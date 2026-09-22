@@ -108,7 +108,7 @@ failures require a separate instruction-level failure-path model.
 
 ## Evidence and tests
 
-[Report](../output/r2/soundamp/wrapper-control-20260920/report.json) includes
+[Report](../assets/soundamp/wrapper-control-20260920/report.json) includes
 raw instruction-range hashes, exact instruction pins, callback branch cases,
 and an11-call synthetic transition trace.
 
@@ -126,7 +126,7 @@ calls, exact counter comparison, uint32 wrap and loader pinning. All20
 
 ```sh
 python3 tools/soundamp-virtual-cabin/amp_b_wrapper_control.py \
-  --output output/r2/soundamp/wrapper-control-20260920/report.json
+  --output assets/soundamp/wrapper-control-20260920/report.json
 python3 -m unittest discover -s tools/soundamp-virtual-cabin \
   -p 'test_amp_b_wrapper*.py'
 ```

@@ -90,7 +90,7 @@ Conditional examples with retained B01 tables and explicitly zero other slots:
 `gain_controls(..., config_bank=k)` now exports the selected bank's bases,
 curves, design records and provenance addresses. Defaultk=1 preserves existing
 conditional callers, **not an actual-car assumption**. New output
-`output/r2/soundamp/remaining-blocks-20260919/b_config_control.json` contains all
+`assets/soundamp/remaining-blocks-20260919/b_config_control.json` contains all
 bank words, hashes, CRCs, difference offsets and per-bank control bindings.
 `b_config_request` models the table-domain candidate; `replay_branch_gain_targets`
 models only the three-gain slice using raw effective controls and explicit prior

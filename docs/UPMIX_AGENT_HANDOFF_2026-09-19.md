@@ -350,7 +350,7 @@ WAV после ревью — хеши в report.json).
 > not the original first4 samples. Full-mode reference is now v3; both profiles'
 > adaptive scenarios rerun. Default identity-path musical tuning is unaffected.
 > [Calibration composition and corrected reports](SHARC_COMPLEX_CALIBRATION_2026-09-20.md).
-> Fresh extraction: output/r2/soundamp/remaining-blocks-20260920-v3/ (168 ranges,
+> Fresh extraction: assets/soundamp/remaining-blocks-20260920-v3/ (168 ranges,
 > UNKNOWN0). Older extraction preserved for historical report hashes; its detector
 > selection text is superseded. Only complex_control_profiles differs.
 > [Second-B numerical reference](SHARC_SECOND_B_2026-09-20.md): all30 nodes21..50
@@ -549,7 +549,7 @@ WAV после ревью — хеши в report.json).
 > Two existing PCM6 clips, bank10 versus flat bank7, B1/B2=0 and C4D17 identity:
 > 20–60Hz gains +5.95..5.98dB front woofers, +5.87..5.94dB subwoofer.
 > These are conditional electronic results, NOT stock comparison or cabin SPL.
-> Report: `output/r2/soundamp/remaining-blocks-20260919/common-input-music-smoke.json`.
+> Report: `assets/soundamp/remaining-blocks-20260919/common-input-music-smoke.json`.
 > Live readback remains blocked by lack of a verified external-J525 RAM
 > transport; RCC /dev/io-amp is not it. No new car contact/settings/deploy/commit.
 > NEXT (revised by static-only constraint above): trace selector source/flags,
@@ -817,8 +817,8 @@ Env knobs (all in `deploy/smartphone_integrator/carplay_startup.sh`): `AUDIO_STE
 `AUDIO_FLOAT_RENDER` / `AUDIO_CABIN_RENDER` / `AUDIO_QUIET_LFE` (opt-in float paths, little
 listened), `AUDIO_SOUNDCHECK*`. Hook log is WARN-only on the unit (`/tmp/carplay_hook.log`).
 
-Amp evidence: `output/r2/soundamp/output_binding_audit.json` (records, gains, delays, routing),
-`output/r2/soundamp/*_evidence.md`, `docs/SHARC_*.md`, `docs/UPMIX_STATIC_READINESS_AND_SOUNDCHECK.md`
+Amp evidence: `assets/soundamp/output_binding_audit.json` (records, gains, delays, routing),
+`assets/soundamp/*_evidence.md`, `docs/SHARC_*.md`, `docs/UPMIX_STATIC_READINESS_AND_SOUNDCHECK.md`
 (complex block coverage), Ghidra project `Firmwares/SoundAmp/AMP_SHARC_MATRIX.gpr`, radare2 works
 for V850 (`r2 -a v850 -b 32`), `tools/inspect_amp_visa.py` for SHARC VISA.
 

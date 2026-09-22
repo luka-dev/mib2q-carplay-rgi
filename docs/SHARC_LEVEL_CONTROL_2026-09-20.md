@@ -461,8 +461,8 @@ Reproduce the new audit:
 ```sh
 python3 tools/audit_amp_level_control.py \
   /Users/luka/Desktop/AUDI_2/Firmwares/SoundAmp/uPD70f3479_8W0035465_0420_H11/CodeFlash_24082026_172027.bin \
-  --output-dir output/r2/soundamp/remaining-blocks-20260919 \
-  --loader output/r2/soundamp/J525_8W0035465_SW0420_SHARC_SPI_bitrev.ldr.bin
+  --output-dir assets/soundamp/remaining-blocks-20260919 \
+  --loader assets/soundamp/J525_8W0035465_SW0420_SHARC_SPI_bitrev.ldr.bin
 ```
 
 Image: raw V850,32-bit,little-endian,base0,size0x180000. Byte addresses above

@@ -155,7 +155,7 @@ about +5.9dB in20–60Hz at the candidate sub/front-woofer groups under B=0;
 it is not a calibrated full-B render, a stock comparison or a live diagnosis.
 See the input-path audit for API, report and remaining readback prerequisites.
 
-Source: [output_binding_audit.json](../output/r2/soundamp/output_binding_audit.json),
+Source: [output_binding_audit.json](../assets/soundamp/output_binding_audit.json),
 freshly extracted from J525 8W0035465 SW0420 CodeFlash, SHA-256
 `8776fdb84d05571cf4addf42655bc875da7c47cc35166e3cee6c60bc5841fe4b`.
 New records retain source addresses and actual firmware gain-table values.
@@ -319,7 +319,7 @@ either real hardware clipping or adequate amplifier headroom.
 ## Validation and reproduction
 
 ```sh
-python3 tools/audit_amp_output_bindings.py IMAGE --output output/r2/soundamp/output_binding_audit.json
+python3 tools/audit_amp_output_bindings.py IMAGE --output assets/soundamp/output_binding_audit.json
 python3 tools/soundamp-virtual-cabin/amp_dsp_chain.py
 python3 tools/soundamp-virtual-cabin/audit_bank1_model.py IMAGE --output OUT/static-audit.json
 python3 -m unittest discover -s tests -p 'test_audit_amp_output_bindings.py'

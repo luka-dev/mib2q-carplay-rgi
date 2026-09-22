@@ -17,14 +17,14 @@ composition of **schedule21..50**, from three caller-supplied graph inputs
 - Bit-reversed SHARC loader SHA-256
   `9169c24f0337c6bfd3646e2538a567bca839b24aa0db5f67b6984943c2286ca7`.
   SHARC PCs are 16-bit short-word addresses, not V850 byte offsets.
-- Inventory: `output/r2/soundamp/second-b-20260920/inventory.json`.
+- Inventory: `assets/soundamp/second-b-20260920/inventory.json`.
   Extraction rejects other image hashes, checks instruction/writer pins, and
   compares every descriptor, class handler, scheduled pointer and port against
   the actual loader rather than trusting derived JSON alone.
 
 ```sh
 python3 tools/soundamp-virtual-cabin/amp_second_b.py \
-  --output output/r2/soundamp/second-b-20260920/inventory.json
+  --output assets/soundamp/second-b-20260920/inventory.json
 
 python3 -m unittest discover -s tools/soundamp-virtual-cabin \
   -p test_amp_second_b.py -v
@@ -199,7 +199,7 @@ pass. This is a target-write plan, not a ready current-state/preset constructor.
 
 ```sh
 python3 tools/soundamp-virtual-cabin/amp_second_b_control.py \
-  --output output/r2/soundamp/second-b-control-20260920/inventory.json \
+  --output assets/soundamp/second-b-control-20260920/inventory.json \
   --listings
 python3 -m unittest discover -s tools/soundamp-virtual-cabin \
   -p test_amp_second_b_control.py -v
@@ -304,7 +304,7 @@ numerical chain; it is not saved as an OEM/live preset.
 
 `mode1_gain_update()` and the mode1 branch of `SecondBAuxReference` now model
 12879C's explicit prior-state behavior. Relevant listing:
-`output/r2/soundamp/remaining-blocks-20260919/gain.asm`; additional decoded
+`assets/soundamp/remaining-blocks-20260919/gain.asm`; additional decoded
 instruction pins are checked against the SHA-pinned loader during inventory
 extraction.
 

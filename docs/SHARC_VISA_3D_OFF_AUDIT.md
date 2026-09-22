@@ -33,10 +33,10 @@ inference into a claim that the entire Symphoria processor is disabled.
 ## Evidence and reproducibility
 
 - [Bounded VISA decoder](../tools/inspect_amp_visa.py).
-- [VISA listings with byte provenance](../output/r2/soundamp/visa_handler_evidence.md).
-- [V850 control-handler decompilation](../output/r2/soundamp/visa_state_v850_evidence.md).
-- [V850 parameter writers](../output/r2/soundamp/output_binding_v850_evidence.md).
-- [Updated machine-readable audit](../output/r2/soundamp/output_binding_audit.json).
+- [VISA listings with byte provenance](../assets/soundamp/visa_handler_evidence.md).
+- [V850 control-handler decompilation](../assets/soundamp/visa_state_v850_evidence.md).
+- [V850 parameter writers](../assets/soundamp/output_binding_v850_evidence.md).
+- [Updated machine-readable audit](../assets/soundamp/output_binding_audit.json).
 
 CodeFlash is raw V850 little-endian, file/load base 0, size `0x180000`, SHA-256
 `8776fdb84d05571cf4addf42655bc875da7c47cc35166e3cee6c60bc5841fe4b`.
@@ -47,7 +47,7 @@ halfwords are MSB-first; each halfword in the normalized loader is little-endian
 
 ```sh
 python3 tools/inspect_amp_visa.py \
-  output/r2/soundamp/J525_8W0035465_SW0420_SHARC_SPI_bitrev.ldr.bin \
+  assets/soundamp/J525_8W0035465_SW0420_SHARC_SPI_bitrev.ldr.bin \
   0x12694c 0x1269bc
 python3 -m unittest discover -s tests -p 'test_*amp*.py'
 ```

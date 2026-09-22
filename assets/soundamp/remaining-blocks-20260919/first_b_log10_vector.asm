@@ -1,0 +1,28 @@
+0012d80b  1607 ffff fffc  I7=MODIFY(I7,-4)
+0012d80e  713f 813f       R2=I3
+0012d810  9d08 017d       DM(-3,I6)=R2
+0012d812  717e 813f       R2=I5
+0012d814  6cbf f102 12c0  R2=PASS R12 || DM(-2,I6)=R2
+0012d817  9d08 077b       DM(-5,I6)=R14
+0012d819  9d08 07fc       DM(-4,I6)=R15
+0012d81b  0700 0400 001b  IF EQ JUMP 0x12d836 (DB)
+0012d81e  707e 09bf       I3=R4
+0012d820  70be 0abf       I5=R8
+0012d822  70fe 07bf       R15=R12
+0012d824  0f0e 3ede 5bd9  R14=0x3ede5bd9
+0012d827  9794            R4=DM(I3,M6)
+0012d828  1804 0012 4393  CJUMP 0x124393 (DB); R2=I6, I6=I7
+0012d82b  9ff2            DM(I7,M7)=R2
+0012d82c  9fc0 0012 d82e  DM(I7,M7)=0x12d82e
+0012d82f  c6ff            R15=R15-1
+0012d830  0720 04ff fff7  IF NE JUMP 0x12d827 (DB)
+0012d833  0193 020e       F2=F0*F14
+0012d835  9bb2            DM(I5,M6)=R2
+0012d836  4dfe 0e3f       I12=DM(M7,I6)
+0012d838  9c08 09fd       I3=DM(-3,I6)
+0012d83a  9c08 0afe       I5=DM(-2,I6)
+0012d83c  9c08 077b       R14=DM(-5,I6)
+0012d83e  9c08 07fc       R15=DM(-4,I6)
+0012d840  083f 343f       JUMP (M14,I12) (DB)
+0012d842  1901            RFRAME
+0012d843  0001            NOP

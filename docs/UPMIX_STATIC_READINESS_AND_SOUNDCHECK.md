@@ -50,7 +50,7 @@ the user's current state been read back. Therefore:
 - OFF does not prove that either gate is off, or that all spatial processing
   and the auxiliary mix disappear. Row 0 is a different state.
 
-Evidence: [native listings](../output/r2/soundamp/mmi_3d_enum_evidence.md),
+Evidence: [native listings](../assets/soundamp/mmi_3d_enum_evidence.md),
 [source-backed regression](../tests/test_amp_control_contract.py),
 [J525 state audit](SHARC_VISA_3D_OFF_AUDIT.md).
 
@@ -101,9 +101,9 @@ behind stage bit 4, present in mask 0xF4BA and absent in both full masks above.
 This isolates that remaining decoding gap, but does not validate the other
 paths' numerical behavior by exclusion.
 
-Evidence: [main listing](../output/r2/soundamp/complex_visa_evidence.md),
-[helper listings](../output/r2/soundamp/complex_helpers_evidence.md),
-[V850 writers](../output/r2/soundamp/complex_v850_evidence.md).
+Evidence: [main listing](../assets/soundamp/complex_visa_evidence.md),
+[helper listings](../assets/soundamp/complex_helpers_evidence.md),
+[V850 writers](../assets/soundamp/complex_v850_evidence.md).
 The decoder extension follows ADI rev 2.4 tables 12-3/12-4/12-11; the selected
 PDF instruction tables were visually checked during research.
 

@@ -9,7 +9,7 @@ The V850 CodeFlash **does contain the complete ADSP-2148x SPI
 boot/application stream**. It is embedded at file offsets
 `0x041014..0x068777`, inclusive, and is `0x27764` (161,636) bytes long.
 
-Two checked artifacts are stored in [`output/r2/soundamp`](../output/r2/soundamp):
+Two checked artifacts are stored in [`assets/soundamp`](../assets/soundamp):
 
 | File | Meaning | SHA-256 |
 |---|---|---|
@@ -72,7 +72,7 @@ From the repository root:
 ```sh
 python3 tools/extract_amp_sharc_app.py \
   /Users/luka/Desktop/AUDI_2/Firmwares/SoundAmp/uPD70f3479_8W0035465_0420_H11/CodeFlash_24082026_172027.bin \
-  --output-dir output/r2/soundamp
+  --output-dir assets/soundamp
 
 python3 -m unittest discover -s tests -p 'test_extract_amp_sharc_app.py'
 ```

@@ -107,7 +107,7 @@ scratch mapping; stale scratch independence; scalar prefilter recurrences;
 completion learning; auxiliary bypass history; and fail-closed inputs. All59
 `test_amp_complex*.py` tests passed after the correction.
 
-[Mode2 smoke report](../output/r2/soundamp/complex-calibration-20260920/calibration_mode2.json)
+[Mode2 smoke report](../assets/soundamp/complex-calibration-20260920/calibration_mode2.json)
 uses actual profile0 initial FIR, explicit synthetic type1 generator state,
 0.1 excitation gain, .01-amplitude63Hz post-C4D11 auxiliary tone and explicit
 zero other histories. Shortened synthetic wait64/measure128 counters exercise
@@ -118,8 +118,8 @@ test, **not a calibration proposal or cabin identification**.
 The previous five-second full-mode sensitivity tests have been rerun into new
 artifacts, without overwriting old v2 results:
 
-- [Profile0 v3](../output/r2/soundamp/complex-calibration-20260920/complex_scenarios_profile0_v3.json)
-- [Profile1 v3](../output/r2/soundamp/complex-calibration-20260920/complex_scenarios_profile1_v3.json)
+- [Profile0 v3](../assets/soundamp/complex-calibration-20260920/complex_scenarios_profile0_v3.json)
+- [Profile1 v3](../assets/soundamp/complex-calibration-20260920/complex_scenarios_profile1_v3.json)
 
 Each scenario produces234 target updates. Selected **endpoint**, not acoustic
 or output-spectrum, dB values:
@@ -142,7 +142,7 @@ by these synthetic comparisons.
 The static extractor now emits `decimation_stride:16` and
 `sample_indices:[0,16,32,48]` in each `complex_control_profiles` detector layout.
 Its fresh complete output is
-`output/r2/soundamp/remaining-blocks-20260920-v3/` (168 ranges, UNKNOWN0).
+`assets/soundamp/remaining-blocks-20260920-v3/` (168 ranges, UNKNOWN0).
 Only `complex_control_profiles` differs from the retained Sep19 audit. The old
 artifact is deliberately not overwritten because completed tuning reports pin
 its hash; its original-prefix selection description is superseded here.
@@ -159,9 +159,9 @@ SHARC instruction addresses are shortword addresses, not CodeFlash offsets.
 ```sh
 python3 -m unittest discover -s tools/soundamp-virtual-cabin -p 'test_amp_complex*.py'
 python3 tools/soundamp-virtual-cabin/amp_complex_calibration.py IMAGE \
-  --output output/r2/soundamp/complex-calibration-20260920/calibration_mode2.json
+  --output assets/soundamp/complex-calibration-20260920/calibration_mode2.json
 python3 tools/soundamp-virtual-cabin/audit_amp_complex_scenarios.py IMAGE \
   --profile 0 --seconds 5 \
-  --output output/r2/soundamp/complex-calibration-20260920/complex_scenarios_profile0_v3.json
+  --output assets/soundamp/complex-calibration-20260920/complex_scenarios_profile0_v3.json
 # Repeat the last command for profile1 and the corresponding output name.
 ```

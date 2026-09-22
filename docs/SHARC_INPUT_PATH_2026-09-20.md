@@ -178,8 +178,8 @@ columns0..2 are the B boundary lanes; all8 also feed the A07 matrix.
 
 ```sh
 python3 tools/soundamp-virtual-cabin/audit_amp_input_scenarios.py \
-  output/r2/soundamp/remaining-blocks-20260919/audit.json \
-  --output output/r2/soundamp/remaining-blocks-20260919/input_scenarios.json
+  assets/soundamp/remaining-blocks-20260919/audit.json \
+  --output assets/soundamp/remaining-blocks-20260919/input_scenarios.json
 ```
 
 277 tests pass:81 extraction/decoder and196 model/report.127 bounded SHARC
@@ -199,7 +199,7 @@ AmpChain now accepts `upstream_scenario`, which supplies all of:
 
 ```python
 upstream = {
-    "audit_path": "output/r2/soundamp/remaining-blocks-20260919/audit.json",
+    "audit_path": "assets/soundamp/remaining-blocks-20260919/audit.json",
     "graph_input_sources": [0, 1, 2, 3, 4, 5, None, None],
     "eq_family": "tone",
     "shared_gains_tenths_db": [0, 0, 0, 0],
@@ -256,14 +256,14 @@ upmix comparison, evidence of active bank10, or proof of the reported bass cause
 `bands_re_dry_L` in this particular report references authored PCM6 channel0,
 not the unavailable original stereo dry signal; scenario deltas use group power.
 Source hashes, settings and complete results are saved in
-`output/r2/soundamp/remaining-blocks-20260919/common-input-music-smoke.json`.
+`assets/soundamp/remaining-blocks-20260919/common-input-music-smoke.json`.
 Reproduce with existing source files:
 
 ```sh
 python3 tools/soundamp-virtual-cabin/audit_amp_common_input_music.py \
-  --scenario output/r2/soundamp/remaining-blocks-20260919/common-input-bank7-hypothesis.json \
-  --scenario output/r2/soundamp/remaining-blocks-20260919/common-input-bank10-hypothesis.json \
-  --out output/r2/soundamp/remaining-blocks-20260919/common-input-music-smoke.json \
+  --scenario assets/soundamp/remaining-blocks-20260919/common-input-bank7-hypothesis.json \
+  --scenario assets/soundamp/remaining-blocks-20260919/common-input-bank10-hypothesis.json \
+  --out assets/soundamp/remaining-blocks-20260919/common-input-music-smoke.json \
   '/tmp/upmix-bank1-audit.BR9uxY/Boost Up-gain4096_fb3.wav' \
   '/tmp/upmix-bank1-audit.BR9uxY/Crazy Train-gain4096_fb3.wav'
 ```

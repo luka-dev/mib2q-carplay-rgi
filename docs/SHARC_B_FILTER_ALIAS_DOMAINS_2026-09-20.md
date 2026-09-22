@@ -34,12 +34,12 @@ Reset wrapper `12D94C` has one direct caller, `12DC4E`, in this span. The proces
 
 ## Reproducibility
 
-Source: `output/r2/soundamp/J525_8W0035465_SW0420_SHARC_SPI_bitrev.ldr.bin`; SHA256 `9169c24f0337c6bfd3646e2538a567bca839b24aa0db5f67b6984943c2286ca7`.
+Source: `assets/soundamp/J525_8W0035465_SW0420_SHARC_SPI_bitrev.ldr.bin`; SHA256 `9169c24f0337c6bfd3646e2538a567bca839b24aa0db5f67b6984943c2286ca7`.
 
 Architecture: SHARC VISA, program addresses in16-bit shortwords, data addresses in32-bit words. The segmented loader is validated and decoded by `inspect_amp_visa.load_shortwords/decode`; these addresses are decoded program addresses, not byte offsets into the loader. Whole B span SHA256: `a30e9c631734d5846aa97ac2ac4c50dacc1769b5284c282960363070880552d4`. The artifact records separate constructor/reset/wrapper/allocator range hashes and exact instruction pins.
 
 ```sh
-python3 tools/audit_amp_b_filter_aliases.py --out output/r2/soundamp/remaining-blocks-20260920-v3/b_binding_filter_aliases.json
+python3 tools/audit_amp_b_filter_aliases.py --out assets/soundamp/remaining-blocks-20260920-v3/b_binding_filter_aliases.json
 python3 -m unittest discover -s tools/soundamp-virtual-cabin -p test_amp_b_filter_aliases.py -v
 ```
 

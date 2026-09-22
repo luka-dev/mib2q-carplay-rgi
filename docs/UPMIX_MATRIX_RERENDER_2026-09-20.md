@@ -114,8 +114,8 @@ python3 tools/soundamp-virtual-cabin/audit_amp_matrix_music_control.py \
   'Boost Up' 'Crazy Train'
 
 python3 tools/soundamp-virtual-cabin/audit_amp_common_input_music.py \
-  --scenario output/r2/soundamp/remaining-blocks-20260919/common-input-bank7-hypothesis.json \
-  --scenario output/r2/soundamp/remaining-blocks-20260919/common-input-bank10-hypothesis.json \
+  --scenario assets/soundamp/remaining-blocks-20260919/common-input-bank7-hypothesis.json \
+  --scenario assets/soundamp/remaining-blocks-20260919/common-input-bank10-hypothesis.json \
   --out output/upmix-matrix-corrected-20260920/common-input-v8.json \
   '/tmp/upmix-bank1-audit.BR9uxY/Boost Up-gain4096_fb3.wav' \
   '/tmp/upmix-bank1-audit.BR9uxY/Crazy Train-gain4096_fb3.wav'

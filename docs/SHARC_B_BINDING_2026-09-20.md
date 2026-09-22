@@ -71,7 +71,7 @@ and exact local stack spills are propagated inside linear blocks. Branch,
 call and loop joins are explicit provenance cuts. This is a nominal linear-
 address audit, not DAG circular/SIMD or whole-program alias emulation.
 
-Artifact `output/r2/soundamp/remaining-blocks-20260919/b_binding_pointer_aliases.json`
+Artifact `assets/soundamp/remaining-blocks-20260919/b_binding_pointer_aliases.json`
 contains16,093 instructions,2,433 blocks,3,942 nominal DM reads,4,398 stores,
 1,002 direct-call argument records,66 non-affine reads and2,277 explicit cut
 sites. Synthetic tests hide1162 behind arithmetic, postincrements and a stack
@@ -146,10 +146,10 @@ Reproduce the artifact, including the conditional caller-domain table:
 
 ```sh
 python3 tools/audit_amp_b_pointer_aliases.py \
-  --loader output/r2/soundamp/J525_8W0035465_SW0420_SHARC_SPI_bitrev.ldr.bin \
-  --config-report output/r2/soundamp/remaining-blocks-20260919/b_config_control.json \
-  --mode-report output/r2/soundamp/remaining-blocks-20260919/b_mode_control.json \
-  --out output/r2/soundamp/remaining-blocks-20260919/b_binding_pointer_aliases.json
+  --loader assets/soundamp/J525_8W0035465_SW0420_SHARC_SPI_bitrev.ldr.bin \
+  --config-report assets/soundamp/remaining-blocks-20260919/b_config_control.json \
+  --mode-report assets/soundamp/remaining-blocks-20260919/b_mode_control.json \
+  --out assets/soundamp/remaining-blocks-20260919/b_binding_pointer_aliases.json
 ```
 
 All retained banks have two six-channel and two two-channel EQ sections.
@@ -266,7 +266,7 @@ finish = build_effective_finish(effective_config=config, library_mode=5,
 out8 = finish.process(six_tail_audio, four_tail_audio, two_tail_audio)
 ```
 
-Artifacts reused: `output/r2/soundamp/remaining-blocks-20260919/`:
+Artifacts reused: `assets/soundamp/remaining-blocks-20260919/`:
 `b_config_control.json`, `b_mode_control.json`, `first_b_algorithm_dispatch.asm`,
 `first_b_eight_channel_finish.asm`, and the API control listings. Source raw
 V850 LE32/base0/size0x180000 SHA256

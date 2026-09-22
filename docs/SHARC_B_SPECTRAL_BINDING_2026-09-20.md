@@ -111,7 +111,7 @@ constants with host float64 intermediates and final float32 storage, not a
 bit-exact SHARC40-bit/FPU execution claim. Its evidence accompanies
 `reference.binding_metadata['transform_tables']`.
 
-Artifact`output/r2/soundamp/remaining-blocks-20260920-v3/b_binding_spectral_calibration.json`
+Artifact`assets/soundamp/remaining-blocks-20260920-v3/b_binding_spectral_calibration.json`
 contains both complete raw common prefixes, both resulting bindings, the
 74-band map and source/instruction/transform/spatial evidence. Its representative
 calibration bank1 example explicitly applies API20default then API16=5.

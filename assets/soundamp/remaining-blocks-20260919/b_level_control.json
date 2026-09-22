@@ -1,0 +1,5604 @@
+{
+  "source_sha256": "8776fdb84d05571cf4addf42655bc875da7c47cc35166e3cee6c60bc5841fe4b",
+  "api_parameter_id": 25,
+  "v850_event": 52,
+  "event_target": "0xaa568",
+  "source_gp_relative": -15718,
+  "formula": "float(max(0,s8(gp-15718)+100)); selected TARGET, NOT smoothed gp-77F8 and NOT gated gp-30720",
+  "transport": "AC648 writes API id/value to C4AD9+8/+9 via descriptor C4AE1; callback124F35 calls131A65",
+  "pending_address": "0xb9127",
+  "validator": "0x131f9a",
+  "applier": "0x13262d",
+  "accepted_finite_range": [
+    -200,
+    200
+  ],
+  "apply": {
+    "shadow_offset": 1151,
+    "effective_offset": 1137,
+    "defer_word_offset": 1178,
+    "baseline_offset": 1090,
+    "helper": "0x12ce71",
+    "formula": "always shadow=value; if object1178==0: effective=value; helper argument=value-object1090; otherwise skip helper",
+    "helper_descriptor_offsets": [
+      46,
+      50,
+      51
+    ],
+    "curve_record_offsets": [
+      [
+        773,
+        782
+      ],
+      [
+        776,
+        785
+      ],
+      [
+        779,
+        788
+      ]
+    ],
+    "curve_base": "DM(object+1180)",
+    "helper_arguments": "12B00F: slot6, signed level delta, lower0, upper5, two curve records per descriptor",
+    "success_followup": "12FBA5 with curve/target buffer and B909A; interpolation/application timing not modelled"
+  },
+  "boundary": "nine branch-gain curve slots bound below; other helper effects, later writers and actual state remain unbound; not a flat/zero-B claim",
+  "instruction_pins": {
+    "0x131ce1": "I4=0xb913d",
+    "0x131d04": "I5=0xb911e",
+    "0x131f9e": "DM(I7,M7)=25",
+    "0x131fa2": "R12=0x43480000",
+    "0x131fa5": "R8=0xc3480000",
+    "0x132407": "I3=MODIFY(I4,+1149)",
+    "0x132425": "I3=MODIFY(I3,-2)",
+    "0x13262d": "R2=DM(+31,I3)",
+    "0x13262f": "R2=PASS R2 || DM(+4,I3)=R8",
+    "0x132635": "R2=DM(-57,I3)",
+    "0x132637": "F8=F8-F2 || DM(-10,I3)=R8",
+    "0x13263b": "CJUMP 0x12ce71 (DB); R2=I6, I6=I7",
+    "0x12ceb0": "R4=DM(+46,I5)",
+    "0x12cee8": "R4=DM(+50,I5)",
+    "0x12cf20": "R4=DM(+51,I5)"
+  },
+  "curve_bindings": {
+    "scope": "normal init from loader or B01, not actual playback state or exhaustive later-writer proof",
+    "copy": {
+      "source_base": "0xc3c6a",
+      "source_config_offset": 245,
+      "words": 829,
+      "effective_object_offset": 299,
+      "target_address": "0xb89c0",
+      "validation": "132A9B checks checksum at config828 before copying"
+    },
+    "descriptor_layout": {
+      "words": 12,
+      "target_pointer": 1,
+      "initial_base_value": 2,
+      "contribution_offsets": [
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11
+      ],
+      "level_slot": 6
+    },
+    "bindings": [
+      {
+        "descriptor_object_offset": 46,
+        "target_config_offset": 122,
+        "effective_object_offset": 421,
+        "channels": 4,
+        "scalar_gain_call": "0x1314da",
+        "base_value": {
+          "config_offset": 122,
+          "loader_address": "0xc3dd9",
+          "b01_file_offset": "0x1205c8",
+          "loader_word": "0x3f800000",
+          "b01_word": "0x3f800000",
+          "loader_float": 1.0,
+          "b01_float": 1.0
+        },
+        "curve_records": [
+          [
+            {
+              "config_offset": 773,
+              "loader_address": "0xc4064",
+              "b01_file_offset": "0x120ff4",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader_float": 0.0,
+              "b01_float": 0.0
+            },
+            {
+              "config_offset": 774,
+              "loader_address": "0xc4065",
+              "b01_file_offset": "0x120ff8",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader_float": 0.0,
+              "b01_float": 0.0
+            },
+            {
+              "config_offset": 775,
+              "loader_address": "0xc4066",
+              "b01_file_offset": "0x120ffc",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader_float": 0.0,
+              "b01_float": 0.0
+            }
+          ],
+          [
+            {
+              "config_offset": 782,
+              "loader_address": "0xc406d",
+              "b01_file_offset": "0x121018",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader_float": 0.0,
+              "b01_float": 0.0
+            },
+            {
+              "config_offset": 783,
+              "loader_address": "0xc406e",
+              "b01_file_offset": "0x12101c",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader_float": 0.0,
+              "b01_float": 0.0
+            },
+            {
+              "config_offset": 784,
+              "loader_address": "0xc406f",
+              "b01_file_offset": "0x121020",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader_float": 0.0,
+              "b01_float": 0.0
+            }
+          ]
+        ]
+      },
+      {
+        "descriptor_object_offset": 50,
+        "target_config_offset": 293,
+        "effective_object_offset": 592,
+        "channels": 6,
+        "scalar_gain_call": "0x131490",
+        "base_value": {
+          "config_offset": 293,
+          "loader_address": "0xc3e84",
+          "b01_file_offset": "0x120874",
+          "loader_word": "0x3f800000",
+          "b01_word": "0x3f800000",
+          "loader_float": 1.0,
+          "b01_float": 1.0
+        },
+        "curve_records": [
+          [
+            {
+              "config_offset": 776,
+              "loader_address": "0xc4067",
+              "b01_file_offset": "0x121000",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader_float": 0.0,
+              "b01_float": 0.0
+            },
+            {
+              "config_offset": 777,
+              "loader_address": "0xc4068",
+              "b01_file_offset": "0x121004",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader_float": 0.0,
+              "b01_float": 0.0
+            },
+            {
+              "config_offset": 778,
+              "loader_address": "0xc4069",
+              "b01_file_offset": "0x121008",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader_float": 0.0,
+              "b01_float": 0.0
+            }
+          ],
+          [
+            {
+              "config_offset": 785,
+              "loader_address": "0xc4070",
+              "b01_file_offset": "0x121024",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader_float": 0.0,
+              "b01_float": 0.0
+            },
+            {
+              "config_offset": 786,
+              "loader_address": "0xc4071",
+              "b01_file_offset": "0x121028",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader_float": 0.0,
+              "b01_float": 0.0
+            },
+            {
+              "config_offset": 787,
+              "loader_address": "0xc4072",
+              "b01_file_offset": "0x12102c",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader_float": 0.0,
+              "b01_float": 0.0
+            }
+          ]
+        ]
+      },
+      {
+        "descriptor_object_offset": 51,
+        "target_config_offset": 377,
+        "effective_object_offset": 676,
+        "channels": 2,
+        "scalar_gain_call": "0x13156d",
+        "base_value": {
+          "config_offset": 377,
+          "loader_address": "0xc3ed8",
+          "b01_file_offset": "0x1209c4",
+          "loader_word": "0x3fcccccd",
+          "b01_word": "0x3fcccccd",
+          "loader_float": 1.600000023841858,
+          "b01_float": 1.600000023841858
+        },
+        "curve_records": [
+          [
+            {
+              "config_offset": 779,
+              "loader_address": "0xc406a",
+              "b01_file_offset": "0x12100c",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader_float": 0.0,
+              "b01_float": 0.0
+            },
+            {
+              "config_offset": 780,
+              "loader_address": "0xc406b",
+              "b01_file_offset": "0x121010",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader_float": 0.0,
+              "b01_float": 0.0
+            },
+            {
+              "config_offset": 781,
+              "loader_address": "0xc406c",
+              "b01_file_offset": "0x121014",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader_float": 0.0,
+              "b01_float": 0.0
+            }
+          ],
+          [
+            {
+              "config_offset": 788,
+              "loader_address": "0xc4073",
+              "b01_file_offset": "0x121030",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader_float": 0.0,
+              "b01_float": 0.0
+            },
+            {
+              "config_offset": 789,
+              "loader_address": "0xc4074",
+              "b01_file_offset": "0x121034",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader_float": 0.0,
+              "b01_float": 0.0
+            },
+            {
+              "config_offset": 790,
+              "loader_address": "0xc4075",
+              "b01_file_offset": "0x121038",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader_float": 0.0,
+              "b01_float": 0.0
+            }
+          ]
+        ]
+      }
+    ],
+    "baseline": {
+      "config_offset": 791,
+      "loader_address": "0xc4076",
+      "b01_file_offset": "0x12103c",
+      "loader_word": "0x0",
+      "b01_word": "0x0",
+      "loader_float": 0.0,
+      "b01_float": 0.0
+    },
+    "baseline_effective_object_offset": 1090,
+    "curve_math": "12B00F signed-side bracket, x==0 contribution0; near-equal x uses near y; otherwise linear/squared/sqrt interpolation; write slot then clamp(base+sum9,0,5)",
+    "zero_curve_words": true,
+    "conclusion": "both image tables give zero API25 contribution for finite -200..200 at baseline0; does NOT mean B is zero, unity, or its other control slots are zero",
+    "publication": "12FBA5 selector==1 copies829 target words; other selectors prepare per-field steps except mask==1 immediate fields;132D0B calls12FAF2 once per branch invocation before multiplying samples",
+    "transition_count": {
+      "config_offset": 2,
+      "loader_address": "0xc3d61",
+      "b01_file_offset": "0x1203e8",
+      "loader_word": "0x43480000",
+      "b01_word": "0x3f800000",
+      "loader_float": 200.0,
+      "b01_float": 1.0
+    },
+    "remaining": [
+      "non-branch-gain helper effects and parameter-block replacement writers",
+      "wrapper call scheduling and complete transition timing",
+      "actual input mapping and external request sequence"
+    ],
+    "instruction_pins": {
+      "0x130f2f": "R2=0xf5",
+      "0x130f31": "R6=R11+R2",
+      "0x130f33": "R2=0x12b",
+      "0x130f35": "R10=R13+R2 || R4=R6",
+      "0x130f88": "DM(+1179,I5)=R6",
+      "0x130f8b": "DM(+1180,I5)=R7",
+      "0x12dde9": "R12=0xb89c0",
+      "0x132abc": "LCNTR=414, DO 0x132ac2 UNTIL LCE",
+      "0x132aca": "R2=DM(I5,M6)",
+      "0x132acb": "DM(I3,M6)=R2",
+      "0x12bcc6": "R2=0x2e",
+      "0x12bcca": "R2=0x7a",
+      "0x12bd7a": "R2=0x32",
+      "0x12bd7e": "R2=0x125",
+      "0x12bda7": "R2=0x33",
+      "0x12bdab": "R2=0x179",
+      "0x12afc9": "DM(I5,M6)=R13",
+      "0x12afca": "DM(I5,M6)=R15",
+      "0x12afcd": "DM(I5,M6)=R2",
+      "0x12afe2": "DM(M5,I4)=R0",
+      "0x12b10d": "I4=MODIFY(I2,+3)",
+      "0x12b112": "DM(M4,I4)=R2",
+      "0x12b12d": "I5=DM(-11,I4)",
+      "0x12b12f": "F2=F2+F1 || R1=DM(-10,I4)",
+      "0x12b132": "F2+=F1",
+      "0x12b133": "DM(M5,I5)=R2",
+      "0x131487": "R1=0x250",
+      "0x1314d3": "R1=0x1a5",
+      "0x131565": "R2=0x2a4",
+      "0x132d23": "CJUMP 0x12faf2 (DB); R2=I6, I6=I7",
+      "0x132d34": "R12=PASS R8 || R4=DM(I5,M5)",
+      "0x12fd19": "F1=F4*F8",
+      "0x12fbd5": "LCNTR=829, DO 0x12fbdb UNTIL LCE",
+      "0x12fbcc": "R2=BTGL R8 BY 0",
+      "0x12fbd2": "IF NOT SZ JUMP 0x12fbef",
+      "0x12fc01": "LCNTR=829, DO 0x12fc1d UNTIL LCE"
+    },
+    "calls": {
+      "0x130f3a": "0x132a9b",
+      "0x130f6e": "0x132a9b",
+      "0x131097": "0x12bc52",
+      "0x12bcce": "0x12af9a",
+      "0x12bd82": "0x12af9a",
+      "0x12bdaf": "0x12af9a",
+      "0x131490": "0x132d0b",
+      "0x1314da": "0x132d0b",
+      "0x13156d": "0x132d0b",
+      "0x132d37": "0x12fce1"
+    }
+  },
+  "gain_controls": {
+    "source_sha256": "8776fdb84d05571cf4addf42655bc875da7c47cc35166e3cee6c60bc5841fe4b",
+    "scope": "three branch gains plus API18/19 parameter targets; no physical-speaker/UI/live-state inference",
+    "config_bank": 1,
+    "parameter_controls": {
+      "apis": [
+        {
+          "api": 19,
+          "slot": 0,
+          "parameters": [
+            {
+              "descriptor": 44,
+              "slot": 0,
+              "call": "0x12bff9",
+              "target_config_offset": 35,
+              "effective_object_offset": 334,
+              "base": {
+                "offset": 35,
+                "loader_address": "0xc3d82",
+                "b01_file_offset": "0x12046c",
+                "loader_word": "0x3f353bef",
+                "b01_word": "0x3f800000",
+                "loader": 0.7079457640647888,
+                "b01": 1.0
+              },
+              "clamp": [
+                0,
+                5
+              ],
+              "variants": {
+                "default": {
+                  "record_offsets": [
+                    509,
+                    554
+                  ],
+                  "records": [
+                    [
+                      {
+                        "offset": 509,
+                        "loader_address": "0xc3f5c",
+                        "b01_file_offset": "0x120bd4",
+                        "loader_word": "0x0",
+                        "b01_word": "0xc2480000",
+                        "loader": 0.0,
+                        "b01": -50.0
+                      },
+                      {
+                        "offset": 510,
+                        "loader_address": "0xc3f5d",
+                        "b01_file_offset": "0x120bd8",
+                        "loader_word": "0x0",
+                        "b01_word": "0xbe99999a",
+                        "loader": 0.0,
+                        "b01": -0.30000001192092896
+                      },
+                      {
+                        "offset": 511,
+                        "loader_address": "0xc3f5e",
+                        "b01_file_offset": "0x120bdc",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ],
+                    [
+                      {
+                        "offset": 554,
+                        "loader_address": "0xc3f89",
+                        "b01_file_offset": "0x120c88",
+                        "loader_word": "0x0",
+                        "b01_word": "0x42c80000",
+                        "loader": 0.0,
+                        "b01": 100.0
+                      },
+                      {
+                        "offset": 555,
+                        "loader_address": "0xc3f8a",
+                        "b01_file_offset": "0x120c8c",
+                        "loader_word": "0x0",
+                        "b01_word": "0x3e4ccccd",
+                        "loader": 0.0,
+                        "b01": 0.20000000298023224
+                      },
+                      {
+                        "offset": 556,
+                        "loader_address": "0xc3f8b",
+                        "b01_file_offset": "0x120c90",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ]
+                  ]
+                }
+              }
+            },
+            {
+              "descriptor": 45,
+              "slot": 0,
+              "call": "0x12c037",
+              "target_config_offset": 79,
+              "effective_object_offset": 378,
+              "base": {
+                "offset": 79,
+                "loader_address": "0xc3dae",
+                "b01_file_offset": "0x12051c",
+                "loader_word": "0x3f4b5918",
+                "b01_word": "0x0",
+                "loader": 0.7943282127380371,
+                "b01": 0.0
+              },
+              "clamp": [
+                0,
+                5
+              ],
+              "variants": {
+                "default": {
+                  "record_offsets": [
+                    512,
+                    557
+                  ],
+                  "records": [
+                    [
+                      {
+                        "offset": 512,
+                        "loader_address": "0xc3f5f",
+                        "b01_file_offset": "0x120be0",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 513,
+                        "loader_address": "0xc3f60",
+                        "b01_file_offset": "0x120be4",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 514,
+                        "loader_address": "0xc3f61",
+                        "b01_file_offset": "0x120be8",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ],
+                    [
+                      {
+                        "offset": 557,
+                        "loader_address": "0xc3f8c",
+                        "b01_file_offset": "0x120c94",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 558,
+                        "loader_address": "0xc3f8d",
+                        "b01_file_offset": "0x120c98",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 559,
+                        "loader_address": "0xc3f8e",
+                        "b01_file_offset": "0x120c9c",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ]
+                  ]
+                }
+              }
+            },
+            {
+              "descriptor": 46,
+              "slot": 0,
+              "call": "0x12c075",
+              "target_config_offset": 122,
+              "effective_object_offset": 421,
+              "base": {
+                "offset": 122,
+                "loader_address": "0xc3dd9",
+                "b01_file_offset": "0x1205c8",
+                "loader_word": "0x3f800000",
+                "b01_word": "0x3f800000",
+                "loader": 1.0,
+                "b01": 1.0
+              },
+              "clamp": [
+                0,
+                5
+              ],
+              "variants": {
+                "default": {
+                  "record_offsets": [
+                    515,
+                    560
+                  ],
+                  "records": [
+                    [
+                      {
+                        "offset": 515,
+                        "loader_address": "0xc3f62",
+                        "b01_file_offset": "0x120bec",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 516,
+                        "loader_address": "0xc3f63",
+                        "b01_file_offset": "0x120bf0",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 517,
+                        "loader_address": "0xc3f64",
+                        "b01_file_offset": "0x120bf4",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ],
+                    [
+                      {
+                        "offset": 560,
+                        "loader_address": "0xc3f8f",
+                        "b01_file_offset": "0x120ca0",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 561,
+                        "loader_address": "0xc3f90",
+                        "b01_file_offset": "0x120ca4",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 562,
+                        "loader_address": "0xc3f91",
+                        "b01_file_offset": "0x120ca8",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ]
+                  ]
+                }
+              }
+            },
+            {
+              "descriptor": 47,
+              "slot": 0,
+              "call": "0x12c0b3",
+              "target_config_offset": 147,
+              "effective_object_offset": 446,
+              "base": {
+                "offset": 147,
+                "loader_address": "0xc3df2",
+                "b01_file_offset": "0x12062c",
+                "loader_word": "0x3f800000",
+                "b01_word": "0x3f642905",
+                "loader": 1.0,
+                "b01": 0.8912509083747864
+              },
+              "clamp": [
+                0,
+                5
+              ],
+              "variants": {
+                "default": {
+                  "record_offsets": [
+                    518,
+                    563
+                  ],
+                  "records": [
+                    [
+                      {
+                        "offset": 518,
+                        "loader_address": "0xc3f65",
+                        "b01_file_offset": "0x120bf8",
+                        "loader_word": "0x0",
+                        "b01_word": "0xc2480000",
+                        "loader": 0.0,
+                        "b01": -50.0
+                      },
+                      {
+                        "offset": 519,
+                        "loader_address": "0xc3f66",
+                        "b01_file_offset": "0x120bfc",
+                        "loader_word": "0x0",
+                        "b01_word": "0xbe99999a",
+                        "loader": 0.0,
+                        "b01": -0.30000001192092896
+                      },
+                      {
+                        "offset": 520,
+                        "loader_address": "0xc3f67",
+                        "b01_file_offset": "0x120c00",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ],
+                    [
+                      {
+                        "offset": 563,
+                        "loader_address": "0xc3f92",
+                        "b01_file_offset": "0x120cac",
+                        "loader_word": "0x0",
+                        "b01_word": "0x42c80000",
+                        "loader": 0.0,
+                        "b01": 100.0
+                      },
+                      {
+                        "offset": 564,
+                        "loader_address": "0xc3f93",
+                        "b01_file_offset": "0x120cb0",
+                        "loader_word": "0x0",
+                        "b01_word": "0x3e4ccccd",
+                        "loader": 0.0,
+                        "b01": 0.20000000298023224
+                      },
+                      {
+                        "offset": 565,
+                        "loader_address": "0xc3f94",
+                        "b01_file_offset": "0x120cb4",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ]
+                  ]
+                }
+              }
+            },
+            {
+              "descriptor": 48,
+              "slot": 0,
+              "call": "0x12c0f1",
+              "target_config_offset": 198,
+              "effective_object_offset": 497,
+              "base": {
+                "offset": 198,
+                "loader_address": "0xc3e25",
+                "b01_file_offset": "0x1206f8",
+                "loader_word": "0x3f8f9e4d",
+                "b01_word": "0x3fe39ea9",
+                "loader": 1.1220184564590454,
+                "b01": 1.778279423713684
+              },
+              "clamp": [
+                0,
+                5
+              ],
+              "variants": {
+                "default": {
+                  "record_offsets": [
+                    521,
+                    566
+                  ],
+                  "records": [
+                    [
+                      {
+                        "offset": 521,
+                        "loader_address": "0xc3f68",
+                        "b01_file_offset": "0x120c04",
+                        "loader_word": "0x0",
+                        "b01_word": "0xc2480000",
+                        "loader": 0.0,
+                        "b01": -50.0
+                      },
+                      {
+                        "offset": 522,
+                        "loader_address": "0xc3f69",
+                        "b01_file_offset": "0x120c08",
+                        "loader_word": "0x0",
+                        "b01_word": "0xbf666666",
+                        "loader": 0.0,
+                        "b01": -0.8999999761581421
+                      },
+                      {
+                        "offset": 523,
+                        "loader_address": "0xc3f6a",
+                        "b01_file_offset": "0x120c0c",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ],
+                    [
+                      {
+                        "offset": 566,
+                        "loader_address": "0xc3f95",
+                        "b01_file_offset": "0x120cb8",
+                        "loader_word": "0x0",
+                        "b01_word": "0x42c80000",
+                        "loader": 0.0,
+                        "b01": 100.0
+                      },
+                      {
+                        "offset": 567,
+                        "loader_address": "0xc3f96",
+                        "b01_file_offset": "0x120cbc",
+                        "loader_word": "0x0",
+                        "b01_word": "0x3e4ccccd",
+                        "loader": 0.0,
+                        "b01": 0.20000000298023224
+                      },
+                      {
+                        "offset": 568,
+                        "loader_address": "0xc3f97",
+                        "b01_file_offset": "0x120cc0",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ]
+                  ]
+                }
+              }
+            },
+            {
+              "descriptor": 49,
+              "slot": 0,
+              "call": "0x12c12f",
+              "target_config_offset": 249,
+              "effective_object_offset": 548,
+              "base": {
+                "offset": 249,
+                "loader_address": "0xc3e58",
+                "b01_file_offset": "0x1207c4",
+                "loader_word": "0x3fcaddc8",
+                "b01_word": "0x3f4b5918",
+                "loader": 1.5848932266235352,
+                "b01": 0.7943282127380371
+              },
+              "clamp": [
+                0,
+                5
+              ],
+              "variants": {
+                "default": {
+                  "record_offsets": [
+                    524,
+                    569
+                  ],
+                  "records": [
+                    [
+                      {
+                        "offset": 524,
+                        "loader_address": "0xc3f6b",
+                        "b01_file_offset": "0x120c10",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 525,
+                        "loader_address": "0xc3f6c",
+                        "b01_file_offset": "0x120c14",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 526,
+                        "loader_address": "0xc3f6d",
+                        "b01_file_offset": "0x120c18",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ],
+                    [
+                      {
+                        "offset": 569,
+                        "loader_address": "0xc3f98",
+                        "b01_file_offset": "0x120cc4",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 570,
+                        "loader_address": "0xc3f99",
+                        "b01_file_offset": "0x120cc8",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 571,
+                        "loader_address": "0xc3f9a",
+                        "b01_file_offset": "0x120ccc",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ]
+                  ]
+                }
+              }
+            },
+            {
+              "descriptor": 50,
+              "slot": 0,
+              "call": "0x12c16d",
+              "target_config_offset": 293,
+              "effective_object_offset": 592,
+              "base": {
+                "offset": 293,
+                "loader_address": "0xc3e84",
+                "b01_file_offset": "0x120874",
+                "loader_word": "0x3f800000",
+                "b01_word": "0x3f800000",
+                "loader": 1.0,
+                "b01": 1.0
+              },
+              "clamp": [
+                0,
+                5
+              ],
+              "variants": {
+                "default": {
+                  "record_offsets": [
+                    527,
+                    572
+                  ],
+                  "records": [
+                    [
+                      {
+                        "offset": 527,
+                        "loader_address": "0xc3f6e",
+                        "b01_file_offset": "0x120c1c",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 528,
+                        "loader_address": "0xc3f6f",
+                        "b01_file_offset": "0x120c20",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 529,
+                        "loader_address": "0xc3f70",
+                        "b01_file_offset": "0x120c24",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ],
+                    [
+                      {
+                        "offset": 572,
+                        "loader_address": "0xc3f9b",
+                        "b01_file_offset": "0x120cd0",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 573,
+                        "loader_address": "0xc3f9c",
+                        "b01_file_offset": "0x120cd4",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 574,
+                        "loader_address": "0xc3f9d",
+                        "b01_file_offset": "0x120cd8",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ]
+                  ]
+                }
+              }
+            },
+            {
+              "descriptor": 51,
+              "slot": 0,
+              "call": "0x12c1ab",
+              "target_config_offset": 377,
+              "effective_object_offset": 676,
+              "base": {
+                "offset": 377,
+                "loader_address": "0xc3ed8",
+                "b01_file_offset": "0x1209c4",
+                "loader_word": "0x3fcccccd",
+                "b01_word": "0x3fcccccd",
+                "loader": 1.600000023841858,
+                "b01": 1.600000023841858
+              },
+              "clamp": [
+                0,
+                5
+              ],
+              "variants": {
+                "default": {
+                  "record_offsets": [
+                    530,
+                    575
+                  ],
+                  "records": [
+                    [
+                      {
+                        "offset": 530,
+                        "loader_address": "0xc3f71",
+                        "b01_file_offset": "0x120c28",
+                        "loader_word": "0x0",
+                        "b01_word": "0xc2480000",
+                        "loader": 0.0,
+                        "b01": -50.0
+                      },
+                      {
+                        "offset": 531,
+                        "loader_address": "0xc3f72",
+                        "b01_file_offset": "0x120c2c",
+                        "loader_word": "0x0",
+                        "b01_word": "0xbe99999a",
+                        "loader": 0.0,
+                        "b01": -0.30000001192092896
+                      },
+                      {
+                        "offset": 532,
+                        "loader_address": "0xc3f73",
+                        "b01_file_offset": "0x120c30",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ],
+                    [
+                      {
+                        "offset": 575,
+                        "loader_address": "0xc3f9e",
+                        "b01_file_offset": "0x120cdc",
+                        "loader_word": "0x0",
+                        "b01_word": "0x42c80000",
+                        "loader": 0.0,
+                        "b01": 100.0
+                      },
+                      {
+                        "offset": 576,
+                        "loader_address": "0xc3f9f",
+                        "b01_file_offset": "0x120ce0",
+                        "loader_word": "0x0",
+                        "b01_word": "0x3e4ccccd",
+                        "loader": 0.0,
+                        "b01": 0.20000000298023224
+                      },
+                      {
+                        "offset": 577,
+                        "loader_address": "0xc3fa0",
+                        "b01_file_offset": "0x120ce4",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ]
+                  ]
+                }
+              }
+            },
+            {
+              "descriptor": 52,
+              "slot": 0,
+              "call": "0x12c1e9",
+              "target_config_offset": 316,
+              "effective_object_offset": 615,
+              "base": {
+                "offset": 316,
+                "loader_address": "0xc3e9b",
+                "b01_file_offset": "0x1208d0",
+                "loader_word": "0x0",
+                "b01_word": "0x42c00000",
+                "loader": 0.0,
+                "b01": 96.0
+              },
+              "clamp": [
+                0,
+                288
+              ],
+              "variants": {
+                "shadow16_eq5": {
+                  "record_offsets": [
+                    494,
+                    500
+                  ],
+                  "records": [
+                    [
+                      {
+                        "offset": 494,
+                        "loader_address": "0xc3f4d",
+                        "b01_file_offset": "0x120b98",
+                        "loader_word": "0x0",
+                        "b01_word": "0xc2480000",
+                        "loader": 0.0,
+                        "b01": -50.0
+                      },
+                      {
+                        "offset": 495,
+                        "loader_address": "0xc3f4e",
+                        "b01_file_offset": "0x120b9c",
+                        "loader_word": "0x0",
+                        "b01_word": "0x42840000",
+                        "loader": 0.0,
+                        "b01": 66.0
+                      },
+                      {
+                        "offset": 496,
+                        "loader_address": "0xc3f4f",
+                        "b01_file_offset": "0x120ba0",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ],
+                    [
+                      {
+                        "offset": 500,
+                        "loader_address": "0xc3f53",
+                        "b01_file_offset": "0x120bb0",
+                        "loader_word": "0x0",
+                        "b01_word": "0x42c80000",
+                        "loader": 0.0,
+                        "b01": 100.0
+                      },
+                      {
+                        "offset": 501,
+                        "loader_address": "0xc3f54",
+                        "b01_file_offset": "0x120bb4",
+                        "loader_word": "0x0",
+                        "b01_word": "0xc29a0000",
+                        "loader": 0.0,
+                        "b01": -77.0
+                      },
+                      {
+                        "offset": 502,
+                        "loader_address": "0xc3f55",
+                        "b01_file_offset": "0x120bb8",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ]
+                  ]
+                },
+                "shadow20_eq3": {
+                  "record_offsets": [
+                    427,
+                    433
+                  ],
+                  "records": [
+                    [
+                      {
+                        "offset": 427,
+                        "loader_address": "0xc3f0a",
+                        "b01_file_offset": "0x120a8c",
+                        "loader_word": "0x0",
+                        "b01_word": "0xc2480000",
+                        "loader": 0.0,
+                        "b01": -50.0
+                      },
+                      {
+                        "offset": 428,
+                        "loader_address": "0xc3f0b",
+                        "b01_file_offset": "0x120a90",
+                        "loader_word": "0x0",
+                        "b01_word": "0x42840000",
+                        "loader": 0.0,
+                        "b01": 66.0
+                      },
+                      {
+                        "offset": 429,
+                        "loader_address": "0xc3f0c",
+                        "b01_file_offset": "0x120a94",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ],
+                    [
+                      {
+                        "offset": 433,
+                        "loader_address": "0xc3f10",
+                        "b01_file_offset": "0x120aa4",
+                        "loader_word": "0x0",
+                        "b01_word": "0x42c80000",
+                        "loader": 0.0,
+                        "b01": 100.0
+                      },
+                      {
+                        "offset": 434,
+                        "loader_address": "0xc3f11",
+                        "b01_file_offset": "0x120aa8",
+                        "loader_word": "0x0",
+                        "b01_word": "0xc29a0000",
+                        "loader": 0.0,
+                        "b01": -77.0
+                      },
+                      {
+                        "offset": 435,
+                        "loader_address": "0xc3f12",
+                        "b01_file_offset": "0x120aac",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ]
+                  ]
+                },
+                "default": {
+                  "record_offsets": [
+                    533,
+                    578
+                  ],
+                  "records": [
+                    [
+                      {
+                        "offset": 533,
+                        "loader_address": "0xc3f74",
+                        "b01_file_offset": "0x120c34",
+                        "loader_word": "0x0",
+                        "b01_word": "0xc2480000",
+                        "loader": 0.0,
+                        "b01": -50.0
+                      },
+                      {
+                        "offset": 534,
+                        "loader_address": "0xc3f75",
+                        "b01_file_offset": "0x120c38",
+                        "loader_word": "0x0",
+                        "b01_word": "0x42840000",
+                        "loader": 0.0,
+                        "b01": 66.0
+                      },
+                      {
+                        "offset": 535,
+                        "loader_address": "0xc3f76",
+                        "b01_file_offset": "0x120c3c",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ],
+                    [
+                      {
+                        "offset": 578,
+                        "loader_address": "0xc3fa1",
+                        "b01_file_offset": "0x120ce8",
+                        "loader_word": "0x0",
+                        "b01_word": "0x42c80000",
+                        "loader": 0.0,
+                        "b01": 100.0
+                      },
+                      {
+                        "offset": 579,
+                        "loader_address": "0xc3fa2",
+                        "b01_file_offset": "0x120cec",
+                        "loader_word": "0x0",
+                        "b01_word": "0xc29a0000",
+                        "loader": 0.0,
+                        "b01": -77.0
+                      },
+                      {
+                        "offset": 580,
+                        "loader_address": "0xc3fa3",
+                        "b01_file_offset": "0x120cf0",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ]
+                  ]
+                }
+              }
+            },
+            {
+              "descriptor": 53,
+              "slot": 0,
+              "call": "0x12c227",
+              "target_config_offset": 317,
+              "effective_object_offset": 616,
+              "base": {
+                "offset": 317,
+                "loader_address": "0xc3e9c",
+                "b01_file_offset": "0x1208d4",
+                "loader_word": "0x0",
+                "b01_word": "0x42c00000",
+                "loader": 0.0,
+                "b01": 96.0
+              },
+              "clamp": [
+                0,
+                288
+              ],
+              "variants": {
+                "shadow16_eq5": {
+                  "record_offsets": [
+                    497,
+                    503
+                  ],
+                  "records": [
+                    [
+                      {
+                        "offset": 497,
+                        "loader_address": "0xc3f50",
+                        "b01_file_offset": "0x120ba4",
+                        "loader_word": "0x0",
+                        "b01_word": "0xc2480000",
+                        "loader": 0.0,
+                        "b01": -50.0
+                      },
+                      {
+                        "offset": 498,
+                        "loader_address": "0xc3f51",
+                        "b01_file_offset": "0x120ba8",
+                        "loader_word": "0x0",
+                        "b01_word": "0x42840000",
+                        "loader": 0.0,
+                        "b01": 66.0
+                      },
+                      {
+                        "offset": 499,
+                        "loader_address": "0xc3f52",
+                        "b01_file_offset": "0x120bac",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ],
+                    [
+                      {
+                        "offset": 503,
+                        "loader_address": "0xc3f56",
+                        "b01_file_offset": "0x120bbc",
+                        "loader_word": "0x0",
+                        "b01_word": "0x42c80000",
+                        "loader": 0.0,
+                        "b01": 100.0
+                      },
+                      {
+                        "offset": 504,
+                        "loader_address": "0xc3f57",
+                        "b01_file_offset": "0x120bc0",
+                        "loader_word": "0x0",
+                        "b01_word": "0xc29a0000",
+                        "loader": 0.0,
+                        "b01": -77.0
+                      },
+                      {
+                        "offset": 505,
+                        "loader_address": "0xc3f58",
+                        "b01_file_offset": "0x120bc4",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ]
+                  ]
+                },
+                "shadow20_eq3": {
+                  "record_offsets": [
+                    430,
+                    436
+                  ],
+                  "records": [
+                    [
+                      {
+                        "offset": 430,
+                        "loader_address": "0xc3f0d",
+                        "b01_file_offset": "0x120a98",
+                        "loader_word": "0x0",
+                        "b01_word": "0xc2480000",
+                        "loader": 0.0,
+                        "b01": -50.0
+                      },
+                      {
+                        "offset": 431,
+                        "loader_address": "0xc3f0e",
+                        "b01_file_offset": "0x120a9c",
+                        "loader_word": "0x0",
+                        "b01_word": "0x42840000",
+                        "loader": 0.0,
+                        "b01": 66.0
+                      },
+                      {
+                        "offset": 432,
+                        "loader_address": "0xc3f0f",
+                        "b01_file_offset": "0x120aa0",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ],
+                    [
+                      {
+                        "offset": 436,
+                        "loader_address": "0xc3f13",
+                        "b01_file_offset": "0x120ab0",
+                        "loader_word": "0x0",
+                        "b01_word": "0x42c80000",
+                        "loader": 0.0,
+                        "b01": 100.0
+                      },
+                      {
+                        "offset": 437,
+                        "loader_address": "0xc3f14",
+                        "b01_file_offset": "0x120ab4",
+                        "loader_word": "0x0",
+                        "b01_word": "0xc29a0000",
+                        "loader": 0.0,
+                        "b01": -77.0
+                      },
+                      {
+                        "offset": 438,
+                        "loader_address": "0xc3f15",
+                        "b01_file_offset": "0x120ab8",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ]
+                  ]
+                },
+                "default": {
+                  "record_offsets": [
+                    536,
+                    581
+                  ],
+                  "records": [
+                    [
+                      {
+                        "offset": 536,
+                        "loader_address": "0xc3f77",
+                        "b01_file_offset": "0x120c40",
+                        "loader_word": "0x0",
+                        "b01_word": "0xc2480000",
+                        "loader": 0.0,
+                        "b01": -50.0
+                      },
+                      {
+                        "offset": 537,
+                        "loader_address": "0xc3f78",
+                        "b01_file_offset": "0x120c44",
+                        "loader_word": "0x0",
+                        "b01_word": "0x42840000",
+                        "loader": 0.0,
+                        "b01": 66.0
+                      },
+                      {
+                        "offset": 538,
+                        "loader_address": "0xc3f79",
+                        "b01_file_offset": "0x120c48",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ],
+                    [
+                      {
+                        "offset": 581,
+                        "loader_address": "0xc3fa4",
+                        "b01_file_offset": "0x120cf4",
+                        "loader_word": "0x0",
+                        "b01_word": "0x42c80000",
+                        "loader": 0.0,
+                        "b01": 100.0
+                      },
+                      {
+                        "offset": 582,
+                        "loader_address": "0xc3fa5",
+                        "b01_file_offset": "0x120cf8",
+                        "loader_word": "0x0",
+                        "b01_word": "0xc29a0000",
+                        "loader": 0.0,
+                        "b01": -77.0
+                      },
+                      {
+                        "offset": 583,
+                        "loader_address": "0xc3fa6",
+                        "b01_file_offset": "0x120cfc",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ]
+                  ]
+                }
+              }
+            },
+            {
+              "descriptor": 54,
+              "slot": 0,
+              "call": "0x12c265",
+              "target_config_offset": 420,
+              "effective_object_offset": 719,
+              "base": {
+                "offset": 420,
+                "loader_address": "0xc3f03",
+                "b01_file_offset": "0x120a70",
+                "loader_word": "0x3f800000",
+                "b01_word": "0x3f8f9e4d",
+                "loader": 1.0,
+                "b01": 1.1220184564590454
+              },
+              "clamp": [
+                0,
+                5
+              ],
+              "variants": {
+                "default": {
+                  "record_offsets": [
+                    539,
+                    584
+                  ],
+                  "records": [
+                    [
+                      {
+                        "offset": 539,
+                        "loader_address": "0xc3f7a",
+                        "b01_file_offset": "0x120c4c",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 540,
+                        "loader_address": "0xc3f7b",
+                        "b01_file_offset": "0x120c50",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 541,
+                        "loader_address": "0xc3f7c",
+                        "b01_file_offset": "0x120c54",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ],
+                    [
+                      {
+                        "offset": 584,
+                        "loader_address": "0xc3fa7",
+                        "b01_file_offset": "0x120d00",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 585,
+                        "loader_address": "0xc3fa8",
+                        "b01_file_offset": "0x120d04",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 586,
+                        "loader_address": "0xc3fa9",
+                        "b01_file_offset": "0x120d08",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ]
+                  ]
+                }
+              }
+            },
+            {
+              "descriptor": 55,
+              "slot": 0,
+              "call": "0x12c2a4",
+              "target_config_offset": 307,
+              "effective_object_offset": 606,
+              "base": {
+                "offset": 307,
+                "loader_address": "0xc3e92",
+                "b01_file_offset": "0x1208ac",
+                "loader_word": "0x0",
+                "b01_word": "0x0",
+                "loader": 0.0,
+                "b01": 0.0
+              },
+              "clamp": [
+                -100,
+                20
+              ],
+              "variants": {
+                "default": {
+                  "record_offsets": [
+                    542,
+                    587
+                  ],
+                  "records": [
+                    [
+                      {
+                        "offset": 542,
+                        "loader_address": "0xc3f7d",
+                        "b01_file_offset": "0x120c58",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 543,
+                        "loader_address": "0xc3f7e",
+                        "b01_file_offset": "0x120c5c",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 544,
+                        "loader_address": "0xc3f7f",
+                        "b01_file_offset": "0x120c60",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ],
+                    [
+                      {
+                        "offset": 587,
+                        "loader_address": "0xc3faa",
+                        "b01_file_offset": "0x120d0c",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 588,
+                        "loader_address": "0xc3fab",
+                        "b01_file_offset": "0x120d10",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 589,
+                        "loader_address": "0xc3fac",
+                        "b01_file_offset": "0x120d14",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ]
+                  ]
+                }
+              }
+            },
+            {
+              "descriptor": 56,
+              "slot": 0,
+              "call": "0x12c330",
+              "target_config_offset": 312,
+              "effective_object_offset": 611,
+              "base": {
+                "offset": 312,
+                "loader_address": "0xc3e97",
+                "b01_file_offset": "0x1208c0",
+                "loader_word": "0x0",
+                "b01_word": "0x0",
+                "loader": 0.0,
+                "b01": 0.0
+              },
+              "clamp": [
+                -100,
+                20
+              ],
+              "variants": {
+                "default": {
+                  "record_offsets": [
+                    545,
+                    590
+                  ],
+                  "records": [
+                    [
+                      {
+                        "offset": 545,
+                        "loader_address": "0xc3f80",
+                        "b01_file_offset": "0x120c64",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 546,
+                        "loader_address": "0xc3f81",
+                        "b01_file_offset": "0x120c68",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 547,
+                        "loader_address": "0xc3f82",
+                        "b01_file_offset": "0x120c6c",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ],
+                    [
+                      {
+                        "offset": 590,
+                        "loader_address": "0xc3fad",
+                        "b01_file_offset": "0x120d18",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 591,
+                        "loader_address": "0xc3fae",
+                        "b01_file_offset": "0x120d1c",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 592,
+                        "loader_address": "0xc3faf",
+                        "b01_file_offset": "0x120d20",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ]
+                  ]
+                }
+              }
+            },
+            {
+              "descriptor": 57,
+              "slot": 0,
+              "call": "0x12c3b5",
+              "target_config_offset": 391,
+              "effective_object_offset": 690,
+              "base": {
+                "offset": 391,
+                "loader_address": "0xc3ee6",
+                "b01_file_offset": "0x1209fc",
+                "loader_word": "0x0",
+                "b01_word": "0x0",
+                "loader": 0.0,
+                "b01": 0.0
+              },
+              "clamp": [
+                -100,
+                20
+              ],
+              "variants": {
+                "default": {
+                  "record_offsets": [
+                    548,
+                    593
+                  ],
+                  "records": [
+                    [
+                      {
+                        "offset": 548,
+                        "loader_address": "0xc3f83",
+                        "b01_file_offset": "0x120c70",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 549,
+                        "loader_address": "0xc3f84",
+                        "b01_file_offset": "0x120c74",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 550,
+                        "loader_address": "0xc3f85",
+                        "b01_file_offset": "0x120c78",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ],
+                    [
+                      {
+                        "offset": 593,
+                        "loader_address": "0xc3fb0",
+                        "b01_file_offset": "0x120d24",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 594,
+                        "loader_address": "0xc3fb1",
+                        "b01_file_offset": "0x120d28",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 595,
+                        "loader_address": "0xc3fb2",
+                        "b01_file_offset": "0x120d2c",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ]
+                  ]
+                }
+              }
+            },
+            {
+              "descriptor": 58,
+              "slot": 0,
+              "call": "0x12c43d",
+              "target_config_offset": 396,
+              "effective_object_offset": 695,
+              "base": {
+                "offset": 396,
+                "loader_address": "0xc3eeb",
+                "b01_file_offset": "0x120a10",
+                "loader_word": "0x0",
+                "b01_word": "0x0",
+                "loader": 0.0,
+                "b01": 0.0
+              },
+              "clamp": [
+                -100,
+                20
+              ],
+              "variants": {
+                "default": {
+                  "record_offsets": [
+                    551,
+                    596
+                  ],
+                  "records": [
+                    [
+                      {
+                        "offset": 551,
+                        "loader_address": "0xc3f86",
+                        "b01_file_offset": "0x120c7c",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 552,
+                        "loader_address": "0xc3f87",
+                        "b01_file_offset": "0x120c80",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 553,
+                        "loader_address": "0xc3f88",
+                        "b01_file_offset": "0x120c84",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ],
+                    [
+                      {
+                        "offset": 596,
+                        "loader_address": "0xc3fb3",
+                        "b01_file_offset": "0x120d30",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 597,
+                        "loader_address": "0xc3fb4",
+                        "b01_file_offset": "0x120d34",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 598,
+                        "loader_address": "0xc3fb5",
+                        "b01_file_offset": "0x120d38",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ]
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "api": 18,
+          "slot": 1,
+          "parameters": [
+            {
+              "descriptor": 44,
+              "slot": 1,
+              "call": "0x12c598",
+              "target_config_offset": 35,
+              "effective_object_offset": 334,
+              "base": {
+                "offset": 35,
+                "loader_address": "0xc3d82",
+                "b01_file_offset": "0x12046c",
+                "loader_word": "0x3f353bef",
+                "b01_word": "0x3f800000",
+                "loader": 0.7079457640647888,
+                "b01": 1.0
+              },
+              "clamp": [
+                0,
+                5
+              ],
+              "variants": {
+                "default": {
+                  "record_offsets": [
+                    599,
+                    635
+                  ],
+                  "records": [
+                    [
+                      {
+                        "offset": 599,
+                        "loader_address": "0xc3fb6",
+                        "b01_file_offset": "0x120d3c",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 600,
+                        "loader_address": "0xc3fb7",
+                        "b01_file_offset": "0x120d40",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 601,
+                        "loader_address": "0xc3fb8",
+                        "b01_file_offset": "0x120d44",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ],
+                    [
+                      {
+                        "offset": 635,
+                        "loader_address": "0xc3fda",
+                        "b01_file_offset": "0x120dcc",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 636,
+                        "loader_address": "0xc3fdb",
+                        "b01_file_offset": "0x120dd0",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 637,
+                        "loader_address": "0xc3fdc",
+                        "b01_file_offset": "0x120dd4",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ]
+                  ]
+                }
+              }
+            },
+            {
+              "descriptor": 45,
+              "slot": 1,
+              "call": "0x12c5da",
+              "target_config_offset": 79,
+              "effective_object_offset": 378,
+              "base": {
+                "offset": 79,
+                "loader_address": "0xc3dae",
+                "b01_file_offset": "0x12051c",
+                "loader_word": "0x3f4b5918",
+                "b01_word": "0x0",
+                "loader": 0.7943282127380371,
+                "b01": 0.0
+              },
+              "clamp": [
+                0,
+                5
+              ],
+              "variants": {
+                "default": {
+                  "record_offsets": [
+                    602,
+                    638
+                  ],
+                  "records": [
+                    [
+                      {
+                        "offset": 602,
+                        "loader_address": "0xc3fb9",
+                        "b01_file_offset": "0x120d48",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 603,
+                        "loader_address": "0xc3fba",
+                        "b01_file_offset": "0x120d4c",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 604,
+                        "loader_address": "0xc3fbb",
+                        "b01_file_offset": "0x120d50",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ],
+                    [
+                      {
+                        "offset": 638,
+                        "loader_address": "0xc3fdd",
+                        "b01_file_offset": "0x120dd8",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 639,
+                        "loader_address": "0xc3fde",
+                        "b01_file_offset": "0x120ddc",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 640,
+                        "loader_address": "0xc3fdf",
+                        "b01_file_offset": "0x120de0",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ]
+                  ]
+                }
+              }
+            },
+            {
+              "descriptor": 46,
+              "slot": 1,
+              "call": "0x12c61a",
+              "target_config_offset": 122,
+              "effective_object_offset": 421,
+              "base": {
+                "offset": 122,
+                "loader_address": "0xc3dd9",
+                "b01_file_offset": "0x1205c8",
+                "loader_word": "0x3f800000",
+                "b01_word": "0x3f800000",
+                "loader": 1.0,
+                "b01": 1.0
+              },
+              "clamp": [
+                0,
+                5
+              ],
+              "variants": {
+                "default": {
+                  "record_offsets": [
+                    605,
+                    641
+                  ],
+                  "records": [
+                    [
+                      {
+                        "offset": 605,
+                        "loader_address": "0xc3fbc",
+                        "b01_file_offset": "0x120d54",
+                        "loader_word": "0x0",
+                        "b01_word": "0xc1100000",
+                        "loader": 0.0,
+                        "b01": -9.0
+                      },
+                      {
+                        "offset": 606,
+                        "loader_address": "0xc3fbd",
+                        "b01_file_offset": "0x120d58",
+                        "loader_word": "0x0",
+                        "b01_word": "0xbf800000",
+                        "loader": 0.0,
+                        "b01": -1.0
+                      },
+                      {
+                        "offset": 607,
+                        "loader_address": "0xc3fbe",
+                        "b01_file_offset": "0x120d5c",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ],
+                    [
+                      {
+                        "offset": 641,
+                        "loader_address": "0xc3fe0",
+                        "b01_file_offset": "0x120de4",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 642,
+                        "loader_address": "0xc3fe1",
+                        "b01_file_offset": "0x120de8",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 643,
+                        "loader_address": "0xc3fe2",
+                        "b01_file_offset": "0x120dec",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ]
+                  ]
+                }
+              }
+            },
+            {
+              "descriptor": 47,
+              "slot": 1,
+              "call": "0x12c65a",
+              "target_config_offset": 147,
+              "effective_object_offset": 446,
+              "base": {
+                "offset": 147,
+                "loader_address": "0xc3df2",
+                "b01_file_offset": "0x12062c",
+                "loader_word": "0x3f800000",
+                "b01_word": "0x3f642905",
+                "loader": 1.0,
+                "b01": 0.8912509083747864
+              },
+              "clamp": [
+                0,
+                5
+              ],
+              "variants": {
+                "default": {
+                  "record_offsets": [
+                    608,
+                    644
+                  ],
+                  "records": [
+                    [
+                      {
+                        "offset": 608,
+                        "loader_address": "0xc3fbf",
+                        "b01_file_offset": "0x120d60",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 609,
+                        "loader_address": "0xc3fc0",
+                        "b01_file_offset": "0x120d64",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 610,
+                        "loader_address": "0xc3fc1",
+                        "b01_file_offset": "0x120d68",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ],
+                    [
+                      {
+                        "offset": 644,
+                        "loader_address": "0xc3fe3",
+                        "b01_file_offset": "0x120df0",
+                        "loader_word": "0x0",
+                        "b01_word": "0x41100000",
+                        "loader": 0.0,
+                        "b01": 9.0
+                      },
+                      {
+                        "offset": 645,
+                        "loader_address": "0xc3fe4",
+                        "b01_file_offset": "0x120df4",
+                        "loader_word": "0x0",
+                        "b01_word": "0xbf000000",
+                        "loader": 0.0,
+                        "b01": -0.5
+                      },
+                      {
+                        "offset": 646,
+                        "loader_address": "0xc3fe5",
+                        "b01_file_offset": "0x120df8",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ]
+                  ]
+                }
+              }
+            },
+            {
+              "descriptor": 48,
+              "slot": 1,
+              "call": "0x12c69a",
+              "target_config_offset": 198,
+              "effective_object_offset": 497,
+              "base": {
+                "offset": 198,
+                "loader_address": "0xc3e25",
+                "b01_file_offset": "0x1206f8",
+                "loader_word": "0x3f8f9e4d",
+                "b01_word": "0x3fe39ea9",
+                "loader": 1.1220184564590454,
+                "b01": 1.778279423713684
+              },
+              "clamp": [
+                0,
+                5
+              ],
+              "variants": {
+                "default": {
+                  "record_offsets": [
+                    611,
+                    647
+                  ],
+                  "records": [
+                    [
+                      {
+                        "offset": 611,
+                        "loader_address": "0xc3fc2",
+                        "b01_file_offset": "0x120d6c",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 612,
+                        "loader_address": "0xc3fc3",
+                        "b01_file_offset": "0x120d70",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 613,
+                        "loader_address": "0xc3fc4",
+                        "b01_file_offset": "0x120d74",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ],
+                    [
+                      {
+                        "offset": 647,
+                        "loader_address": "0xc3fe6",
+                        "b01_file_offset": "0x120dfc",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 648,
+                        "loader_address": "0xc3fe7",
+                        "b01_file_offset": "0x120e00",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 649,
+                        "loader_address": "0xc3fe8",
+                        "b01_file_offset": "0x120e04",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ]
+                  ]
+                }
+              }
+            },
+            {
+              "descriptor": 49,
+              "slot": 1,
+              "call": "0x12c6da",
+              "target_config_offset": 249,
+              "effective_object_offset": 548,
+              "base": {
+                "offset": 249,
+                "loader_address": "0xc3e58",
+                "b01_file_offset": "0x1207c4",
+                "loader_word": "0x3fcaddc8",
+                "b01_word": "0x3f4b5918",
+                "loader": 1.5848932266235352,
+                "b01": 0.7943282127380371
+              },
+              "clamp": [
+                0,
+                5
+              ],
+              "variants": {
+                "default": {
+                  "record_offsets": [
+                    614,
+                    650
+                  ],
+                  "records": [
+                    [
+                      {
+                        "offset": 614,
+                        "loader_address": "0xc3fc5",
+                        "b01_file_offset": "0x120d78",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 615,
+                        "loader_address": "0xc3fc6",
+                        "b01_file_offset": "0x120d7c",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 616,
+                        "loader_address": "0xc3fc7",
+                        "b01_file_offset": "0x120d80",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ],
+                    [
+                      {
+                        "offset": 650,
+                        "loader_address": "0xc3fe9",
+                        "b01_file_offset": "0x120e08",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 651,
+                        "loader_address": "0xc3fea",
+                        "b01_file_offset": "0x120e0c",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 652,
+                        "loader_address": "0xc3feb",
+                        "b01_file_offset": "0x120e10",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ]
+                  ]
+                }
+              }
+            },
+            {
+              "descriptor": 50,
+              "slot": 1,
+              "call": "0x12c71a",
+              "target_config_offset": 293,
+              "effective_object_offset": 592,
+              "base": {
+                "offset": 293,
+                "loader_address": "0xc3e84",
+                "b01_file_offset": "0x120874",
+                "loader_word": "0x3f800000",
+                "b01_word": "0x3f800000",
+                "loader": 1.0,
+                "b01": 1.0
+              },
+              "clamp": [
+                0,
+                5
+              ],
+              "variants": {
+                "default": {
+                  "record_offsets": [
+                    617,
+                    653
+                  ],
+                  "records": [
+                    [
+                      {
+                        "offset": 617,
+                        "loader_address": "0xc3fc8",
+                        "b01_file_offset": "0x120d84",
+                        "loader_word": "0x0",
+                        "b01_word": "0xc1100000",
+                        "loader": 0.0,
+                        "b01": -9.0
+                      },
+                      {
+                        "offset": 618,
+                        "loader_address": "0xc3fc9",
+                        "b01_file_offset": "0x120d88",
+                        "loader_word": "0x0",
+                        "b01_word": "0xbf800000",
+                        "loader": 0.0,
+                        "b01": -1.0
+                      },
+                      {
+                        "offset": 619,
+                        "loader_address": "0xc3fca",
+                        "b01_file_offset": "0x120d8c",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ],
+                    [
+                      {
+                        "offset": 653,
+                        "loader_address": "0xc3fec",
+                        "b01_file_offset": "0x120e14",
+                        "loader_word": "0x0",
+                        "b01_word": "0x41100000",
+                        "loader": 0.0,
+                        "b01": 9.0
+                      },
+                      {
+                        "offset": 654,
+                        "loader_address": "0xc3fed",
+                        "b01_file_offset": "0x120e18",
+                        "loader_word": "0x0",
+                        "b01_word": "0x3fc00000",
+                        "loader": 0.0,
+                        "b01": 1.5
+                      },
+                      {
+                        "offset": 655,
+                        "loader_address": "0xc3fee",
+                        "b01_file_offset": "0x120e1c",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ]
+                  ]
+                }
+              }
+            },
+            {
+              "descriptor": 54,
+              "slot": 1,
+              "call": "0x12c75a",
+              "target_config_offset": 420,
+              "effective_object_offset": 719,
+              "base": {
+                "offset": 420,
+                "loader_address": "0xc3f03",
+                "b01_file_offset": "0x120a70",
+                "loader_word": "0x3f800000",
+                "b01_word": "0x3f8f9e4d",
+                "loader": 1.0,
+                "b01": 1.1220184564590454
+              },
+              "clamp": [
+                0,
+                5
+              ],
+              "variants": {
+                "default": {
+                  "record_offsets": [
+                    620,
+                    656
+                  ],
+                  "records": [
+                    [
+                      {
+                        "offset": 620,
+                        "loader_address": "0xc3fcb",
+                        "b01_file_offset": "0x120d90",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 621,
+                        "loader_address": "0xc3fcc",
+                        "b01_file_offset": "0x120d94",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 622,
+                        "loader_address": "0xc3fcd",
+                        "b01_file_offset": "0x120d98",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ],
+                    [
+                      {
+                        "offset": 656,
+                        "loader_address": "0xc3fef",
+                        "b01_file_offset": "0x120e20",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 657,
+                        "loader_address": "0xc3ff0",
+                        "b01_file_offset": "0x120e24",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 658,
+                        "loader_address": "0xc3ff1",
+                        "b01_file_offset": "0x120e28",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ]
+                  ]
+                }
+              }
+            },
+            {
+              "descriptor": 55,
+              "slot": 1,
+              "call": "0x12c79b",
+              "target_config_offset": 307,
+              "effective_object_offset": 606,
+              "base": {
+                "offset": 307,
+                "loader_address": "0xc3e92",
+                "b01_file_offset": "0x1208ac",
+                "loader_word": "0x0",
+                "b01_word": "0x0",
+                "loader": 0.0,
+                "b01": 0.0
+              },
+              "clamp": [
+                -100,
+                20
+              ],
+              "variants": {
+                "default": {
+                  "record_offsets": [
+                    623,
+                    659
+                  ],
+                  "records": [
+                    [
+                      {
+                        "offset": 623,
+                        "loader_address": "0xc3fce",
+                        "b01_file_offset": "0x120d9c",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 624,
+                        "loader_address": "0xc3fcf",
+                        "b01_file_offset": "0x120da0",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 625,
+                        "loader_address": "0xc3fd0",
+                        "b01_file_offset": "0x120da4",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ],
+                    [
+                      {
+                        "offset": 659,
+                        "loader_address": "0xc3ff2",
+                        "b01_file_offset": "0x120e2c",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 660,
+                        "loader_address": "0xc3ff3",
+                        "b01_file_offset": "0x120e30",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 661,
+                        "loader_address": "0xc3ff4",
+                        "b01_file_offset": "0x120e34",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ]
+                  ]
+                }
+              }
+            },
+            {
+              "descriptor": 56,
+              "slot": 1,
+              "call": "0x12c82b",
+              "target_config_offset": 312,
+              "effective_object_offset": 611,
+              "base": {
+                "offset": 312,
+                "loader_address": "0xc3e97",
+                "b01_file_offset": "0x1208c0",
+                "loader_word": "0x0",
+                "b01_word": "0x0",
+                "loader": 0.0,
+                "b01": 0.0
+              },
+              "clamp": [
+                -100,
+                20
+              ],
+              "variants": {
+                "default": {
+                  "record_offsets": [
+                    626,
+                    662
+                  ],
+                  "records": [
+                    [
+                      {
+                        "offset": 626,
+                        "loader_address": "0xc3fd1",
+                        "b01_file_offset": "0x120da8",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 627,
+                        "loader_address": "0xc3fd2",
+                        "b01_file_offset": "0x120dac",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 628,
+                        "loader_address": "0xc3fd3",
+                        "b01_file_offset": "0x120db0",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ],
+                    [
+                      {
+                        "offset": 662,
+                        "loader_address": "0xc3ff5",
+                        "b01_file_offset": "0x120e38",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 663,
+                        "loader_address": "0xc3ff6",
+                        "b01_file_offset": "0x120e3c",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 664,
+                        "loader_address": "0xc3ff7",
+                        "b01_file_offset": "0x120e40",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ]
+                  ]
+                }
+              }
+            },
+            {
+              "descriptor": 57,
+              "slot": 1,
+              "call": "0x12c8b4",
+              "target_config_offset": 391,
+              "effective_object_offset": 690,
+              "base": {
+                "offset": 391,
+                "loader_address": "0xc3ee6",
+                "b01_file_offset": "0x1209fc",
+                "loader_word": "0x0",
+                "b01_word": "0x0",
+                "loader": 0.0,
+                "b01": 0.0
+              },
+              "clamp": [
+                -100,
+                20
+              ],
+              "variants": {
+                "default": {
+                  "record_offsets": [
+                    629,
+                    665
+                  ],
+                  "records": [
+                    [
+                      {
+                        "offset": 629,
+                        "loader_address": "0xc3fd4",
+                        "b01_file_offset": "0x120db4",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 630,
+                        "loader_address": "0xc3fd5",
+                        "b01_file_offset": "0x120db8",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 631,
+                        "loader_address": "0xc3fd6",
+                        "b01_file_offset": "0x120dbc",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ],
+                    [
+                      {
+                        "offset": 665,
+                        "loader_address": "0xc3ff8",
+                        "b01_file_offset": "0x120e44",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 666,
+                        "loader_address": "0xc3ff9",
+                        "b01_file_offset": "0x120e48",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 667,
+                        "loader_address": "0xc3ffa",
+                        "b01_file_offset": "0x120e4c",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ]
+                  ]
+                }
+              }
+            },
+            {
+              "descriptor": 58,
+              "slot": 1,
+              "call": "0x12c940",
+              "target_config_offset": 396,
+              "effective_object_offset": 695,
+              "base": {
+                "offset": 396,
+                "loader_address": "0xc3eeb",
+                "b01_file_offset": "0x120a10",
+                "loader_word": "0x0",
+                "b01_word": "0x0",
+                "loader": 0.0,
+                "b01": 0.0
+              },
+              "clamp": [
+                -100,
+                20
+              ],
+              "variants": {
+                "default": {
+                  "record_offsets": [
+                    632,
+                    668
+                  ],
+                  "records": [
+                    [
+                      {
+                        "offset": 632,
+                        "loader_address": "0xc3fd7",
+                        "b01_file_offset": "0x120dc0",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 633,
+                        "loader_address": "0xc3fd8",
+                        "b01_file_offset": "0x120dc4",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 634,
+                        "loader_address": "0xc3fd9",
+                        "b01_file_offset": "0x120dc8",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ],
+                    [
+                      {
+                        "offset": 668,
+                        "loader_address": "0xc3ffb",
+                        "b01_file_offset": "0x120e50",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 669,
+                        "loader_address": "0xc3ffc",
+                        "b01_file_offset": "0x120e54",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      },
+                      {
+                        "offset": 670,
+                        "loader_address": "0xc3ffd",
+                        "b01_file_offset": "0x120e58",
+                        "loader_word": "0x0",
+                        "b01_word": "0x0",
+                        "loader": 0.0,
+                        "b01": 0.0
+                      }
+                    ]
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "eq_rebuilds": [
+        {
+          "descriptor": 55,
+          "design_config_offset": 305,
+          "coefficient_config_offset": 295,
+          "design_words": [
+            {
+              "offset": 305,
+              "loader_address": "0xc3e90",
+              "b01_file_offset": "0x1208a4",
+              "loader_word": "0x41a00000",
+              "b01_word": "0x41a00000",
+              "loader": 20.0,
+              "b01": 20.0
+            },
+            {
+              "offset": 306,
+              "loader_address": "0xc3e91",
+              "b01_file_offset": "0x1208a8",
+              "loader_word": "0x42c80000",
+              "b01_word": "0x42c80000",
+              "loader": 100.0,
+              "b01": 100.0
+            },
+            {
+              "offset": 307,
+              "loader_address": "0xc3e92",
+              "b01_file_offset": "0x1208ac",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader": 0.0,
+              "b01": 0.0
+            },
+            {
+              "offset": 308,
+              "loader_address": "0xc3e93",
+              "b01_file_offset": "0x1208b0",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader": 0.0,
+              "b01": 0.0
+            },
+            {
+              "offset": 309,
+              "loader_address": "0xc3e94",
+              "b01_file_offset": "0x1208b4",
+              "loader_word": "0x3f800000",
+              "b01_word": "0x3f800000",
+              "loader": 1.0,
+              "b01": 1.0
+            }
+          ],
+          "coefficient_words": [
+            {
+              "offset": 295,
+              "loader_address": "0xc3e86",
+              "b01_file_offset": "0x12087c",
+              "loader_word": "0x3f800000",
+              "b01_word": "0x3f800000",
+              "loader": 1.0,
+              "b01": 1.0
+            },
+            {
+              "offset": 296,
+              "loader_address": "0xc3e87",
+              "b01_file_offset": "0x120880",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader": 0.0,
+              "b01": 0.0
+            },
+            {
+              "offset": 297,
+              "loader_address": "0xc3e88",
+              "b01_file_offset": "0x120884",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader": 0.0,
+              "b01": 0.0
+            },
+            {
+              "offset": 298,
+              "loader_address": "0xc3e89",
+              "b01_file_offset": "0x120888",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader": 0.0,
+              "b01": 0.0
+            },
+            {
+              "offset": 299,
+              "loader_address": "0xc3e8a",
+              "b01_file_offset": "0x12088c",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader": 0.0,
+              "b01": 0.0
+            }
+          ],
+          "gain_index": 2,
+          "type_index": 3,
+          "sample_rate": 48000,
+          "channels": 6,
+          "api19_call": "0x12c2ef",
+          "api18_call": "0x12c7e8",
+          "consumer_call": "0x13138c",
+          "consumer_object_offset": 593
+        },
+        {
+          "descriptor": 56,
+          "design_config_offset": 310,
+          "coefficient_config_offset": 300,
+          "design_words": [
+            {
+              "offset": 310,
+              "loader_address": "0xc3e95",
+              "b01_file_offset": "0x1208b8",
+              "loader_word": "0x41a00000",
+              "b01_word": "0x41a00000",
+              "loader": 20.0,
+              "b01": 20.0
+            },
+            {
+              "offset": 311,
+              "loader_address": "0xc3e96",
+              "b01_file_offset": "0x1208bc",
+              "loader_word": "0x42c80000",
+              "b01_word": "0x42c80000",
+              "loader": 100.0,
+              "b01": 100.0
+            },
+            {
+              "offset": 312,
+              "loader_address": "0xc3e97",
+              "b01_file_offset": "0x1208c0",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader": 0.0,
+              "b01": 0.0
+            },
+            {
+              "offset": 313,
+              "loader_address": "0xc3e98",
+              "b01_file_offset": "0x1208c4",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader": 0.0,
+              "b01": 0.0
+            },
+            {
+              "offset": 314,
+              "loader_address": "0xc3e99",
+              "b01_file_offset": "0x1208c8",
+              "loader_word": "0x3f800000",
+              "b01_word": "0x3f800000",
+              "loader": 1.0,
+              "b01": 1.0
+            }
+          ],
+          "coefficient_words": [
+            {
+              "offset": 300,
+              "loader_address": "0xc3e8b",
+              "b01_file_offset": "0x120890",
+              "loader_word": "0x3f800000",
+              "b01_word": "0x3f800000",
+              "loader": 1.0,
+              "b01": 1.0
+            },
+            {
+              "offset": 301,
+              "loader_address": "0xc3e8c",
+              "b01_file_offset": "0x120894",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader": 0.0,
+              "b01": 0.0
+            },
+            {
+              "offset": 302,
+              "loader_address": "0xc3e8d",
+              "b01_file_offset": "0x120898",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader": 0.0,
+              "b01": 0.0
+            },
+            {
+              "offset": 303,
+              "loader_address": "0xc3e8e",
+              "b01_file_offset": "0x12089c",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader": 0.0,
+              "b01": 0.0
+            },
+            {
+              "offset": 304,
+              "loader_address": "0xc3e8f",
+              "b01_file_offset": "0x1208a0",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader": 0.0,
+              "b01": 0.0
+            }
+          ],
+          "gain_index": 2,
+          "type_index": 3,
+          "sample_rate": 48000,
+          "channels": 6,
+          "api19_call": "0x12c376",
+          "api18_call": "0x12c873",
+          "consumer_call": "0x13138c",
+          "consumer_object_offset": 593
+        },
+        {
+          "descriptor": 57,
+          "design_config_offset": 389,
+          "coefficient_config_offset": 379,
+          "design_words": [
+            {
+              "offset": 389,
+              "loader_address": "0xc3ee4",
+              "b01_file_offset": "0x1209f4",
+              "loader_word": "0x41a00000",
+              "b01_word": "0x41a00000",
+              "loader": 20.0,
+              "b01": 20.0
+            },
+            {
+              "offset": 390,
+              "loader_address": "0xc3ee5",
+              "b01_file_offset": "0x1209f8",
+              "loader_word": "0x42c80000",
+              "b01_word": "0x42c80000",
+              "loader": 100.0,
+              "b01": 100.0
+            },
+            {
+              "offset": 391,
+              "loader_address": "0xc3ee6",
+              "b01_file_offset": "0x1209fc",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader": 0.0,
+              "b01": 0.0
+            },
+            {
+              "offset": 392,
+              "loader_address": "0xc3ee7",
+              "b01_file_offset": "0x120a00",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader": 0.0,
+              "b01": 0.0
+            },
+            {
+              "offset": 393,
+              "loader_address": "0xc3ee8",
+              "b01_file_offset": "0x120a04",
+              "loader_word": "0x3f800000",
+              "b01_word": "0x3f800000",
+              "loader": 1.0,
+              "b01": 1.0
+            }
+          ],
+          "coefficient_words": [
+            {
+              "offset": 379,
+              "loader_address": "0xc3eda",
+              "b01_file_offset": "0x1209cc",
+              "loader_word": "0x3f800000",
+              "b01_word": "0x3f800000",
+              "loader": 1.0,
+              "b01": 1.0
+            },
+            {
+              "offset": 380,
+              "loader_address": "0xc3edb",
+              "b01_file_offset": "0x1209d0",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader": 0.0,
+              "b01": 0.0
+            },
+            {
+              "offset": 381,
+              "loader_address": "0xc3edc",
+              "b01_file_offset": "0x1209d4",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader": 0.0,
+              "b01": 0.0
+            },
+            {
+              "offset": 382,
+              "loader_address": "0xc3edd",
+              "b01_file_offset": "0x1209d8",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader": 0.0,
+              "b01": 0.0
+            },
+            {
+              "offset": 383,
+              "loader_address": "0xc3ede",
+              "b01_file_offset": "0x1209dc",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader": 0.0,
+              "b01": 0.0
+            }
+          ],
+          "gain_index": 2,
+          "type_index": 3,
+          "sample_rate": 48000,
+          "channels": 2,
+          "api19_call": "0x12c3fe",
+          "api18_call": "0x12c8ff",
+          "consumer_call": "0x1313e6",
+          "consumer_object_offset": 677
+        },
+        {
+          "descriptor": 58,
+          "design_config_offset": 394,
+          "coefficient_config_offset": 384,
+          "design_words": [
+            {
+              "offset": 394,
+              "loader_address": "0xc3ee9",
+              "b01_file_offset": "0x120a08",
+              "loader_word": "0x41a00000",
+              "b01_word": "0x41a00000",
+              "loader": 20.0,
+              "b01": 20.0
+            },
+            {
+              "offset": 395,
+              "loader_address": "0xc3eea",
+              "b01_file_offset": "0x120a0c",
+              "loader_word": "0x42c80000",
+              "b01_word": "0x42c80000",
+              "loader": 100.0,
+              "b01": 100.0
+            },
+            {
+              "offset": 396,
+              "loader_address": "0xc3eeb",
+              "b01_file_offset": "0x120a10",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader": 0.0,
+              "b01": 0.0
+            },
+            {
+              "offset": 397,
+              "loader_address": "0xc3eec",
+              "b01_file_offset": "0x120a14",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader": 0.0,
+              "b01": 0.0
+            },
+            {
+              "offset": 398,
+              "loader_address": "0xc3eed",
+              "b01_file_offset": "0x120a18",
+              "loader_word": "0x3f800000",
+              "b01_word": "0x3f800000",
+              "loader": 1.0,
+              "b01": 1.0
+            }
+          ],
+          "coefficient_words": [
+            {
+              "offset": 384,
+              "loader_address": "0xc3edf",
+              "b01_file_offset": "0x1209e0",
+              "loader_word": "0x3f800000",
+              "b01_word": "0x3f800000",
+              "loader": 1.0,
+              "b01": 1.0
+            },
+            {
+              "offset": 385,
+              "loader_address": "0xc3ee0",
+              "b01_file_offset": "0x1209e4",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader": 0.0,
+              "b01": 0.0
+            },
+            {
+              "offset": 386,
+              "loader_address": "0xc3ee1",
+              "b01_file_offset": "0x1209e8",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader": 0.0,
+              "b01": 0.0
+            },
+            {
+              "offset": 387,
+              "loader_address": "0xc3ee2",
+              "b01_file_offset": "0x1209ec",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader": 0.0,
+              "b01": 0.0
+            },
+            {
+              "offset": 388,
+              "loader_address": "0xc3ee3",
+              "b01_file_offset": "0x1209f0",
+              "loader_word": "0x0",
+              "b01_word": "0x0",
+              "loader": 0.0,
+              "b01": 0.0
+            }
+          ],
+          "gain_index": 2,
+          "type_index": 3,
+          "sample_rate": 48000,
+          "channels": 2,
+          "api19_call": "0x12c481",
+          "api18_call": "0x12c986",
+          "consumer_call": "0x1313e6",
+          "consumer_object_offset": 677
+        }
+      ],
+      "delay_bindings": {
+        "descriptors": [
+          52,
+          53
+        ],
+        "config_offsets": [
+          316,
+          317
+        ],
+        "object_offsets": [
+          615,
+          616
+        ],
+        "tail_call": "0x133015",
+        "pair_helper": "0x12eb9b",
+        "channel_calls": [
+          "0x12ebc9",
+          "0x12ec04"
+        ],
+        "delay_helper": "0x12f411",
+        "settled_units": "samples; consumer truncates(value+0.5)",
+        "boundary": "individual delays inside two-channel B tail, not total wrapper/acoustic latency; transitions read old value then smooth and read new value"
+      },
+      "selector_rule": "for API19 descriptors52/53: uint32-trunc(shadow API16)==5 first, else uint32-trunc(shadow API20)==3, else default",
+      "selector_object_offsets": [
+        1142,
+        1146
+      ],
+      "eq_zero_gain_proof": "12AB1F calls12AB0A to write [1,0,0,0,0]; rounded type0/1/2 and gain0 return without replacing identity",
+      "boundary": "successful nondeferred parameter targets only; no queue, publication, smoothing or coefficient design for nonzero EQ gain. Other descriptors are config-word bindings, not physical speakers or UI labels."
+    },
+    "slots": [
+      {
+        "slot": 0,
+        "api": 19,
+        "helper": "0x12bf21",
+        "validator": "0x131ee4",
+        "applier": "0x132501",
+        "accepted_range": [
+          -200,
+          200
+        ],
+        "effective_object_offset": 1131,
+        "shadow_object_offset": 1145,
+        "coordinate": "value",
+        "branches": [
+          {
+            "descriptor": 46,
+            "slot": 0,
+            "record_offsets": [
+              515,
+              560
+            ],
+            "call": "0x12c075",
+            "records": [
+              [
+                {
+                  "offset": 515,
+                  "loader_address": "0xc3f62",
+                  "b01_file_offset": "0x120bec",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 516,
+                  "loader_address": "0xc3f63",
+                  "b01_file_offset": "0x120bf0",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 517,
+                  "loader_address": "0xc3f64",
+                  "b01_file_offset": "0x120bf4",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ],
+              [
+                {
+                  "offset": 560,
+                  "loader_address": "0xc3f8f",
+                  "b01_file_offset": "0x120ca0",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 561,
+                  "loader_address": "0xc3f90",
+                  "b01_file_offset": "0x120ca4",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 562,
+                  "loader_address": "0xc3f91",
+                  "b01_file_offset": "0x120ca8",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ]
+            ]
+          },
+          {
+            "descriptor": 50,
+            "slot": 0,
+            "record_offsets": [
+              527,
+              572
+            ],
+            "call": "0x12c16d",
+            "records": [
+              [
+                {
+                  "offset": 527,
+                  "loader_address": "0xc3f6e",
+                  "b01_file_offset": "0x120c1c",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 528,
+                  "loader_address": "0xc3f6f",
+                  "b01_file_offset": "0x120c20",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 529,
+                  "loader_address": "0xc3f70",
+                  "b01_file_offset": "0x120c24",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ],
+              [
+                {
+                  "offset": 572,
+                  "loader_address": "0xc3f9b",
+                  "b01_file_offset": "0x120cd0",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 573,
+                  "loader_address": "0xc3f9c",
+                  "b01_file_offset": "0x120cd4",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 574,
+                  "loader_address": "0xc3f9d",
+                  "b01_file_offset": "0x120cd8",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ]
+            ]
+          },
+          {
+            "descriptor": 51,
+            "slot": 0,
+            "record_offsets": [
+              530,
+              575
+            ],
+            "call": "0x12c1ab",
+            "records": [
+              [
+                {
+                  "offset": 530,
+                  "loader_address": "0xc3f71",
+                  "b01_file_offset": "0x120c28",
+                  "loader_word": "0x0",
+                  "b01_word": "0xc2480000",
+                  "loader": 0.0,
+                  "b01": -50.0
+                },
+                {
+                  "offset": 531,
+                  "loader_address": "0xc3f72",
+                  "b01_file_offset": "0x120c2c",
+                  "loader_word": "0x0",
+                  "b01_word": "0xbe99999a",
+                  "loader": 0.0,
+                  "b01": -0.30000001192092896
+                },
+                {
+                  "offset": 532,
+                  "loader_address": "0xc3f73",
+                  "b01_file_offset": "0x120c30",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ],
+              [
+                {
+                  "offset": 575,
+                  "loader_address": "0xc3f9e",
+                  "b01_file_offset": "0x120cdc",
+                  "loader_word": "0x0",
+                  "b01_word": "0x42c80000",
+                  "loader": 0.0,
+                  "b01": 100.0
+                },
+                {
+                  "offset": 576,
+                  "loader_address": "0xc3f9f",
+                  "b01_file_offset": "0x120ce0",
+                  "loader_word": "0x0",
+                  "b01_word": "0x3e4ccccd",
+                  "loader": 0.0,
+                  "b01": 0.20000000298023224
+                },
+                {
+                  "offset": 577,
+                  "loader_address": "0xc3fa0",
+                  "b01_file_offset": "0x120ce4",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ]
+            ]
+          }
+        ],
+        "all_helper_descriptors": [
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58
+        ],
+        "range_sha256": "f92217993f23612d061af2c029459cc59701a074094562d1aa1b24285dfef77e"
+      },
+      {
+        "slot": 1,
+        "api": 18,
+        "helper": "0x12c4ef",
+        "validator": "0x131ec8",
+        "applier": "0x1324d8",
+        "accepted_range": [
+          -200,
+          200
+        ],
+        "effective_object_offset": 1130,
+        "shadow_object_offset": 1144,
+        "coordinate": "value",
+        "branches": [
+          {
+            "descriptor": 46,
+            "slot": 1,
+            "record_offsets": [
+              605,
+              641
+            ],
+            "call": "0x12c61a",
+            "records": [
+              [
+                {
+                  "offset": 605,
+                  "loader_address": "0xc3fbc",
+                  "b01_file_offset": "0x120d54",
+                  "loader_word": "0x0",
+                  "b01_word": "0xc1100000",
+                  "loader": 0.0,
+                  "b01": -9.0
+                },
+                {
+                  "offset": 606,
+                  "loader_address": "0xc3fbd",
+                  "b01_file_offset": "0x120d58",
+                  "loader_word": "0x0",
+                  "b01_word": "0xbf800000",
+                  "loader": 0.0,
+                  "b01": -1.0
+                },
+                {
+                  "offset": 607,
+                  "loader_address": "0xc3fbe",
+                  "b01_file_offset": "0x120d5c",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ],
+              [
+                {
+                  "offset": 641,
+                  "loader_address": "0xc3fe0",
+                  "b01_file_offset": "0x120de4",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 642,
+                  "loader_address": "0xc3fe1",
+                  "b01_file_offset": "0x120de8",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 643,
+                  "loader_address": "0xc3fe2",
+                  "b01_file_offset": "0x120dec",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ]
+            ]
+          },
+          {
+            "descriptor": 50,
+            "slot": 1,
+            "record_offsets": [
+              617,
+              653
+            ],
+            "call": "0x12c71a",
+            "records": [
+              [
+                {
+                  "offset": 617,
+                  "loader_address": "0xc3fc8",
+                  "b01_file_offset": "0x120d84",
+                  "loader_word": "0x0",
+                  "b01_word": "0xc1100000",
+                  "loader": 0.0,
+                  "b01": -9.0
+                },
+                {
+                  "offset": 618,
+                  "loader_address": "0xc3fc9",
+                  "b01_file_offset": "0x120d88",
+                  "loader_word": "0x0",
+                  "b01_word": "0xbf800000",
+                  "loader": 0.0,
+                  "b01": -1.0
+                },
+                {
+                  "offset": 619,
+                  "loader_address": "0xc3fca",
+                  "b01_file_offset": "0x120d8c",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ],
+              [
+                {
+                  "offset": 653,
+                  "loader_address": "0xc3fec",
+                  "b01_file_offset": "0x120e14",
+                  "loader_word": "0x0",
+                  "b01_word": "0x41100000",
+                  "loader": 0.0,
+                  "b01": 9.0
+                },
+                {
+                  "offset": 654,
+                  "loader_address": "0xc3fed",
+                  "b01_file_offset": "0x120e18",
+                  "loader_word": "0x0",
+                  "b01_word": "0x3fc00000",
+                  "loader": 0.0,
+                  "b01": 1.5
+                },
+                {
+                  "offset": 655,
+                  "loader_address": "0xc3fee",
+                  "b01_file_offset": "0x120e1c",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ]
+            ]
+          }
+        ],
+        "all_helper_descriptors": [
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          54,
+          55,
+          56,
+          57,
+          58
+        ],
+        "range_sha256": "68972861cc958159dc940000791e45930ab5b58cc7a8ec28a855f65989842ade"
+      },
+      {
+        "slot": 2,
+        "api": 22,
+        "helper": "0x12c9b7",
+        "validator": "0x131f46",
+        "applier": "0x1325b2",
+        "accepted_range": [
+          -200,
+          200
+        ],
+        "effective_object_offset": 1134,
+        "shadow_object_offset": 1148,
+        "coordinate": "value",
+        "branches": [
+          {
+            "descriptor": 46,
+            "slot": 2,
+            "record_offsets": [
+              671,
+              689
+            ],
+            "call": "0x12ca16",
+            "records": [
+              [
+                {
+                  "offset": 671,
+                  "loader_address": "0xc3ffe",
+                  "b01_file_offset": "0x120e5c",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 672,
+                  "loader_address": "0xc3fff",
+                  "b01_file_offset": "0x120e60",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 673,
+                  "loader_address": "0xc4000",
+                  "b01_file_offset": "0x120e64",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ],
+              [
+                {
+                  "offset": 689,
+                  "loader_address": "0xc4010",
+                  "b01_file_offset": "0x120ea4",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 690,
+                  "loader_address": "0xc4011",
+                  "b01_file_offset": "0x120ea8",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 691,
+                  "loader_address": "0xc4012",
+                  "b01_file_offset": "0x120eac",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ]
+            ]
+          },
+          {
+            "descriptor": 50,
+            "slot": 2,
+            "record_offsets": [
+              680,
+              698
+            ],
+            "call": "0x12cac0",
+            "records": [
+              [
+                {
+                  "offset": 680,
+                  "loader_address": "0xc4007",
+                  "b01_file_offset": "0x120e80",
+                  "loader_word": "0x0",
+                  "b01_word": "0xc1100000",
+                  "loader": 0.0,
+                  "b01": -9.0
+                },
+                {
+                  "offset": 681,
+                  "loader_address": "0xc4008",
+                  "b01_file_offset": "0x120e84",
+                  "loader_word": "0x0",
+                  "b01_word": "0xbf000000",
+                  "loader": 0.0,
+                  "b01": -0.5
+                },
+                {
+                  "offset": 682,
+                  "loader_address": "0xc4009",
+                  "b01_file_offset": "0x120e88",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ],
+              [
+                {
+                  "offset": 698,
+                  "loader_address": "0xc4019",
+                  "b01_file_offset": "0x120ec8",
+                  "loader_word": "0x0",
+                  "b01_word": "0x41100000",
+                  "loader": 0.0,
+                  "b01": 9.0
+                },
+                {
+                  "offset": 699,
+                  "loader_address": "0xc401a",
+                  "b01_file_offset": "0x120ecc",
+                  "loader_word": "0x0",
+                  "b01_word": "0xbf000000",
+                  "loader": 0.0,
+                  "b01": -0.5
+                },
+                {
+                  "offset": 700,
+                  "loader_address": "0xc401b",
+                  "b01_file_offset": "0x120ed0",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ]
+            ]
+          },
+          {
+            "descriptor": 51,
+            "slot": 2,
+            "record_offsets": [
+              683,
+              701
+            ],
+            "call": "0x12caf8",
+            "records": [
+              [
+                {
+                  "offset": 683,
+                  "loader_address": "0xc400a",
+                  "b01_file_offset": "0x120e8c",
+                  "loader_word": "0x0",
+                  "b01_word": "0xc1100000",
+                  "loader": 0.0,
+                  "b01": -9.0
+                },
+                {
+                  "offset": 684,
+                  "loader_address": "0xc400b",
+                  "b01_file_offset": "0x120e90",
+                  "loader_word": "0x0",
+                  "b01_word": "0xbecccccd",
+                  "loader": 0.0,
+                  "b01": -0.4000000059604645
+                },
+                {
+                  "offset": 685,
+                  "loader_address": "0xc400c",
+                  "b01_file_offset": "0x120e94",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ],
+              [
+                {
+                  "offset": 701,
+                  "loader_address": "0xc401c",
+                  "b01_file_offset": "0x120ed4",
+                  "loader_word": "0x0",
+                  "b01_word": "0x41100000",
+                  "loader": 0.0,
+                  "b01": 9.0
+                },
+                {
+                  "offset": 702,
+                  "loader_address": "0xc401d",
+                  "b01_file_offset": "0x120ed8",
+                  "loader_word": "0x0",
+                  "b01_word": "0xbecccccd",
+                  "loader": 0.0,
+                  "b01": -0.4000000059604645
+                },
+                {
+                  "offset": 703,
+                  "loader_address": "0xc401e",
+                  "b01_file_offset": "0x120edc",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ]
+            ]
+          }
+        ],
+        "all_helper_descriptors": [
+          46,
+          47,
+          48,
+          50,
+          51,
+          54
+        ],
+        "range_sha256": "c4ad61395b6e66b48a5e4fc47d835d029debe8e5c2849cfe6882b81f1eb19767"
+      },
+      {
+        "slot": 3,
+        "api": 21,
+        "helper": "0x12cb59",
+        "validator": "0x131f2a",
+        "applier": "0x132589",
+        "accepted_range": [
+          -200,
+          200
+        ],
+        "effective_object_offset": 1133,
+        "shadow_object_offset": 1147,
+        "coordinate": "value",
+        "branches": [
+          {
+            "descriptor": 46,
+            "slot": 3,
+            "record_offsets": [
+              707,
+              722
+            ],
+            "call": "0x12cbae",
+            "records": [
+              [
+                {
+                  "offset": 707,
+                  "loader_address": "0xc4022",
+                  "b01_file_offset": "0x120eec",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 708,
+                  "loader_address": "0xc4023",
+                  "b01_file_offset": "0x120ef0",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 709,
+                  "loader_address": "0xc4024",
+                  "b01_file_offset": "0x120ef4",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ],
+              [
+                {
+                  "offset": 722,
+                  "loader_address": "0xc4031",
+                  "b01_file_offset": "0x120f28",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 723,
+                  "loader_address": "0xc4032",
+                  "b01_file_offset": "0x120f2c",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 724,
+                  "loader_address": "0xc4033",
+                  "b01_file_offset": "0x120f30",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ]
+            ]
+          },
+          {
+            "descriptor": 50,
+            "slot": 3,
+            "record_offsets": [
+              713,
+              728
+            ],
+            "call": "0x12cc20",
+            "records": [
+              [
+                {
+                  "offset": 713,
+                  "loader_address": "0xc4028",
+                  "b01_file_offset": "0x120f04",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 714,
+                  "loader_address": "0xc4029",
+                  "b01_file_offset": "0x120f08",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 715,
+                  "loader_address": "0xc402a",
+                  "b01_file_offset": "0x120f0c",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ],
+              [
+                {
+                  "offset": 728,
+                  "loader_address": "0xc4037",
+                  "b01_file_offset": "0x120f40",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 729,
+                  "loader_address": "0xc4038",
+                  "b01_file_offset": "0x120f44",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 730,
+                  "loader_address": "0xc4039",
+                  "b01_file_offset": "0x120f48",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ]
+            ]
+          },
+          {
+            "descriptor": 51,
+            "slot": 3,
+            "record_offsets": [
+              716,
+              731
+            ],
+            "call": "0x12cc58",
+            "records": [
+              [
+                {
+                  "offset": 716,
+                  "loader_address": "0xc402b",
+                  "b01_file_offset": "0x120f10",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 717,
+                  "loader_address": "0xc402c",
+                  "b01_file_offset": "0x120f14",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 718,
+                  "loader_address": "0xc402d",
+                  "b01_file_offset": "0x120f18",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ],
+              [
+                {
+                  "offset": 731,
+                  "loader_address": "0xc403a",
+                  "b01_file_offset": "0x120f4c",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 732,
+                  "loader_address": "0xc403b",
+                  "b01_file_offset": "0x120f50",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 733,
+                  "loader_address": "0xc403c",
+                  "b01_file_offset": "0x120f54",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ]
+            ]
+          }
+        ],
+        "all_helper_descriptors": [
+          46,
+          48,
+          50,
+          51,
+          54
+        ],
+        "range_sha256": "5d366607a32341947a96f8c284cf4151e0899739cbb45fbaa581fd11e950a472"
+      },
+      {
+        "slot": 4,
+        "api": 23,
+        "helper": "0x12ccb9",
+        "validator": "0x131f62",
+        "applier": "0x1325db",
+        "accepted_range": [
+          -200,
+          200
+        ],
+        "effective_object_offset": 1135,
+        "shadow_object_offset": 1149,
+        "coordinate": "value",
+        "branches": [
+          {
+            "descriptor": 46,
+            "slot": 4,
+            "record_offsets": [
+              737,
+              746
+            ],
+            "call": "0x12ccfa",
+            "records": [
+              [
+                {
+                  "offset": 737,
+                  "loader_address": "0xc4040",
+                  "b01_file_offset": "0x120f64",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 738,
+                  "loader_address": "0xc4041",
+                  "b01_file_offset": "0x120f68",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 739,
+                  "loader_address": "0xc4042",
+                  "b01_file_offset": "0x120f6c",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ],
+              [
+                {
+                  "offset": 746,
+                  "loader_address": "0xc4049",
+                  "b01_file_offset": "0x120f88",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 747,
+                  "loader_address": "0xc404a",
+                  "b01_file_offset": "0x120f8c",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 748,
+                  "loader_address": "0xc404b",
+                  "b01_file_offset": "0x120f90",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ]
+            ]
+          },
+          {
+            "descriptor": 50,
+            "slot": 4,
+            "record_offsets": [
+              740,
+              749
+            ],
+            "call": "0x12cd34",
+            "records": [
+              [
+                {
+                  "offset": 740,
+                  "loader_address": "0xc4043",
+                  "b01_file_offset": "0x120f70",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 741,
+                  "loader_address": "0xc4044",
+                  "b01_file_offset": "0x120f74",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 742,
+                  "loader_address": "0xc4045",
+                  "b01_file_offset": "0x120f78",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ],
+              [
+                {
+                  "offset": 749,
+                  "loader_address": "0xc404c",
+                  "b01_file_offset": "0x120f94",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 750,
+                  "loader_address": "0xc404d",
+                  "b01_file_offset": "0x120f98",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 751,
+                  "loader_address": "0xc404e",
+                  "b01_file_offset": "0x120f9c",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ]
+            ]
+          },
+          {
+            "descriptor": 51,
+            "slot": 4,
+            "record_offsets": [
+              743,
+              752
+            ],
+            "call": "0x12cd6c",
+            "records": [
+              [
+                {
+                  "offset": 743,
+                  "loader_address": "0xc4046",
+                  "b01_file_offset": "0x120f7c",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 744,
+                  "loader_address": "0xc4047",
+                  "b01_file_offset": "0x120f80",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 745,
+                  "loader_address": "0xc4048",
+                  "b01_file_offset": "0x120f84",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ],
+              [
+                {
+                  "offset": 752,
+                  "loader_address": "0xc404f",
+                  "b01_file_offset": "0x120fa0",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 753,
+                  "loader_address": "0xc4050",
+                  "b01_file_offset": "0x120fa4",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 754,
+                  "loader_address": "0xc4051",
+                  "b01_file_offset": "0x120fa8",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ]
+            ]
+          }
+        ],
+        "all_helper_descriptors": [
+          46,
+          50,
+          51
+        ],
+        "range_sha256": "6fd0ef3af10376899f03ff1860c784301f8aba8341514c069cbe71d34805617b"
+      },
+      {
+        "slot": 5,
+        "api": 24,
+        "helper": "0x12cd95",
+        "validator": "0x131f7e",
+        "applier": "0x132604",
+        "accepted_range": [
+          -200,
+          200
+        ],
+        "effective_object_offset": 1136,
+        "shadow_object_offset": 1150,
+        "coordinate": "value",
+        "branches": [
+          {
+            "descriptor": 46,
+            "slot": 5,
+            "record_offsets": [
+              755,
+              764
+            ],
+            "call": "0x12cdd6",
+            "records": [
+              [
+                {
+                  "offset": 755,
+                  "loader_address": "0xc4052",
+                  "b01_file_offset": "0x120fac",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 756,
+                  "loader_address": "0xc4053",
+                  "b01_file_offset": "0x120fb0",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 757,
+                  "loader_address": "0xc4054",
+                  "b01_file_offset": "0x120fb4",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ],
+              [
+                {
+                  "offset": 764,
+                  "loader_address": "0xc405b",
+                  "b01_file_offset": "0x120fd0",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 765,
+                  "loader_address": "0xc405c",
+                  "b01_file_offset": "0x120fd4",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 766,
+                  "loader_address": "0xc405d",
+                  "b01_file_offset": "0x120fd8",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ]
+            ]
+          },
+          {
+            "descriptor": 50,
+            "slot": 5,
+            "record_offsets": [
+              758,
+              767
+            ],
+            "call": "0x12ce10",
+            "records": [
+              [
+                {
+                  "offset": 758,
+                  "loader_address": "0xc4055",
+                  "b01_file_offset": "0x120fb8",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 759,
+                  "loader_address": "0xc4056",
+                  "b01_file_offset": "0x120fbc",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 760,
+                  "loader_address": "0xc4057",
+                  "b01_file_offset": "0x120fc0",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ],
+              [
+                {
+                  "offset": 767,
+                  "loader_address": "0xc405e",
+                  "b01_file_offset": "0x120fdc",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 768,
+                  "loader_address": "0xc405f",
+                  "b01_file_offset": "0x120fe0",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 769,
+                  "loader_address": "0xc4060",
+                  "b01_file_offset": "0x120fe4",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ]
+            ]
+          },
+          {
+            "descriptor": 51,
+            "slot": 5,
+            "record_offsets": [
+              761,
+              770
+            ],
+            "call": "0x12ce48",
+            "records": [
+              [
+                {
+                  "offset": 761,
+                  "loader_address": "0xc4058",
+                  "b01_file_offset": "0x120fc4",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 762,
+                  "loader_address": "0xc4059",
+                  "b01_file_offset": "0x120fc8",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 763,
+                  "loader_address": "0xc405a",
+                  "b01_file_offset": "0x120fcc",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ],
+              [
+                {
+                  "offset": 770,
+                  "loader_address": "0xc4061",
+                  "b01_file_offset": "0x120fe8",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 771,
+                  "loader_address": "0xc4062",
+                  "b01_file_offset": "0x120fec",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 772,
+                  "loader_address": "0xc4063",
+                  "b01_file_offset": "0x120ff0",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ]
+            ]
+          }
+        ],
+        "all_helper_descriptors": [
+          46,
+          50,
+          51
+        ],
+        "range_sha256": "ba44fbabd6fb5264e0a91bf0ade6ceb5c7b6bdfdceecd3311cb4d78b1462368a"
+      },
+      {
+        "slot": 6,
+        "api": 25,
+        "helper": "0x12ce71",
+        "validator": "0x131f9a",
+        "applier": "0x13262d",
+        "accepted_range": [
+          -200,
+          200
+        ],
+        "effective_object_offset": 1137,
+        "shadow_object_offset": 1151,
+        "coordinate": "value - effective config791",
+        "branches": [
+          {
+            "descriptor": 46,
+            "slot": 6,
+            "record_offsets": [
+              773,
+              782
+            ],
+            "call": "0x12ceb2",
+            "records": [
+              [
+                {
+                  "offset": 773,
+                  "loader_address": "0xc4064",
+                  "b01_file_offset": "0x120ff4",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 774,
+                  "loader_address": "0xc4065",
+                  "b01_file_offset": "0x120ff8",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 775,
+                  "loader_address": "0xc4066",
+                  "b01_file_offset": "0x120ffc",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ],
+              [
+                {
+                  "offset": 782,
+                  "loader_address": "0xc406d",
+                  "b01_file_offset": "0x121018",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 783,
+                  "loader_address": "0xc406e",
+                  "b01_file_offset": "0x12101c",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 784,
+                  "loader_address": "0xc406f",
+                  "b01_file_offset": "0x121020",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ]
+            ]
+          },
+          {
+            "descriptor": 50,
+            "slot": 6,
+            "record_offsets": [
+              776,
+              785
+            ],
+            "call": "0x12ceec",
+            "records": [
+              [
+                {
+                  "offset": 776,
+                  "loader_address": "0xc4067",
+                  "b01_file_offset": "0x121000",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 777,
+                  "loader_address": "0xc4068",
+                  "b01_file_offset": "0x121004",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 778,
+                  "loader_address": "0xc4069",
+                  "b01_file_offset": "0x121008",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ],
+              [
+                {
+                  "offset": 785,
+                  "loader_address": "0xc4070",
+                  "b01_file_offset": "0x121024",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 786,
+                  "loader_address": "0xc4071",
+                  "b01_file_offset": "0x121028",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 787,
+                  "loader_address": "0xc4072",
+                  "b01_file_offset": "0x12102c",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ]
+            ]
+          },
+          {
+            "descriptor": 51,
+            "slot": 6,
+            "record_offsets": [
+              779,
+              788
+            ],
+            "call": "0x12cf24",
+            "records": [
+              [
+                {
+                  "offset": 779,
+                  "loader_address": "0xc406a",
+                  "b01_file_offset": "0x12100c",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 780,
+                  "loader_address": "0xc406b",
+                  "b01_file_offset": "0x121010",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 781,
+                  "loader_address": "0xc406c",
+                  "b01_file_offset": "0x121014",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ],
+              [
+                {
+                  "offset": 788,
+                  "loader_address": "0xc4073",
+                  "b01_file_offset": "0x121030",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 789,
+                  "loader_address": "0xc4074",
+                  "b01_file_offset": "0x121034",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 790,
+                  "loader_address": "0xc4075",
+                  "b01_file_offset": "0x121038",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ]
+            ]
+          }
+        ],
+        "all_helper_descriptors": [
+          46,
+          50,
+          51
+        ],
+        "range_sha256": "c49e1f94c849e5e778ab44eb3a7430c7949862bbdb067ef079857e878885fc1d"
+      },
+      {
+        "slot": 7,
+        "api": 27,
+        "helper": "0x12cf4d",
+        "validator": "0x131fd9",
+        "applier": "0x132667",
+        "accepted_range": [
+          -200,
+          400
+        ],
+        "effective_object_offset": 1139,
+        "shadow_object_offset": 1153,
+        "coordinate": "value",
+        "branches": [
+          {
+            "descriptor": 46,
+            "slot": 7,
+            "record_offsets": [
+              792,
+              801
+            ],
+            "call": "0x12cf8e",
+            "records": [
+              [
+                {
+                  "offset": 792,
+                  "loader_address": "0xc4077",
+                  "b01_file_offset": "0x121040",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 793,
+                  "loader_address": "0xc4078",
+                  "b01_file_offset": "0x121044",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 794,
+                  "loader_address": "0xc4079",
+                  "b01_file_offset": "0x121048",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ],
+              [
+                {
+                  "offset": 801,
+                  "loader_address": "0xc4080",
+                  "b01_file_offset": "0x121064",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 802,
+                  "loader_address": "0xc4081",
+                  "b01_file_offset": "0x121068",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 803,
+                  "loader_address": "0xc4082",
+                  "b01_file_offset": "0x12106c",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ]
+            ]
+          },
+          {
+            "descriptor": 50,
+            "slot": 7,
+            "record_offsets": [
+              795,
+              804
+            ],
+            "call": "0x12cfc8",
+            "records": [
+              [
+                {
+                  "offset": 795,
+                  "loader_address": "0xc407a",
+                  "b01_file_offset": "0x12104c",
+                  "loader_word": "0x0",
+                  "b01_word": "0x42f00000",
+                  "loader": 0.0,
+                  "b01": 120.0
+                },
+                {
+                  "offset": 796,
+                  "loader_address": "0xc407b",
+                  "b01_file_offset": "0x121050",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 797,
+                  "loader_address": "0xc407c",
+                  "b01_file_offset": "0x121054",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ],
+              [
+                {
+                  "offset": 804,
+                  "loader_address": "0xc4083",
+                  "b01_file_offset": "0x121070",
+                  "loader_word": "0x0",
+                  "b01_word": "0x43340000",
+                  "loader": 0.0,
+                  "b01": 180.0
+                },
+                {
+                  "offset": 805,
+                  "loader_address": "0xc4084",
+                  "b01_file_offset": "0x121074",
+                  "loader_word": "0x0",
+                  "b01_word": "0x3f333333",
+                  "loader": 0.0,
+                  "b01": 0.699999988079071
+                },
+                {
+                  "offset": 806,
+                  "loader_address": "0xc4085",
+                  "b01_file_offset": "0x121078",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ]
+            ]
+          },
+          {
+            "descriptor": 51,
+            "slot": 7,
+            "record_offsets": [
+              798,
+              807
+            ],
+            "call": "0x12d000",
+            "records": [
+              [
+                {
+                  "offset": 798,
+                  "loader_address": "0xc407d",
+                  "b01_file_offset": "0x121058",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 799,
+                  "loader_address": "0xc407e",
+                  "b01_file_offset": "0x12105c",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 800,
+                  "loader_address": "0xc407f",
+                  "b01_file_offset": "0x121060",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ],
+              [
+                {
+                  "offset": 807,
+                  "loader_address": "0xc4086",
+                  "b01_file_offset": "0x12107c",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 808,
+                  "loader_address": "0xc4087",
+                  "b01_file_offset": "0x121080",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 809,
+                  "loader_address": "0xc4088",
+                  "b01_file_offset": "0x121084",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ]
+            ]
+          }
+        ],
+        "all_helper_descriptors": [
+          46,
+          50,
+          51
+        ],
+        "range_sha256": "e123807c284cb513c6b4fac8fd26793b1f384ccc306449c610fc08743dab65cb"
+      },
+      {
+        "slot": 8,
+        "api": 29,
+        "helper": "0x12d029",
+        "validator": "0x132018",
+        "applier": "0x13269e",
+        "accepted_range": [
+          -200,
+          200
+        ],
+        "effective_object_offset": 1141,
+        "shadow_object_offset": 1155,
+        "coordinate": "value",
+        "branches": [
+          {
+            "descriptor": 46,
+            "slot": 8,
+            "record_offsets": [
+              810,
+              819
+            ],
+            "call": "0x12d06a",
+            "records": [
+              [
+                {
+                  "offset": 810,
+                  "loader_address": "0xc4089",
+                  "b01_file_offset": "0x121088",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 811,
+                  "loader_address": "0xc408a",
+                  "b01_file_offset": "0x12108c",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 812,
+                  "loader_address": "0xc408b",
+                  "b01_file_offset": "0x121090",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ],
+              [
+                {
+                  "offset": 819,
+                  "loader_address": "0xc4092",
+                  "b01_file_offset": "0x1210ac",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 820,
+                  "loader_address": "0xc4093",
+                  "b01_file_offset": "0x1210b0",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 821,
+                  "loader_address": "0xc4094",
+                  "b01_file_offset": "0x1210b4",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ]
+            ]
+          },
+          {
+            "descriptor": 50,
+            "slot": 8,
+            "record_offsets": [
+              813,
+              822
+            ],
+            "call": "0x12d0a4",
+            "records": [
+              [
+                {
+                  "offset": 813,
+                  "loader_address": "0xc408c",
+                  "b01_file_offset": "0x121094",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 814,
+                  "loader_address": "0xc408d",
+                  "b01_file_offset": "0x121098",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 815,
+                  "loader_address": "0xc408e",
+                  "b01_file_offset": "0x12109c",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ],
+              [
+                {
+                  "offset": 822,
+                  "loader_address": "0xc4095",
+                  "b01_file_offset": "0x1210b8",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 823,
+                  "loader_address": "0xc4096",
+                  "b01_file_offset": "0x1210bc",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 824,
+                  "loader_address": "0xc4097",
+                  "b01_file_offset": "0x1210c0",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ]
+            ]
+          },
+          {
+            "descriptor": 51,
+            "slot": 8,
+            "record_offsets": [
+              816,
+              825
+            ],
+            "call": "0x12d0dc",
+            "records": [
+              [
+                {
+                  "offset": 816,
+                  "loader_address": "0xc408f",
+                  "b01_file_offset": "0x1210a0",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 817,
+                  "loader_address": "0xc4090",
+                  "b01_file_offset": "0x1210a4",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 818,
+                  "loader_address": "0xc4091",
+                  "b01_file_offset": "0x1210a8",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ],
+              [
+                {
+                  "offset": 825,
+                  "loader_address": "0xc4098",
+                  "b01_file_offset": "0x1210c4",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 826,
+                  "loader_address": "0xc4099",
+                  "b01_file_offset": "0x1210c8",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                },
+                {
+                  "offset": 827,
+                  "loader_address": "0xc409a",
+                  "b01_file_offset": "0x1210cc",
+                  "loader_word": "0x0",
+                  "b01_word": "0x0",
+                  "loader": 0.0,
+                  "b01": 0.0
+                }
+              ]
+            ]
+          }
+        ],
+        "all_helper_descriptors": [
+          46,
+          50,
+          51
+        ],
+        "range_sha256": "b2d76f7ad1f5722eb3bbeb7a1f41b904e6797aadd61860e8120e14f29ca3a3f3"
+      }
+    ],
+    "bases": {
+      "46": {
+        "offset": 122,
+        "loader_address": "0xc3dd9",
+        "b01_file_offset": "0x1205c8",
+        "loader_word": "0x3f800000",
+        "b01_word": "0x3f800000",
+        "loader": 1.0,
+        "b01": 1.0
+      },
+      "50": {
+        "offset": 293,
+        "loader_address": "0xc3e84",
+        "b01_file_offset": "0x120874",
+        "loader_word": "0x3f800000",
+        "b01_word": "0x3f800000",
+        "loader": 1.0,
+        "b01": 1.0
+      },
+      "51": {
+        "offset": 377,
+        "loader_address": "0xc3ed8",
+        "b01_file_offset": "0x1209c4",
+        "loader_word": "0x3fcccccd",
+        "b01_word": "0x3fcccccd",
+        "loader": 1.600000023841858,
+        "b01": 1.600000023841858
+      }
+    },
+    "untouched": {
+      "51": [
+        1
+      ]
+    },
+    "event_targets": {
+      "45": "0xaa4a4",
+      "46": "0xaa468",
+      "47": "0xaa39a",
+      "48": "0xaa3c4",
+      "49": "0xaa4ce",
+      "50": "0xaa522",
+      "51": "0xaa546",
+      "52": "0xaa568",
+      "53": "0xaa59a"
+    },
+    "v850_sources": {
+      "19": "event47: float table6EA68[u8(gp-16783)]",
+      "21": "event49: float(s8(gp-15758+u8(gp-15740)))",
+      "22": "event49: float(s8(gp-15739+u8(gp-15740)))",
+      "23": "event50: float(s8(gp-15721))",
+      "24": "event51: float(s8(gp-15719))",
+      "25": "event52: max(0,s8(gp-15718)+100)",
+      "27": "event53: float(min(400,u32(gp-17832)//100))",
+      "18": "events22/368: AA886 sends float(s8(gp-15840)); CA4B4 selector5/0 accepts -12..12 and clamps to -9..9; see b_outer_control.json",
+      "29": "no dedicated writer bound; generic proxy A782E reads ID gp-15936/value gp-15932; D40C8/D4130 stage two request words and queue369"
+    },
+    "api19_table": [
+      -100.0,
+      -50.0,
+      0.0,
+      100.0
+    ],
+    "boundary": "shadow writes precede defer1178 check; direct scalar changes only if not deferred; full helpers also change other DSP parameters. Request semantics/order, later config replacement and indirect writers remain open"
+  }
+}

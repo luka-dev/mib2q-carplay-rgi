@@ -30,7 +30,7 @@ Old static identity-path music reports are unaffected by this correction.
 | C4D17 reference | Full-mode composition; corrected control scales; separate startup/mask/calibration sequencer and noise-core references. | Calibration audio composition/rounding, physical auxiliary source/level, live state and hardware numerical equivalence. Default remains identity. |
 
 The [reproducible inventory](../tools/audit_amp_remaining_blocks.py) emits
-[instruction evidence and JSON](../output/r2/soundamp/remaining-blocks-20260919/audit.json).
+[instruction evidence and JSON](../assets/soundamp/remaining-blocks-20260919/audit.json).
 The newly covered handlers contain 172 gain, 208 limiter, 127 software-EQ and
 243 B-wrapper/callback instructions, with no decoder UNKNOWN operations.
 This is decoding coverage, **not execution-equivalence proof**.
@@ -953,12 +953,12 @@ These tests verify the stated local reconstruction, not the real amplifier.
 
 ```sh
 python3 tools/audit_amp_remaining_blocks.py IMAGE \
-  output/r2/soundamp/J525_8W0035465_SW0420_SHARC_SPI_bitrev.ldr.bin \
-  --output-dir output/r2/soundamp/remaining-blocks-20260919
+  assets/soundamp/J525_8W0035465_SW0420_SHARC_SPI_bitrev.ldr.bin \
+  --output-dir assets/soundamp/remaining-blocks-20260919
 python3 -m unittest discover -s tests -p 'test_*amp*.py'
 python3 -m unittest discover -s tools/soundamp-virtual-cabin -p 'test_amp*.py'
 python3 tools/soundamp-virtual-cabin/audit_amp_complex_scenarios.py IMAGE \
-  --output output/r2/soundamp/remaining-blocks-20260919/complex_scenarios_profile0.json
+  --output assets/soundamp/remaining-blocks-20260919/complex_scenarios_profile0.json
 ```
 
 ## Sep20: mode5 gain provenance and pre-B EQ

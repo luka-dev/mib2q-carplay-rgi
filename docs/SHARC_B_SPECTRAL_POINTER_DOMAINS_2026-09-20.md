@@ -69,7 +69,7 @@ An initial branch alone is misleading: `131591` sends selector5 to preparation a
 
 ## Fingerprints and validation
 
-Loader: `output/r2/soundamp/J525_8W0035465_SW0420_SHARC_SPI_bitrev.ldr.bin`, SHA256:
+Loader: `assets/soundamp/J525_8W0035465_SW0420_SHARC_SPI_bitrev.ldr.bin`, SHA256:
 `9169c24f0337c6bfd3646e2538a567bca839b24aa0db5f67b6984943c2286ca7`.
 
 B01 CodeFlash SHA256:

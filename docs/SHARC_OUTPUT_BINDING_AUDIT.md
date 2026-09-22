@@ -27,12 +27,12 @@ under the user's MMI 3D OFF setting.
 ```sh
 python3 tools/audit_amp_output_bindings.py \
   /Users/luka/Desktop/AUDI_2/Firmwares/SoundAmp/uPD70f3479_8W0035465_0420_H11/CodeFlash_24082026_172027.bin \
-  --output output/r2/soundamp/output_binding_audit.json
+  --output assets/soundamp/output_binding_audit.json
 python3 -m unittest discover -s tests -p 'test_audit_amp_output_bindings.py'
 ```
 
-- [Machine-readable report](../output/r2/soundamp/output_binding_audit.json).
-- [V850 decompiler evidence](../output/r2/soundamp/output_binding_v850_evidence.md).
+- [Machine-readable report](../assets/soundamp/output_binding_audit.json).
+- [V850 decompiler evidence](../assets/soundamp/output_binding_v850_evidence.md).
 - [Image extraction and fingerprint](SHARC_APPLICATION_EXTRACTION.md).
 
 Twenty-one extraction/audit/VISA tests passed after the follow-up. These are

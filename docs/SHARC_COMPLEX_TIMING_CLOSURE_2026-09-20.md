@@ -68,7 +68,7 @@ SHARC program addresses above are shortword addresses; coefficient addresses
 are32-bit words. Builtin record offsets in the **derived loader** are
 `0x7618` and `0x762C`; these are not original CodeFlash offsets.
 
-[Reproducible report](../output/r2/soundamp/complex-timing-closure-20260920/report.json)
+[Reproducible report](../assets/soundamp/complex-timing-closure-20260920/report.json)
 records hashes, constants, addresses, file offsets, and96+65+28 decoded
 instructions with no UNKNOWN. The added ten tests cover independent scalar
 recurrences with nonzero history, streaming partition invariance, raw/type1/type9
@@ -78,7 +78,7 @@ All50 `test_amp_complex*.py` tests passed.
 
 ```sh
 python3 tools/soundamp-virtual-cabin/amp_complex_timing.py \
-  --output output/r2/soundamp/complex-timing-closure-20260920/report.json
+  --output assets/soundamp/complex-timing-closure-20260920/report.json
 python3 -m unittest discover -s tools/soundamp-virtual-cabin \
   -p 'test_amp_complex*.py'
 ```
