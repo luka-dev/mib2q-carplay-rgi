@@ -113,6 +113,35 @@ Output rail is fixed PCM6 `L, R, C, LFE, Ls, Rs`. **C is always digital zero** �
 the J525 amplifier derives centre from L/R/LFE, so the hook must not
 (`hook/audio/stereo_upmix.h`, `docs/STEREO_TO_5_1_UPMIX_DESIGN.md`).
 
+End to end, one 128-sample hop:
+
+```
+stereo S16 in
+  │
+  ├─► front delay line (512, S16) ───────────────────────► FRONT L/R  (bit-exact delayed input)
+  │
+  └─► STFT 512/hop128 ─► 32-band features (368) ─► [async GRU worker @ 93.75 Hz]
+                                                       │  per band: 6-class, rearability, pan
+                                                       ▼
+                          routing decode  (vetoes: lead_keep⁴, bass_keep⁵, guard²;
+                                           freq gates: 0 <220 Hz, ramp→350, roll >15k)
+                                                       │
+                              ┌────────────────────────┴───────────────┐
+                              ▼                                         ▼
+                        object slots (4, pan-steered)            bed (ambience / fallback,
+                              │                                   delayed + cross term −0.14)
+                              └───────────────► rear synth ◄───────────┘
+                                          rear delay 12 ms · Ls/Rs +3 dB@4k shelf
+                                                       │
+   FRONT L/R  ── minus (1−retention_eff(f))·source ───┤   ◄ retention HF taper 1000:2500
+                                                       ▼
+                                        [ L  R  C=0  LFE  Ls  Rs ]   float → S16
+                                                       │
+                                     LFE V2 assist  +  cabin guard (J525 peak, early-out)
+                                                       ▼
+                                                  PCM6 S16 out
+```
+
 ### 3.1 Signal path (STFT / WOLA)
 
 - FFT size **512**, hop **128**, 257 half-spectrum bins, **32 perceptual bands**,
@@ -141,7 +170,26 @@ the J525 amplifier derives centre from L/R/LFE, so the hook must not
 Shape: **368 → GRU(160) → GRU(160) → Linear(264)**, int8 weights with per-row
 float dequant scales and float biases, loaded from an `HSSRNEO1` little-endian
 blob (CRC32-validated, all floats finite, all scales positive) (`hssr_neon.h`,
-`hssr_neon.c`). Inference: standardize `(x−mean)·inv_std`, clamp ±6, quantize int8
+`hssr_neon.c`).
+
+```
+features (368)  =  32 bands × 9   +   64 shape   +   16 global
+      │  standardize (x−mean)·inv_std, clamp ±6, quantize int8 @ 127/6
+      ▼
+  GRU layer 1  (368→160)   int8 GEMV → per-row dequant → reset-after GRU, h clamp ±1
+      ▼
+  GRU layer 2  (160→160)
+      ▼
+  Linear head  (160→264)   int8 GEMV → scale → bias
+      ▼
+outputs (264)  =  32 bands × [ 6 class logits , rearability , pan ]  +  8 global
+                              softmax          σ→smoothstep   tanh±0.85   (only k=3..7 used)
+```
+
+451,464 parameters; 469,760-byte export. Runtime inference is not PyTorch: the C
+path additionally quantizes matrix inputs and recurrent activations and uses
+rational sigmoid/tanh, so loading the exported weights into PyTorch is **not** the
+shipped inference (`docs/HSSR_DATASET_TRAINING_AUDIT.md`). Inference: standardize `(x−mean)·inv_std`, clamp ±6, quantize int8
 at `127/6`; int8 GEMV (NEON `vmull_s8`/`vpadalq_s16`); PyTorch reset-after GRU
 `r,z,n` with rational sigmoid/tanh (bounded cost on old QNX libm); hidden clamped
 ±1 (`hssr_neon.c`).
