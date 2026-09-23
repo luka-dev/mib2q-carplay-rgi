@@ -1,12 +1,12 @@
 # Deploy and Release
 
-*The build scripts only produce loose binaries. You assemble a release by hand from three folders into `mod/carplay/root/` on an M.I.B. card, install it with `custom.sh`, and never reboot the car without asking.*
+*The build scripts only produce loose binaries. `scripts/prepare_install.sh` assembles them, with the models and `deploy/` files, into `mod/carplay/root/` for an M.I.B. card; `custom.sh` installs it. Never reboot the car without asking.*
 
 ---
 
 ## 📦 Builds emit binaries, not releases
 
-There is no packaging script; `package_mib.py`, `package_protected.sh` and `deploy_over_ssh.sh` have all been deleted. Each build script writes its outputs into `build/`, and you assemble a release **by hand** from three folders:
+Each build script writes its outputs into `build/`. `scripts/prepare_install.sh <hook build dir>` (e.g. `build/protected_<VIN>` or `build/unprotected`) rebuilds the jar and renderers (`SKIP_BUILD=1` reuses them), stages every file below at its on-unit path and writes `build/install_<name>/install_MoreIncredibleBash/` plus `build/install_<name>.zip`. A hook folder without `libcarplay_apac.so` (`HOOK_AUDIO=0`) also leaves out the HSSR models. The old `package_mib.py`, `package_protected.sh` and `deploy_over_ssh.sh` stay deleted. A release comes from three folders:
 
 - `build/` holds the compiled outputs: `libcarplay_hook.so`, `libcarplay_apac.so`, `maneuver_render`, `altscreen_render` and `carplay_hook.jar`.
 - `models/` holds the HSSR models, `hssr_model.bin` and `hssr_guard.bin`.
@@ -17,7 +17,7 @@ There is no packaging script; `package_mib.py`, `package_protected.sh` and `depl
 ```mermaid
 flowchart TB
   accTitle: Source folders to on-unit paths
-  accDescr: The build, models and deploy folders are staged by hand into mod/carplay/root on the SD card. custom.sh copies that tree onto the unit's root, then patches the SI json, the PF profiles and dio_manager.json in place.
+  accDescr: The build, models and deploy folders are staged by prepare_install.sh into mod/carplay/root on the SD card. custom.sh copies that tree onto the unit's root, then patches the SI json, the PF profiles and dio_manager.json in place.
 
   subgraph repo_side [Repo]
     build_dir["build/ compiled outputs"]

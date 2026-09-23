@@ -392,8 +392,8 @@ Deployed 2026-09-22 (repo at commit `b021ec9`), each verified by read-back **[ca
 Source homes for a manual build (models in `models/`, firmware in `deploy/`) are in
 `docs/build-and-deploy/DEPLOY_AND_RELEASE.md`. The `.so` files come from `build/unprotected/`
 (`scripts/build_hook.sh:20`) and the renderers and jar from `build/`
-(`scripts/build_renderers.sh:11`, `docs/build-and-deploy/DEPLOY_AND_RELEASE.md:15-19`). There is no
-packaging script; a release is assembled by hand.
+(`scripts/build_renderers.sh:11`, `docs/build-and-deploy/DEPLOY_AND_RELEASE.md:15-19`). A release is
+assembled by `scripts/prepare_install.sh`.
 
 ## ⚠️ The honest gaps
 
@@ -417,5 +417,5 @@ packaging script; a release is assembled by hand.
 | How the amp was reversed, why 6ch was hard, the Virtual Cabin | [VIRTUAL_CABIN.md](VIRTUAL_CABIN.md) |
 | What Atmos is on CarPlay, why it's blocked, what we borrowed | [DOLBY_ATMOS_TEARDOWN.md](DOLBY_ATMOS_TEARDOWN.md) |
 | Traps not to re-hit | [LANDMINES.md](../LANDMINES.md) |
-| Assemble/deploy a release by hand | `docs/build-and-deploy/DEPLOY_AND_RELEASE.md` |
+| Assemble/deploy a release (`prepare_install.sh`) | `docs/build-and-deploy/DEPLOY_AND_RELEASE.md` |
 | The runtime code | `hook/audio/{hssr_dsp,hssr_neon,hssr_control_worker,stereo_upmix}.{c,h}`, `hook/audio/rt_upmix_guard.h` |
