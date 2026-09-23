@@ -32,7 +32,7 @@ sequenceDiagram
 
 ## 🔍 The symptom and the hunt
 
-What the driver heard on the broken six-channel path, across several sessions: a **constant tick** ("тцык тцык тцык", a "tsyk tsyk tsyk" click, continuous, not once a second), **very low-pitched voices**, tempo only mildly off (explicitly not 3× or 4×), sound from the **correct speakers**, content still **recognisable**, and stereo CarPlay always clean. "Recognisable but wrong" excluded every waveform-destroying hypothesis; clean stereo on the same device excluded anything shared by both widths.
+What the driver heard on the broken six-channel path, across several sessions: a **constant tick** (a "tsyk tsyk tsyk" click, continuous, not once a second), **very low-pitched voices**, tempo only mildly off (explicitly not 3× or 4×), sound from the **correct speakers**, content still **recognisable**, and stereo CarPlay always clean. "Recognisable but wrong" excluded every waveform-destroying hypothesis; clean stereo on the same device excluded anything shared by both widths.
 
 *Timeline: how each layer was cleared in September 2026 until only the two declaration faults remained.*
 
@@ -78,7 +78,7 @@ Known-good 5.1 was corrupted on purpose, folded to stereo and auditioned (render
 | centre into the low-passed path | sounds normal |
 | stream order read as context order | sounds normal |
 | fragment repeated ×3, ×4 | too much slowdown |
-| **fragment repeated ×2** | **closest match ever — "невероятно похожи" ("incredibly similar")** |
+| **fragment repeated ×2** | **closest match ever — "incredibly similar"** |
 
 The ×2 match pointed at fragment-level repetition; the router-width audit later showed the real mechanism (a third of each fragment copied, source samples tripled, 62.5 Hz seam).
 

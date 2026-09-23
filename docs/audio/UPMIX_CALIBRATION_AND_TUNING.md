@@ -13,7 +13,7 @@
 - The float candidate (surround 0.30 / front bass −1 / retention 0.75) is **not** to be applied: it was a +1.9 dB bass increase, not a bass fix.
 - Level discipline: every level lives in env and `carplay_startup.sh`; never move a default inside a feature commit without a line in the status log (`UPMIX_Q4_SECOND_SCENE_STATUS.md`).
 
-Later on 2026-09-21 he chose the scene-bed variant after a headphone A/B (`output/listen-bed-20260921/`, four 60 s cuts, seven variants): retention 0.5, bed delays on, owner attack, collapse 0.75, everything else unchanged. In the car that evening the front sounded too bright ("высоких стало многовато, особенно на первом потоке со Spotify; проблема во фронте; всё остальное звучит очень неплохо" — "a bit too much treble, especially on the first Spotify stream; the problem is in the front; everything else sounds very decent"), which led to the retention HF taper. After the 2026-09-22 deploy: "всё было отлично" ("everything was great"). The shipped table with code citations is in [Stereo to 5.1 Upmix](STEREO_TO_5_1_UPMIX.md#-the-shipped-calibration); the deploy chronology in [Upmix Listening and Deploy Log](UPMIX_LISTENING_AND_DEPLOY_LOG.md).
+Later on 2026-09-21 he chose the scene-bed variant after a headphone A/B (`output/listen-bed-20260921/`, four 60 s cuts, seven variants): retention 0.5, bed delays on, owner attack, collapse 0.75, everything else unchanged. In the car that evening the front sounded too bright ("a bit too much treble, especially on the first Spotify stream; the problem is in the front; everything else sounds very decent"), which led to the retention HF taper. After the 2026-09-22 deploy: "everything was great". The shipped table with code citations is in [Stereo to 5.1 Upmix](STEREO_TO_5_1_UPMIX.md#-the-shipped-calibration); the deploy chronology in [Upmix Listening and Deploy Log](UPMIX_LISTENING_AND_DEPLOY_LOG.md).
 
 ### Symptom → one lever
 
@@ -50,7 +50,7 @@ timeline
 |---|---|---|---|
 | 09-07 | V11 Universal: rear 0.25, LFE assist Q15 4096 (LR4 48 Hz), front gain 31392 with LFE | the one-algorithm cleanup; older 95 Hz punch branch removed | `STEREO_TO_5_1_UPMIX_DESIGN` |
 | 09-08 | Ls/Rs RBJ high shelf +3 dB, 4 kHz midpoint (+1.5 dB at 4 kHz, → +3 dB above 8 kHz) | rear tweeters sounded subdued | `stereo_upmix.c:43-53` |
-| 09-17 | scene: rear delayed 576 frames (12 ms), rear ceiling 0.25 → 0.50, surround 0.40 | "second scene" by precedence | on car 09-17: «шикарно, яркие объекты сзади» ("gorgeous, bright objects behind") |
+| 09-17 | scene: rear delayed 576 frames (12 ms), rear ceiling 0.25 → 0.50, surround 0.40 | "second scene" by precedence | on car 09-17: "gorgeous, bright objects behind" |
 | 09-17 | rear low shelf −4 dB @ 500 Hz before the transfer | the "bass" Luka turned down was 350–800 Hz from the rear door woofers | `stereo_upmix.c:32-41` |
 | 09-17→18 | LFE corner 48 → 60 Hz and level 4096 → 12288 (+9.5 dB) | close a modelled 48–62 Hz dip (transposed-matrix reasoning) | the boom — the **level** was reverted 09-19; the 60 Hz corner stayed (`stereo_upmix.c:23-31`) |
 | 09-18 | objects and universal ramp start at 220 Hz (was 125) | Radio bass in rear 7.0 → 5.6 % | synth-bass harmonics still pass (semantic miss) |

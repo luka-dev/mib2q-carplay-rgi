@@ -6,7 +6,7 @@
 
 ## 🔍 The symptom
 
-An on-unit diagnosis (build `34c4c9d`, 2026-08-11) looked at an intermittent reconnect: "после перевтыка не работает" ("doesn't work after a replug"), which took 3 replugs. The key finding: **the altScreen pipeline was not the problem**. Across 4 dio sessions the phone offered stream 111 reliably within 2–3 s, and video decoded and rendered fine; one session ran 13,056 frames in 5 min. The "no 111 stream in request" log lines are just the phone's *other* SETUP requests (main and audio), not a failure. **[car]**
+An on-unit diagnosis (build `34c4c9d`, 2026-08-11) looked at an intermittent reconnect: "doesn't work after a replug", which took 3 replugs. The key finding: **the altScreen pipeline was not the problem**. Across 4 dio sessions the phone offered stream 111 reliably within 2–3 s, and video decoded and rendered fine; one session ran 13,056 frames in 5 min. The "no 111 stream in request" log lines are just the phone's *other* SETUP requests (main and audio), not a failure. **[car]**
 
 ## ⚠️ Root cause: lifecycle churn with no debounce
 

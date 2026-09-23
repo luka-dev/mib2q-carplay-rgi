@@ -7,12 +7,12 @@ correct. Read `tools/qsa-emu/HANDOFF.md` first; everything there still holds.
 
 Two symptoms, reported by ear from the vehicle:
 
-1. A continuous tick, "тцык тцык тцык", not once per second but constant.
+1. A continuous tick, "tsyk tsyk tsyk", not once per second but constant.
 2. Voices very low pitched -- but the tempo is only mildly off, not 3x or 4x slow.
 
 Synthesised candidates were auditioned against that memory. Results:
 
-* A fragment repeated x2 matched the tick closely ("невероятно похожи").
+* A fragment repeated x2 matched the tick closely ("incredibly similar").
 * x3 and x4 repeats were rejected: too much slowdown.
 * Clipping, low-24-bit extraction, centre-into-subwoofer, and a stream/context
   channel-order permutation were all auditioned and rejected -- they sound normal.

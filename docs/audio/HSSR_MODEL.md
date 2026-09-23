@@ -241,7 +241,7 @@ Luka, 2026-09-21: *current calibration is OK for now — do not tune.* The scene
 
 ## ⚠️ Where it stands
 
-**Deployed 2026-09-22:** single-path scene code, primary q6d + V11 guard, surround 0.40 / front bass −3 / LFE 0 / retention 0.5 with HF taper 1000:2500 / bed delays on / owner attack at 0.75, and the realtime type-100 upmix on (`carplay_startup.sh:63-86`). User verdict after the scene build: "звучать стало шикарно, отличные яркие объекты сзади" ("it sounds gorgeous now, great bright objects behind").
+**Deployed 2026-09-22:** single-path scene code, primary q6d + V11 guard, surround 0.40 / front bass −3 / LFE 0 / retention 0.5 with HF taper 1000:2500 / bed delays on / owner attack at 0.75, and the realtime type-100 upmix on (`carplay_startup.sh:63-86`). User verdict after the scene build: "it sounds gorgeous now, great bright objects behind".
 
 **Open items** — no on-car period-time distribution `[open]`; no Krait full-chain loaded trace, TARGET gate unverified `[open]`; no blind listening / cabin SPL `[open]`; known semantic misses (processed vocal intros, wide synth-bass) read as keys `[car]`. See [Landmines](../LANDMINES.md).
 

@@ -587,8 +587,8 @@ single-path scene code, primary q6d + V11 guard, surround 0.40 / front bass −3
 LFE 0 / retention 0.5 with the 1000:2500 HF taper / bed delays on / owner attack at
 collapse 0.75 / realtime type-100 upmix on (`carplay_startup.sh:63-86`; the scene-bed
 and realtime commits `3676324`, `820f3e3`, `48b9851` all precede `b021ec9`). User
-verdict after the scene build: "звучать стало шикарно, отличные яркие объекты сзади" ("it sounds gorgeous now, great bright objects behind");
-after the 2026-09-22 deploy: "всё было отлично" ("everything was great").
+verdict after the scene build: "it sounds gorgeous now, great bright objects behind";
+after the 2026-09-22 deploy: "everything was great".
 
 **Open items — the honest gaps:**
 

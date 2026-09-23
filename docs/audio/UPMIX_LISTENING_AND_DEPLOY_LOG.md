@@ -16,7 +16,7 @@
 | `carplay_hook.jar` | `10137756…` | **only after a unit restart** — the jar is on j9's `-Xbootclasspath` (carries the KDK visibility fix, `b021ec9`) |
 | `hssr_model.bin` / `hssr_guard.bin` | q6d `96abe57d…` / V11 `ab01463e…` | unchanged since 2026-09-18 |
 
-`altscreen_render` and `maneuver_render` were not replaced. Config = the shipped table in [Stereo to 5.1 Upmix](STEREO_TO_5_1_UPMIX.md#-the-shipped-calibration). Luka after the deploy: **«всё было отлично» ("everything was great")**.
+`altscreen_render` and `maneuver_render` were not replaced. Config = the shipped table in [Stereo to 5.1 Upmix](STEREO_TO_5_1_UPMIX.md#-the-shipped-calibration). Luka after the deploy: **"everything was great"**.
 
 Not collected yet: the realtime `stop` line with `mean_us`, `cold_us` and `ms_hist` — the only way to learn the real period-time distribution instead of the QEMU estimate. Pull `/tmp/carplay_hook.log` next time the unit is online.
 
@@ -40,12 +40,12 @@ timeline
 | When | Hook on the unit | What changed | Verdict / trigger |
 |---|---|---|---|
 | ≤ 09-17 | builds after `2f4b677` | rear clamped to 0.25, no delay | — |
-| 09-17 ~20:43 (unit reboot) | scene build, `e85655c2` | `-DSPA_HSSR_SCENE=1`: rear-only 12 ms delay, surround ceiling 0.5, env 0.40; fresh jar; V11 unchanged; log 21:02 showed `rearGainQ15=13107` | «звучать стало шикарно» ("it sounds gorgeous now"), «отличные яркие объекты сзади» ("great bright objects behind"); MMI Bass turned down |
-| 09-18 17:31 EDT | `6882c720`, 672 060 B | unified scene code (scene5): 4 slots, coherence, hold, q6d `96abe57d` + V11 guard `ab01463e`; **also LFE 12288 and LR4 60 Hz** | «звук неплохой, чуть меньше ВАУ, но явно слышно сзади в высоких» ("sound is not bad, a bit less WOW, but the highs are clearly heard behind"); bass needed MMI Bass −30 % |
+| 09-17 ~20:43 (unit reboot) | scene build, `e85655c2` | `-DSPA_HSSR_SCENE=1`: rear-only 12 ms delay, surround ceiling 0.5, env 0.40; fresh jar; V11 unchanged; log 21:02 showed `rearGainQ15=13107` | "it sounds gorgeous now", "great bright objects behind"; MMI Bass turned down |
+| 09-18 17:31 EDT | `6882c720`, 672 060 B | unified scene code (scene5): 4 slots, coherence, hold, q6d `96abe57d` + V11 guard `ab01463e`; **also LFE 12288 and LR4 60 Hz** | "sound is not bad, a bit less WOW, but the highs are clearly heard behind"; bass needed MMI Bass −30 % |
 | by 09-19 evening EDT | `6c0baa3b…`, 674 618 B | LFE default 4096 + `AUDIO_STEREO_LFE_GAIN=0`, `AUDIO_STEREO_FRONT_BASS_DB=-3`, QSA negative-return crash fix | confirmed by live readback (below) |
 | 09-21 morning | same | — | **decision: calibration OK, do not tune** ([Upmix Calibration and Tuning](UPMIX_CALIBRATION_AND_TUNING.md#-the-decision-on-record)) |
-| 09-21 | `6ea3f2f1` (the scene-bed-only build `cbb23556` in `build/bed-experiment-20260921/car-LOG1/` was first parked on Luka's "don't deploy yet") | scene bed: retention 0.5, bed delays, owner 0.75; realtime type-100 upmix with the 8 ms guard | «высоких стало многовато, особенно на первом потоке со Spotify; проблема во фронте; всё остальное звучит очень неплохо» ("a bit too much treble, especially on the first Spotify stream; the problem is in the front; everything else sounds very decent"); rears blinking on the realtime path |
-| 09-22 | `dbd5da32` | retention HF taper 1000:2500, 10 ms guard / 16 cold periods / revival on a ≥ 500 ms gap, −28.8 % DSP cost | «всё было отлично» ("everything was great") |
+| 09-21 | `6ea3f2f1` (the scene-bed-only build `cbb23556` in `build/bed-experiment-20260921/car-LOG1/` was first parked on Luka's "don't deploy yet") | scene bed: retention 0.5, bed delays, owner 0.75; realtime type-100 upmix with the 8 ms guard | "a bit too much treble, especially on the first Spotify stream; the problem is in the front; everything else sounds very decent"; rears blinking on the realtime path |
+| 09-22 | `dbd5da32` | retention HF taper 1000:2500, 10 ms guard / 16 cold periods / revival on a ≥ 500 ms gap, −28.8 % DSP cost | "everything was great" |
 
 Backups: the 09-18 transfer saved the previous unit files (scene1 hook `e85655c2`, old V11 model) locally in `~/Desktop/AUDI_2/upmix-data/unit-backup-20260918-1731/`; the unit itself holds no backups. Earlier scene builds (scene2 `697d6300`, scene3 `d199103a`, scene4 `b78bc19a`, scene5 `912d7c31`) were host-only candidates folded into the 09-18 hook; they are gone from `build/`.
 
@@ -94,14 +94,14 @@ All listening so far is one listener (Luka), sighted, in the car or on headphone
 
 | Date | Setting | Verdict | What followed |
 |---|---|---|---|
-| 09-17 | scene1, 0.40 + 12 ms | «шикарно» ("gorgeous"), bright objects behind; bass knob down | bass-origin measurement → rear low shelf |
+| 09-17 | scene1, 0.40 + 12 ms | "gorgeous", bright objects behind; bass knob down | bass-origin measurement → rear low shelf |
 | 09-18 | headphone previews of scene variants | — | scene5 + q6d + guard chosen |
 | 09-19 | 09-18 hook | less "WOW", clearly audible behind in the highs; Bass −30 %; keep bass guitar behind; Subwoofer knob fine | LFE culprit found, front shelf −3 |
 | 09-21 | car state S16 / 0.40 / −3 / LFE 0 / r 0 | "current calibration is OK" | freeze |
 | 09-21 | headphone A/B, 4 × 60 s cuts, 7 variants | chose r 0.5 + bed delays + owner 0.75 | deployed same day |
-| 09-21 | car, scene bed | front treble too much, worst on Spotify; everything else "очень неплохо" ("very decent") | HF taper |
+| 09-21 | car, scene bed | front treble too much, worst on Spotify; everything else "very decent" | HF taper |
 | 09-21 | realtime path | rears blinking | 10 ms guard |
-| 09-22 | car, `dbd5da32` | «всё было отлично» ("everything was great") | — |
+| 09-22 | car, `dbd5da32` | "everything was great" | — |
 
 **What to listen for next:** front treble back to the pre-retention level with body kept; rear unchanged; no rear appearing mid-track on Spotify. If collapse 0.75 makes the front "breathe" on hits, try `AUDIO_HSSR_ATTACK_COLLAPSE=0.5`. Suggested A/B set from the plan (equal loudness, same cuts, MMI Bass 0 / Sub 0): base / `BED_DELAYS` / + `BED_ATTACK=owner` at c 0.5 and 1 / `front`.
 

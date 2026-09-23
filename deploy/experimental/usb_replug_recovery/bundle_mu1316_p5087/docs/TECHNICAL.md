@@ -1,44 +1,44 @@
-# Техническое устройство bundle
+# How the bundle works
 
-## Почему файлов четыре
+## Why there are four files
 
-Два исправления независимы:
+The two fixes are independent:
 
 ```text
-старый stopncm                         SI после retries
+old stopncm                            SI after retries
 sleep 1                               final cleanup
-destroy нового carplay0               SwitchPort(direction=0)
+destroys the new carplay0             SwitchPort(direction=0)
         ↓                                     ↓
-нет рабочего NCM                      start_stack::none навсегда
+no working NCM                        start_stack::none forever
 ```
 
-NCM-исправление обязательно состоит из трёх файлов. Lua передаёт
-`busno/devno/iface`; `startncm.sh` и `stopncm.sh` используют их как identity
-одного USB enumeration и берут общий per-interface lock. Если stop победил, он
-заканчивает teardown до нового mount. Если start победил, поздний stop увидит
-другое поколение и не уничтожит новый `carplay0`.
+The NCM fix necessarily consists of three files. Lua passes
+`busno/devno/iface`; `startncm.sh` and `stopncm.sh` use them as the identity
+of one USB enumeration and take a shared per-interface lock. If stop wins, it
+finishes teardown before the new mount. If start wins, a late stop sees a
+different generation and does not destroy the new `carplay0`.
 
-Новый start также:
+The new start also:
 
-- проверяет `/dev/io-usb/otg_dev` через `ls`;
-- не продолжает работу после failed mount;
-- публикует generation только после mount/up;
-- исправляет UTF-8 en-dash на ASCII `-s 2 -r 1`;
-- пишет решения в `/tmp/carplay_hook.log` как `NCM_FENCE`.
+- checks `/dev/io-usb/otg_dev` via `ls`;
+- does not continue after a failed mount;
+- publishes the generation only after mount/up;
+- fixes the UTF-8 en-dash to ASCII `-s 2 -r 1`;
+- logs its decisions to `/tmp/carplay_hook.log` as `NCM_FENCE`.
 
 ## SI re-arm
 
-Stock MU1316 P5087 после исчерпания CarPlay `TIMEOUT_STARTUP` retries вызывает:
+After CarPlay `TIMEOUT_STARTUP` retries are exhausted, stock MU1316 P5087 calls:
 
 ```text
 MediaConnectorHandler_Cleanup
 → EnqueueSwitchPort(direction=0)
 → MediaConnectionService_OnJobSwitchPort
 → cleanup + start_stack::none
-→ job complete без нового start
+→ job complete without a new start
 ```
 
-В binary меняется одна ARM-инструкция:
+One ARM instruction in the binary changes:
 
 ```text
 VA:          0x17FDB4
@@ -48,44 +48,45 @@ stock bytes:   00 30 a0 e3    MOV R3, #0
 payload bytes: 2e 33 09 e0    AND R3, R9, LR, LSR #6
 ```
 
-В этой точке `R9` содержит cleanup error flag, а CarPlay branch получает
-`CONNECTION_FLAG_REPORT_CARPLAY_SUPPORTED == 0x40`. Только сочетание
-`error=1 + CarPlay` даёт direction 1. Direction 1 уже существует в stock SI и
-делает activate-CarPlay, switch-port и `start_stack::device,2`.
+At this point `R9` holds the cleanup error flag, and the CarPlay branch gets
+`CONNECTION_FLAG_REPORT_CARPLAY_SUPPORTED == 0x40`. Only the combination
+`error=1 + CarPlay` gives direction 1. Direction 1 already exists in stock SI and
+does activate-CarPlay, switch-port and `start_stack::device,2`.
 
-Патч не увеличивает retry counter, не добавляет цикл и не касается владения
-`dio_manager`.
+The patch does not increase the retry counter, does not add a loop and does not
+touch ownership of `dio_manager`.
 
-## Scope по системам проекции
+## Scope per projection system
 
-| Система | SI app ID | Влияние SI-патча |
+| System | SI app ID | Effect of the SI patch |
 |---|---:|---|
-| CarPlay | 0 | error-cleanup меняется с direction 0 на 1 |
-| Android Auto / GAL | 1 | идёт по другой cleanup-ветке; инструкция не достигается |
-| MirrorLink | 2 | идёт по той же отдельной ветке, что GAL |
-| CarLife | 3 | CarPlay flag обнуляется; direction остаётся 0 |
+| CarPlay | 0 | error-cleanup changes from direction 0 to 1 |
+| Android Auto / GAL | 1 | goes down a different cleanup branch; the instruction is not reached |
+| MirrorLink | 2 | goes down the same separate branch as GAL |
+| CarLife | 3 | CarPlay flag is zeroed; direction stays 0 |
 
-Matching Lua включает strong generation identity только для CarPlay. CarLife
-сохраняет stock-compatible no-argument teardown. Поэтому bundle не заявляет,
-что лечит отдельный rapid-replug CarLife, пока такой live-дефект не доказан и
-не спроектирован отдельный identity contract.
+The matching Lua enables strong generation identity only for CarPlay. CarLife
+keeps the stock-compatible no-argument teardown. Therefore the bundle does not
+claim to fix a separate CarLife rapid-replug case until such a live defect is
+proven and a separate identity contract is designed.
 
-## Что bundle не лечит
+## What the bundle does not fix
 
-Если погиб сам OTG `usblauncher`, one-shot flag распаянного `0x2530`-хаба может
-не позволить main launcher создать его снова. Ранее внешний kill/relaunch
-возвращал USB node «за спиной» владельца, но не поднимал CarPlay. Поэтому в
-bundle нет `rc.local` watchdog, port-reset loop или второго владельца SI.
+If the OTG `usblauncher` itself dies, the one-shot flag of the soldered-on
+`0x2530` hub may prevent the main launcher from creating it again. Previously an
+external kill/relaunch brought the USB node back "behind the owner's back", but
+did not bring up CarPlay. That is why the bundle has no `rc.local` watchdog,
+port-reset loop or second SI owner.
 
-Также bundle не меняет:
+The bundle also does not change:
 
 - `verifyPortReset` state 12/14;
-- `maxSetupRetries`, startup/restart timing или child config;
-- audio hook, APAC, altScreen, renderers, Java или PF;
-- Tailscale, Wi-Fi, LTE и memory/CPU policy.
+- `maxSetupRetries`, startup/restart timing or child config;
+- audio hook, APAC, altScreen, renderers, Java or PF;
+- Tailscale, Wi-Fi, LTE and memory/CPU policy.
 
-## Точные image boundaries
+## Exact image boundaries
 
-Все восемь файлов проверяются через `MANIFEST.sha256`. SI дополнительно имеет
-размер `802798` байт. Полные хеши находятся в корне bundle; unknown target
-никогда не перезаписывается автоматически.
+All eight files are checked via `MANIFEST.sha256`. SI additionally has a size of
+`802798` bytes. The full hashes are in the bundle root; an unknown target is
+never overwritten automatically.

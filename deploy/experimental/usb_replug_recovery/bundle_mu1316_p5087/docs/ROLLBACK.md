@@ -1,57 +1,57 @@
-# Полный rollback
+# Full rollback
 
-Bundle содержит точные stock-файлы, поэтому rollback не зависит от того,
-сохранилась ли ручная копия на HU. Скрипт всё равно отказывается работать, если
-текущий target не совпадает ни со stock, ни с payload этого bundle.
+The bundle contains the exact stock files, so rollback does not depend on
+whether a manual copy survived on the HU. The script still refuses to run if
+the current target matches neither the stock nor the payload of this bundle.
 
-## Только NCM
+## NCM only
 
 ```sh
 ./rollback_over_ssh.sh ncm
-# reboot выполняет владелец
+# reboot is done by the owner
 ./verify_over_ssh.sh stock
 ```
 
-Одновременно возвращаются:
+Restored together:
 
 - `/mnt/system/etc/scripts/startncm.sh`;
 - `/mnt/system/etc/scripts/stopncm.sh`;
 - `/mnt/system/etc/usblauncher_otg.lua`.
 
-Частичный rollback запрещён.
+Partial rollback is forbidden.
 
-## Только SI
+## SI only
 
 ```sh
 ./rollback_over_ssh.sh si
-# reboot выполняет владелец
+# reboot is done by the owner
 ./verify_over_ssh.sh stock
 ```
 
-Возвращается
-`/mnt/app/eso/bin/apps/smartphone_integrator` с exact stock SHA-256
+Restores
+`/mnt/app/eso/bin/apps/smartphone_integrator` with the exact stock SHA-256
 `a25dc981e5591cb3c6b09f00fd95de23803dd3daa0f562e7e8d60b6d0e1b0d02`.
 
-## Полный комплект
+## Full set
 
 ```sh
 ./rollback_over_ssh.sh all
-# reboot выполняет владелец
+# reboot is done by the owner
 ./verify_over_ssh.sh stock
 ```
 
-Rollback использует `.rollback-new`, readback и побайтный `cmp` до `mv`.
-Скрипт не убивает SI/`dio_manager`, не перезапускает `usblauncher` и не вызывает
-reboot.
+Rollback uses `.rollback-new`, readback and a byte-for-byte `cmp` before `mv`.
+The script does not kill SI/`dio_manager`, does not restart `usblauncher` and
+does not call reboot.
 
-## Если rollback отказался
+## If rollback refused
 
-Не обходить `REFUSE`. Сначала сохранить:
+Do not bypass `REFUSE`. First save:
 
 ```sh
 ./capture_state_over_ssh.sh ./rollback-refuse-state.txt
 ```
 
-Затем вручную прочитать неизвестный target на Mac и выяснить, какая версия или
-сторонняя модификация уже установлена. Принудительное overwrite неизвестного
-SI/Lua не является частью этого bundle.
+Then manually read the unknown target on the Mac and find out which version or
+third-party modification is already installed. Forcibly overwriting an unknown
+SI/Lua is not part of this bundle.

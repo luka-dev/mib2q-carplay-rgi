@@ -69,7 +69,9 @@ setup/teardown races. Commands: `scripts/test_supervisor_lifecycle.sh`,
   Check on car: side OPS leaves nothing at the bottom; reverse still opens the
   full-screen camera; HOME/camera show the stock footer.
   [Details](<docs/cluster-and-rgi/PDC_SMALL_STAGE.md>).
-- Upmix: ongoing work, separate from the completed base audio path.
+- Upmix: **accepted by the owner on 2026-09-22** ("everything was great") with the
+  shipped calibration in `carplay_startup.sh`. The retention r* grid and other
+  ideas in `docs/audio/UPMIX_CALIBRATION_AND_TUNING.md` are optional, not debt.
 - CarPlay Video: receiver/player integration remains unimplemented; optional
   next feature. [Research](<docs/altscreen-and-video/CARPLAY_VIDEO_PLAYBACK.md>).
 - Partial 360-camera beside CarPlay: deliberately deferred by the owner on

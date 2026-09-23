@@ -1,142 +1,144 @@
 # MU1316 P5087 CarPlay USB replug recovery bundle
 
-Самостоятельный комплект из четырёх готовых файлов для Audi MHI2Q US MU1316:
+A self-contained set of four ready-made files for the Audi MHI2Q US MU1316:
 
 1. `startncm.sh` — generation-aware NCM start;
-2. `stopncm.sh` — teardown с USB identity и общим lock;
-3. `usblauncher_otg.lua` — передаёт `busno/devno/iface` обоим скриптам;
+2. `stopncm.sh` — teardown with USB identity and a shared lock;
+3. `usblauncher_otg.lua` — passes `busno/devno/iface` to both scripts;
 4. `smartphone_integrator` — one-instruction CarPlay error re-arm.
 
-Bundle предназначен только для
-`MU1316-MHI2Q_US_AUG22_P5087-JTB-07426.03.1811930398`. Установщики сверяют
-фактические файлы HU побайтно с `stock/` и `payload/` и отказываются менять
-неизвестную версию.
+The bundle is intended only for
+`MU1316-MHI2Q_US_AUG22_P5087-JTB-07426.03.1811930398`. The installers compare
+the actual HU files byte for byte against `stock/` and `payload/` and refuse to
+modify an unknown version.
 
-Статус: offline/static verification и host-тесты пройдены; live A/B ещё не
-закрыт. Скрипты никогда не вызывают reboot — его выполняет владелец HU.
+Status: offline/static verification and host tests passed; live A/B is not yet
+closed. The scripts never call reboot — the HU owner does that.
 
-## Состав папки
+## Folder contents
 
 ```text
 bundle_mu1316_p5087/
-├── payload/                  готовые четыре patched-файла
-├── stock/                    точные четыре stock-файла для rollback
+├── payload/                  the four ready-made patched files
+├── stock/                    the exact four stock files for rollback
 ├── docs/
-│   ├── TECHNICAL.md          механизм и границы исправлений
-│   ├── LIVE_TEST.md          независимый A/B и критерии PASS
-│   └── ROLLBACK.md           точный возврат stock
-├── MANIFEST.sha256           контроль всех восьми бинарных/text payload
-├── verify_bundle.sh          полностью локальная проверка
-├── verify_over_ssh.sh        read-only проверка HU после reboot
+│   ├── TECHNICAL.md          mechanism and limits of the fixes
+│   ├── LIVE_TEST.md          independent A/B and PASS criteria
+│   └── ROLLBACK.md           exact return to stock
+├── MANIFEST.sha256           check of all eight binary/text payloads
+├── verify_bundle.sh          fully local verification
+├── verify_over_ssh.sh        read-only HU check after reboot
 ├── install_over_ssh.sh       stage/readback/atomic install
 ├── rollback_over_ssh.sh      stage/readback/atomic stock restore
-└── capture_state_over_ssh.sh read-only snapshot мёртвой сессии
+└── capture_state_over_ssh.sh read-only snapshot of a dead session
 ```
 
-## Локальная проверка
+## Local verification
 
 ```sh
 cd /Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/deploy/experimental/usb_replug_recovery/bundle_mu1316_p5087
 ./verify_bundle.sh
 ```
 
-Ожидается восемь строк `OK` и `bundle verification: PASS`.
+Expected: eight `OK` lines and `bundle verification: PASS`.
 
-По умолчанию используется
-`/Users/luka/Desktop/AUDI_2/audi_ssh.sh`. Для другого helper:
+By default
+`/Users/luka/Desktop/AUDI_2/audi_ssh.sh` is used. For a different helper:
 
 ```sh
 AUDI_SSH_HELPER=/absolute/path/to/audi_ssh.sh ./verify_over_ssh.sh stock
 ```
 
-## Режимы
+## Modes
 
-| Режим | NCM scripts + Lua | SI | Назначение |
+| Mode | NCM scripts + Lua | SI | Purpose |
 |---|---|---|---|
-| `stock` | stock | stock | только `verify_over_ssh.sh` после полного rollback |
-| `ncm` | payload | stock | первая независимая live-фаза |
-| `si` | stock | payload | вторая независимая live-фаза |
-| `all` | payload | payload | финал только после двух отдельных PASS |
+| `stock` | stock | stock | only `verify_over_ssh.sh` after a full rollback |
+| `ncm` | payload | stock | first independent live phase |
+| `si` | stock | payload | second independent live phase |
+| `all` | payload | payload | final, only after two separate PASSes |
 
-## Рекомендуемый порядок
+## Recommended order
 
-Проверить исходный HU без записи:
+Check the original HU without writing anything:
 
 ```sh
 ./verify_over_ssh.sh stock
 ```
 
-Первая фаза:
+First phase:
 
 ```sh
 ./install_over_ssh.sh ncm
-# владелец перезагружает HU
+# owner reboots the HU
 ./verify_over_ssh.sh ncm
 ```
 
-Провести матрицу из [`docs/LIVE_TEST.md`](docs/LIVE_TEST.md). Затем вернуть
-stock до второго независимого теста:
+Run the matrix from [`docs/LIVE_TEST.md`](docs/LIVE_TEST.md). Then return to
+stock before the second independent test:
 
 ```sh
 ./rollback_over_ssh.sh ncm
-# владелец перезагружает HU
+# owner reboots the HU
 ./verify_over_ssh.sh stock
 ```
 
-Вторая фаза:
+Second phase:
 
 ```sh
 ./install_over_ssh.sh si
-# владелец перезагружает HU
+# owner reboots the HU
 ./verify_over_ssh.sh si
 ```
 
-Только если обе фазы отдельно дали PASS:
+Only if both phases gave a PASS separately:
 
 ```sh
 ./rollback_over_ssh.sh si
-# владелец перезагружает HU и проверяет stock
+# owner reboots the HU and verifies stock
 ./install_over_ssh.sh all
-# владелец перезагружает HU
+# owner reboots the HU
 ./verify_over_ssh.sh all
 ```
 
-`install_over_ssh.sh` выполняет:
+`install_over_ssh.sh` performs:
 
-- локальную проверку `MANIFEST.sha256`;
-- read-only определение каждого target как exact `stock` или exact `payload`;
-- отказ `ncm` при non-stock SI и отказ `si` при non-stock NCM, чтобы случайно
-  не превратить независимый A/B в combined-тест;
-- проверку уже существующих `.usb-replug-stock` backup;
-- remount только требуемой persistent partition;
-- upload в `.usb-replug-new`;
-- readback и побайтный `cmp` до активации;
-- `sh -n` NCM-скриптов на QNX;
-- атомарный `mv` и `sync`;
-- запись RAM-маркера `reboot_required`, из-за которого verifier не примет даже
-  SI-only замену до полной перезагрузки;
-- остановку без reboot или kill живых процессов.
+- local verification of `MANIFEST.sha256`;
+- read-only identification of each target as exact `stock` or exact `payload`;
+- refusal of `ncm` when SI is non-stock and refusal of `si` when NCM is
+  non-stock, so an independent A/B is not accidentally turned into a combined
+  test;
+- a check of already existing `.usb-replug-stock` backups;
+- remount of only the required persistent partition;
+- upload to `.usb-replug-new`;
+- readback and a byte-for-byte `cmp` before activation;
+- `sh -n` of the NCM scripts on QNX;
+- atomic `mv` and `sync`;
+- writing a `reboot_required` RAM marker, because of which the verifier will
+  not accept even an SI-only replacement until a full reboot;
+- stopping without a reboot and without killing live processes.
 
-## Быстрый snapshot перед reboot
+## Quick snapshot before reboot
 
-Если сессия умерла, сначала:
+If the session died, first:
 
 ```sh
 ./capture_state_over_ssh.sh ./dead-session-01.txt
 ```
 
-Скрипт ничего не меняет на HU. Он сохраняет USB nodes, процессы, NCM,
-`usb_ctrl1`, PPS topology и тихие строки `NCM_FENCE` на Mac.
+The script changes nothing on the HU. It saves USB nodes, processes, NCM,
+`usb_ctrl1`, PPS topology and the quiet `NCM_FENCE` lines to the Mac.
 
-## Жёсткие ограничения
+## Hard constraints
 
-- Нельзя ставить только два `.sh` без matching `usblauncher_otg.lua`.
-- Нельзя применять SI к другому SHA, MH2p или другой MU-версии.
-- Нельзя считать обычные успешные подключения доказательством SI: тест должен
-  реально дойти до исчерпания `maxSetupRetries`.
-- Нельзя добавлять USB reset/kill loop в `rc.local`.
-- Единственное доказанное аварийное восстановление уже мёртвой stock-сессии —
-  полная перезагрузка после сохранения snapshot.
+- Do not install only the two `.sh` files without the matching
+  `usblauncher_otg.lua`.
+- Do not apply SI to a different SHA, MH2p or a different MU version.
+- Do not treat ordinary successful connects as proof for SI: the test must
+  actually reach exhaustion of `maxSetupRetries`.
+- Do not add a USB reset/kill loop to `rc.local`.
+- The only proven emergency recovery of an already dead stock session is a
+  full reboot after saving a snapshot.
 
-Подробности механизма: [`docs/TECHNICAL.md`](docs/TECHNICAL.md). Полный rollback:
+Mechanism details: [`docs/TECHNICAL.md`](docs/TECHNICAL.md). Full rollback:
 [`docs/ROLLBACK.md`](docs/ROLLBACK.md).
