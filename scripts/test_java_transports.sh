@@ -1,5 +1,5 @@
 #!/bin/bash
-# Compile shipping Java 1.4 sources, then exercise input and local transports.
+# Compile shipping Java 1.4 sources, then exercise the local transports.
 set -euo pipefail
 PROJECT_DIR=$(cd "$(dirname "$0")/.." && pwd)
 TEST_JDK="$PROJECT_DIR/../../Tools/jxe2jar/jvms/zulu8.78.0.19-ca-jdk8.0.412-macosx_aarch64/zulu-8.jdk/Contents/Home"
@@ -8,9 +8,7 @@ TEST_DIR=$(mktemp -d)
 trap 'rm -rf "$TEST_DIR"' EXIT
 "$TEST_JDK/bin/javac" -encoding UTF-8 -cp "$PROJECT_DIR/build/carplay_hook.jar" -d "$TEST_DIR" \
     "$PROJECT_DIR/tests/CarplayBusTransportTest.java" \
-    "$PROJECT_DIR/tests/RendererServerTransportTest.java" \
-    "$PROJECT_DIR/tests/TouchpadControllerTest.java"
-"$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar" TouchpadControllerTest
+    "$PROJECT_DIR/tests/RendererServerTransportTest.java"
 "$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar" com.luka.carplay.bus.CarplayBusTransportTest
 "$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar" com.luka.carplay.rgd.RendererServerTransportTest
 

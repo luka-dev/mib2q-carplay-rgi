@@ -605,8 +605,29 @@ static int main_disp_modernize(void *mainDisp, int night)
                      (long long)v[0], (long long)v[1], (long long)v[2], (long long)v[3]);
         }
     }
+    /* Native MMI touchpad.  Stock dio registers the HID trackpad ("Eso_TrackPad") but builds
+     * "features" from the knob and touchscreen flags only, never bit 0x10, and sends no
+     * primaryInputDevice.  iOS then picks CarPlay knob focus mode, which has no swipe
+     * recognizer: a pad touch only highlights the focused item.  Trackpad focus mode
+     * (_UIFocusBehavior_CarPlayTouchpad) needs features & 0x10 and primaryInputDevice 2
+     * (CarKit CARScreenInfo: 1 touch, 2 trackpad, 3/4 knob; 0 = pick touch > knob > trackpad).
+     * See docs/reference/ARCHITECTURE.md, "MMI touchpad". */
+    int64_t primary_input = 2;   /* trackpad */
+    {
+        int64_t features = 0;
+        void *k = cf_str(0, "features", CFENC_UTF8);
+        if (k && cf_geti64) features = cf_geti64(mainDisp, k, NULL);
+        if (k && cf_rel) cf_rel(k);
+        /* A touchscreen unit (0x04 high / 0x08 low fidelity) keeps touch as primary:
+         * 0 lets iOS pick touch first, as before.  The pad bit is still advertised. */
+        if (features & 0x0C) primary_input = 0;
+        set_i64(mainDisp, "features", features | 0x10);
+        LOG_INFO(LOG_MODULE, "main display: features 0x%llx -> 0x%llx, primaryInputDevice %lld",
+                 (unsigned long long)features, (unsigned long long)(features | 0x10),
+                 (long long)primary_input);
+    }
     /* complete the main dict like a real HU (MHI3 set) — see build_cluster_dict note */
-    set_i64(mainDisp, "primaryInputDevice", 0);
+    set_i64(mainDisp, "primaryInputDevice", primary_input);
     set_i64(mainDisp, "cornerMasks",        0);
     set_i64(mainDisp, "nightMode",          night ? 1 : 0);
     set_i64(mainDisp, "limitedUI",          0);
