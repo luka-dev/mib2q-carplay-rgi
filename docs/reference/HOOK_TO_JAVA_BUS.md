@@ -73,6 +73,8 @@ Payload defaults to text `key:type:value\n` lines; `BUS_FLAG_BINARY` (0x02) mark
 
 **Cluster commands ride the same bus.** `CMD_ALT_ZOOM` is live at `0x0110` (`bus_protocol.h:92`, `CarplayBus.java:54`, handler `zoom_on_cmd` registered at `hook/altscreen/altscreen_hook.c:2635`); `CMD_ALT_ZONE 0x0111`, `CMD_ALT_ZONE_ACK 0x0112`, `CMD_ALT_APPEARANCE 0x0114`, `CMD_ALT_UICTX 0x0115`, `CMD_ALT_RGI 0x0116` follow. `CMD_ALT_HID` / `CMD_KNOB` do not exist (the old stale `CMD_KNOB` comment in `bus.c` is gone too) — the cluster has no HID path; all cluster commands are BAP/semantic. The July 2026 plan had put `CMD_ALT_HID` at 0x0110; that slot is now `CMD_ALT_ZOOM`. `EVT_DEVICE_STATE 0x0030` is reserved and unused. **[code]**
 
+**Telephony rides it too.** `EVT_TEL_LISTS 0x0040` is a sticky text frame with CarPlay recents (`r.n`, `r.<i>.a|b|type|ts|occ`) and favorites (`f.n`, `f.<i>.a|b`) from iAP2 ListUpdate; `EVT_TEL_COMM 0x0041` is a sticky text frame with `signal`, `registration`, `airplane` and `carrier` read from the stock CommunicationsUpdate; `CMD_TEL 0x0117` is `[u8 action][u8 on]`: `1` = mic mute (iAP2 0x4160), `2` = hold (0x415F) (`hook/telephony/tel_hook.c`, `GatedPhoneService`). See [CarPlay Telephony](../cluster-and-rgi/CARPLAY_TELEPHONY.md). **[code]**
+
 ---
 
 ## ⚙️ Hook side: threads, queue and failure handling

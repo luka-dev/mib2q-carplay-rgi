@@ -79,6 +79,10 @@
 #define EVT_COVERART            0x0010  /* text: crc:n:<u32> path:s:<path>   */
 #define EVT_RGD_UPDATE          0x0020  /* text: route_state + all fields    */
 #define EVT_DEVICE_STATE        0x0030  /* reserved                          */
+#define EVT_TEL_LISTS           0x0040  /* sticky text: r.n / r.<i>.a|b|type|ts|occ, */
+                                        /* f.n / f.<i>.a|b (iAP2 ListUpdate)  */
+#define EVT_TEL_COMM            0x0041  /* sticky text: signal, registration,  */
+                                        /* airplane, carrier (iAP2 0x4158)    */
 
 /* ============================================================
  * Command types (Java -> Hook)
@@ -108,6 +112,8 @@
 #define CMD_ALT_RGI             0x0116  /* binary [u8 0=off 1=on] — Java's     */
                                         /* confirmed RGI presentation; hook    */
                                         /* picks the Maps cluster URL (showUI) */
+#define CMD_TEL                 0x0117  /* binary [u8 action][u8 on]: 1 = mute */
+                                        /* (0x4160), 2 = hold (0x415F)         */
 /* NOTE: dispatchable inbound types must be < MAX_TYPES in bus.c (grown to      */
 /* cover this 0x11x block).                                                     */
 

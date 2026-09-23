@@ -124,6 +124,11 @@ add_ids() {   # $1 = line holding one list, rest = IDs; prints the new line
     done
     printf '%s\n' "$l"
 }
+# iAP2 messages the hook needs Cinemo to declare in Identify: route guidance
+# (0x52xx) and telephony (0x415F/0x4160 Hold/MuteStatusUpdate, 0x4170/0x4171
+# ListUpdates).
+DIO_SENT_IDS="0x5200 0x5203 0x415F 0x4160 0x4170"
+DIO_RECV_IDS="0x5201 0x5202 0x5204 0x4171"
 patch_dio() {
     [ -f "$DIO" ] || { echo "  WARN no $DIO - route guidance will not arrive"; return 0; }
     tmp=$DIO.carplay-new.$$; : > "$tmp" || { echo "FAILED create $tmp"; return 1; }
@@ -132,9 +137,9 @@ patch_dio() {
         case $line in
             *'##'*) new=$line ;;
             *'"MessagesSentByAccessory":['*']'*)
-                sent=$((sent+1)); new=$(add_ids "$line" 0x5200 0x5203) ;;
+                sent=$((sent+1)); new=$(add_ids "$line" $DIO_SENT_IDS) ;;
             *'"MessagesReceivedFromDevice":['*']'*)
-                recv=$((recv+1)); new=$(add_ids "$line" 0x5201 0x5202 0x5204) ;;
+                recv=$((recv+1)); new=$(add_ids "$line" $DIO_RECV_IDS) ;;
             *) new=$line ;;
         esac
         [ "$new" = "$line" ] || { line=$new; changed=1; }
@@ -143,11 +148,12 @@ patch_dio() {
     if [ "$sent" != 1 ] || [ "$recv" != 1 ]; then
         echo "  WARN dio_manager.json: lists sent=$sent recv=$recv (expected 1/1); left as-is"; rm -f "$tmp"; return 1
     fi
-    n=0; for id in 0x5200 0x5201 0x5202 0x5203 0x5204; do grep -q "\"$id\"" "$tmp" && n=$((n+1)); done
-    [ "$n" = 5 ] || { echo "  WARN dio_manager.json: only $n/5 IDs after edit; left as-is"; rm -f "$tmp"; return 1; }
+    n=0; want=0
+    for id in $DIO_SENT_IDS $DIO_RECV_IDS; do want=$((want+1)); grep -q "\"$id\"" "$tmp" && n=$((n+1)); done
+    [ "$n" = "$want" ] || { echo "  WARN dio_manager.json: only $n/$want IDs after edit; left as-is"; rm -f "$tmp"; return 1; }
     if [ "$changed" = 0 ]; then echo "  dio_manager.json IDs already registered"; rm -f "$tmp"; return 0; fi
     backup_once "$DIO" "$DIO.carplay-stock" || { rm -f "$tmp"; return 1; }
-    chmod 644 "$tmp"; mv -f "$tmp" "$DIO" && echo "  dio_manager.json route-guidance IDs registered"
+    chmod 644 "$tmp"; mv -f "$tmp" "$DIO" && echo "  dio_manager.json route-guidance and telephony IDs registered"
 }
 
 echo "custom.sh: CarPlay $ACTION"

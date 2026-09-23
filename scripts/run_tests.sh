@@ -157,6 +157,12 @@ cc -std=c99 -O1 -Wall -Wextra -Werror -Wno-unused-variable -Wno-unused-function 
     -o "$OUT/rgd_tlv"
 "$OUT/rgd_tlv"
 
+printf '%-32s ' tel_hook_test
+cc -std=c99 -O1 -Wall -Wextra -Werror -Wno-unused-function \
+    -DENABLE_LOGGING=0 -Ihook tests/tel_hook_test.c hook/telephony/tel_hook.c \
+    hook/framework/iap2_protocol.c -o "$OUT/tel_hook"
+"$OUT/tel_hook"
+
 printf '%-32s ' state_trace_test
 cc -std=c99 -O2 -Wall -Wextra -Werror -Ihook \
     -DENABLE_LOGGING=0 -DENABLE_STATE_TRACE=1 \

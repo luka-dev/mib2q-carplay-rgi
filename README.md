@@ -153,3 +153,4 @@ Thanks for the prior work and knowledge that helped figure this out:
 - https://github.com/EthanArbuckle/iPhone18-3_26.1_23B85_Restore
 - https://github.com/adi961/mib2-android-auto-vc
 - [@fifthBro](https://t.me/fifthBro)
+- https://github.com/xPaiiN for telephony magic

@@ -81,6 +81,7 @@ The visual target is known: force VC `phoneAvailable = 0`. `[decompile]`
 - In `hmi_app.elf`, `App::getTabBarIconIndex` (`0x183378`) returns icon index 0 when `phoneAvailable == 0` (`App+960`).
 - Only `App::setPhoneAvailable` (`0x18836C`) sets it, from a separately cached service-availability byte (handler `0x17F1B0`). op-State and the FSG value do not set it.
 - So the real signal is VC-side `BAP_Telephone2_Available = 0 → phoneAvailable = 0`.
+- **Correction (2026-09-23, `[decompile]`, likely not proven):** the handler that sets App+960 sits in the VC `Telephone` module (HU PHONE 0x28), not `Telephone2`; `BAP_Telephone2_Available` (`0x2000093`) belongs to `AsgTelephone2`. See [VC Telephone Tab](VC_TELEPHONE_TAB.md).
 
 Next step, if this is picked up again: find the real publisher of `BAP_Telephone2_Available` in MHI Java/BAP and gate that on CarPlay, or minimally patch the VC availability consumer. `hmi_app.elf` alone cannot show whether `avail = 0` collapses the ribbon slot or leaves an empty gap, because another component fills the ribbon. Only an on-unit A/B test can answer it. `[open]`
 

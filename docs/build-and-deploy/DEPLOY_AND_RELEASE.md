@@ -12,7 +12,7 @@ There is no packaging script; `package_mib.py`, `package_protected.sh` and `depl
 - `models/` holds the HSSR models, `hssr_model.bin` and `hssr_guard.bin`.
 - `deploy/` holds the startup scripts, the patched firmware (`smartphone_integrator` and `deva-ctrl-qc.so`) and the SI child JSON.
 
-`custom.sh` installs whatever it finds under `mod/carplay/root/`. It copies every file in that tree to the same path under `/` (`install_MoreIncredibleBash/mod/custom.sh:30-33`, `:158-176`). You put each file at its on-unit path yourself, using the map below.
+`custom.sh` installs whatever it finds under `mod/carplay/root/`. It copies every file in that tree to the same path under `/` (`install_MoreIncredibleBash/mod/custom.sh:30-33`, `:164-182`). You put each file at its on-unit path yourself, using the map below.
 
 ```mermaid
 flowchart TB
@@ -79,7 +79,7 @@ Build the compiled outputs first (`build_hook.sh` or `build_hook_protected.sh`, 
 
 ### Firmware and model identities
 
-`custom.sh` backs up each replaced firmware file once, as `*.carplay-stock`, before an atomic rename on the same partition (`custom.sh:49`, `:53`, `:168-172`). It does **not** check SHA-256 identities, so staging the correct images is your job. Check with `shasum -a 256`; the repo copies matched when this was last checked.
+`custom.sh` backs up each replaced firmware file once, as `*.carplay-stock`, before an atomic rename on the same partition (`custom.sh:49`, `:53`, `:174-178`). It does **not** check SHA-256 identities, so staging the correct images is your job. Check with `shasum -a 256`; the repo copies matched when this was last checked.
 
 | File | SHA-256 | Note |
 |---|---|---|
@@ -111,28 +111,29 @@ To install, run **GEM → M.I.B. → Advanced Settings → Run Custom Script** (
 2. copies each file under `root/` onto `/` through an atomic rename;
 3. patches `smartphone_integrator.json` by replacing the `"carplay"` child;
 4. widens the PF profiles;
-5. registers the route-guidance message IDs in `dio_manager.json`;
-6. runs `sync` and prints `DONE (install). Reboot the HU to load.` (`:153-180`).
+5. registers the route-guidance and telephony message IDs in `dio_manager.json`;
+6. runs `sync` and prints `DONE (install). Reboot the HU to load.` (`:159-186`).
 
 It stops no processes and does not reboot.
 
 If `carplay_child.json` is missing from `mod/carplay/`, the JSON patch is skipped with a `WARN` (`:59`) and the hook never loads. If `mod/carplay/root/` is missing, the script exits with `no payload tree` (`:33`).
 
-Watch the install output for `dio_manager.json route-guidance IDs registered` (or `already registered`). A `WARN dio_manager.json …` line means the file had an unexpected layout and was left as-is; then do the [manual step](#-route-guidance-message-ids-in-dio_managerjson) before the reboot, or route guidance (maneuvers, lanes, the cluster turn card) never arrives.
+Watch the install output for `dio_manager.json route-guidance and telephony IDs registered` (or `already registered`). A `WARN dio_manager.json …` line means the file had an unexpected layout and was left as-is; then do the [manual step](#-route-guidance-message-ids-in-dio_managerjson) before the reboot, or route guidance (maneuvers, lanes, the cluster turn card) never arrives.
 
 To check an install on the unit (the mod only becomes active after a reboot, and on a protected build only on the stamped VIN):
 
 ```bash
 grep carplay_startup.sh /mnt/system/etc/eso/production/smartphone_integrator.json
 grep -o '6030:6032' /mnt/system/etc/pf.conf /mnt/system/etc/pf.ecm0.conf
-grep -o '"0x520[0-4]"' /mnt/system/etc/eso/production/dio_manager.json
+grep -c '"0x5204"' /mnt/system/etc/eso/production/dio_manager.json
+grep -c '"0x4171"' /mnt/system/etc/eso/production/dio_manager.json
 ```
 
-The last line must print all five IDs: `0x5200`, `0x5203`, `0x5201`, `0x5202`, `0x5204`.
+Both counts must be 1. The unit's `grep` has no working `-o`, so check a representative ID from each set. The full list is in the table below.
 
 On a car with the LTE modem the live profile is `pf.ecm0.conf`, not `pf.conf`.
 
-To uninstall, copy `uninstall_MoreIncredibleBash/` over the card instead. That script needs no payload tree or marker. It renames every `*.carplay-stock` it finds under `/mnt/app` and `/mnt/system` back to the original, which covers the firmware, the SI JSON, the PF profiles and `dio_manager.json`. It then deletes the files on its fixed owned list (`uninstall_MoreIncredibleBash/mod/custom.sh:23-54`). The list includes `hssr_guard.bin` (`:27`); the "[open] missing from the list" remark in `DEPLOYMENT.md` and `PROTECTOR.md` is superseded. `custom.sh uninstall` from the install folder (`install_MoreIncredibleBash/mod/custom.sh:182-203`) is a second path when the payload tree is present. Both READMEs that described the old generated uninstaller (`.orig` restore, `package_mib.py`) are gone or stale; the scripts are authoritative. **[code]**
+To uninstall, copy `uninstall_MoreIncredibleBash/` over the card instead. That script needs no payload tree or marker. It renames every `*.carplay-stock` it finds under `/mnt/app` and `/mnt/system` back to the original, which covers the firmware, the SI JSON, the PF profiles and `dio_manager.json`. It then deletes the files on its fixed owned list (`uninstall_MoreIncredibleBash/mod/custom.sh:23-54`). The list includes `hssr_guard.bin` (`:27`); the "[open] missing from the list" remark in `DEPLOYMENT.md` and `PROTECTOR.md` is superseded. `custom.sh uninstall` from the install folder (`install_MoreIncredibleBash/mod/custom.sh:188-209`) is a second path when the payload tree is present. Both READMEs that described the old generated uninstaller (`.orig` restore, `package_mib.py`) are gone or stale; the scripts are authoritative. **[code]**
 
 ## 🧭 Route-guidance message IDs in dio_manager.json
 
@@ -147,10 +148,14 @@ Stock MU1316 P5087 lists none of them (checked against the firmware copy of `dio
 |---|---|---|
 | `MessagesSentByAccessory` | `0x5200`, `0x5203` | StartRouteGuidanceUpdates, StopRouteGuidanceUpdates |
 | `MessagesReceivedFromDevice` | `0x5201`, `0x5202`, `0x5204` | RouteGuidanceUpdate, RouteGuidanceManeuverUpdate, LaneGuidanceInformation |
+| `MessagesSentByAccessory` | `0x415F`, `0x4160`, `0x4170` | HoldStatusUpdate, MuteStatusUpdate, StartListUpdates ([CarPlay Telephony](../cluster-and-rgi/CARPLAY_TELEPHONY.md)) |
+| `MessagesReceivedFromDevice` | `0x4171` | ListUpdate (recents and favorites) |
+
+Without the telephony IDs the call screen still works (it comes from stock `DSICarplay`); only the cluster's recents/favorites lists, hold/resume and mic mute are missing. If iOS rejects the telephony IDs in Identify, Cinemo removes them from its identification pool by itself and continues (`OnIdentificationRejected`, `libNmeVfs.so@0xE438C`). **[decompile]**
 
 The file is not strict JSON: it carries `##` comment lines above each list, so edit the two list lines as text and do not run it through a JSON tool.
 
-**Installer.** `patch_dio()` in `custom.sh` (`install_MoreIncredibleBash/mod/custom.sh:114-151`) does this in plain ksh, like the PF edit. It reads the file line by line, appends each missing ID before the list's closing `]`, and leaves `##` lines alone. It refuses to write unless it found exactly one of each list and all five IDs are present afterwards. It backs up the stock file once as `dio_manager.json.carplay-stock` (so both uninstall paths restore it), then swaps the file in with an atomic rename. Re-running it is a no-op. `scripts/test_install_dio.sh` checks all of that under ksh, dash and sh. **[code]**
+**Installer.** `patch_dio()` in `custom.sh` (`install_MoreIncredibleBash/mod/custom.sh:114-157`) does this in plain ksh, like the PF edit. It reads the file line by line, appends each missing ID before the list's closing `]`, and leaves `##` lines alone. It refuses to write unless it found exactly one of each list and every ID in `DIO_SENT_IDS` / `DIO_RECV_IDS` is present afterwards. It backs up the stock file once as `dio_manager.json.carplay-stock` (so both uninstall paths restore it), then swaps the file in with an atomic rename. Re-running it is a no-op. `scripts/test_install_dio.sh` checks all of that under ksh, dash and sh. **[code]**
 
 **By hand (manual installs).** If you install without the M.I.B. script, or the installer printed a `WARN`, do the same over SSH after the files are in place and **before** the reboot (`dio_manager` reads the file only at start). On the host, in a `#!/bin/bash` script, with `HU` set to your unit's SSH target:
 
@@ -161,14 +166,14 @@ F=/mnt/system/etc/eso/production/dio_manager.json
 #    The uninstaller renames every *.carplay-stock back, so this also covers removal.
 ssh -n "$HU" "mount -uw /mnt/system; [ -e $F.carplay-stock ] || cp -p $F $F.carplay-stock"
 
-# 2. Pull the file and add the five IDs on the host. Re-running is a no-op.
+# 2. Pull the file and add the IDs on the host. Re-running is a no-op.
 ssh -n "$HU" "cat $F" > dio_manager.json
 python3 - dio_manager.json <<'PY'
 import re, sys
 path = sys.argv[1]
 text = open(path).read()
-add = {"MessagesSentByAccessory": ["0x5200", "0x5203"],
-       "MessagesReceivedFromDevice": ["0x5201", "0x5202", "0x5204"]}
+add = {"MessagesSentByAccessory": ["0x5200", "0x5203", "0x415F", "0x4160", "0x4170"],
+       "MessagesReceivedFromDevice": ["0x5201", "0x5202", "0x5204", "0x4171"]}
 for key, ids in add.items():
     m = re.search(r'"%s"\s*:\s*\[([^\]]*)\]' % key, text)
     have = [h.upper() for h in re.findall(r'"(0x[0-9A-Fa-f]+)"', m.group(1))]
@@ -182,8 +187,8 @@ PY
 ssh "$HU" "cat > $F.new" < dio_manager.json
 ssh -n "$HU" "chmod 644 $F.new && mv $F.new $F && sync"
 
-# 4. Verify: all five IDs must be printed.
-ssh -n "$HU" "grep -o '\"0x520[0-4]\"' $F"
+# 4. Verify on the host copy: every ID must be listed.
+grep -oE '"0x(520[0-4]|415F|4160|417[01])"' dio_manager.json | sort -u
 ```
 
 Then disconnect CarPlay and have the owner reboot the HU (never reboot it unasked, see below). After the reboot, start a route in Apple Maps: the cluster must show the turn card and the HUD arrow. If nothing appears, check the file again with the grep above: when the IDs are missing the SDK drops the messages before the hook sees them, so the hook logs nothing about them. (The hook's WARN `Unknown 0x52xx msgid=…`, `hook/framework/hook_framework.c:360-368`, covers only IDs that do arrive but that the hook does not handle.)

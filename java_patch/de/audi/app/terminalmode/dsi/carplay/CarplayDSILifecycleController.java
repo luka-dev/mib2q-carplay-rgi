@@ -1,5 +1,6 @@
 package de.audi.app.terminalmode.dsi.carplay;
 
+import com.luka.carplay.telephony.GatedPhoneService;
 import de.audi.app.terminalmode.IContext;
 import de.audi.app.terminalmode.ITerminalModeConfiguration;
 import de.audi.app.terminalmode.SmartphoneManager;
@@ -104,6 +105,18 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
         /* The same component object can be deinit/init'd; deinit clears the singleton sink. */
         ((CarplayDSILifecycleController.TerminalModeDSIKeyEventsController)this.keyEventController)
             .installTouchpadSink();
+        /* Cluster telephone tab actions -> CarPlay (GatedPhoneListener). */
+        final DSICarplaySafe dsi = this.dsiCarplaySafe;
+        GatedPhoneService.setCommands(new GatedPhoneService.Commands() {
+            public void button(int id) {
+                dsi.postButtonEvent(id, 0);
+                dsi.postButtonEvent(id, 1);
+            }
+
+            public void dial(String number) {
+                dsi.requestUI2("tel:" + number);
+            }
+        });
     }
 
     public void deinit() {
@@ -112,6 +125,7 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
          * inject into the torn-down DSI proxy (stale-DSI injection) and accumulate across
          * connect cycles. */
         TouchpadController.getInstance().setTouchSink(null);
+        GatedPhoneService.setCommands(null);
         super.deinit();
         this.carPlayDsiController.deinit();
     }
@@ -256,6 +270,10 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
         }
 
         public void postDSICarplayButtonEvent(int i, int j) {
+            /* Stock MFL phone keys (CarPlayDSIManager hook/hangup/flash).  While the
+             * cluster tab shows CarPlay calls the VC may deliver the same Tel press
+             * over BAP; keep only the first of the two. */
+            if (GatedPhoneService.dropStockPhoneKey(i)) return;
             this.this$0.dsiCarplaySafe.postButtonEvent(i, j);
         }
 
@@ -724,6 +742,7 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
                             }
 
                             public void run() {
+                                GatedPhoneService.onCarPlayCalls(this.val$callState);
                                 GList glist = Generics.newArrayListWithCapacity(this.val$callState.length);
 
                                 for (int j = 0; j < this.val$callState.length; j++) {
