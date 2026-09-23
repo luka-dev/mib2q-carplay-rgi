@@ -19,8 +19,30 @@ responsible for any damage, bricked units or warranty issues resulting from thei
 ## Gallery
 
 <p align="center">
-  <img src="assets/gallery/IMG_0082_39-45.gif" width="90%" />
+  <img src="assets/gallery/maneuver_demo.gif" width="90%" /><br />
+  <sub>Cluster maneuver renderer driven through a demo route (rendered with
+  <code>maneuver_render/demo_sequence.py</code>)</sub>
 </p>
+
+**Virtual Cockpit: CarPlay map on the cluster, route guidance beside it**
+
+<p align="center">
+  <img src="assets/gallery/vc_day_nav.jpeg" width="45%" />
+  <img src="assets/gallery/vc_night_nav.jpeg" width="45%" />
+</p>
+<p align="center">
+  <img src="assets/gallery/vc_full_map.jpeg" width="90%" />
+</p>
+
+**Audi front PDC no longer hides CarPlay** · **Cover art on the cluster**
+
+<p align="center">
+  <img src="assets/gallery/pdc_over_carplay.jpeg" width="45%" />
+  <img src="assets/gallery/cover_art.jpeg" width="45%" />
+</p>
+
+**Head-up display**
+
 <p align="center">
   <img src="assets/gallery/IMG_0623.jpeg" width="45%" />
   <img src="assets/gallery/IMG_6299.jpeg" width="45%" />
