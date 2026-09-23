@@ -10,7 +10,7 @@ The protector binds a build to a single VIN. On the target VIN the mod is active
 
 - Both `.so` files (`libcarplay_hook.so`, `libcarplay_apac.so`) carry a small VIN gate and a stamped slot.
 - On first use, the gate reads the **live VIN** from the MMX persistence store and checksums the `.so`'s own image on disk. The store is `/mnt/persist/var/fw/persistence.sqlite`, with `/var/fw/persistence.sqlite` as a fallback (`protector/prot_vin.c:89-90`). The gate reads the `/core/vin` and `/core/registeredVin` records; if both are present they must agree (`prot_vin.c:94-96`).
-- The stamp is `KDF(secret, VIN, CRC)` over a blind sentinel. It verifies **only** when the unit's live VIN matches the VIN baked in at build time, and only if the `.so` has not been patched.
+- The stamp is the 4-byte token tag encrypted with a keystream from `KDF(secret, VIN, CRC)`. It verifies **only** when the unit's live VIN matches the VIN baked in at build time, and only if the `.so` has not been patched. Until 2026-09-23 the CarPlay gate checked a 1-byte blind sentinel (`0x5A`), which let about 1 in 256 foreign VINs through; it now uses token mode (`protector/carplay_prot.c`), a 1 in 2^32 false accept.
 - **Fail-open:** any error (no VIN, disagreeing VINs, an unreadable image, an unstamped `.so`) leaves the unit inert and stock. It never bricks the unit (`protector/carplay_prot.h:8-12`).
 
 ## 🔐 The gate at runtime
@@ -29,7 +29,7 @@ flowchart TB
 
   load["gate called once"]
   read["read live VIN and image CRC"]
-  derive["derive KDF over sentinel"]
+  derive["derive KDF, decode token tag"]
   cmp{"stamp matches this VIN?"}
   active["ACTIVE: mod runs"]
   inert["inert: stock, codec refuses"]
@@ -59,7 +59,7 @@ PROT_VIN=<VIN> ./scripts/build_hook_protected.sh             # VIN from the envi
 ```
 
 1. **Compile and link.** The shared `build_hook_common.sh` core runs with `PROT_BUILD=1`. It compiles the three protector objects (`prot_rt`, `prot_vin`, `carplay_prot`) as plain C with `-fvisibility=hidden` and no constructor, so there are no new dynamic exports and `.init_array` holds only the compiler's entry. Those objects are linked into both `.so` files, and each file gets its own PROT slot. The hook and APAC sources are built with `-DCARPLAY_PROT` (`build_hook_common.sh:111-122`).
-2. **Stamp.** Each compiled `.so` in `build/protected_<VIN>/` is stamped in place with `protector/protect.py --vin <VIN> --mode blind` (`build_hook_protected.sh:46-53`). This step binds the files to the VIN; without it they are inert.
+2. **Stamp.** Each compiled `.so` in `build/protected_<VIN>/` is stamped in place with `protector/protect.py --vin <VIN> --mode token` (`build_hook_protected.sh:47-50`). This step binds the files to the VIN; without it they are inert.
 
 `build_hook_protected.sh` and `build_hook.sh` share one compile+verify core, so the protected `.so` passes exactly the same ABI-safety gates ([Build System](BUILD_SYSTEM.md)) and cannot drift from the shipping one. The protected build writes **binaries only**, to `build/protected_<VIN>/`. `scripts/prepare_install.sh build/protected_<VIN>` then assembles the install tree from those files plus the runtime assets, following the map in [Deploy and Release](DEPLOY_AND_RELEASE.md); the only difference from an unprotected release is that the two `.so` files come from `build/protected_<VIN>/`.
 
@@ -78,7 +78,7 @@ A `HOOK_AUDIO=0 … build_hook_protected.sh <VIN>` build yields `libcarplay_hook
 
 This protects against cloning and casual patching. It is not cryptographic secrecy.
 
-- The secret is compiled into the runtime image, so a rooted attacker who runs a provisioned image once can extract the derived key.
+- The secret is compiled into the runtime image. Since 2026-09-23 it is stored masked (`PROT_SECRET_ENC`, `s[i] ^ (i*167+59)`, built by `build_hook_common.sh`, decoded in `prot_rt.c` `prot_secret()`), so `strings` no longer finds it; before that it sat in both `.so` files as a plain 64-hex string. Anyone who disassembles the gate still recovers it, and with the secret can re-stamp the `.so` for any VIN, so the VIN itself never needs to be recovered. With the secret, the 4-byte tag also identifies the stamped VIN by brute force over the VIN structure; a VIN is not a secret anyway.
 - `/mnt/persist` is writable, so the VIN records can be edited, but editing them only produces inert stock behaviour, never the mod.
 - A real barrier needs a secret kept **off the box**, such as TrustZone or secure storage, or a server challenge. The code stays the same; only the source of the secret changes.
 - **OPSEC:** never describe the mechanism in files that ship on the SD card. Any marker left on the card should stay neutral: VIN, date and an install hint only. No script writes a `PROTECTED.txt` any more, and the old `.gitignore` entry for it is gone too. **[code]**
@@ -91,7 +91,7 @@ The same three pieces bind any other `.so` or binary; `protector/carplay_prot.{c
 1. **One slot per artifact**, defined once with `PROT_DEFINE_SLOT()`, plus a one-call gate like `carplay_prot_active(self_path)` that arms once against the live VIN and the artifact's own image.
 2. **Gate one choke point**, falling open to stock: if the gate says no, return before the feature does anything.
 3. **Compile the protector objects into the artifact** as plain C with `-fvisibility=hidden` and no constructor, so no new dynamic exports appear and a strict `.init_array` audit stays green.
-4. **Stamp the built file** for the VIN with `protector/protect.py --vin <VIN> --mode blind`; for a standalone app `protector/build.sh <VIN> <out>` compiles and stamps in one step. `protect.py` takes the secret from `--secret` or `$PROT_SECRET` (`protector/protect.py:89-95`) and a small payload file; the exact invocation the CarPlay build uses is in `scripts/build_hook_protected.sh:46-53`, and the full API is in `protector/README.md`.
+4. **Stamp the built file** for the VIN with `protector/protect.py --vin <VIN> --mode blind`; for a standalone app `protector/build.sh <VIN> <out>` compiles and stamps in one step. `protect.py` takes the secret from `--secret` or `$PROT_SECRET` (`protector/protect.py:89-95`) and a small payload file; the CarPlay build uses `--mode token` with no payload (`scripts/build_hook_protected.sh:47-50`), and the full API is in `protector/README.md`.
 
 Trap: the runtime finds the slot by scanning the file, so nothing references it by symbol, and a `-fdata-sections` / `--gc-sections` link silently drops it. `carplay_prot.c` keeps it alive with a volatile self-read (`protector/carplay_prot.c:15-16`); any new slot owner must do the same. The VIN reader reads the MMX persistence store by default; a `-DPROT_TARGET_RCC` build reads the two RCC FEC copies instead (`protector/prot_vin.c:1-10`, `:68-71`). `protector/selftest.sh` demonstrates active vs inert behaviour on the host. **[code]**
 

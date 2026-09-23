@@ -3,6 +3,7 @@
  * to link into the strictly-audited APAC .so. */
 #include "carplay_prot.h"
 #include "prot_rt.h"
+#include "prot_vin.h"
 
 PROT_DEFINE_SLOT();                 /* exactly one slot per .so */
 
@@ -15,10 +16,13 @@ int carplay_prot_active(const char *self_path)
      * volatile read forces retention (byte[0] is the 'P' magic, never 0xFF). */
     if (((volatile unsigned char *)PROT_SLOT)[0] == 0xFF) return 0;
     if (!done) {
-        static const unsigned char none = 0;
-        /* sentinel-only gate: n=0 constants, just the 0x5A sentinel check */
-        prot_arm_path(self_path, 0x5A, &none, 0);
-        active = prot_active();
+        /* Token gate: the stamp decodes to the 4-byte TAG only for the stamped VIN
+         * (a 1-byte sentinel let 1 in 256 foreign VINs through). */
+        char vin[PROT_VIN_LEN + 1];
+        unsigned char none[1];
+        size_t n = 0;
+        active = self_path && prot_read_vin(vin) == 0 &&
+                 prot_unlock(self_path, vin, none, 0, &n) == 0;
         done = 1;
     }
     return active;

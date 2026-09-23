@@ -22,6 +22,27 @@
 #define PROT_SECRET "CHANGE-ME-per-build-secret"
 #endif
 
+/* The key bytes are the ASCII of PROT_SECRET either way (protect.py uses the same).
+ * PROT_SECRET_ENC (build_hook_common.sh) stores them as s[i] ^ (i*167+59) so the
+ * image carries no plain secret string for `strings` to find; volatile keeps the
+ * compiler from folding it back.  Not secrecy against a disassembler. */
+#define PROT_SECRET_MAX 128
+static size_t prot_secret(uint8_t out[PROT_SECRET_MAX])
+{
+#ifdef PROT_SECRET_ENC
+    static const volatile uint8_t enc[] = { PROT_SECRET_ENC };
+    size_t i;
+    for (i = 0; i < sizeof enc && i < PROT_SECRET_MAX; i++)
+        out[i] = (uint8_t)(enc[i] ^ (uint8_t)(i * 167u + 59u));
+    return i;
+#else
+    size_t n = strlen(PROT_SECRET);
+    if (n > PROT_SECRET_MAX) n = PROT_SECRET_MAX;
+    memcpy(out, PROT_SECRET, n);
+    return n;
+#endif
+}
+
 #define PROT_MAX_IMG (8u * 1024u * 1024u)   /* cap; the RCC apps are well under this */
 
 /* The 8-byte magic may appear more than once in the image (the compiler can
@@ -57,7 +78,10 @@ static int slot_core(uint8_t *img, size_t n, size_t s, const char *vin,
     memcpy(msg, vin, 17);
     msg[17]=(uint8_t)chk; msg[18]=(uint8_t)(chk>>8);
     msg[19]=(uint8_t)(chk>>16); msg[20]=(uint8_t)(chk>>24);
-    prot_hmac((const uint8_t *)PROT_SECRET, strlen(PROT_SECRET), msg, sizeof msg, K);
+    uint8_t sec[PROT_SECRET_MAX];
+    size_t secn = prot_secret(sec);
+    prot_hmac(sec, secn, msg, sizeof msg, K);
+    for (size_t i = 0; i < secn; i++) ((volatile uint8_t *)sec)[i] = 0;
 
     uint8_t ks[PROT_TAG + PROT_SLOT_CAP];
     prot_keystream(K, ks, len);

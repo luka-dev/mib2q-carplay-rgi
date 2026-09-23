@@ -46,12 +46,9 @@ BUILDD="$PROJECT_DIR/$OUTDIR_REL"
 
 # Stamp the compiled .so in place - the stamp is what binds them to this VIN.
 echo "=== Stamping the compiled .so for VIN $VIN ==="
-printf '\x5a' > /tmp/prot_consts.bin
 for so in "$BUILDD/libcarplay_hook.so" "$BUILDD/libcarplay_apac.so"; do
-  [ -f "$so" ] && python3 "$PROJECT_DIR/protector/protect.py" "$so" \
-      --vin "$VIN" --mode blind --payload-file /tmp/prot_consts.bin
+  [ -f "$so" ] && python3 "$PROJECT_DIR/protector/protect.py" "$so" --vin "$VIN" --mode token
 done
-rm -f /tmp/prot_consts.bin
 
 echo ""
 echo "Stamped protected binaries: $OUTDIR_REL/"

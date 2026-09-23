@@ -40,6 +40,9 @@ carplay_build_hook() {
   if [ "$PROT_BUILD" = "1" ] && [ -z "$PROT_SECRET" ]; then
     echo "carplay_build_hook: PROT_BUILD=1 requires PROT_SECRET"; return 1
   fi
+  # The runtime gets the secret masked (protector/prot_rt.c prot_secret), never as a string.
+  local PROT_SECRET_ENC=""
+  [ "$PROT_BUILD" = "1" ] && PROT_SECRET_ENC="$(python3 -c 'import sys; print(",".join(str(b ^ ((i*167+59) & 255)) for i, b in enumerate(sys.argv[1].encode())))' "$PROT_SECRET")"
 
   local QNX_TOOLCHAIN_VARIANT="${QNX_TOOLCHAIN_VARIANT:-latest}"
   case "$QNX_TOOLCHAIN_VARIANT" in
@@ -111,12 +114,12 @@ carplay_build_hook() {
     # compiler-only). Linked into both .so; each gets its own PROT slot.
     PROT_BUILD='"$PROT_BUILD"'
     HOOK_AUDIO='"$HOOK_AUDIO"'
-    PROT_SECRET='"$PROT_SECRET"'
+    PROT_SECRET_ENC='"$PROT_SECRET_ENC"'
     PROT_OBJS=""; PROT_CC=""
     if [ "$PROT_BUILD" = "1" ]; then
         for p in prot_rt prot_vin carplay_prot; do
             $CC -O2 -fPIC -fvisibility=hidden -std=gnu99 -I/src/protector \
-                -DPROT_SECRET="\"$PROT_SECRET\"" -c /src/protector/$p.c -o $OBJ/$p.o
+                -DPROT_SECRET_ENC="$PROT_SECRET_ENC" -c /src/protector/$p.c -o $OBJ/$p.o
         done
         PROT_OBJS="$OBJ/prot_rt.o $OBJ/prot_vin.o $OBJ/carplay_prot.o"
         PROT_CC="-DCARPLAY_PROT -I/src/protector"
