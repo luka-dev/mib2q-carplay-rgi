@@ -191,7 +191,7 @@ size_t iap2_build_tlv_str(uint8_t* out, size_t out_max, uint16_t tlv_id, const c
     return tlv_len;
 }
 
-size_t iap2_build_pioneer_now_playing_start(uint8_t* out, size_t out_max) {
+size_t iap2_build_now_playing_start(uint8_t* out, size_t out_max) {
     static const uint16_t media_attributes[] = {
         0x00, 0x01, 0x04, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0c,
         0x10, 0x12, 0x15, 0x16, 0x17, 0x18, 0x1a, 0x1b

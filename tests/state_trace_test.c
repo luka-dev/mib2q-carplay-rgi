@@ -67,9 +67,9 @@ int main(void)
     };
     size_t media_len = 0, playback_len = 0, payload_len = 0, i;
 
-    assert(iap2_build_pioneer_now_playing_start(now_playing,
+    assert(iap2_build_now_playing_start(now_playing,
                                                  sizeof(now_playing) - 1u) == 0);
-    assert(iap2_build_pioneer_now_playing_start(now_playing,
+    assert(iap2_build_now_playing_start(now_playing,
                                                  sizeof(now_playing)) ==
            sizeof(now_playing));
     assert(read_be16(now_playing) == 72u && read_be16(now_playing + 2u) == 0u);

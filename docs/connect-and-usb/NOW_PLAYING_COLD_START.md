@@ -16,7 +16,7 @@ Reported early September 2026: right after connecting, Apple Music plays on the 
 
 Binaries analysed: MU1316 MHI2Q P5087 `dio_manager` (SHA-256 `e9862680…c0e794`) and `libNmeVfs.so` (`7cb70418…726fad`); iOS `24A5418b` iPhone18,1 `AccessoryNowPlaying` (`5870bd01…da35c`), `accessoryd` (`3c736704…f9ef`), `ACCNowPlayingFeature` (`cc8a052c…e509`), `AirPlaySender` (`379fb232…ead1`). Annotated IDBs sit beside the images under `Refferences/ios27_dsc/24A5418b__iPhone18,1/state_machine_out/` and `aps_out/`.
 
-## 🔍 Pioneer: `0x5000` is sent exactly once per physical Identify
+## 🔍 Stock HU: `0x5000` is sent exactly once per physical Identify
 
 **[decompile]** `libNmeVfs.so:NmeIAP2_StartNowPlayingUpdates @0xD907C` builds `0x5000` with media attributes `0,1,4,6,7,8,9,0x0A,0x0C,0x10,0x12,0x15,0x16,0x17,0x18,0x1A,0x1B` and playback attributes `0..0x10`, queued by the normal control-session send at `0xD8320`. It has exactly one caller, and so does every step above it:
 
@@ -48,8 +48,8 @@ The subscription is tied to physical iAP2 identification, not to any AirPlay med
 
 | Status | Statement |
 |---|---|
-| Proved | Pioneer sends `0x5000` once per physical Identify, no retry; `0x5001` arrives independently of audio; a fresh iOS `0x5000` sends an initial `0x5001` and rebuilds subscribers; XPC interruption reconnects, invalidation alone does not; the XPC service starts without Music; AirPlay command/metadata objects bind only on zero→nonzero features |
-| Falsified | Music UI is a coded prerequisite; a new AirPlay media SETUP makes Pioneer resend `0x5000`; `ReConnect` resubscribes iAP2; invalidation stays stuck after a fresh handled `0x5000`; the symptom implicates AAC/APAC, QSA, upmix or PCM6 |
+| Proved | The stock HU sends `0x5000` once per physical Identify, no retry; `0x5001` arrives independently of audio; a fresh iOS `0x5000` sends an initial `0x5001` and rebuilds subscribers; XPC interruption reconnects, invalidation alone does not; the XPC service starts without Music; AirPlay command/metadata objects bind only on zero→nonzero features |
+| Falsified | Music UI is a coded prerequisite; a new AirPlay media SETUP makes the stock HU resend `0x5000`; `ReConnect` resubscribes iAP2; invalidation stays stuck after a fresh handled `0x5000`; the symptom implicates AAC/APAC, QSA, upmix or PCM6 |
 | Inferred, not proof | cold failure fits a missing/undelivered/unanswered single `0x5000`; stale metadata over live audio fits either a stale iAP2/XPC rail or a stale routing context; opening Music changes MediaRemote publication or route activation |
 
 Sources: `NOW_PLAYING_STARTUP_STATE_MACHINE_AUDIT`
@@ -68,11 +68,11 @@ Workflow: `scripts/carplay_state_trace.sh clear` (truncates the inode, safe afte
 
 | Trace result | Boundary |
 |---|---|
-| Identify completes, no outbound `0x5000` | Pioneer one-shot lifecycle |
+| Identify completes, no outbound `0x5000` | Stock one-shot lifecycle |
 | `0x5000` sent, no link ACK | iAP2 transport/lifetime |
 | ACKed, no inbound `0x5001` | iOS `accessoryd` handler |
 | first `0x5001` stays default/empty | MediaRemote publication / XPC |
-| nonempty `0x5001`, HU still blank | Pioneer callback / HMI propagation |
+| nonempty `0x5001`, HU still blank | Stock callback / HMI propagation |
 | metadata fine, no type 100/103 SETUP | iOS media-route/app selection |
 | SETUP/SETRATE arrive, QSA never writes | hook/render rail |
 | audio advances, metadata/commands stale | compare iAP2 generation with full AirPlay activation (stale routing context) |
@@ -93,7 +93,7 @@ timeline
 ```
 
 1. **Capture `20260905-110501`.** `0x5000` built and sent at `00:27:24.995`, ACKed, and iOS returned a full initial `0x5001` (17 media + 16 playback attributes) — the "no `0x5000`" and "no `0x5001`" hypotheses are false. Type 103 was up (SETUP index 23 AAC-LC 48 kHz stereo at `27.221`, 39-byte cookie `27.282`, decoder `27.306`, SETRATE 1 `27.348`) but `mpl5_dio_ent` never opened. Afterwards hundreds of `0x5001` carried only a 12-byte playback progress group, no new media item; every `updateFeedback` returned `response=0 realtime_clock=0 buffered_active=1`. Opening Music at `00:32:44` produced media-group updates, a type-100 SETUP in the same session (`32:56.067`), QSA open (`56.930`), PCM6 expansion, first write from the already-running 103 ring (`buffered_frames=768`), feedback clock (`57.258`), and handoff to detached 103 when 100 closed (`33:01.262`). Title, artist and artwork appeared at the same moment. Correlation, not causation: one foreground action can refresh MediaRemote and activate a stream.
-2. **Bounded cold path, then A/B `20260905-125527`.** The first build added a nominal feedback clock, one Pioneer-identical `0x5000` refresh and a cold QSA bootstrap. Cold result: APAC index 65 decoded to 6 ch and **10,861** full detached writes with zero short/zero writes, recoveries or underruns — and silence. Opening Music: type-100 SETUP at `02:23:19.881`, `QSA_OPEN action=reclaim` of the same handle, first stock write from the 103 ring, audible. Opening/writing QSA is necessary but not sufficient.
+2. **Bounded cold path, then A/B `20260905-125527`.** The first build added a nominal feedback clock, one stock-identical `0x5000` refresh and a cold QSA bootstrap. Cold result: APAC index 65 decoded to 6 ch and **10,861** full detached writes with zero short/zero writes, recoveries or underruns — and silence. Opening Music: type-100 SETUP at `02:23:19.881`, `QSA_OPEN action=reclaim` of the same handle, first stock write from the 103 ring, audible. Opening/writing QSA is necessary but not sufficient.
 3. **Missing call found.** Stock `AudioStreamPrepare @0x4A9D0` (libairplay `01c116b1…56f2`) calls the audio-type callback (`stream+0x74`, type `+0x70`, ctx `+0x78`, `0x4AA14-0x4AA28`) and waits for an ACK of 1 (`+0x80`, `0x4AA2C-0x4AAEC`) before opening QSA. In `dio_manager` that is `dio::CDIOManager::s_audioTypeCallback(int, void*) @0x154E58` → `CAirPlayServiceEvent_UpdateMainAudioType` → `onEvent_updateMainAudioType @0x1584E8` (`kAudioTypeMedia` 1 → DSI type 2) → `CDSICarplayImpl::updateMainAudioType(2, true) @0x168AEC` (vtable `+0x74`). Release: `s_audioTornDownCallback(void*) @0x154DBC`. Acceptance `20260905-131355`: stream types `[103, 110, 111]`, `AUDIO_ROUTE action=request owner=cold_buffered audio_type=1` at `02:41:30.228`, cold QSA open `.231`, first full period `.232`, 2,560 clean periods, audible without touching Music. **[car]**
 4. **Inverse edge.** A generation that began on stock type 100 and then detached kept writing (17,061 full writes) but lost the Media route to stock `AudioStreamStop @0x4A2F8`'s torn-down callback (`stream+0x90/+0x94`). A 50 ms reacquire after a retained stock close was added; the analyser flags `route_reacquire_missing`.
 5. **Prime deadlock (2026-09-06).** The rate-zero FIFO stopped decoding at the 250 ms / 12,000-frame high-water while cold bootstrap waited for the 400 ms / 19,200-frame prime; fixed by using `max(high_water, prime_target)` before priming.
@@ -120,7 +120,7 @@ Route declaration, reacquire timing and prime details are canonical in [Buffered
 |---|---|
 | Rollback switch for the whole cold path | `AUDIO_COLD_CONNECT` (default on; value-checked, `0` disables) — `hook/audio/audio_hook.h:51-52`, `hook/audio/audio_hook.c:81-95` |
 | Nominal feedback clock `{type=100, sampleRate=48000}` when type 103 is active and no stock/detached/cached clock exists | `hook/audio/audio_hook.c:8840-8882`; `AUDIO_FEEDBACK_BLANK=1` restores the old empty response for A/B (`:8763,8846`) |
-| One Pioneer-identical `0x5000` refresh after the first decoded type-103 media frame, via the retained `ICinemoIAP` (Cinemo keeps seq/ACK); retried at 1 s, at most 8 attempts, stops after the first successful queue | `spa103_retry_now_playing_after_media` `hook/audio/audio_hook.c:4516-4580`; builder `iap2_build_pioneer_now_playing_start` `hook/framework/iap2_protocol.c:194` (144 payload bytes, FNV-1a `0ee9e0ae`, identical to the captured stock request) |
+| One stock-identical `0x5000` refresh after the first decoded type-103 media frame, via the retained `ICinemoIAP` (Cinemo keeps seq/ACK); retried at 1 s, at most 8 attempts, stops after the first successful queue | `spa103_retry_now_playing_after_media` `hook/audio/audio_hook.c:4516-4580`; builder `iap2_build_now_playing_start` `hook/framework/iap2_protocol.c:194` (144 payload bytes, FNV-1a `0ee9e0ae`, identical to the captured stock request) |
 | Media route declared before the cold QSA open, released only if still hook-owned | exported symbols `hook/audio/audio_hook.c:3788-3797`, request at `:5289` |
 | Route reacquired 50 ms after a retained stock close; a stock reopen cancels | `SPA_MEDIA_ROUTE_REACQUIRE_DELAY_NS` `hook/audio/media_route.h:18,120` |
 | Cold QSA bootstrap on the existing APAP receiver thread (no thread inside `io-audio`, no second ring consumer; stock type 100 later reclaims the same handle under `ioLock`) | PCM6 / S16LE / 48 kHz / 768-frame periods |
@@ -139,6 +139,6 @@ While index-23 AAC stereo played, the owner heard rare frame-scale noises. Captu
 
 Merged originals were removed from the tree after this note absorbed them; they remain in git history (commit 23972aa).
 
-- `NOW_PLAYING_STARTUP_STATE_MACHINE_AUDIT` — the three-rail audit, Pioneer/iOS decompiles, the trace design, all 2026-09-05/06 vehicle captures and repairs.
+- `NOW_PLAYING_STARTUP_STATE_MACHINE_AUDIT` — the three-rail audit, Cinemo/iOS decompiles, the trace design, all 2026-09-05/06 vehicle captures and repairs.
 
 Related: [Buffered Playback Lifecycle](../audio/BUFFERED_PLAYBACK_LIFECYCLE.md), [Session Lifecycle](SESSION_LIFECYCLE.md), [HMI Startup and Identity](HMI_STARTUP_AND_IDENTITY.md), [Landmines](../LANDMINES.md).

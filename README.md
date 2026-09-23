@@ -111,6 +111,16 @@ Tests: `./scripts/run_tests.sh`.
 
 ## Deployment
 
+**Compatibility.** The patch is not limited to US, EU or CN units, nor to one MU train: it is
+meant for any MHI2Q MU firmware (developed on MU1316). What matters is:
+
+- a fully digital instrument cluster (Audi virtual cockpit); cars with an analog cluster are not
+  supported;
+- preferably, the latest firmware available for the unit, flashed before installing the patch.
+
+With both in place it should almost certainly work, as long as nothing went wrong during the
+install itself.
+
 A release is assembled by hand. Stage the build outputs, the models and the `deploy/` runtime files
 into `install_MoreIncredibleBash/mod/carplay/root/`, each at its on-unit path (for example
 `mod/carplay/root/mnt/app/root/hooks/libcarplay_hook.so`), and put `carplay_child.json` in

@@ -283,7 +283,7 @@ def summarize_generation(process_id: str, generation: str,
     if int(generation) == 0:
         boundary = "Pre-Identify process events only; not a physical CarPlay generation."
     elif not starts:
-        boundary = "No outbound 0x5000 was constructed: Pioneer one-shot lifecycle boundary."
+        boundary = "No outbound 0x5000 was constructed: stock one-shot lifecycle boundary."
     elif not link_tx:
         boundary = "0x5000 was constructed but never observed at NmeTransport::Send."
     elif all(as_int(event, "result", -1) != 0 for event in link_tx):
@@ -301,15 +301,15 @@ def summarize_generation(process_id: str, generation: str,
     elif not qsa_writes:
         boundary = "QSA opened/configured, but no successful rendered write was observed."
     elif missing_route_reacquires:
-        boundary = ("Stock type 100 released the Pioneer Media route while type 103 kept "
+        boundary = ("Stock type 100 released the stock Media route while type 103 kept "
                     "rendering on the retained QSA handle; no hook route reacquire followed, "
                     "so valid PCM can be inaudible.")
     elif any(event.get("action") == "cold_buffered" for event in qsa_opens) and not any(
             event.get("action") in ("request", "handoff") for event in audio_routes):
-        boundary = ("Cold buffered PCM reached QSA without a Pioneer media-route declaration; "
+        boundary = ("Cold buffered PCM reached QSA without a stock media-route declaration; "
                     "successful device writes can remain inaudible until stock type 100 starts.")
     else:
-        boundary = ("The traced transport/render path and Pioneer media-route declaration "
+        boundary = ("The traced transport/render path and stock media-route declaration "
                     "completed through QSA. Correlate with audible output and HU metadata.")
 
     first_update = updates[0] if updates else {}

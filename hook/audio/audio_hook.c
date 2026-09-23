@@ -3784,7 +3784,7 @@ typedef unsigned int (*spa_snd_disable_t)(snd_pcm_t *, unsigned int);
 typedef void (*spa_dio_audio_type_callback_t)(int, void *);
 typedef void (*spa_dio_audio_torn_down_callback_t)(void *);
 
-/* Exact exported Pioneer callbacks recovered from dio_manager MU1316.
+/* Exact exported stock callbacks recovered from dio_manager MU1316.
  * AudioStreamPrepare invokes s_audioTypeCallback(kAudioTypeMedia, context)
  * before it opens mpl5_dio_ent, then waits for the HMI routing ACK.  A hook-
  * owned type-103 stream has no AudioStream object, so opening QSA directly
@@ -4234,7 +4234,7 @@ static int spa_pcm_sink_request_hook_media_route(const char *owner,
                     (unsigned long long)failures,
                     SPA_DIO_AUDIO_TYPE_CALLBACK_SYM);
         LOG_ERROR(LOG_MODULE,
-                  "audio sink: cannot resolve Pioneer media-route callback %s",
+                  "audio sink: cannot resolve stock media-route callback %s",
                   SPA_DIO_AUDIO_TYPE_CALLBACK_SYM);
         pthread_mutex_unlock(&spa_pcm_sink.routeLock);
         return 0;
@@ -4252,7 +4252,7 @@ static int spa_pcm_sink_request_hook_media_route(const char *owner,
                 reason ? reason : "unknown",
                 SPA_DIO_AUDIO_TYPE_MEDIA, SPA_DIO_AUDIO_TYPE_CALLBACK_SYM);
     LOG_WARN(LOG_MODULE,
-             "audio sink: queued Pioneer media-route declaration owner=%s reason=%s",
+             "audio sink: queued stock media-route declaration owner=%s reason=%s",
              owner ? owner : "hook_buffered",
              reason ? reason : "unknown");
     pthread_mutex_unlock(&spa_pcm_sink.routeLock);
@@ -4282,7 +4282,7 @@ static void spa_pcm_sink_release_cold_media_route(void)
                     "action=release_failed owner=cold_buffered symbol=%s",
                     SPA_DIO_AUDIO_TORN_DOWN_CALLBACK_SYM);
         LOG_ERROR(LOG_MODULE,
-                  "audio sink: cannot resolve Pioneer media-route release callback %s",
+                  "audio sink: cannot resolve stock media-route release callback %s",
                   SPA_DIO_AUDIO_TORN_DOWN_CALLBACK_SYM);
         pthread_mutex_unlock(&spa_pcm_sink.routeLock);
         return;
@@ -4293,7 +4293,7 @@ static void spa_pcm_sink_release_cold_media_route(void)
                 "action=release owner=cold_buffered result=queued symbol=%s",
                 SPA_DIO_AUDIO_TORN_DOWN_CALLBACK_SYM);
     LOG_WARN(LOG_MODULE,
-             "audio sink: queued Pioneer media-route release for cold buffered playback");
+             "audio sink: queued stock media-route release for cold buffered playback");
     pthread_mutex_unlock(&spa_pcm_sink.routeLock);
 }
 
@@ -4505,7 +4505,7 @@ static int spa_pcm_recover_underrun(snd_pcm_t *handle, int detached)
     return prepareFn(handle, SND_PCM_CHANNEL_PLAYBACK) == 0;
 }
 
-/* Pioneer asks for Now Playing only once, during physical identification.
+/* Stock dio_manager asks for Now Playing only once, during physical identification.
  * iOS's handler is explicitly restartable: another identical 0x5000 removes
  * and re-adds the AccessoryNowPlaying subscription, which is the only static
  * recovery path found for its invalidated/stale XPC publisher.  Queue one
@@ -4545,7 +4545,7 @@ static void spa103_retry_now_playing_after_media(void)
         nowNs ? nowNs + UINT64_C(1000000000) : 0;
     pthread_mutex_unlock(&spa103_lock);
 
-    if (iap2_build_pioneer_now_playing_start(payload, sizeof(payload)) !=
+    if (iap2_build_now_playing_start(payload, sizeof(payload)) !=
         sizeof(payload)) {
         STATE_TRACE("IAP_NOW_PLAYING_RETRY",
                     "action=build_failed generation=%u attempt=%u",

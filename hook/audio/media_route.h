@@ -1,7 +1,7 @@
 /*
  * media_route.h -- stock-main priority and buffered CarPlay route ownership.
  *
- * Stock type-100 releases the Pioneer Media route after its QSA worker has
+ * Stock type-100 releases the stock Media route after its QSA worker has
  * stopped.  If type-103 keeps the QSA handle alive, the hook must request the
  * route again, but only after that stock release has had time to be queued.
  * Keeping the decision pure makes the stock -> detached ownership edge

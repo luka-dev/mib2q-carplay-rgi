@@ -203,15 +203,15 @@ printf '%s\n' "$trace_summary" | grep -q \
 printf '%s\n' "$trace_summary" | grep -q \
     'pid 4242 generation 0: Pre-Identify process events only'
 printf '%s\n' "$trace_summary" | grep -q \
-    'pid 4242 generation 1: The traced transport/render path and Pioneer media-route declaration completed through QSA.'
+    'pid 4242 generation 1: The traced transport/render path and stock media-route declaration completed through QSA.'
 printf '%s\n' "$trace_summary" | grep -q \
     'pid 4242 generation 2: No outbound 0x5000 was constructed'
 printf '%s\n' "$trace_summary" | grep -q \
     'pid 4343 generation 1: No outbound 0x5000 was constructed'
 printf '%s\n' "$trace_summary" | grep -q \
-    'pid 4242 generation 3: Stock type 100 released the Pioneer Media route while type 103 kept rendering'
+    'pid 4242 generation 3: Stock type 100 released the stock Media route while type 103 kept rendering'
 printf '%s\n' "$trace_summary" | grep -q \
-    'pid 4242 generation 4: The traced transport/render path and Pioneer media-route declaration completed through QSA.'
+    'pid 4242 generation 4: The traced transport/render path and stock media-route declaration completed through QSA.'
 printf '%s\n' "$trace_summary" | grep -q \
     'route_reacquire_missing: 1'
 printf '%s\n' "$trace_summary" | grep -q \

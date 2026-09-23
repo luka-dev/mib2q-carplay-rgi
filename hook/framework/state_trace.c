@@ -350,7 +350,7 @@ void state_trace_reset_iap_transport_rx(void)
     pthread_mutex_unlock(&g_trace_lock);
 }
 
-/* Pioneer MHI2Q control seam, recovered from the exact dio_manager image:
+/* Stock MHI2Q dio_manager control seam, recovered from the exact dio_manager image:
  *
  *   CDIOManager_sendButtonHIDReport @ 0x1566c8
  *     HIDRemotePlaybackFillReport(report, usage, state == 0, descriptorBits)

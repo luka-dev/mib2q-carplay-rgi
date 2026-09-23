@@ -132,10 +132,10 @@ size_t iap2_build_tlv_u8(uint8_t* out, size_t out_max, uint16_t tlv_id, uint8_t 
 /* Build TLV with string value (including null terminator) */
 size_t iap2_build_tlv_str(uint8_t* out, size_t out_max, uint16_t tlv_id, const char* str);
 
-/* Exact Pioneer StartNowPlayingUpdates (0x5000) payload: one media group
+/* Exact stock dio_manager StartNowPlayingUpdates (0x5000) payload: one media group
  * requesting its 17 stock attributes and one playback group requesting 0..16.
  * The result is 144 bytes, or zero when the output buffer is too small. */
-size_t iap2_build_pioneer_now_playing_start(uint8_t* out, size_t out_max);
+size_t iap2_build_now_playing_start(uint8_t* out, size_t out_max);
 
 /* iAP2 link-layer checksum: negated 8-bit sum of payload bytes. */
 uint8_t iap2_cksum_neg(const uint8_t* buf, size_t len);
