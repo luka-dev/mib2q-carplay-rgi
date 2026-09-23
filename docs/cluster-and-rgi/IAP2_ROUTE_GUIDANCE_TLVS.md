@@ -153,6 +153,22 @@ Stock symbols (MU1316 NME image and database): `[decompile]`
 
 `Encode` produces the `0x4040` session message in `NmeArray<unsigned char>`; the stock path wraps it in FF5A. The Identify patch uses the same Encode boundary.
 
+### Frame layout the hook parses
+
+Two layers, both big-endian. `[code]`
+
+| Layer | Bytes | Fields | Where |
+|---|---|---|---|
+| Link packet | `FF 5A` + 7 | `len` BE16 at +2, `ctrl` +4, `seq` +5, `ack` +6, `session` +7, header checksum +8 | `hook/framework/iap2_protocol.c:241-254` |
+| Session message (control session) | `40 40` + 4 | `len` BE16 at +2 (whole message, minimum 6), `msgid` BE16 at +4, parameters from +6 | `iap2_protocol.c:13-30` |
+| Parameter (TLV) | 4 + value | `len` BE16 (includes the 4-byte header), `id` BE16, value from +4 | `iap2_protocol.c:50-57`, `:88-104` |
+
+The link checksum is the negated 8-bit sum of the covered bytes (`iap2_cksum_neg`, `iap2_protocol.c:230-239`). The hook never builds a link packet itself: injected messages go through the stock Cinemo object, which owns sequence, ack and checksums (see above).
+
+### Unknown 0x52xx messages
+
+Any `0x52xx` message in either direction that is not one of the five handled IDs (`0x5200`–`0x5204`) logs `Unknown 0x52xx msgid=0x%04X dir=IN|OUT len=%zu` at WARN (`hook/framework/hook_framework.c:348-368`, called at `:893` for incoming and `:972` for outgoing). It shows in a normal build without `carplay_verbose`; a `LOG=0` build compiles it out. The raw bytes follow as `IAP2 0x52xx raw`, but that dump is DEBUG level and only 32 bytes, so it is not visible at WARN or INFO. If iOS adds a route-guidance message, this line is the first place it appears.
+
 On-unit acceptance: both proof lines appear, then control SETUP with LocationInfo intact; first `0x5201` within 1-2 s; song metadata and cover art keep changing while RGI runs; a fast replug gives a new Identify-start reset and a new successful `0x5200`; no `Injected frame with prefix` or `Semantic iAP2 send: replaced carrier` line. Whether all five were observed on the current build is `[open]`.
 
 ## 🔗 Related

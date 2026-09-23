@@ -157,6 +157,20 @@ A rapid replug can run: old removal launches `stopncm.sh` → it sleeps → the 
 
 An insertion inside the removal/cleanup window can belong to the new generation while old-generation work is still queued. After the retries are spent, final cleanup stops the stack and assumes a later detection event will rebuild it.
 
+Our install replaces the whole `children.carplay` block with `deploy/smartphone_integrator/carplay_child.json`. Against the stock MU1316 P5087 child it changes only what the wrapper needs; every timing and retry budget that SI uses in the race above is unchanged. `[code]`
+
+| Key | Stock | Ours | Why |
+|---|---|---|---|
+| `exec` / `path` | `dio_manager`, `/mnt/app/eso/bin/apps` | `carplay_startup.sh`, `/mnt/app/root/hooks` | the wrapper starts `dio_manager` itself with `LD_PRELOAD` scoped to that one process |
+| `cleanupScript` | `/etc/scripts/carplay_cleanup.sh` | `/mnt/app/root/hooks/carplay_cleanup.sh` | our cleanup, which still calls the stock one for mdnsd/PPS teardown |
+| `stopTimeout` | 3,000 ms | 8,000 ms | settling delay, see below |
+| `restartDelay` | 2,000 ms | 3,000 ms | settling delay, see below |
+| `startupTimeout`, `watchdogTimeout` (60,000 ms, `disableWatchdog` false), `maxSetupRetries` 2, `maxRuntimeRetries` 2, `retriesBeforeDowntime` 3, `downtime` 30,000 ms, `portResetTime` 250 ms, `envs`, `selfTermination`, `decoderUse` | – | same as stock | – |
+
+The longer `stopTimeout` and `restartDelay` are a deliberate settling delay (commit `349408f`): rapid OTG stop/start cycles can leave the iAP2 NCM accessory with only one of its two interfaces enabled. Renderers are independent of this (they survive a `dio_manager` exit), so do not shorten the delay for their sake (`deploy/smartphone_integrator/README.md:103-107`).
+
+Note that `startupTimeout` (10,000 ms) now starts at the wrapper, not at `dio_manager`, so everything the wrapper does before `exec` comes out of dio's budget (next section). Sources: `deploy/smartphone_integrator/carplay_child.json:1-22`; stock `system/etc/eso/production/smartphone_integrator.json` from the P5087 firmware.
+
 ### Other triggers that reach the same terminal state
 
 - a short cable or power interruption during USB role reversal;

@@ -134,6 +134,16 @@ Argv parsing is at `0x105B98` (32-byte command struct), dispatch at `0x105F48`. 
 
 `maneuver_render` used to `popen("/eso/bin/apps/dmdt gs")` to learn cluster focus, and a hardened parser (match `terminal: LVDS2`, merge stderr, force `sc` on parse failure) was written after "dmdt focus unknown" logs. That is superseded: the renderer runs no `dmdt` now, and context routing is Java's job through `AltScreenModule`. `[code]` (`maneuver_render/platform_qnx.c:6`, `:146`, `:212`, `:395`)
 
+### How a window becomes a displayable
+
+The DM binds an external window to a displayable by its ID string, not by who created it. This is why `altscreen_render` and `maneuver_render` can own 99 and 98 as plain Screen clients.
+
+1. The client creates a window, puts it in the DM's window group with `screen_manage_window(win, "How are you gentlemen?")`, and sets `SCREEN_PROPERTY_ID_STRING` to the displayable number (`"98"`, `"99"`). Our renderers do this with raw `screen_create_window` and `screen_manage_window`, without `libdisplayinit` (`common/cluster_surface.h:7-30`, `common/cluster_surface.c:48`, `maneuver_render/platform_qnx.c:4-6`). `[code]`
+2. `CScreenHandler` receives the new-window screen event (`handleScreenEvent`), reads the ID string back with `atoi`, wraps the window in a `CSurfaceSource`, stores it in the DM's surface-source map (an rb-tree at `DisplayManager+0x68`) and calls `CDisplayable::attachSource`. It stamps `SCREEN_PROPERTY_MANAGER_STRING = "All your base are belong to us!"` on windows it owns. `[decompile]` (`libdm_modMain.so`; the class and method symbols are exported, the `atoi`/`+0x68` details come from the original RE notes)
+3. For the cluster, `CASIMostEncoder::setActiveDisplayable` records the displayable-to-display mapping and forwards it to the video encoder ([Cluster Video Encoder](../altscreen-and-video/CLUSTER_VIDEO_ENCODER.md)). `[decompile]`
+
+Displayables 98 and 99 have no stock owner, so their slots are empty until our window arrives: binding them is not a race with a stock producer. The DM can disown a window on context transitions; `cluster_surface_lost()` detects that so the renderer rebuilds its surface on a fresh window (`common/cluster_surface.h:18-22`). `[code]`
+
 ## 🔗 Related
 
 - [RGI and BAP Bridge](RGI_AND_BAP_BRIDGE.md): what sets `rgActive` and `navActive`.

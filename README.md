@@ -11,6 +11,25 @@ Production implementation for Audi MHI2Q (MU1316, QNX 6.5 ARMv7):
 The shipped path always keeps stock `libairplay.so`. From-source libairplay/dio experiments are
 research records, not production dependencies or authorities for stock 210 behavior.
 
+**Disclaimer:** use at your own risk. These patches modify firmware binaries and system
+configuration on your infotainment unit. The installer keeps a `.carplay-stock` backup of every
+file it replaces, but back up anything you change by hand as well. The authors are not
+responsible for any damage, bricked units or warranty issues resulting from their use.
+
+## Gallery
+
+<p align="center">
+  <img src="assets/gallery/IMG_0082_39-45.gif" width="90%" />
+</p>
+<p align="center">
+  <img src="assets/gallery/IMG_0623.jpeg" width="45%" />
+  <img src="assets/gallery/IMG_6299.jpeg" width="45%" />
+</p>
+<p align="center">
+  <img src="assets/gallery/IMG_6302.jpeg" width="45%" />
+  <img src="assets/gallery/IMG_0599.jpeg" width="45%" />
+</p>
+
 ## Documentation
 
 All documentation is one linked Markdown tree in [`docs/`](docs/README.md). Start at
@@ -92,16 +111,19 @@ Tests: `./scripts/run_tests.sh`.
 
 ## Deployment
 
-A release is assembled by hand: copy the build outputs, the models and the `deploy/` runtime files
-into `install_MoreIncredibleBash/mod/carplay/root/` at their on-unit paths, then run
-`mod/custom.sh` from the M.I.B. SD card. The source-to-unit map, file modes and hashes are in
+A release is assembled by hand. Stage the build outputs, the models and the `deploy/` runtime files
+into `install_MoreIncredibleBash/mod/carplay/root/`, each at its on-unit path (for example
+`mod/carplay/root/mnt/app/root/hooks/libcarplay_hook.so`), and put `carplay_child.json` in
+`mod/carplay/`. Copy the contents of `install_MoreIncredibleBash/` onto the M.I.B. SD card, so the
+card holds `mod/custom.sh` and `mod/carplay/`, then run `mod/custom.sh` from M.I.B. The
+source-to-unit map, file modes and hashes are in
 [Deploy and Release](<docs/build-and-deploy/DEPLOY_AND_RELEASE.md>).
 
-- `custom.sh` copies the `root/` tree onto the unit, replaces the SI `carplay` child by path and
-  widens the CarPlay rule in all four PF profiles, keeping a `.carplay-stock` backup of everything
-  it replaces. It never stops processes or reboots the HU.
-- `custom.sh` also registers the iAP2 route-guidance message IDs in `dio_manager.json` (stock
-  backup kept); without them no route guidance arrives. For a manual install, see the
+- `custom.sh` copies every file under `SD:/mod/carplay/root/` to the same path under `/` on the
+  unit, replaces the SI `carplay` child by path, widens the CarPlay rule in all four PF profiles
+  and registers the iAP2 route-guidance message IDs in `dio_manager.json` (without them no route
+  guidance arrives). It keeps a `.carplay-stock` backup of everything it replaces or edits, and
+  never stops processes or reboots the HU. For a manual install of the message IDs, see the
   [procedure](<docs/build-and-deploy/DEPLOY_AND_RELEASE.md#-route-guidance-message-ids-in-dio_managerjson>).
 - Uninstall: copy `uninstall_MoreIncredibleBash/` over the card and run it; it restores every
   `.carplay-stock` backup and deletes the owned files.
@@ -112,3 +134,12 @@ into `install_MoreIncredibleBash/mod/carplay/root/` at their on-unit paths, then
 
 Disconnect CarPlay first and reboot the HU manually after installing. Deploying the Java jar always
 means a full unit restart (it is on j9's boot classpath).
+
+## References
+
+Thanks for the prior work and knowledge that helped figure this out:
+
+- https://github.com/ludwig-v/wireless-carplay-dongle-reverse-engineering
+- https://github.com/EthanArbuckle/iPhone18-3_26.1_23B85_Restore
+- https://github.com/adi961/mib2-android-auto-vc
+- [@fifthBro](https://t.me/fifthBro)

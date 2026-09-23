@@ -86,14 +86,17 @@ Before altScreen, the plan was to make the **stock** PresentationController draw
 
 ### Widget sizes (`komoviewstyle.conf`)
 
-| Style | Name | Resolution | Note |
+The file maps a **DSI value** to an EB style and a size (MU1316 P5087, `app/navigation/resources/app/au/nar/pcconfig/komoviewstyle.conf`):
+
+| DSI value | EB style | Size | Meaning |
 |---|---|---|---|
-| 0 | `KVS_Invalid` | – | unset |
-| 1 | `KVS_RGI` | 285×276 | old MIB1 widget |
-| 2 | `KVS_RGI2` | 363×260 | current MHI2Q widget |
-| 3 | `KVS_FPK` | 800×480 | full FPK |
-| 4 | `KVS_Most` | – | MOST video mode |
-| 5 | `KVS_Debug_MoKoInMainDisplay` | – | debug |
+| 1 | `KVS_Most` | 800×252 | MoKo story for the MOST display |
+| 2 | `KVS_FPK` | 210×153 | MoKo story for FPK, popup size |
+| 3 | `KVS_FPK` | 328×181 | MoKo story for FPK, sport size |
+| 4–7 | `KVS_Invalid` | – | not assigned; "do not set this variant via DSI" |
+| 255 | `KVS_RGI` | 263×366 | old MIB1 style, separate KDK and exit-view displayables |
+
+`KVS_Debug_MoKoInMainDisplay` is declared in the file's header but not assigned. The EB enum ordinals (0 Invalid, 1 RGI, 2 RGI2, 3 FPK, 4 Most, 5 Debug) are a different numbering from the DSI values: `KVS_RGI2` exists only as ordinal 2 in the binary and has no DSI assignment. An earlier version of this table listed `KVS_RGI2 363×260`, `KVS_RGI 285×276` and `KVS_FPK 800×480`; none of those sizes exists in the firmware. **[firmware]**
 
 `setKomoViewStyle` is accepted once at startup ("received SetKomoViewStyle after startup => will be ignored!").
 
