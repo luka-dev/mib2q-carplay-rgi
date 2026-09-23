@@ -20,8 +20,7 @@ responsible for any damage, bricked units or warranty issues resulting from thei
 
 <p align="center">
   <img src="assets/gallery/maneuver_demo.gif" width="90%" /><br />
-  <sub>Cluster maneuver renderer driven through a demo route (rendered with
-  <code>maneuver_render/demo_sequence.py</code>)</sub>
+  <sub>Cluster maneuver renderer driven through a demo route</sub>
 </p>
 
 **Virtual Cockpit: CarPlay map on the cluster, route guidance beside it**
