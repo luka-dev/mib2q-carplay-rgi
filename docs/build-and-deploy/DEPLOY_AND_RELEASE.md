@@ -134,6 +134,124 @@ On a car with the LTE modem the live profile is `pf.ecm0.conf`, not `pf.conf`.
 
 To uninstall, copy `uninstall_MoreIncredibleBash/` over the card instead. That script needs no payload tree or marker. It renames every `*.carplay-stock` it finds under `/mnt/app` and `/mnt/system` back to the original, which covers the firmware, the SI JSON, the PF profiles and `dio_manager.json`. It then deletes the files on its fixed owned list (`uninstall_MoreIncredibleBash/mod/custom.sh:23-54`). The list includes `hssr_guard.bin` (`:27`); the "[open] missing from the list" remark in `DEPLOYMENT.md` and `PROTECTOR.md` is superseded. `custom.sh uninstall` from the install folder (`install_MoreIncredibleBash/mod/custom.sh:182-203`) is a second path when the payload tree is present. Both READMEs that described the old generated uninstaller (`.orig` restore, `package_mib.py`) are gone or stale; the scripts are authoritative. **[code]**
 
+## 🔧 Manual install over SSH (without M.I.B.)
+
+The same install as `custom.sh`, by hand, in a root shell on the unit. Disconnect CarPlay first and
+back up anything you change. Put the release files somewhere on the unit (an SD card or USB stick
+works) and `cd` there.
+
+### 1. Make the partitions writable
+
+```bash
+mount -uw /mnt/app
+mount -uw /mnt/system
+mkdir -p /mnt/app/root/hooks
+```
+
+### 2. Copy the files
+
+| File | Goes to | Mode |
+|---|---|---|
+| `libcarplay_hook.so`, `libcarplay_apac.so` | `/mnt/app/root/hooks/` | 755 |
+| `maneuver_render`, `altscreen_render` | `/mnt/app/root/hooks/` | 755 |
+| `carplay_startup.sh`, `carplay_monitor.sh`, `carplay_processes.sh`, `carplay_cleanup.sh` | `/mnt/app/root/hooks/` | 755 |
+| `hssr_model.bin`, `hssr_guard.bin`, `flag_atlas.rgba` | `/mnt/app/root/hooks/` | 644 |
+| `carplay_hook.jar` | `/mnt/app/eso/hmi/lsd/jars/` | 644 |
+
+```bash
+cp libcarplay_hook.so libcarplay_apac.so maneuver_render altscreen_render carplay_*.sh /mnt/app/root/hooks/
+cp hssr_model.bin hssr_guard.bin flag_atlas.rgba /mnt/app/root/hooks/
+chmod 755 /mnt/app/root/hooks/*.so /mnt/app/root/hooks/*_render /mnt/app/root/hooks/carplay_*.sh
+cp carplay_hook.jar /mnt/app/eso/hmi/lsd/jars/
+```
+
+Leave `libcarplay_apac.so` out of a `HOOK_AUDIO=0` build.
+
+**The two stock binaries go in through a temporary name and `mv`.** `smartphone_integrator` and
+`deva-ctrl-qc.so` (the repo's `deva-ctrl-qc.so.patched`) replace files the system is running. Do
+not `cp` straight over them: copy to `<name>.new` in the same folder, then `mv` it onto the real
+name. A `mv` inside one partition is a rename, so the file switches in one step; the running
+process keeps the old copy it already opened, and nothing ever sees a half-written file. Check both
+images against their hashes first ([identities](#firmware-and-model-identities)).
+
+```bash
+cp smartphone_integrator /mnt/app/eso/bin/apps/smartphone_integrator.new
+chmod 755 /mnt/app/eso/bin/apps/smartphone_integrator.new
+mv /mnt/app/eso/bin/apps/smartphone_integrator.new /mnt/app/eso/bin/apps/smartphone_integrator
+
+cp deva-ctrl-qc.so /mnt/app/armle/lib/dll/deva-ctrl-qc.so.new
+chmod 755 /mnt/app/armle/lib/dll/deva-ctrl-qc.so.new
+mv /mnt/app/armle/lib/dll/deva-ctrl-qc.so.new /mnt/app/armle/lib/dll/deva-ctrl-qc.so
+```
+
+### 3. Edit three config files
+
+Edit each on the unit, or copy it off, edit it and copy it back.
+
+**`/mnt/system/etc/eso/production/smartphone_integrator.json`**: replace the whole
+`"carplay": { … }` block under `children` with the contents of `carplay_child.json` from the
+release, and keep the comma after it. The stock block runs `dio_manager` directly; ours runs
+`carplay_startup.sh`:
+
+```json
+"carplay": {
+  "exec": "carplay_startup.sh",
+  "path": "/mnt/app/root/hooks",
+  "params": "",
+  "envs": [
+    "LD_LIBRARY_PATH=/mnt/app/root/lib-target:/eso/lib:/mnt/app/usr/lib:/mnt/app/armle/lib:/mnt/app/armle/lib/dll:/mnt/app/armle/usr/lib",
+    "IPL_CONFIG_DIR_DIO_MANAGER=/etc/eso/production"
+  ],
+  "startupTimeout": 10000,
+  "stopTimeout": 8000,
+  "watchdogTimeout": 60000,
+  "disableWatchdog": false,
+  "maxSetupRetries": 2,
+  "maxRuntimeRetries": 2,
+  "decoderUse": false,
+  "selfTermination": true,
+  "cleanupScript": "/mnt/app/root/hooks/carplay_cleanup.sh",
+  "retriesBeforeDowntime": 3,
+  "downtime": 30000,
+  "restartDelay": 3000,
+  "portResetTime": 250
+},
+```
+
+**`/mnt/system/etc/pf.conf`, `pf.ecm0.conf`, `pf.mlan0.conf`, `pf.ppp0.conf`** (all four; an LTE
+car uses `pf.ecm0.conf`): in the `carplay0` line change ` 6030,` to ` 6030:6032,`:
+
+```text
+before: pass in quick on carplay0 proto tcp from any to any port { 5000:5001, 5010, 6000:6001, 6030, 6100, 6200, 7000:7001, 7100 } allow-opts
+after:  pass in quick on carplay0 proto tcp from any to any port { 5000:5001, 5010, 6000:6001, 6030:6032, 6100, 6200, 7000:7001, 7100 } allow-opts
+```
+
+**`/mnt/system/etc/eso/production/dio_manager.json`**: add the five route-guidance IDs at the end
+of the two lists. Without them iOS sends route guidance and the SDK drops it.
+
+```json
+before:
+"MessagesSentByAccessory":["0x5000", "0x5002", "0xAE00", "0xAE02", "0xAE03", "0x4154", "0x4156", "0x4157", "0x4159", "0xFFFB", "0x4C00", "0x4C02", "0x4C03", "0x4C05"],
+"MessagesReceivedFromDevice":["0x4E09", "0x4E0A", "0x4E0C", "0x5001", "0xAE01", "0x4155", "0x4158", "0xFFFA", "0xFFFC", "0x4C01", "0x4C04"],
+
+after:
+"MessagesSentByAccessory":["0x5000", "0x5002", "0xAE00", "0xAE02", "0xAE03", "0x4154", "0x4156", "0x4157", "0x4159", "0xFFFB", "0x4C00", "0x4C02", "0x4C03", "0x4C05", "0x5200", "0x5203"],
+"MessagesReceivedFromDevice":["0x4E09", "0x4E0A", "0x4E0C", "0x5001", "0xAE01", "0x4155", "0x4158", "0xFFFA", "0xFFFC", "0x4C01", "0x4C04", "0x5201", "0x5202", "0x5204"],
+```
+
+The file has `##` comment lines, so edit it as text, not with a JSON tool.
+
+### 4. Flush and reboot
+
+```bash
+sync
+```
+
+Wait a few seconds after `sync`, then reboot. A forced reboot (the MMI button combo) right after
+copying can leave files truncated or missing. After the reboot, start a route in Apple Maps: the
+cluster map, the turn arrow and the HUD arrow must appear. Logs: `/tmp/carplay_hook.log` and
+`/tmp/carplay_java.log`.
+
 ## 🧭 Route-guidance message IDs in dio_manager.json
 
 Route guidance needs **two** things, and the installer provides only one:

@@ -201,8 +201,10 @@ source-to-unit map, file modes and hashes are in
   unit, replaces the SI `carplay` child by path, widens the CarPlay rule in all four PF profiles
   and registers the iAP2 route-guidance message IDs in `dio_manager.json` (without them no route
   guidance arrives). It keeps a `.carplay-stock` backup of everything it replaces or edits, and
-  never stops processes or reboots the HU. For a manual install of the message IDs, see the
-  [procedure](<docs/build-and-deploy/DEPLOY_AND_RELEASE.md#-route-guidance-message-ids-in-dio_managerjson>).
+  never stops processes or reboots the HU.
+- **Manual install** (no M.I.B., root shell over SSH): the same steps by hand, what to copy where
+  and what to change in each config file, in
+  [Manual install over SSH](<docs/build-and-deploy/DEPLOY_AND_RELEASE.md#-manual-install-over-ssh-without-mib>).
 - Uninstall: copy `uninstall_MoreIncredibleBash/` over the card and run it; it restores every
   `.carplay-stock` backup and deletes the owned files.
 - The runtime integration (renderer supervision, environment, spatial/upmix settings) lives in
