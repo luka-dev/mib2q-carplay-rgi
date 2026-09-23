@@ -12,7 +12,7 @@
  * until everything is up or the CarPlay generation ends.  Navigation can appear
  * much later than TerminalMode on a cold boot, so this must not have a fixed timeout.
  *
- * Java 1.2 (no generics/autoboxing).
+ * Java 1.4 / Foundation 1.1 (no generics/autoboxing).
  *
  * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
@@ -29,8 +29,7 @@ public final class CarPlayApp {
     private static final String TAG = "App";
     public static final String BUILD_ID = "@BUILD_ID@";
 
-    /* Modules, in start order.  Populated as each module lands (rgd, coverart,
-     * input, altscreen). */
+    /* Modules, in start order. */
     private static final Module[] MODULES = new Module[] {
         new AltScreenModule(), new RgdModule(), new SteeringWheelInputModule()
     };
@@ -51,8 +50,7 @@ public final class CarPlayApp {
 
     private CarPlayApp() {}
 
-    /** Current HMI framework access, or null before activate / after deactivate.
-     *  Replaces the old CarPlayHook.getFrameworkAccess() static seam. */
+    /** Current HMI framework access, or null before activate / after deactivate. */
     public static IFrameworkAccess framework() {
         FrameworkRef r = fwRef;
         return r != null ? r.framework() : null;

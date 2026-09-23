@@ -1094,8 +1094,7 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
 
     /* ============================================================
      * CarPlay hook accessors (patched-in; avoid reflection in BAPBridge).
-     * Graft onto combined-final stock — env/combiBAPListener/refreshRGIValid
-     * are the same members the stock already exposes.
+     * env/combiBAPListener/refreshRGIValid are existing stock members.
      * ============================================================ */
 
     public DSIResponseContainer getDSIResponseContainer() {

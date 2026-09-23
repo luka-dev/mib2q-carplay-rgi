@@ -12,9 +12,9 @@
  * BAP session start, and 80 -> 81 after VC withdraws KDK visibility when
  * guidance/presentation goes away.
  *
- * The context table itself (dc[80]) is declared to the native compositor at init via
- * DisplayManager.declareContexts(dc); getMappedInternalContext is identity on MIB2High, so
- * switchContext(80) lands on exactly that declared context.
+ * The context table itself (dc[80], dc[81]) is built at init by the patched
+ * DisplayManagerMIB2High; getMappedInternalContext is identity on MIB2High, so
+ * switchContext(80/81) lands on exactly those contexts.
  *
  * There is exactly ONE persistent worker for the module lifetime and it is the SOLE caller of
  * DisplayManager.switchContext/setUpdateRate.  Single writer => two switches can never race the
@@ -38,9 +38,7 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
     private static final String TAG = "AltScreen";
 
     public static final int TERMINAL_CLUSTER  = 1;    /* LVDS2 */
-    /* The single CarPlay cluster context: dc[80] = {98 popup, 102/101 KDK bg, 99 CarPlay video}.
-     * If on-unit displayable 99 fails to composite, flip this to a video-less sibling as a
-     * calibration knob (e.g. a dc[] slot that carries {98,102,101,33} over the stock map). */
+    /* The two CarPlay cluster contexts; composition is defined in DisplayManagerMIB2High. */
     public static final int CTX_CLUSTER       = 80;   /* nav active: {98 maneuver, 101/102 backing, 99 map} */
     public static final int CTX_CLUSTER_MAP   = 81;   /* no nav: {99 map} only (no backing box, no maneuver) */
     public static final int CTX_STOCK_CLUSTER = 74;
@@ -581,7 +579,7 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
                 }
                 d.switchContext(ctx, TERMINAL_CLUSTER, null);
                 d.setUpdateRate(TERMINAL_CLUSTER, CLUSTER_FPS);   /* (idempotent when already running) */
-                clusterActive = true;                             /* roller → CMD_ALT_ZOOM */
+                clusterActive = true;
             } else {
                 /* Preserve the stop-before-switch ordering, but never leave terminal 1
                  * parked at 0 FPS. On this A5/MHI2Q the stock

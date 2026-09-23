@@ -11,7 +11,7 @@
  * screen uses SMALL_STAGE_NO_CHANGE and TerminalMode keeps Resource.SCREEN.
  * The stock screen policy is restored as soon as the popup goes away.
  *
- * Java 1.2 compatible.
+ * Java 1.4 / Foundation 1.1.
  *
  * Copyright (c) 2026 LuKa (@LuKa_dev)
  */

@@ -9,21 +9,19 @@
  *   - connect() opens the listen socket + starts accept thread.  Returns
  *     immediately whether the renderer is up or not.
  *   - Accept thread loops accept() forever, replacing the current socket
- *     when a new connection comes in.  If the renderer process is killed
- *     and respawned, it just reconnects and we pick up the new socket.
+ *     when a new connection comes in.  If carplay_monitor.sh restarts the
+ *     renderer, it just reconnects and we pick up the new socket.
  *   - sendXxx() returns false if no current connection — caller (BAPBridge)
- *     uses that signal for crash-recovery counter (3 fails -> respawn).
+ *     counts failures to drop the view and wait for a reconnect; Java never
+ *     kills or starts the renderer.
  *   - disconnect() stops the accept thread + closes everything.
  *
  * No timing dependencies, no blocking accepts, no Thread.sleep hacks.
  *
- * Class name kept for compatibility with all call sites in BAPBridge /
- * RouteGuidance.
- *
  * Sends 48-byte cr_cmd_t packets matching maneuver_render/protocol.h.
  * All methods are non-fatal (swallow exceptions, log only).
  *
- * Java 1.2 compatible (no generics, no autoboxing, no enhanced for).
+ * Java 1.4 / Foundation 1.1 (no generics, no autoboxing, no enhanced for).
  *
  * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
@@ -95,7 +93,7 @@ public class RendererServer {
     /* True once we've successfully accepted at least one renderer
      * connection.  Lets the caller distinguish "still starting up,
      * sends are expected to fail" vs "had a working renderer that
-     * just died, respawn is appropriate". */
+     * just died, drop the view until it reconnects". */
     private volatile boolean everConnected;
     private volatile StateListener stateListener;
     private long lastBindFailureLogMs;
@@ -395,8 +393,8 @@ public class RendererServer {
             changed = sock != null || rendererReady || frameReady || clearPending;
             closeClientLocked();
             /* everConnected stays true — within this session we've already
-             * had a working renderer; subsequent connect failures should
-             * still trigger respawn correctly. */
+             * had a working renderer; later send failures still count as
+             * a lost renderer, not start-up. */
         }
         if (changed) notifyStateChanged("disconnect-request");
     }
@@ -476,7 +474,7 @@ public class RendererServer {
      * True once the renderer has successfully connected at least once
      * during the current connect()/disconnect() lifecycle.  Caller uses
      * this to distinguish "still starting up" (sends fail naturally)
-     * from "had a connection that died" (respawn appropriate).
+     * from "had a connection that died" (drop the view, wait for reconnect).
      */
     public boolean everConnected() {
         return everConnected;

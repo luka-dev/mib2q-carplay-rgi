@@ -3,13 +3,12 @@
  *
  * Topology: Java is the long-lived TCP SERVER on 127.0.0.1:19810; the hook is the
  * client and (re)connects once per CarPlay session.  This half both RECEIVES hook
- * events (EVT_*) AND SENDS commands (CMD_*) — the old patch's send() was a stub;
- * here send() is a real writer (the altScreen CMD_ALT_* path needs it).
+ * events (EVT_*) and SENDS commands (CMD_*, e.g. the altScreen CMD_ALT_* path).
  *
- * Wire frame (matches c_hook/framework/bus.c, all multi-byte big-endian):
+ * Wire frame (matches hook/framework/bus.c, all multi-byte big-endian):
  *   [u32 MAGIC][u32 seq][u16 type][u8 flags][u8 reserved][u32 len][payload]
  *
- * Java 1.2 (MU1316 lsd): no generics/autoboxing/enhanced-for.
+ * Java 1.4 / Foundation 1.1: no generics/autoboxing/enhanced-for.
  *
  * Copyright (c) 2026 LuKa (@LuKa_dev)
  */

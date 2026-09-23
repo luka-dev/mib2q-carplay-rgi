@@ -79,9 +79,10 @@ public final class AltScreenNavStatusGate {
                  * well for the no-edge case so stock Navigation receives its exact
                  * current INITIALIZING/NORMAL state after CarPlay disconnects. */
                 try { cs.refreshInitializingScreenAfterCarPlay(); }
-                catch (Throwable t) { Log.d(TAG, "native init-screen refresh failed: " + t); }
+                catch (Throwable t) { Log.w(TAG, "native init-screen refresh failed: " + t); }
             }
         } catch (Throwable t) {
+            Log.w(TAG, "init-state gate install failed: " + t);
         }
     }
 
@@ -133,7 +134,6 @@ public final class AltScreenNavStatusGate {
         boolean changed = desiredAltScreenActive != active;
         desiredAltScreenActive = active;
         if (gate == null || changed || appliedAltScreenActive != active) scheduleInstallLocked();
-        if (gate == null && active) Log.d(TAG, "init-state gate pending - Navigation service not ready");
         return gate != null && appliedAltScreenActive == active && !installScheduled;
     }
 

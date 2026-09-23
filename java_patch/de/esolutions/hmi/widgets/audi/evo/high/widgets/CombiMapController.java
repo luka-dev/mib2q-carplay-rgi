@@ -117,7 +117,7 @@ public class CombiMapController extends DisplayControllerEvo implements NaviMoKo
                  * button is toggled while CarPlay owns the cluster.  A KDK delta still arrives, so
                  * re-read the choice model here as a backup: syncViewSize() compares against the
                  * cache and only does work on a real change, so Sport (event always fires) is a
-                 * cheap no-op.  This is the single writer of the view-size cache. */
+                 * cheap no-op. */
                 this.syncViewSize(false);
                 this.handleKdk(modelupdateevent);
                 this.switchToTargetContext();
@@ -349,7 +349,7 @@ public class CombiMapController extends DisplayControllerEvo implements NaviMoKo
          * ("View -> stock map").  Pin on isConnected() (true for the whole session from start()), NOT
          * clusterActive (set only after the first switch settles) — else a View press during the first
          * ~180ms switch slips the pin and strands the cluster on the stock map.  isConnected() clears
-         * on disconnect, so the stock map returns then.  (Caller per probe stack: switchToTargetContext.) */
+         * on disconnect, so the stock map returns then. */
         if (this.kombiTerminal == CLUSTER_TERMINAL && com.luka.carplay.core.AltScreenModule.isConnected()) {
             logDisplay.log(10000000, "CombiMapController#switchToTargetContext SKIPPED — CarPlay owns cluster (ctx 80)");
             return;

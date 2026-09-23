@@ -836,7 +836,6 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
 
         private TerminalModeDSIKeyEventsController(CarplayDSILifecycleController carplaydsilifecyclecontroller) {
             this.this$0 = carplaydsilifecyclecontroller;
-            installTouchpadSink();   /* CarPlay: touchpad -> DPAD ticks via TouchpadController */
         }
 
         /* Wire TouchpadController's DPAD output back through the stock DSI bridge's
@@ -878,10 +877,9 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
             }
 
             /* Central-console knob press (DDS_SELECT = Dreh-Drück-Steller) must SELECT in the
-             * CarPlay Main UI — it falls through to postButtonEvent below.  An earlier build
-             * redirected DDS_SELECT to a cluster virtual HID and returned, swallowing the
-             * select → "knob press does nothing". Cluster map zoom is driven separately by the
-             * steering-wheel MapScale callback, never by this central-console select. */
+             * CarPlay Main UI — it falls through to postButtonEvent below.  Never swallow it
+             * here.  Cluster map zoom is driven separately by the steering-wheel MapScale
+             * callback, never by this central-console select. */
             if (TerminalModeUtils.isJoystickMiddleposition(key)) {
                 if (null != this.this$0.lastJoystickkey) {
                     this.this$0

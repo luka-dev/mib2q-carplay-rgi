@@ -7,7 +7,6 @@ import de.audi.app.terminalmode.audio.IAudioStateListener;
 import de.audi.app.terminalmode.device.IActiveDeviceStateListener;
 import de.audi.app.terminalmode.device.TMDevice;
 import de.audi.app.terminalmode.events.DefaultEventListener;
-import de.audi.app.terminalmode.events.IEventListener;
 import de.audi.app.terminalmode.events.TrackDataChangedEvent;
 import de.audi.app.terminalmode.events.TrackPlayPositionEvent;
 import de.audi.app.terminalmode.osgi.IServiceManager;
@@ -131,9 +130,8 @@ public class TerminalModeBapCombi implements ITerminalModeComponent {
              * ConnectionState name is therefore fragile; instead deactivate whenever the device is no longer
              * a CarPlay device while we still think CarPlay is active.  All connect states (ATTACHED /
              * ACTIVATING / ACTIVE) report carplay=true, so this only fires on a genuine drop.  onDeactivate()
-             * is idempotent (no-op unless active), so it is safe.  This also unsticks the cluster: without it
-             * clusterActive stayed true → CombiMapController kept blocking the stock map → "AltScreen stayed
-             * after disconnect" and "View won't return to stock". */
+             * is idempotent (no-op unless active), so it is safe.  It also releases the cluster pin
+             * (AltScreenModule.isConnected()), so the stock map and the View button work again. */
             if (!tmdevice.isCarplayDevice() && com.luka.carplay.core.CarPlayApp.isActive()) {
                 try {
                     com.luka.carplay.core.CarPlayApp.onDeactivate();

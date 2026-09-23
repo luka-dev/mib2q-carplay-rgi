@@ -23,8 +23,8 @@ public class TouchpadController {
      * after arm, only the current adaptive threshold matters. */
     private static final int DPAD_THRESHOLD_FAST = 150;
     private static final int DPAD_THRESHOLD_SLOW = 200;
-    /* Speed axis is "touchpad units per 100 ms" (integer to stay
-     * Java-1.2 friendly; no doubles in the hot path).  Samples arrive
+    /* Speed axis is "touchpad units per 100 ms" (integer; no doubles in
+     * the hot path).  Samples arrive
      * every ~30 ms so speeds in the 30..400 range are typical. */
     private static final int SPEED_FAST          = 300;  /* ≥ → full sweep */
     private static final int SPEED_SLOW          = 100;  /* ≤ → full precision */

@@ -293,7 +293,7 @@ final class SideStreets {
     }
 
     private static void sortEntriesByMinDiff(EntryList entries) {
-        /* Insertion sort (small lists, Java 1.2, stable). */
+        /* Insertion sort (small lists, stable). */
         for (int i = 1; i < entries.size(); i++) {
             Entry key = entries.get(i);
             float kd = (key != null) ? key.minDiff : Float.MAX_VALUE;

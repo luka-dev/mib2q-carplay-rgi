@@ -30,12 +30,8 @@ public class RouteGuidance implements CarplayBus.Listener {
     private static final int ROUTE_STATE_NO_ROUTE_SET = 0;
     private static final int ROUTE_STATE_ROUTE_SET = 1;
     private static final int ROUTE_STATE_REROUTING = 5;
-    /*
-     * MHI3 dio_manager behaviour (CRouteGuidanceUpdateProcessorImpl::isRouteGuidanceManeuverIndexGreater):
-     * if routeGuidanceState == 5 then maneuver updates are always accepted.
-     *
-     * Note: naming in accNav docs varies (Locating/Rerouting). We match the observed check (==5).
-     */
+    /* MHI3 accepts every maneuver update while routeGuidanceState == 5; that rule
+     * lives in the hook (rgd_hook.c, RGD_STATE_REROUTING), not here. */
 
     /* State */
     private BAPBridge bap;
@@ -44,6 +40,8 @@ public class RouteGuidance implements CarplayBus.Listener {
     /* Separate from rgActive: route intent/BAP ownership may already be active while ctx 81 is
      * still held.  It flips only after BAP update + maneuver renderer FRAME_READY. */
     private boolean presentationConfirmed = false;
+    /* One WARN per pending episode; the retry runs on every RG update. */
+    private boolean bapStartPendingLogged = false;
     private boolean hasRouteUpdate = false;
     private boolean routeWantsActive = false;
 
@@ -520,6 +518,7 @@ public class RouteGuidance implements CarplayBus.Listener {
              * nothing to show, regardless of stale visible_in_app from C hook. */
             if (state.routeState == ROUTE_STATE_NO_ROUTE_SET) wantActive = false;
             if (!wantActive && routeWantsActive) resetInfoPresentation();
+            if (!wantActive) bapStartPendingLogged = false;
             routeWantsActive = wantActive;
 
             /* Re-check running: a frame captured by the bus dispatcher just before stop()
@@ -542,8 +541,13 @@ public class RouteGuidance implements CarplayBus.Listener {
                 rgActive = bap != null && bap.onStart();
                 com.luka.carplay.core.AltScreenModule.setNavActive(rgActive);
                 if (!rgActive) {
-                    Log.w(TAG, "RG activation pending: BAP start did not complete; keeping ctx 81");
+                    if (!bapStartPendingLogged) {
+                        Log.w(TAG, "RG activation pending: BAP start did not complete; keeping ctx 81");
+                        bapStartPendingLogged = true;
+                    }
                     requestPresentationCheck("bap-start-pending");
+                } else {
+                    bapStartPendingLogged = false;
                 }
             } else if (!wantActive && rgActive) {
                 Log.i(TAG, "RG deactivate: route_state=" + state.routeState
@@ -1425,52 +1429,5 @@ public class RouteGuidance implements CarplayBus.Listener {
             }
         }
         return out;
-    }
-
-    private static String dirtyToString(State s) {
-        StringBuffer sb = new StringBuffer();
-        appendIf(sb, (s.dirtyMask & State.DIRTY_ROUTE_STATE) != 0, "route_state");
-        appendIf(sb, (s.dirtyMask & State.DIRTY_MANEUVER_STATE) != 0, "maneuver_state");
-        appendIf(sb, (s.dirtyMask & State.DIRTY_MANEUVER_COUNT) != 0, "maneuver_count");
-        appendIf(sb, (s.dirtyMask & State.DIRTY_MANEUVER_LIST) != 0, "maneuver_list");
-        appendIf(sb, (s.dirtyMask & State.DIRTY_DIST_DEST) != 0, "dist_dest_m");
-        appendIf(sb, (s.dirtyMask & State.DIRTY_DIST_MAN) != 0, "dist_maneuver_m");
-        appendIf(sb, (s.dirtyMask & State.DIRTY_ETA) != 0, "eta_seconds");
-        appendIf(sb, (s.dirtyMask & State.DIRTY_TIME_REMAINING) != 0, "time_remaining");
-        appendIf(sb, (s.dirtyMask & State.DIRTY_CURRENT_ROAD) != 0, "current_road");
-        appendIf(sb, (s.dirtyMask & State.DIRTY_DESTINATION) != 0, "destination");
-        appendIf(sb, (s.dirtyMask & State.DIRTY_DISCONNECT) != 0, "disconnect_reason");
-        appendIf(sb, (s.dirtyMask & State.DIRTY_VISIBLE_IN_APP) != 0, "visible_in_app");
-        appendIf(sb, (s.dirtyMask & State.DIRTY_SOURCE_SUPPORTS_RG) != 0, "source_supports_rg");
-        appendIf(sb, (s.dirtyMask & State.DIRTY_LANE_GUIDANCE) != 0, "lane_guidance");
-
-        boolean firstMan = true;
-        for (int i = 0; i < MAX_MANEUVERS; i++) {
-            int md = s.mDirty[i];
-            if (md == 0) continue;
-            if (firstMan) {
-                appendSep(sb);
-                sb.append("maneuver=");
-                firstMan = false;
-            } else {
-                sb.append(',');
-            }
-            sb.append(i);
-            sb.append(':');
-            if ((md & State.MAN_DIR_ICON) != 0) sb.append('I');
-            if ((md & State.MAN_DIR_TEXT) != 0) sb.append('T');
-        }
-
-        return sb.toString();
-    }
-
-    private static void appendIf(StringBuffer sb, boolean cond, String label) {
-        if (!cond) return;
-        appendSep(sb);
-        sb.append(label);
-    }
-
-    private static void appendSep(StringBuffer sb) {
-        if (sb.length() > 0) sb.append(',');
     }
 }
