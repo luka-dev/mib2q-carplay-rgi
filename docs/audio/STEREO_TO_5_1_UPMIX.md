@@ -4,6 +4,58 @@
 
 ---
 
+## 🧭 At a glance: what each channel gets
+
+For stereo music (type-103 decoded stereo and type-100 realtime media). Spatial Audio / Atmos tracks arrive as real 5.1 and skip this; calls and Siri stay plain stereo. Numbers are the shipped calibration below.
+
+```mermaid
+flowchart TB
+    accTitle: HSSR upmix at a glance
+    accDescr: Stereo input is split into a delayed bit-exact front and a feature path; a small GRU controller decides per band what goes to the rear, which is built from moving objects and an ambience bed delayed 12 ms; LFE and the output stage finish the six channels that go over MOST150 to the B&O amp, whose Virtual Cabin renders them on 19 speakers.
+    stereo["🎵 Stereo input<br/>128-sample hop, 48 kHz"]
+
+    subgraph hssr ["HSSR upmix in the hook"]
+        front["Front L/R<br/>input delayed bit-exact<br/>minus the part moved to the rear<br/>(50 % kept in front, less above 1–2.5 kHz)"]
+        ctrl["GRU controller ~94 Hz<br/>32 bands: what belongs<br/>behind the listener"]
+        rear["Rear Ls/Rs<br/>up to 4 moving objects<br/>+ decorrelated ambience bed<br/>delayed 12 ms (Haas), gain 0.40"]
+        lfe["LFE<br/>mono assist, 60 Hz LR4"]
+        centre["C = 0<br/>amp derives centre from L+R"]
+        out["Output stage<br/>front bass −3 dB, SoundCheck level,<br/>cabin clip guard (predicts amp bus peaks)"]
+    end
+
+    pcm["PCM 6ch<br/>L R C LFE Ls Rs"]
+    amp["B&O J525 via MOST150<br/>Virtual Cabin: centre, crossovers,<br/>sub management"]
+    spk["🔊 19 speakers"]
+
+    stereo --> front
+    stereo --> ctrl
+    ctrl --> rear
+    ctrl --> front
+    stereo --> lfe
+    front --> out
+    rear --> out
+    lfe --> out
+    centre --> out
+    out --> pcm --> amp --> spk
+
+    classDef primary fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
+    classDef success fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
+    classDef neutral fill:#f3f4f6,stroke:#6b7280,stroke-width:2px,color:#1f2937
+    class stereo,spk primary
+    class ctrl,rear,front success
+    class lfe,centre,out,pcm,amp neutral
+```
+
+| Channel / stage | What it gets |
+|---|---|
+| **Front L/R** | The input itself, delayed and bit-exact, minus what moves to the rear; 50 % of that part stays in front (`AUDIO_STEREO_FRONT_RETENTION`), less of it above 1–2.5 kHz (HF taper). |
+| **Controller** | A small GRU, about 94 times a second, decides per band (32 bands) what belongs behind the listener ([HSSR Model](HSSR_MODEL.md)). |
+| **Rear Ls/Rs** | Up to 4 moving objects plus a decorrelated ambience bed, delayed 12 ms so the front still anchors the image; rear gain 0.40 (`AUDIO_STEREO_SURROUND`). |
+| **LFE** | Low-passed mono assist, Butterworth LR4 at 60 Hz. |
+| **C** | 0 on purpose: the amp derives the centre from L+R. |
+| **Output stage** | Front bass −3 dB, SoundCheck level, and the cabin clip guard, which predicts the amp's bus peaks and scales if needed. |
+| **Amp** | PCM 6ch over MOST150; the B&O Virtual Cabin handles centre, crossovers and sub management across 19 speakers ([Virtual Cabin and Amp RE](VIRTUAL_CABIN_AND_AMP_RE.md)). |
+
 ## 🎯 The big picture
 
 Two things had to be built: get the **right six PCM channels**, and **synthesize them** for stereo content. The amp (J525 B&O) is a complete 5.1 renderer — the [Virtual Cabin](VIRTUAL_CABIN_AND_AMP_RE.md) — so the head unit only feeds it `L R C LFE Ls Rs` and lets it do the acoustics: it derives the centre, manages the sub, crosses over every driver, and fans out to 19 speakers.
