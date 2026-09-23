@@ -44,12 +44,9 @@ responsible for any damage, bricked units or warranty issues resulting from thei
 **Head-up display**
 
 <p align="center">
-  <img src="assets/gallery/IMG_0623.jpeg" width="45%" />
-  <img src="assets/gallery/IMG_6299.jpeg" width="45%" />
-</p>
-<p align="center">
-  <img src="assets/gallery/IMG_6302.jpeg" width="45%" />
-  <img src="assets/gallery/IMG_0599.jpeg" width="45%" />
+  <img src="assets/gallery/IMG_0623.jpeg" width="30%" />
+  <img src="assets/gallery/IMG_6302.jpeg" width="30%" />
+  <img src="assets/gallery/IMG_0599.jpeg" width="30%" />
 </p>
 
 ## Documentation
