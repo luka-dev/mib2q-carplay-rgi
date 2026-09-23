@@ -134,11 +134,13 @@ On a car with the LTE modem the live profile is `pf.ecm0.conf`, not `pf.conf`.
 
 To uninstall, copy `uninstall_MoreIncredibleBash/` over the card instead. That script needs no payload tree or marker. It renames every `*.carplay-stock` it finds under `/mnt/app` and `/mnt/system` back to the original, which covers the firmware, the SI JSON, the PF profiles and `dio_manager.json`. It then deletes the files on its fixed owned list (`uninstall_MoreIncredibleBash/mod/custom.sh:23-54`). The list includes `hssr_guard.bin` (`:27`); the "[open] missing from the list" remark in `DEPLOYMENT.md` and `PROTECTOR.md` is superseded. `custom.sh uninstall` from the install folder (`install_MoreIncredibleBash/mod/custom.sh:182-203`) is a second path when the payload tree is present. Both READMEs that described the old generated uninstaller (`.orig` restore, `package_mib.py`) are gone or stale; the scripts are authoritative. **[code]**
 
-## 🔧 Manual install over SSH (without M.I.B.)
+## 🔧 Manual install (without M.I.B.)
 
-The same install as `custom.sh`, by hand, in a root shell on the unit. Disconnect CarPlay first and
-back up anything you change. Put the release files somewhere on the unit (an SD card or USB stick
-works) and `cd` there.
+The same install as `custom.sh`, by hand. You need a **root shell on the unit, over SSH or
+Telnet**, whichever your unit has enabled. How you get one and the address to connect to depend on your
+unit; this guide does not assume either.
+Disconnect CarPlay first and back up anything you change. Put the release files somewhere on the
+unit (an SD card or USB stick works) and `cd` there.
 
 ### 1. Make the partitions writable
 
@@ -312,7 +314,7 @@ The runtime side of the install (which process owns what, the generation monitor
 
 ## 🌐 SSH deploy and its traps
 
-No SSH deploy script remains in `scripts/`. A push over SSH is done by hand to the unit (`root@10.173.189.1`, or other `10.173.189.x` addresses). The unit has a bare QNX environment, and a naive copy fails in four ways:
+No SSH deploy script remains in `scripts/`. A push over SSH is done by hand; the development unit answers at `root@10.173.189.1` (or other `10.173.189.x` addresses), which is that unit's own setup, not a stock address. The unit has a bare QNX environment, and a naive copy fails in four ways:
 
 | Trap | Fix |
 |---|---|
