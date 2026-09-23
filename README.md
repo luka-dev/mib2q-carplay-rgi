@@ -3,10 +3,11 @@
 Production implementation for Audi MHI2Q (MU1316, QNX 6.5 ARMv7):
 
 - stock `libairplay.so` 210.81 inside `dio_manager`;
-- `LD_PRELOAD` hook for CarPlay negotiation, route guidance, altScreen stream 111 and the
-  buffered/upmixed 5.1 audio path;
+- `LD_PRELOAD` hook for CarPlay negotiation, route guidance, telephony (recents/favorites,
+  signal, hold and mute), altScreen stream 111 and the buffered/upmixed 5.1 audio path;
 - external QNX renderers for maneuver graphics and cluster video;
-- one Java patch for cluster context, BAP/RGI, cover art and steering-wheel input.
+- one Java patch for cluster context, BAP/RGI, the cluster telephone tab (CarPlay calls), cover art
+  and steering-wheel input.
 
 The shipped path always keeps stock `libairplay.so`. From-source libairplay/dio experiments are
 research records, not production dependencies or authorities for stock 210 behavior.
@@ -38,7 +39,7 @@ All documentation is one linked Markdown tree in [`docs/`](docs/README.md). Star
 | Domain | Entry point |
 | --- | --- |
 | Audio (upmix, HSSR model, J525 amp, codecs, 5.1 routing) | [`docs/audio/README.md`](<docs/audio/README.md>) |
-| Cluster and route guidance (contexts, BAP/RGI, HUD renderer) | [`docs/cluster-and-rgi/README.md`](<docs/cluster-and-rgi/README.md>) |
+| Cluster and route guidance (contexts, BAP/RGI, HUD renderer, CarPlay telephony) | [`docs/cluster-and-rgi/README.md`](<docs/cluster-and-rgi/README.md>) |
 | AltScreen and video (stream 111, OMX pipeline, loader) | [`docs/altscreen-and-video/README.md`](<docs/altscreen-and-video/README.md>) |
 | Connect and USB (NCM, replug recovery, PF, session lifecycle) | [`docs/connect-and-usb/README.md`](<docs/connect-and-usb/README.md>) |
 | Build and deploy (toolchain, release map, VIN protection) | [`docs/build-and-deploy/README.md`](<docs/build-and-deploy/README.md>) |
@@ -131,8 +132,8 @@ source-to-unit map, file modes and hashes are in
 
 - `custom.sh` copies every file under `SD:/mod/carplay/root/` to the same path under `/` on the
   unit, replaces the SI `carplay` child by path, widens the CarPlay rule in all four PF profiles
-  and registers the iAP2 route-guidance message IDs in `dio_manager.json` (without them no route
-  guidance arrives). It keeps a `.carplay-stock` backup of everything it replaces or edits, and
+  and registers the iAP2 route-guidance and telephony message IDs in `dio_manager.json` (without
+  them no route guidance arrives, and the cluster phone tab has no lists, hold or mute). It keeps a `.carplay-stock` backup of everything it replaces or edits, and
   never stops processes or reboots the HU. For a manual install of the message IDs, see the
   [procedure](<docs/build-and-deploy/DEPLOY_AND_RELEASE.md#-route-guidance-message-ids-in-dio_managerjson>).
 - Uninstall: copy `uninstall_MoreIncredibleBash/` over the card and run it; it restores every
