@@ -49,6 +49,45 @@ responsible for any damage, bricked units or warranty issues resulting from thei
   <img src="assets/gallery/IMG_0599.jpeg" width="30%" />
 </p>
 
+## Features
+
+There is nothing to switch on: plug in the iPhone and CarPlay starts as usual; the cluster
+features below follow it automatically.
+
+- **CarPlay map in the Virtual Cockpit.** The phone streams its own map to the cluster (Apple's
+  second-screen "altScreen" stream). It shows while CarPlay is connected, even without an active
+  route. The **Audi View** button switches the cluster between its classic and large layouts as
+  with the stock navigation, and the **steering-wheel roller** zooms the cluster map. A short
+  animation fills the cluster until the first video frame arrives.
+- **Turn-by-turn on the cluster.** During CarPlay navigation the cluster shows a 3D maneuver
+  arrow beside the map. Its distance bar fills as the turn approaches and blinks just before it.
+  The cluster also shows lane arrows, distance to the turn, arrival time and remaining distance.
+  Needs an app that sends CarPlay route guidance: Apple Maps does, Waze does not
+  ([details](docs/cluster-and-rgi/THIRD_PARTY_NAV_APPS.md)).
+- **Route text in the Virtual Cockpit.** A text line under the map names the exit sign or the
+  next road (the current road when there is nothing else); long names scroll. Press **OK** (the
+  left steering-wheel roller) to switch it to arrival time and time left, and press again to go
+  back ([details](docs/cluster-and-rgi/RGI_AND_BAP_BRIDGE.md#-route-text-eta-and-the-mfw-ok-key)).
+- **Head-up display.** The same maneuver icons, lane arrows and distance appear on the HUD.
+- **Cover art on the cluster.** The now-playing album art shows on the cluster media screen.
+- **Parking popups no longer hide CarPlay.** When the Audi front PDC / parking view pops up,
+  CarPlay stays on screen beside it instead of being replaced.
+- **5.1 surround for CarPlay music (B&O).** The head unit feeds the external B&O amplifier six
+  channels instead of two, and the amplifier's own Virtual Cabin processing spreads them over the
+  cabin speakers ([details](docs/audio/README.md)).
+  - *Spatial input:* Spatial Audio / Dolby Atmos tracks from Apple Music arrive as real 5.1 in
+    Apple's APAC codec. The head unit decodes them and plays each channel on its own speaker
+    group, with no upmix.
+  - *Stereo input* (most music, and apps such as Spotify): a small model running on the head
+    unit (HSSR) upmixes it. Vocals and lead parts stay anchored in front, secondary parts and
+    room ambience move to the rear speakers with short delays for depth, and the subwoofer gets
+    its own bass feed. Calls and Siri stay plain stereo. It is cheap: measured on the unit
+    (2026-09-05 build), a 21 ms block of audio takes about 5 ms of one CPU core, so it runs roughly 4× faster than
+    real time and uses under a quarter of a core
+    ([measurements](docs/audio/UPMIX_COMPUTE_BUDGET.md#-measured-krait-wall-time)).
+  - Built for the B&O amplifier only. The startup script enables it unconditionally for now;
+    cars with the internal amplifier have no six-channel route and are untested.
+
 ## Documentation
 
 All documentation is one linked Markdown tree in [`docs/`](docs/README.md). Start at
