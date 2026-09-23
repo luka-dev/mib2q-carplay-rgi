@@ -58,7 +58,7 @@ flowchart TB
 | [RGI and BAP Bridge](RGI_AND_BAP_BRIDGE.md) | The route-guidance path: `BAPBridge` outputs, FSG sync and ExitView, FctID 18/37, slot mapping and LRU, `visible_in_app` vs route-active. |
 | [HUD Renderer](HUD_RENDERER.md) | The three renderers, the procedural arrow, the stock KOMO map pipeline (unused by CarPlay code), and the VC FPK state machine. |
 | [Third-party Nav Apps](THIRD_PARTY_NAV_APPS.md) | Why Waze and AMap send no usable RGI, `updateViewArea`, `CMD_ALT_ZOOM`, and the cluster scene URL. |
-| [CarPlay Telephony](CARPLAY_TELEPHONY.md) | CarPlay calls, actions, recents/favorites, mic mute, missed calls and signal on the cluster telephone tab: the gated PHONE 0x28 service, status and the on-car checks (implemented, untested on the car). |
+| [CarPlay Telephony](CARPLAY_TELEPHONY.md) | CarPlay calls, actions, recents/favorites, mic mute, missed calls and signal on the cluster telephone tab: the gated PHONE 0x28 service, status and the on-car checks (working on the car since 2026-09-23). |
 | [VC Telephone Tab](VC_TELEPHONE_TAB.md) | How the VC telephone tab reads PHONE 0x28: `mobileConnectionType` and the CarPlay note, callOptions, mute, lists, and the steering-wheel Tel key on the VC and HU sides. |
 | [iAP2 Communications](IAP2_COMMUNICATIONS.md) | iAP2 call state, communications, hold/mute and list updates: every parameter, the Identify rules and the iOS/Cinemo/car evidence. |
 | [Phone Tab Gating](PHONE_TAB_GATING.md) | The removed cluster telephone-tab gate (HFP && !CarPlay), its traps, and what stays unproven. |

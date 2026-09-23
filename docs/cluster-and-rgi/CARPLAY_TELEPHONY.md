@@ -1,6 +1,6 @@
 # CarPlay Telephony
 
-*Shows CarPlay calls on the cluster telephone tab, which stock only fills for a Bluetooth HFP phone and otherwise covers with "Your iPhone is in Apple CarPlay mode. It is only possible to make and receive calls via Apple CarPlay." Status: **implemented, not yet tested on the car**, branch `feature/carplay-telephony`.*
+*Shows CarPlay calls on the cluster telephone tab, which stock only fills for a Bluetooth HFP phone and otherwise covers with "Your iPhone is in Apple CarPlay mode. It is only possible to make and receive calls via Apple CarPlay." Status: **working on the car**, confirmed by the owner on 2026-09-23 on the first try.*
 
 ---
 
@@ -114,7 +114,7 @@ Mute is optimistic: a mute toggled on the phone is not read back, because stock'
 | 5 | Mic mute, missed-call indication, signal, register state, carrier | Implemented |
 | – | Caller picture | Not possible over iAP2 |
 
-Nothing is tested on the car yet.
+On 2026-09-23 the owner confirmed on the car that it works on the first try. The logs from that session (`logs/telephony-20260923-102339/`, not in git) show the gate switching on at CarPlay connect and iOS sending 12 recents (the CarPlay cap) and 4 favorites within 21 s of the hook starting. `[car]`
 
 ## ✅ On-car checks
 

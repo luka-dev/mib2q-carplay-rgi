@@ -25,14 +25,13 @@ altScreen projection and audio. Cover art, metadata and steering-wheel input
 are also implemented. The September 17 rebuild uses the repaired GCC 8.5
 toolchain; rebuilding artifacts alone does not change what is installed on HU.
 
-### Open: CarPlay telephony on the cluster tab
+### Closed: CarPlay telephony on the cluster tab
 
-On branch `feature/carplay-telephony`: [design and status](docs/cluster-and-rgi/CARPLAY_TELEPHONY.md).
-Phases 1–5 implemented (call screen, accept/hangup/hold/dial via CarPlay HID, `tel:` and iAP2 hold, recents/favorites and mic mute via `hook/telephony`). Next: the on-car checks in the doc.
-
-Also implemented: missed-call indication (FctID 45, from the recents list), signal,
-register state and carrier (read from the stock CommunicationsUpdate 0x4158).
-Caller picture: not possible, iAP2 CallStateUpdate carries no image (see the doc).
+Working on the car, confirmed by the owner on 2026-09-23 on the first try:
+[design and status](docs/cluster-and-rgi/CARPLAY_TELEPHONY.md). The cluster phone tab shows
+CarPlay calls (state, name, number, timer) with accept/hangup/hold/dial, mic mute, recents and
+favorites, the missed-call indication, signal, register state and carrier. Caller picture: not
+possible, iAP2 CallStateUpdate carries no image.
 
 ### Closed: connections and recovery
 

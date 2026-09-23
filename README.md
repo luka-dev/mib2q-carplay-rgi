@@ -75,7 +75,7 @@ features below follow it automatically.
   CarPlay mode" note, the Virtual Cockpit telephone tab works as with a Bluetooth phone: caller
   name and number, call state and timer, accept / hang up (tab or steering wheel), hold, mute and
   dialling, recents and favorites, the missed-call indication, signal and carrier. There is no
-  caller photo: iPhone does not send one to the car. *Implemented, not yet tested on the car*
+  caller photo: iPhone does not send one to the car. Confirmed on the car
   ([details](docs/cluster-and-rgi/CARPLAY_TELEPHONY.md)).
 - **Parking popups no longer hide CarPlay.** When the Audi front PDC / parking view pops up,
   CarPlay stays on screen beside it instead of being replaced.
