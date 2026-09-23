@@ -25,6 +25,18 @@ altScreen projection and audio. Cover art, metadata and steering-wheel input
 are also implemented. The September 17 rebuild uses the repaired GCC 8.5
 toolchain; rebuilding artifacts alone does not change what is installed on HU.
 
+### Open: "Navigation is initializing" over the CarPlay cluster map
+
+The owner still sees the VC's "Initialising navigation system. Please wait..." over the CarPlay
+map (2026-09-23), so the September 16 deferral (`7d35b53`) does not work. Static analysis: the text
+is the VC Nav NA screen, selected by NavSD FSG_OperationState OP 3 (INITIALIZING). The HU sends it
+not only from `showInitializingScreen` (`appIsReady`, the only input the deferral touches) but also
+while the "Navi" app has not started, during the BAP init sequence, a software download or a BAP
+stack drop. Fix implemented 2026-09-23, **not yet tested on the car**: a patched
+`InitializationManagerNavi` sends INITIALIZING as NORMAL while CarPlay owns the cluster.
+Check: cold boot with CarPlay shows the CarPlay cluster map and no NA screen; without CarPlay stock
+navigation still shows its own "Initialising" screen. [Details](docs/cluster-and-rgi/NAV_INITIALIZING_SCREEN.md).
+
 ### Closed: CarPlay telephony on the cluster tab
 
 Working on the car, confirmed by the owner on 2026-09-23 on the first try:

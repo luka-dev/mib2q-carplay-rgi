@@ -212,6 +212,7 @@ Every curated note, alphabetical:
 - [Lane Guidance](cluster-and-rgi/LANE_GUIDANCE.md)
 - [Maneuver Mapping](cluster-and-rgi/MANEUVER_MAPPING.md)
 - [MHI2 MU1439 Port](reference/MHI2_MU1439_PORT.md)
+- [Nav Initializing Screen](cluster-and-rgi/NAV_INITIALIZING_SCREEN.md)
 - [NavSD FctID Matrix](cluster-and-rgi/NAVSD_FCTID_MATRIX.md)
 - [Now Playing Cold Start](connect-and-usb/NOW_PLAYING_COLD_START.md)
 - [Partial 360 Camera Preflight](altscreen-and-video/PARTIAL_360_CAMERA_PREFLIGHT.md)

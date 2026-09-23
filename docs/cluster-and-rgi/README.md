@@ -67,6 +67,7 @@ flowchart TB
 | [Smartphone Tab and Kombi DSI](SMARTPHONE_TAB_AND_KOMBI_DSI.md) | `DSICarKombi`/`DSIKombiSync2`, HU display architecture, the unbuilt VC Smartphone-tab alternative. |
 | [iAP2 Route Guidance TLVs](IAP2_ROUTE_GUIDANCE_TLVS.md) | What iOS sends in 0x5201/0x5202, what the hook parses, angle sentinels, the `SendIAP2` injection fix. |
 | [NavSD FctID Matrix](NAVSD_FCTID_MATRIX.md) | All 56 Navigation BAP functions and who owns each while CarPlay drives the cluster. |
+| [Nav Initializing Screen](NAV_INITIALIZING_SCREEN.md) | Why the VC's "Initialising navigation system" NA screen still covers the CarPlay map: NavSD OP_State 3, its five HU inputs, why `7d35b53` misses them, and the `InitializationManagerNavi` fix (implemented, untested on the car). |
 | [Maneuver Mapping](MANEUVER_MAPPING.md) | The 54-type iAP2 → BAP icon → HUD selector → renderer arrow table and the HUD firmware chain. |
 | [Distance Bargraph](DISTANCE_BARGRAPH.md) | Why the VC hides the distance while the bargraph is on, FctID 18 bytes, arrow fill instead of a column. |
 | [Lane Guidance](LANE_GUIDANCE.md) | Lanes as an independent event, the wire batch, the bottom panel, the QNX `fmin` hang, rejected approaches. |

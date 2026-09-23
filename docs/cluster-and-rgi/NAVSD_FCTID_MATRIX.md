@@ -23,7 +23,7 @@ Variant legend: `S` Std, `H` HighPrem, `M` MMIKombi, `MH` MMIKombiHUD; `All` = a
 | 3 | 0x03 | FunctionList | property | All | framework | availability bitmap | stock; capability truth |
 | 4 | 0x04 | HeartBeat | protocol | All | framework | LSG liveness | stock |
 | 5-14 | - | reserved | - | none | none | - | do not use |
-| 15 | 0x0F | FSG_OperationState | property | All | `show/hideInitializingScreen()` | READY / INITIALIZING | session-gated: altScreen ownership holds READY; the latest stock request is deferred and replayed |
+| 15 | 0x0F | FSG_OperationState | property | All | `show/hideInitializingScreen()` | READY / INITIALIZING | session-gated for `appIsReady` only: altScreen ownership defers stock `showInitializingScreen` and replays it. That alone was not enough (`appState == 0`, `initState < 9`, a download or a BAP stack drop still sent INITIALIZING (3), which the VC turns into the NA "Initialising navigation system" screen over the CarPlay map), so the patched `InitializationManagerNavi` now sends INITIALIZING as NORMAL while CarPlay owns the cluster ([Nav Initializing Screen](NAV_INITIALIZING_SCREEN.md)) |
 | 16 | 0x10 | CompassInfo | property | All | `updateCompassInfo(angle, symbolic)` | heading, N/NE/… | stock |
 | 17 | 0x11 | RG_Status | property | All | `updateRGStatus(status)` | RG active; opens FctSync | CarPlay-owned for the session |
 | 18 | 0x12 | DistanceToNextManeuver | property | All | `updateDistanceToNextManeuver(dist, unit, barOn, bar)` | distance + bargraph | CarPlay-owned |
@@ -46,7 +46,7 @@ Variant legend: `S` Std, `H` HighPrem, `M` MMIKombi, `MH` MMIKombiHUD; `All` = a
 | 35 | 0x23 | RepeatLastNavAnnouncement | method | none | `repeatLastNavAnnouncementResult` | repeat announcement | not advertised |
 | 36 | 0x24 | VoiceGuidance | property/SetGet | S/H | `updateVoiceGuidanceState(state)` | voice mode | stock |
 | 37 | 0x25 | FunctionSynchronisation | property | All | framework | atomic RG sync | implicit via 17/23/18/49; never write |
-| 38 | 0x26 | InfoStates | property | All | `updateInfoStates(state)` | no error / no GPS / initializing / mobile device | stock; high-risk global state |
+| 38 | 0x26 | InfoStates | property | All | `updateInfoStates(state)` | no error / no GPS / initializing / mobile device | stock, passed through. 6 (navigation in mobile device, sent while a terminal-mode nav app runs) replaces the map with the VC's mobile-device compass screen; 5 is a diagnostic splash ([Nav Initializing Screen](NAV_INITIALIZING_SCREEN.md)) |
 | 39 | 0x27 | ActiveRGType | property/SetGet | S/H | `updateActiveRGType(type)` | guidance presentation source | CarPlay-owned; sends `0` (BAP RGI) |
 | 40 | 0x28 | TrafficBlock_Indication | property | S/H/MH | `updateTrafficBlockIndication(symbol)` | TMC icon | stock |
 | 41 | 0x29 | GetNextListPos | method | S/H | none | list paging | framework |
@@ -72,7 +72,7 @@ Variant legend: `S` Std, `H` HighPrem, `M` MMIKombi, `MH` MMIKombiHUD; `All` = a
 
 | Class | FctIDs | Rule |
 |---|---|---|
-| Session altScreen availability | 15 | While plane 99 owns the cluster, stock INITIALIZING is deferred and NavSD held READY; on release the latest request is replayed and `ClusterService` recomputes |
+| Session altScreen availability | 15 | While plane 99 owns the cluster, stock `showInitializingScreen` is deferred and `hideInitializingScreen` reasserted; on release the latest request is replayed and `ClusterService` recomputes. This covers `appIsReady` only and did not stop the NA screen (owner, 2026-09-23); the patched `InitializationManagerNavi` clamps INITIALIZING to NORMAL for the same ownership lifetime (implemented 2026-09-23, [Nav Initializing Screen](NAV_INITIALIZING_SCREEN.md)) |
 | CarPlay exclusive during takeover | 17, 18, 23, 24, 39, 49, 55 | `GatedCombiService` drops stock writes; `BAPBridge` publishes |
 | CarPlay exclusive only during active RGI | 19, 20, 21, 22, 46 | stock route text and trip output allowed again for `CP && !RGI` |
 | Suppressed native-map decorations | 45, 47 | stock value cached; hidden status sent (`updateMapScale(15, false, 0xFFFF, 0xFF, false)`, `updateAltitude(0x7FFF, 2)`); restored on release |
@@ -96,7 +96,7 @@ Practical reading: FctID 22 variants and richer 21/46 data are safe; 25/40 only 
 | 23 | `mainElement`, `direction`, `zLevelGuidance`, slot | glyph, signed direction, level, current/next | only from the real iOS maneuver |
 | 24 | `laneGuidanceOnOff`, per-lane `guidanceInfo` | 0 not recommended, 1 recommended, 2 best | from iOS lane guidance; type, markings and description alter glyphs |
 | 25 | `messageStatus`, `messageWaitingIndication` | popup request / confirmation, waiting count | leave stock |
-| 38 | `states` | 0 no error, 3 no GPS, 5 initializing MOST map, 6 navigation in mobile device | global lifecycle; implicated in old "Initializing" / nav-unavailable bugs; never use to hide a widget |
+| 38 | `states` | 0 no error, 1 no data medium, 2 database corrupted, 3 no GPS, 4 database update, 5 initializing MOST map, 6 navigation in mobile device | global lifecycle; not the source of the "Initialising navigation system" text (that is FctID 15 OP 3); 6 selects the mobile-device screen, 1/2/4/5 a hint popup ([Nav Initializing Screen](NAV_INITIALIZING_SCREEN.md)); never use to hide a widget |
 | 39 | `rgtype` | 0 BAP ManeuverDescriptor RGI, 1 MOST KDK, 2 compass, 3 MOST map, 4 LVDS map, 5 LVDS KDK, 255 default | selects the whole guidance source; we send 0, the planes need no LVDS type |
 | 40 | `tmc_Symbol` | none or a traffic glyph | only with a real event |
 | 43 | `colour`, `activeMapType`, `mainMapSetup` | day / night / auto; destination / 2D / 3D / overview / range | stock map only |

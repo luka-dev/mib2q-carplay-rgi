@@ -29,7 +29,7 @@ Paths: `extract_stage3/KI_FPK_AU491/.../bin/app/gssipc-kbd`, `.../bin/app/fds`, 
 
 ```text
 NavFpk (0xa6)
-+-- SV_NavFPK_NA (0xb7)                  nav not available
++-- SV_NavFPK_NA (0xb7)                  nav not available: NavSD OP_State 1/3/15 (3 = "Initialising navigation system")
 +-- NAV_fpk_Operable (0xa7)
     +-- SV_NavFPK_HinweisTexte (0xb6)    info / hint texts
     +-- NAV_FPK_Operable_Normal (0xa8)
@@ -90,6 +90,8 @@ Non-FPK clusters use other state paths, each with `NA_Init` / `NA_Off` availabil
 |---|---|---|---|
 | `INTERN_Active_NavFPK_Content` | 0x4000037 | Integer | None 0, Map 1, LastDest 2, Fav 3 |
 | `BAP_NavSD_InfoStates_States` | 0x400000f | Integer | 6 = NavigationInMobileDevice |
+| NavSD OP_State mirror | 0x200006A | Integer | 1/3/15 → `SV_NavFPK_NA` (`sub_2286B4`); written by the FctID 15 handler `0x1797E4` |
+| `DP_ID_NavFPK_HinweisTexte_TextIndex` | 0x4000044 | Integer | hint text index; != 0 → `SV_NavFPK_HinweisTexte` |
 | `BAP_NavSD_RG_Status_RG_Status` | 0x2000070 | Integer | route guidance active |
 | `LVDS_Available` | 0x20002d7 | Integer | video stream present |
 | `NavFPK_RG_toggled` | 0x400004f | Integer | RG toggle tracking |
@@ -224,6 +226,7 @@ What is left `[open]`: the per-entry `Nav_SideMenusNav_*_visible` gates have ano
 
 - [KDK Geometry and Animation](KDK_GEOMETRY_AND_ANIMATION.md): the KDK placement and fade inside `SV_LVDS_NavMap_FPK`.
 - [NavSD FctID Matrix](NAVSD_FCTID_MATRIX.md): every NavSD FctID and who owns it during CarPlay.
+- [Nav Initializing Screen](NAV_INITIALIZING_SCREEN.md): what selects `SV_NavFPK_NA` and the "Initialising navigation system" text, and why it still covers the CarPlay map.
 - [Smartphone Tab and Kombi DSI](SMARTPHONE_TAB_AND_KOMBI_DSI.md): the VC Smartphone tab and the HU-side Kombi DSI interfaces.
 - [HUD Renderer](HUD_RENDERER.md): the KOMO video pipeline and the KSS patch bytes.
 
