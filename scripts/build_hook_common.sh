@@ -79,7 +79,8 @@ carplay_build_hook() {
 
   if ! docker image inspect "$IMG" >/dev/null 2>&1; then
       echo "ERROR: docker image '$IMG' not found."
-      echo "Build it once:  docker build --platform=linux/amd64 -t $IMG $PROJECT_DIR/../../Tools/qnx-65-sdp-docker"
+      echo "Build it once from https://github.com/luka-dev/qnx65-armv7-toolchain :"
+      echo "  ./host-scripts/qnx-run.sh build $([ "$QNX_TOOLCHAIN_VARIANT" = latest ] || echo "$QNX_TOOLCHAIN_VARIANT")"
       return 1
   fi
 

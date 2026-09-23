@@ -20,16 +20,80 @@ responsible for any damage, bricked units or warranty issues resulting from thei
 ## Gallery
 
 <p align="center">
-  <img src="assets/gallery/IMG_0082_39-45.gif" width="90%" />
+  <img src="assets/gallery/maneuver_demo.gif" width="90%" /><br />
+  <sub>Cluster maneuver renderer driven through a demo route</sub>
+</p>
+
+**Virtual Cockpit: CarPlay map on the cluster, route guidance beside it**
+
+<p align="center">
+  <img src="assets/gallery/vc_day_nav.jpeg" width="45%" />
+  <img src="assets/gallery/vc_night_nav.jpeg" width="45%" />
 </p>
 <p align="center">
-  <img src="assets/gallery/IMG_0623.jpeg" width="45%" />
-  <img src="assets/gallery/IMG_6299.jpeg" width="45%" />
+  <img src="assets/gallery/vc_full_map.jpeg" width="45%" />
+  <img src="assets/gallery/vc_lane_guidance.jpeg" width="45%" />
 </p>
+
+**Audi front PDC no longer hides CarPlay** · **Cover art on the cluster**
+
 <p align="center">
-  <img src="assets/gallery/IMG_6302.jpeg" width="45%" />
-  <img src="assets/gallery/IMG_0599.jpeg" width="45%" />
+  <img src="assets/gallery/pdc_over_carplay.jpeg" width="45%" />
+  <img src="assets/gallery/cover_art.jpeg" width="45%" />
 </p>
+
+**Head-up display**
+
+<p align="center">
+  <img src="assets/gallery/IMG_0623.jpeg" width="30%" />
+  <img src="assets/gallery/IMG_6302.jpeg" width="30%" />
+  <img src="assets/gallery/IMG_0599.jpeg" width="30%" />
+</p>
+
+## Features
+
+There is nothing to switch on: plug in the iPhone and CarPlay starts as usual; the cluster
+features below follow it automatically.
+
+- **CarPlay map in the Virtual Cockpit.** The phone streams its own map to the cluster (Apple's
+  second-screen "altScreen" stream). It shows while CarPlay is connected, even without an active
+  route. The **Audi View** button switches the cluster between its classic and large layouts as
+  with the stock navigation, and the **steering-wheel roller** zooms the cluster map. A short
+  animation fills the cluster until the first video frame arrives.
+- **Turn-by-turn on the cluster.** During CarPlay navigation the cluster shows a 3D maneuver
+  arrow beside the map. Its distance bar fills as the turn approaches and blinks just before it.
+  The cluster also shows lane arrows, distance to the turn, arrival time and remaining distance.
+  Needs an app that sends CarPlay route guidance: Apple Maps does, Waze does not
+  ([details](docs/cluster-and-rgi/THIRD_PARTY_NAV_APPS.md)).
+- **Route text in the Virtual Cockpit.** A text line under the map names the exit sign or the
+  next road (the current road when there is nothing else); long names scroll. Press **OK** (the
+  left steering-wheel roller) to switch it to arrival time and time left, and press again to go
+  back ([details](docs/cluster-and-rgi/RGI_AND_BAP_BRIDGE.md#-route-text-eta-and-the-mfw-ok-key)).
+- **Head-up display.** The same maneuver icons, lane arrows and distance appear on the HUD.
+- **Cover art on the cluster.** The now-playing album art shows on the cluster media screen.
+- **CarPlay calls on the cluster phone tab.** Instead of the stock "Your iPhone is in Apple
+  CarPlay mode" note, the Virtual Cockpit telephone tab works as with a Bluetooth phone: caller
+  name and number, call state and timer, accept / hang up (tab or steering wheel), hold, mute and
+  dialling, recents and favorites, the missed-call indication, signal and carrier. There is no
+  caller photo: iPhone does not send one to the car. *Implemented, not yet tested on the car*
+  ([details](docs/cluster-and-rgi/CARPLAY_TELEPHONY.md)).
+- **Parking popups no longer hide CarPlay.** When the Audi front PDC / parking view pops up,
+  CarPlay stays on screen beside it instead of being replaced.
+- **5.1 surround for CarPlay music (B&O).** The head unit feeds the external B&O amplifier six
+  channels instead of two, and the amplifier's own Virtual Cabin processing spreads them over the
+  cabin speakers ([details](docs/audio/README.md)).
+  - *Spatial input:* Spatial Audio / Dolby Atmos tracks from Apple Music arrive as real 5.1 in
+    Apple's APAC codec. The head unit decodes them and plays each channel on its own speaker
+    group, with no upmix.
+  - *Stereo input* (most music, and apps such as Spotify): a small model running on the head
+    unit (HSSR) upmixes it. Vocals and lead parts stay anchored in front, secondary parts and
+    room ambience move to the rear speakers with short delays for depth, and the subwoofer gets
+    its own bass feed. Calls and Siri stay plain stereo. It is cheap: measured on the unit
+    (2026-09-05 build), a 21 ms block of audio takes about 5 ms of one CPU core, so it runs roughly 4× faster than
+    real time and uses under a quarter of a core
+    ([measurements](docs/audio/UPMIX_COMPUTE_BUDGET.md#-measured-krait-wall-time)).
+  - Built for the B&O amplifier only. The startup script enables it unconditionally for now;
+    cars with the internal amplifier have no six-channel route and are untested.
 
 ## Documentation
 
@@ -76,7 +140,17 @@ The cleanup archive is under `/Users/luka/Desktop/AUDI_2/LocalLogs/`.
 
 ## Build
 
-Run from the repository root:
+Native code needs the QNX 6.5 ARMv7 cross-toolchain image from
+[luka-dev/qnx65-armv7-toolchain](https://github.com/luka-dev/qnx65-armv7-toolchain). Build it once:
+
+```sh
+git clone https://github.com/luka-dev/qnx65-armv7-toolchain
+cd qnx65-armv7-toolchain
+./host-scripts/qnx-run.sh build        # qnx65-armv7-toolchain:latest (GCC 8.5)
+./host-scripts/qnx-run.sh build 4.9    # optional: :4.9 (GCC 4.9.4)
+```
+
+Then run from this repository's root:
 
 ```sh
 ./scripts/build_java.sh
@@ -133,9 +207,12 @@ source-to-unit map, file modes and hashes are in
 - `custom.sh` copies every file under `SD:/mod/carplay/root/` to the same path under `/` on the
   unit, replaces the SI `carplay` child by path, widens the CarPlay rule in all four PF profiles
   and registers the iAP2 route-guidance and telephony message IDs in `dio_manager.json` (without
-  them no route guidance arrives, and the cluster phone tab has no lists, hold or mute). It keeps a `.carplay-stock` backup of everything it replaces or edits, and
-  never stops processes or reboots the HU. For a manual install of the message IDs, see the
-  [procedure](<docs/build-and-deploy/DEPLOY_AND_RELEASE.md#-route-guidance-message-ids-in-dio_managerjson>).
+  them no route guidance arrives, and the cluster phone tab has no lists, hold or mute). It keeps
+  a `.carplay-stock` backup of everything it replaces or edits, and never stops processes or
+  reboots the HU.
+- **Manual install** (no M.I.B., root shell over SSH): the same steps by hand, what to copy where
+  and what to change in each config file, in
+  [Manual install over SSH](<docs/build-and-deploy/DEPLOY_AND_RELEASE.md#-manual-install-over-ssh-without-mib>).
 - Uninstall: copy `uninstall_MoreIncredibleBash/` over the card and run it; it restores every
   `.carplay-stock` backup and deletes the owned files.
 - The runtime integration (renderer supervision, environment, spatial/upmix settings) lives in

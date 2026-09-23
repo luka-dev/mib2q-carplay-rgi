@@ -6,10 +6,13 @@
 
 ## 🔧 The toolchain
 
-Everything cross-compiles inside one Docker image family, `qnx65-armv7-toolchain`, built from `../../Tools/qnx-65-sdp-docker` (the path is relative to this repo; the scripts print it as `$PROJECT_DIR/../../Tools/qnx-65-sdp-docker`). No VM is needed. If the image is missing, the build stops and prints the command to build it:
+Everything cross-compiles inside one Docker image family, `qnx65-armv7-toolchain`, built from [luka-dev/qnx65-armv7-toolchain](https://github.com/luka-dev/qnx65-armv7-toolchain). No VM is needed. Build the image once; if it is missing, the build stops and prints the same command:
 
 ```bash
-docker build --platform=linux/amd64 -t qnx65-armv7-toolchain ../../Tools/qnx-65-sdp-docker
+git clone https://github.com/luka-dev/qnx65-armv7-toolchain
+cd qnx65-armv7-toolchain
+./host-scripts/qnx-run.sh build        # :8.5-full, also tagged :latest
+./host-scripts/qnx-run.sh build 4.9    # :4.9, only for QNX_TOOLCHAIN_VARIANT=4.9
 ```
 
 The tag picks the compiler:
@@ -143,7 +146,7 @@ At runtime, `maneuver_render`'s EGL needs `GRAPHICS_ROOT=/proc/boot`. The genera
 
 `apac_flags.sh` is the only definition of how the APAC decoder is compiled. The shipping build and the benchmark both source it, because a drifted copy would let the benchmark report headroom for a binary nobody ships. `-fno-threadsafe-statics` avoids `__cxa_guard_acquire`, which this libstdc++ configuration lacks. `-D_NO_CPP_INLINES` stops the QNX headers from pulling in C++ inline definitions (`apac_flags.sh:12-20`). The flags also include `-Wall -Wextra -Werror`. The host-side upmix bench compiles with `-ffp-contract=off` because the ARMv7 target has no FMA, and a host build that fused multiply-adds would not match the unit's arithmetic (`tools/stereo-upmix-render/bench/build_host.sh:9-11`).
 
-Provenance: `scripts/build_hook.sh`, `scripts/build_hook_common.sh`, `scripts/build_java.sh`, `scripts/build_renderers.sh`, `scripts/apac_flags.sh`, `scripts/run_tests.sh`, `../../Tools/qnx-65-sdp-docker/README.md`.
+Provenance: `scripts/build_hook.sh`, `scripts/build_hook_common.sh`, `scripts/build_java.sh`, `scripts/build_renderers.sh`, `scripts/apac_flags.sh`, `scripts/run_tests.sh`, [qnx65-armv7-toolchain README](https://github.com/luka-dev/qnx65-armv7-toolchain#readme).
 
 ## 🔍 Checking a build beyond the asserts
 
