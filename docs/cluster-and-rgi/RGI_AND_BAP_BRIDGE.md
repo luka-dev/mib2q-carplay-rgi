@@ -19,6 +19,9 @@ Concurrency: the blink worker (600 ms) only touches `blinkDistM`/`actionBlinkFul
 
 ## 📊 iAP2 to cluster
 
+> [!IMPORTANT]
+> Route guidance reaches the hook only if the unit's `dio_manager.json` lists the message IDs (`0x5200`/`0x5203` sent, `0x5201`/`0x5202`/`0x5204` received). The hook's Identify patch (component `0x001E`) makes iOS offer route guidance but does not register them; the M.I.B. installer does (`patch_dio` in `custom.sh`). Manual procedure and checks: [Deploy and Release](../build-and-deploy/DEPLOY_AND_RELEASE.md#-route-guidance-message-ids-in-dio_managerjson).
+
 ```mermaid
 sequenceDiagram
   accTitle: iAP2 RGI to cluster sequence
@@ -84,6 +87,40 @@ So `visible_in_app == 0` does not tear down RGI while route state, maneuver coun
 ## ⚠️ Transient `route_state = 0` and `maneuver_count = 0`
 
 iOS briefly sends `count = 0` at route start, and `route_state = 0` during setup and about every 30 s mid-route. These only reset count and order, and they never clear per-slot data. `[code]` (`RouteGuidance.java:911-935`, `:961-990`)
+
+### Hook side: the zero hold
+
+Java treats `route_state = 0` as final: it drops `wantActive` at once (`RouteGuidance.java:519`), which stops BAP guidance, leaves ctx 80 and clears the maneuver renderer. iOS Maps, however, uses the same 0 for two things: the real end of a route, and a reset frame during a reroute (`REROUTING (5) → 0 → new route data`). Passing every zero through would make the HUD and VC go dark and come back on each reroute and each stray mid-route zero. So the hook does not forward a zero straight away; it holds it until the zero proves itself. `[code]` (`hook/routeguidance/rgd_hook.c:15-33`, added in `a7a4144`, 2026-05-01)
+
+```mermaid
+stateDiagram-v2
+    accTitle: Hook hold on route_state 0
+    accDescr: While a route is active, a route_state 0 from iOS is held instead of forwarded to Java. Active-route evidence drops it with no teardown. A hard clear or disconnect forwards it at once, and after 800 ms without a reroute the 1 Hz tick forwards it as a real route end. A zero that follows a reroute has no timeout.
+
+    [*] --> active
+    active --> held: 0 from iOS
+    held --> active: route evidence, 0 dropped
+    held --> ended: 800 ms, not a reroute
+    held --> ended: hard clear
+    active --> ended: hard clear
+    ended --> active: new route
+```
+
+| Event while the zero is held | Effect | Where |
+|---|---|---|
+| Active-route evidence: `route_state > 0`, `maneuver_count > 0`, a non-empty maneuver list, distance to maneuver or remaining > 0, a destination or current road, any `0x5202` or `0x5204` | Hold cancelled; Java never sees the zero | `rgd_hook.c:173-183`, `:1422-1431`, `:1457`, `:1474` |
+| Hard clear: `route_state = 0` with `source_supports_rg = 0` | Zero forwarded at once | `:1382-1397` |
+| Disconnect (`rgd_clear_state`) | Zero forwarded at once, hold bookkeeping reset | `:1190-1205` |
+| No evidence for `ROUTE_ZERO_NORMAL_GRACE_MS` = 800 ms, and the zero did not follow a reroute | The 1 Hz bus tick (`rgd_periodic_tick`) sends a sticky `route_state=0, maneuver_count=0` | `:33`, `:1670-1716`; tick `hook/framework/bus.c:731-745` |
+| Zero after `REROUTING (5)` | Held with no deadline until evidence or a hard clear | `:1402-1418`, `:1681` |
+| Reset-only `0x5201` frames | Suppressed while the hold is pending | `:1432-1438` |
+
+Notes:
+
+- The 800 ms is checked on a 1 s tick, so a real route end reaches Java 0.8–1.8 s late. That is the whole cost of the hold.
+- The hook's own slot cache and maneuver map are flushed as soon as the zero arrives (`:1405-1411`); only the Java update is held. The next route's maneuvers therefore start from clean slots either way.
+- A zero while nothing is active (`emitted_route_state == 0`) passes straight through (`:1398-1400`).
+- This is why Java can afford to treat 0 as final: false zeros never reach it. Do not remove the hold or add a second debounce in Java.
 
 A full per-slot clear happens only on:
 

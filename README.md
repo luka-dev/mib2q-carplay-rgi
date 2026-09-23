@@ -100,6 +100,9 @@ into `install_MoreIncredibleBash/mod/carplay/root/` at their on-unit paths, then
 - `custom.sh` copies the `root/` tree onto the unit, replaces the SI `carplay` child by path and
   widens the CarPlay rule in all four PF profiles, keeping a `.carplay-stock` backup of everything
   it replaces. It never stops processes or reboots the HU.
+- `custom.sh` also registers the iAP2 route-guidance message IDs in `dio_manager.json` (stock
+  backup kept); without them no route guidance arrives. For a manual install, see the
+  [procedure](<docs/build-and-deploy/DEPLOY_AND_RELEASE.md#-route-guidance-message-ids-in-dio_managerjson>).
 - Uninstall: copy `uninstall_MoreIncredibleBash/` over the card and run it; it restores every
   `.carplay-stock` backup and deletes the owned files.
 - The runtime integration (renderer supervision, environment, spatial/upmix settings) lives in

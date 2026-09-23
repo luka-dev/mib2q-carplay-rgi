@@ -9,6 +9,7 @@
 #   - in-place runtime patches (per-unit / stock-dependent), done here:
 #       * smartphone_integrator.json  - replace the "carplay" child by path
 #       * pf profiles                 - widen the CarPlay TCP rule (MANDATORY)
+#       * dio_manager.json            - register the iAP2 route-guidance message IDs
 # No CRC gymnastics, no lock dir. Atomic renames. Upgrade-safe: a stock backup is
 # kept once so uninstall restores the original.
 # Copyright (c) 2026 LuKa (@LuKa_dev)
@@ -33,6 +34,7 @@ ACTION=${1:-install}
 
 CFG=/mnt/system/etc/eso/production/smartphone_integrator.json
 PROFILES="pf.conf pf.ecm0.conf pf.mlan0.conf pf.ppp0.conf"
+DIO=/mnt/system/etc/eso/production/dio_manager.json
 
 mode_for() {
     case $1 in
@@ -109,6 +111,45 @@ patch_pf() {
     [ "$seen" -gt 0 ] || echo "  WARN no pf profiles found"
 }
 
+# ---- dio_manager.json: register the route-guidance message IDs ----------------
+# The Cinemo iAP2 SDK passes only listed messages. The hook's Identify patch makes
+# iOS offer route guidance but does not touch these lists. The file carries "##"
+# comment lines, so it is edited as text: IDs are appended before the list's "]".
+add_ids() {   # $1 = line holding one list, rest = IDs; prints the new line
+    l=$1; shift
+    for id in "$@"; do
+        case $l in *"\"$id\""*) continue ;; esac
+        head=${l%%]*}; tail=${l#*]}
+        case $head in *'[') l=$head'"'$id'"]'$tail ;; *) l=$head', "'$id'"]'$tail ;; esac
+    done
+    printf '%s\n' "$l"
+}
+patch_dio() {
+    [ -f "$DIO" ] || { echo "  WARN no $DIO - route guidance will not arrive"; return 0; }
+    tmp=$DIO.carplay-new.$$; : > "$tmp" || { echo "FAILED create $tmp"; return 1; }
+    sent=0; recv=0; changed=0
+    while IFS= read -r line || [ -n "$line" ]; do
+        case $line in
+            *'##'*) new=$line ;;
+            *'"MessagesSentByAccessory":['*']'*)
+                sent=$((sent+1)); new=$(add_ids "$line" 0x5200 0x5203) ;;
+            *'"MessagesReceivedFromDevice":['*']'*)
+                recv=$((recv+1)); new=$(add_ids "$line" 0x5201 0x5202 0x5204) ;;
+            *) new=$line ;;
+        esac
+        [ "$new" = "$line" ] || { line=$new; changed=1; }
+        printf '%s\n' "$line" >> "$tmp"
+    done < "$DIO"
+    if [ "$sent" != 1 ] || [ "$recv" != 1 ]; then
+        echo "  WARN dio_manager.json: lists sent=$sent recv=$recv (expected 1/1); left as-is"; rm -f "$tmp"; return 1
+    fi
+    n=0; for id in 0x5200 0x5201 0x5202 0x5203 0x5204; do grep -q "\"$id\"" "$tmp" && n=$((n+1)); done
+    [ "$n" = 5 ] || { echo "  WARN dio_manager.json: only $n/5 IDs after edit; left as-is"; rm -f "$tmp"; return 1; }
+    if [ "$changed" = 0 ]; then echo "  dio_manager.json IDs already registered"; rm -f "$tmp"; return 0; fi
+    backup_once "$DIO" "$DIO.carplay-stock" || { rm -f "$tmp"; return 1; }
+    chmod 644 "$tmp"; mv -f "$tmp" "$DIO" && echo "  dio_manager.json route-guidance IDs registered"
+}
+
 echo "custom.sh: CarPlay $ACTION"
 echo "Remounting app and system read-write..."
 mount -uw /mnt/app    2>/dev/null || true
@@ -134,6 +175,7 @@ install)
     rm -f "$LIST"
     patch_json
     patch_pf
+    patch_dio
     sync
     echo "DONE (install). Reboot the HU to load."
     ;;
@@ -151,6 +193,7 @@ uninstall)
     rm -f "$LIST"
     # restore in-place patched configs
     [ -e "$CFG.carplay-stock" ] && mv -f "$CFG.carplay-stock" "$CFG"
+    [ -e "$DIO.carplay-stock" ] && mv -f "$DIO.carplay-stock" "$DIO"
     for profile in $PROFILES; do
         s=/mnt/system/etc/$profile
         [ -e "$s.carplay-stock" ] && mv -f "$s.carplay-stock" "$s"
