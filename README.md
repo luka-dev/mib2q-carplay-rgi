@@ -94,7 +94,17 @@ The cleanup archive is under `/Users/luka/Desktop/AUDI_2/LocalLogs/`.
 
 ## Build
 
-Run from the repository root:
+Native code needs the QNX 6.5 ARMv7 cross-toolchain image from
+[luka-dev/qnx65-armv7-toolchain](https://github.com/luka-dev/qnx65-armv7-toolchain). Build it once:
+
+```sh
+git clone https://github.com/luka-dev/qnx65-armv7-toolchain
+cd qnx65-armv7-toolchain
+./host-scripts/qnx-run.sh build        # qnx65-armv7-toolchain:latest (GCC 8.5)
+./host-scripts/qnx-run.sh build 4.9    # optional: :4.9 (GCC 4.9.4)
+```
+
+Then run from this repository's root:
 
 ```sh
 ./scripts/build_java.sh

@@ -60,7 +60,7 @@ The VIN is known before the build, so stamping happens inside the build:
 # constants = [ sentinel, your real coefficients... ]
 printf '\x5a\x66\x07' > consts.bin
 CC='qcc -Vgcc_ntoarmv7le' PROT_SECRET='<ci-secret>' ./build.sh WAUC4CF55JA099137 app consts.bin
-# (or the qnx-65-sdp-docker toolchain: arm-unknown-nto-qnx6.5.0eabi-gcc)
+# (or the qnx65-armv7-toolchain image: arm-unknown-nto-qnx6.5.0eabi-gcc)
 ```
 
 At load the app arms once, reading the **live VIN from the MMX store** and
@@ -90,7 +90,7 @@ attacker to edit both records. It does not turn the VIN into a trust anchor.
 ## QNX / armv7 validation
 
 Cross-compiled with the QNX 6.5 `armle-v7` toolchain
-(`Tools/qnx-65-sdp-docker`, GCC 8.5.0) and run on real QNX 6.5 under QEMU
+([qnx65-armv7-toolchain](https://github.com/luka-dev/qnx65-armv7-toolchain), GCC 8.5.0) and run on real QNX 6.5 under QEMU
 (`tests/qemu-run.sh`). The arch-sensitive core — SHA-256, HMAC-SHA256, CRC32,
 the sha256-CTR keystream, and the unblind roundtrip — is byte-identical to the
 host (`qnx_kat.c`, all known-answer vectors pass on armv7):

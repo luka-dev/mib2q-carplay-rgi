@@ -2,8 +2,8 @@
 # Build the QNX/ARMv7 renderers (maneuver and altscreen) in Docker.
 #
 # Replaces the old VM-SSH recipe (root@192.168.64.16 + stock ntoarmv7-gcc 4.4.2).
-# Now uses the self-contained image `qnx65-armv7-toolchain` (Tools/qnx-65-sdp-docker,
-# GCC 8.5). No VM required.
+# Now uses the self-contained image `qnx65-armv7-toolchain`
+# (https://github.com/luka-dev/qnx65-armv7-toolchain, GCC 8.5). No VM required.
 #
 #   ./scripts/build_renderers.sh            # build both renderers
 #   ./scripts/build_renderers.sh grid       # maneuver_render with -DCR_DEBUG_GRID
@@ -28,7 +28,7 @@ GRID=""
 
 if ! docker image inspect "$IMG" >/dev/null 2>&1; then
     echo "ERROR: docker image '$IMG' not found."
-    echo "Build it once:  docker build --platform=linux/amd64 -t $IMG $PROJECT_DIR/../../Tools/qnx-65-sdp-docker"
+    echo "Build it once from https://github.com/luka-dev/qnx65-armv7-toolchain :  ./host-scripts/qnx-run.sh build"
     exit 1
 fi
 
