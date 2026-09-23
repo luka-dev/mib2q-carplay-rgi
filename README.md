@@ -30,7 +30,8 @@ responsible for any damage, bricked units or warranty issues resulting from thei
   <img src="assets/gallery/vc_night_nav.jpeg" width="45%" />
 </p>
 <p align="center">
-  <img src="assets/gallery/vc_full_map.jpeg" width="90%" />
+  <img src="assets/gallery/vc_full_map.jpeg" width="45%" />
+  <img src="assets/gallery/vc_lane_guidance.jpeg" width="45%" />
 </p>
 
 **Audi front PDC no longer hides CarPlay** · **Cover art on the cluster**
