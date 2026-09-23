@@ -210,9 +210,9 @@ source-to-unit map, file modes and hashes are in
   them no route guidance arrives, and the cluster phone tab has no lists, hold or mute). It keeps
   a `.carplay-stock` backup of everything it replaces or edits, and never stops processes or
   reboots the HU.
-- **Manual install** (no M.I.B., root shell over SSH): the same steps by hand, what to copy where
-  and what to change in each config file, in
-  [Manual install over SSH](<docs/build-and-deploy/DEPLOY_AND_RELEASE.md#-manual-install-over-ssh-without-mib>).
+- **Manual install** (no M.I.B.; needs a root shell on the unit over SSH or Telnet): the same steps
+  by hand, what to copy where and what to change in each config file, in
+  [Manual install](<docs/build-and-deploy/DEPLOY_AND_RELEASE.md#-manual-install-without-mib>).
 - Uninstall: copy `uninstall_MoreIncredibleBash/` over the card and run it; it restores every
   `.carplay-stock` backup and deletes the owned files.
 - The runtime integration (renderer supervision, environment, spatial/upmix settings) lives in
