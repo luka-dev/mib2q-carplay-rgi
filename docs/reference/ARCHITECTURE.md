@@ -147,7 +147,7 @@ CarPlay has no pointer: the MMI touchpad moves CarPlay's focus. Rotary, knob pre
 
 **What ships (untested on the car).**
 
-- The hook's `main_disp_modernize` ORs 0x10 into the stock main display `features` and sets `primaryInputDevice = 2` (`hook/altscreen/altscreen_hook.c`). On a unit whose stock `features` already carry a touchscreen bit (0x04 / 0x08), `primaryInputDevice` stays 0 so iOS keeps touch as the primary input. It runs on the altScreen advert path, which production always takes. The INFO log line `main display: features 0x… -> 0x…` shows it went out.
+- The hook's `main_disp_modernize` ORs 0x10 into the stock main display `features` and sets `primaryInputDevice = 2` (`hook/altscreen/altscreen_hook.c`). MHI2Q has no touchscreen hardware, so the value is unconditional. It runs on the altScreen advert path, which production always takes. The INFO log line `main display: features 0x… -> 0x…` shows it went out.
 - `CarplayDSILifecycleController.updateTouchEvents` splits each batch by event, where stock routes the whole batch by element 0: touchscreen events on DSI input 1 with the screen offset removed, touchpad events on DSI input 0 with raw pad coordinates, each sorted left to right with its active-finger count. `dio_manager` turns input 0 into the trackpad report (`sendTouchScreenHIDReport` → `HIDSingleTrackPadFillReport`: tip plus the first finger's X/Y).
 - Open: whether the knob behaves the same in trackpad focus mode (the knob class differs only by the index-bar flag, so it should), and whether the default 4 cm gain feels right. If not, `HIDSingleTrackPadCreateDescriptor` can be interposed to add physical units.
 
