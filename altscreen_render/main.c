@@ -246,7 +246,7 @@ static void *decode_worker_main(void *unused) {
             uint64_t age = item->received_ms && now >= item->received_ms
                 ? now - item->received_ms : 0;
             if (age > ageMax) ageMax = age;
-            if (++frames <= 3 || frames % 600 == 0) {
+            if (++frames <= 3 || (frames % 600 == 0 && log_verbose_marker())) {
                 fprintf(stderr,
                         "altscreen_render: decode intake #%lu age=%llu ms max=%llu ms generation=%u\n",
                         frames, (unsigned long long)age, (unsigned long long)ageMax,
@@ -426,7 +426,7 @@ static void socket_pace_sample(void) {
         samples++;
     }
     last_ms = now;
-    if (++frames % 600 == 0) {
+    if (++frames % 600 == 0 && log_verbose_marker()) {
         fprintf(stderr,
                 "altscreen_render: %lu frames off the socket; arrival avg=%lu max=%lu ms\n",
                 frames,

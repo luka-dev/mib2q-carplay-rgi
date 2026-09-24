@@ -26,6 +26,7 @@
  * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 #include "sink.h"
+#include "log_stamp.h"
 
 #include "OMX_Core.h"
 #include "OMX_Component.h"
@@ -161,7 +162,7 @@ static OMX_ERRORTYPE _OnEmptyDone(OMX_HANDLETYPE c, OMX_PTR app, OMX_BUFFERHEADE
     for (i = 0; i < me->nInBufs; ++i)
         if (me->inBufs[i] == b) { me->freeIn[me->freeInTail % me->nInBufs] = i; me->freeInTail++; break; }
     me->inputReturned++;
-    if (me->inputReturned <= 3 || (me->inputReturned % 600) == 0)
+    if (me->inputReturned <= 3 || ((me->inputReturned % 600) == 0 && log_verbose_marker()))
         fprintf(stderr, "altscreen_render[qnx]: EmptyBufferDone #%lu header=%p matched=%s\n",
                 me->inputReturned, (void *)b, (i < me->nInBufs) ? "yes" : "NO");
     pthread_cond_broadcast(&me->cond);
@@ -300,7 +301,7 @@ static OMX_ERRORTYPE _OnFillDone(OMX_HANDLETYPE c, OMX_PTR app, OMX_BUFFERHEADER
             me->presentQueue[(me->presentHead + me->presentCount) % me->nOutBufs] = slot;
             ++me->presentCount;
             ++me->outputFilled;
-            if (me->outputFilled <= 3 || (me->outputFilled % 600) == 0)
+            if (me->outputFilled <= 3 || ((me->outputFilled % 600) == 0 && log_verbose_marker()))
                 fprintf(stderr, "altscreen_render[qnx]: FillBufferDone #%lu filled=%u queue=%u posted=%lu age=%llu ms\n",
                         me->outputFilled, (unsigned)b->nFilledLen, (unsigned)me->presentCount,
                         me->outputPosted, (unsigned long long)(pictureMs && nowMs >= pictureMs ? nowMs-pictureMs : 0));
@@ -786,7 +787,7 @@ static int _FeedInput(ScreenSink *me, const uint8_t *data, uint32_t len, OMX_U32
         if (received_ms > me->newestInputMs) me->newestInputMs = received_ms;
         pthread_mutex_unlock(&me->lock);
         me->inputSubmitted++;
-        if (me->inputSubmitted <= 3 || (me->inputSubmitted % 600) == 0)
+        if (me->inputSubmitted <= 3 || ((me->inputSubmitted % 600) == 0 && log_verbose_marker()))
             fprintf(stderr,
                     "altscreen_render[qnx]: EmptyThisBuffer OK #%lu requested=%u submitted=%u flags=0x%x in=%u\n",
                     me->inputSubmitted, (unsigned)requestedLen, (unsigned)len,

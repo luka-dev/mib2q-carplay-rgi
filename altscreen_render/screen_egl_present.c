@@ -22,6 +22,7 @@
  */
 #include "screen_egl_present.h"
 #include "pipeline_timing.h"
+#include "log_stamp.h"
 #include "loader/prism_baked.h"
 #include "loader/prism_waiting.h"
 #include "cluster_surface.h"
@@ -1040,7 +1041,7 @@ int screen_egl_present_frame(screen_egl_present_t *p,
         fprintf(stderr,
                 "altscreen_render[egl]: VISIBLE PATH OK: Qcom 32m -> EGLImage external sampler -> RGBA8888 swap (%dx%d src=%u)\n",
                 p->width, p->height, source_index);
-    } else if ((p->frames % 600) == 0) {
+    } else if ((p->frames % 600) == 0 && log_verbose_marker()) {
         unsigned long n = p->pace_samples, swaps = p->pace_swap_samples;
         fprintf(stderr,
                 "altscreen_render[egl]: %lu GPU RGBA frames swapped; "
@@ -1086,9 +1087,10 @@ out:
             if (work > p->pace_work_max_ns) p->pace_work_max_ns = work;
         }
         if (p->pace_work_samples == 600) {
-            fprintf(stderr, "altscreen_render[egl]: full present incl loader/lock/UV/GPU/swap/unbind avg=%llu us max=%llu us\n",
-                    (unsigned long long)(p->pace_work_sum_ns / p->pace_work_samples / 1000ULL),
-                    (unsigned long long)(p->pace_work_max_ns / 1000ULL));
+            if (log_verbose_marker())
+                fprintf(stderr, "altscreen_render[egl]: full present incl loader/lock/UV/GPU/swap/unbind avg=%llu us max=%llu us\n",
+                        (unsigned long long)(p->pace_work_sum_ns / p->pace_work_samples / 1000ULL),
+                        (unsigned long long)(p->pace_work_max_ns / 1000ULL));
             p->pace_work_sum_ns = p->pace_work_max_ns = p->pace_work_samples = 0;
         }
     }
