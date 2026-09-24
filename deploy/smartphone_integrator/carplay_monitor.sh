@@ -107,15 +107,16 @@ monitor_main()
 {
     trap 'exit 0' 1 2 15
 
-    # Let carplay_startup.sh complete its immediate exec before any pidin or EGL
-    # work competes with dio_manager's ten-second SI startup budget.
-    sleep 1
+    # No settle sleeps: the renderers are separate processes and never gate dio.
+    # SI's 10 s budget ends at the phone's control SETUP, which waits on USB/NCM/
+    # mDNS, not CPU; the renderers must instead be ready before Java selects the
+    # cluster context, so they start at once (GL programs load from the
+    # persistent binary cache after the first boot).
     monitor_current || exit 0
     echo "[monitor] generation=$DIO_PID active" >> "$WLOG"
 
     cp_seed_renderer_pid_files
     start_renderer altscreen_render initial
-    sleep 1
     start_renderer maneuver_render initial
 
     MON_TICKS=0

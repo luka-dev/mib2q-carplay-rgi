@@ -188,7 +188,7 @@ SI starts the 10,000 ms `startupTimeout` clock when it spawns the child `exec` â
 
 The 2026-09 wrapper had front-loaded costs: `cp_usb_consume_pending_reset` (`sleep 1` on the latched path), a full `pidin ar`, two `netstat -an` probes, a 1 s kill grace for a wedged renderer and a fixed `sleep 1` EGL settle â€” ~1 s floor, ~3-4 s worst case.
 
-**[code]** All of that is gone. `carplay_startup.sh` now does only file checks, an atomic owner-file publish, a monitor fork and `exec dio_manager` (`deploy/smartphone_integrator/carplay_startup.sh:21-95`). The monitor first sleeps 1 s "so exec wins scheduling", then adopts or starts the renderers (`deploy/smartphone_integrator/carplay_monitor.sh:110-118`). The pending-USB-reset consumer no longer exists in any script.
+**[code]** All of that is gone. `carplay_startup.sh` now does only file checks, an atomic owner-file publish, a monitor fork and `exec dio_manager` (`deploy/smartphone_integrator/carplay_startup.sh:21-95`). The monitor then adopts or starts both renderers at once; its two settle `sleep 1`s were removed on 2026-09-24, because the renderers never gate dio and the budget ends at the phone's control SETUP, which waits on USB/NCM/mDNS rather than CPU (`deploy/smartphone_integrator/carplay_monitor.sh`). If a cold boot ever shows `TIMEOUT_STARTUP` in `[CSIStateRunning]`, CPU contention from renderer EGL init is the first suspect. The pending-USB-reset consumer no longer exists in any script.
 
 Sources: `SI_STACK_RESTART_RE`, `NCM_AND_FIREWALL_IDEAL_START`
 
