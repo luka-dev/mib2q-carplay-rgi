@@ -138,9 +138,31 @@ public final class CarplayBusTransportTest {
         check(oldCalls[0] == 0, "preempted old frame dispatched");
     }
 
+    /* Cold boot: the hook's sticky state arrives before GatedPhoneService listens. */
+    private static void lateListenerGetsSticky() throws Exception {
+        final CarplayBus bus = new CarplayBus(0);
+        Socket s = new Socket();
+        set(bus, "running", Boolean.TRUE); set(bus, "lifecycleGeneration", Integer.valueOf(1)); set(bus, "sock", s);
+        Class[] t = {Integer.TYPE, Socket.class, Integer.TYPE, Integer.TYPE, byte[].class, Integer.TYPE};
+        call(bus, "dispatch", t, new Object[] {Integer.valueOf(1), s, Integer.valueOf(CarplayBus.EVT_TEL_LISTS),
+            Integer.valueOf(CarplayBus.FLAG_STICKY), new byte[] {5}, Integer.valueOf(1)});
+        call(bus, "dispatch", t, new Object[] {Integer.valueOf(1), s, Integer.valueOf(CarplayBus.EVT_TEL_COMM),
+            Integer.valueOf(0), new byte[] {6}, Integer.valueOf(1)});
+        final int[] got = {-1, -1};
+        bus.on(CarplayBus.EVT_TEL_LISTS, new CarplayBus.Listener() {
+            public void onFrame(int type, int flags, byte[] bytes, int len) { got[0] = bytes[0]; }
+        });
+        bus.on(CarplayBus.EVT_TEL_COMM, new CarplayBus.Listener() {
+            public void onFrame(int type, int flags, byte[] bytes, int len) { got[1] = bytes[0]; }
+        });
+        check(got[0] == 5, "late listener missed the held sticky frame");
+        check(got[1] == -1, "non-sticky frame must not be held");
+        s.close();
+    }
+
     public static void main(String[] args) throws Exception {
         Log.setLevel(-1);
-        malformedLists(); realWireAndRestart(); delayedOldRead();
-        System.out.println("CarplayBusTransportTest: malformed lists, 30 restarts, fragmented wire, stale bind/read and outbound bounds PASS");
+        malformedLists(); realWireAndRestart(); delayedOldRead(); lateListenerGetsSticky();
+        System.out.println("CarplayBusTransportTest: malformed lists, 30 restarts, fragmented wire, stale bind/read, outbound bounds and late sticky listener PASS");
     }
 }

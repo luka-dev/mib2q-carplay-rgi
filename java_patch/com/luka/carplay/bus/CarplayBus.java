@@ -75,6 +75,11 @@ public final class CarplayBus {
      * or holding the connection lock while calling a module. */
     private final Object dispatchLock = new Object();
     private final Listener[] listeners = new Listener[MAX_TYPES];
+    /* Last sticky frame of a type nobody listened to yet: the hook replays its sticky
+     * state once per connection, and on a connected-phone cold boot that can come
+     * before a late listener registers (GatedPhoneService wraps the stock phone
+     * service long after the bus is up), so on() hands it over.  [flags, payload]. */
+    private final Object[][] unheard = new Object[MAX_TYPES][];
     private static final int WRITE_QUEUE_CAPACITY = 32;
 
     private volatile boolean running = false;
@@ -146,7 +151,14 @@ public final class CarplayBus {
     /* ---- listeners ---- */
     public void on(int type, Listener l) {
         if (type < 0 || type >= MAX_TYPES) return;
-        synchronized (lock) { listeners[type] = l; }
+        synchronized (dispatchLock) {             /* ordered against live frames */
+            Object[] held;
+            synchronized (lock) { listeners[type] = l; held = unheard[type]; unheard[type] = null; }
+            if (held == null || l == null) return;
+            byte[] payload = (byte[]) held[1];
+            try { l.onFrame(type, ((Integer) held[0]).intValue(), payload, payload.length); }
+            catch (Throwable t) { Log.w(TAG, "listener 0x" + Integer.toHexString(type) + " threw: " + t); }
+        }
     }
     public void off(int type) {
         if (type < 0 || type >= MAX_TYPES) return;
@@ -466,6 +478,8 @@ public final class CarplayBus {
                 if (!isCurrentRun(lifecycle) || sock != owned) return false;
                 if (type < 0 || type >= MAX_TYPES) return true;
                 l = listeners[type];
+                if (l == null && (flags & FLAG_STICKY) != 0)
+                    unheard[type] = new Object[] { new Integer(flags), payload };
             }
             if (l != null) {
                 try { l.onFrame(type, flags, payload, len); }
