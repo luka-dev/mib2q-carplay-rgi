@@ -49,7 +49,7 @@ flowchart TB
 | [AltScreen RE History](ALTSCREEN_RE_HISTORY.md) | Every altScreen framing, gate theory, plan and verdict in order — what held and what was refuted. |
 | [Cluster Video Encoder](CLUSTER_VIDEO_ENCODER.md) | DisplayManager, `videoencoderservice` and stock KOMO: how a cluster context becomes the VC's H.264. |
 | [Cover Art Pipeline](COVER_ART_PIPELINE.md) | Stock MH2P cover-art design vs our MHI2Q hook, and the size-only Setup regression. |
-| [CarPlay Video Playback](CARPLAY_VIDEO_PLAYBACK.md) | iOS 27 "Video in Car" (stream 130, URL playback) and why it is not enabled here. |
+| [CarPlay Video Playback](CARPLAY_VIDEO_PLAYBACK.md) | iOS 27 "Video in Car" (stream 130, URL playback). **Not planned:** only a partial build is possible (clear H.264); DRM needs Apple's receiver FairPlay module, and camera clips are HEVC. |
 | [CarPlay Feature Survey](CARPLAY_FEATURE_SURVEY.md) | Stock baseline, features we added, tiered list of addable ones, the LOD widgets / Live Activities chain. |
 | [Partial 360 Camera Preflight](PARTIAL_360_CAMERA_PREFLIGHT.md) | Deferred: CarPlay beside the top-view camera — contexts, crops, camera ownership, coordinator design. |
 

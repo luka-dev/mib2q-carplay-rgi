@@ -26,7 +26,7 @@ The capability names are phone-side flags from carkitd/accessoryd 23G71 (iOS 26.
 | 3 | Electronic toll collection | `supportsElectronicTollCollection` | |
 | 3 | Dolby Atmos / spatial audio | `supportsDolbyAtmos`, `supportsSpatialAudio` | See the Audio domain |
 | 3 | DND while driving | `SupportsDNDWhileDriving` | Phone-side, gated by a car flag; cheap if the advert place is found |
-| 3 | In-car video playback | `supportsVideoPlayback` | Needs a stream-130 receiver; see [CarPlay Video Playback](CARPLAY_VIDEO_PLAYBACK.md) |
+| 3 | In-car video playback | `supportsVideoPlayback` | Not planned: partial only (clear H.264 via stock Cinemo); DRM needs Apple's FairPlay receiver module, no HEVC decoder; see [CarPlay Video Playback](CARPLAY_VIDEO_PLAYBACK.md) |
 | – | Wireless CarPlay | `supportsWirelessCarPlay` | Out of scope: needs BT + Wi-Fi pairing; this unit is wired USB |
 | – | Car Keys | `supportsCarKeys` | Out of scope: UWB/NFC |
 | – | High-fidelity touch on the cluster | `supportsHighFidelityTouch` | The cluster has no touch panel and advertises no `primaryInputDevice` |
