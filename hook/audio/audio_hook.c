@@ -1037,6 +1037,7 @@ static int spa_write_plist_path(const void *object, const char *path)
     int fd, err;
     FILE *file;
 
+    if (!log_verbose()) { (void)object; (void)path; return 1; }   /* captures need carplay_verbose */
     if (!object || !cfa_plwrite) {
         LOG_ERROR(LOG_MODULE, "probe103: cannot dump %s — CFPropertyListWriteToANSIFile unavailable",
                   path ? path : "plist");
@@ -3037,7 +3038,7 @@ static int spa103_render_frame(const uint8_t *packet, size_t length,
          * but delete it when done and do not ship a build that writes it. */
         static FILE *es;
         static size_t esBytes;
-        if (audio && audioLength && esBytes < SPA_103_ES_DUMP_LIMIT) {
+        if (log_verbose() && audio && audioLength && esBytes < SPA_103_ES_DUMP_LIMIT) {
             if (!es) {
                 es = fopen(SPA_103_ES_DUMP_PATH, "wb");
                 if (es) setvbuf(es, 0, _IOFBF, 32768);
@@ -6785,6 +6786,7 @@ static int spa103_store_magic_cookie(int64_t id, uint8_t *bytes, size_t size)
         slot->size = size;
         stored = 1;
 #if ENABLE_AUDIO_DIAGNOSTICS
+        if (log_verbose()) {
         snprintf(path, sizeof(path), "/tmp/spatial_magiccookie_%u_%016llx.bin",
                  (unsigned)sequence, (unsigned long long)(uint64_t)id);
         captureFd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0600);
@@ -6798,6 +6800,7 @@ static int spa103_store_magic_cookie(int64_t id, uint8_t *bytes, size_t size)
         } else {
             LOG_ERROR(LOG_MODULE, "buffer103: cannot capture magic cookie path=%s errno=%d",
                       path, errno);
+        }
         }
 #endif
     }
@@ -7744,7 +7747,8 @@ static void *spa103_thread_main(void *opaque)
     const int listenSock = arg->listenSock;
     const int isControl = arg->isControl;
     const char *transport = isControl ? "RTCP" : "APAP";
-    const size_t captureLimit = ENABLE_AUDIO_DIAGNOSTICS ?
+    const int diagnostics = ENABLE_AUDIO_DIAGNOSTICS && log_verbose();
+    const size_t captureLimit = diagnostics ?
         (isControl ? SPA_103_CONTROL_CAPTURE_LIMIT : SPA_103_CAPTURE_LIMIT) : 0;
     uint8_t buffer[16384];
     uint8_t prefix[32];
@@ -7831,7 +7835,7 @@ static void *spa103_thread_main(void *opaque)
             LOG_WARN(LOG_MODULE, "buffer103: failed to set client socket non-blocking errno=%d",
                      errno);
     }
-    if (ENABLE_AUDIO_DIAGNOSTICS) {
+    if (diagnostics) {
         snprintf(path, sizeof(path), isControl ? "/tmp/spatial_rtcp_%u.bin"
                                                : "/tmp/spatial_apap_%u.bin",
                  (unsigned)sequence);
@@ -7957,7 +7961,7 @@ static void *spa103_thread_main(void *opaque)
         if (n > 0) {
             size_t keep;
             total += (uint64_t)n;
-            if (ENABLE_AUDIO_DIAGNOSTICS &&
+            if (diagnostics &&
                 !prefixLogged && prefixSize < sizeof(prefix)) {
                 size_t copy = sizeof(prefix) - prefixSize;
                 if (copy > (size_t)n) copy = (size_t)n;
@@ -8795,6 +8799,7 @@ HOOK_EXPORT int AirPlayReceiverSessionControl(void *session, uint32_t flags, con
             snprintf(commandText, sizeof(commandText), "<non-string:%p>", command);
 
 #if ENABLE_AUDIO_DIAGNOSTICS
+        if (log_verbose()) {
         sequence = __sync_add_and_fetch(&controlSequence, 1);
         tracing = 1;
         LOG_WARN(LOG_MODULE,
@@ -8809,6 +8814,7 @@ HOOK_EXPORT int AirPlayReceiverSessionControl(void *session, uint32_t flags, con
             snprintf(path, sizeof(path), "/tmp/spatial_controlcmd_%u_params.bplist",
                      (unsigned)sequence);
             spa_write_plist_path(params, path);
+        }
         }
 #endif
     }

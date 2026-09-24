@@ -192,10 +192,9 @@ static bool log_start_writer_locked(void) {
 static void log_apply_defaults_locked(void) {
     log_config_t def = LOG_CONFIG_DEFAULT;
     g_log.config = def;
-    if (access("/mnt/app/carplay_verbose", F_OK) == 0
-            || access("/tmp/carplay_verbose", F_OK) == 0) {
-        g_log.config.min_level = LOG_LEVEL_INFO;
-    }
+#if ENABLE_LOGGING
+    if (log_verbose()) g_log.config.min_level = LOG_LEVEL_INFO;
+#endif
 }
 
 hook_result_t log_init(const log_config_t* config) {
@@ -409,6 +408,14 @@ void log_write(log_level_t level, const char* module, const char* fmt, ...) {
 }
 
 #if ENABLE_LOGGING
+
+bool log_verbose(void) {
+    static volatile int verbose = -1;       /* benign race: every caller stores the same value */
+    if (verbose < 0)
+        verbose = access("/mnt/app/carplay_verbose", F_OK) == 0
+               || access("/tmp/carplay_verbose", F_OK) == 0;
+    return verbose != 0;
+}
 
 void log_hexdump(log_level_t level, const char* module, const char* prefix,
                  const uint8_t* data, size_t len, size_t max_bytes) {

@@ -146,6 +146,12 @@ static inline void log_hexdump(log_level_t level, const char* module, const char
 #define LOG_HEXDUMP_FULL(module, prefix, data, len) \
     log_hexdump(LOG_LEVEL_DEBUG, module, prefix, data, len, 0)
 
+/* True when /mnt/app/carplay_verbose or /tmp/carplay_verbose existed at the first call
+ * (checked once per process, i.e. per dio_manager session).  It lifts the log to INFO and
+ * turns on every runtime diagnostic: audio captures in /tmp, probe103 traces, stream-111
+ * pace reports.  Without it a LOG=1 build logs WARN/ERROR only and writes no captures. */
+bool log_verbose(void);
+
 /* Dump binary data to file (for debugging) */
 hook_result_t log_dump_file(const char* path, const uint8_t* data, size_t len);
 
@@ -155,6 +161,7 @@ hook_result_t log_dump_file_once(const char* path, const uint8_t* data, size_t l
 #else /* ENABLE_LOGGING == 0 */
 
 /* No-op versions when logging is disabled */
+static inline bool log_verbose(void) { return false; }
 #define LOG_DEBUG(module, fmt, ...)      ((void)0)
 #define LOG_INFO(module, fmt, ...)       ((void)0)
 #define LOG_WARN(module, fmt, ...)       ((void)0)
