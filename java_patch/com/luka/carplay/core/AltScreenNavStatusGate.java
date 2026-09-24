@@ -7,8 +7,6 @@
  */
 package com.luka.carplay.core;
 
-import de.audi.app.combi.bap.app.navi.InitializationManagerNavi;
-
 import com.luka.carplay.framework.Log;
 import com.luka.carplay.rgd.GatedCombiService;
 
@@ -131,16 +129,8 @@ public final class AltScreenNavStatusGate {
 
     /** Presentation ownership follows connected || videoAvailable, independently of
      * CarPlay route guidance.  A cold-boot stock map must not hold plane 99 behind
-     * NAVSD INITIALIZING: the stock init manager sends it for several inputs (Navi app
-     * not started, BAP init sequence, download, appIsReady), so it is clamped to NORMAL
-     * in the patched InitializationManagerNavi.  That call re-enters the stock BAP
-     * init manager and runs outside this class's lock. */
-    public static boolean setAltScreenActive(boolean active) {
-        InitializationManagerNavi.setCarPlayClusterOwner(active);
-        return applyAltScreenActive(active);
-    }
-
-    private static synchronized boolean applyAltScreenActive(boolean active) {
+     * NAVSD INITIALIZING. */
+    public static synchronized boolean setAltScreenActive(boolean active) {
         boolean changed = desiredAltScreenActive != active;
         desiredAltScreenActive = active;
         if (gate == null || changed || appliedAltScreenActive != active) scheduleInstallLocked();

@@ -1,6 +1,6 @@
 # Nav Initializing Screen
 
-*Why the Virtual Cockpit still shows "Initialising navigation system. Please wait..." over the CarPlay cluster map, what really drives it on both sides, why the September 16 fix (`7d35b53`) does not stop it, and the fix that should. Status: **fix implemented 2026-09-23, not yet tested on the car** (the owner reported that day that the text still appears with `7d35b53`). The analysis is static, of the VC `hmi_app.elf` (A5 2018, `AU491_0379`) and the HU stock Java (`Tools/jxe2jar/out/MU1316-vf/`).*
+*Why the Virtual Cockpit still shows "Initialising navigation system. Please wait..." over the CarPlay cluster map, what really drives it on both sides, why the September 16 fix (`7d35b53`) does not stop it, and the fix that should. Status: **open, no fix shipped.** A clamp in a patched `InitializationManagerNavi` was built on 2026-09-23 (`b4a661a`), did not remove the screen on the car, and was removed on 2026-09-24; the analysis and the decisions stay here for the next attempt. The analysis is static, of the VC `hmi_app.elf` (A5 2018, `AU491_0379`) and the HU stock Java (`Tools/jxe2jar/out/MU1316-vf/`).*
 
 ---
 
@@ -13,7 +13,7 @@
 | What is *not* the cause | NavSD **InfoStates** (FctID 38). It drives a separate hint-text popup and the "navigation on mobile device" screen (which the KSS firmware makes unreachable on this VC), not this text. |
 | Why the HU sends INITIALIZING | `AbstractBAPModuleInitializationManagerFSG.getGeneralOperationState()` returns INITIALIZING when the "Navi" app has not started (`appState == 0`), when the BAP init sequence is still running (`initState < 9`), during a software download, when `appIsReady` is false, or when the BAP stack is down. |
 | Why `7d35b53` fails | It only intercepts `showInitializingScreen()` / `hideInitializingScreen()`, which toggle `appIsReady`. The other four inputs still send INITIALIZING, from a manager that runs before and beside our wrapper. |
-| Fix (implemented) | A patched `InitializationManagerNavi.setFSGOperationStateValue()` sends INITIALIZING as NORMAL while CarPlay owns the cluster. InfoStates hint values are left alone for now. |
+| Fix | None shipped. The OP_State clamp (`b4a661a`) was tried and removed on 2026-09-24; see "The tried fix (removed)" below. |
 
 ## 🖥️ The VC side
 
@@ -47,6 +47,7 @@ stateDiagram-v2
 
 - `166 NavFpk` → `183 NA` when DP `0x200006A` (the NavSD OP_State mirror) ∈ {1, 3, 15} or DP `0x2000073` == 2, else `167 Operable` (`sub_2286B4`). On a non-FPK cluster, `162 LVDS_Nav_Generic` is used instead (DP `0x6400DE3`).
 - `167 Operable` picks `180 Compass` (DP `0x400004B` != 0), `181 Compass_MobileDevice` (DP `0x400000F` == 6, i.e. InfoStates 6), `182 HinweisTexte` (DP `0x4000044` != 0), else `168 Normal` (`sub_22871C` / `sub_22879C`).
+- **How NA is left again.** The event-1 transitions with flag `0x4` are initial-child choices, evaluated only on entry; 183 itself has no transitions. A datapool watcher (table filled in `sub_222158`) fires event **354** whenever DP `0x200006A` (OP_State), `0x2000073` or `0x200052D` changes, and `153 Nav` handles 354 as an external self-transition. So every OP_State change re-enters 153 → 166 and re-runs the NA/Operable choice: OP 3 → 0 leaves the NA screen, and the FctID 15 handler also calls `VC_TryShowKDKFlap` for OP 0. Sending NORMAL is enough on the VC side. `[decompile]`
 - Only `168 Normal` → `169 NavMap_FPK` → `177 SV_LVDS_NavMap_FPK` shows the HU's LVDS map, which is where the CarPlay plane appears. **Any of NA, compass, mobile-device or hint screens takes the CarPlay map away.**
 
 ### The handlers
@@ -124,11 +125,18 @@ flowchart LR
 
 **On this VC, InfoStates 4 and 6 never reach the state chart.** The KSS AUTOSAR firmware validates the value before EB GUIDE sees it (`sub_108F42C`: `a1 <= 0xF && (a1 & 5) != 4 && (a1 & 0xA) != 8`), which rejects 4, 6, 8, 9, 12 and 13, so `181 Compass_MobileDevice` is unreachable ([VC FPK State Machine](VC_FPK_STATE_MACHINE.md#-infostates-6-is-rejected-by-kss)). Of the stock values, only 1, 2 (hint popups) and 5 (splash) can show anything. `[decompile]`
 
-## 🛠️ The fix
+## 🛠️ The tried fix (removed)
 
-**Implemented** in `java_patch/de/audi/app/combi/bap/app/navi/InitializationManagerNavi.java` (patched stock class) and `AltScreenNavStatusGate.setAltScreenActive()`, which calls `InitializationManagerNavi.setCarPlayClusterOwner()` outside its own lock before the existing takeover logic. The clamp applies only while the BAP stack is up and only to INITIALIZING; OFF and DEFECT pass through. While clamped, stock `isOpStateNormalOperation()` also reads NORMAL, which is harmless while CarPlay owns the cluster. Covered indirectly by `AltScreenStartupTest` (cold/warm/stop) in `scripts/test_java_transports.sh`; the clamp itself has no unit test because the stock init manager needs the BAP framework. `[code]`
+**Tried, then removed (2026-09-24).** On the car the owner still saw the screen, and CarPlay came up late or on the second attempt in that drive. No logs were taken (the unit was offline). Static findings behind the removal decision:
 
-1. **Clamp OP_State in `InitializationManagerNavi` (main fix, done).** Ship a patched `de/audi/app/combi/bap/app/navi/InitializationManagerNavi.java` (the tree already patches classes under `de/audi/app/combi`):
+- **The VC side is sufficient.** OP 3 → 0 re-enters `153 Nav` through event 354 and leaves NA (see the state tree above), so NORMAL is enough to bring the CarPlay map back.
+- **The HU override is loaded.** `lsd.sh` puts `lsd/jars/*.jar` on `-Xbootclasspath` before `lsd.jxe`, the same path the other patched combi classes use; `setFSGOperationStateValue` is the only OP_State writer.
+- **The clamp cannot cover the window the owner sees.** Ownership is `connected || videoAvailable`. `connected` is set in `AltScreenModule.start()` (first `CarPlayApp.onActivate`); `videoAvailable` comes from `altscreen_render` (`decode_video_ready()`: stream 111 attached, decoder alive, OMX presented a frame → `VIDEO_ON` on :19832) and is accepted only after `connected` or inside the 1.5 s `acceptVideoFallback` grace after `stop()`. So from cold boot until the CarPlay session activates, nothing can clamp, and the VC shows the stock NA screen for that whole time; a slow or retried CarPlay start makes it long.
+- **Decision:** remove the clamp rather than ship an untested extra patched stock class for the part it can cover. A future fix needs an earlier, trustworthy "CarPlay will own the cluster" signal (for example a CarPlay device attached at boot), and it must not hide a real stock-navigation initialisation when no phone comes.
+
+What the removed patch did: `java_patch/de/audi/app/combi/bap/app/navi/InitializationManagerNavi.java` (patched stock class) and `AltScreenNavStatusGate.setAltScreenActive()`, which calls `InitializationManagerNavi.setCarPlayClusterOwner()` outside its own lock before the existing takeover logic. The clamp applies only while the BAP stack is up and only to INITIALIZING; OFF and DEFECT pass through. While clamped, stock `isOpStateNormalOperation()` also reads NORMAL, which is harmless while CarPlay owns the cluster. Covered indirectly by `AltScreenStartupTest` (cold/warm/stop) in `scripts/test_java_transports.sh`; the clamp itself has no unit test because the stock init manager needs the BAP framework. `[code]`
+
+1. **Clamp OP_State in `InitializationManagerNavi` (tried in `b4a661a`, removed).** Ship a patched `de/audi/app/combi/bap/app/navi/InitializationManagerNavi.java` (the tree already patches classes under `de/audi/app/combi`):
    - keep a static reference to the instance in the constructor;
    - add a static `setCarPlayClusterOwner(boolean)` that stores the flag and calls `instance.updateOperationState()` (public, synchronized, safe from any thread);
    - in `setFSGOperationStateValue(int i)`: when the flag is set, `getBapStackState() != 0` and `i == 2` (INITIALIZING), use 0 (NORMAL); optionally treat 3 (DEFECT) the same;
@@ -137,13 +145,13 @@ flowchart LR
    No cache is needed: on release, `updateOperationState()` recomputes the real value from `appState`, `initState` and `appIsReady`, and because it changes back to 2 it is resent. The VC keeps the KDK map window open, since OP 0 calls `VC_TryShowKDKFlap`. Risk (guess): the VC sees NORMAL while the HU init sequence still runs; the sequence finishes on its own, so this looks harmless.
 2. **Optional: neutralise InfoStates in `GatedCombiService`.** While CarPlay owns the cluster, cache the last value and forward 0 for anything that would draw over the map; replay the cached value on release. 6 and 4 are already dropped by the KSS validator on this VC, and 5 is diagnostic only, so this matters only for 1/2 (no data medium, database corrupted), which put a hint popup over the CarPlay map.
 3. **Optional:** gate `routeGuidanceActDeactResult` while CarPlay route guidance is active, so stock route-guidance results cannot pop hints (for example "Route guidance is already active").
-4. The `7d35b53` show/hide deferral stays as a second layer until (1) is proven on the car.
+4. The `7d35b53` show/hide deferral stays in the tree (covers `appIsReady` only).
 
 ## ✅ How to confirm on the car
 
 - **HU log:** `updateOperationState ... (swdlRunning=?, appState=?)` followed by `updateOperationStateBAP ... is 2 (INITIALIZING)` at the moment the text appears. `appState=0` → the cold-boot cause; `initState < 9` → the init sequence.
 - **VC trace:** `FSG_OperationState: new OP_State=03` / `NavSD_FSG_OperationState_OP_State: 03` at the same moment.
-- After the fix: cold boot with CarPlay connected shows the CarPlay cluster map with no NA screen; disconnecting CarPlay during a stock navigation start shows the stock "Initialising" screen again until navigation is ready; stock navigation without CarPlay behaves as before.
+- For any future fix: cold boot with CarPlay connected shows the CarPlay cluster map with no NA screen; disconnecting CarPlay during a stock navigation start shows the stock "Initialising" screen again until navigation is ready; stock navigation without CarPlay behaves as before.
 
 ## 🔗 Related
 

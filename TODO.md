@@ -32,8 +32,9 @@ map (2026-09-23), so the September 16 deferral (`7d35b53`) does not work. Static
 is the VC Nav NA screen, selected by NavSD FSG_OperationState OP 3 (INITIALIZING). The HU sends it
 not only from `showInitializingScreen` (`appIsReady`, the only input the deferral touches) but also
 while the "Navi" app has not started, during the BAP init sequence, a software download or a BAP
-stack drop. Fix implemented 2026-09-23, **not yet tested on the car**: a patched
-`InitializationManagerNavi` sends INITIALIZING as NORMAL while CarPlay owns the cluster.
+stack drop. A clamp in a patched `InitializationManagerNavi` (`b4a661a`) did not help on the car
+and was removed 2026-09-24: it can only act after CarPlay activates, and the screen shows from cold
+boot until then. Open: needs an earlier "CarPlay will own the cluster" signal.
 Check: cold boot with CarPlay shows the CarPlay cluster map and no NA screen; without CarPlay stock
 navigation still shows its own "Initialising" screen. [Details](docs/cluster-and-rgi/NAV_INITIALIZING_SCREEN.md).
 
