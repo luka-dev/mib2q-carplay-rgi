@@ -34,7 +34,7 @@ SI="$PROJECT_DIR/deploy/smartphone_integrator"
 rm -rf "$OUT" "$OUT.zip"
 mkdir -p "$HOOKS" "$ROOT/mnt/app/eso/hmi/lsd/jars" "$ROOT/mnt/app/eso/bin/apps" "$ROOT/mnt/app/armle/lib/dll"
 
-cp "$PROJECT_DIR/install_MoreIncredibleBash/mod/custom.sh" "$MOD/"
+cp "$PROJECT_DIR/install_MoreIncredibleBash/mod/custom.sh" "$PROJECT_DIR/install_MoreIncredibleBash/mod/command.sh" "$MOD/"
 cp "$SI/carplay_child.json" "$MOD/carplay/"
 
 cp "$IN/libcarplay_hook.so" "$HOOKS/"
@@ -55,7 +55,7 @@ cp "$PROJECT_DIR/deploy/deva-ctrl-qc/deva-ctrl-qc.so.patched" "$ROOT/mnt/app/arm
 
 # custom.sh sets the on-unit modes; make the card copy match anyway.
 find "$ROOT" -type f -exec chmod 644 {} +
-chmod 755 "$MOD/custom.sh" "$HOOKS"/*.so "$HOOKS"/*_render "$HOOKS"/*.sh \
+chmod 755 "$MOD/custom.sh" "$MOD/command.sh" "$HOOKS"/*.so "$HOOKS"/*_render "$HOOKS"/*.sh \
   "$ROOT/mnt/app/eso/bin/apps/smartphone_integrator" "$ROOT/mnt/app/armle/lib/dll/deva-ctrl-qc.so"
 
 ( cd "$OUT" && COPYFILE_DISABLE=1 zip -qrX "$OUT.zip" install_MoreIncredibleBash )

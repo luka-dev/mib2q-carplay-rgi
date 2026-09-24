@@ -97,7 +97,8 @@ Copy the contents of `install_MoreIncredibleBash/` over the root of the M.I.B. S
 
 ```text
 SD1/
-  mod/custom.sh
+  mod/custom.sh                           the installer
+  mod/command.sh                          forwarder for older M.I.B. releases (via "Run individual script")
   mod/carplay/carplay_child.json          from deploy/smartphone_integrator/
   mod/carplay/root/mnt/app/root/hooks/     .so, renderers, models, atlas, carplay_*.sh
   mod/carplay/root/mnt/app/eso/hmi/lsd/jars/carplay_hook.jar
@@ -105,7 +106,16 @@ SD1/
   mod/carplay/root/mnt/app/armle/lib/dll/deva-ctrl-qc.so
 ```
 
-To install, run **GEM → M.I.B. → Advanced Settings → Run Custom Script** (`mod/custom.sh`) with CarPlay disconnected. If it is started on the RCC it hands itself to the MMX (`:25-28`). It then:
+To install, run the M.I.B. custom-script entry with CarPlay disconnected. Its name depends on the M.I.B. build:
+
+| M.I.B. build | GEM entry | Runs |
+|---|---|---|
+| Release zips, tags up to **V3.7.1** | **Advanced Settings → Run individual script** ("Place command.sh with script in /mod/ folder in M.I.B SD root") | `/mod/command.sh` via `esd/scripts/individual.sh` |
+| `main` since `e531867` (2024-07-05, "More clear naming") | **Advanced Settings → Run Custom Script** ("Run /mod/custom.sh from m.i.b. SD") | `/mod/custom.sh` via `esd/scripts/custom.sh` |
+
+Until 2026-09-24 the package shipped only `custom.sh`, so on a release-zip M.I.B. the entry printed "Nothing to do!" and nothing was installed. The package now also ships `mod/command.sh`, a three-line forwarder to `custom.sh` (a symlink is impossible: the SD card is FAT). The M.I.B. launcher also sources `/mod/command.sh` while it installs M.I.B. itself (`apps/launcher:114-117`); `$0` is then the launcher, so the forwarder does nothing. Both packages (install and uninstall) carry it.
+
+The script is `mod/custom.sh`. If it is started on the RCC it hands itself to the MMX (`:25-28`). It then:
 
 1. remounts `/mnt/app` and `/mnt/system` read-write;
 2. copies each file under `root/` onto `/` through an atomic rename;

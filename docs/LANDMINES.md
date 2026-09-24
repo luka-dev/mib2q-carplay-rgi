@@ -120,6 +120,8 @@ Domain: [Deploy and Release](build-and-deploy/DEPLOY_AND_RELEASE.md).
 
 **Deploying `carplay_hook.jar` = a full unit reboot (j9 `-Xbootclasspath`).** The jar does nothing until the JVM restarts, and killing j9 is a critical-process death → whole-system restart (~50 s, SSH drops). Contrast the C hook: only dio_manager needs a new generation (per-fork, invisible). The build writes `build/carplay_hook.jar` (`scripts/build_java.sh:29`); on-unit path `/mnt/app/eso/hmi/lsd/jars/carplay_hook.jar` after `mount -uw /mnt/app`. · measured 2026-08-22 · `memory/java_jar_deploy_reboots_unit.md`.
 
+**The M.I.B. script entry runs `command.sh` on release builds and `custom.sh` on `main`.** Release zips up to V3.7.1 show "Run individual script" and run `/mod/command.sh`; M.I.B. `main` since `e531867` (2024-07-05) shows "Run Custom Script" and runs `/mod/custom.sh`. Shipping only `custom.sh` made the release entry print "Nothing to do!". The package ships both; `command.sh` forwards to `custom.sh` (no symlink: the card is FAT) and does nothing when the M.I.B. launcher sources it. · 2026-09-24 · [Deploy and Release](build-and-deploy/DEPLOY_AND_RELEASE.md#-the-mib-sd-install).
+
 **SSH to the head unit has no scp/tar/cksum on the far side — read back to verify.**
 
 1. No remote `scp` / `tar` / `sha256sum`; push via `ssh "cat > f.new" < local` + chmod + mv + sync; verify by read-back + local `cmp`.
