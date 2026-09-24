@@ -78,7 +78,8 @@ public final class CarplayBus {
     /* Last sticky frame of a type nobody listened to yet: the hook replays its sticky
      * state once per connection, and on a connected-phone cold boot that can come
      * before a late listener registers (GatedPhoneService wraps the stock phone
-     * service long after the bus is up), so on() hands it over.  [flags, payload]. */
+     * service long after the bus is up), so on() hands it over.  [flags, payload].
+     * Valid only for the connection it came on (a new hook = a new session). */
     private final Object[][] unheard = new Object[MAX_TYPES][];
     private static final int WRITE_QUEUE_CAPACITY = 32;
 
@@ -149,16 +150,30 @@ public final class CarplayBus {
     }
 
     /* ---- listeners ---- */
-    public void on(int type, Listener l) {
+    public void on(final int type, final Listener l) {
         if (type < 0 || type >= MAX_TYPES) return;
-        synchronized (dispatchLock) {             /* ordered against live frames */
-            Object[] held;
-            synchronized (lock) { listeners[type] = l; held = unheard[type]; unheard[type] = null; }
-            if (held == null || l == null) return;
-            byte[] payload = (byte[]) held[1];
-            try { l.onFrame(type, ((Integer) held[0]).intValue(), payload, payload.length); }
-            catch (Throwable t) { Log.w(TAG, "listener 0x" + Integer.toHexString(type) + " threw: " + t); }
-        }
+        final Object[] held;
+        synchronized (lock) { listeners[type] = l; held = l != null ? unheard[type] : null; }
+        if (held == null) return;
+        /* Deliver on our own thread under dispatchLock: callers register while holding
+         * their own monitor (CoverArt.start), which a listener running on the reader
+         * thread may need, so on() itself must never wait for dispatchLock.  A live
+         * frame of this type dispatched first clears unheard[type] and wins. */
+        Thread t = new Thread(new Runnable() {
+            public void run() {
+                synchronized (dispatchLock) {
+                    synchronized (lock) {
+                        if (unheard[type] != held || listeners[type] != l) return;
+                        unheard[type] = null;
+                    }
+                    byte[] payload = (byte[]) held[1];
+                    try { l.onFrame(type, ((Integer) held[0]).intValue(), payload, payload.length); }
+                    catch (Throwable e) { Log.w(TAG, "listener 0x" + Integer.toHexString(type) + " threw: " + e); }
+                }
+            }
+        }, "carplay-bus-late-" + Integer.toHexString(type));
+        t.setDaemon(true);
+        t.start();
     }
     public void off(int type) {
         if (type < 0 || type >= MAX_TYPES) return;
@@ -478,7 +493,8 @@ public final class CarplayBus {
                 if (!isCurrentRun(lifecycle) || sock != owned) return false;
                 if (type < 0 || type >= MAX_TYPES) return true;
                 l = listeners[type];
-                if (l == null && (flags & FLAG_STICKY) != 0)
+                if (l != null) unheard[type] = null;                   /* newer than a held one */
+                else if ((flags & FLAG_STICKY) != 0)
                     unheard[type] = new Object[] { new Integer(flags), payload };
             }
             if (l != null) {
@@ -492,6 +508,7 @@ public final class CarplayBus {
     /* caller holds lock */
     private void closeConnectionLocked(String why) {
         if (sock != null) Log.i(TAG, "closing connection (" + why + ")");
+        for (int i = 0; i < MAX_TYPES; i++) unheard[i] = null;   /* that hook's state is gone */
         if (in   != null) { try { in.close();   } catch (IOException e) {} in = null; }
         if (out  != null) { try { out.close();  } catch (IOException e) {} out = null; }
         if (sock != null) { try { sock.close(); } catch (IOException e) {} sock = null; }
