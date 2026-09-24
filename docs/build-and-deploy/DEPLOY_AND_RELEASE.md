@@ -118,7 +118,7 @@ Until 2026-09-24 the package shipped only `custom.sh`, so on a release-zip M.I.B
 The script is `mod/custom.sh`. If it is started on the RCC it hands itself to the MMX (`:25-28`). It then:
 
 1. remounts `/mnt/app` and `/mnt/system` read-write;
-2. copies each file under `root/` onto `/` through an atomic rename;
+2. copies each file under `root/` onto `/` through an atomic rename, skipping the macOS junk a Mac-written card carries (`._name` AppleDouble files and `.DS_Store`) and deleting any copy an older install put on the unit (a `._carplay_hook.jar` in `lsd/jars` would land on j9's bootclasspath);
 3. patches `smartphone_integrator.json` by replacing the `"carplay"` child;
 4. widens the PF profiles;
 5. registers the route-guidance and telephony message IDs in `dio_manager.json`;
@@ -145,7 +145,37 @@ On a car with the LTE modem the live profile is `pf.ecm0.conf`, not `pf.conf`.
 
 To uninstall, copy `uninstall_MoreIncredibleBash/` over the card instead. That script needs no payload tree or marker. It renames every `*.carplay-stock` it finds under `/mnt/app` and `/mnt/system` back to the original, which covers the firmware, the SI JSON, the PF profiles and `dio_manager.json`. It then deletes the files on its fixed owned list (`uninstall_MoreIncredibleBash/mod/custom.sh:23-54`). The list includes `hssr_guard.bin` (`:27`); the "[open] missing from the list" remark in `DEPLOYMENT.md` and `PROTECTOR.md` is superseded. `custom.sh uninstall` from the install folder (`install_MoreIncredibleBash/mod/custom.sh:188-209`) is a second path when the payload tree is present. Both READMEs that described the old generated uninstaller (`.orig` restore, `package_mib.py`) are gone or stale; the scripts are authoritative. **[code]**
 
-To collect logs from a car, copy `logging_MoreIncredibleBash/` over the card and run it the same way. Each run makes `<card>/carplay_logs/NNN/` (numbered, since the unit clock is often wrong; `info.txt` records the clock and whether verbose was on). It holds the `/tmp` logs and captures (`*.log*`, `carplay_*`, `spatial_*`, `*.pid`, never the shared-memory objects that also live in `/tmp`), `sloginfo` of MMX and RCC, `pidin`, mounts, network, the live PF rules, our hook and jar listing, the configs we patch and our processes' cores from `/mnt/ota/system/core`. It remounts a read-only card writable and finally creates `/tmp/carplay_verbose`. So: run once, reconnect the phone and use CarPlay, run again to save the verbose session. The marker is in RAM and goes away on reboot; the Java log only reads it at j9 start. Checked by `scripts/test_logging_mib.sh`. **[code]**
+### Collecting logs
+
+Copy `logging_MoreIncredibleBash/` over the card and run it through the same M.I.B. entry. It deletes nothing on the unit or the card. **[code]**
+
+```mermaid
+flowchart LR
+  accTitle: Two-run log collection with verbose
+  accDescr: The first run saves the current logs into the next numbered folder and creates the verbose marker. After a phone reconnect and a CarPlay session, the second run saves the verbose session into the following folder.
+
+  run_1["💾 Run 1: save NNN"] --> marker["/tmp/carplay_verbose created"]
+  marker --> reconnect["📱 Reconnect phone, use CarPlay"]
+  reconnect --> run_2["💾 Run 2: save NNN+1 with verbose logs"]
+
+  classDef primary fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
+  classDef success fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
+  class run_1,run_2 success
+  class marker,reconnect primary
+```
+
+- **Where:** `<card>/carplay_logs/NNN/`, where `NNN` is the highest existing number + 1, so a deleted older folder is never reused. The unit clock is often wrong, so `info.txt` records what it said and whether verbose was already on. A read-only card is remounted writable (`mount -uw`, trying `sda0`, `sdb0`, `usb0_0`).
+- **What:**
+
+| In the folder | Content |
+|---|---|
+| `tmp/` | `/tmp/*.log*`, `carplay_*`, `spatial_*`, `*.pid`; never the shared-memory objects that also live in `/tmp` |
+| `config/` | `dio_manager.json`, `smartphone_integrator.json`, `pf.conf`, `pf.ecm0.conf` |
+| `core/` | cores of `dio_manager`, both renderers and `smartphone_integrator` from `/mnt/ota/system/core` |
+| `*.txt` | `sloginfo` of MMX and RCC, `pidin ar` / `info`, `mount`, `df`, `ifconfig`, `netstat -rn`, `pfctl -sr`, the hook and jar listing, every `*.carplay-stock`, the `/tmp` and core listings |
+
+- **Verbose:** the run ends by creating `/tmp/carplay_verbose` ([what it switches on](BUILD_SYSTEM.md)). The hook reads it at the next phone connect and `altscreen_render` at its next report; the Java log only at j9 start, and `/tmp` is empty after a reboot. The marker is in RAM, so a reboot turns verbose off again.
+- **Check:** `scripts/test_logging_mib.sh` runs it on a fake card under every shell found (ksh93, mksh from the pdksh line like QNX 6.5 `/bin/sh`, dash, sh).
 
 ## 🔧 Manual install (without M.I.B.)
 

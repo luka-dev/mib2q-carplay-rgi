@@ -15,8 +15,9 @@ The owner narrowed the port to **RGI + cover art**; AltScreen was dropped from s
 | RGI enable | runtime Identify patch + msg IDs in `dio_manager.json` | `[ident] recvmsgs/sendmsgs` in `/etc/mm/iap2.cfg`, no binary patch | trivial config edit |
 | RGI capture | `LD_PRELOAD` interpose of Cinemo `NmeIAP2Message::Decode` | **binary detour** of `link_handle_iap2pkt@0x12e00` in `ipod-drvr-iap2.so` | the main C work |
 | Cover art | chunked-JPEG reassembly from the raw stream | `LD_PRELOAD` into `dio_manager` that calls `iap2_nowplay_getartwork` | simpler |
-| AltScreen | shipping today via hook interposition (the study called it impossible) | not studied | dropped from scope |
+| AltScreen | shipping today via hook interposition (the study called it impossible) | hook seams port with re-derived offsets; `altscreen_render` needs OpenKODE + NvMedia ([audit](#-whole-product-audit-2026-09-24)) | rewrite of the renderer |
 | Java | built against MU1316 | cover-art class identical; `ClusterService` rebuild vs new `Util` signatures | small |
+| Cluster planes | QNX Screen window, `SCREEN_PROPERTY_ID_STRING` = displayable id | OpenKODE client window, caption = displayable id; same DM contexts and Java API | window layer only |
 
 Platform facts shared by both: ARM32 QNX 6.5 (EABI5, `ldqnx.so.2`), so the hook toolchain and the no-`__thread` rule carry over ([Build System](../build-and-deploy/BUILD_SYSTEM.md), [Landmines](../LANDMINES.md)). The two `libairplay.so` builds differ in size (MHI2Q 763,420 B), so every libairplay offset must be re-derived. MHI2Q lives in partition `MMX2QC`, MHI2 in `MMX2`. **[decompile]**
 
@@ -194,6 +195,140 @@ Also disproven: `swdlclient` is not the LZO decompressor. It links only zlib, us
 
 Sources: `lzoz README`, `mhi2_mu1439_lzoz_format`
 
+## 🖥️ Cluster planes on the Tegra3 displaymanager
+
+MU1439 has no QNX Screen and no OMX. Its `displaymanager` (`ifs/eso/bin/apps/displaymanager` in the stage2 imagefs, 583,837 B, image base `0x100000`, framework `5.41.10.SR5 MIB2CLU6`) comes from the same eso `displaymanager_2` source tree as MHI2Q's. It exposes the same DSI API (`switchContext`, `setCropping`, `setOpacity`, `createImageDisplayable`, `requestUpdateImageDisplayable`), and `DisplayManagerMIB2High` in the MHI2 jar builds the same contexts. So `dc[80] = {98, 101, 102, 99}`, the 101/102 backings and `ClusterLayerController` carry over. Only the renderer's window layer changes. `komoviewstyle.conf` is identical to MU1316 (FPK 210×153 / 328×181), and navigation still draws the stock KDK (displayable 20). Everything in this section was read offline in IDA and **not tested on an MHI2 unit**. **[decompile]**
+
+### Getting a plane: an OpenKODE client window
+
+Stock recipe, `libdisplayinit.so` `display_create_window@0x136c` (also used by the sample app `eso/bin/apps/loadandshowimage`):
+
+```c
+KDWindow *w = kdCreateWindow(egl_dpy, egl_cfg, NULL);
+char cap[16]; sprintf(cap, "%d", 98);                       /* caption = displayable id */
+kdSetWindowPropertycv(w, KD_WINDOWPROPERTY_CAPTION /*0x45*/, cap);
+KDint sz[2] = {328, 181};
+kdSetWindowPropertyiv(w, KD_WINDOWPROPERTY_SIZE /*0x42*/, sz);
+EGLNativeWindowType nw; kdRealizeWindow(w, &nw);
+EGLSurface s = eglCreateWindowSurface(egl_dpy, egl_cfg, nw, NULL);  /* then GLES2 + eglSwapBuffers */
+```
+
+The DM accepts the window with `kdAcceptClientWindowNV` (`sub_15EE64`). The caption handler `sub_15E588` reads the caption, `atoi()`s it and stores the result as the window's id. It checks it against nothing: not the config, not a list of registered ids, not duplicates. After that it only marks the displays dirty (`sub_109F5C`). The window is drawn when the active context lists that id. **[decompile]**
+
+```mermaid
+flowchart LR
+  accTitle: Client window id binding in MU1439 displaymanager
+  accDescr: A client KD window with a numeric caption is accepted, parsed with atoi and stored as its displayable id with no further checks. The config is consulted only for filtering, and the window is composed when the active context lists the id.
+
+  client_win["🖼️ KD window, caption 98"]
+  accept["⚙️ kdAcceptClientWindowNV"]
+  caption["🔢 sub_15E588: atoi"]
+  reject["❌ ignored: -1 or over 64 chars"]
+  store["📌 id stored, no config or duplicate check"]
+  filter_cfg["🔍 filtering lookup, the only config use"]
+  ctx["🗂️ active context lists the id"]
+  composed["✅ composed on the cluster"]
+
+  client_win --> accept --> caption
+  caption -->|"-1 or too long"| reject
+  caption -->|"any other value"| store
+  store --> filter_cfg
+  store --> ctx --> composed
+
+  classDef primary fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
+  classDef neutral fill:#f3f4f6,stroke:#6b7280,stroke-width:2px,color:#1f2937
+  classDef danger fill:#fee2e2,stroke:#dc2626,stroke-width:2px,color:#7f1d1d
+  classDef success fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
+  class client_win primary
+  class accept,caption,store,filter_cfg,ctx neutral
+  class reject danger
+  class composed success
+```
+
+| Caption | Result |
+|---|---|
+| any non-zero integer, e.g. `"98"` | stored as the window's displayable id |
+| `"0"` or non-numeric | logs `CAPTION evaluated to 0`, yet still stores id 0 |
+| `"-1"` | ignored |
+| longer than 64 characters | rejected (`CAPTION string seems too long`) |
+
+There is no duplicate check, so two windows with the same id are undefined behaviour. 98 appears in no stock context. `displaymanager.json` `displayables` entries carry only annotation and filtering, so a custom id needs no config entry, the same as on MHI2Q. The MU1439 copy of `displaymanager.json` was not found in efs-sys, eifs, stage1 or stage2. **[open]**
+
+A zero-native fallback is the DSI Image displayable: `createImageDisplayable(id, ResourceLocator(png))`, then `requestUpdateImageDisplayable` per maneuver. This is how the stock 987 backings 101/102 exist. It only accepts `DT_BACKGROUND` (bitmap) ids, re-decodes a PNG on every update, and bitmaps lose alpha. It is fine for a prototype but too slow for an animated distance bar. **[decompile]**
+
+### Alpha: premultiplied, blended in shaders
+
+- The DM never enables `GL_BLEND` and does not import `glBlendFunc`. The only `glEnable` calls are for scissor (`sub_135DF0`, `sub_175C44`) and texture (`sub_1775BC`).
+- Composition runs through precompiled shaders (`glShaderBinary`, no GLSL in the binary). The materials are `premultiplied_alpha` and `blend_premult_alpha` (`sub_12F338`, `sub_1372DC`) with a `uOpacity` uniform and `source` / `target` inputs. The composite so far is copied into `target` by `glCopyTexImage2D` (`sub_1358D4`).
+- The layout's `transparent` flag (`sub_132380`, vtable +48 = `0x10A3F8`) is **not** alpha. It is 1 only for a KD *stream* (type 1) with no buffers. For a window (type 0) it always returns 0.
+
+Per-pixel alpha very likely works and is premultiplied, but the exact formula sits in the shader binaries. **[decompile]** Renderer consequences: `EGL_ALPHA_SIZE = 8`, clear to `(0,0,0,0)`, write `rgb * a`. Straight alpha would leave bright fringes. MHI2Q's source-over overlay proves nothing here, because QNX Screen is a different compositor. On-unit check: a 50 % alpha square over the map in ctx 80. If the map shows through, alpha works; if it sits on black, keep painting the background into the frame. **[open]**
+
+### Filtering
+
+`sub_10AC28` takes the global `client_filtering` first (`GL_LINEAR` only when it is linear, otherwise `GL_NEAREST`). A per-displayable `filtering` entry then overrides it. A 1:1 `setCropping` (source size = target size, e.g. 210×153 → 210×153) does not scale, so nearest sampling does no harm. Keep the crop exact. **[decompile]**
+
+Sources: IDA of MU1439 `displaymanager` and `libdisplayinit.so`, `mhi2_mu1439_port_analysis`
+
+## 🧭 Whole-product audit (2026-09-24)
+
+The sections above cover RGI and cover art only. This static audit, with no car, checked every layer the product ships today against MU1439. The short answer: the AirPlay seams, the bus, the TLV and route state, the upmix DSP and the Java logic port; everything tied to Qualcomm or Cinemo does not. **[decompile]**
+
+```mermaid
+flowchart LR
+  accTitle: MHI2Q vs MHI2 platform stacks
+  accDescr: On MHI2Q the product rides QNX Screen, Qualcomm OMX, Cinemo iAP2 and QSA audio. On MHI2 MU1439 those are OpenKODE with displaymanager, NvMedia or libnvss_video, the Apple iAP2 stack in mm-ipod and libnvaudio. Only libairplay 210.81 and the TCP bus are shared.
+
+  subgraph q_stack ["MHI2Q MU1316 (Qualcomm)"]
+    q_win["QNX Screen + Adreno EGL"]
+    q_vid["OMX.qcom decoder"]
+    q_iap["Cinemo iAP2 in dio_manager"]
+    q_aud["QSA snd_pcm + deva-ctrl-qc"]
+  end
+  subgraph n_stack ["MHI2 MU1439 (Tegra3)"]
+    n_win["OpenKODE libKD + displaymanager"]
+    n_vid["NvMedia / libnvss_video"]
+    n_iap["Apple iAP2 in mm-ipod"]
+    n_aud["libnvaudio + deva-nvaudio"]
+  end
+  shared["libairplay 210.81 + TCP bus"]
+
+  q_win -.->|"rewrite"| n_win
+  q_vid -.->|"rewrite"| n_vid
+  q_iap -.->|"redesign"| n_iap
+  q_aud -.->|"redesign"| n_aud
+  shared --- q_stack
+  shared --- n_stack
+
+  classDef neutral fill:#f3f4f6,stroke:#6b7280,stroke-width:2px,color:#1f2937
+  classDef warning fill:#fef9c3,stroke:#ca8a04,stroke-width:2px,color:#713f12
+  classDef success fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
+  class q_win,q_vid,q_iap,q_aud neutral
+  class n_win,n_vid,n_iap,n_aud warning
+  class shared success
+```
+
+| Layer | MU1439 finding | Verdict |
+|---|---|---|
+| AirPlay seams (`/info`, SETUP, TearDown, SendCommand, CopyProperty) | all exported by MU1439 `libairplay.so` (also 210.81), reached through the PLT, no `DT_SYMBOLIC` | ports |
+| altScreen hook offsets (`altscreen_hook.c:916-919`) | re-derived from `AirPlayReceiverSessionSetup` (MU1439 `0x22fe0`): table below | offsets only |
+| iAP2 (RGI, telephony, cover art, Identify) | no Cinemo; the Apple stack runs in `mm-ipod` (`ipod-drvr-iap2.so`, `DT_SYMBOLIC`); telephony `0x415B–0x415D` / `0x4170` absent from the driver; enable via `[ident]` in `/etc/mm/iap2.cfg`, send via `iap2_raw_msg_send` (framing unverified) | redesign |
+| Audio type 103 | no `snd_pcm_*` import; seams become `CAudioDriverIF::*` / `nvaudio_pcm_*`; no `deva-ctrl-qc`; no AAC decoder (Cinemo gone); 6 channels on nvaudio TDM unverified. APAC and the HSSR DSP port | redesign |
+| `altscreen_render` / `maneuver_render` | no QNX Screen and no OMX: windows are OpenKODE (`kdCreateWindow`, caption = displayable id) composited by `displaymanager`; video is NvMedia or `libnvss_video` (what stock dio uses); no `GL_OES_get_program_binary` (the cache disables itself); PRISM `highp` needs a `GL_FRAGMENT_PRECISION_HIGH` guard; the VC may get the cluster over LVDS or H.264-over-MOST (unverified) | window and decoder rewrite |
+| Java (`carplay_hook.jar`) | 102 compile errors against the MU1439 jar: its terminalmode line is older. Re-derive `CarplayDSILifecycleController`, `ExternalEventsListener`, `HighPriorityResourceTracker`, `PartialPopupManagerEvoHigh` (constructors are injected by type, so they must match); small fixes in `ClusterService`, `CombiMapController` (`logKDKG24`), `DisplayManagerMIB2High` (`dc[34]`), `StatusBarStubController`, `ParkingPartialPopupHandler`, `GatedCombiService` (`updateManeuverDescriptorAndExitView`); `DSICarplay.requestUI2` (the `tel:` dial) does not exist | re-derive four classes |
+| Install (`custom.sh`) | `smartphone_integrator`, `lsd.sh` jars dir, the four PF profiles and the mounts match; `deva-ctrl-qc.so` is missing (the backup step aborts the install), `smartphone_integrator` is a different build, the SI child has `decoderUse:true` and `skipDeviceTest`, `dio_manager.json` has no Cinemo ID lists, `/mnt/persist` is 8 MB NOR | make train-conditional |
+
+| altScreen offset | MU1316 | MU1439 | Evidence (MU1439) |
+|---|---|---|---|
+| `OFF_SERVER` | 12 | 12 | `ldr r3,[r6,#12]` @ `0x23394` |
+| `OFF_FAMILY` | 85 | 81 | peer address at `+80`, `ldrb r0,[r6,#81]` @ `0x2335c` |
+| `OFF_AESKEY` | 456 | 448 | `add r1,r6,#448` → key argument of `Derive…ForScreen` @ `0x23310` |
+| `SVR_OFF_QOSDISABLED` | 452 | 196 | `ldrb r3,[r3,#196]` @ `0x23398` |
+
+Suggested order if the port is picked up: install branching and the Java rebuild, then the AirPlay seams and cover art, then RGI (`ipod-drvr-iap2.so` patch plus `iap2.cfg`), then the renderers on OpenKODE/NvMedia, and audio last, after one live check that nvaudio can carry 6 channels. A first SSH session on a real MHI2 (`pidin ar`, `/etc/mm/iap2.cfg`, `/etc/eso/production/*.json`, LVDS or MOST for the cluster) settles most of the open items. The MU1439 jar used for the Java check was rebuilt by carving `lsd.jxe` at `0x878000` from `extracted/mifs-stage2.full.imagefs` and running `jxe2jar`; it is not kept in `Tools/jxe2jar/out/`.
+
+---
+
 ## 🔗 Where the artifacts live
 
 All outside this repo, under `/Users/luka/Desktop/AUDI_2/`:
@@ -208,6 +343,8 @@ All outside this repo, under `/Users/luka/Desktop/AUDI_2/`:
 | `ipod-drvr-iap2.so` (≈740 KB, 180 dynamic symbols) | `extracted/app70/armle/lib/dll/` |
 | `dio_manager`, `libairplay.so`, `swdlclient` | `extracted/app70/eso/bin/apps/`, `extracted/app70/eso/lib/` |
 | `libiap2client.so.1` | `extracted/app70/armle/usr/lib/` |
+| `displaymanager` (stage2 IFS) | not saved: run `dumpifs_macos -x -z` on `mifs-stage2.full.imagefs`, with the directory tree pre-created, to get `eso/bin/apps/displaymanager` |
+| `libdisplayinit.so`, `loadandshowimage` | `extracted/app70/eso/lib/`, `extracted/app70/eso/bin/apps/` |
 | Converted jars | `Tools/jxe2jar/out/`: `MU1316-lsd.jar` (compile baseline), `MU1326-lsd.jar`, `MU1339-lsd.jar`, `MU1340-lsd.jar`, `MU1439-lsd.jar`; `MU1326-lsd-vf/` = 30,998 decompiled files |
 | Sibling proxies | `Firmwares/MU1367-MHI2_ER_VWG13_K4525/` (VW MHI2, no LZOZ; has `start_usb_device_stack.sh` and an `iap2.cfg` template), `Firmwares/MU1326-MHI2_ER_AU37x_…` |
 | Tools | `Tools/jxe2jar/src/jxe2jar.py`, `Tools/dumpifs-linux/dumpifs_macos`, `Tools/cfr.jar`; QNX SDP 6.5 VM via `qnx_ssh.sh` (credentials not recorded here) |

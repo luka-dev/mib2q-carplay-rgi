@@ -116,6 +116,8 @@ Domain: [Build System](build-and-deploy/BUILD_SYSTEM.md).
 
 Domain: [Deploy and Release](build-and-deploy/DEPLOY_AND_RELEASE.md).
 
+**A Mac-written M.I.B. card carries `._name` AppleDouble files next to every payload file.** The installer used to copy them onto the unit, back up `._deva-ctrl-qc.so` as a stock file, and a `._carplay_hook.jar` in `lsd/jars` lands on j9's bootclasspath. `custom.sh` now skips `._*` and `.DS_Store` and deletes copies an older install left. · tester report 2026-09-24 · [Deploy and Release](build-and-deploy/DEPLOY_AND_RELEASE.md#-the-mib-sd-install).
+
 **NEVER reboot / kill j9 / restart the unit yourself — ask every single time.** The user is usually in the car; killing j9 blacks the screen ~50 s. Approval to deploy is not approval to reboot, and approval once is not approval next time. · standing directive · `memory/feedback_never_reboot_unit.md`.
 
 **Deploying `carplay_hook.jar` = a full unit reboot (j9 `-Xbootclasspath`).** The jar does nothing until the JVM restarts, and killing j9 is a critical-process death → whole-system restart (~50 s, SSH drops). Contrast the C hook: only dio_manager needs a new generation (per-fork, invisible). The build writes `build/carplay_hook.jar` (`scripts/build_java.sh:29`); on-unit path `/mnt/app/eso/hmi/lsd/jars/carplay_hook.jar` after `mount -uw /mnt/app`. · measured 2026-08-22 · `memory/java_jar_deploy_reboots_unit.md`.
@@ -319,6 +321,8 @@ Domain: [RGI and BAP Bridge](cluster-and-rgi/RGI_AND_BAP_BRIDGE.md).
 
 **Never replace the outgoing iAP2 LocationInfo with `0x5200` — inject `0x5200` as an extra packet via stock `SendIAP2`.** Replacing it (`687596f`) made iOS answer STOP_LOCATION and AirPlay never reached control SETUP. Trigger: `hook/routeguidance/rgd_hook.c:1493-1500`. · on-car · [iAP2 Route Guidance TLVs](cluster-and-rgi/IAP2_ROUTE_GUIDANCE_TLVS.md).
 
+**The injection `generation` names a link session, never a send.** When it advanced on every stock Send, the worker dropped any frame queued from an Encode seam as soon as the stock message's own Send won the race; one-shot StartListUpdates was lost and recents/favorites stayed empty for the session. Advance it only on a new link session or an Identify boundary, and never reset it (`inject_note_link` / `inject_unlink`, `hook/framework/hook_framework.h`; `tests/inject_generation_test.c`). A drop now logs `Dropped stale semantic frame` at WARN. · 2026-09-24 static audit · [Architecture](reference/ARCHITECTURE.md#cinemo-nme-and-iap2-injection-abi).
+
 **Keep the ±1000 angle sentinels and presence guards.** +1000 is the hook parser's missing-field default; clamping it to ±180 fabricated a U-turn (`java_patch/com/luka/carplay/rgd/ManeuverMapper.java:385-389`, `:439-445`). · on-car · [Maneuver Mapping](cluster-and-rgi/MANEUVER_MAPPING.md).
 
 **Ramps are slight TURNs: never send `EXIT_RIGHT/A0` or `EXIT_LEFT/60`, and don't restore the old CarPlay type table.** Those pairs make the HUD MCU return model 0 (no arrow, no roads); the old table mapped on-ramps to MERGE and off-ramps to EXIT and drew the S-shaped arrows the owner rejected. · decompile + on-car · [Maneuver Mapping](cluster-and-rgi/MANEUVER_MAPPING.md), [Production Audits](build-and-deploy/PRODUCTION_AUDITS.md).
@@ -364,6 +368,8 @@ Domain: [AltScreen Cluster Video](altscreen-and-video/ALTSCREEN_CLUSTER_VIDEO.md
 ## 🔧 Java and HMI
 
 Domains: [Build System](build-and-deploy/BUILD_SYSTEM.md), [Deploy and Release](build-and-deploy/DEPLOY_AND_RELEASE.md).
+
+**`CarplayBus.on()` must never wait for `dispatchLock`.** Callers register while holding their own monitor (`CoverArt.start()`), which a listener on the reader thread may need; a blocking `on()` is a j9 deadlock. A held sticky frame for a late listener is delivered by a short thread under `dispatchLock`, cleared by a newer live frame and dropped when the connection closes (`java_patch/com/luka/carplay/bus/CarplayBus.java`). · 2026-09-24 audit · [Hook to Java Bus](reference/HOOK_TO_JAVA_BUS.md#-java-side).
 
 **Target Foundation Profile 1.1 (~J2SE 1.4): no generics/enum/enhanced-for/autoboxing/StringBuilder.** Runtime is IBM J9 CDC1.1+FP1.1, `-noverify`, bytecode major 48. Build: `-source 1.4 -target 1.4` (`scripts/build_java.sh:62`). · live core dump · `MEMORY.md` §"Java runtime".
 

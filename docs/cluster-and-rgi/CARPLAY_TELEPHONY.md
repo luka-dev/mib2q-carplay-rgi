@@ -14,7 +14,7 @@ While CarPlay owns the iPhone, the cluster telephone tab behaves as it does with
 - recents and favorites, and dialling from them;
 - the missed-call indication, signal strength, register state and carrier name.
 
-The Directory (phonebook, BAP FctID 51-53) stays empty by design: iAP2 gives the car no contacts, only the recents and favorites lists, and the HU's own phonebook comes over BT PBAP, which is not connected during wired CarPlay. `GatedAddressBook` therefore tells the VC `DOWNLOAD_STATE_NO_PHONE_BOOK_AVAILABLE` with 0 entries while the gate is on, and replays stock's PbState on gate-off. In the A5 2018 VC (`hmi_app.elf`, `on_PbState_Status` `0x17FBBC`, bindings `0x614E08`) downloadState 0 hides the list and shows message `0x19C` (most likely "not available" / "no entries"; the text mapping was not resolved), while stock's CarPlay-time value 2 with 0 entries draws an empty list. The other native option, MobileServiceSupport bit 52 = 0, removes the Directory item from the menu instead; the VC has no greyed state. `[decompile]`
+The Directory (phonebook) has no CarPlay source and reports "no phonebook"; the HU phone app goes straight to CarPlay. Both are in [The HU phone app and the Directory](#-the-hu-phone-app-and-the-directory).
 
 A caller picture is not possible: iAP2 CallStateUpdate carries no image ([iAP2 Communications](IAP2_COMMUNICATIONS.md#-callstateupdate-0x4155-and-call-control)).
 
@@ -101,10 +101,56 @@ Mute is optimistic: a mute toggled on the phone is not read back, because stock'
 
 ## 🔌 Hook, bus and install
 
-- **Hook** (`hook/telephony/tel_hook.c`): sends StartListUpdates once per Identify cycle when stock's StartCallStateUpdates leaves; folds ListUpdate messages into the running lists (`tel_merge_lists`); reads stock's CommunicationsUpdate (`tel_merge_comm`); sends HoldStatusUpdate and MuteStatusUpdate on `CMD_TEL`. It never replaces or blocks a stock message. Formats and evidence: [iAP2 Communications](IAP2_COMMUNICATIONS.md). `[code]`
-- **Bus:** `EVT_TEL_LISTS 0x0040` (sticky text: `r.<i>.a|b|type|ts|occ`, `f.<i>.a|b`), `EVT_TEL_COMM 0x0041` (sticky text: `signal`, `registration`, `airplane`, `carrier`; −1 = not reported), both published empty at init and on every new Identify or disconnect; `CMD_TEL 0x0117` = `[u8 action][u8 on]`, 1 = mute, 2 = hold ([Hook to Java Bus](../reference/HOOK_TO_JAVA_BUS.md)). `[code]`
+- **Hook** (`hook/telephony/tel_hook.c`): sends StartListUpdates once per Identify cycle when stock's StartCallStateUpdates leaves (through the injection worker, see [Architecture](../reference/ARCHITECTURE.md#cinemo-nme-and-iap2-injection-abi)); folds ListUpdate messages into the running lists (`tel_merge_lists`); reads stock's CommunicationsUpdate (`tel_merge_comm`); sends AcceptCall, EndCall, SwapCalls, HoldStatusUpdate and MuteStatusUpdate on `CMD_TEL`. It never replaces or blocks a stock message. Formats and evidence: [iAP2 Communications](IAP2_COMMUNICATIONS.md). `[code]`
+- **Bus:** `EVT_TEL_LISTS 0x0040` (sticky text: `r.<i>.a|b|type|ts|occ`, `f.<i>.a|b`), `EVT_TEL_COMM 0x0041` (sticky text: `signal`, `registration`, `airplane`, `carrier`; −1 = not reported), both published empty at init and on every new Identify or disconnect; `CMD_TEL 0x0117` = `[u8 action][u8 on]`, 1 = mute, 2 = hold, 3 = accept, 4 = end, 5 = swap ([Hook to Java Bus](../reference/HOOK_TO_JAVA_BUS.md)). `[code]`
 - **Install:** `custom.sh` adds `0x415B`, `0x415C`, `0x415D`, `0x415F`, `0x4160`, `0x4170` (sent) and `0x4171` (received) to `dio_manager.json` next to the route-guidance IDs ([Deploy and Release](../build-and-deploy/DEPLOY_AND_RELEASE.md#-route-guidance-message-ids-in-dio_managerjson)). Without them accept, hang-up, swap, the lists, hold and mute are missing. A unit installed before 2026-09-24 needs the installer run again (it only adds the missing IDs).
 - **Tests:** `tests/tel_hook_test.c` checks the StartListUpdates bytes against the car-verified request, the hold/mute layout, three captured ListUpdate frames, one captured CommunicationsUpdate frame, split and shrinking lists, and 100 000 malformed inputs.
+
+## 📵 The HU phone app and the Directory
+
+Two stock surfaces had nothing sensible to show during CarPlay; both now use the stock's own states.
+
+**The HU phone app skips its CarPlay popup.** With CarPlay active, stock `TelTerminalModeHandler` sets `SHOW_CAR_PLAY_DISCLAIMER_CHOICE` (301049) = 1, and every way into the phone app first chose the "Your iPhone is in Apple CarPlay mode" popup (state `telCarPlayDisclaimer_compound`, screen `TELINITPHONECARPLAY`). Its "Switch to Apple CarPlay" button only flips `SWITCH_TO_TERMINAL_MODE_CHOICE` (4095), which `SystemSMM` turns into event 2000 on any change (`ChangeMediator` 76), so the flip is safe even when CarPlay is already in front. The patched phone-SM `Activator` builds `CarPlayPhoneSMM`, which presses that button for the user whenever branch 0 of the five entry choices is taken. `[code]` `[decompile]`
+
+```mermaid
+flowchart LR
+  accTitle: HU phone app entry during CarPlay
+  accDescr: Pressing TEL or opening the phone menu enters telCenter, whose entry choice picks the CarPlay popup while 301049 is 1. CarPlayPhoneSMM sees that branch taken and flips model 4095, and the system state machine switches the screen to CarPlay.
+
+  tel_key["📞 TEL key or phone menu"] --> tel_center["telCenter entry choice"]
+  tel_center -->|"301049 == 1, branch 0"| popup["CarPlay popup state"]
+  tel_center -->|"call active, power, default"| stock_screens["Stock phone screens"]
+  popup --> skip["CarPlayPhoneSMM flips 4095"]
+  skip --> system_sm["SystemSMM event 2000"]
+  system_sm --> carplay["🍎 CarPlay in front"]
+
+  classDef primary fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
+  classDef success fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
+  classDef neutral fill:#f3f4f6,stroke:#6b7280,stroke-width:2px,color:#1f2937
+  class tel_key,tel_center,popup,stock_screens neutral
+  class skip,system_sm primary
+  class carplay success
+```
+
+| Transition | Source state | Trigger |
+|---|---|---|
+| `300002` | `telCenter` | ENTER: the TEL hard key (`HK_PHONE` → 300444) and every non-history entry |
+| `301320` | `300632` | `PHONE_VALUES_CHANGED` (ChangeMediator 300155 on 301049, lock, power, call-active) |
+| `301327` | `300632` | `CALL_ACTIVE_DATA_CHANGED` |
+| `301389` | `300632` | `CALL_ACTIVE_CHANGED` |
+| `301447` | the popup state | COMPLETION, the choice re-run |
+
+All five fire only while the phone app is entered or already in front; a CarPlay connect while another app is shown is postponed until the phone app is opened again (stock `ChangeMediator.postponedAction`). `checkGuard` has one caller, `AbstractStateMachine.determineTrgtState`, so it is never evaluated speculatively. One path is not covered: `SystemSMM` transition 833 (`REMOTE_HMI_SWITCHTOSERVICE`, a remote/online request for messaging) enters the popup without `PhoneSMM`. Checked on a single-view car only. `[decompile]`
+
+**The Directory reports "no phonebook".** CarPlay gives the car no contacts (iAP2 carries only recents and favorites), and the HU's own phonebook comes over BT PBAP, which is not connected during wired CarPlay. `GatedAddressBook` wraps the stock `CombiBAPServiceAddressBook` the same way `GatedPhoneService` wraps the phone service and switches with the same gate. `[code]` `[decompile]`
+
+| HU sends | A5 2018 VC draws (`hmi_app.elf`) |
+|---|---|
+| Stock during CarPlay: PbState 2, 0 entries | an empty list |
+| **Ours:** PbState 0 (no phonebook), support bit 52 kept | no list; message `0x19C`, most likely "not available" / "no entries" (text mapping not resolved) |
+| Alternative: MobileServiceSupport bit 52 = 0 | the Directory item disappears; the VC has no greyed state |
+
+Stock sends support `(true, true, true)` itself when it binds the service (`CombiBAPServiceHandler.setCombiService`) and PbState 0 while the address book is not ready (`CombiADBStateHandler.computePbState`), so both values are states the VC already knows. On gate-off the wrapper replays stock's last PbState and support.
 
 ## 🪜 Status
 

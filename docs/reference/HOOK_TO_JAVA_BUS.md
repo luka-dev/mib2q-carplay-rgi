@@ -73,7 +73,7 @@ Payload defaults to text `key:type:value\n` lines; `BUS_FLAG_BINARY` (0x02) mark
 
 **Cluster commands ride the same bus.** `CMD_ALT_ZOOM` is live at `0x0110` (`bus_protocol.h:92`, `CarplayBus.java:54`, handler `zoom_on_cmd` registered at `hook/altscreen/altscreen_hook.c:2635`); `CMD_ALT_ZONE 0x0111`, `CMD_ALT_ZONE_ACK 0x0112`, `CMD_ALT_APPEARANCE 0x0114`, `CMD_ALT_UICTX 0x0115`, `CMD_ALT_RGI 0x0116` follow. `CMD_ALT_HID` / `CMD_KNOB` do not exist (the old stale `CMD_KNOB` comment in `bus.c` is gone too) — the cluster has no HID path; all cluster commands are BAP/semantic. The July 2026 plan had put `CMD_ALT_HID` at 0x0110; that slot is now `CMD_ALT_ZOOM`. `EVT_DEVICE_STATE 0x0030` is reserved and unused. **[code]**
 
-**Telephony rides it too.** `EVT_TEL_LISTS 0x0040` is a sticky text frame with CarPlay recents (`r.n`, `r.<i>.a|b|type|ts|occ`) and favorites (`f.n`, `f.<i>.a|b`) from iAP2 ListUpdate; `EVT_TEL_COMM 0x0041` is a sticky text frame with `signal`, `registration`, `airplane` and `carrier` read from the stock CommunicationsUpdate; `CMD_TEL 0x0117` is `[u8 action][u8 on]`: `1` = mic mute (iAP2 0x4160), `2` = hold (0x415F) (`hook/telephony/tel_hook.c`, `GatedPhoneService`). See [CarPlay Telephony](../cluster-and-rgi/CARPLAY_TELEPHONY.md). **[code]**
+**Telephony rides it too.** `EVT_TEL_LISTS 0x0040` is a sticky text frame with CarPlay recents (`r.n`, `r.<i>.a|b|type|ts|occ`) and favorites (`f.n`, `f.<i>.a|b`) from iAP2 ListUpdate; `EVT_TEL_COMM 0x0041` is a sticky text frame with `signal`, `registration`, `airplane` and `carrier` read from the stock CommunicationsUpdate; `CMD_TEL 0x0117` is `[u8 action][u8 on]`: `1` = mic mute (iAP2 0x4160), `2` = hold (0x415F), `3` = accept (AcceptCall 0x415B), `4` = end (EndCall 0x415C), `5` = swap (SwapCalls 0x415D) (`hook/telephony/tel_hook.c`, `GatedPhoneService`). See [CarPlay Telephony](../cluster-and-rgi/CARPLAY_TELEPHONY.md). **[code]**
 
 ---
 
@@ -97,6 +97,28 @@ Payload defaults to text `key:type:value\n` lines; `BUS_FLAG_BINARY` (0x02) mark
 ## 📦 Java side
 
 `java_patch/com/luka/carplay/bus/CarplayBus.java` is the long-lived `ServerSocket` on 19810 (`:34`), sets `TCP_NODELAY` on accept (`:393`), rejects payloads over 128 KiB (`:37`, `:442`) and types outside `0..0x011F` (`:38`, `:465`). Listeners are a per-type array. Text frames parse into `CarplayBus.Data` with a **1024-key** capacity and an explicit `text frame truncated` warning on overflow (`:253-260`, `:334`); the original 512-key parser silently dropped the tail of a full RGI snapshot (16 maneuvers plus 32 lane slots). A failed bind closes its `ServerSocket` instead of leaking one FD per retry. After registering its RGD listener, Java sends `CMD_SYNC_REQ` so a cold-boot snapshot published before Java was ready is replayed. **[code]**
+
+**A late listener still gets the sticky frame it missed.** The hook replays its sticky state once per connection, and a listener can register after that (`GatedPhoneService` wraps the stock phone service long after the bus is up). `dispatch()` keeps the last `FLAG_STICKY` frame of a type that has no listener (`unheard[type]`); `on()` only registers and hands that frame to a short `carplay-bus-late-<type>` thread, which delivers it under `dispatchLock`. A live frame of the same type clears the held one first, so an older frame never overwrites a newer one, and closing the connection drops every held frame, so a module never gets the previous session's route or artwork. `on()` itself never waits for `dispatchLock`: callers such as `CoverArt.start()` hold their own monitor, which a listener on the reader thread may need. Tests in `tests/CarplayBusTransportTest.java` cover delivery, no survival across a connection, and a non-blocking `on()`. **[code]**
+
+```mermaid
+sequenceDiagram
+  accTitle: Late listener hand-over on the Java bus
+  accDescr: The hook replays a sticky frame before any listener exists, so CarplayBus holds it. When the listener registers later, on returns at once and a short thread delivers the held frame under the dispatch lock, unless a newer live frame already replaced it.
+
+  participant hook as Hook bus client
+  participant reader as CarplayBus reader
+  participant bus as CarplayBus on()
+  participant late as Late delivery thread
+  participant module as GatedPhoneService
+
+  hook->>reader: sticky EVT_TEL_LISTS (replay on connect)
+  reader->>reader: no listener, keep in unheard
+  module->>bus: on(EVT_TEL_LISTS)
+  bus-->>module: returns at once
+  bus->>late: start with the held frame
+  late->>module: onFrame under dispatchLock
+  Note over reader,late: a newer live frame clears the held one, a closed connection drops it
+```
 
 ## 🔄 History: PPS to TCP
 

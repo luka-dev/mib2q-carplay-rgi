@@ -104,6 +104,26 @@ libNmeVfs imports all four through its PLT (Recv `0x12af20`, Send `0x12af70`, De
 
 `CinemoCreateIAP@0x5848c` returns an `ICinemoIAP` whose vtable has AddRef `0x9b60c` (slot 0), Release `0x9b620` (`+4`) and SendIAP2 `0x9b748` (`+60`, args `(self, session, data, size)`). The hook captures the object only after the real factory succeeds, keeps a persistent reference and takes a transient reference around every injected `SendIAP2`. The stock outbound frame is sent first; only after a successful stock Send does LocationInfo trigger the separate 0x5200 injection, so LocationInfo is never consumed or used as a carrier. The component-0x001E schema and 0x520x payloads are **operationally** verified on the car, not independently proven from the phone binary. **[decompile]** **[car]**
 
+**Injected frames go through one worker thread.** `hook_inject_message()` snapshots `(link_session, generation)` and queues the frame; the worker re-checks both just before the stock `SendIAP2` and drops a frame whose values changed (`Dropped stale semantic frame …`, WARN). `generation` names **one iAP2 link session**: it advances when a stock link frame arrives on a new session or after an Identify boundary (`inject_note_link` / `inject_unlink` in `hook/framework/hook_framework.h`), and is never reset, so a frame queued for an old link cannot match the next one. Until 2026-09-24 it advanced on every stock Send. Telephony queues StartListUpdates from the Encode of stock `0x4154`, before that message's own Send, so whenever the stock Send won the race the worker dropped the request and the recents and favorites stayed empty for the whole session. Checked by `tests/inject_generation_test.c`. **[code]**
+
+```mermaid
+sequenceDiagram
+  accTitle: Injection worker race on the generation
+  accDescr: The telephony module queues StartListUpdates while stock Cinemo encodes 0x4154. Stock then sends 0x4154, which used to advance the generation, so the worker found a changed generation and dropped the queued frame. Now the generation only changes per link session and the frame is sent.
+
+  participant stock as Stock Cinemo
+  participant hook as Hook Encode seam
+  participant worker as Injection worker
+  participant phone as iPhone
+
+  stock->>hook: Encode 0x4154 StartCallStateUpdates
+  hook->>worker: queue 0x4170 with generation G
+  stock->>phone: Send 0x4154
+  Note over hook,worker: old code: every Send made G+1, frame dropped as stale
+  worker->>phone: SendIAP2 0x4170 (generation still G)
+  phone-->>stock: ListUpdate 0x4171 recents and favorites
+```
+
 ### iOS 26.6 altScreen addresses
 
 The gate itself is explained in [AltScreen Cluster Video](../altscreen-and-video/ALTSCREEN_CLUSTER_VIDEO.md); this table keeps the phone-side addresses the seam audit read (iPhone18,2 build 23G71, `AirPlaySender` + `CarKit`). **[decompile]**
