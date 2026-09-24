@@ -1,6 +1,7 @@
 package de.audi.app.combi.bap.app.phone;
 
 import com.luka.carplay.telephony.GatedPhoneListener;
+import com.luka.carplay.telephony.GatedAddressBook;
 import com.luka.carplay.telephony.GatedPhoneService;
 import de.audi.app.bap.fw.AbstractBAPModuleServiceManager;
 import de.audi.app.combi.bap.fw.AbstractCombiModule;
@@ -89,7 +90,7 @@ public class ServiceManagerPhone extends AbstractBAPModuleServiceManager {
             );
         abstractactivator.registerService(
             "de.audi.atip.interapp.combi.bap.phone.CombiBAPServiceAddressBook",
-            this.module.getAppConnectors().get(AppNameConst.APP_NAME_ADDRESSBOOK),
+            GatedAddressBook.wrap(this.module.getAppConnectors().get(AppNameConst.APP_NAME_ADDRESSBOOK)),
             null
         );
         this.logChannel

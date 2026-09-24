@@ -251,6 +251,7 @@ public class GatedPhoneService implements CombiBAPServicePhone {
         if (carplay != gated) {
             gated = carplay;
             Log.i(TAG, "cluster phone tab " + (gated ? "-> CarPlay calls" : "-> stock"));
+            GatedAddressBook.setCarPlay(gated);                /* Directory: no phonebook */
             if (gated) publishCarPlay();
             else { calls = new CallState[0]; replayStock(); }  /* no stale call on the next session */
             return;
