@@ -10,8 +10,8 @@
  * replayed when the gate goes off.  Every other method passes straight through.
  *
  * VC actions (accept, hangup, hold/resume/swap, dial, mic mute) come back through
- * GatedPhoneListener and go to CarPlay's HID telephony keys, callNumber and
- * hook/telephony (mute).  Recents/favorites come from hook/telephony (iAP2
+ * GatedPhoneListener and go to hook/telephony (iAP2 AcceptCall, EndCall,
+ * SwapCalls, Hold/MuteStatusUpdate) and to callNumber (dial).  Recents/favorites come from hook/telephony (iAP2
  * ListUpdate, EVT_TEL_LISTS), with the missed-call indication derived from them;
  * signal and carrier come from the stock CommunicationsUpdate (EVT_TEL_COMM).
  *
@@ -52,54 +52,40 @@ public class GatedPhoneService implements CombiBAPServicePhone {
     /* VC actions handled for CarPlay (GatedPhoneListener). */
     static final int ACT_ACCEPT = 1, ACT_HANGUP = 2, ACT_HOLD = 3, ACT_RESUME = 4, ACT_SWAP = 5, ACT_DIAL = 6,
                      ACT_MUTE_ON = 7, ACT_MUTE_OFF = 8, ACT_RESET_MISSED = 9;
-    private static final int TEL_CMD_MUTE = 1, TEL_CMD_HOLD = 2;   /* hook/telephony CMD_TEL actions */
+    /* hook/telephony CMD_TEL actions: MuteStatusUpdate, HoldStatusUpdate, AcceptCall, EndCall, SwapCalls. */
+    private static final int TEL_CMD_MUTE = 1, TEL_CMD_HOLD = 2, TEL_CMD_ACCEPT = 3, TEL_CMD_END = 4,
+                             TEL_CMD_SWAP = 5;
     /* BAP callMode, as stock BAPPropertyTelCombinedNumbers.getCallMode maps DSI stacks. */
     private static final int CALLMODE_MISSED = 1, CALLMODE_RECEIVED = 2, CALLMODE_DIALED = 3;
-    /* DSICarplay BUTTON_*: CarPlay's own HID telephony keys. */
+    /* DSICarplay BUTTON_*: CarPlay's HID telephony keys, as stock MFLPhoneButtonsListener
+     * posts them.  We send none of them: on the car they reached the phone neither
+     * from the cluster nor from the wheel (2026-09-24), so every call action is iAP2. */
     private static final int BUTTON_ACCEPT_CALL = 13, BUTTON_END_CALL = 14, BUTTON_FLASH_CALL = 20;
     private static final int RESULT_OK = 0, RESULT_FAILED = 1;
 
     /** CarPlay-side commands, installed by CarplayDSILifecycleController while DSI is up. */
     public interface Commands {
-        /** Press + release of a DSICarplay BUTTON_* id. */
-        void button(int id);
         /** Dial through CarPlay (requestUI2 "tel:<number>", stock callNumber). */
         void dial(String number);
     }
 
     private static volatile Commands commands;
 
-    /* One steering-wheel Tel press can reach CarPlay twice: stock MFLPhoneButtonsListener
-     * posts FLASH 20 when the HU gets KEY_MFW_*, and the VC sends AcceptCall/HangupCall
-     * over BAP (App::handleKeyEvent, event 479).  Whichever comes first wins. */
-    private static final long TEL_KEY_WINDOW_MS = 800;
-    private static long lastStockTelKeyMs, lastVcTelKeyMs;
-
-    /** From CarplayDSILifecycleController.postDSICarplayButtonEvent (stock MFL path). */
+    /* The steering-wheel Tel key reaches us twice: stock MFLPhoneButtonsListener
+     * posts a HID key (FLASH 20, or HOOK 13 / HANGUP 14 on two-key wheels) and the
+     * VC sends AcceptCall/HangupCall over BAP (App::handleKeyEvent, event 479).
+     * During a call the BAP copy is answered over iAP2, so the stock HID copy is
+     * dropped: it did nothing on the car, and on a unit where it works it would act
+     * a second time (a FLASH right after an accept).  Without a call the VC sends no
+     * BAP action (it opens the list itself), so stock's key is left alone. */
     public static boolean dropStockPhoneKey(int id) {
         if (id != BUTTON_ACCEPT_CALL && id != BUTTON_END_CALL && id != BUTTON_FLASH_CALL) return false;
         GatedPhoneService g;
         synchronized (GatedPhoneService.class) { g = instance; }
-        if (g == null || !g.isGated()) return false;
-        long now = System.currentTimeMillis();
-        synchronized (GatedPhoneService.class) {
-            if (now - lastVcTelKeyMs < TEL_KEY_WINDOW_MS) return true;
-            lastStockTelKeyMs = now;
-        }
-        return false;
+        return g != null && g.gatedWithCall();
     }
 
-    /** True when stock already sent this Tel press to CarPlay; stamps the VC press otherwise. */
-    private static boolean stockKeyJustSent() {
-        long now = System.currentTimeMillis();
-        synchronized (GatedPhoneService.class) {
-            if (now - lastStockTelKeyMs < TEL_KEY_WINDOW_MS) return true;
-            lastVcTelKeyMs = now;
-        }
-        return false;
-    }
-
-    private synchronized boolean isGated() { return gated; }
+    private synchronized boolean gatedWithCall() { return gated && liveCalls() > 0; }
 
     public static void setCommands(Commands c) { commands = c; }
 
@@ -184,17 +170,14 @@ public class GatedPhoneService implements CombiBAPServicePhone {
         int result = RESULT_FAILED;
         switch (action) {
             case ACT_ACCEPT:
-                if (c != null && has(BAP_RINGING)) {
-                    if (!stockKeyJustSent()) c.button(BUTTON_ACCEPT_CALL);
-                    result = RESULT_OK;
-                }
+                /* iAP2 AcceptCall, action 0, no UUID: iOS answers the incoming call. */
+                if (has(BAP_RINGING) && tel(TEL_CMD_ACCEPT, false)) result = RESULT_OK;
                 real.acceptCallResult(result);
                 break;
             case ACT_HANGUP:
-                if (c != null && liveCalls() > 0) {
-                    if (!stockKeyJustSent()) c.button(BUTTON_END_CALL);
-                    result = RESULT_OK;
-                }
+                /* iAP2 EndCall, action 0, no UUID: iOS ends the frontmost call,
+                 * dialing included. */
+                if (liveCalls() > 0 && tel(TEL_CMD_END, false)) result = RESULT_OK;
                 real.hangupCallResult(result);
                 break;
             case ACT_HOLD:
@@ -205,8 +188,8 @@ public class GatedPhoneService implements CombiBAPServicePhone {
                 else real.resumeCallResult(result);
                 break;
             case ACT_SWAP:
-                /* HID Flash: CarPlay's swap between an active and a held call. */
-                if (c != null && liveCalls() > 1) { c.button(BUTTON_FLASH_CALL); result = RESULT_OK; }
+                /* iAP2 SwapCalls (no params): iOS swaps the active and the held call. */
+                if (liveCalls() > 1 && tel(TEL_CMD_SWAP, false)) result = RESULT_OK;
                 real.swapCallsResult(result);
                 break;
             case ACT_MUTE_ON:

@@ -12,12 +12,15 @@
 | `0x4155` | CallStateUpdate | phone → HU | stock (reaches Java as `DSICarplay.updateCallState`) |
 | `0x4157` | StartCommunicationsUpdates | HU → phone | stock, params 0, 1, 2, 4, 5 |
 | `0x4158` | CommunicationsUpdate | phone → HU | stock; the hook also reads it |
+| `0x415B` | AcceptCall | HU → phone | hook (`CMD_TEL` action 3) |
+| `0x415C` | EndCall | HU → phone | hook (`CMD_TEL` action 4) |
+| `0x415D` | SwapCalls | HU → phone | hook (`CMD_TEL` action 5), no params |
 | `0x415F` | HoldStatusUpdate | HU → phone | hook (`CMD_TEL` action 2) |
 | `0x4160` | MuteStatusUpdate | HU → phone | hook (`CMD_TEL` action 1) |
 | `0x4170` | StartListUpdates | HU → phone | hook, once per Identify cycle |
 | `0x4171` | ListUpdate | phone → HU | hook parses it |
 
-Stock `dio_manager.json` already lists `0x4154`/`0x4157` (sent) and `0x4155`/`0x4158` (received). The installer adds `0x415F`, `0x4160`, `0x4170` and `0x4171` ([Deploy and Release](../build-and-deploy/DEPLOY_AND_RELEASE.md#-route-guidance-message-ids-in-dio_managerjson)). Stock dio_manager never calls Cinemo's own builders for the hook's messages; the hook sends them as extra messages through the stock `SendIAP2` worker and never replaces or blocks a stock message (`hook/telephony/tel_hook.c`). `[code]`
+Stock `dio_manager.json` already lists `0x4154`/`0x4157` (sent) and `0x4155`/`0x4158` (received). The installer adds `0x415B`, `0x415C`, `0x415D`, `0x415F`, `0x4160`, `0x4170` and `0x4171` ([Deploy and Release](../build-and-deploy/DEPLOY_AND_RELEASE.md#-route-guidance-message-ids-in-dio_managerjson)). Stock dio_manager never calls Cinemo's own builders for the hook's messages; the hook sends them as extra messages through the stock `SendIAP2` worker and never replaces or blocks a stock message (`hook/telephony/tel_hook.c`). `[code]`
 
 Evidence tags: `[decompile]` = iOS 26.1 pseudo-source (`ACCCommunicationsFeaturePlugin.mm`, `CoreAccessories_18.mm`), iOS 27 `accessoryd`, or Cinemo `libNmeVfs.so` MU1316; `[car]` = our car's 2026-08-21 accessoryd packet log, or xPaiiN's V54.3D8 capture on a MU1102 (MIB2 Standard CN).
 
@@ -124,13 +127,14 @@ The hook sends StartListUpdates once per Identify cycle, when it sees stock's ou
 
 CallStateUpdate carries RemoteID, DisplayName, Status, Direction, CallUUID, AddressBookID, Label, Service, IsConferenced, ConferenceGroup, DisconnectReason and StartTimestamp (`CoreAccessories_18.mm:6279-6302`). **It has no picture**: iOS sends image files over iAP2 only for Now Playing artwork, so the cluster cannot show a caller photo for CarPlay calls. The HU does not parse 0x4155 itself; stock turns it into `DSICarplay.updateCallState`. `[decompile]`
 
-Accept, hangup and dial use CarPlay's HID telephony keys and the `tel:` URL instead of iAP2 (see [CarPlay Telephony](CARPLAY_TELEPHONY.md#-actions-from-the-cluster)). For reference, the iAP2 alternatives `[decompile]`:
+Accept and hang-up use iAP2 AcceptCall/EndCall with Action 0 as param 0 and **no CallUUID**: iOS then takes `incomingCall` / `frontmostAudioOrVideoCall` (`ACCCommunicationsFeaturePlugin.mm` `acceptCallWithAction:callUUID:` / `endCallWithAction:callUUID:`, logs "No call UUID specified - falling back to ..."). Until 2026-09-24 they used CarPlay's HID telephony keys (`DSICarplay` 13/14), which on the car reached the phone neither from the cluster OK nor from the wheel. Dial still uses the `tel:` URL, which works. `[decompile]` `[car]`:
 
 | Msg | Param 0 | Param 1 | Param 2 | Param 3 |
 |---|---|---|---|---|
 | InitiateCall `0x415A` | Type: 0 destination, 1 voicemail, 2 redial | DestinationID | Service 1..3 (destination only) | AddressBookID |
 | AcceptCall `0x415B` | Action: 0 accept or hold-and-accept, 1 end-and-accept | CallUUID | – | – |
 | EndCall `0x415C` | Action: 0 end (UUID or frontmost), 1 end all | CallUUID | – | – |
+| SwapCalls `0x415D` | – | – | – | – |
 
 ## 🪪 Identify rules
 

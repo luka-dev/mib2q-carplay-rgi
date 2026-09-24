@@ -104,11 +104,6 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
         /* Cluster telephone tab actions -> CarPlay (GatedPhoneListener). */
         final DSICarplaySafe dsi = this.dsiCarplaySafe;
         GatedPhoneService.setCommands(new GatedPhoneService.Commands() {
-            public void button(int id) {
-                dsi.postButtonEvent(id, 0);
-                dsi.postButtonEvent(id, 1);
-            }
-
             public void dial(String number) {
                 dsi.requestUI2("tel:" + number);
             }

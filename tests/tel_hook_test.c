@@ -12,7 +12,8 @@
 
 /* ---- stubs for the framework seams tel_hook.c links against ---- */
 void bus_set_sticky(uint16_t t, bool s) { (void)t; (void)s; }
-hook_result_t bus_on(uint16_t t, bus_handler_t h, void* c) { (void)t; (void)h; (void)c; return HOOK_OK; }
+static bus_handler_t cmd_handler;
+hook_result_t bus_on(uint16_t t, bus_handler_t h, void* c) { (void)c; if (t == CMD_TEL) cmd_handler = h; return HOOK_OK; }
 void bus_off(uint16_t t) { (void)t; }
 hook_result_t bus_text_begin_heap(bus_text_builder_t* b, const char* o, uint32_t c) {
     (void)b; (void)o; (void)c; return HOOK_ERR_IO;
@@ -22,7 +23,25 @@ void bus_text_uint(bus_text_builder_t* b, const char* k, uint64_t v) { (void)b; 
 void bus_text_str(bus_text_builder_t* b, const char* k, const char* v) { (void)b; (void)k; (void)v; }
 void bus_text_bool(bus_text_builder_t* b, const char* k, bool v) { (void)b; (void)k; (void)v; }
 hook_result_t bus_send_text(uint16_t t, uint8_t f, bus_text_builder_t* b) { (void)t; (void)f; (void)b; return HOOK_OK; }
-hook_result_t hook_inject_message(uint16_t m, const uint8_t* p, size_t n) { (void)m; (void)p; (void)n; return HOOK_OK; }
+static uint16_t sent_msg;
+static uint8_t sent_payload[32];
+static size_t sent_len;
+static int sent_count;
+hook_result_t hook_inject_message(uint16_t m, const uint8_t* p, size_t n) {
+    sent_msg = m; sent_len = n < sizeof(sent_payload) ? n : sizeof(sent_payload);
+    memcpy(sent_payload, p, sent_len); sent_count++;
+    return HOOK_OK;
+}
+
+/* CMD_TEL [action][arg] from Java -> the iAP2 message and a single u8 param 0. */
+static void check_cmd(uint8_t action, uint8_t arg, uint16_t want_msg, uint8_t want_value) {
+    const uint8_t cmd[2] = { action, arg };
+    const uint8_t want[5] = { 0x00, 0x05, 0x00, 0x00, want_value };
+    int before = sent_count;
+    cmd_handler(CMD_TEL, 0, cmd, 2, NULL);
+    assert(sent_count == before + 1 && sent_msg == want_msg);
+    assert(sent_len == 5 && memcmp(sent_payload, want, 5) == 0);
+}
 
 /* xPaiiN cpvc-tel-lib send_start_list_updates_probe (recents max 25, favorites max 0). */
 static const uint8_t verified_start[] =
@@ -84,6 +103,27 @@ int main(void) {
 
     n = tel_build_status(buf, sizeof(buf), true);
     assert(n == 5 && memcmp(buf, "\x00\x05\x00\x00\x01", 5) == 0);
+
+    /* CMD_TEL: mute/hold status, AcceptCall/EndCall action 0 without CallUUID. */
+    tel_module_def.on_init();
+    assert(cmd_handler);
+    check_cmd(1, 1, 0x4160, 1);        /* MuteStatusUpdate on */
+    check_cmd(2, 0, 0x415F, 0);        /* HoldStatusUpdate off */
+    check_cmd(3, 0, 0x415B, 0);        /* AcceptCall: accept the incoming call */
+    check_cmd(4, 0, 0x415C, 0);        /* EndCall: end the frontmost call */
+    {
+        const uint8_t swap[2] = { 5, 0 };
+        int before = sent_count;
+        cmd_handler(CMD_TEL, 0, swap, 2, NULL);
+        assert(sent_count == before + 1 && sent_msg == 0x415D && sent_len == 0);  /* SwapCalls, no params */
+    }
+    {
+        const uint8_t bad[2] = { 9, 0 };
+        int before = sent_count;
+        cmd_handler(CMD_TEL, 0, bad, 2, NULL);
+        cmd_handler(CMD_TEL, 0, bad, 1, NULL);
+        assert(sent_count == before);  /* unknown or short command: nothing sent */
+    }
 
     n = tel_build_start_list_updates(buf, sizeof(buf), 25, 0);
     assert(n == sizeof(verified_start) - 1 && memcmp(buf, verified_start, n) == 0);
@@ -159,6 +199,6 @@ int main(void) {
         assert(l.recents.n <= TEL_LIST_MAX && l.favorites.n <= TEL_LIST_MAX);
         assert(last.recents.n <= TEL_LIST_MAX && last.favorites.n <= TEL_LIST_MAX);
     }
-    puts("tel_hook_test: verified 0x4170 bytes, R29 hold/mute, 3 captured 0x4171 frames, split/shrink merge, captured 0x4158, 100000 malformed inputs PASS");
+    puts("tel_hook_test: verified 0x4170 bytes, R29 hold/mute, AcceptCall/EndCall/SwapCalls commands, 3 captured 0x4171 frames, split/shrink merge, captured 0x4158, 100000 malformed inputs PASS");
     return 0;
 }

@@ -29,6 +29,9 @@ DEFINE_LOG_MODULE(TELEPHONY);
 
 #define MSG_START_CALL_STATE    0x4154  /* stock subscription = link is up */
 #define MSG_COMM_UPDATE         0x4158  /* stock subscription, read-only here */
+#define MSG_ACCEPT_CALL         0x415B
+#define MSG_END_CALL            0x415C
+#define MSG_SWAP_CALLS          0x415D
 #define MSG_HOLD_STATUS_UPDATE  0x415F
 #define MSG_MUTE_STATUS_UPDATE  0x4160
 #define MSG_START_LIST_UPDATES  0x4170
@@ -37,6 +40,9 @@ DEFINE_LOG_MODULE(TELEPHONY);
 /* CMD_TEL actions (Java -> hook), payload [u8 action][args]. */
 #define TEL_CMD_MUTE            1       /* [u8 on] */
 #define TEL_CMD_HOLD            2       /* [u8 on] */
+#define TEL_CMD_ACCEPT          3       /* [u8 action]: 0 accept / hold-and-accept */
+#define TEL_CMD_END             4       /* [u8 action]: 0 end, 1 end all */
+#define TEL_CMD_SWAP            5       /* [u8 ignored]: SwapCalls has no params */
 
 static const uint16_t tel_msg_filter[] = { MSG_START_CALL_STATE, MSG_COMM_UPDATE, MSG_LIST_UPDATE };
 
@@ -245,11 +251,26 @@ static void tel_on_cmd(uint16_t type, uint8_t flags, const uint8_t* p, uint32_t 
     uint8_t payload[16];
     size_t n;
     hook_result_t r;
+    uint16_t msg;
     (void)type; (void)flags; (void)ctx;
-    if (len < 2 || (p[0] != TEL_CMD_MUTE && p[0] != TEL_CMD_HOLD)) return;
-    n = tel_build_status(payload, sizeof(payload), p[1] != 0);
-    r = n ? hook_inject_message(p[0] == TEL_CMD_MUTE ? MSG_MUTE_STATUS_UPDATE : MSG_HOLD_STATUS_UPDATE,
-                                payload, n) : HOOK_ERR_PARAM;
+    if (len < 2) return;
+    switch (p[0]) {
+        case TEL_CMD_MUTE:   msg = MSG_MUTE_STATUS_UPDATE; break;
+        case TEL_CMD_HOLD:   msg = MSG_HOLD_STATUS_UPDATE; break;
+        /* AcceptCall / EndCall carry Action as param 0 and no CallUUID: iOS then
+         * takes the incoming call / the frontmost call (26.1
+         * ACCCommunicationsFeaturePlugin acceptCallWithAction / endCallWithAction,
+         * "No call UUID specified - falling back to ...").  Unlike CarPlay's HID
+         * telephony keys this works in every call state, dialing included, and
+         * does not depend on the car's HID descriptor. */
+        case TEL_CMD_ACCEPT: msg = MSG_ACCEPT_CALL; break;
+        case TEL_CMD_END:    msg = MSG_END_CALL; break;
+        case TEL_CMD_SWAP:   msg = MSG_SWAP_CALLS; break;       /* iOS swapCalls */
+        default: return;
+    }
+    /* Every other command is one u8 as param 0 (status or action; both use 0/1). */
+    n = msg == MSG_SWAP_CALLS ? 0 : tel_build_status(payload, sizeof(payload), p[1] != 0);
+    r = (n || msg == MSG_SWAP_CALLS) ? hook_inject_message(msg, payload, n) : HOOK_ERR_PARAM;
     if (r != HOOK_OK)
         LOG_WARN(LOG_MODULE, "cmd %u/%u not sent rc=%d", (unsigned)p[0], (unsigned)p[1], (int)r);
 }

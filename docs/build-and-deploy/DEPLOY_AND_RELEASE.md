@@ -240,10 +240,10 @@ after:  pass in quick on carplay0 proto tcp from any to any port { 5000:5001, 50
 ```
 
 **`/mnt/system/etc/eso/production/dio_manager.json`**: add the route-guidance IDs (`0x5200`,
-`0x5203` sent; `0x5201`, `0x5202`, `0x5204` received) and the telephony IDs (`0x415F`, `0x4160`,
-`0x4170` sent; `0x4171` received) at the end of the two lists. Without the route-guidance IDs iOS
+`0x5203` sent; `0x5201`, `0x5202`, `0x5204` received) and the telephony IDs (`0x415B`, `0x415C`, `0x415D`, `0x415F`,
+`0x4160`, `0x4170` sent; `0x4171` received) at the end of the two lists. Without the route-guidance IDs iOS
 sends route guidance and the SDK drops it; without the telephony IDs the cluster phone tab has no
-recents/favorites, hold or mute ([CarPlay Telephony](../cluster-and-rgi/CARPLAY_TELEPHONY.md)).
+recents/favorites, accept, hang-up, swap, hold or mute ([CarPlay Telephony](../cluster-and-rgi/CARPLAY_TELEPHONY.md)).
 
 ```json
 before:
@@ -251,7 +251,7 @@ before:
 "MessagesReceivedFromDevice":["0x4E09", "0x4E0A", "0x4E0C", "0x5001", "0xAE01", "0x4155", "0x4158", "0xFFFA", "0xFFFC", "0x4C01", "0x4C04"],
 
 after:
-"MessagesSentByAccessory":["0x5000", "0x5002", "0xAE00", "0xAE02", "0xAE03", "0x4154", "0x4156", "0x4157", "0x4159", "0xFFFB", "0x4C00", "0x4C02", "0x4C03", "0x4C05", "0x5200", "0x5203", "0x415F", "0x4160", "0x4170"],
+"MessagesSentByAccessory":["0x5000", "0x5002", "0xAE00", "0xAE02", "0xAE03", "0x4154", "0x4156", "0x4157", "0x4159", "0xFFFB", "0x4C00", "0x4C02", "0x4C03", "0x4C05", "0x5200", "0x5203", "0x415B", "0x415C", "0x415D", "0x415F", "0x4160", "0x4170"],
 "MessagesReceivedFromDevice":["0x4E09", "0x4E0A", "0x4E0C", "0x5001", "0xAE01", "0x4155", "0x4158", "0xFFFA", "0xFFFC", "0x4C01", "0x4C04", "0x5201", "0x5202", "0x5204", "0x4171"],
 ```
 
@@ -281,7 +281,7 @@ Stock MU1316 P5087 lists none of them (checked against the firmware copy of `dio
 |---|---|---|
 | `MessagesSentByAccessory` | `0x5200`, `0x5203` | StartRouteGuidanceUpdates, StopRouteGuidanceUpdates |
 | `MessagesReceivedFromDevice` | `0x5201`, `0x5202`, `0x5204` | RouteGuidanceUpdate, RouteGuidanceManeuverUpdate, LaneGuidanceInformation |
-| `MessagesSentByAccessory` | `0x415F`, `0x4160`, `0x4170` | HoldStatusUpdate, MuteStatusUpdate, StartListUpdates ([CarPlay Telephony](../cluster-and-rgi/CARPLAY_TELEPHONY.md)) |
+| `MessagesSentByAccessory` | `0x415B`, `0x415C`, `0x415D`, `0x415F`, `0x4160`, `0x4170` | AcceptCall, EndCall, SwapCalls, HoldStatusUpdate, MuteStatusUpdate, StartListUpdates ([CarPlay Telephony](../cluster-and-rgi/CARPLAY_TELEPHONY.md)) |
 | `MessagesReceivedFromDevice` | `0x4171` | ListUpdate (recents and favorites) |
 
 Without the telephony IDs the call screen still works (it comes from stock `DSICarplay`); only the cluster's recents/favorites lists, hold/resume and mic mute are missing. If iOS rejects the telephony IDs in Identify, Cinemo removes them from its identification pool by itself and continues (`OnIdentificationRejected`, `libNmeVfs.so@0xE438C`). **[decompile]**
@@ -305,7 +305,7 @@ python3 - dio_manager.json <<'PY'
 import re, sys
 path = sys.argv[1]
 text = open(path).read()
-add = {"MessagesSentByAccessory": ["0x5200", "0x5203", "0x415F", "0x4160", "0x4170"],
+add = {"MessagesSentByAccessory": ["0x5200", "0x5203", "0x415B", "0x415C", "0x415D", "0x415F", "0x4160", "0x4170"],
        "MessagesReceivedFromDevice": ["0x5201", "0x5202", "0x5204", "0x4171"]}
 for key, ids in add.items():
     m = re.search(r'"%s"\s*:\s*\[([^\]]*)\]' % key, text)
@@ -321,7 +321,7 @@ ssh "$HU" "cat > $F.new" < dio_manager.json
 ssh -n "$HU" "chmod 644 $F.new && mv $F.new $F && sync"
 
 # 4. Verify on the host copy: every ID must be listed.
-grep -oE '"0x(520[0-4]|415F|4160|417[01])"' dio_manager.json | sort -u
+grep -oE '"0x(520[0-4]|415[BCDF]|4160|417[01])"' dio_manager.json | sort -u
 ```
 
 Then disconnect CarPlay and have the owner reboot the HU (never reboot it unasked, see below). After the reboot, start a route in Apple Maps: the cluster must show the turn card and the HUD arrow. If nothing appears, check the file again with the grep above: when the IDs are missing the SDK drops the messages before the hook sees them, so the hook logs nothing about them. (The hook's WARN `Unknown 0x52xx msgid=…`, `hook/framework/hook_framework.c:360-368`, covers only IDs that do arrive but that the hook does not handle.)
