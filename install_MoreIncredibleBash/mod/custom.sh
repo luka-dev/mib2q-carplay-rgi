@@ -168,8 +168,11 @@ case $ACTION in
 install)
     cd "$ROOT" || { rm -f "$LIST"; exit 1; }
     while IFS= read -r f; do
-        case $f in *.DS_Store) continue ;; esac
         dest=/${f#./}; dir=${dest%/*}
+        # macOS junk from a Mac-written card: AppleDouble "._name" and .DS_Store.
+        # Never install it, and drop copies an older install put on the unit
+        # (a "._carplay_hook.jar" in lsd/jars would land on j9's bootclasspath).
+        case $f in */._*|*/.DS_Store) rm -f "$dest"; continue ;; esac
         mkdir -p "$dir" || { echo "FAILED mkdir $dir"; rm -f "$LIST"; exit 1; }
         if is_replaced "$dest"; then backup_once "$dest" "$dest.carplay-stock" || { rm -f "$LIST"; exit 1; }; fi
         tmp=$dest.carplay-new.$$
