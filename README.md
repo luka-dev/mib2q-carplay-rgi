@@ -126,7 +126,7 @@ are in `docs/research/`; primary evidence (papers, manuals, data files, decompil
 | `models/` | HSSR upmix models (q6d main model, V11 guard) |
 | `deploy/` | On-unit runtime scripts, SI child config, patched firmware and PF/deva recipes |
 | `scripts/` | Host build and test entry points |
-| `install_MoreIncredibleBash/`, `uninstall_MoreIncredibleBash/` | M.I.B. SD install/remove scripts |
+| `install_MoreIncredibleBash/`, `uninstall_MoreIncredibleBash/`, `logging_MoreIncredibleBash/` | M.I.B. SD install / remove / log-collection scripts |
 | `protector/` | VIN-lock protector used by the protected build |
 | `tools/` | Host tools (upmix renderer and benches, QSA emulator, amp model, …) |
 | `assets/` | RE working sets (`soundamp/`, `vc-fonts/`) and visual references |

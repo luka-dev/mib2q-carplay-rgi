@@ -30,7 +30,7 @@ EOF
 
 fail() { echo "FAIL ($1): $2"; exit 1; }
 shells=
-for s in /bin/ksh /bin/mksh /bin/dash /bin/sh; do [ -x "$s" ] && shells="$shells $s"; done
+for s in /bin/ksh /bin/mksh "$(command -v mksh 2>/dev/null)" /bin/dash /bin/sh; do [ -x "$s" ] && shells="$shells $s"; done
 for sh in $shells; do
     cp "$T/stock" "$T/d"; rm -f "$T/d.carplay-stock"
     "$sh" "$T/h.sh" "$T/d" > /dev/null || fail "$sh" "patch returned non-zero"
