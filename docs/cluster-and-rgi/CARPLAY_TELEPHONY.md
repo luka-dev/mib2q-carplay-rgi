@@ -14,6 +14,8 @@ While CarPlay owns the iPhone, the cluster telephone tab behaves as it does with
 - recents and favorites, and dialling from them;
 - the missed-call indication, signal strength, register state and carrier name.
 
+The Directory (phonebook, BAP FctID 51-53) stays empty by design: iAP2 gives the car no contacts, only the recents and favorites lists, and the HU's own phonebook comes over BT PBAP, which is not connected during wired CarPlay. `GatedAddressBook` therefore tells the VC `DOWNLOAD_STATE_NO_PHONE_BOOK_AVAILABLE` with 0 entries while the gate is on, and replays stock's PbState on gate-off; what the VC draws for that state is not yet seen on the car. `[code]`
+
 A caller picture is not possible: iAP2 CallStateUpdate carries no image ([iAP2 Communications](IAP2_COMMUNICATIONS.md#-callstateupdate-0x4155-and-call-control)).
 
 The idea follows xPaiiN's `mst2-carplay-vc` on MIB2 Standard (call data from iAP2, commands back to the phone). That code hooks `ipod-drvr-iap2`, which MHI2Q does not have, so only the idea and its car-verified wire bytes carry over.
@@ -114,6 +116,8 @@ Mute is optimistic: a mute toggled on the phone is not read back, because stock'
 | 3 | Accept, hangup, hold/resume, swap, dial | Implemented |
 | 4 | Recents and favorites, dial from a list | Implemented |
 | 5 | Mic mute, missed-call indication, signal, register state, carrier | Implemented |
+| 6 | Directory shows "no phonebook" instead of an empty list | Implemented, not verified on the car |
+| 7 | HU phone app (TEL key, menu) goes straight to CarPlay: the stock "Your iPhone is in Apple CarPlay mode" popup is skipped by pressing its "Switch to Apple CarPlay" for the user (`CarPlayPhoneSMM`, built by the patched phone-SM `Activator`) | Implemented, not verified on the car |
 | – | Caller picture | Not possible over iAP2 |
 
 On 2026-09-23 the owner confirmed on the car that it works on the first try. The logs from that session (`logs/telephony-20260923-102339/`, not in git) show the gate switching on at CarPlay connect and iOS sending 12 recents (the CarPlay cap) and 4 favorites within 21 s of the hook starting. `[car]`
