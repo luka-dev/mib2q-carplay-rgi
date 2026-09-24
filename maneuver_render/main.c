@@ -11,6 +11,7 @@
  * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
+#include "log_stamp.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -415,7 +416,7 @@ int main(int argc, char **argv) {
     signal(SIGPIPE, SIG_IGN);
 #endif
 
-    fprintf(stderr, "maneuver_render: starting %dx%d\n", WINDOW_W, WINDOW_H);
+    fprintf(stderr, "%s maneuver_render: starting %dx%d\n", log_stamp(), WINDOW_W, WINDOW_H);
 
     /* Cover platform_init as well as runtime/teardown. A process blocked in
      * eglInitialize has a valid PID but no useful output; the supervisor's

@@ -28,6 +28,8 @@
 #include <time.h>
 
 #include "gl_compat.h"
+#define GLPC_DIR "/mnt/persist/var/app/luka_carplay_maneuver"
+#include "gl_program_cache.h"
 #include "render.h"
 #include "protocol.h"
 #include "maneuver.h"
@@ -675,6 +677,38 @@ static GLuint compile_shader(GLenum type, const char *src) {
     return s;
 }
 
+/* Create, bind attributes 0..n-1 in order, and link: from the persistent
+ * program-binary cache when it holds this exact program, else by compiling
+ * (then saved for the next launch).  The tag names the attribute bindings,
+ * which are baked into a cached binary. */
+static GLuint link_program_cached(const char *tag, const char *vert, const char *frag,
+                                  const char *const *attrs, int nattrs) {
+    GLuint program = glCreateProgram(), vs = 0, fs = 0;
+    GLint ok = 0;
+    int i;
+    if (!program) return 0;
+    for (i = 0; i < nattrs; ++i) glBindAttribLocation(program, (GLuint)i, attrs[i]);
+    if (glpc_load(program, tag, vert, frag)) return program;
+    vs = compile_shader(GL_VERTEX_SHADER, vert);
+    fs = compile_shader(GL_FRAGMENT_SHADER, frag);
+    if (vs && fs) {
+        glAttachShader(program, vs);
+        glAttachShader(program, fs);
+        glLinkProgram(program);
+        glGetProgramiv(program, GL_LINK_STATUS, &ok);
+        if (!ok) {
+            char log[512];
+            glGetProgramInfoLog(program, sizeof(log), NULL, log);
+            fprintf(stderr, "render: %s link error: %s\n", tag, log);
+        }
+    }
+    if (vs) glDeleteShader(vs);
+    if (fs) glDeleteShader(fs);
+    if (!ok) { glDeleteProgram(program); return 0; }
+    glpc_store(program, tag, vert, frag);
+    return program;
+}
+
 static int build_program(void) {
     char vert_src[4096];
     snprintf(vert_src, sizeof(vert_src), "%s%s%s",
@@ -683,37 +717,11 @@ static int build_program(void) {
     snprintf(frag_src, sizeof(frag_src), "%s%s%s",
              SHADER_HEADER, SHADER_PRECISION, k_frag_src_body);
 
-    GLuint vs = compile_shader(GL_VERTEX_SHADER, vert_src);
-    GLuint fs = compile_shader(GL_FRAGMENT_SHADER, frag_src);
-    if (!vs || !fs) {
-        if (vs) glDeleteShader(vs);
-        if (fs) glDeleteShader(fs);
-        return -1;
-    }
-
-    g_program = glCreateProgram();
-    glAttachShader(g_program, vs);
-    glAttachShader(g_program, fs);
     /* GL 2.1 requires array 0 to remain the position stream. */
-    glBindAttribLocation(g_program,0,"a_pos");
-    glBindAttribLocation(g_program,1,"a_normal");
-    glBindAttribLocation(g_program,2,"a_progress");
-    glLinkProgram(g_program);
-
-    GLint ok = 0;
-    glGetProgramiv(g_program, GL_LINK_STATUS, &ok);
-    if (!ok) {
-        char log[512];
-        glGetProgramInfoLog(g_program, sizeof(log), NULL, log);
-        fprintf(stderr, "render: link error: %s\n", log);
-        glDetachShader(g_program, vs);
-        glDetachShader(g_program, fs);
-        glDeleteShader(vs);
-        glDeleteShader(fs);
-        glDeleteProgram(g_program);
-        g_program = 0;
-        return -1;
-    }
+    static const char *const attrs[] = { "a_pos", "a_normal", "a_progress" };
+    g_program = link_program_cached("maneuver:main:a_pos,a_normal,a_progress",
+                                    vert_src, frag_src, attrs, 3);
+    if (!g_program) return -1;
 
     g_attr_pos  = glGetAttribLocation(g_program, "a_pos");
     g_attr_norm = glGetAttribLocation(g_program, "a_normal");
@@ -735,42 +743,17 @@ static int build_program(void) {
     g_uni_tex      = glGetUniformLocation(g_program, "u_tex");
     g_uni_mask_scale = glGetUniformLocation(g_program, "u_mask_scale");
     g_uni_global_alpha = glGetUniformLocation(g_program, "u_global_alpha");
-
-    glDeleteShader(vs);
-    glDeleteShader(fs);
     return 0;
 }
 
 static GLuint build_pass_program(const char *name,const char *vertex_body,
                                  const char *fragment_body) {
-    char vertex[4096],fragment[8192];
-    GLuint vs,fs,program;
-    GLint ok;
+    static const char *const attrs[] = { "a_pos", "a_normal" };
+    char vertex[4096],fragment[8192],tag[64];
     snprintf(vertex,sizeof(vertex),"%s%s%s",SHADER_HEADER,SHADER_PRECISION,vertex_body);
     snprintf(fragment,sizeof(fragment),"%s%s%s",SHADER_HEADER,SHADER_PRECISION,fragment_body);
-    vs=compile_shader(GL_VERTEX_SHADER,vertex);
-    fs=compile_shader(GL_FRAGMENT_SHADER,fragment);
-    if(!vs || !fs) {
-        if(vs)glDeleteShader(vs);
-        if(fs)glDeleteShader(fs);
-        return 0;
-    }
-    program=glCreateProgram();
-    if(!program) {glDeleteShader(vs);glDeleteShader(fs);return 0;}
-    glAttachShader(program,vs);
-    glAttachShader(program,fs);
-    glBindAttribLocation(program,0,"a_pos");
-    glBindAttribLocation(program,1,"a_normal");
-    glLinkProgram(program);
-    glGetProgramiv(program,GL_LINK_STATUS,&ok);
-    if(!ok) {
-        char log[512];
-        glGetProgramInfoLog(program,sizeof(log),NULL,log);
-        fprintf(stderr,"render: %s pass link error: %s\n",name,log);
-        glDeleteProgram(program);program=0;
-    }
-    glDeleteShader(vs);glDeleteShader(fs);
-    return program;
+    snprintf(tag,sizeof(tag),"maneuver:%s:a_pos,a_normal",name);
+    return link_program_cached(tag,vertex,fragment,attrs,2);
 }
 
 static int build_flat_program(void) {
@@ -918,38 +901,14 @@ static int build_fxaa_program(void) {
     snprintf(vert, sizeof(vert), "%s%s%s", SHADER_HEADER, SHADER_PRECISION, k_fxaa_vert);
     snprintf(frag, sizeof(frag), "%s%s%s", SHADER_HEADER, SHADER_PRECISION, k_fxaa_frag);
 
-    GLuint vs = compile_shader(GL_VERTEX_SHADER, vert);
-    GLuint fs = compile_shader(GL_FRAGMENT_SHADER, frag);
-    if (!vs || !fs) {
-        fprintf(stderr, "render: FXAA shader compile failed\n");
-        if (vs) glDeleteShader(vs);
-        if (fs) glDeleteShader(fs);
-        return -1;
-    }
-
-    g_fxaa_prog = glCreateProgram();
-    glAttachShader(g_fxaa_prog, vs);
-    glAttachShader(g_fxaa_prog, fs);
-    glLinkProgram(g_fxaa_prog);
-    GLint ok = 0;
-    glGetProgramiv(g_fxaa_prog, GL_LINK_STATUS, &ok);
-    if (!ok) {
-        char log[512];
-        glGetProgramInfoLog(g_fxaa_prog, sizeof(log), NULL, log);
-        fprintf(stderr, "render: FXAA link error: %s\n", log);
-        glDetachShader(g_fxaa_prog, vs);
-        glDetachShader(g_fxaa_prog, fs);
-        glDeleteShader(vs);
-        glDeleteShader(fs);
-        glDeleteProgram(g_fxaa_prog);
-        g_fxaa_prog = 0;
+    g_fxaa_prog = link_program_cached("maneuver:fxaa", vert, frag, NULL, 0);
+    if (!g_fxaa_prog) {
+        fprintf(stderr, "render: FXAA program build failed\n");
         return -1;
     }
     g_fxaa_attr_pos = glGetAttribLocation(g_fxaa_prog, "a_pos");
     g_fxaa_uni_tex  = glGetUniformLocation(g_fxaa_prog, "u_tex");
     g_fxaa_uni_rcp  = glGetUniformLocation(g_fxaa_prog, "u_rcp");
-    glDeleteShader(vs);
-    glDeleteShader(fs);
     fprintf(stderr, "render: FXAA shader OK\n");
     return 0;
 }

@@ -10,6 +10,7 @@
 
 #ifdef PLATFORM_QNX
 
+#include "log_stamp.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -288,7 +289,7 @@ int platform_init(int width, int height) {
         fprintf(stderr, "platform_qnx: FAIL eglInitialize (err=0x%x)\n", eglGetError());
         return -1;
     }
-    fprintf(stderr, "platform_qnx: EGL %d.%d\n", major, minor);
+    fprintf(stderr, "%s platform_qnx: EGL %d.%d\n", log_stamp(), major, minor);
 
     /* No MSAA — FXAA post-process handles edge smoothing instead */
     EGLint config_attrs[] = {

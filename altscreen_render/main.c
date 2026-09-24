@@ -10,6 +10,7 @@
  *
  * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
+#include "log_stamp.h"
 #include "protocol.h"
 #include "frame_io.h"
 #include "sink.h"
@@ -501,6 +502,7 @@ int main(void) {
         putenv("IPL_CONFIG_DIR=/etc/eso/production");
 
     open_runtime_log("/tmp/altscreen_render.log", "/tmp/altscreen_render.log.1");
+    fprintf(stderr, "%s altscreen_render: process start\n", log_stamp());
 
     {
         pthread_t watchdog;
@@ -523,7 +525,7 @@ int main(void) {
     __sync_synchronize();
     g_startup_complete = 1;
     __sync_synchronize();
-    fprintf(stderr, "altscreen_render: listening on %s:%d\n", ALTAV_HOST, ALTAV_PORT);
+    fprintf(stderr, "%s altscreen_render: listening on %s:%d\n", log_stamp(), ALTAV_HOST, ALTAV_PORT);
 
     /* Start only after av_sink_open has posted PRISM. Java treats the first
      * VIDEO_ON/OFF as surface readiness before selecting cluster plane 99. */
@@ -542,8 +544,8 @@ int main(void) {
             if (generation == 0) {
                 fprintf(stderr, "altscreen_render: decoder BEGIN enqueue FAILED\n");
             } else {
-                fprintf(stderr, "altscreen_render: hook connected generation=%u\n",
-                        (unsigned)generation);
+                fprintf(stderr, "%s altscreen_render: hook connected generation=%u\n",
+                        log_stamp(), (unsigned)generation);
                 serve_client(cfd, generation);
                 decode_queue_end(generation);
             }

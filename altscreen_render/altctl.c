@@ -3,6 +3,7 @@
  *
  * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
+#include "log_stamp.h"
 #include "altctl.h"
 #include "protocol.h"
 #include "sink.h"
@@ -74,8 +75,12 @@ static void *ctl_loop(void *arg) {
             fd = ctl_connect();
             last_sent = -1;                       /* force resend of the current state on (re)connect */
             rx_used = 0;
-            if (fd < 0) { sleep(1); continue; }   /* Java control server not up yet — retry */
-            fprintf(stderr, "altscreen_render: control link to lsd up (:%d)\n", ALTCTL_PORT);
+            if (fd < 0) {                          /* Java control server not up yet — retry */
+                struct timespec retry = { 0, 200L * 1000000L };
+                nanosleep(&retry, NULL);
+                continue;
+            }
+            fprintf(stderr, "%s altscreen_render: control link to lsd up (:%d)\n", log_stamp(), ALTCTL_PORT);
         }
 
         /* Decode/presentation can complete after the last socket record. Never
@@ -88,7 +93,7 @@ static void *ctl_loop(void *arg) {
             ssize_t k = send(fd, pkt, sizeof(pkt), 0);
             if (k != (ssize_t)sizeof(pkt)) { close(fd); fd = -1; continue; }  /* reconnect */
             last_sent = state;
-            fprintf(stderr, "altscreen_render: -> VIDEO_%s\n", state ? "ON" : "OFF");
+            fprintf(stderr, "%s altscreen_render: -> VIDEO_%s\n", log_stamp(), state ? "ON" : "OFF");
         }
 
         /* ~10 Hz idle: catch state changes promptly + notice a peer close. */

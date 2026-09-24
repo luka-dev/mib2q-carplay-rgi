@@ -32,6 +32,8 @@
 #include <EGL/eglext.h>
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
+#define GLPC_DIR "/mnt/persist/var/app/luka_carplay_altscreen"
+#include "gl_program_cache.h"
 
 #include <errno.h>
 #include <pthread.h>
@@ -212,15 +214,20 @@ static int ep_make_program(screen_egl_present_t *p) {
     GLuint vs = 0, fs = 0;
     GLint ok = 0;
 
-    vs = ep_compile_shader(GL_VERTEX_SHADER, vertex_source, "vertex");
-    fs = ep_compile_shader(GL_FRAGMENT_SHADER, fragment_source, "external-YUV");
-    if (!vs || !fs) goto fail;
     p->program = glCreateProgram();
     if (!p->program) goto fail;
-    glAttachShader(p->program, vs);
-    glAttachShader(p->program, fs);
-    glLinkProgram(p->program);
-    glGetProgramiv(p->program, GL_LINK_STATUS, &ok);
+    if (glpc_load(p->program, "altscreen:yuv", vertex_source, fragment_source)) {
+        ok = 1;
+    } else {
+        vs = ep_compile_shader(GL_VERTEX_SHADER, vertex_source, "vertex");
+        fs = ep_compile_shader(GL_FRAGMENT_SHADER, fragment_source, "external-YUV");
+        if (!vs || !fs) goto fail;
+        glAttachShader(p->program, vs);
+        glAttachShader(p->program, fs);
+        glLinkProgram(p->program);
+        glGetProgramiv(p->program, GL_LINK_STATUS, &ok);
+        if (ok) glpc_store(p->program, "altscreen:yuv", vertex_source, fragment_source);
+    }
     if (!ok) {
         char log[768];
         GLsizei used = 0;
@@ -251,15 +258,20 @@ static int ep_make_loader_program(screen_egl_present_t *p) {
     GLuint vs = 0, fs = 0;
     GLint ok = 0;
 
-    vs = ep_compile_shader(GL_VERTEX_SHADER, vertex_source, "loader vertex");
-    fs = ep_compile_shader(GL_FRAGMENT_SHADER, PRISM_WAITING_GLES, "PRISM waiting");
-    if (!vs || !fs) goto fail;
     p->loader_program = glCreateProgram();
     if (!p->loader_program) goto fail;
-    glAttachShader(p->loader_program, vs);
-    glAttachShader(p->loader_program, fs);
-    glLinkProgram(p->loader_program);
-    glGetProgramiv(p->loader_program, GL_LINK_STATUS, &ok);
+    if (glpc_load(p->loader_program, "altscreen:prism", vertex_source, PRISM_WAITING_GLES)) {
+        ok = 1;
+    } else {
+        vs = ep_compile_shader(GL_VERTEX_SHADER, vertex_source, "loader vertex");
+        fs = ep_compile_shader(GL_FRAGMENT_SHADER, PRISM_WAITING_GLES, "PRISM waiting");
+        if (!vs || !fs) goto fail;
+        glAttachShader(p->loader_program, vs);
+        glAttachShader(p->loader_program, fs);
+        glLinkProgram(p->loader_program);
+        glGetProgramiv(p->loader_program, GL_LINK_STATUS, &ok);
+        if (ok) glpc_store(p->loader_program, "altscreen:prism", vertex_source, PRISM_WAITING_GLES);
+    }
     if (!ok) {
         char log[768];
         GLsizei used = 0;
@@ -482,6 +494,8 @@ static int ep_alias_source_pixmaps(screen_egl_present_t *p) {
     return 0;
 }
 
+static uint64_t ep_monotonic_ns(void);
+
 static int ep_init_egl(screen_egl_present_t *p) {
     const char *egl_ext;
     const char *gl_ext;
@@ -498,6 +512,7 @@ static int ep_init_egl(screen_egl_present_t *p) {
         EGL_NONE
     };
     EGLNativeWindowType native_window;
+    uint64_t t_begin = ep_monotonic_ns(), t_egl, t_yuv, t_prism, t_art;
 
     p->egl_display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
     if (p->egl_display == EGL_NO_DISPLAY) goto egl_fail;
@@ -542,8 +557,21 @@ static int ep_init_egl(screen_egl_present_t *p) {
                 (void *)p->image_target_texture);
         return -1;
     }
-    if (ep_make_program(p) != 0 || ep_make_loader_program(p) != 0 ||
-        ep_make_loader_textures(p) != 0) return -1;
+    t_egl = ep_monotonic_ns();
+    if (ep_make_program(p) != 0) return -1;
+    t_yuv = ep_monotonic_ns();
+    if (ep_make_loader_program(p) != 0) return -1;
+    t_prism = ep_monotonic_ns();
+    if (ep_make_loader_textures(p) != 0) return -1;
+    t_art = ep_monotonic_ns();
+    /* Startup cost split: shows whether EGL, a shader build (cache miss/hit)
+     * or the PRISM art dominates "Screen/EGL open took". */
+    fprintf(stderr,
+            "altscreen_render[egl]: startup egl=%llu yuv=%llu prism=%llu art=%llu ms\n",
+            (unsigned long long)((t_egl - t_begin) / 1000000ULL),
+            (unsigned long long)((t_yuv - t_egl) / 1000000ULL),
+            (unsigned long long)((t_prism - t_yuv) / 1000000ULL),
+            (unsigned long long)((t_art - t_prism) / 1000000ULL));
     if (!eglSwapInterval(p->egl_display, EP_SWAP_INTERVAL)) goto egl_fail;
     fprintf(stderr,
             "altscreen_render[egl]: live GPU=%s GL=%s EGL=%d.%d pixmap-image+external-image OK\n",

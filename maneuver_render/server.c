@@ -17,6 +17,7 @@
  * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
+#include "log_stamp.h"
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -49,7 +50,7 @@ static uint8_t g_event_queue[EVENT_QUEUE_SIZE];
 static int g_event_head = 0;
 static int g_event_count = 0;
 
-#define RETRY_INTERVAL_SEC 1   /* re-attempt connect every 1 s if Java not up yet */
+#define RETRY_INTERVAL_MS 200 /* re-attempt connect every 200 ms if Java not up yet */
 
 /* Any lost peer invalidates the visible frame, including RST/write failure.
  * Main clears content before accepting fresh state on the reconnected link. */
@@ -178,7 +179,7 @@ int cr_server_init(int port) {
     /* First connect attempt — Java should already be listening. */
     g_server_fd = try_connect();
     if (g_server_fd >= 0) {
-        fprintf(stderr, "server: connected to 127.0.0.1:%d\n", port);
+        fprintf(stderr, "%s server: connected to 127.0.0.1:%d\n", log_stamp(), port);
     } else {
         fprintf(stderr, "server: 127.0.0.1:%d not yet listening, will retry\n", port);
     }
@@ -187,15 +188,17 @@ int cr_server_init(int port) {
 }
 
 void cr_server_poll(void) {
-    /* Reconnect if disconnected, throttled to RETRY_INTERVAL_SEC. */
+    /* Reconnect if disconnected, throttled to RETRY_INTERVAL_MS. */
     if (g_server_fd < 0 && g_target_port > 0) {
         struct timeval now;
         gettimeofday(&now, NULL);
-        if (now.tv_sec - g_last_retry.tv_sec >= RETRY_INTERVAL_SEC) {
+        long since_ms = (now.tv_sec - g_last_retry.tv_sec) * 1000L
+                      + (now.tv_usec - g_last_retry.tv_usec) / 1000L;
+        if (since_ms >= RETRY_INTERVAL_MS || since_ms < 0) {
             g_last_retry = now;
             g_server_fd = try_connect();
             if (g_server_fd >= 0) {
-                fprintf(stderr, "server: connected to 127.0.0.1:%d\n", g_target_port);
+                fprintf(stderr, "%s server: connected to 127.0.0.1:%d\n", log_stamp(), g_target_port);
                 g_recv_len = 0;
                 clear_event_queue();
                 if (g_ready_sent) send_event(EVT_READY);

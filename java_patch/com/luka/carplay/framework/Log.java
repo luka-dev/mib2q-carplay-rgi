@@ -68,7 +68,7 @@ public final class Log {
 
     private static void out(int l, String p, String tag, String msg) {
         if (l > level) return;
-        String line = "[CP/" + p + "][" + tag + "] " + msg;
+        String line = stamp() + " [CP/" + p + "][" + tag + "] " + msg;
         synchronized (LOCK) {
             ensureWriterLocked();
             if (writerThread == null) return;
@@ -82,6 +82,25 @@ public final class Log {
             queueCount++;
             LOCK.notifyAll();
         }
+    }
+
+    /* Same "HH:MM:SS.mmm" wall clock as the hook and renderer logs, so one
+     * startup timeline can be read across all of them. */
+    private static String stamp() {
+        java.util.Calendar c = java.util.Calendar.getInstance();
+        int h = c.get(java.util.Calendar.HOUR_OF_DAY), m = c.get(java.util.Calendar.MINUTE);
+        int sec = c.get(java.util.Calendar.SECOND), ms = c.get(java.util.Calendar.MILLISECOND);
+        StringBuffer b = new StringBuffer(12);
+        if (h < 10) b.append('0');
+        b.append(h).append(':');
+        if (m < 10) b.append('0');
+        b.append(m).append(':');
+        if (sec < 10) b.append('0');
+        b.append(sec).append('.');
+        if (ms < 100) b.append('0');
+        if (ms < 10) b.append('0');
+        b.append(ms);
+        return b.toString();
     }
 
     /* No stock HMI/BAP callback ever performs file I/O. A single daemon owns

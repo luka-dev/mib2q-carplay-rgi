@@ -82,6 +82,22 @@ Cold boot on 2026-09-16 still showed about 1.5 s of black: `Screen/EGL open` too
 
 Sources: `ALTSCREEN_PRISM_WAITING_2026_09_14`, `ALTSCREEN_VC_NAV_STATUSBAR`
 
+## ⏱️ Renderer start cost
+
+Both renderers start only when the first `dio_manager` generation after boot starts `carplay_monitor.sh`; later sessions adopt the running processes, so this cost is paid once per boot.
+
+| Step | Cost | Change (2026-09-24) |
+|---|---|---|
+| `altscreen_render` Screen/EGL open (EGL init, YUV + PRISM shader compile, two PNG decodes, first PRISM frame) | **1349 ms** on the car (2026-09-16) **[car]** | program-binary cache, below |
+| PRISM PNG decodes (512×512 material + signature, stb_image) | 2.4 ms on the Mac host; roughly tens of ms on Krait (estimate) | none, too small |
+| `maneuver_render`: five programs (main, flat, shadow, cutout, FXAA) | not measured | program-binary cache |
+| Control link to Java (`:19832`) and route socket (`:19800`) retry while Java is not listening | up to 1 s each | retry every 200 ms |
+| `carplay_monitor.sh` `sleep 1` before the first renderer and between the two | 2 s | unchanged: it keeps renderer EGL work off `dio_manager`'s 10 s SI startup budget, and a missed budget restarts the whole USB chain. Revisit with timestamps. |
+
+**Program-binary cache** (`common/gl_program_cache.h`). There is no offline compiler for the Adreno 320 driver (stock Kanzi ships binaries from Harman's toolchain, which we do not have), so the cache fills on the unit. The driver (`/proc/boot/OpenGLES20.so`) advertises `GL_OES_get_program_binary` and `GL_AMD_program_binary_Z400`. After the first successful link each program's binary is saved to `/mnt/persist/var/app/luka_carplay_altscreen/<key>.bin` or `.../luka_carplay_maneuver/<key>.bin` (qnx6 `rw` in `/etc/fstab`, survives power-off); later launches call `glProgramBinaryOES` instead of compiling. The key hashes the tag (attribute bindings), both sources, `GL_RENDERER` and `GL_VERSION`, so a shader edit or a firmware driver update misses. A missing extension, a corrupt or rejected binary, or a failed link deletes the file and falls back to compiling. Uninstall removes both directories. Test: `tests/gl_program_cache_test.c`. The saving on the car is **[open]**: compare the next two cold boots' `Screen/EGL open took` lines (the first fills the cache, the second hits it).
+
+**Timestamps.** Renderer milestones (process start, listening, control link up, `VIDEO_ON/OFF`, hook connected; `maneuver_render` start, EGL, route socket) and every Java log line now carry the hook's `HH:MM:SS.mmm` wall clock (`common/log_stamp.h`, `Log.java`), so one cold boot gives a cross-process startup timeline. QEMU cannot give these numbers: the harness has no Screen, OMX or Adreno and runs single-core TCG.
+
 ## ❌ The PRISM compositor that was removed
 
 The intermediate design (commit `7fce1c4`) kept a compositor thread alive for a smooth, reversible PRISM↔video handoff. Each OMX callback submitted to `prism_queue` and waited for the compositor to copy the native source into an owned RGBA FBO, run PRISM and swap before `prism_queue_complete` released the callback: an extra rendezvous and a full-frame GPU pass per picture, tying OMX buffer recycling to compositor speed. Once the handoff reached 1 the shader had a cheap passthrough branch, but the cache copy and rendezvous stayed. **[code]** (historical)
