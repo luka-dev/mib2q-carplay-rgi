@@ -14,7 +14,7 @@ While CarPlay owns the iPhone, the cluster telephone tab behaves as it does with
 - recents and favorites, and dialling from them;
 - the missed-call indication, signal strength, register state and carrier name.
 
-The Directory (phonebook, BAP FctID 51-53) stays empty by design: iAP2 gives the car no contacts, only the recents and favorites lists, and the HU's own phonebook comes over BT PBAP, which is not connected during wired CarPlay. `GatedAddressBook` therefore tells the VC `DOWNLOAD_STATE_NO_PHONE_BOOK_AVAILABLE` with 0 entries while the gate is on, and replays stock's PbState on gate-off; what the VC draws for that state is not yet seen on the car. `[code]`
+The Directory (phonebook, BAP FctID 51-53) stays empty by design: iAP2 gives the car no contacts, only the recents and favorites lists, and the HU's own phonebook comes over BT PBAP, which is not connected during wired CarPlay. `GatedAddressBook` therefore tells the VC `DOWNLOAD_STATE_NO_PHONE_BOOK_AVAILABLE` with 0 entries while the gate is on, and replays stock's PbState on gate-off. In the A5 2018 VC (`hmi_app.elf`, `on_PbState_Status` `0x17FBBC`, bindings `0x614E08`) downloadState 0 hides the list and shows message `0x19C` (most likely "not available" / "no entries"; the text mapping was not resolved), while stock's CarPlay-time value 2 with 0 entries draws an empty list. The other native option, MobileServiceSupport bit 52 = 0, removes the Directory item from the menu instead; the VC has no greyed state. `[decompile]`
 
 A caller picture is not possible: iAP2 CallStateUpdate carries no image ([iAP2 Communications](IAP2_COMMUNICATIONS.md#-callstateupdate-0x4155-and-call-control)).
 
@@ -177,6 +177,7 @@ Settled statically on 2026-09-23: the hold/mute parameter, the recents type valu
 - Our VC build may differ from the A5 2018 VC the decompile came from; the normal branch of the note rule needs `DP[0x12A] == 117`.
 - A Tel press must act exactly once (the 800 ms filter).
 - iOS stops the lists when the accessory is not a CarPlay-paired vehicle; when that re-check fires was not traced.
+- **Injection generation (fixed 2026-09-24).** `inject.generation` used to advance on every stock send, so the injection worker dropped a frame queued from Encode whenever the stock message's own Send won the race. One-shot StartListUpdates (queued on stock 0x4154) was then lost for the session, which left recents and favorites empty (seen once after a cold boot). It now advances only per iAP2 link session (`inject_note_link`, `tests/inject_generation_test.c`). `[code]`
 - **Known limits (audit 2026-09-24).** Hang-up ignores the VC's call index and ends iOS's frontmost call, so with an active and a held call the held one cannot be ended first from the cluster. A waiting call offers only "accept", which iOS turns into hold-and-accept; end-and-accept (AcceptCall action 1) and join (MergeCalls 0x415E) are not wired, because the VC is never given those options. A mute changed on the phone is not read back.
 - Who owns the tab when a second BT phone has a real call during CarPlay? Today CarPlay does, for as long as stock reports `mct = 5`. (Stock hangs up HFP calls when CarPlay starts, `TelTerminalModeHandler.TMActiveState.enter:125-131`.)
 

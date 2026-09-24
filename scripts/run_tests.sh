@@ -168,6 +168,11 @@ cc -std=c99 -O1 -Wall -Wextra -Werror -Wno-unused-function \
     hook/framework/iap2_protocol.c -o "$OUT/tel_hook"
 "$OUT/tel_hook"
 
+printf '%-32s ' inject_generation_test
+cc -std=c99 -O1 -Wall -Wextra -Werror -Wno-unused-function \
+    -DENABLE_LOGGING=0 -Ihook -Ihook/framework tests/inject_generation_test.c -o "$OUT/inject_generation"
+"$OUT/inject_generation"
+
 printf '%-32s ' state_trace_test
 cc -std=c99 -O2 -Wall -Wextra -Werror -Ihook \
     -DENABLE_LOGGING=0 -DENABLE_STATE_TRACE=1 \

@@ -112,9 +112,29 @@ extern const size_t hook_module_table_count;
  * FF5A sequence/ack/checksums inside the stock Cinemo stack. */
 typedef struct {
     uint8_t link_session;
-    uint32_t generation;
+    uint32_t generation;   /* one iAP2 link session, never one send; monotonic */
+    bool linked;           /* a stock link frame was seen since the last Identify */
     bool valid;
 } injection_ctx_t;
+
+/* A stock link frame on `session`.  A new generation only when the link session
+ * changes: bumping it on every stock send made the worker drop a frame queued
+ * from Encode whenever the stock message's own Send won the race, and one-shot
+ * StartListUpdates (0x4170) was then lost for the whole session. */
+static inline void inject_note_link(injection_ctx_t* inj, uint8_t session) {
+    if (!inj->linked || inj->link_session != session) {
+        if (++inj->generation == 0) inj->generation = 1;
+    }
+    inj->link_session = session;
+    inj->linked = true;
+}
+
+/* Identify boundary.  generation is kept, so a frame queued for the old link
+ * can never match the next one. */
+static inline void inject_unlink(injection_ctx_t* inj) {
+    inj->linked = false;
+    inj->valid = false;
+}
 
 /* Hook Context */
 struct hook_context {
@@ -130,7 +150,7 @@ struct hook_context {
     bool session_active;
 #if ENABLE_STATE_TRACE
     /* Stable across every iAP2/AirPlay/QSA marker for one physical Identify
-     * cycle.  Unlike inject.generation, this does not advance per link frame. */
+     * cycle.  inject.generation advances per iAP2 link session; this per Identify cycle. */
     uint32_t lifecycle_generation;
 #endif
 
