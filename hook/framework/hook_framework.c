@@ -206,7 +206,9 @@ static void* inject_worker_main(void* arg) {
         pthread_mutex_unlock(&g_fw.lock);
 
         if (!iap) {
-            LOG_INFO(LOG_MODULE,
+            /* WARN: never expected in a live session (a lost StartListUpdates
+             * or call command), so it must reach the log without carplay_verbose. */
+            LOG_WARN(LOG_MODULE,
                      "Dropped stale semantic frame gen=%u session=%u len=%u",
                      (unsigned)item.generation, (unsigned)item.link_session,
                      (unsigned)item.len);
