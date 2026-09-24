@@ -173,7 +173,7 @@ All offline; none of these runs is an on-car proof of the current binaries (the 
 | `bash scripts/test_maneuver_native.sh` | ASan/UBSan: all families, partial meshes, retraced paths, 40 Hz retargets, 200 Hz duplicates, 30/60 Hz equivalence, TCP FIN/RST, half-degrees, refresh, coalescing, NONE, ±160° lift |
 | `make -C tools/maneuver-preview all test`, `capture.py`, `capture_lanes.py`, `test_lane_transport.py` | 32 scenes × 2 stages, 64 GPU stills, 10 camera/progress handoffs with exact settled endpoints and no recompilation during travel |
 | `python3 tests/test_rgd_native_contract.py` | real TLV parser + reset/slot writer + Java + stock BAP sender |
-| `bash scripts/build_renderers.sh`, `LOG=0 bash scripts/build_hook.sh`, `bash scripts/build_java.sh` | production ARM artefacts (ARM ELF, no emutls); 107 shipping classes at bytecode 48.0 |
+| `bash scripts/build_renderers.sh`, `bash scripts/build_hook.sh`, `bash scripts/build_java.sh` | production ARM artefacts (ARM ELF, no emutls); 107 shipping classes at bytecode 48.0 |
 
 Preview: `build/maneuver-preview/preview --lanes 0`; Left/Right next maneuver with travel, Up narrow/wide frame, Down lane events, P show/hide lanes, Space fill/blink, D red frame. Still needed on the car: both VC compositions, lanes appearing/hiding within one maneuver, blink, travel with fill retreat, reroute, reconnect, day/night readability of the white/blue arrow, real queue/BAP error rates and physical frame skew. `[open]`
 

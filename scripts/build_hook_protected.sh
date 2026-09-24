@@ -11,7 +11,7 @@
 # unstamped, a CARPLAY_PROT .so is inert on every car.
 #
 #   ./scripts/build_hook_protected.sh WAUZZZF45HA149423
-#   HOOK_AUDIO=0 LOG=0 ./scripts/build_hook_protected.sh <VIN>   # beta: no audio, no logs
+#   HOOK_AUDIO=0 ./scripts/build_hook_protected.sh <VIN>   # beta: no audio
 #   PROT_SECRET=<hex> ./scripts/build_hook_protected.sh <VIN>    # pin a stable fleet secret
 #
 # PROT_SECRET is optional: unset -> a fresh random per-build secret, used for

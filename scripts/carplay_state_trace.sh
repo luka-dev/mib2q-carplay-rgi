@@ -1,5 +1,5 @@
 #!/bin/bash
-# Operate the compact LOG=0/AUDIO_STATE_TRACE=1 capture on the MHI2Q unit.
+# Operate the compact AUDIO_STATE_TRACE=1 capture on the MHI2Q unit.
 set -euo pipefail
 
 DEV="${CARPLAY_TRACE_DEV:-root@10.173.189.1}"

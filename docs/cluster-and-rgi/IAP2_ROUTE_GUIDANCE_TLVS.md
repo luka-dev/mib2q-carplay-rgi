@@ -167,7 +167,7 @@ The link checksum is the negated 8-bit sum of the covered bytes (`iap2_cksum_neg
 
 ### Unknown 0x52xx messages
 
-Any `0x52xx` message in either direction that is not one of the five handled IDs (`0x5200`–`0x5204`) logs `Unknown 0x52xx msgid=0x%04X dir=IN|OUT len=%zu` at WARN (`hook/framework/hook_framework.c:348-368`, called at `:893` for incoming and `:972` for outgoing). It shows in a normal build without `carplay_verbose`; a `LOG=0` build compiles it out. The raw bytes follow as `IAP2 0x52xx raw`, but that dump is DEBUG level and only 32 bytes, so it is not visible at WARN or INFO. If iOS adds a route-guidance message, this line is the first place it appears.
+Any `0x52xx` message in either direction that is not one of the five handled IDs (`0x5200`–`0x5204`) logs `Unknown 0x52xx msgid=0x%04X dir=IN|OUT len=%zu` at WARN (`hook/framework/hook_framework.c:348-368`, called at `:893` for incoming and `:972` for outgoing). It shows in a normal build without `carplay_verbose`. The raw bytes follow as `IAP2 0x52xx raw`, but that dump is DEBUG level and only 32 bytes, so it is not visible at WARN or INFO. If iOS adds a route-guidance message, this line is the first place it appears.
 
 On-unit acceptance: both proof lines appear, then control SETUP with LocationInfo intact; first `0x5201` within 1-2 s; song metadata and cover art keep changing while RGI runs; a fast replug gives a new Identify-start reset and a new successful `0x5200`; no `Injected frame with prefix` or `Semantic iAP2 send: replaced carrier` line. Whether all five were observed on the current build is `[open]`.
 

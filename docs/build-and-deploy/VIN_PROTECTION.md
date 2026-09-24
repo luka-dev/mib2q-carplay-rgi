@@ -54,7 +54,7 @@ You give the VIN before the build starts. The script compiles and then stamps, i
 
 ```bash
 ./scripts/build_hook_protected.sh <VIN>                      # stamped -> build/protected_<VIN>/
-HOOK_AUDIO=0 LOG=0 ./scripts/build_hook_protected.sh <VIN>   # beta: no audio, no logs
+HOOK_AUDIO=0 ./scripts/build_hook_protected.sh <VIN>         # beta: no audio
 PROT_VIN=<VIN> ./scripts/build_hook_protected.sh             # VIN from the environment instead
 ```
 
@@ -117,7 +117,7 @@ The shipped reader chose the MMX persistence store because the RCC FEC partition
 
 The handoff's QEMU negative scenarios still describe what "cannot run elsewhere" would have to mean: QEMU without the RCC device; QEMU with correct substituted VIN, serial and device paths; replay of a recorded real RCC answer; a replaced VIN reader or helper; removal of a single authorization check. Failing the first proves nothing about the others, and no instruction was found that distinguishes the real RCC/MMX from QEMU. The shipped protector does not claim to pass these; see the ceiling above. **[open]** The QEMU benches in this repo use `-M virt -cpu cortex-a15`, and `tools/qsa-emu` replaces the DSP with a `libcsdIpcClient` stub whose `devstub.c` answers unknown `devctl` with success and reads with EOF, so a path existing or a call succeeding there is no proof of a real device.
 
-The compiler-pass design it asked for was never built; its constraints are still the right checklist if it ever is: keep the QNX guards (no emutls, no C++ runtime, no loader-lock init, exact exports), work with `LOG=0` and without traces, isolate per-VIN outputs, report covered regions and exceptions without secrets, restore floats bit-exactly and never reorder DSP arithmetic, do expensive work and RCC reads off the realtime audio thread, test damaged blocks, wrong/absent VIN and absent RCC, and measure init/RAM/realtime cost before any on-car claim. The deva driver cannot be covered this way because it is modified by binary patches (`deploy/deva-ctrl-qc/BUILD_CHAIN.md`). Primary references it cited: QNX 6.5 Qnet (remote resource managers via `/net`), RFC 5869 (HKDF: a KDF adds no secrecy to a known input), RFC 8439 §4 (nonce reuse), the QEMU ARM `virt` board docs, and an ARM emulator-deviation study (arXiv 2105.14273).
+The compiler-pass design it asked for was never built; its constraints are still the right checklist if it ever is: keep the QNX guards (no emutls, no C++ runtime, no loader-lock init, exact exports), work with and without traces, isolate per-VIN outputs, report covered regions and exceptions without secrets, restore floats bit-exactly and never reorder DSP arithmetic, do expensive work and RCC reads off the realtime audio thread, test damaged blocks, wrong/absent VIN and absent RCC, and measure init/RAM/realtime cost before any on-car claim. The deva driver cannot be covered this way because it is modified by binary patches (`deploy/deva-ctrl-qc/BUILD_CHAIN.md`). Primary references it cited: QNX 6.5 Qnet (remote resource managers via `/net`), RFC 5869 (HKDF: a KDF adds no secrecy to a known input), RFC 8439 §4 (nonce reuse), the QEMU ARM `virt` board docs, and an ARM emulator-deviation study (arXiv 2105.14273).
 
 <details>
 <summary>Verify a build locally</summary>

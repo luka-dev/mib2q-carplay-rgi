@@ -198,7 +198,7 @@ Sources: `ALTSCREEN_FRAME_RATE_INVESTIGATION`
 
 ## 🔧 The pace probe
 
-Build-time only: `LOG=0 AUDIO_STATE_TRACE=0 ALTSCREEN_PACE_TRACE=1 LOG_RGD_PACKET_RAW=0 bash scripts/build_hook.sh`; production leaves `ALTSCREEN_PACE_TRACE=0` (`scripts/build_hook_common.sh:57`). Output goes to `/tmp/carplay_alt_pace.log` via the bounded async logger, one summary per 300 video AUs plus a final summary; each receiver starts a fresh accumulator (`hook/altscreen/pace_trace.h`, `altscreen_hook.c:1259-1320`, `:1483-1505`). Only NTP deltas are recorded, never absolute timestamps or video bytes. **[code]**
+Build-time only: `ALTSCREEN_PACE_TRACE=1 bash scripts/build_hook.sh` (the trace build compiles the normal log out on its own); production leaves `ALTSCREEN_PACE_TRACE=0` and prints the same summaries in `/tmp/carplay_hook.log` only with `carplay_verbose`. Output goes to `/tmp/carplay_alt_pace.log` via the bounded async logger, one summary per 300 video AUs plus a final summary; each receiver starts a fresh accumulator (`hook/altscreen/pace_trace.h`, `altscreen_hook.c:1259-1320`, `:1483-1505`). Only NTP deltas are recorded, never absolute timestamps or video bytes. **[code]**
 
 | Field | Meaning |
 |---|---|

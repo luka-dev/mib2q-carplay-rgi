@@ -17,7 +17,7 @@
 #                            build/unprotected  or  build/protected_<VIN>
 #   PROT_BUILD   (0/1, default 0)   1 links the VIN-gate protector objects
 #   PROT_SECRET  (hex)              required when PROT_BUILD=1
-# It also honors the same knobs as before: QNX_TOOLCHAIN_VARIANT, LOG,
+# It also honors: QNX_TOOLCHAIN_VARIANT,
 # HOOK_AUDIO, AUDIO_STATE_TRACE, ALTSCREEN_PACE_TRACE, LOG_RGD_PACKET_RAW.
 # On success it sets OUT and APAC_OUT (absolute paths) for the caller.
 #
@@ -54,19 +54,23 @@ carplay_build_hook() {
   APAC_OUT="$PROJECT_DIR/$OUTDIR_REL/libcarplay_apac.so"
   mkdir -p "$PROJECT_DIR/$OUTDIR_REL"
 
-  local LOG="${LOG:-1}"
   local LOG_RGD_PACKET_RAW="${LOG_RGD_PACKET_RAW:-0}"
   local AUDIO_STATE_TRACE="${AUDIO_STATE_TRACE:-0}"
   local ALTSCREEN_PACE_TRACE="${ALTSCREEN_PACE_TRACE:-0}"
   # HOOK_AUDIO=0 builds the hook without the type-103 audio module (stock CarPlay
   # audio; no QSA/AirPlay audio interposers, no libcarplay_apac.so).
   local HOOK_AUDIO="${HOOK_AUDIO:-1}"
-  [[ "$LOG" == "0" || "$LOG" == "1" ]] || { echo "Invalid LOG=$LOG (0|1)"; return 1; }
+  # There is one production image: logging compiled in, WARN only, and every runtime
+  # diagnostic behind carplay_verbose (log_verbose()).  The old LOG=0 variant is gone.
+  [ "${LOG:-}" = 0 ] && { echo "LOG=0 is gone: the hook always logs WARN; touch carplay_verbose for diagnostics"; return 1; }
   [[ "$LOG_RGD_PACKET_RAW" == "0" || "$LOG_RGD_PACKET_RAW" == "1" ]] || { echo "Invalid LOG_RGD_PACKET_RAW"; return 1; }
   [[ "$AUDIO_STATE_TRACE" == "0" || "$AUDIO_STATE_TRACE" == "1" ]] || { echo "Invalid AUDIO_STATE_TRACE=$AUDIO_STATE_TRACE (0|1)"; return 1; }
   [[ "$ALTSCREEN_PACE_TRACE" == "0" || "$ALTSCREEN_PACE_TRACE" == "1" ]] || { echo "Invalid ALTSCREEN_PACE_TRACE=$ALTSCREEN_PACE_TRACE (0|1)"; return 1; }
   [[ "$HOOK_AUDIO" == "0" || "$HOOK_AUDIO" == "1" ]] || { echo "Invalid HOOK_AUDIO=$HOOK_AUDIO (0|1)"; return 1; }
-  [[ "$LOG_RGD_PACKET_RAW" == "1" && "$LOG" != "1" ]] && { echo "LOG_RGD_PACKET_RAW=1 requires LOG=1"; return 1; }
+  # A trace build writes only its compact ledger, so the normal hook log is compiled out.
+  local TRACE_ONLY=0
+  [[ "$AUDIO_STATE_TRACE" == "1" || "$ALTSCREEN_PACE_TRACE" == "1" ]] && TRACE_ONLY=1
+  [[ "$LOG_RGD_PACKET_RAW" == "1" && "$TRACE_ONLY" == "1" ]] && { echo "LOG_RGD_PACKET_RAW=1 needs the normal log, not a trace build"; return 1; }
 
   local CFLAGS_EXTRA="-D__QNX__ -mfpu=neon -mfloat-abi=softfp"
   if [ "$HOOK_AUDIO" == "0" ]; then
@@ -75,7 +79,7 @@ carplay_build_hook() {
   else
       echo "Stereo upmix renderer: hssr-universal"
   fi
-  [ "$LOG" == "0" ] && CFLAGS_EXTRA="$CFLAGS_EXTRA -DENABLE_LOGGING=0" && echo "Logging and diagnostic captures DISABLED"
+  [ "$TRACE_ONLY" == "1" ] && CFLAGS_EXTRA="$CFLAGS_EXTRA -DENABLE_LOGGING=0" && echo "Trace build: normal hook log compiled out"
   [ "$AUDIO_STATE_TRACE" == "1" ] && CFLAGS_EXTRA="$CFLAGS_EXTRA -DENABLE_STATE_TRACE=1" && echo "Compact lifecycle trace ENABLED"
   [ "$ALTSCREEN_PACE_TRACE" == "1" ] && CFLAGS_EXTRA="$CFLAGS_EXTRA -DENABLE_ALTSCREEN_PACE_TRACE=1" && echo "Stream-111 pacing trace ENABLED (no media capture)"
   [ "$LOG_RGD_PACKET_RAW" == "1" ] && CFLAGS_EXTRA="$CFLAGS_EXTRA -DRGD_TRACE_RAW_FULL=1" && echo "RGD raw packet logging ENABLED"

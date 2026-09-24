@@ -164,9 +164,9 @@ build; the resulting ELFs resolve the real Screen/EGL/GLES/OpenMAX libraries on 
 
 | Variant | Command | Output |
 | --- | --- | --- |
-| Quiet production | `LOG=0 ./scripts/build_hook.sh` | logging, audio probe captures and pace diagnostics compiled out |
+| Production | `./scripts/build_hook.sh` | the one image: WARN/ERROR log only; `touch /mnt/app/carplay_verbose` turns on INFO, audio captures and pace reports for the next session |
 | No audio module | `HOOK_AUDIO=0 ./scripts/build_hook.sh` | hook without the type-103 audio path, no codec |
-| State trace | `LOG=0 AUDIO_STATE_TRACE=1 ./scripts/build_hook.sh` | compact `/tmp/carplay_state_trace.log` ledger (see `scripts/carplay_state_trace.sh`) |
+| State trace | `AUDIO_STATE_TRACE=1 ./scripts/build_hook.sh` | compact `/tmp/carplay_state_trace.log` ledger (see `scripts/carplay_state_trace.sh`) |
 | VIN-locked | `./scripts/build_hook_protected.sh <VIN>` | stamped `.so` files in `build/protected_<VIN>/` |
 
 Build outputs (binaries only; builds never package a release):

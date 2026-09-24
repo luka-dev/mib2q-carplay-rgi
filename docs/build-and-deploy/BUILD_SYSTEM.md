@@ -111,13 +111,12 @@ All of these are validated as `0`/`1` in `build_hook_common.sh:54-66`, except th
 | Flag | Default | Effect |
 |---|---|---|
 | `HOOK_AUDIO` | `1` | `0` removes the type-103 audio path at compile time (`-DHOOK_AUDIO=0`): the `hook/audio/*` sources and the QSA/AirPlay audio interposers are left out, and `libcarplay_apac.so` is not built. A codec left in the output directory by an earlier audio build is removed. `AUDIO_SPATIAL=0` only disables type 103 at runtime; `HOOK_AUDIO=0` takes it out of the binary. |
-| `LOG` | `1` | `0` sets `-DENABLE_LOGGING=0`, which turns off logging and diagnostic captures (`:75`). |
-| `AUDIO_STATE_TRACE` | `0` | `1` sets `-DENABLE_STATE_TRACE=1`, a compact lifecycle trace. It exports the two trace HID seams and checks the markers after the build. |
+| `AUDIO_STATE_TRACE` | `0` | `1` sets `-DENABLE_STATE_TRACE=1`, a compact lifecycle trace; like `ALTSCREEN_PACE_TRACE=1` it compiles the normal hook log out (`-DENABLE_LOGGING=0`). It exports the two trace HID seams and checks the markers after the build. |
 | `ALTSCREEN_PACE_TRACE` | `0` | `1` sets `-DENABLE_ALTSCREEN_PACE_TRACE=1`, a stream-111 pacing trace. The markers are checked after the build. |
-| `LOG_RGD_PACKET_RAW` | `0` | `1` sets `-DRGD_TRACE_RAW_FULL=1`, which logs raw RGD packets. It requires `LOG=1` (`:66`). |
+| `LOG_RGD_PACKET_RAW` | `0` | `1` sets `-DRGD_TRACE_RAW_FULL=1`, which logs raw RGD packets. Not with a trace build. |
 | `QNX_TOOLCHAIN_VARIANT` | `latest` | `latest`, `4.9` or `8.5` (`:44-48`). The default `latest` is GCC 8.5. |
 
-At runtime the hook only logs at **WARN** and above by default. `LOG_INFO` never reaches `/tmp/carplay_hook.log` unless you `touch /mnt/app/carplay_verbose`, so any instrumentation you want to read back from the car must use `LOG_WARN`. See `memory/hook_log_is_warn_only.md` and [Landmines](../LANDMINES.md).
+There is one production image; the old `LOG=0` variant was removed on 2026-09-24 and `LOG=0` now stops the build. At runtime the hook logs only **WARN** and above and writes no captures. `touch /mnt/app/carplay_verbose` (or `/tmp/carplay_verbose`) switches on the full diagnostic set for the next `dio_manager` (the marker is read once per process, `log_verbose()` in `hook/framework/logging.c`): INFO in `/tmp/carplay_hook.log`, the probe103 plist and control traces and the APAP/RTCP, magic-cookie and elementary-stream captures in `/tmp/spatial_*` (`hook/audio/audio_hook.c`), and the stream-111 pace reports (`hook/altscreen/altscreen_hook.c`, always on with `ALTSCREEN_PACE_TRACE=1`). `SPA_TAP` keeps its own environment gate. Without the marker, `LOG_INFO` never reaches the log, so instrumentation you want to read back from a normal drive must use `LOG_WARN`. See `memory/hook_log_is_warn_only.md` and [Landmines](../LANDMINES.md).
 
 </details>
 

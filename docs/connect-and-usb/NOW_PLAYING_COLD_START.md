@@ -56,7 +56,7 @@ Sources: `NOW_PLAYING_STARTUP_STATE_MACHINE_AUDIT`
 
 ## 📊 The compact state trace
 
-A passive, generation-scoped discriminator, build-time only: `LOG=0 AUDIO_STATE_TRACE=1 ./scripts/build_hook.sh` (`scripts/build_hook.sh:10`, `-DENABLE_STATE_TRACE=1` in `scripts/build_hook_common.sh:76`). `LOG=0` still removes every ordinary log call and all packet/PCM captures; the trace keeps only the bounded async writer and writes `/tmp/carplay_state_trace.log`. Stock callbacks enqueue one short record and never touch the filesystem. It records no title, artist, artwork, cookie or audio payload. **[code]**
+A passive, generation-scoped discriminator, build-time only: `AUDIO_STATE_TRACE=1 ./scripts/build_hook.sh` (`-DENABLE_STATE_TRACE=1` in `scripts/build_hook_common.sh`). A trace build compiles the ordinary hook log and all packet/PCM captures out on its own (`-DENABLE_LOGGING=0`); the trace keeps only the bounded async writer and writes `/tmp/carplay_state_trace.log`. Stock callbacks enqueue one short record and never touch the filesystem. It records no title, artist, artwork, cookie or audio payload. **[code]**
 
 ```text
 ST ev=<process-event> mono_ms=<monotonic> pid=<pid> gen=<physical-Identify-generation> name=<event> ...
