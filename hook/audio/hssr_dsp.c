@@ -184,7 +184,7 @@ static float spa_hssr_dsp_tanh(float value)
 }
 
 /* In-place radix-2 complex FFT, 512 points.  The permutation comes from a
- * precomputed table and the inverse sign from a negated twiddle table, so
+ * precomputed swap table and the inverse sign from a negated twiddle table, so
  * neither the reversal loop nor the butterfly carries a branch.  The inverse
  * transform does NOT rescale by 1/N: both consumers multiply by
  * synthesis_window_scaled, which carries that factor. */
@@ -198,19 +198,61 @@ static void spa_hssr_fft(struct spa_hssr_dsp *state,
     unsigned index;
     unsigned length;
 
-    for (index = 0; index < SPA_HSSR_FFT_SIZE; ++index) {
-        unsigned reversed = state->bit_reverse[index];
+    for (index = 0; index < state->bit_swaps; ++index) {
+        unsigned a = state->bit_swap[index][0];
+        unsigned b = state->bit_swap[index][1];
+        float temporary = real[a];
 
-        if (index < reversed) {
-            float temporary = real[index];
-            real[index] = real[reversed];
-            real[reversed] = temporary;
-            temporary = imaginary[index];
-            imaginary[index] = imaginary[reversed];
-            imaginary[reversed] = temporary;
-        }
+        real[a] = real[b];
+        real[b] = temporary;
+        temporary = imaginary[a];
+        imaginary[a] = imaginary[b];
+        imaginary[b] = temporary;
     }
 
+#if SPA_HSSR_DSP_HAVE_NEON
+    /* The first two passes fused, four groups of four at a time: vld4 puts
+     * element k of each group in lane set k, so both passes are lane-wise
+     * vector arithmetic.  Same operations in the same order as the scalar
+     * passes below (pass 1 add/sub, pass 2 separate products then one
+     * subtract), so the result is unchanged; the scalar half=2 pass could not
+     * use the four-wide loop further down. */
+    {
+        const float32x4_t w0r = vdupq_n_f32(state->pass_twiddle_re[0]);
+        const float32x4_t w1r = vdupq_n_f32(state->pass_twiddle_re[1]);
+        const float32x4_t w0i = vdupq_n_f32(twiddle_imaginary_pass[0]);
+        const float32x4_t w1i = vdupq_n_f32(twiddle_imaginary_pass[1]);
+
+        for (index = 0; index < SPA_HSSR_FFT_SIZE; index += 16) {
+            float32x4x4_t r = vld4q_f32(real + index);
+            float32x4x4_t m = vld4q_f32(imaginary + index);
+            float32x4_t a0r = vaddq_f32(r.val[0], r.val[1]);
+            float32x4_t a0i = vaddq_f32(m.val[0], m.val[1]);
+            float32x4_t a1r = vsubq_f32(r.val[0], r.val[1]);
+            float32x4_t a1i = vsubq_f32(m.val[0], m.val[1]);
+            float32x4_t a2r = vaddq_f32(r.val[2], r.val[3]);
+            float32x4_t a2i = vaddq_f32(m.val[2], m.val[3]);
+            float32x4_t a3r = vsubq_f32(r.val[2], r.val[3]);
+            float32x4_t a3i = vsubq_f32(m.val[2], m.val[3]);
+            float32x4_t t0r = vsubq_f32(vmulq_f32(w0r, a2r), vmulq_f32(w0i, a2i));
+            float32x4_t t0i = vaddq_f32(vmulq_f32(w0r, a2i), vmulq_f32(w0i, a2r));
+            float32x4_t t1r = vsubq_f32(vmulq_f32(w1r, a3r), vmulq_f32(w1i, a3i));
+            float32x4_t t1i = vaddq_f32(vmulq_f32(w1r, a3i), vmulq_f32(w1i, a3r));
+
+            r.val[0] = vaddq_f32(a0r, t0r);
+            r.val[2] = vsubq_f32(a0r, t0r);
+            r.val[1] = vaddq_f32(a1r, t1r);
+            r.val[3] = vsubq_f32(a1r, t1r);
+            m.val[0] = vaddq_f32(a0i, t0i);
+            m.val[2] = vsubq_f32(a0i, t0i);
+            m.val[1] = vaddq_f32(a1i, t1i);
+            m.val[3] = vsubq_f32(a1i, t1i);
+            vst4q_f32(real + index, r);
+            vst4q_f32(imaginary + index, m);
+        }
+        length = 8;
+    }
+#else
     /* First pass: the only twiddle is (1, 0), so it is pure add/sub.  This is
      * a quarter of all butterflies and it carried four needless products. */
     for (index = 0; index < SPA_HSSR_FFT_SIZE; index += 2) {
@@ -224,7 +266,9 @@ static void spa_hssr_fft(struct spa_hssr_dsp *state,
         real[index + 1] = even_re - odd_re;
         imaginary[index + 1] = even_im - odd_im;
     }
-    for (length = 4; length <= SPA_HSSR_FFT_SIZE; length <<= 1) {
+    length = 4;
+#endif
+    for (; length <= SPA_HSSR_FFT_SIZE; length <<= 1) {
         unsigned half = length >> 1;
         const float *pass_re = state->pass_twiddle_re + (half - 2);
         const float *pass_im = twiddle_imaginary_pass + (half - 2);
@@ -356,7 +400,6 @@ void spa_hssr_dsp_prepare(struct spa_hssr_dsp *state)
     {
         unsigned reversed = 0;
 
-        state->bit_reverse[0] = 0;
         for (sample = 1; sample < SPA_HSSR_FFT_SIZE; ++sample) {
             unsigned bit = SPA_HSSR_FFT_SIZE >> 1;
 
@@ -365,7 +408,11 @@ void spa_hssr_dsp_prepare(struct spa_hssr_dsp *state)
                 bit >>= 1;
             }
             reversed ^= bit;
-            state->bit_reverse[sample] = (uint16_t)reversed;
+            if (sample < reversed) {
+                state->bit_swap[state->bit_swaps][0] = (uint16_t)sample;
+                state->bit_swap[state->bit_swaps][1] = (uint16_t)reversed;
+                state->bit_swaps++;
+            }
         }
     }
     for (sample = 0; sample < SPA_HSSR_FFT_SIZE; ++sample)

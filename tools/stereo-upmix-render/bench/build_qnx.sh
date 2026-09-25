@@ -34,7 +34,7 @@ READELF=arm-unknown-nto-qnx6.5.0eabi-readelf
 OUT=build/stereo-upmix-bench/qnx-"'"$VARIANT"'"
 rm -rf "$OUT"
 mkdir -p "$OUT"
-CFLAGS="'"$APAC_CFLAGS_NOINC"' -fPIC -D__QNX__ -Ihook/audio '"${BENCH_CFLAGS_EXTRA:-}"'"
+CFLAGS="'"$APAC_CFLAGS_NOINC"' '"$UPMIX_DSP_CFLAGS"' -fPIC -D__QNX__ -Ihook/audio '"${BENCH_CFLAGS_EXTRA:-}"'"
 
 $CC $CFLAGS -Werror -c \
     tools/stereo-upmix-render/bench/stereo_upmix_bench.c \

@@ -168,7 +168,7 @@ static int16_t spa_upmix_lfe_to_s16(float normalized, uint32_t gain_q15)
  * the call overhead was most of the cost; GCC leaves it out of line because
  * the caller is already large.  Same arithmetic, same order, same result. */
 #if defined(__GNUC__)
-__attribute__((always_inline))
+__attribute__((always_inline, unused))
 #endif
 static inline float spa_upmix_biquad(
     float input, float state[2],
@@ -189,6 +189,43 @@ static inline float spa_upmix_biquad(
     return output;
 }
 
+#if SPA_UPMIX_HAVE_NEON
+/* spa_upmix_biquad for the L/R pair, one channel per lane: every lane does the
+ * scalar operations in the scalar order, and the two states are independent.
+ * The one NEON difference is denormal flushing, which the 1e-20 state flush
+ * already applies to the state, and a denormal output is 0 in S16 either way. */
+static inline float32x2_t spa_upmix_biquad_pair(
+    float32x2_t input, float state_l[2], float state_r[2],
+    const struct spa_upmix_biquad_coefficients *c)
+{
+    const float32x2_t limit = vdup_n_f32(4.0f);
+    const float32x2_t negative_limit = vdup_n_f32(-4.0f);
+    const float32x2_t tiny = vdup_n_f32(1.0e-20f);
+    const float32x2_t zero = vdup_n_f32(0.0f);
+    float32x2x2_t z = vtrn_f32(vld1_f32(state_l), vld1_f32(state_r));
+    float32x2_t output = vadd_f32(vmul_n_f32(input, c->b0), z.val[0]);
+    float32x2_t next_z1;
+    float32x2_t next_z2;
+
+    output = vmin_f32(vmax_f32(output, negative_limit), limit);
+    next_z1 = vadd_f32(vsub_f32(vmul_n_f32(input, c->b1),
+                                vmul_n_f32(output, c->a1)), z.val[1]);
+    next_z2 = vsub_f32(vmul_n_f32(input, c->b2), vmul_n_f32(output, c->a2));
+    next_z1 = vbsl_f32(vcalt_f32(next_z1, tiny), zero, next_z1);
+    next_z2 = vbsl_f32(vcalt_f32(next_z2, tiny), zero, next_z2);
+    z = vtrn_f32(vmin_f32(vmax_f32(next_z1, negative_limit), limit),
+                 vmin_f32(vmax_f32(next_z2, negative_limit), limit));
+    vst1_f32(state_l, z.val[0]);
+    vst1_f32(state_r, z.val[1]);
+    return output;
+}
+
+static inline float32x2_t spa_upmix_pair(float l, float r)
+{
+    return vset_lane_f32(r, vdup_n_f32(l), 1);
+}
+#endif
+
 #ifdef SPA_STEREO_UPMIX_TESTING
 float spa_stereo_upmix_test_rear_high_shelf(float input, float state[2])
 {
@@ -196,6 +233,7 @@ float spa_stereo_upmix_test_rear_high_shelf(float input, float state[2])
 }
 #endif
 
+#if !SPA_UPMIX_HAVE_NEON
 static float spa_upmix_lfe_lr4(
     float input, float state[2][2],
     const struct spa_upmix_biquad_coefficients *coefficients)
@@ -205,6 +243,7 @@ static float spa_upmix_lfe_lr4(
 
     return spa_upmix_biquad(output, state[1], coefficients);
 }
+#endif
 
 static float spa_upmix_lfe_v2_normalized(
     struct spa_stereo_upmix *state, int16_t render_l, int16_t render_r,
@@ -212,10 +251,25 @@ static float spa_upmix_lfe_v2_normalized(
 {
     const float normalized_l = (float)render_l * (1.0f / 32768.0f);
     const float normalized_r = (float)render_r * (1.0f / 32768.0f);
+#if SPA_UPMIX_HAVE_NEON
+    float32x2_t low48 = spa_upmix_biquad_pair(
+        spa_upmix_pair(normalized_l, normalized_r),
+        state->_runtime._lfe_low48_state[0][0],
+        state->_runtime._lfe_low48_state[1][0], &kLfeLow);
+    float low48_l;
+    float low48_r;
+
+    low48 = spa_upmix_biquad_pair(low48,
+        state->_runtime._lfe_low48_state[0][1],
+        state->_runtime._lfe_low48_state[1][1], &kLfeLow);
+    low48_l = vget_lane_f32(low48, 0);
+    low48_r = vget_lane_f32(low48, 1);
+#else
     float low48_l = spa_upmix_lfe_lr4(
         normalized_l, state->_runtime._lfe_low48_state[0], &kLfeLow);
     float low48_r = spa_upmix_lfe_lr4(
         normalized_r, state->_runtime._lfe_low48_state[1], &kLfeLow);
+#endif
     const float power_alpha = 0.00075f;
     float target_polarity;
     float polarity_alpha;
@@ -312,6 +366,7 @@ static void spa_upmix_front_bass_prepare(struct spa_stereo_upmix *state)
                             (float)state->config.front_bass_db10 * 0.1f);
 }
 
+#if !SPA_UPMIX_HAVE_NEON
 /* S16-scale in, S16-scale out; the biquad works in normalized units. */
 static float spa_upmix_front_bass(struct spa_stereo_upmix *state,
                                   unsigned channel, float value)
@@ -321,6 +376,7 @@ static float spa_upmix_front_bass(struct spa_stereo_upmix *state,
         state->_runtime._front_bass_state[channel],
         &state->_runtime._front_bass_shelf);
 }
+#endif
 
 static void spa_upmix_cabin_guard_s16(int16_t sample[6], int adjust_lfe)
 {
@@ -685,6 +741,21 @@ static int spa_upmix_process(struct spa_stereo_upmix *state,
             int16_t output_transfer_rear_r;
             uint32_t retention_q15;
 
+#if SPA_UPMIX_HAVE_NEON
+            float32x2_t rear_pair = spa_upmix_biquad_pair(
+                vld1_f32(&state->_hssr_rear_scratch[frame * 2]),
+                state->_runtime._scene_rear_shelf_state[0],
+                state->_runtime._scene_rear_shelf_state[1], &kSceneRearLowShelf);
+            /* Subtract the source-aligned object (x2.5 x rear 0.40 = once),
+             * shelved the same way, never the synthetic bed. */
+            float32x2_t transfer_pair = spa_upmix_biquad_pair(
+                vld1_f32(&state->_hssr_source_scratch[frame * 2]),
+                state->_runtime._scene_source_shelf_state[0],
+                state->_runtime._scene_source_shelf_state[1], &kSceneRearLowShelf);
+
+            transfer_rear_l = vget_lane_f32(transfer_pair, 0);
+            transfer_rear_r = vget_lane_f32(transfer_pair, 1);
+#else
             rear_l = spa_upmix_biquad(rear_l,
                 state->_runtime._scene_rear_shelf_state[0], &kSceneRearLowShelf);
             rear_r = spa_upmix_biquad(rear_r,
@@ -695,6 +766,7 @@ static int spa_upmix_process(struct spa_stereo_upmix *state,
                 state->_runtime._scene_source_shelf_state[0], &kSceneRearLowShelf);
             transfer_rear_r = spa_upmix_biquad(state->_hssr_source_scratch[frame * 2 + 1],
                 state->_runtime._scene_source_shelf_state[1], &kSceneRearLowShelf);
+#endif
             if (state->config.lfe_enabled) {
                 lfe_candidate = spa_upmix_lfe_to_s16(spa_upmix_lfe_v2_normalized(
                     state, render_l, render_r,
@@ -703,12 +775,20 @@ static int spa_upmix_process(struct spa_stereo_upmix *state,
                     state->config.lfe_gain_q15);
             }
 
+#if SPA_UPMIX_HAVE_NEON
+            rear_pair = spa_upmix_biquad_pair(rear_pair,
+                state->_runtime._rear_high_shelf_state[0],
+                state->_runtime._rear_high_shelf_state[1], &kRearHighShelf4k3dB);
+            rear_l = vget_lane_f32(rear_pair, 0);
+            rear_r = vget_lane_f32(rear_pair, 1);
+#else
             rear_l = spa_upmix_biquad(
                 rear_l, state->_runtime._rear_high_shelf_state[0],
                 &kRearHighShelf4k3dB);
             rear_r = spa_upmix_biquad(
                 rear_r, state->_runtime._rear_high_shelf_state[1],
                 &kRearHighShelf4k3dB);
+#endif
 
             /* Linked limiter: instantaneous attack, about 42 ms release. */
             {
@@ -762,10 +842,22 @@ static int spa_upmix_process(struct spa_stereo_upmix *state,
                     (32768u - retention_q15) + 16384u) / 32768u),
                 state->config.front_gain_q15);
             if (state->config.front_bass_db10) {
+#if SPA_UPMIX_HAVE_NEON
+                float32x2_t bass = vmul_n_f32(spa_upmix_biquad_pair(
+                    vmul_n_f32(spa_upmix_pair((float)front_l, (float)front_r),
+                               1.0f / 32768.0f),
+                    state->_runtime._front_bass_state[0],
+                    state->_runtime._front_bass_state[1],
+                    &state->_runtime._front_bass_shelf), 32768.0f);
+
+                front_l = spa_upmix_float_to_s16(vget_lane_f32(bass, 0));
+                front_r = spa_upmix_float_to_s16(vget_lane_f32(bass, 1));
+#else
                 front_l = spa_upmix_float_to_s16(
                     spa_upmix_front_bass(state, 0, (float)front_l));
                 front_r = spa_upmix_float_to_s16(
                     spa_upmix_front_bass(state, 1, (float)front_r));
+#endif
             }
             if (state->config.lfe_enabled)
                 lfe = lfe_candidate;

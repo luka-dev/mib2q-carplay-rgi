@@ -27,3 +27,12 @@ $APAC_CXX_NORUNTIME $APAC_CXX_CODEGEN"
 
 # The C side: the hook itself, apap_crypto.c and spatial_downmix.c.
 APAC_CFLAGS_NOINC="-O2 -g -std=gnu99 -Wall -Wextra -fdata-sections -ffunction-sections"
+
+# The stereo upmix DSP (the per-period realtime work).  -O3 and -fno-math-errno
+# change no result: no -ffast-math, so nothing is reassociated, and without
+# errno sqrtf is a bare vsqrt.  Measured bit-identical and -6.9% instructions
+# in tools/stereo-upmix-render/bench.  No -mfpu=neon-vfpv4: fused multiply-add
+# changes the arithmetic.  The hook and the bench both compile these files so.
+UPMIX_DSP_SRCS="audio/stereo_upmix.c audio/hssr_dsp.c audio/hssr_neon.c \
+audio/hssr_control_worker.c audio/soundcheck.c"
+UPMIX_DSP_CFLAGS="-O3 -fno-math-errno"

@@ -89,7 +89,10 @@ struct spa_hssr_dsp {
     float pass_twiddle_re[SPA_HSSR_FFT_SIZE - 2];
     float pass_twiddle_im[SPA_HSSR_FFT_SIZE - 2];
     float pass_twiddle_im_inverse[SPA_HSSR_FFT_SIZE - 2];
-    uint16_t bit_reverse[SPA_HSSR_FFT_SIZE];
+    /* The bit-reversal permutation as its index pairs with i < reverse(i)
+     * (240 for 512 points), so the reorder is straight swaps. */
+    uint16_t bit_swap[SPA_HSSR_FFT_SIZE / 2][2];
+    uint16_t bit_swaps;
     float input[2][SPA_HSSR_FFT_SIZE];
     int16_t front_delay[2][SPA_HSSR_FFT_SIZE];
     float ola[2][SPA_HSSR_FFT_SIZE];
