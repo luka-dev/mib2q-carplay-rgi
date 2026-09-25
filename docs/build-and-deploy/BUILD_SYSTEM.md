@@ -34,7 +34,7 @@ The BSP client libraries (`libscreen`, `libEGL`, `libGLESv2`, `libOmxCore`) expo
 | `scripts/build_hook.sh` | `hook/`, `apac_decoder/` | `build/unprotected/libcarplay_hook.so` (+ `libcarplay_apac.so`) | Builds without protection only. It takes no arguments, sets `OUTDIR_REL=build/unprotected` and calls the shared core. |
 | `scripts/build_hook_protected.sh <VIN>` | same | `build/protected_<VIN>/` (stamped) | Uses the same core with `PROT_BUILD=1`, then stamps the result. See [VIN Protection](VIN_PROTECTION.md). |
 | `scripts/build_hook_common.sh` | — | — | The one shared compile+verify core, `carplay_build_hook()`, sourced by both hook scripts. |
-| `scripts/build_java.sh` | `java_patch/` + `java_resources/` | `build/carplay_hook.jar` + `build/carplay_hook-build.json` | Targets Foundation 1.1 with `-source 1.4 -target 1.4`. It takes no arguments. |
+| `scripts/build_java.sh` | `java_patch/` (+ `java_patch_cn/*.patch`) + `java_resources/` | `build/carplay_hook.jar` (US/EU) + `build/carplay_hook_cn.jar` (CN), each with a `-build.json` receipt | Targets Foundation 1.1 with `-source 1.4 -target 1.4`. It takes no arguments. |
 | `scripts/build_renderers.sh [grid]` | `maneuver_render/`, `altscreen_render/`, `common/` | `build/maneuver_render`, `build/altscreen_render` (+ `build/libmaneuver_scene.a`) | The `grid` argument adds `-DCR_DEBUG_GRID` to the maneuver build. |
 | `scripts/apac_flags.sh` | — | — | The single source of the APAC compiler flags. The hook core and `apac_decoder/bench/build_qnx_bench.sh` both source it. |
 | `scripts/run_tests.sh` | `hook/`, `tests/` | — | Host-side tests for the hook. The APAC decoder has its own suite, `make -C apac_decoder check`. |
@@ -135,7 +135,7 @@ There is one production image; the old `LOG=0` variant was removed on 2026-09-24
 
 ## 📦 The Java build
 
-`build_java.sh` compiles `java_patch/` (`:25`), the only Java tree, against `../../Tools/jxe2jar/out/MU1316-final.jar` plus two OSGi jars, using the bundled Zulu JDK 8 `javac` with `-source 1.4 -target 1.4` (`:17-23`, `:62`). It then copies `java_resources/` into the jar (`:70`). The unit runs IBM J9 **Foundation Profile 1.1** (about J2SE 1.4, `jclfoun11`), so the bytecode is major version 48 and the code cannot use generics, enums, enhanced for-loops or autoboxing. `-target 1.4` matters because it makes `"a"+b` compile to `StringBuffer`; the runtime has no `StringBuilder`.
+`build_java.sh` builds two variants of `java_patch/`, the only Java tree: `carplay_hook.jar` against `java_stock/US_MU1316_lsd.jar` (US MU1316, EU MU1329 and JP MU1017 have byte-identical stock classes for everything we replace) and `carplay_hook_cn.jar`, the same tree with the CN stock delta from `java_patch_cn/` applied strictly (`patch -F0`), against `java_stock/CN_MU1003_lsd.jar`. `scripts/audit_java_variants.sh` (in `run_tests.sh`) requires 0 linkage errors for each jar on its firmwares. Both compile with two OSGi jars, using the bundled Zulu JDK 8 `javac` with `-source 1.4 -target 1.4` (`:17-23`, `:62`). It then copies `java_resources/` into the jar (`:70`). The unit runs IBM J9 **Foundation Profile 1.1** (about J2SE 1.4, `jclfoun11`), so the bytecode is major version 48 and the code cannot use generics, enums, enhanced for-loops or autoboxing. `-target 1.4` matters because it makes `"a"+b` compile to `StringBuffer`; the runtime has no `StringBuilder`.
 
 Trap: targeting 1.4 against a JDK 8 `rt.jar` does **not** restrict which APIs you can call. A 1.5 method compiles fine and then throws `NoSuchMethodError` on the unit.
 

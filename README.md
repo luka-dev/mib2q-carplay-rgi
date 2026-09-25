@@ -186,14 +186,18 @@ Tests: `./scripts/run_tests.sh`.
 
 ## Deployment
 
-**Compatibility.** The patch is not limited to US, EU or CN units, nor to one MU train: it is
-meant for any MHI2Q MU firmware (developed on MU1316). What matters is:
+**Compatibility.** Audi MHI2Q only: the installer reads the firmware version from E2P and stops on
+anything else. The Java part replaces whole stock HMI classes, so it ships per firmware family and
+is chosen by the region in that version string: US, ER and JP (verified on MU1316 P5087, MU1329
+P5092, MU1017 P1017) get `carplay_hook.jar`, CN (verified on MU1003 K1004) gets
+`carplay_hook_cn.jar`. Any other region installs CarPlay without the Java part (no cluster/HUD
+features) until it is added. Also needed:
 
 - a fully digital instrument cluster (Audi virtual cockpit); cars with an analog cluster are not
   supported;
 - preferably, the latest firmware available for the unit, flashed before installing the patch.
 
-With both in place it should almost certainly work, as long as nothing went wrong during the
+With these in place it should almost certainly work, as long as nothing went wrong during the
 install itself.
 
 A release is assembled by hand. Stage the build outputs, the models and the `deploy/` runtime files

@@ -64,7 +64,7 @@ The on-unit column is the path under `/`. On the card, that same file goes at `m
 | `libcarplay_apac.so` | `build/unprotected/` or `build/protected_<VIN>/`; leave it out of a `HOOK_AUDIO=0` build | `/mnt/app/root/hooks/` |
 | `maneuver_render` | `build/` (`build_renderers.sh`) | `/mnt/app/root/hooks/` |
 | `altscreen_render` | `build/` (`build_renderers.sh`) | `/mnt/app/root/hooks/` |
-| `carplay_hook.jar` | `build/` (`build_java.sh`) | `/mnt/app/eso/hmi/lsd/jars/` |
+| `carplay_hook.jar`, `carplay_hook_cn.jar` | `build/` (`build_java.sh`); both ship; `custom.sh` reads the firmware version from E2P (`modifyE2P r 3A0 19`, as M.I.B.), stops on anything but Audi MHI2Q, keeps `carplay_hook.jar` for region US/ER/JP or `carplay_hook_cn.jar` for CN and deletes the other (both for any other region) | `/mnt/app/eso/hmi/lsd/jars/` |
 | `hssr_model.bin` | `models/hssr-q6d-moises-a/`, the main control model | `/mnt/app/root/hooks/` |
 | `hssr_guard.bin` | `models/hssr-selection-v11/`, the V11 vocal guard, loaded from beside the main model (`hook/audio/audio_hook.c:1756`) | `/mnt/app/root/hooks/` |
 | `flag_atlas.rgba` | `maneuver_render/resources/` | `/mnt/app/root/hooks/` (`maneuver_render/main.c:45`) |

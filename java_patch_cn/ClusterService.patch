@@ -1,0 +1,44 @@
+--- a/de/audi/tghu/navi/app/cluster/ClusterService.java
++++ b/de/audi/tghu/navi/app/cluster/ClusterService.java
+@@ -96,7 +96,6 @@
+     private boolean dataConnectivityAvailable = false;
+     private final MapScaleHandler mapScaleHandler;
+     private final MapScaleTimer mapScaleTimer;
+-    private boolean satMapProviderChanged = true;
+ 
+     public ClusterService(
+         NavigationEnv navigationenv,
+@@ -571,7 +570,6 @@
+             this.updateTurnToStreet("", false);
+             this.clearRouteInfoElement(this.followInfoRIE);
+             this.clearRouteInfoElement(this.nextManeuverElement);
+-            this.updateDestinationInfo(null, 0, 0);
+         }
+ 
+         this.clusterKDKHandler.updateRgActive(flag);
+@@ -1045,7 +1043,7 @@
+                 j,
+                 true
+             );
+-        this.combiBAPListener.setOnlineNavigationState(i == 1 && !this.hasSatMapProviderChanged(), j, true);
++        this.combiBAPListener.setOnlineNavigationState(i == 1, j, true);
+     }
+ 
+     public void cleanup() {
+@@ -1082,16 +1080,8 @@
+         } else {
+             this.combiBAPListener.setHomeAddress(this.getBAPNaviDestFromLocation(navlocation));
+         }
+-    }
+-
+-    public void setProviderChangeFlag(boolean flag) {
+-        this.satMapProviderChanged = flag;
+     }
+ 
+-    private boolean hasSatMapProviderChanged() {
+-        return this.satMapProviderChanged;
+-    }
+-
+     /* ============================================================
+      * CarPlay hook accessors (patched-in; avoid reflection in BAPBridge).
+      * env/combiBAPListener/refreshRGIValid are existing stock members.

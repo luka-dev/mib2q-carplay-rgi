@@ -52,6 +52,54 @@ is_replaced() { case $1 in */eso/bin/apps/*|*/armle/lib/dll/*) return 0 ;; *) re
 # count occurrences of $2 in $1 (ksh-safe, no external tools)
 count_char() { n=0; rest=$1; while :; do case $rest in *"$2"*) rest=${rest#*"$2"}; n=$((n+1)) ;; *) break ;; esac; done; echo "$n"; }
 
+file_size() { set -- $(ls -l "$1" 2>/dev/null); echo "${5:-}"; }
+
+# Firmware train from the RCC EEPROM, read like M.I.B. (config/GLOBALS: modifyE2P r 3A0 19),
+# e.g. MHI2Q_CN_AUG22_K1004 = platform _ region _ brand(AU=Audi)+platform-generation _ version.
+# modifyE2P prints "0x<addr> <hex>" lines (bytes spaced or not) and can block until the RCC
+# E2P service is up, so it runs with a 10 s limit.  Sets TRAIN (empty if unreadable).
+E2P_READ=${E2P_READ:-"on -f rcc /usr/apps/modifyE2P r 3A0 19"}
+read_train() {
+    TRAIN=; out=/tmp/carplay_train.$$
+    $E2P_READ > "$out" 2>/dev/null &
+    p=$!; i=0
+    while kill -0 $p 2>/dev/null && [ $i -lt 10 ]; do sleep 1; i=$((i+1)); done
+    kill $p 2>/dev/null
+    while read -r addr rest; do
+        case $addr in 0x*|0X*) ;; *) continue ;; esac
+        for tok in $rest; do
+            while [ -n "$tok" ]; do
+                b=${tok%"${tok#??}"}; tok=${tok#??}
+                case $b in [0-9a-fA-F][0-9a-fA-F]) ;; *) break ;; esac
+                d=$((16#$b))
+                [ $d -ge 32 ] && [ $d -lt 127 ] || continue
+                TRAIN=$TRAIN$(printf "\\$((d/64))$((d/8%8))$((d%8))")
+            done
+        done
+    done < "$out"
+    rm -f "$out"
+}
+train_field() {   # $1 = field number (1 platform, 2 region, 3 brand+gen, 4 version)
+    t=$TRAIN; i=1
+    while [ $i -lt "$1" ]; do case $t in *_*) t=${t#*_} ;; *) t= ;; esac; i=$((i+1)); done
+    echo "${t%%_*}"
+}
+# The Java patch replaces whole stock HMI classes, so each jar fits one firmware family:
+# on any other the HMI fails at boot and RCC reboots MMX in a loop (issue #24, the US jar
+# on MHI2Q_CN_AUG22_K1004).  US, ER and JP share every class we replace (byte-identical),
+# CN differs in six (java_patch_cn/); scripts/audit_java_variants.sh proves each jar links
+# cleanly on its firmware.  Chosen by the E2P region; any other region gets no jar.
+java_jar() {
+    case $(train_field 2) in
+        US|ER|JP) echo carplay_hook.jar ;;
+        CN)       echo carplay_hook_cn.jar ;;
+    esac
+}
+# The firmware binaries we replace whole are patched MU1316 US P5087 files (same size as
+# the stock they came from).  Other trains ship different builds (CN K1004: both differ),
+# so replace only a file of that size - the P5087 stock or our own copy.
+p5087_size() { case $1 in */smartphone_integrator) echo 802798 ;; */deva-ctrl-qc.so) echo 694904 ;; esac; }
+
 backup_once() { [ -e "$2" ] || cp -p "$1" "$2" || { echo "FAILED backup $2"; return 1; }; }
 
 # List every payload file into $2.  Normally from manifest.txt (written by
@@ -249,6 +297,24 @@ list_payload "$ROOT" "$LIST" || exit 1
 
 case $ACTION in
 install)
+    # Everything below depends on the firmware, so no E2P train = no install.
+    read_train
+    if [ -z "$TRAIN" ]; then
+        echo "FAILED: could not read the firmware version from E2P - nothing was changed"
+        rm -f "$LIST"; exit 1
+    fi
+    brand=$(train_field 3); brand=${brand%"${brand#??}"}
+    echo "  Firmware: $TRAIN (platform $(train_field 1), region $(train_field 2), brand $brand)"
+    if [ "$(train_field 1)" != MHI2Q ] || [ "$brand" != AU ]; then
+        echo "FAILED: this patch is for Audi MHI2Q units only - nothing was changed"
+        rm -f "$LIST"; exit 1
+    fi
+    JAVA_JAR=$(java_jar)
+    if [ -n "$JAVA_JAR" ]; then echo "  Java: $JAVA_JAR"; else
+        echo "  WARN region $(train_field 2) is not verified for the Java part:"
+        echo "       no Java patch is installed - it could keep the HMI from booting."
+        echo "       CarPlay runs without the cluster/HUD features. Report your firmware version."
+    fi
     cd "$ROOT" || { rm -f "$LIST"; exit 1; }
     while IFS= read -r f; do
         dest=/${f#./}; dir=${dest%/*}
@@ -256,8 +322,19 @@ install)
         # Never install it, and drop copies an older install put on the unit
         # (a "._carplay_hook.jar" in lsd/jars would land on j9's bootclasspath).
         case $f in */._*|*/.DS_Store) rm -f "$dest"; continue ;; esac
+        case $dest in */lsd/jars/carplay_hook.jar|*/lsd/jars/carplay_hook_cn.jar)
+            # lsd.sh loads every jar in that folder: exactly one variant may stay, and the
+            # other (or any jar on an unverified firmware) keeps the HMI from booting.
+            [ "${dest##*/}" = "$JAVA_JAR" ] || { rm -f "$dest"; echo "  skipped $dest (removed any copy)"; continue; } ;;
+        esac
         mkdir -p "$dir" || { echo "FAILED mkdir $dir"; rm -f "$LIST"; exit 1; }
-        if is_replaced "$dest"; then backup_once "$dest" "$dest.carplay-stock" || { rm -f "$LIST"; exit 1; }; fi
+        if is_replaced "$dest"; then
+            want=$(p5087_size "$dest"); have=$(file_size "$dest")
+            if [ -n "$want" ] && [ "$have" != "$want" ]; then
+                echo "  WARN skipped $dest: not the P5087 build (size '$have') - stock kept"; continue
+            fi
+            backup_once "$dest" "$dest.carplay-stock" || { rm -f "$LIST"; exit 1; }
+        fi
         tmp=$dest.carplay-new.$$
         cp -p "$f" "$tmp" || { echo "FAILED copy $tmp"; rm -f "$tmp" "$LIST"; exit 1; }
         chmod $(mode_for "$dest") "$tmp" || { echo "FAILED chmod $tmp"; rm -f "$tmp" "$LIST"; exit 1; }

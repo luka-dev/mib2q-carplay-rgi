@@ -56,7 +56,8 @@ for f in startncm.sh stopncm.sh usblauncher_otg.lua; do
   cp "$NCM/stock/$f" "$MOD/carplay/ncm/stock/"
   cp "$NCM/payload/$f" "$MOD/carplay/ncm/payload/"
 done
-cp "$PROJECT_DIR/build/carplay_hook.jar" "$ROOT/mnt/app/eso/hmi/lsd/jars/"
+# Both Java variants ship; custom.sh keeps the one for the E2P region and removes the other.
+cp "$PROJECT_DIR/build/carplay_hook.jar" "$PROJECT_DIR/build/carplay_hook_cn.jar" "$ROOT/mnt/app/eso/hmi/lsd/jars/"
 cp "$SI/smartphone_integrator" "$ROOT/mnt/app/eso/bin/apps/"
 cp "$PROJECT_DIR/deploy/deva-ctrl-qc/deva-ctrl-qc.so.patched" "$ROOT/mnt/app/armle/lib/dll/deva-ctrl-qc.so"
 
