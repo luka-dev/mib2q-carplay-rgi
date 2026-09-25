@@ -242,14 +242,14 @@ SoundCheck is a **programme** gain applied after the upmix on purpose: HSSR uses
 
 ## ⚡ The realtime path in the car
 
-The stock type-100 media stream (Spotify, every app without buffered 103) is upmixed inside stock's own QSA thread: period 768 frames = 16 ms (`audio_hook.c:1541-1542`), own DSP state and worker, allowed only for realtime periods, 2→6, a tracked media stream and no phone/Siri/alert owner (`media_route.h:158-167`). The deadline guard rules (10 ms budget, 4 consecutive overruns, 16 cold periods excused, revival only after a ≥ 500 ms gap) live in [HSSR Model](HSSR_MODEL.md#async-execution-and-the-realtime-guard); the code is `rt_upmix_guard.h:24-100`.
+The stock type-100 media stream (Spotify, every app without buffered 103) is upmixed inside stock's own QSA thread: period 768 frames = 16 ms (`audio_hook.c:1541-1542`), own DSP state and worker, allowed only for realtime periods, 2→6, a tracked media stream and no phone/Siri/alert owner (`media_route.h:158-167`). The deadline guard rules (12 ms budget, 4 consecutive overruns, 64 cold periods (~1 s) excused, revival only after a ≥ 500 ms gap) live in [HSSR Model](HSSR_MODEL.md#async-execution-and-the-realtime-guard); the code is `rt_upmix_guard.h:24-100`.
 
 ```mermaid
 stateDiagram-v2
   accTitle: Realtime upmix guard lifecycle
-  accDescr: A realtime sink arms the guard with sixteen excused cold periods, judges each period against the 10 ms budget, disables after four consecutive overruns and revives only after a break of at least 500 ms in the stream.
+  accDescr: A realtime sink arms the guard with sixty-four excused cold periods, judges each period against the 12 ms budget, disables after four consecutive overruns and revives only after a break of at least 500 ms in the stream.
   [*] --> cold_start: params on a 2 to 6 sink
-  cold_start --> judged: 16 periods excused
+  cold_start --> judged: 64 periods excused
   judged --> judged: period within 10 ms
   judged --> disabled: 4 consecutive over 10 ms
   disabled --> cold_start: gap of 500 ms or more

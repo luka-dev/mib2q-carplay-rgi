@@ -16,14 +16,21 @@
 
 #include <stdint.h>
 
-/* Half of the 16 ms period was a guess made before the cost was measured; the
- * DSP is about a quarter cheaper since, and the guard is a safety net rather
- * than a deadline, so it sits at 10 ms and leaves 6 ms for the rest of the
- * thread. Four consecutive periods over it, not one, mean the unit cannot keep
- * up. */
-#define SPA_RT_UPMIX_BUDGET_NS  UINT64_C(10000000)
+/* The guard is a safety net, not the deadline: the deadline is the 16 ms
+ * period, and QSA holds eight fragments (~128 ms) behind it, so a period that
+ * runs long drains nothing as long as it stays under 16 ms.  12 ms leaves 4 ms
+ * for stock's own work on the thread (the realtime stream is PCM passthrough);
+ * the car measured a mean of ~3 ms before the -19% cut of 2026-09-25.  Much
+ * higher would only mean the whole CPU is saturated, which starves the rest of
+ * dio_manager too.  Four consecutive periods over it, not one, mean the unit
+ * cannot keep up. */
+#define SPA_RT_UPMIX_BUDGET_NS  UINT64_C(12000000)
 #define SPA_RT_UPMIX_SLOW_LIMIT 4u
-#define SPA_RT_UPMIX_WARMUP_PERIODS 16u
+/* ~1 s excused after a start or reset: right after boot the CPU is busy with
+ * j9 and the HMI while the phone may already be playing.  No longer than that:
+ * periods truly over 16 ms empty the ~128 ms QSA cushion in about half a
+ * second, and then switching off beats dropouts. */
+#define SPA_RT_UPMIX_WARMUP_PERIODS 64u
 /* Coming back in the middle of a track means the rears appear under the music,
  * which is more noticeable than their absence, and a failed attempt costs about
  * 320 ms of periods at the limit before it gives up again.  So the upmix waits

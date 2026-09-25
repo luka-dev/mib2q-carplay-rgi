@@ -169,13 +169,13 @@ Shipped on (`carplay_startup.sh:76-78`), default off in code (`hook/audio/audio_
 
 Inference runs every 4th hop (93.75 Hz = 48000/(128·4)). A `SCHED_RR` priority-17 worker owns the recurrent state (`hook/audio/audio_hook.c:1963-1964`, `:3959`; `hook/audio/hssr_control_worker.c:116-131`); the audio thread submits features and reads results through two-entry mailboxes (`hssr_control_worker.h:45-46`) — no locks, no allocation, no logging on the audio thread. One or two missed deadlines keep the last stable mask; the third consecutive miss decays it toward a quiet rear (`hssr_dsp.c:1160-1165`).
 
-The realtime media path (`AUDIO_REALTIME_UPMIX=on`, shipped, `carplay_startup.sh:86`) runs the same renderer inside the stock QSA thread on its own state and worker; period 768 frames = 16 ms, +10.7 ms front latency. Old 8 ms builds self-disabled in 3 of 5 recorded sessions. The current guard (`hook/audio/rt_upmix_guard.h:24-34`):
+The realtime media path (`AUDIO_REALTIME_UPMIX=on`, shipped, `carplay_startup.sh:86`) runs the same renderer inside the stock QSA thread on its own state and worker; period 768 frames = 16 ms, +10.7 ms front latency. Old 8 ms builds self-disabled in 3 of 5 recorded sessions. The current guard (`hook/audio/rt_upmix_guard.h:19-45`):
 
 | Rule | Value |
 |---|---|
-| Budget per period | 10 ms |
+| Budget per period | 12 ms (QSA holds ~128 ms behind the 16 ms period) |
 | Disable after | 4 consecutive overruns |
-| Cold-start forgiveness | 16 periods |
+| Cold-start forgiveness | 64 periods (~1 s) |
 | Revival | only after a ≥ 500 ms gap in the stream (no mid-track rear reappearance) |
 
 Speedup numbers are QEMU `-icount` estimates, bit-identical, not on-car measurements.

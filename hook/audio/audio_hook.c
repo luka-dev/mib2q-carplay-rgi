@@ -3888,7 +3888,7 @@ static uint64_t spa_monotonic_ns(void);
  * renderer as the type-103 path runs on it, on its OWN state and controller,
  * only for periods the realtime timeline really owns and only while every
  * tracked main stream is media (media_route.h).  It runs on stock's audio
- * thread, so a deadline guard (rt_upmix_guard.h: 10 ms budget, 4 consecutive
+ * thread, so a deadline guard (rt_upmix_guard.h: 12 ms budget, 4 consecutive
  * overruns) turns it off and revives it only after a pause in the stream.
  * Everything here is serialized by the
  * sink lock; the worker join happens outside it. */
