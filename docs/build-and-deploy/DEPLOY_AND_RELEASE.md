@@ -100,6 +100,7 @@ SD1/
   mod/custom.sh                           the installer
   mod/command.sh                          forwarder for older M.I.B. releases (via "Run individual script")
   mod/carplay/carplay_child.json          from deploy/smartphone_integrator/
+  mod/carplay/manifest.txt                every file under root/, written by prepare_install.sh
   mod/carplay/root/mnt/app/root/hooks/     .so, renderers, models, atlas, carplay_*.sh
   mod/carplay/root/mnt/app/eso/hmi/lsd/jars/carplay_hook.jar
   mod/carplay/root/mnt/app/eso/bin/apps/smartphone_integrator
@@ -118,11 +119,12 @@ Until 2026-09-24 the package shipped only `custom.sh`, so on a release-zip M.I.B
 The script is `mod/custom.sh`. If it is started on the RCC it hands itself to the MMX (`:25-28`). It then:
 
 1. remounts `/mnt/app` and `/mnt/system` read-write;
-2. copies each file under `root/` onto `/` through an atomic rename, skipping the macOS junk a Mac-written card carries (`._name` AppleDouble files and `.DS_Store`) and deleting any copy an older install put on the unit (a `._carplay_hook.jar` in `lsd/jars` would land on j9's bootclasspath);
-3. patches `smartphone_integrator.json` by replacing the `"carplay"` child;
-4. widens the PF profiles;
-5. registers the route-guidance and telephony message IDs in `dio_manager.json`;
-6. runs `sync` and prints `DONE (install). Reboot the HU to load.` (`:159-186`).
+2. checks every file named in `manifest.txt` on its own (no walk of the card; a partly copied card stops with `FAILED missing payload file …`), or, on a hand-staged card without a manifest, lists `root/` with `find`, tolerating the QNX fs-dos `./dir/..: Filename too long` report some FAT cards give ([Landmines](../LANDMINES.md)); then copies each file under `root/` onto `/` through an atomic rename, skipping the macOS junk a Mac-written card carries (`._name` AppleDouble files and `.DS_Store`) and deleting any copy an older install put on the unit (a `._carplay_hook.jar` in `lsd/jars` would land on j9's bootclasspath);
+3. deletes M.I.B.'s NavActiveIgnore jar (`lsd/jars/NavActiveIgnore.jar`, or a hand-copied `navignore_audi.jar` / `navignore_vw.jar`) without a backup: it replaces `org.dsi.ifc.carplay.AppState` so every app state and owner reads 0, which hides CarPlay's resource ownership from the HMI;
+4. patches `smartphone_integrator.json` by replacing the `"carplay"` child;
+5. widens the PF profiles;
+6. registers the route-guidance and telephony message IDs in `dio_manager.json`;
+7. runs `sync` and prints `DONE (install). Reboot the HU to load.` (`:159-186`).
 
 It stops no processes and does not reboot.
 

@@ -52,6 +52,31 @@ count_char() { n=0; rest=$1; while :; do case $rest in *"$2"*) rest=${rest#*"$2"
 
 backup_once() { [ -e "$2" ] || cp -p "$1" "$2" || { echo "FAILED backup $2"; return 1; }; }
 
+# List every payload file into $2.  Normally from manifest.txt (written by
+# prepare_install.sh), checking each file on its own: no walk of the card at all, and a
+# partly copied card fails by name.  Without a manifest (hand-staged card) fall back to
+# find.  QNX fs-dos cannot stat ".." inside the folders of some FAT cards: find then
+# reports "./dir/..: Filename too long" and exits 1 although the list is complete.
+# Tolerate exactly that error; anything else (or an empty list) still fails.
+list_payload() {
+    if [ -f "$RES/manifest.txt" ]; then
+        : > "$2" || { echo "FAILED create $2"; return 1; }
+        while IFS= read -r f || [ -n "$f" ]; do
+            case $f in ''|*/._*|*/.DS_Store) continue ;; esac
+            [ -f "$1/${f#./}" ] || { echo "FAILED missing payload file $f (copy mod/ again)"; rm -f "$2"; return 1; }
+            printf '%s\n' "$f" >> "$2"
+        done < "$RES/manifest.txt"
+        [ -s "$2" ] || { echo "FAILED empty manifest"; rm -f "$2"; return 1; }
+        return 0
+    fi
+    ( cd "$1" && find . -type f > "$2" ) 2> "$2.err"
+    if [ ! -s "$2" ] || grep -v '/\.\.: Filename too long' "$2.err" | grep -q .; then
+        echo "FAILED listing payload"; cat "$2.err" 2>/dev/null
+        rm -f "$2" "$2.err"; return 1
+    fi
+    rm -f "$2.err"
+}
+
 # ---- smartphone_integrator.json: replace the "carplay" child by path ----------
 patch_json() {
     FRAG=$RES/carplay_child.json
@@ -162,7 +187,7 @@ mount -uw /mnt/app    2>/dev/null || true
 mount -uw /mnt/system 2>/dev/null || true
 
 LIST=/tmp/carplay_files.$$
-( cd "$ROOT" && find . -type f > "$LIST" ) 2>/dev/null || { echo "FAILED listing payload"; rm -f "$LIST"; exit 1; }
+list_payload "$ROOT" "$LIST" || exit 1
 
 case $ACTION in
 install)
@@ -182,6 +207,16 @@ install)
         echo "  $dest"
     done < "$LIST"
     rm -f "$LIST"
+    # M.I.B.'s "NavActiveIgnore" (navignore_audi/_vw.jar, installed as NavActiveIgnore.jar)
+    # replaces org.dsi.ifc.carplay.AppState so getAppStateID()/getOwner() always return 0:
+    # the HMI no longer sees which resources CarPlay owns, which our lifecycle relies on.
+    # Not ours and not stock: removed, no backup.
+    for j in NavActiveIgnore.jar navignore_audi.jar navignore_vw.jar; do
+        j=/mnt/app/eso/hmi/lsd/jars/$j
+        [ -e "$j" ] || continue
+        if rm -f "$j"; then echo "  removed $j (M.I.B. NavActiveIgnore conflicts with CarPlay app state)"
+        else echo "  WARN could not remove $j"; fi
+    done
     patch_json
     patch_pf
     patch_dio

@@ -58,6 +58,10 @@ find "$ROOT" -type f -exec chmod 644 {} +
 chmod 755 "$MOD/custom.sh" "$MOD/command.sh" "$HOOKS"/*.so "$HOOKS"/*_render "$HOOKS"/*.sh \
   "$ROOT/mnt/app/eso/bin/apps/smartphone_integrator" "$ROOT/mnt/app/armle/lib/dll/deva-ctrl-qc.so"
 
+# The installer checks these files one by one instead of walking the card (QNX fs-dos
+# fails to walk some FAT cards, and a partly copied card is caught by name).
+( cd "$ROOT" && find . -type f | sort ) > "$MOD/carplay/manifest.txt"
+
 ( cd "$OUT" && COPYFILE_DISABLE=1 zip -qrX "$OUT.zip" install_MoreIncredibleBash )
 
 echo "Built from $(git -C "$PROJECT_DIR" rev-parse --short HEAD)$(git -C "$PROJECT_DIR" diff --quiet HEAD || echo ' (dirty)'), audio: $AUDIO"
