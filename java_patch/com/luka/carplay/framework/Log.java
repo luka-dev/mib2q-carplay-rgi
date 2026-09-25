@@ -16,8 +16,9 @@ public final class Log {
     public static final int E = 0, W = 1, I = 2, D = 3;
     /* Production emits WARN and ERROR only.  INFO carries the state-transition trace that is
      * worth having while diagnosing (session start, module ready, context/geometry decisions);
-     * it stays compiled in and is switched on without a rebuild - and without a unit reboot -
-     * by `touch /mnt/app/carplay_verbose` or /tmp/carplay_verbose. */
+     * it stays compiled in and is switched on without a rebuild by `touch /mnt/app/carplay_verbose`
+     * (or /tmp/carplay_verbose).  The marker is read once, when this class loads at j9 start, so
+     * it takes effect after a reboot - which clears /tmp, so only the /mnt/app marker survives it. */
     private static final String VERBOSE_MARKERS =
         "/mnt/app/carplay_verbose:/tmp/carplay_verbose";
     private static int level = resolveInitialLevel();
