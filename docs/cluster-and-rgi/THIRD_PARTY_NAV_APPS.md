@@ -1,6 +1,6 @@
 # Third-party Nav Apps
 
-*Why Waze and AMap put little or nothing on the cluster, why Waze ignores steering-wheel zoom, the one lever (`updateViewArea`) that reshapes any app's cluster scene without its cooperation, and how the head unit picks the cluster scene URL.*
+*Why Waze puts nothing on the cluster (and what an old AMap build sent), why Waze ignores steering-wheel zoom, the one lever (`updateViewArea`) that reshapes any app's cluster scene without its cooperation, and how the head unit picks the cluster scene URL.*
 
 ---
 
@@ -35,6 +35,8 @@ The once-blocks build a fixed `CPAccNavParam(property, keys)` table. That table 
 
 Neither table has an image property. `symbolImage`, `symbolSet`, `junctionImage`, `dashboardSymbolImage` and `cardBackgroundColor` are CarPlay-screen only. The cluster gets semantics (a type, a junction shape, angles, a distance, a string) and draws its own icon. That is why our `ManeuverMapper` exists (`java_patch/com/luka/carplay/rgd/ManeuverMapper.java`). `initialDistance` is derived: `-[CPManeuver(CPAccNavUpdate) initialDistance]` returns `initialTravelEstimates.distanceRemaining`, so setting travel estimates is enough. How these fields arrive on the wire is in [iAP2 Route Guidance TLVs](IAP2_ROUTE_GUIDANCE_TLVS.md).
 
+> 📌 **Owner correction (2026-09-25): AMap works on the car.** With a recent iOS and the CarPlay guidance setting enabled inside AMap, AMap maneuvers reach the cluster and HUD. The exact iOS version and the setting's name are not recorded yet. The AMap analysis below is from AMap 16.25.0 on iOS 26.6 and does not describe current versions. Waze still sends nothing. `[car]`
+
 ## ⚠️ Waze and AMap fail at different stages
 
 The on/off gate is `CPRouteGuidance.sourceSupportsRouteGuidance` (TLV `0x14`). It is written in one place, `-[CPSTemplateInstance setSendsNavigationMetadata:]` (`CarPlaySupport` `0x24a18b3c8`, block `0x24a18b4c4`), which copies a BOOL through. That BOOL comes from `-[CPMapTemplate startNavigationSessionForTrip:]` (`0x23d92cfb4`): `[decompile]`
@@ -52,7 +54,7 @@ It reaches the host as `hostStartNavigationSessionForTrip:sendsNavigationMetadat
 | App | Metadata gate | maneuverType | What reaches the cluster |
 |---|---|---|---|
 | Waze | never implements the selector, so `SourceSupportsRouteGuidance = 0` | never set | nothing; `RouteGuidance.java` deactivates on `source_supports_rg == 0` |
-| AMap | implements it 3× | never set | session, ETA and distance flow; maneuvers are typeless |
+| AMap 16.25.0 / iOS 26.6 | implements it 3× | never set | session, ETA and distance flow; maneuvers are typeless (current AMap on a recent iOS works, see correction above) |
 | Apple / Google Maps | implements it | set | full RGI |
 
 `[decompile]` for the apps; `[code]` for our reaction (`java_patch/com/luka/carplay/rgd/RouteGuidance.java:517`, `:876-905`)
