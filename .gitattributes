@@ -7,3 +7,6 @@
 /output/ios-sentinel/*.asm -text -whitespace
 /output/r2/hud-ramps-2026-09-11/*.c -text -whitespace
 /output/r2/hud-ramps-2026-09-11/mcu-verified/*.c -text -whitespace
+
+# SWDL files copied byte-for-byte from M.I.B. (metainfo2.txt is CRLF; FinalScript is checksummed).
+/rescue_Swdlautorun/** -text -whitespace
