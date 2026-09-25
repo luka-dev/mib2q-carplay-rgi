@@ -17,13 +17,17 @@ public final class Log {
     /* Production emits WARN and ERROR only.  INFO carries the state-transition trace that is
      * worth having while diagnosing (session start, module ready, context/geometry decisions);
      * it stays compiled in and is switched on without a rebuild by `touch /mnt/app/carplay_verbose`
-     * (or /tmp/carplay_verbose).  The marker is read once, when this class loads at j9 start, so
-     * it takes effect after a reboot - which clears /tmp, so only the /mnt/app marker survives it. */
+     * or /tmp/carplay_verbose.  The markers are read at j9 start and again on every CarPlay
+     * session start (refreshLevel), like the hook, so a marker takes effect on the next phone
+     * connect without a reboot.  /tmp is cleared by a reboot; /mnt/app survives it. */
     private static final String VERBOSE_MARKERS =
         "/mnt/app/carplay_verbose:/tmp/carplay_verbose";
-    private static int level = resolveInitialLevel();
+    private static int level = resolveLevel();
 
-    private static int resolveInitialLevel() {
+    /** Re-read the markers; called at each CarPlay session start. */
+    public static void refreshLevel() { level = resolveLevel(); }
+
+    private static int resolveLevel() {
         try {
             int from = 0;
             while (from < VERBOSE_MARKERS.length()) {

@@ -176,7 +176,7 @@ flowchart LR
 | `core/` | cores of `dio_manager`, both renderers and `smartphone_integrator` from `/mnt/ota/system/core` |
 | `*.txt` | `sloginfo` of MMX and RCC, `pidin ar` / `info`, `mount`, `df`, `ifconfig`, `netstat -rn`, `pfctl -sr`, the hook and jar listing, every `*.carplay-stock`, the `/tmp` and core listings |
 
-- **Verbose:** the run ends by creating `/tmp/carplay_verbose` ([what it switches on](BUILD_SYSTEM.md)). The hook reads it at the next phone connect and `altscreen_render` at its next report; the Java log only at j9 start, and `/tmp` is empty after a reboot. The marker is in RAM, so a reboot turns verbose off again.
+- **Verbose:** the run ends by creating `/tmp/carplay_verbose` ([what it switches on](BUILD_SYSTEM.md)). The hook and the Java log read it at the next phone connect, `altscreen_render` at its next report. The marker is in RAM, so a reboot turns verbose off again.
 - **Check:** `scripts/test_logging_mib.sh` runs it on a fake card under every shell found (ksh93, mksh from the pdksh line like QNX 6.5 `/bin/sh`, dash, sh).
 
 ## 🔧 Manual install (without M.I.B.)
