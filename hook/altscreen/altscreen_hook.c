@@ -1284,7 +1284,7 @@ static uint64_t alt_pace_now_us(void)
 static void alt_pace_report(alt_pace_trace_t *s, uint32_t generation)
 {
 #if !ENABLE_ALTSCREEN_PACE_TRACE
-    if (!log_verbose()) { alt_pace_reset_window(s); return; }   /* LOG=1: only with carplay_verbose */
+    if (!log_verbose()) { alt_pace_reset_window(s); return; }   /* only with carplay_verbose */
 #endif
     /* Bounded asynchronous writer, one aggregate per 300 video access units.
      * read includes waiting for network data; work includes decrypt/forward.

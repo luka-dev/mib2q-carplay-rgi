@@ -53,11 +53,10 @@
 
 DEFINE_LOG_MODULE(audio);
 
-/* A LOG=0 build is the pre-production artifact: it must remove not only the
- * logger thread and LOG_* formatting, but also the historical probe files.
- * These captures are diagnostic-only; none participates in negotiation,
- * decoding, timing, or rendering.  Keep one switch so a supposedly quiet
- * build cannot continue writing APAP/plist/cookie/tap data to /tmp. */
+/* The probe files are diagnostic-only; none participates in negotiation,
+ * decoding, timing, or rendering.  They follow the hook log: compiled out with it
+ * in a trace build (ENABLE_LOGGING=0), and at runtime written only with
+ * carplay_verbose (log_verbose()). */
 #ifndef ENABLE_AUDIO_DIAGNOSTICS
 #define ENABLE_AUDIO_DIAGNOSTICS ENABLE_LOGGING
 #endif

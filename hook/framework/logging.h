@@ -149,7 +149,7 @@ static inline void log_hexdump(log_level_t level, const char* module, const char
 /* True when /mnt/app/carplay_verbose or /tmp/carplay_verbose existed at the first call
  * (checked once per process, i.e. per dio_manager session).  It lifts the log to INFO and
  * turns on every runtime diagnostic: audio captures in /tmp, probe103 traces, stream-111
- * pace reports.  Without it a LOG=1 build logs WARN/ERROR only and writes no captures. */
+ * pace reports.  Without it the hook logs WARN/ERROR only and writes no captures. */
 bool log_verbose(void);
 
 /* Dump binary data to file (for debugging) */
