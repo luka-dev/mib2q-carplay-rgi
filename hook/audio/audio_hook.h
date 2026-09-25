@@ -72,6 +72,10 @@
 #define SPA_AUDIO_STEREO_SURROUND_ENV "AUDIO_STEREO_SURROUND"
 #define SPA_AUDIO_STEREO_LFE_ENV      "AUDIO_STEREO_LFE"
 #define SPA_AUDIO_STEREO_FRONT_BASS_ENV "AUDIO_STEREO_FRONT_BASS_DB"
+#define SPA_AUDIO_STEREO_REAR_BODY_ENV "AUDIO_STEREO_REAR_BODY_DB" /* -12..0, default -4 */
+#define SPA_AUDIO_HSSR_VOCAL_GATE_ENV "AUDIO_HSSR_VOCAL_GATE"       /* 0..1, default 0.95, 0 = off */
+#define SPA_AUDIO_STEREO_REAR_AIR_ENV "AUDIO_STEREO_REAR_AIR_DB"      /* -40..0 dB, unset = off */
+#define SPA_AUDIO_STEREO_FRONT_TREBLE_ENV "AUDIO_STEREO_FRONT_TREBLE_DB" /* -12..0 dB, unset = off */
 /* Independent experimental front retention0..1, default0 (existing removal).
  * This does not change the rear synthesis gain or select float rendering. */
 #define SPA_AUDIO_STEREO_FRONT_RETENTION_ENV "AUDIO_STEREO_FRONT_RETENTION"

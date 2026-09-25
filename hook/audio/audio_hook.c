@@ -108,6 +108,10 @@ typedef struct {
     uint32_t stereoSurroundQ15;
     int stereoLfeAssist;
     int32_t stereoFrontBassDb10;   /* tenths of dB, <= 0, 0 = off */
+    int32_t stereoFrontTrebleDb10; /* tenths of dB, <= 0, 0 = off */
+    int32_t stereoRearBodyDb10;    /* tenths of dB, <= 0, default -40 */
+    uint32_t hssrVocalGateQ15;     /* 0..32768, default 31130 */
+    uint32_t stereoRearAirQ15;     /* 0..32768, 0 = off */
     uint32_t stereoFrontRetentionQ15; /* experimental0..32768, default0 */
     uint32_t hssrBedDelays;           /* 0/1 */
     uint32_t hssrBedAttack;           /* enum spa_hssr_bed_attack */
@@ -272,6 +276,80 @@ static int32_t spa_parse_stereo_front_bass_db10(void)
     return (int32_t)(db * 10.0 - 0.5); /* db <= 0: truncation rounds to nearest tenth */
 }
 
+/* Front-only treble trim, high shelf @4 kHz, dB (-12..0), unset = off. */
+static int32_t spa_parse_stereo_front_treble_db10(void)
+{
+    const char *value = getenv(SPA_AUDIO_STEREO_FRONT_TREBLE_ENV);
+    char *end = 0;
+    double db;
+
+    if (!value || !value[0]) return 0;
+    errno = 0;
+    db = strtod(value, &end);
+    if (errno || end == value || *end || db != db || db > 0.0 || db < -12.0) {
+        LOG_ERROR(LOG_MODULE, "audio config: invalid %s='%s'; expected -12.0..0; using 0",
+                  SPA_AUDIO_STEREO_FRONT_TREBLE_ENV, value);
+        return 0;
+    }
+    return (int32_t)(db * 10.0 - 0.5);
+}
+
+/* Rear object low shelf @500 Hz in dB (-12..0, default -4).  0 makes the
+ * object's front/rear split flat over frequency (depth no longer follows pitch). */
+static int32_t spa_parse_stereo_rear_body_db10(void)
+{
+    const char *value = getenv(SPA_AUDIO_STEREO_REAR_BODY_ENV);
+    char *end = 0;
+    double db;
+
+    if (!value || !value[0]) return SPA_STEREO_UPMIX_REAR_BODY_DB10_DEFAULT;
+    errno = 0;
+    db = strtod(value, &end);
+    if (errno || end == value || *end || db != db || db > 0.0 || db < -12.0) {
+        LOG_ERROR(LOG_MODULE,
+                  "audio config: invalid %s='%s'; expected -12.0..0; using -4",
+                  SPA_AUDIO_STEREO_REAR_BODY_ENV, value);
+        return SPA_STEREO_UPMIX_REAR_BODY_DB10_DEFAULT;
+    }
+    return (int32_t)(db * 10.0 - 0.5);
+}
+
+/* Instant vocal veto strength on the rendered rear object, 0..1 (default 0.95). */
+static uint32_t spa_parse_hssr_vocal_gate_q15(void)
+{
+    const char *value = getenv(SPA_AUDIO_HSSR_VOCAL_GATE_ENV);
+    char *end = 0;
+    double v;
+
+    if (!value || !value[0]) return SPA_STEREO_UPMIX_VOCAL_GATE_Q15_DEFAULT;
+    errno = 0;
+    v = strtod(value, &end);
+    if (errno || end == value || *end || v != v || v < 0.0 || v > 1.0) {
+        LOG_ERROR(LOG_MODULE, "audio config: invalid %s='%s'; expected 0..1; using 0.95",
+                  SPA_AUDIO_HSSR_VOCAL_GATE_ENV, value);
+        return SPA_STEREO_UPMIX_VOCAL_GATE_Q15_DEFAULT;
+    }
+    return (uint32_t)(v * 32768.0 + 0.5);
+}
+
+/* Rear air bed level in dB re the input (-40..0); unset or empty = off. */
+static uint32_t spa_parse_stereo_rear_air_q15(void)
+{
+    const char *value = getenv(SPA_AUDIO_STEREO_REAR_AIR_ENV);
+    char *end = 0;
+    double db;
+
+    if (!value || !value[0]) return 0;
+    errno = 0;
+    db = strtod(value, &end);
+    if (errno || end == value || *end || db != db || db > 0.0 || db < -40.0) {
+        LOG_ERROR(LOG_MODULE, "audio config: invalid %s='%s'; expected -40..0 dB; off",
+                  SPA_AUDIO_STEREO_REAR_AIR_ENV, value);
+        return 0;
+    }
+    return (uint32_t)(32768.0 * pow(10.0, db / 20.0) + 0.5);
+}
+
 /* Sub level: dB re the calibrated 4096 assist, -24..+12 (16384 = renderer max). */
 static uint32_t spa_parse_stereo_lfe_gain_q15(void)
 {
@@ -344,6 +422,10 @@ static void spa_audio_config_init_once(void)
     spa_audio_config_value.stereoSurroundQ15 = spa_parse_stereo_surround_q15();
     spa_audio_config_value.stereoLfeAssist = spa_parse_stereo_lfe();
     spa_audio_config_value.stereoFrontBassDb10 = spa_parse_stereo_front_bass_db10();
+    spa_audio_config_value.stereoFrontTrebleDb10 = spa_parse_stereo_front_treble_db10();
+    spa_audio_config_value.stereoRearBodyDb10 = spa_parse_stereo_rear_body_db10();
+    spa_audio_config_value.hssrVocalGateQ15 = spa_parse_hssr_vocal_gate_q15();
+    spa_audio_config_value.stereoRearAirQ15 = spa_parse_stereo_rear_air_q15();
     spa_audio_config_value.stereoFrontRetentionQ15 = spa_parse_stereo_front_retention_q15();
     {
         int present = 0;
@@ -1947,6 +2029,10 @@ static void spa103_render_start(uint32_t generation, int64_t formatIndex, int ha
     upmixConfig.backend = config->stereoUpmixBackend;
     upmixConfig.rear_gain_q15 = config->stereoSurroundQ15;
     upmixConfig.front_bass_db10 = config->stereoFrontBassDb10;
+    upmixConfig.front_treble_db10 = config->stereoFrontTrebleDb10;
+    upmixConfig.rear_body_db10 = config->stereoRearBodyDb10;
+    upmixConfig.vocal_gate_q15 = config->hssrVocalGateQ15;
+    upmixConfig.rear_air_q15 = config->stereoRearAirQ15;
     upmixConfig.front_retention_q15 = config->stereoFrontRetentionQ15;
     upmixConfig.bed_delays = config->hssrBedDelays;
     upmixConfig.bed_attack = config->hssrBedAttack;
@@ -2025,7 +2111,7 @@ static void spa103_render_start(uint32_t generation, int64_t formatIndex, int ha
 
     LOG_INFO(LOG_MODULE,
              "buffer103: render %s formatIndex=%lld key=%s output=%uch atmosMode=%s "
-             "stereoUpmix=%s frontGainQ15=%u rearGainQ15=%u frontBassDb10=%d frontRetentionQ15=%u "
+             "stereoUpmix=%s frontGainQ15=%u rearGainQ15=%u frontBassDb10=%d rearBodyDb10=%d frontRetentionQ15=%u vocalGateQ15=%u "
              "hssrController=%s stereoLfe=%s lfeGainQ15=%u "
              "soundCheck=%s target=%s%ddB/kind%u "
              "fallback=%d limiter=%d compressedQueueLimit=%u initialRate=0",
@@ -2036,7 +2122,9 @@ static void spa103_render_start(uint32_t generation, int64_t formatIndex, int ha
              spa_stereo_upmix_backend_name(activeUpmixBackend),
              (unsigned)activeFrontGainQ15, (unsigned)activeRearGainQ15,
              (int)spa103_render.stereoUpmix.config.front_bass_db10,
+             (int)spa103_render.stereoUpmix.config.rear_body_db10,
              (unsigned)spa103_render.stereoUpmix.config.front_retention_q15,
+             (unsigned)spa103_render.stereoUpmix.config.vocal_gate_q15,
              activeUpmixBackend == SPA_STEREO_UPMIX_HSSR_UNIVERSAL
                  ? (hssrWorkerStatus == SPA_HSSR_OK
                      ? "async" : "sync-fallback")
@@ -3970,6 +4058,10 @@ static void spa_rt_upmix_start(snd_pcm_t *handle)
     upmixConfig.backend = SPA_STEREO_UPMIX_HSSR_UNIVERSAL;
     upmixConfig.rear_gain_q15 = config->stereoSurroundQ15;
     upmixConfig.front_bass_db10 = config->stereoFrontBassDb10;
+    upmixConfig.front_treble_db10 = config->stereoFrontTrebleDb10;
+    upmixConfig.rear_body_db10 = config->stereoRearBodyDb10;
+    upmixConfig.vocal_gate_q15 = config->hssrVocalGateQ15;
+    upmixConfig.rear_air_q15 = config->stereoRearAirQ15;
     upmixConfig.front_retention_q15 = config->stereoFrontRetentionQ15;
     upmixConfig.bed_delays = config->hssrBedDelays;
     upmixConfig.bed_attack = config->hssrBedAttack;
@@ -3993,11 +4085,16 @@ static void spa_rt_upmix_start(snd_pcm_t *handle)
     pthread_mutex_unlock(&spa_pcm_sink.lock);
     LOG_WARN(LOG_MODULE,
              "audio realtime upmix: %s (init=%d controller=%s period=%u frames, "
-             "surround_q15=%u front_bass_db10=%d retention_q15=%u bed_delays=%u bed_attack=%u)",
+             "surround_q15=%u front_bass_db10=%d front_treble_db10=%d rear_body_db10=%d retention_q15=%u retention_hf=%u:%u "
+             "vocal_gate_q15=%u rear_air_q15=%u bed_delays=%u bed_attack=%u)",
              spa_rt_upmix.ready ? "armed" : "NOT armed", status,
              workerStatus == SPA_HSSR_OK ? "async" : "sync-fallback",
              (unsigned)SPA_PCM_SINK_PERIOD_FRAMES, (unsigned)upmixConfig.rear_gain_q15,
-             (int)upmixConfig.front_bass_db10, (unsigned)upmixConfig.front_retention_q15,
+             (int)upmixConfig.front_bass_db10, (int)upmixConfig.front_treble_db10,
+             (int)upmixConfig.rear_body_db10,
+             (unsigned)upmixConfig.front_retention_q15,
+             (unsigned)upmixConfig.retention_hf_lo_hz, (unsigned)upmixConfig.retention_hf_hi_hz,
+             (unsigned)upmixConfig.vocal_gate_q15, (unsigned)upmixConfig.rear_air_q15,
              (unsigned)upmixConfig.bed_delays, (unsigned)upmixConfig.bed_attack);
 }
 

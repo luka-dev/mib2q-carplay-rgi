@@ -824,8 +824,40 @@ static void spa_hssr_update_controls(struct spa_hssr_dsp *state)
             ? 0.45f : 0.12f;
         state->band_universal_safety[band] += alpha *
             (universal_safety_target - state->band_universal_safety[band]);
+        /* Instant vocal veto for the render stage (see vocal_gate).  Symmetric:
+         * the next syllable is protected as fast as the last one is released. */
+        {
+            /* Fast attack, ~0.35 s release: a voice does not vanish between
+             * syllables, and holding a band front is never heard as a jump. */
+            float veto_target = spa_hssr_dsp_smoothstep(probabilities[0], 0.5f, 0.9f);
+
+            state->band_vocal_veto[band] +=
+                (veto_target > state->band_vocal_veto[band] ? 0.35f : 0.03f) *
+                (veto_target - state->band_vocal_veto[band]);
+        }
     }
 
+    {
+        /* Whole-voice presence for the gate: body bands 350..2500 Hz. */
+        float called = 0.0f;
+        unsigned body = 0;
+
+        for (band = 0; band < SPA_HSSR_BANDS; ++band) {
+            if (kHssrBandEdgeHz[band] < 350 || kHssrBandEdgeHz[band] >= 2500) continue;
+            called += state->band_vocal_veto[band];
+            ++body;
+        }
+        {
+            /* ~0.1 s attack so a brief misread does not engage the gate,
+             * ~0.5 s release. */
+            float presence_target = spa_hssr_dsp_smoothstep(
+                called / (float)(body ? body : 1u), 0.30f, 0.60f);
+
+            state->vocal_presence +=
+                (presence_target > state->vocal_presence ? 0.10f : 0.02f) *
+                (presence_target - state->vocal_presence);
+        }
+    }
     {
         float bass_target = lfe_weight > 1.0e-11f
             ? lfe_bass_sum / lfe_weight : 0.0f;
@@ -1433,8 +1465,29 @@ static void spa_hssr_render_hop(
     float band_motion_support[SPA_HSSR_BANDS];
     float band_ambience_scale[SPA_HSSR_BANDS];
     float band_diffuse_scale[SPA_HSSR_BANDS];
+    /* Vocal gate per band: veto x whole-voice presence, then per bin by
+     * comodulation with the voice body (spa_hssr_como).  Sparing a guitar that
+     * shares the band by PAN proximity was tried first: the voice's own top
+     * bins have a noisy pan and lost half their protection for little gain. */
+    float band_gate[SPA_HSSR_BANDS];
+    float band_air[SPA_HSSR_BANDS];
+    float body_log;
 
     memset(band_best, 0, sizeof(band_best));
+    for (band = 0; band < SPA_HSSR_BANDS; ++band)
+        band_air[band] = state->rear_air * spa_hssr_dsp_smoothstep(
+            (float)kHssrBandEdgeHz[band], 2000.0f, 4000.0f);
+    {
+        float body = 0.0f;
+
+        for (band = 0; band < SPA_HSSR_BANDS; ++band) {
+            band_gate[band] = state->vocal_gate * state->vocal_presence *
+                state->band_vocal_veto[band];
+            if (kHssrBandEdgeHz[band] < 350 || kHssrBandEdgeHz[band] >= 2500) continue;
+            body += state->band_vocal_veto[band] * (bands[band].pl + bands[band].pr);
+        }
+        body_log = logf(body + 1.0e-6f);
+    }
     if (state->bed_attack) {
         for (band = 0; band < SPA_HSSR_BANDS; ++band)
             spa_hssr_attack_step(bands[band].pl + bands[band].pr,
@@ -1650,6 +1703,22 @@ static void spa_hssr_render_hop(
         band = state->bin_band[bin];
         mask = state->bin[bin].mask;
         mask *= 1.0f + state->band_object_boost[band];
+        if (band_gate[band] > 0.0f) {
+            const float a = 0.012f;                       /* ~0.22 s at 2.67 ms hops */
+            struct spa_hssr_como *cm = &state->como[bin];
+            float x = logf(left_re * left_re + left_im * left_im +
+                           right_re * right_re + right_im * right_im + 1.0e-6f);
+            float corr;
+
+            cm->mx += a * (x - cm->mx);
+            cm->my += a * (body_log - cm->my);
+            cm->xx += a * ((x - cm->mx) * (x - cm->mx) - cm->xx);
+            cm->yy += a * ((body_log - cm->my) * (body_log - cm->my) - cm->yy);
+            cm->xy += a * ((x - cm->mx) * (body_log - cm->my) - cm->xy);
+            corr = cm->xy / sqrtf(cm->xx * cm->yy + 1.0e-6f);
+            cm->g += 0.05f * (spa_hssr_dsp_smoothstep(corr, 0.0f, 0.40f) - cm->g);
+            mask *= 1.0f - band_gate[band] * cm->g;
+        }
         {
             float source_l;
             float source_r;
@@ -1737,10 +1806,10 @@ static void spa_hssr_render_hop(
                 state->fft_im[SPA_HSSR_LEFT][bin] = mask * steering_l * projected_im;
                 state->fft_re[SPA_HSSR_RIGHT][bin] = mask * steering_r * projected_re;
                 state->fft_im[SPA_HSSR_RIGHT][bin] = mask * steering_r * projected_im;
-                state->bed_re[0][bin] = ambience * side_re;
-                state->bed_im[0][bin] = ambience * side_im;
-                state->bed_re[1][bin] = -ambience * side_re;
-                state->bed_im[1][bin] = -ambience * side_im;
+                state->bed_re[0][bin] = ambience * side_re + band_air[band] * left_re;
+                state->bed_im[0][bin] = ambience * side_im + band_air[band] * left_im;
+                state->bed_re[1][bin] = -ambience * side_re + band_air[band] * right_re;
+                state->bed_im[1][bin] = -ambience * side_im + band_air[band] * right_im;
             }
             if (universal > 0.0f) {
                 /* A bounded conjugate phase pair prevents the fallback from

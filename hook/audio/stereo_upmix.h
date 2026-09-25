@@ -35,7 +35,12 @@ enum {
     SPA_STEREO_UPMIX_LFE_Q15_DEFAULT = 4096,
     SPA_STEREO_UPMIX_LFE_Q15_MAX = 16384,
     SPA_STEREO_UPMIX_FRONT_BASS_HZ = 200,
+    SPA_STEREO_UPMIX_FRONT_TREBLE_HZ = 4000,
     SPA_STEREO_UPMIX_FRONT_BASS_DB10_MIN = -120,
+    /* Scene rear low shelf @500 Hz ("body stays in front"), tenths of dB. */
+    SPA_STEREO_UPMIX_REAR_BODY_DB10_DEFAULT = -40,
+    /* Vocal gate strength, Q15 (0.95): see spa_hssr_dsp.vocal_gate. */
+    SPA_STEREO_UPMIX_VOCAL_GATE_Q15_DEFAULT = 31130,
     /* Front retention taper defaults: the retention benefit measured on real
      * cuts is the 500-2000 Hz front/centre body, so keep it there and let the
      * treble object leave the front entirely. */
@@ -83,6 +88,16 @@ struct spa_stereo_upmix_config {
      * but amp sub/rear outputs also receive L/R and can change. Linked safety
      * attenuation can affect all PCM channels. */
     int32_t front_bass_db10;
+    /* Front-only treble trim: RBJ high shelf at SPA_STEREO_UPMIX_FRONT_TREBLE_HZ,
+     * tenths of dB (-120..0, 0 = off).  A static tone control for the front
+     * pair, the lever for "the front is too bright" that does not touch the
+     * object decisions (retention and the taper do, and they flicker). */
+    int32_t front_treble_db10;
+    /* Rear object low shelf @500 Hz, tenths of dB (-120..0, default -40).  It
+     * also shapes what is subtracted from the front, so it tilts the object's
+     * front/rear split with frequency: low notes stay front, high notes go
+     * back (tools/stereo-upmix-render/upmix_behavior_tests.py octave_jump). */
+    int32_t rear_body_db10;
     /* Scene-bed distribution experiments, see
      * docs/audio/UPMIX_CALIBRATION_AND_TUNING.md.  All zero keeps the
      * legacy renderer bit-exact.  With bed_attack the front retention is
@@ -95,6 +110,10 @@ struct spa_stereo_upmix_config {
      * taper).  Ignored unless bed_attack is set. */
     uint32_t retention_hf_lo_hz;
     uint32_t retention_hf_hi_hz;
+    /* 0..32768: instant per-band vocal veto on the rendered object (0 = off). */
+    uint32_t vocal_gate_q15;
+    /* 0..32768: rear air bed gain (0 = off), see spa_hssr_dsp.rear_air. */
+    uint32_t rear_air_q15;
     enum spa_stereo_upmix_backend backend;
     const struct spa_hssr_model *hssr_model;
     const struct spa_hssr_control_provider *hssr_control_provider;
@@ -132,6 +151,9 @@ struct spa_stereo_upmix_runtime {
     float _scene_rear_shelf_state[2][2];
     float _scene_source_shelf_state[2][2];
     struct spa_upmix_biquad_coefficients _front_bass_shelf;
+    struct spa_upmix_biquad_coefficients _front_treble_shelf;
+    float _front_treble_state[2][2];
+    struct spa_upmix_biquad_coefficients _scene_rear_shelf;
     float _front_bass_state[2][2];
     struct spa_hssr_dsp _hssr;
 };

@@ -72,6 +72,13 @@ struct spa_hssr_object_slot {
     uint16_t hold_hops;
 };
 
+/* Per-bin running correlation of the bin's log energy with the voice body's
+ * (~0.2 s): vocal partials rise and fall with the syllables, a guitar sharing
+ * the band does not.  g is the smoothed gate share for the bin. */
+struct spa_hssr_como {
+    float mx, my, xx, yy, xy, g;
+};
+
 struct spa_hssr_dsp {
     float analysis_window[SPA_HSSR_FFT_SIZE];
     float synthesis_window[SPA_HSSR_FFT_SIZE];
@@ -116,6 +123,20 @@ struct spa_hssr_dsp {
      * hi <= lo disables the taper (retention flat over frequency). */
     float retention_hf_lo_hz;
     float retention_hf_hi_hz;
+    /* Vocal gate strength 0..1.  The model's per-band vocal veto already zeroes
+     * the band's rearability TARGET, but three fast-attack/slow-release
+     * memories (band_mask ~0.3 s, slot band_weight ~1 s, bin mask ~0.13 s)
+     * sit between that target and the rendered object, so a band that just
+     * belonged to a guitar keeps sending the next vocal syllable's top to the
+     * rear.  MoisesDB 2026-09-25: vocal own-cell rear share 0.08 in 0.3-1 kHz
+     * but 0.34-0.38 from 2.5 kHz up, flickering at syllable rate.  The gate
+     * multiplies the FINAL bin mask by 1 - strength * veto, ~30 ms symmetric. */
+    float vocal_gate;
+    /* Rear "air" bed, linear gain (0 = off): a copy of the input above ~2.5 kHz
+     * (0 at 2 kHz, full from 4 kHz) added to the scene bed, so it rides the
+     * bed's per-band delays into the rears and is never subtracted from the
+     * front.  Constant gain, no decision: rear brightness that cannot jump. */
+    float rear_air;
     float bed_re[2][SPA_HSSR_BINS];
     float bed_im[2][SPA_HSSR_BINS];
     float bed_ring_re[2][SPA_HSSR_BED_RING][SPA_HSSR_BINS];
@@ -141,6 +162,12 @@ struct spa_hssr_dsp {
     float band_object_boost[SPA_HSSR_BANDS];
     float band_focus_rescue[SPA_HSSR_BANDS];
     float band_universal_safety[SPA_HSSR_BANDS];
+    float band_vocal_veto[SPA_HSSR_BANDS];      /* smoothstep(p_vocal, 0.5, 0.9), ~30 ms */
+    /* A voice is broadband: the gate engages as a whole-voice decision (share
+     * of the 350-2500 Hz bands the model calls vocal), so a single band the
+     * guard misreads on a solo guitar does not pull that guitar forward. */
+    float vocal_presence;
+    struct spa_hssr_como como[SPA_HSSR_BINS];
     struct spa_hssr_object_slot object_slot[SPA_HSSR_OBJECT_SLOTS];
     float scene_confidence;
     float scene_stability;

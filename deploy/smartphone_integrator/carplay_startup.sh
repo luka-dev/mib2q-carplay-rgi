@@ -79,19 +79,29 @@ export AUDIO_STEREO_LFE_GAIN=0
 # Front-only bass trim (dB, -12..0): our Bass knob for the 5.1 bank; sub and rear PCM untouched
 # (in the amp model front bass still moves the sub by about +3 dB).
 export AUDIO_STEREO_FRONT_BASS_DB=-3
-# Scene-bed experiment 2026-09-21 (docs/audio/UPMIX_CALIBRATION_AND_TUNING.md), chosen by Luka
-# after the headphone A/B: keep half of each second-scene object in front, decorrelate the bed with
-# per-band delays, and gather hits toward the band owner (object -> rear, bed -> front). All three off
-# plus retention 0 restores the legacy renderer bit-exactly (the HF retention taper rides on
-# AUDIO_HSSR_BED_ATTACK, so turning only that one off leaves retention un-tapered).
+# Scene bed (2026-09-21): keep half of each second-scene object in front and decorrelate the
+# bed with per-band delays.  The attack detector (owner/front) and the HF retention taper that
+# rides on it were turned OFF on 2026-09-25: on 12 MoisesDB songs the per-hit collapse was the
+# largest jump generator of every stem (flicker -30..40 %, back-and-forth -20..30 % without it)
+# and the taper added another +0.07.  docs/audio/UPMIX_STABILITY_2026-09-25.md.
 export AUDIO_STEREO_FRONT_RETENTION=0.5
 export AUDIO_HSSR_BED_DELAYS=on
-export AUDIO_HSSR_BED_ATTACK=owner
-export AUDIO_HSSR_ATTACK_COLLAPSE=0.75
-# Retention is a MID control: ungated it also keeps the object's treble in the front
-# (measured +1.3 dB in the front 2-16 kHz, docs/audio/UPMIX_CALIBRATION_AND_TUNING.md
-# section 7).  The taper defaults to 1000:2500 Hz in the library, so it needs no export
-# here; AUDIO_HSSR_RETENTION_HF=LO:HI overrides it and HI<=LO restores the flat behaviour.
+export AUDIO_HSSR_BED_ATTACK=off
+# Vocal gate (2026-09-25): the model calls a voice in every band, but three slow-release
+# memories let a band that just belonged to a guitar send the next syllable's top to the rear
+# (vocal 2.5-10 kHz was 34-38 % rear, flickering at syllable rate).  The gate applies the
+# model's per-band vocal veto to the rendered object instantly, held ~0.35 s, per bin by
+# comodulation with the voice body.  0 = the 22.09 behaviour.
+export AUDIO_HSSR_VOCAL_GATE=0.95
+# Rear air bed (2026-09-25): the input above ~2.5 kHz copied into the scene bed at a constant
+# level (rides the bed delays, never subtracted from the front).  Gives the rears back the
+# treble the gate and the attack-off removed (-12 dB = the 22.09 rear treble level on 12
+# MoisesDB songs) without the per-hit decisions that made it jump.  Unset = off.
+export AUDIO_STEREO_REAR_AIR_DB=-12
+# Front-only treble trim (dB, -12..0, high shelf @4 kHz), unset = off.  The static lever if the
+# front sounds too bright (21.09 complaint): -3 lands near the 22.09 front balance without touching
+# the object decisions.  Retention and the taper darken the front too, but they flicker.
+# export AUDIO_STEREO_FRONT_TREBLE_DB=-3
 # HSSR upmix also for the stock realtime media stream (type 100, audioType=media: Spotify and
 # every app without buffered type 103). Own DSP state and controller; plain L/R while a
 # phone/Siri/alert stream is tracked or while type 103 owns the rail. off = zero rears as before.

@@ -61,6 +61,10 @@ struct options {
     int bed_delays;
     int bed_attack;
     double attack_collapse;
+    double rear_body_db;
+    double vocal_gate;
+    double rear_air_db;              /* <= -100 = off */
+    double front_treble_db;
     long retention_hf_lo_hz;
     long retention_hf_hi_hz;
     double lfe_gain_db;            /* re SPA_STEREO_UPMIX_LFE_Q15_DEFAULT */
@@ -359,7 +363,7 @@ static void usage(const char *program)
             "usage: %s [--mode off|hssr-universal] "
             "[--model HSSR.bin] "
             "[--lfe off|assist] [--lfe-gain -24..12] [--surround 0.0..0.5] [--front-bass -12..0] "
-            "[--front-retention 0..1] [--bed-delays] [--bed-attack off|owner|front] [--attack-collapse 0..1] [--retention-hf LO:HI] "
+            "[--front-retention 0..1] [--bed-delays] [--bed-attack off|owner|front] [--attack-collapse 0..1] [--retention-hf LO:HI] [--rear-body -12..0] [--vocal-gate 0..1] [--rear-air -40..0] [--front-treble -12..0] "
             "INPUT.wav OUTPUT.wav\n"
             "  --surround controls OUR rear gain, not the MMI Surround setting.\n",
             program);
@@ -428,6 +432,10 @@ static int parse_options(int argc, char **argv, struct options *options)
     options->bed_delays = 0;
     options->bed_attack = 0;
     options->attack_collapse = 1.0;
+    options->rear_body_db = -4.0;
+    options->vocal_gate = SPA_STEREO_UPMIX_VOCAL_GATE_Q15_DEFAULT / 32768.0;
+    options->rear_air_db = -1000.0;
+    options->front_treble_db = 0.0;
     options->retention_hf_lo_hz = SPA_STEREO_UPMIX_RETENTION_HF_LO_HZ;
     options->retention_hf_hi_hz = SPA_STEREO_UPMIX_RETENTION_HF_HI_HZ;
     options->lfe_gain_db = 0.0;
@@ -539,6 +547,50 @@ static int parse_options(int argc, char **argv, struct options *options)
             }
             continue;
         }
+        if (strcmp(argument, "--vocal-gate") == 0) {
+            char *end;
+            if (++index >= argc) return 0;
+            options->vocal_gate = strtod(argv[index], &end);
+            if (end == argv[index] || *end || !isfinite(options->vocal_gate) ||
+                options->vocal_gate < 0.0 || options->vocal_gate > 1.0) {
+                fprintf(stderr, "error: --vocal-gate must be 0..1\n");
+                return 0;
+            }
+            continue;
+        }
+        if (strcmp(argument, "--front-treble") == 0) {
+            char *end;
+            if (++index >= argc) return 0;
+            options->front_treble_db = strtod(argv[index], &end);
+            if (end == argv[index] || *end || !isfinite(options->front_treble_db) ||
+                options->front_treble_db < -12.0 || options->front_treble_db > 0.0) {
+                fprintf(stderr, "error: --front-treble must be -12..0 dB\n");
+                return 0;
+            }
+            continue;
+        }
+        if (strcmp(argument, "--rear-air") == 0) {
+            char *end;
+            if (++index >= argc) return 0;
+            options->rear_air_db = strtod(argv[index], &end);
+            if (end == argv[index] || *end || !isfinite(options->rear_air_db) ||
+                options->rear_air_db < -40.0 || options->rear_air_db > 0.0) {
+                fprintf(stderr, "error: --rear-air must be -40..0 dB\n");
+                return 0;
+            }
+            continue;
+        }
+        if (strcmp(argument, "--rear-body") == 0) {
+            char *end;
+            if (++index >= argc) return 0;
+            options->rear_body_db = strtod(argv[index], &end);
+            if (end == argv[index] || *end || !isfinite(options->rear_body_db) ||
+                options->rear_body_db < -12.0 || options->rear_body_db > 0.0) {
+                fprintf(stderr, "error: --rear-body must be -12..0 dB\n");
+                return 0;
+            }
+            continue;
+        }
         if (strcmp(argument, "--retention-hf") == 0) {
             char *end;
             long lo, hi;
@@ -631,6 +683,11 @@ static void make_upmix_config(const struct options *options,
     config->attack_collapse_q15 = (uint32_t)lround(options->attack_collapse * 32768.0);
     config->retention_hf_lo_hz = (uint32_t)options->retention_hf_lo_hz;
     config->retention_hf_hi_hz = (uint32_t)options->retention_hf_hi_hz;
+    config->rear_body_db10 = (int32_t)lround(options->rear_body_db * 10.0);
+    config->vocal_gate_q15 = (uint32_t)lround(options->vocal_gate * 32768.0);
+    config->front_treble_db10 = (int32_t)lround(options->front_treble_db * 10.0);
+    config->rear_air_q15 = options->rear_air_db > -100.0
+        ? (uint32_t)lround(32768.0 * pow(10.0, options->rear_air_db / 20.0)) : 0u;
     config->lfe_gain_q15 = (uint32_t)lround(
         SPA_STEREO_UPMIX_LFE_Q15_DEFAULT * pow(10.0, options->lfe_gain_db / 20.0));
     if (config->lfe_gain_q15 < 1) config->lfe_gain_q15 = 1;
