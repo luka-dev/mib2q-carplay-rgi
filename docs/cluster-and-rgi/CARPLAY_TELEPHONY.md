@@ -110,24 +110,31 @@ Mute is optimistic: a mute toggled on the phone is not read back, because stock'
 
 Two stock surfaces had nothing sensible to show during CarPlay; both now use the stock's own states.
 
-**The HU phone app skips its CarPlay popup.** With CarPlay active, stock `TelTerminalModeHandler` sets `SHOW_CAR_PLAY_DISCLAIMER_CHOICE` (301049) = 1, and every way into the phone app first chose the "Your iPhone is in Apple CarPlay mode" popup (state `telCarPlayDisclaimer_compound`, screen `TELINITPHONECARPLAY`). Its "Switch to Apple CarPlay" button only flips `SWITCH_TO_TERMINAL_MODE_CHOICE` (4095), which `SystemSMM` turns into event 2000 on any change (`ChangeMediator` 76), so the flip is safe even when CarPlay is already in front. The patched phone-SM `Activator` builds `CarPlayPhoneSMM`, which presses that button for the user whenever branch 0 of the five entry choices is taken. `[code]` `[decompile]`
+**The HU phone app skips its CarPlay popup.** With CarPlay active, stock `TelTerminalModeHandler` sets `SHOW_CAR_PLAY_DISCLAIMER_CHOICE` (301049) = 1, and every way into the phone app first chose the "Your iPhone is in Apple CarPlay mode" popup (state `telCarPlayDisclaimer_compound`, screen `TELINITPHONECARPLAY`). Its "Switch to Apple CarPlay" button only flips `SWITCH_TO_TERMINAL_MODE_CHOICE` (4095), which `SystemSMM` turns into event 2000 on any change (`ChangeMediator` 76), so the flip is safe even when CarPlay is already in front. The popup is chosen in two places, and both now press that button for the user (`CarPlayDisclaimerSkip`, with a one-second guard so one press never flips 4095 twice):
+
+- **The TEL key goes through the system SM.** System transition 833 (state 484) has branch 0 `301049 == 1` → `telCarPlayDisclaimer_compound`, branch 1 remote HMI → `telSMSDesktop`, branch 2 → `telOfficeDesktop_comp`. It enters the popup directly, without passing any `PhoneSMM` guard. The first version hooked only the phone SM, so the TEL key still showed the popup (owner report, 2026-09-25). The patched system `Activator` now builds `CarPlaySystemSMM` for the front terminals. It has the same transition and guard on MU1316, MU1329 and MU1003 (`SystemSMM.java:1751`).
+- **In-app entries go through the phone SM.** The patched phone-SM `Activator` builds `CarPlayPhoneSMM`, which catches branch 0 of the five entry choices 300002 / 301320 / 301327 / 301389 / 301447.
+
+Both hook `checkGuard`: the engine calls `execTransitionAction` only for transitions that have a stock action (`AbstractStateMachine.java:1998`), and none of these do. `[code]` `[decompile]`
 
 ```mermaid
 flowchart LR
   accTitle: HU phone app entry during CarPlay
-  accDescr: Pressing TEL or opening the phone menu enters telCenter, whose entry choice picks the CarPlay popup while 301049 is 1. CarPlayPhoneSMM sees that branch taken and flips model 4095, and the system state machine switches the screen to CarPlay.
+  accDescr: The TEL key reaches the popup through system transition 833 and the phone menu through the phone entry choices, both while 301049 is 1. CarPlaySystemSMM or CarPlayPhoneSMM sees that branch taken and flips model 4095, and the system state machine switches the screen to CarPlay.
 
-  tel_key["📞 TEL key or phone menu"] --> tel_center["telCenter entry choice"]
-  tel_center -->|"301049 == 1, branch 0"| popup["CarPlay popup state"]
+  tel_key["📞 TEL key"] --> sys_833["system transition 833"]
+  phone_menu["phone menu"] --> tel_center["telCenter entry choice"]
+  sys_833 -->|"301049 == 1, branch 0"| popup["CarPlay popup state"]
+  tel_center -->|"301049 == 1, branch 0"| popup
   tel_center -->|"call active, power, default"| stock_screens["Stock phone screens"]
-  popup --> skip["CarPlayPhoneSMM flips 4095"]
+  popup --> skip["CarPlaySystemSMM / CarPlayPhoneSMM flip 4095"]
   skip --> system_sm["SystemSMM event 2000"]
   system_sm --> carplay["🍎 CarPlay in front"]
 
   classDef primary fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
   classDef success fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
   classDef neutral fill:#f3f4f6,stroke:#6b7280,stroke-width:2px,color:#1f2937
-  class tel_key,tel_center,popup,stock_screens neutral
+  class tel_key,phone_menu,sys_833,tel_center,popup,stock_screens neutral
   class skip,system_sm primary
   class carplay success
 ```
@@ -163,7 +170,7 @@ Stock sends support `(true, true, true)` itself when it binds the service (`Comb
 | 4 | Recents and favorites, dial from a list | Implemented |
 | 5 | Mic mute, missed-call indication, signal, register state, carrier | Implemented |
 | 6 | Directory shows "no phonebook" instead of an empty list | Implemented, not verified on the car |
-| 7 | HU phone app (TEL key, menu) goes straight to CarPlay: the stock "Your iPhone is in Apple CarPlay mode" popup is skipped by pressing its "Switch to Apple CarPlay" for the user (`CarPlayPhoneSMM`, built by the patched phone-SM `Activator`) | Implemented, not verified on the car |
+| 7 | HU phone app (TEL key, menu) goes straight to CarPlay: the stock "Your iPhone is in Apple CarPlay mode" popup is skipped by pressing its "Switch to Apple CarPlay" for the user: TEL key via `CarPlaySystemSMM` (system transition 833, patched system `Activator`), in-app entries via `CarPlayPhoneSMM` (patched phone-SM `Activator`) | First version (phone SM only) did not skip on TEL on the car; system-SM fix implemented, not yet verified on the car |
 | – | Caller picture | Not possible over iAP2 |
 
 On 2026-09-23 the owner confirmed on the car that it works on the first try. The logs from that session (`logs/telephony-20260923-102339/`, not in git) show the gate switching on at CarPlay connect and iOS sending 12 recents (the CarPlay cap) and 4 favorites within 21 s of the hook starting. `[car]`
