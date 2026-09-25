@@ -209,6 +209,7 @@ static void *renderer_watchdog_main(void *unused) {
  * underneath the compositor at alpha 0; the next real presentation fades it in. */
 static float g_fade_alpha = 1.0f;
 static int   g_fade_active = 0;
+static int g_anim_prev_rendered;
 #define FADE_SPEED 0.125f  /* per-frame step (~0.27s / 8 frames at 30fps) */
 static int   g_cleared = 1;
 
@@ -560,6 +561,21 @@ int main(int argc, char **argv) {
         int got_progress=0, progress_level=0, progress_mode=0;
         int progress_state=CR_PROGRESS_OFF;
         double progress_now=(double)t_start.tv_sec+t_start.tv_nsec*1e-9;
+        /* Animations advance by elapsed time, not by frames: at 20 fps a per-frame step
+         * made every slide 1.5x slower.  Iterations that render are paced by the swap, so
+         * the gap since the previous rendering iteration is the frame time.  After idle
+         * the first frame is one step; a stall longer than 4 frames slows, never jumps. */
+        {
+            static double anim_prev;
+            float step = 1.0f;
+            if (g_anim_prev_rendered) {
+                step = (float)((progress_now - anim_prev) * TARGET_FPS);
+                if (step < 0.0f) step = 0.0f;
+                if (step > 4.0f) step = 4.0f;
+            }
+            anim_prev = progress_now;
+            render_set_frame_step(step);
+        }
         int got_screenshot = 0;
         char screenshot_label[17];
 
@@ -724,7 +740,7 @@ int main(int argc, char **argv) {
 
         /* Fade-in animation */
         if (g_fade_active) {
-            g_fade_alpha += FADE_SPEED;
+            g_fade_alpha += FADE_SPEED * render_frame_step();
             if (g_fade_alpha >= 1.0f) {
                 g_fade_alpha = 1.0f;
                 g_fade_active = 0;
@@ -941,6 +957,7 @@ int main(int argc, char **argv) {
          * any activity snaps back to 30 Hz.  Idle timing needs no precision → the QNX nanosleep
          * granularity is harmless here. */
         static int idle_frames = 0;
+        g_anim_prev_rendered = rendered_this_frame;
         if (rendered_this_frame) {
             idle_frames = 0;
         } else {

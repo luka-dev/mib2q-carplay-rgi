@@ -205,6 +205,9 @@ static float  g_global_alpha = 1.0f;
 static int   g_perspective = 1;   /* target: 0=ortho, 1=perspective */
 static float g_persp_t = 1.0f;   /* animated blend: 0.0=ortho, 1.0=perspective */
 #define PERSP_ANIM_SPEED 0.033f   /* per-frame step (~1s at 30fps) */
+static float g_frame_step = 1.0f;
+void render_set_frame_step(float frames) { g_frame_step = frames; }
+float render_frame_step(void) { return g_frame_step; }
 static int g_raised = 1;
 static int g_fb_w = 640, g_fb_h = 400;
 static int g_win_w = 640, g_win_h = 400;  /* actual window buffer size (pre-SSAA) */
@@ -254,16 +257,25 @@ static float g_mvp_ortho_2d[16];   /* pure orthographic for mask rendering */
 enum { FBO_ROAD = 0, FBO_ROUTE = 1, FBO_COUNT = 2 };
 static GLuint g_fbos[FBO_COUNT];
 static GLuint g_fbo_texs[FBO_COUNT];
-static GLuint g_fbo_depths[FBO_COUNT];
 static int g_fbo_w = 0, g_fbo_h = 0;
 static GLint g_default_fbo = 0;  /* saved at init -- may not be 0 on macOS */
 static int g_route_mask_ready = 0;
 
-/* 2x supersample FBO — render at double resolution, blit down with GL_LINEAR */
-#ifdef PLATFORM_MACOS
+/* Supersample FBO — render above window resolution, blit down with GL_LINEAR.
+ * QNX uses 1.6x (= 8/5).  The floor comes from the transition masks, which are
+ * sized from this and sampled GL_NEAREST: the 0.022-unit shoulder spans ~2*k mask
+ * texels and needs ~3 to survive rasterisation + nearest lookup, so k >= ~1.51
+ * (1.44 / 1.33 / 1.25 show dark notches under the arrow).  1.6 keeps margin for
+ * perspective and camera rotation, is indistinguishable from 2x at 328x181
+ * (~0.2 mm/px on the cluster) and fills ~36% fewer pixels.  Prefer small-
+ * denominator ratios (period q px for k=p/q).  Compare with CR_CAR_PIXELS
+ * preview builds and -DSSAA_SCALE=... */
+#ifndef SSAA_SCALE
+#if defined(PLATFORM_MACOS) && !defined(CR_CAR_PIXELS)
 #define SSAA_SCALE 1  /* macOS Retina provides 2x framebuffer */
 #else
-#define SSAA_SCALE 2  /* QNX: explicit 2x supersample */
+#define SSAA_SCALE 1.6f  /* QNX: explicit 1.6x supersample */
+#endif
 #endif
 #define FXAA_ENABLED 1 /* FXAA on both platforms */
 static GLuint g_ss_fbo = 0;
@@ -927,8 +939,9 @@ static void fbos_init(int w, int h) {
     g_fbo_w = alloc_w;
     g_fbo_h = alloc_h;
 
+    /* Masks draw flat 2D with depth off (begin_mask), so they get no depth
+     * buffer: at 2267x1251 each, its clear alone was 2x2.8 Mpx per re-render. */
     glGenTextures(FBO_COUNT, g_fbo_texs);
-    glGenRenderbuffers(FBO_COUNT, g_fbo_depths);
     glGenFramebuffers(FBO_COUNT, g_fbos);
 
     for (i = 0; i < FBO_COUNT; i++) {
@@ -940,14 +953,9 @@ static void fbos_init(int w, int h) {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-        glBindRenderbuffer(GL_RENDERBUFFER, g_fbo_depths[i]);
-        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_FBO, g_fbo_w, g_fbo_h);
-
         glBindFramebuffer(GL_FRAMEBUFFER, g_fbos[i]);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                                GL_TEXTURE_2D, g_fbo_texs[i], 0);
-        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
-                                  GL_RENDERBUFFER, g_fbo_depths[i]);
 
         GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
         if (status != GL_FRAMEBUFFER_COMPLETE)
@@ -956,11 +964,10 @@ static void fbos_init(int w, int h) {
         /* Make initial contents deterministic even if a given mask is never rendered. */
         glViewport(0, 0, g_fbo_w, g_fbo_h);
         glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        glClear(GL_COLOR_BUFFER_BIT);
     }
 
     glBindTexture(GL_TEXTURE_2D, 0);
-    glBindRenderbuffer(GL_RENDERBUFFER, 0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     g_route_mask_ready = 0;
     fprintf(stderr, "render: %d FBOs init %dx%d (mask half extents %.2f x %.2f)\n",
@@ -970,7 +977,6 @@ static void fbos_init(int w, int h) {
 static void fbos_shutdown(void) {
     if (g_fbos[0]) { glDeleteFramebuffers(FBO_COUNT, g_fbos); memset(g_fbos, 0, sizeof(g_fbos)); }
     if (g_fbo_texs[0]) { glDeleteTextures(FBO_COUNT, g_fbo_texs); memset(g_fbo_texs, 0, sizeof(g_fbo_texs)); }
-    if (g_fbo_depths[0]) { glDeleteRenderbuffers(FBO_COUNT, g_fbo_depths); memset(g_fbo_depths, 0, sizeof(g_fbo_depths)); }
     g_fbo_w = g_fbo_h = 0;
     g_route_mask_ready = 0;
 }
@@ -993,7 +999,7 @@ static void fbo_bind(int idx) {
     glBindFramebuffer(GL_FRAMEBUFFER, g_fbos[idx]);
     glViewport(0, 0, g_fbo_w, g_fbo_h);
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glClear(GL_COLOR_BUFFER_BIT);
 }
 
 static void fbo_unbind(void) {
@@ -1045,8 +1051,8 @@ int render_init(int fb_width, int fb_height) {
 
     /* 2x supersample: create SS FBO, then override g_fb_w/g_fb_h to 2x
      * so the entire pipeline renders at double resolution. */
-    g_ss_w = fb_width * SSAA_SCALE;
-    g_ss_h = fb_height * SSAA_SCALE;
+    g_ss_w = (int)(fb_width * SSAA_SCALE + 0.5f);
+    g_ss_h = (int)(fb_height * SSAA_SCALE + 0.5f);
     glGenTextures(1, &g_ss_tex);
     glBindTexture(GL_TEXTURE_2D, g_ss_tex);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, g_ss_w, g_ss_h, 0,
@@ -1112,8 +1118,8 @@ int render_init(int fb_width, int fb_height) {
 void render_set_viewport(int fb_width, int fb_height) {
     g_win_w = fb_width;
     g_win_h = fb_height;
-    g_ss_w = fb_width * SSAA_SCALE;
-    g_ss_h = fb_height * SSAA_SCALE;
+    g_ss_w = (int)(fb_width * SSAA_SCALE + 0.5f);
+    g_ss_h = (int)(fb_height * SSAA_SCALE + 0.5f);
     g_fb_w = g_ss_w;
     g_fb_h = g_ss_h;
 
@@ -1238,7 +1244,7 @@ static void sync_camera_uniforms(void) {
         if (fabsf(diff) < 0.001f) {
             g_persp_t = target;
         } else {
-            g_persp_t += (diff > 0 ? 1.0f : -1.0f) * PERSP_ANIM_SPEED;
+            g_persp_t += (diff > 0 ? 1.0f : -1.0f) * PERSP_ANIM_SPEED * g_frame_step;
             if ((diff > 0 && g_persp_t > target) ||
                 (diff < 0 && g_persp_t < target))
                 g_persp_t = target;

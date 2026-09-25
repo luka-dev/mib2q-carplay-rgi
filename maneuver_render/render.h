@@ -85,6 +85,10 @@ void render_set_light_rotation(float angle_rad);
 
 /* Recompute camera-dependent matrices/uniforms for the current frame. */
 void render_sync_camera(void);
+/* Animation step of this frame in 30 fps frames (1.0 at 30 fps, 1.5 at 20 fps).
+ * Every per-frame animation constant is tuned for 30 fps and multiplies by it. */
+void render_set_frame_step(float frames);
+float render_frame_step(void);
 /* Pure settled projection for scene compilation; does not move the live camera. */
 void render_get_layout_matrix(float out[16]);
 void render_build_layout_matrix(float out[16],float aspect);

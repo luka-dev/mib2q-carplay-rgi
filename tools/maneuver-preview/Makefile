@@ -2,7 +2,7 @@ ROOT=../..
 OUT=$(ROOT)/build/maneuver-preview
 CC=cc
 CXX=c++
-CPPFLAGS=-DPLATFORM_MACOS -I/opt/homebrew/include -I$(ROOT)/maneuver_render
+CPPFLAGS=-DPLATFORM_MACOS -I/opt/homebrew/include -I$(ROOT)/maneuver_render -I$(ROOT)/common
 CFLAGS=-O2 -std=c99 -Wall -Wextra
 CXXFLAGS=-O2 -std=c++11 -Wall -Wextra -Wno-missing-field-initializers -fno-exceptions -fno-rtti
 LDLIBS=-L/opt/homebrew/lib -lglfw -framework OpenGL -lm

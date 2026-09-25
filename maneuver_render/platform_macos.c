@@ -69,7 +69,7 @@ int platform_init(int width, int height) {
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
     glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, GLFW_TRUE);
     glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);
-    /* Retina default (TRUE) — gives 2x framebuffer, same as QNX SSAA 2x */
+    /* Retina default (TRUE) — gives 2x framebuffer, same as QNX SSAA 2x. */
 
     g_window = glfwCreateWindow(width, height, "maneuver_render", NULL, NULL);
     if (!g_window) {
@@ -110,8 +110,15 @@ void platform_shutdown(void) {
 }
 
 void platform_get_framebuffer_size(int *width, int *height) {
+    /* CR_CAR_PIXELS: the QNX pipeline (1x window + explicit SSAA) drawn into the
+     * bottom-left of the Retina buffer; GLFW 3.5 ignores GLFW_SCALE_FRAMEBUFFER. */
+#ifdef CR_CAR_PIXELS
+    if (g_window)
+        glfwGetWindowSize(g_window, width, height);
+#else
     if (g_window)
         glfwGetFramebufferSize(g_window, width, height);
+#endif
 }
 
 void platform_get_routing_ids(int *display_id, int *context_id, int *displayable_id) {

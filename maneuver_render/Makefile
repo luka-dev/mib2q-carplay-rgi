@@ -14,7 +14,7 @@ ifeq ($(UNAME), Darwin)
   PLATFORM_SRC = platform_macos.c
   CFLAGS = -O2 -std=c99 -Wall -Wextra -DPLATFORM_MACOS
   LDFLAGS = -L/opt/homebrew/lib -lglfw -framework OpenGL -lm
-  INCLUDES = -I/opt/homebrew/include
+  INCLUDES = -I/opt/homebrew/include -I../common
   HARNESS_LDFLAGS = -L/opt/homebrew/lib -lglfw -framework Cocoa -framework IOKit
   BUILD_HARNESS = 1
 else

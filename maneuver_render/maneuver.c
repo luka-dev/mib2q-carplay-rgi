@@ -679,7 +679,7 @@ static void update_light_settle(void) {
     blend = light_settle_curve(g_light_settle_t);
     render_set_light_rotation(lerp_angle(g_light_settle_start_rot, 0.0f, blend));
 
-    g_light_settle_t += LIGHT_SETTLE_SPEED;
+    g_light_settle_t += LIGHT_SETTLE_SPEED * render_frame_step();
     if (g_light_settle_t >= 1.0f)
         clear_light_settle();
 }
@@ -699,7 +699,7 @@ static void update_camera_settle(void) {
                       g_cam_settle_start_y * (1.0f - blend),
                       lerp_angle(g_cam_settle_start_rot, 0.0f, blend));
 
-    g_cam_settle_t += CAMERA_SETTLE_SPEED;
+    g_cam_settle_t += CAMERA_SETTLE_SPEED * render_frame_step();
     if (g_cam_settle_t >= 1.0f) {
         clear_camera_settle();
         set_default_camera();
@@ -2202,7 +2202,7 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
     /* Advance flag animation */
     if (g_flag_active) {
         int fc = render_get_flag_frame_count();
-        g_flag_frame += FLAG_ANIM_SPEED;
+        g_flag_frame += FLAG_ANIM_SPEED * render_frame_step();
         if (fc > 0 && g_flag_frame >= (float)fc)
             g_flag_frame = fmodf(g_flag_frame, (float)fc);
     }
@@ -2243,7 +2243,7 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
         if (e_speed < 0.15f) e_speed = 0.15f;
         float curv = path_curvature_factor(&g_route_path, g_t_head);
         float speed = ROUTE_SPEED_MIN + (ROUTE_SPEED_PEAK - ROUTE_SPEED_MIN) * e_speed * curv;
-        g_route_slide += speed / orig_len;
+        g_route_slide += speed * render_frame_step() / orig_len;
         if (g_route_slide >= g_anim_target) {
             g_route_slide = g_anim_target;
             g_route_animating = 0;
@@ -2257,7 +2257,7 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
         g_tip_morph_active = 1;
     }
     if (g_tip_morph_active && g_tip_morph_t < 1.0f) {
-        g_tip_morph_t += TIP_MORPH_SPEED;
+        g_tip_morph_t += TIP_MORPH_SPEED * render_frame_step();
         if (g_tip_morph_t > 1.0f) g_tip_morph_t = 1.0f;
     }
 
