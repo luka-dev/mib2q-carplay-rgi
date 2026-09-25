@@ -82,7 +82,7 @@ Platform mechanics worth keeping **[car]**:
 - `carplay_cleanup.sh` only logs and calls Audi's stock `/etc/scripts/carplay_cleanup.sh` (`deploy/smartphone_integrator/carplay_cleanup.sh:17-22`).
 - `carplay_monitor.sh` "never controls USB, OTG, dio_manager or the SI retry state machine" (`deploy/smartphone_integrator/carplay_monitor.sh:3`).
 - The shipping `smartphone_integrator` **is** the re-arm image: `deploy/smartphone_integrator/smartphone_integrator` hashes to `606236a8…` (re-verified 2026-09-22), equal to `PATCHED_SHA256` in `deploy/experimental/usb_replug_recovery/patch_si_rearm.py:15`; the release map installs it whole-file (`docs/build-and-deploy/DEPLOY_AND_RELEASE.md:27,49-51`, HU readback 2026-09-16).
-- The NCM generation fence is **not** in the release map (`docs/build-and-deploy/DEPLOY_AND_RELEASE.md:13-29`).
+- The NCM generation fence **is** in the release since 2026-09-25: `custom.sh` `patch_ncm` installs it over the exact P5087 stock only, and `patch_otg_cleanup` repoints SI's cleanup (see [Shipped 2026-09-25](#-shipped-2026-09-25-fence-on-the-car)).
 - The owner confirmed connection and reconnection closed on the current car on 2026-09-17 (`TODO.md:5-10`). That is an acceptance report, not a recorded A/B of either component. A later 2026-09-17 report (an alarm coinciding with a ~1 s picture+audio loss and a session teardown) no longer reproduces per the owner on 2026-09-22; the cause was never captured.
 
 <details>
@@ -121,12 +121,30 @@ Both are in `deploy/experimental/usb_replug_recovery/` (README states nothing th
 
 | File | Stock MU1316 P5087 | Candidate |
 |---|---|---|
-| `startncm.sh` | `c533b63f…713f` | `e40ef903…06ba` |
-| `stopncm.sh` | `596b349c…0008` | `804b3854…3d68` |
+| `startncm.sh` | `c533b63f…713f` | `40259982…b2ab` |
+| `stopncm.sh` | `596b349c…0008` | `1aad7622…6d3c` |
 | `usblauncher_otg.lua` | `21ca8cb9…6b5c` | `76843b2d…e329` |
 | `smartphone_integrator` | `a25dc981…0d02` | `606236a8…2af3` |
 
 Any mismatch stops the install; never force the patch or name an unknown file `stock`.
+
+## ✅ Shipped 2026-09-25: fence on the car
+
+**The first bundle broke every connect.** It was installed over SSH unchanged and CarPlay stopped starting. The lock is a directory, and the bundle put it at `/tmp/ncm_lock_carplay0`: `/tmp` is `/dev/shmem`, where `mkdir` fails with `Function not implemented`. Every start and stop waited 8 s and gave up (`NCM_FENCE … fail lock_timeout`), so `carplay0` never came up. The unit also has no `rmdir` binary, so a lock could never have been released, and the dead-owner branch (`rmdir` then `continue`) would have looped forever. The host tests ran on macOS, where both work. Rolled back to stock within minutes. `[car]`
+
+**Fix.** The lock lives in `/ramdisk` (a RAM qnx4 disk, cleared at boot, `NCM_LOCK_BASE`). It is removed with `rm -rf`, and a reclaim counts against the same 8 tries. The generation file stays in `/tmp` (files work there). All five paths (start, own stop, dead-owner reclaim, concurrent start and stop, legacy call) were run on the unit with stub `mount`/`if_up`/`ifconfig` on a dummy `ncmtest0` before the install. `[car]`
+
+**SI cleanup.** SI's `usb.otgStackCleanupScript` (stock `/etc/scripts/stopncm.sh`, shared with CarLife) runs after every session with no arguments, so it could still destroy a replugged phone's new `carplay0`. It never did in testing, but only because it always arrived before the new start. Now:
+
+- `carplay_startup.sh` records the generation each CarPlay session starts on in `/tmp/ncm_session_generation`;
+- `otgStackCleanupScript` points to `/mnt/app/root/hooks/carplay_ncm_cleanup.sh`, which passes that generation to `stopncm.sh` as `NCM_EXPECT_GENERATION`;
+- `stopncm.sh` then destroys only that generation, checked under the lock before and after the one-second delay (`skip session_mismatch`, `skip replaced_after_sleep`).
+
+The stock teardown after a failed session still happens, because that session's own generation is still current. CarLife, or no recorded session, keeps the stock call. `[code]` (`scripts/test_install_ncm.sh`)
+
+**On the car after the reboot:** `usblauncher` passes `0 0x1 0x1`. Every observed plug came up the first time, 3–5 s from plug to control SETUP, with no lock waits or timeouts. The SI-cleanup change was not yet on the unit. `[car]`
+
+⚠️ This phone always enumerates as `0:0x1:0x1`, so the key alone cannot tell two plugs apart; the pid suffix of the generation does. Skipping SI's cleanup outright would leave a dead `carplay0` behind if a removal event were ever lost, and the next start would reuse it (`skip duplicate_ready`). That is why the cleanup is matched to the session instead.
 
 ## 📋 A/B runbook (historical procedure, 2026-09-07)
 

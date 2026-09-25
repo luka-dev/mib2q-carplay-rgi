@@ -11,7 +11,7 @@ SI is the supervisor of the whole USB/OTG side of CarPlay. `dio_manager` owns no
 | Thing | Owner | Detail |
 |---|---|---|
 | Creating `carplay0` | OTG `usblauncher` | class rule `0x02/0x0d/0x00` in `usblauncher_otg.lua:254` → `startncm.sh` |
-| Destroying `carplay0` | **SI** | `smartphone_integrator.json:92` `"otgStackCleanupScript": "/etc/scripts/stopncm.sh"` → `sleep 1; ifconfig carplay0 destroy` |
+| Destroying `carplay0` | **SI** | `smartphone_integrator.json:92` `"otgStackCleanupScript": "/etc/scripts/stopncm.sh"` → `sleep 1; ifconfig carplay0 destroy` (stock; the installer now points it at `carplay_ncm_cleanup.sh`, see [USB Replug Recovery](USB_REPLUG_RECOVERY.md#-shipped-2026-09-25-fence-on-the-car)) |
 | The OTG stack | **SI** | `otgStackStartScriptDeviceMode`, `otgStackStopScript`, `otgCmdStartStackDeviceModeCarPlay = start_stack::device,2`, `restartOtgStackDelayTime: 5000`, `otgStackReconnectTimeout: 30000`, all over PPS `/ramdisk/pps/device/usb_ctrl1` |
 | iAP2 | long-lived driver | `class(0xFF,0xF0,0x00)` → `io-otg-cinemo -s /dev/io-usb/otg_dev -lc 212 -v -t 8` |
 | `dio_manager` | nobody's owner | consumer of the IP link |

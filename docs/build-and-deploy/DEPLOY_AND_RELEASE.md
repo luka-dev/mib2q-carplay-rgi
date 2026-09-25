@@ -68,6 +68,8 @@ The on-unit column is the path under `/`. On the card, that same file goes at `m
 | `hssr_model.bin` | `models/hssr-q6d-moises-a/`, the main control model | `/mnt/app/root/hooks/` |
 | `hssr_guard.bin` | `models/hssr-selection-v11/`, the V11 vocal guard, loaded from beside the main model (`hook/audio/audio_hook.c:1756`) | `/mnt/app/root/hooks/` |
 | `flag_atlas.rgba` | `maneuver_render/resources/` | `/mnt/app/root/hooks/` (`maneuver_render/main.c:45`) |
+| `carplay_ncm_cleanup.sh` | `deploy/smartphone_integrator/`; SI's `usb.otgStackCleanupScript` points here | `/mnt/app/root/hooks/` |
+| `startncm.sh`, `stopncm.sh`, `usblauncher_otg.lua` | `deploy/experimental/usb_replug_recovery/bundle_mu1316_p5087/{stock,payload}/`, staged as `mod/carplay/ncm/`, not in `root/`; `patch_ncm` installs them only over the exact stock, with a `.carplay-stock` backup | `/mnt/system/etc/scripts/`, `/mnt/system/etc/` |
 | `carplay_{startup,monitor,processes,cleanup}.sh` | `deploy/smartphone_integrator/` | `/mnt/app/root/hooks/` |
 | `smartphone_integrator` | `deploy/smartphone_integrator/` | `/mnt/app/eso/bin/apps/` (replaces the whole file) |
 | `deva-ctrl-qc.so` | `deploy/deva-ctrl-qc/deva-ctrl-qc.so.patched`, renamed | `/mnt/app/armle/lib/dll/` (replaces the whole file) |
@@ -201,7 +203,7 @@ mkdir -p /mnt/app/root/hooks
 |---|---|---|
 | `libcarplay_hook.so`, `libcarplay_apac.so` | `/mnt/app/root/hooks/` | 755 |
 | `maneuver_render`, `altscreen_render` | `/mnt/app/root/hooks/` | 755 |
-| `carplay_startup.sh`, `carplay_monitor.sh`, `carplay_processes.sh`, `carplay_cleanup.sh` | `/mnt/app/root/hooks/` | 755 |
+| `carplay_startup.sh`, `carplay_monitor.sh`, `carplay_processes.sh`, `carplay_cleanup.sh`, `carplay_ncm_cleanup.sh` | `/mnt/app/root/hooks/` | 755 |
 | `hssr_model.bin`, `hssr_guard.bin`, `flag_atlas.rgba` | `/mnt/app/root/hooks/` | 644 |
 | `carplay_hook.jar` | `/mnt/app/eso/hmi/lsd/jars/` | 644 |
 

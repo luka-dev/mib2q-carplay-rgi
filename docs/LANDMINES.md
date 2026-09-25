@@ -163,6 +163,8 @@ Domains: [USB Replug Recovery](connect-and-usb/USB_REPLUG_RECOVERY.md), [PF Fire
 
 **Don't raise SI `maxSetupRetries` (2) as a fix.** More stop/delay/start cycles remove neither race and turn a permanent failure into a long restart storm. · SI decompile · [SI Stack and Replug Race](connect-and-usb/SI_STACK_AND_REPLUG_RACE.md), [USB Replug Recovery](connect-and-usb/USB_REPLUG_RECOVERY.md).
 
+**Don't put a directory under `/tmp`, and don't call `rmdir`, in any on-unit script.** `/tmp` is `/dev/shmem`: `mkdir` there fails with `Function not implemented`. The unit has no `rmdir` binary. Use `/ramdisk` (RAM, cleared at boot) for lock directories and `rm -rf` to remove them. The first NCM fence bundle did both, and on 2026-09-25 every CarPlay connect failed until it was rolled back; host tests on macOS cannot catch this, so run such scripts on the unit (stub binaries, dummy interface) first. · car · [USB Replug Recovery](connect-and-usb/USB_REPLUG_RECOVERY.md#-shipped-2026-09-25-fence-on-the-car).
+
 **Never use `reset port 3 250 1` or switch media port 1 to OTG as recovery.** The port reset made it worse (`drivers_running` 1 → 0); switching port 1 to the OTG hub stopped the phone enumerating, and switching back did not restore it — the command is reversible, the state was not. · on-car · [USB Replug Recovery](connect-and-usb/USB_REPLUG_RECOVERY.md).
 
 **`/proc/<pid>/cmdline` is empty for `usblauncher` on QNX — read argv with `pidin -F "%a %A"`.** The first relaunch guard silently did nothing because of this; `usblauncher` is also not on `PATH` (it lives in `/mnt/app/armle/bin/`). · on-car · [USB Replug Recovery](connect-and-usb/USB_REPLUG_RECOVERY.md).

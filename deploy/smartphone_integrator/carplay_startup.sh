@@ -42,6 +42,16 @@ echo "$DIO_PID" > "$OWNER_STAGE" || startup_fail
 mv "$OWNER_STAGE" "$OWNER_FILE" || startup_fail
 echo "===== CarPlay generation pid=$DIO_PID ppid=${PPID:-unknown} =====" >> "$WLOG"
 
+# The NCM generation this session starts on, for carplay_ncm_cleanup.sh (SI's
+# otgStackCleanupScript): only that carplay0 may be destroyed after this session.
+NCM_GEN=
+[ -r /tmp/ncm_generation_carplay0 ] && read NCM_GEN < /tmp/ncm_generation_carplay0
+if [ -n "$NCM_GEN" ]; then
+    echo "$NCM_GEN" > /tmp/ncm_session_generation.$DIO_PID && mv -f /tmp/ncm_session_generation.$DIO_PID /tmp/ncm_session_generation
+else
+    rm -f /tmp/ncm_session_generation
+fi
+
 LD_PRELOAD= "$H/carplay_monitor.sh" "$DIO_PID" </dev/null >>"$WLOG" 2>&1 &
 MONITOR_PID=$!
 

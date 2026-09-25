@@ -32,6 +32,7 @@ OWNED="/mnt/app/root/hooks/libcarplay_hook.so
 /mnt/app/root/hooks/carplay_monitor.sh
 /mnt/app/root/hooks/carplay_processes.sh
 /mnt/app/root/hooks/carplay_cleanup.sh
+/mnt/app/root/hooks/carplay_ncm_cleanup.sh
 /mnt/app/eso/hmi/lsd/jars/carplay_hook.jar
 /mnt/app/carplay_verbose
 /tmp/carplay_verbose"

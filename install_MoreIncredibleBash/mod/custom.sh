@@ -10,6 +10,8 @@
 #       * smartphone_integrator.json  - replace the "carplay" child by path
 #       * pf profiles                 - widen the CarPlay TCP rule (MANDATORY)
 #       * dio_manager.json            - register the iAP2 route-guidance message IDs
+#       * NCM start/stop + usblauncher_otg.lua - only over the exact stock they replace
+#       * SI usb.otgStackCleanupScript -> our generation-aware NCM cleanup
 # No CRC gymnastics, no lock dir. Atomic renames. Upgrade-safe: a stock backup is
 # kept once so uninstall restores the original.
 # Copyright (c) 2026 LuKa (@LuKa_dev)
@@ -109,7 +111,63 @@ patch_json() {
     o=$(grep -c '"exec"' "$CFG"); n=$(grep -c '"exec"' "$tmp")
     [ "$o" = "$n" ] || { echo "  WARN SI child count changed ($o->$n)"; rm -f "$tmp"; return 1; }
     grep -q 'carplay_startup.sh' "$CFG" || backup_once "$CFG" "$CFG.carplay-stock" || { rm -f "$tmp"; return 1; }
-    chmod 644 "$tmp"; mv -f "$tmp" "$CFG" && echo "  SI json patched"
+    chmod 644 "$tmp"; mv -f "$tmp" "$CFG" && echo "  SI json patched" || return 1
+    patch_otg_cleanup
+}
+
+# SI's usb.otgStackCleanupScript tears NCM down after every session with no identity;
+# point it at our wrapper, which passes the ended session's NCM generation to stopncm.sh.
+OTG_CLEANUP=/mnt/app/root/hooks/carplay_ncm_cleanup.sh
+patch_otg_cleanup() {
+    grep -q "\"otgStackCleanupScript\":\"$OTG_CLEANUP\"" "$CFG" && { echo "  SI otg cleanup already ours"; return 0; }
+    [ "$(grep -c '"otgStackCleanupScript":"/etc/scripts/stopncm.sh"' "$CFG")" = 1 ] ||
+        { echo "  WARN SI otgStackCleanupScript not the stock stopncm.sh - left as-is"; return 0; }
+    tmp=$CFG.carplay-new.$$; : > "$tmp" || { echo "FAILED create $tmp"; return 1; }
+    while IFS= read -r line || [ -n "$line" ]; do
+        case $line in *'"otgStackCleanupScript":"/etc/scripts/stopncm.sh"'*)
+            line=${line%%/etc/scripts/stopncm.sh*}$OTG_CLEANUP${line#*/etc/scripts/stopncm.sh} ;;
+        esac
+        printf '%s\n' "$line" >> "$tmp"
+    done < "$CFG"
+    grep -q "\"otgStackCleanupScript\":\"$OTG_CLEANUP\"" "$tmp" || { echo "  WARN SI otg cleanup edit failed"; rm -f "$tmp"; return 1; }
+    chmod 644 "$tmp"; mv -f "$tmp" "$CFG" && echo "  SI otg cleanup -> $OTG_CLEANUP"
+}
+
+# ---- NCM fence: generation-aware startncm/stopncm + usblauncher_otg.lua ------
+# Fixes the fast-replug race where a late teardown destroys the new carplay0
+# (docs/connect-and-usb/USB_REPLUG_RECOVERY.md).  Whole files, so only over the exact
+# stock they were written against (MU1316 P5087) or our own copy; anything else is left
+# alone - the scripts and the Lua work independently, so a skip is never half-broken.
+# The unit has no cmp: compare as text.  An older copy of our own scripts (marker line)
+# counts as ours, so a script update still installs.  The stock copy for uninstall comes
+# from the bundled original with the file's mode, so it is exact and executable even if an
+# older install already replaced the file.
+NCM_FILES="/mnt/system/etc/scripts/startncm.sh /mnt/system/etc/scripts/stopncm.sh /mnt/system/etc/usblauncher_otg.lua"
+NCM_MARK='Generation-aware replacement for the stock MU1316'
+same_text() { [ -f "$1" ] && [ -f "$2" ] && [ "$(cat "$1")" = "$(cat "$2")" ]; }
+ncm_known() {   # $1 = on-unit file: stock, current payload, or an older copy of ours
+    same_text "$1" "$RES/ncm/stock/${1##*/}" || same_text "$1" "$RES/ncm/payload/${1##*/}" ||
+        { case $1 in *.sh) grep -q "$NCM_MARK" "$1" 2>/dev/null ;; *) false ;; esac; }
+}
+patch_ncm() {
+    for dest in $NCM_FILES; do
+        n=${dest##*/}
+        [ -f "$RES/ncm/stock/$n" ] && [ -f "$RES/ncm/payload/$n" ] || { echo "  WARN no NCM resources - NCM fence skipped"; return 0; }
+        case $n in *.sh) sh -n "$RES/ncm/payload/$n" || { echo "  WARN $n on the card is damaged - NCM fence skipped (copy mod/ again)"; return 0; } ;; esac
+        ncm_known "$dest" || { echo "  WARN $dest is not the known stock - NCM fence skipped (firmware differs)"; return 0; }
+    done
+    for dest in $NCM_FILES; do
+        n=${dest##*/}
+        if [ ! -e "$dest.carplay-stock" ]; then
+            cp "$RES/ncm/stock/$n" "$dest.carplay-stock" && chmod $(mode_for "$dest") "$dest.carplay-stock" ||
+                { echo "FAILED backup $dest"; rm -f "$dest.carplay-stock"; return 1; }
+        fi
+        if same_text "$dest" "$RES/ncm/payload/$n"; then echo "  $dest already fenced"; continue; fi
+        tmp=$dest.carplay-new.$$
+        cp "$RES/ncm/payload/$n" "$tmp" && chmod $(mode_for "$dest") "$tmp" && mv -f "$tmp" "$dest" ||
+            { echo "FAILED install $dest"; rm -f "$tmp"; return 1; }
+        echo "  $dest"
+    done
 }
 
 # ---- pf: widen the CarPlay TCP rule in every profile (MANDATORY) --------------
@@ -218,6 +276,7 @@ install)
         else echo "  WARN could not remove $j"; fi
     done
     patch_json
+    patch_ncm
     patch_pf
     patch_dio
     sync
@@ -238,6 +297,9 @@ uninstall)
     # restore in-place patched configs
     [ -e "$CFG.carplay-stock" ] && mv -f "$CFG.carplay-stock" "$CFG"
     [ -e "$DIO.carplay-stock" ] && mv -f "$DIO.carplay-stock" "$DIO"
+    for f in $NCM_FILES; do
+        [ -e "$f.carplay-stock" ] && mv -f "$f.carplay-stock" "$f"
+    done
     for profile in $PROFILES; do
         s=/mnt/system/etc/$profile
         [ -e "$s.carplay-stock" ] && mv -f "$s.carplay-stock" "$s"

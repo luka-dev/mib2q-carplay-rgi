@@ -15,6 +15,10 @@ SOCKET=/cplay/dev/socket
 IF_NAME="${INTERFACE}0"
 
 NCM_GENERATION_DIR=${NCM_GENERATION_DIR:-/tmp}
+# The lock is a directory: /tmp is /dev/shmem on the HU and mkdir there fails
+# (ENOSYS).  /ramdisk is a RAM qnx4 disk, cleared at boot.  The unit has no
+# rmdir binary, so the lock is removed with rm -rf.
+NCM_LOCK_BASE=${NCM_LOCK_BASE:-/ramdisk}
 NCM_LOG_FILE=${NCM_LOG_FILE:-/tmp/carplay_hook.log}
 NCM_MOUNT_BIN=${NCM_MOUNT_BIN:-mount}
 NCM_IF_UP_BIN=${NCM_IF_UP_BIN:-if_up}
@@ -31,7 +35,7 @@ release_lock()
 {
     if [ "${LOCK_HELD}" = 1 ]; then
         rm -f "${LOCK_DIR}/pid"
-        rmdir "${LOCK_DIR}" >/dev/null 2>&1
+        rm -rf "${LOCK_DIR}" >/dev/null 2>&1
         LOCK_HELD=0
     fi
 }
@@ -51,9 +55,14 @@ acquire_lock()
             *)
                 if ! kill -0 "${LOCK_OWNER}" >/dev/null 2>&1; then
                     rm -f "${LOCK_DIR}/pid"
-                    rmdir "${LOCK_DIR}" >/dev/null 2>&1
+                    rm -rf "${LOCK_DIR}" >/dev/null 2>&1
                     log_ncm "reclaim_lock owner=${LOCK_OWNER} interface=${IF_NAME}"
-                    continue
+                    # Bounded like a wait: a lock that cannot be removed must
+                    # not spin forever.
+                    LOCK_TRIES=$((LOCK_TRIES + 1))
+                    [ "${LOCK_TRIES}" -lt 8 ] && continue
+                    log_ncm "fail lock_reclaim owner=${LOCK_OWNER} interface=${IF_NAME}"
+                    return 1
                 fi
                 ;;
         esac
@@ -68,7 +77,7 @@ acquire_lock()
     done
 
     if ! echo "$$" > "${LOCK_DIR}/pid"; then
-        rmdir "${LOCK_DIR}" >/dev/null 2>&1
+        rm -rf "${LOCK_DIR}" >/dev/null 2>&1
         log_ncm "fail lock_owner_write interface=${IF_NAME}"
         return 1
     fi
@@ -106,7 +115,7 @@ case "${INTERFACE}" in
 esac
 
 GENERATION_FILE="${NCM_GENERATION_DIR}/ncm_generation_${IF_NAME}"
-LOCK_DIR="${NCM_GENERATION_DIR}/ncm_lock_${IF_NAME}"
+LOCK_DIR="${NCM_LOCK_BASE}/ncm_lock_${IF_NAME}"
 
 if [ -n "${USB_BUSNO}" ] && [ -n "${USB_DEVNO}" ] && [ -n "${USB_IFACE}" ]; then
     GENERATION_KEY="${USB_BUSNO}:${USB_DEVNO}:${USB_IFACE}"

@@ -48,7 +48,14 @@ else
 fi
 cp "$PROJECT_DIR/build/maneuver_render" "$PROJECT_DIR/build/altscreen_render" "$HOOKS/"
 cp "$PROJECT_DIR/maneuver_render/resources/flag_atlas.rgba" "$HOOKS/"
-cp "$SI"/carplay_{startup,monitor,processes,cleanup}.sh "$HOOKS/"
+cp "$SI"/carplay_{startup,monitor,processes,cleanup,ncm_cleanup}.sh "$HOOKS/"
+# NCM fence: the installer replaces these only over the exact stock copy (patch_ncm).
+NCM=$PROJECT_DIR/deploy/experimental/usb_replug_recovery/bundle_mu1316_p5087
+mkdir -p "$MOD/carplay/ncm/stock" "$MOD/carplay/ncm/payload"
+for f in startncm.sh stopncm.sh usblauncher_otg.lua; do
+  cp "$NCM/stock/$f" "$MOD/carplay/ncm/stock/"
+  cp "$NCM/payload/$f" "$MOD/carplay/ncm/payload/"
+done
 cp "$PROJECT_DIR/build/carplay_hook.jar" "$ROOT/mnt/app/eso/hmi/lsd/jars/"
 cp "$SI/smartphone_integrator" "$ROOT/mnt/app/eso/bin/apps/"
 cp "$PROJECT_DIR/deploy/deva-ctrl-qc/deva-ctrl-qc.so.patched" "$ROOT/mnt/app/armle/lib/dll/deva-ctrl-qc.so"

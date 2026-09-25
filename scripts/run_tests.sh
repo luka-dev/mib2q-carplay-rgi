@@ -321,6 +321,9 @@ sh scripts/test_install_dio.sh
 printf '%-32s ' install_listing_test
 sh scripts/test_install_listing.sh
 
+printf '%-32s ' install_ncm_test
+sh scripts/test_install_ncm.sh
+
 printf '%-32s ' logging_mib_test
 sh scripts/test_logging_mib.sh
 

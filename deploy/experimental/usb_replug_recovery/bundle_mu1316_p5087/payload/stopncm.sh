@@ -3,7 +3,10 @@
 # Generation-aware replacement for the stock MU1316 stopncm.sh.
 # With arguments, teardown is permitted only for the USB enumeration that
 # currently owns the interface.  With no arguments, stock CarLife-compatible
-# behavior is retained for staged deployment and rollback.
+# behavior is retained, unless NCM_EXPECT_GENERATION names the exact generation
+# the ended CarPlay session ran on (smartphone_integrator's otgStackCleanupScript
+# via carplay_ncm_cleanup.sh): then only that generation is destroyed and a
+# newer one, from a phone replugged in the meantime, is left alone.
 
 REQUESTED_INTERFACE=${1:-}
 USB_BUSNO=${2:-}
@@ -12,6 +15,10 @@ USB_IFACE=${4:-}
 
 CARLIFE_FLAG=/tmp/carlife_active
 NCM_GENERATION_DIR=${NCM_GENERATION_DIR:-/tmp}
+# The lock is a directory: /tmp is /dev/shmem on the HU and mkdir there fails
+# (ENOSYS).  /ramdisk is a RAM qnx4 disk, cleared at boot.  The unit has no
+# rmdir binary, so the lock is removed with rm -rf.
+NCM_LOCK_BASE=${NCM_LOCK_BASE:-/ramdisk}
 NCM_LOG_FILE=${NCM_LOG_FILE:-/tmp/carplay_hook.log}
 NCM_IFCONFIG_BIN=${NCM_IFCONFIG_BIN:-ifconfig}
 NCM_STOP_DELAY=${NCM_STOP_DELAY:-1}
@@ -26,7 +33,7 @@ release_lock()
 {
     if [ "${LOCK_HELD}" = 1 ]; then
         rm -f "${LOCK_DIR}/pid"
-        rmdir "${LOCK_DIR}" >/dev/null 2>&1
+        rm -rf "${LOCK_DIR}" >/dev/null 2>&1
         LOCK_HELD=0
     fi
 }
@@ -46,9 +53,14 @@ acquire_lock()
             *)
                 if ! kill -0 "${LOCK_OWNER}" >/dev/null 2>&1; then
                     rm -f "${LOCK_DIR}/pid"
-                    rmdir "${LOCK_DIR}" >/dev/null 2>&1
+                    rm -rf "${LOCK_DIR}" >/dev/null 2>&1
                     log_ncm "reclaim_lock owner=${LOCK_OWNER} interface=${INTERFACE}"
-                    continue
+                    # Bounded like a wait: a lock that cannot be removed must
+                    # not spin forever.
+                    LOCK_TRIES=$((LOCK_TRIES + 1))
+                    [ "${LOCK_TRIES}" -lt 8 ] && continue
+                    log_ncm "fail lock_reclaim owner=${LOCK_OWNER} interface=${INTERFACE}"
+                    return 1
                 fi
                 ;;
         esac
@@ -63,7 +75,7 @@ acquire_lock()
     done
 
     if ! echo "$$" > "${LOCK_DIR}/pid"; then
-        rmdir "${LOCK_DIR}" >/dev/null 2>&1
+        rm -rf "${LOCK_DIR}" >/dev/null 2>&1
         log_ncm "fail lock_owner_write interface=${INTERFACE}"
         return 1
     fi
@@ -96,7 +108,7 @@ case "${INTERFACE}" in
 esac
 
 GENERATION_FILE="${NCM_GENERATION_DIR}/ncm_generation_${INTERFACE}"
-LOCK_DIR="${NCM_GENERATION_DIR}/ncm_lock_${INTERFACE}"
+LOCK_DIR="${NCM_LOCK_BASE}/ncm_lock_${INTERFACE}"
 
 trap 'release_lock' 0
 trap 'release_lock; exit 1' 1 2 3 15
@@ -127,6 +139,14 @@ if [ "${EXPLICIT_GENERATION}" = 1 ]; then
     esac
 
     log_ncm "armed requested=${REQUESTED_KEY} observed=${OBSERVED_GENERATION} interface=${INTERFACE}"
+elif [ -n "${NCM_EXPECT_GENERATION:-}" ]; then
+    read_generation
+    if [ "${NCM_READ_GENERATION}" != "${NCM_EXPECT_GENERATION}" ]; then
+        log_ncm "skip session_mismatch expected=${NCM_EXPECT_GENERATION} active=${NCM_READ_GENERATION} interface=${INTERFACE}"
+        exit 0
+    fi
+    OBSERVED_GENERATION=${NCM_READ_GENERATION}
+    log_ncm "armed session=${OBSERVED_GENERATION} interface=${INTERFACE}"
 else
     OBSERVED_GENERATION=legacy
     log_ncm "legacy_no_identity interface=${INTERFACE}"
@@ -137,7 +157,7 @@ fi
 # validates ownership or waits until this teardown has completed.
 sleep "${NCM_STOP_DELAY}"
 
-if [ "${EXPLICIT_GENERATION}" = 1 ]; then
+if [ "${OBSERVED_GENERATION}" != legacy ]; then
     read_generation
     if [ "${NCM_READ_GENERATION}" != "${OBSERVED_GENERATION}" ]; then
         log_ncm "skip replaced_after_sleep observed=${OBSERVED_GENERATION} active=${NCM_READ_GENERATION} interface=${INTERFACE}"
@@ -148,7 +168,7 @@ fi
 "${NCM_IFCONFIG_BIN}" "${INTERFACE}" destroy
 IFCONFIG_RC=$?
 
-if [ "${EXPLICIT_GENERATION}" = 1 ] && [ "${IFCONFIG_RC}" -eq 0 ]; then
+if [ "${OBSERVED_GENERATION}" != legacy ] && [ "${IFCONFIG_RC}" -eq 0 ]; then
     read_generation
     if [ "${NCM_READ_GENERATION}" = "${OBSERVED_GENERATION}" ]; then
         rm -f "${GENERATION_FILE}"
