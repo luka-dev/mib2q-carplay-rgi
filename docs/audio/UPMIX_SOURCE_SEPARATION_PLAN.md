@@ -257,6 +257,36 @@ labelled protected (the 6 % of non-vocal energy this over-protects costs a
 little rear, the safe direction) — at low weight beside the real-stem anchor,
 with no loss term at all on the other cells of a teacher song.
 
+## 🔭 Neighbours on GitHub (survey 2026-09-26, what is worth taking)
+
+Nothing public does role-aware per-bin masks at 512/128 inside 200 M MAC/s;
+four things are worth borrowing, the rest is either our own idea in another
+coat or the teacher path we measured out:
+
+* **s3a-decorrelation-toolbox** (Surrey, ISC) — transients are *not*
+  decorrelated but randomly panned; harmonic and noise parts are decorrelated
+  each their own way.  Exactly the hi-hat lottery / transient flicker of the
+  rear bed: a Phase 1 renderer rule (do not run hits through the bed delays).
+* **sweetspotsoundsystem/upmix-rt** (MIT) — clean allpass decorrelators
+  (~4 ms) for the rear, an alternative to the per-band delay comb.
+* **HS-TasNet** (L-Acoustics weights, 23 ms streaming, 4 stems) — too heavy
+  for the car, but the ceiling for the separability probe (what AUC a real
+  low-latency separator reaches at our cells) and a *causal* teacher for
+  protection labels, unlike HTDemucs.
+* **arXiv 2609.12201** (MSS on SHARC-FX, 1.9 GMAC/s for 4 stems): confirms
+  that 200 M MAC/s buys a protection mask, not a separator, and warns that
+  nets trained on windows with zero initial state collapse in streaming after
+  ~2 s.  Phase 1 gate: masks from the C runtime over a whole song must match
+  the windowed Python evaluation (a per-bin net without memory is immune;
+  any temporal GRU is not).
+* `ffmpeg af_surround` / FreeSurround — the classic steering decoders, "back
+  and forth" in pure form; worth one run through the stem harness as the
+  public baseline in the doc, nothing more.
+
+Not useful: GPL per-bin MLPs (our idea without protection), MagicSpatial
+(the DSP second scene without learning), stem-routing via Demucs (the teacher
+path: 14 % of the voice in "other"), generative / offline upmixers.
+
 ## ⚖️ Licensing
 
 MoisesDB is CC BY-NC-SA 4.0, teacher checkpoints unverified: weights stay
