@@ -135,6 +135,9 @@ def protect_mask_args(src, out, tag, model_path):
 ORACLE_PROTECT = ("vocals", "bass", "drums")   # MoisesDB stem names never allowed rear (drums whole: conservative)
 
 
+ORACLE_AMP = False   # --oracle-amp: write 1 - sqrt(eligibility) so the drive mode's (1 - protect) is an AMPLITUDE gain
+
+
 def oracle_mask_args(stems, k, out, tag):
     """Upper bound of the whole approach: the protect mask from the REAL stems at
     the DSP's geometry.  If even this gives a poor rear through the DSP, the mask
@@ -149,6 +152,8 @@ def oracle_mask_args(stems, k, out, tag):
     elig = sum(v for n, v in P.items() if n not in ORACLE_PROTECT) / tot  # [T, 257]
     T = (elig.shape[0] // MN.CONTROL) * MN.CONTROL
     elig = elig[:T].reshape(T // MN.CONTROL, MN.CONTROL, MN.N_BINS).mean(1)
+    if ORACLE_AMP:
+        elig = elig.sqrt()
     prot = (1 - elig).numpy().astype(np.float32)
     path = os.path.join(out, tag + ".oracle.msk")
     MN.write_mask(path, prot)
@@ -205,9 +210,12 @@ def main():
     ap.add_argument("--mask-model", help="mask_net.pt: render with its protect mask (test-mask build)")
     ap.add_argument("--oracle-mask", action="store_true", help="protect mask from the real stems (upper bound)")
     ap.add_argument("--render-extra", default="", help="extra renderer flags, e.g. '--mask-drive 1.0'")
+    ap.add_argument("--oracle-amp", action="store_true", help="oracle mask as amplitude gain (sqrt of the energy share)")
     ap.add_argument("--split-file", help="masknet_cache/split.json")
     ap.add_argument("--split", default="dev", help="with --split-file: which split to take songs from")
     a = ap.parse_args()
+    global ORACLE_AMP
+    ORACLE_AMP = a.oracle_amp
     os.makedirs(a.out, exist_ok=True)
     args = T.VARIANTS[a.variant] + ["--model", a.model] + (["--guard-model", a.guard] if a.guard else []) + a.render_extra.split()
     tracks = sorted(d for d in os.listdir(a.moisesdb) if os.path.isdir(os.path.join(a.moisesdb, d)))

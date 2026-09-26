@@ -115,6 +115,24 @@ with the core, cymbals and other eligible).
   build has `--mask-drive G` for exactly this; the oracle through it is the
   true ceiling of a mask-driven renderer and the next number to read.
 
+**The mask-driven ceiling** (oracle eligibility drives the rear object,
+`--mask-drive`, energy share used as the gain, 40 DEV songs):
+
+| | vocals | guitar | piano | keys | bass | drums |
+|---|---|---|---|---|---|---|
+| candidate (22.09 knobs + gate) | 0.01 / swing 0.21 | 0.06 / 0.35, 24/39 songs > 0.30 | 0.03 / 0.17 | 0.08 / 0.28 | 0.04 / 0.11 | 0.20 / 0.42 |
+| oracle protect only | 0.01 / 0.07 | 0.09 / 0.32, 22/39 | 0.08 / 0.17 | 0.11 / 0.26 | 0.04 / 0.11 | 0.08 / 0.10 |
+| **oracle drives, G = 1.0** | 0.01 / 0.08 | **0.16 / 0.24, 7/39** | 0.12 / 0.12 | 0.15 / 0.20 | 0.04 / 0.08 | 0.08 / 0.10 |
+| oracle drives, G = 0.5 | 0.01 / 0.05 | 0.04 / 0.07 | 0.02 / 0.04 | 0.05 / 0.07 | 0.01 / 0.03 | 0.06 / 0.06 |
+
+With a perfect mask driving the rear, guitars and keys sit behind at
+0.15–0.16 (top bands 0.28–0.37) with a third of the candidate's swinging
+songs, while the voice, bass and drum core do not move at all.  That is the
+"confident rear" the plan is after, and it exists — the amount is a gain
+choice (the energy share was used as an amplitude here; the sqrt mapping and
+G = 1.5 are the next reads), the rest is how close a network gets to the
+oracle.
+
 ### Review 2 (Codex, after the oracle)
 
 Ranked by expected impact, all adopted as the next steps:
