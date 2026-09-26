@@ -740,7 +740,10 @@ def loss_softmax_ramp(torch, logits, irm, w, P, roles, ramp):
         Pg = P[..., g] * (irm[..., g] > 0.6).float() * valid
         missed = missed + (Pg * (1 - elig)).sum() / (Pg.sum() + 1e-9)
     missed = missed / max(1, len(roles.eligible))
-    return ce + ramp * (LOSS_W["leak"] * leak + LOSS_W["leakp"] * leak_p) + LOSS_W["missed"] * missed
+    # the retention term rides the same ramp: unramped (v20, v24a-c) it alone drove eligibility to 0.8-0.9
+    # everywhere for the 5000 pre-ramp steps - every "distillation drift" of 26.09 was this term, not the teacher
+    # (v25t, teacher-only with plain CE: 0.34 in vocal-owned cells)
+    return ce + ramp * (LOSS_W["leak"] * leak + LOSS_W["leakp"] * leak_p + LOSS_W["missed"] * missed)
 
 
 def band_pool(torch, dev):
