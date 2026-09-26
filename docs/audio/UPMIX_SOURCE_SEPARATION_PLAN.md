@@ -132,6 +132,16 @@ With the energy share converted to an amplitude gain (`--oracle-amp`,
 |---|---|---|---|---|---|---|
 | **oracle drives, amplitude, G = 1.0** | 0.03 / 0.12 | **0.20 / 0.22, 7/39** | 0.14 / 0.12 | 0.17 / 0.19 | 0.07 / 0.11 | 0.12 / 0.15 |
 | oracle drives, amplitude, G = 1.5 | 0.06 / 0.19 | 0.36 / 0.31, 20/39 | 0.28 / 0.17 | 0.31 / 0.21 | 0.15 / 0.19 | 0.16 / 0.24, 13/40 |
+| **htdemucs_ft's own mask drives, amplitude, G = 1.0** (`--teacher-mask`, 2026-09-26) | **0.03 / 0.14**, 11/40 swinging | **0.20 / 0.23, 8/39** | 0.14 / 0.12 | 0.16 / 0.18, 5/27 | 0.11 / 0.16 | 0.11 / 0.21, 8/40 |
+
+**The teacher reaches the oracle.**  htdemucs's mask through the same
+renderer gives guitars 0.20 (top bands 0.29–0.41), keys 0.16, voice 0.03,
+drums 0.11 — the oracle's numbers, with somewhat more swing (8/39 guitar,
+11/40 vocal songs).  The milestone (guitars ≥ 0.15 at voice ≤ 0.04) is met by
+a 40 M-parameter separator at the car's STFT: the evidence is in the mixture,
+and the distillation route has a real ceiling equal to the oracle.  What is
+missing is a student that can copy the teacher within the budget — the
+question is now capacity and training, not information.
 
 At G = 1.0 the guitars' top bands sit at 0.39–0.43 rear — the 22.09 car's
 level (0.47–0.53) — with a third of its swinging songs and the voice at 0.03.
