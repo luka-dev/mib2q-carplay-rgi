@@ -193,9 +193,13 @@ def analyse_song(render, args, out, track_dir, excerpt_s, mask_model=None, oracl
     T.write_wav(src, mix * k)
     extra = protect_mask_args(src, out, tag, mask_model) if mask_model else \
         oracle_mask_args(stems, k, out, tag) if oracle else []
-    subprocess.run([render] + args + extra + [src, dst], check=True,
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    out6 = T.read_wav6(dst)
+    try:
+        subprocess.run([render] + args + extra + [src, dst], check=True,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        out6 = T.read_wav6(dst)
+    except (subprocess.CalledProcessError, OSError, ValueError) as e:   # one bad song (D: stall) must not kill the table
+        print(f"  SKIP {tag}: {e}", flush=True)
+        return []
     print(f"  rendered {tag}", flush=True)
     on = np.ones(n, bool)
     rows = []

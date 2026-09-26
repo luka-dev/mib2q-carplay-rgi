@@ -555,6 +555,31 @@ def load_split(cache_dir):
             for k in ("train", "dev", "test")}
 
 
+def npy_header(path):
+    """(shape, dtype, data offset) of a .npy without touching its data."""
+    with open(path, "rb") as f:
+        version = np.lib.format.read_magic(f)
+        shape, _, dtype = (np.lib.format.read_array_header_1_0 if version == (1, 0) else np.lib.format.read_array_header_2_0)(f)
+        return shape, dtype, f.tell()
+
+
+def read_window(path, s, n, slots=None):
+    """[G,C,N] .npy -> [len(slots),C,n] for samples s..s+n with plain file reads.  No mmap: on the
+    PC's WinBtrfs volume page-ins of a mmapped cache file fault under load (access violation in a
+    prefetch thread, the second death of v20)."""
+    shape, dtype, off = npy_header(path)
+    G, C, N = shape
+    slots = range(G) if slots is None else slots
+    out = np.zeros((len(slots), C, n), dtype)
+    isz = dtype.itemsize
+    with open(path, "rb") as f:
+        for i, g in enumerate(slots):
+            for c in range(C):
+                f.seek(off + ((g * C + c) * N + s) * isz)
+                out[i, c] = np.frombuffer(f.read(n * isz), dtype)
+    return out
+
+
 def merge_groups(w, merge_idx):
     """[7, 2, n] cached groups -> [G, 2, n] merged (numpy, int16 sums in int32)."""
     return np.stack([w[idx].astype(np.int32).sum(0) for idx in merge_idx]).astype(np.float32)
@@ -565,11 +590,12 @@ def batch_windows(torch, cache_dir, tracks, seconds, batch, rng, dev, merge_idx)
     wavs = []
     for _ in range(batch):
         t = tracks[rng.integers(len(tracks))]
-        w = np.load(os.path.join(cache_dir, t + ".npy"), mmap_mode="r")   # reads only the window
-        if w.shape[2] <= n:
+        path = os.path.join(cache_dir, t + ".npy")
+        shape = npy_header(path)[0]
+        if shape[2] <= n:
             continue
-        s = rng.integers(0, w.shape[2] - n)
-        win = np.asarray(w[:, :, s:s + n])
+        s = rng.integers(0, shape[2] - n)
+        win = read_window(path, s, n)
         if win.shape[0] == 2:                                # teacher cache: [vocals, rest] -> lead_vocal / other slots
             full = np.zeros((len(GROUPS), 2, n), np.int16); full[0] = win[0]; full[6] = win[1]; win = full
         wavs.append(merge_groups(win, merge_idx))
@@ -992,17 +1018,14 @@ def evaluate(torch, net, cache_dir, tracks, dev, seconds, merge_idx, roles, song
     rng = np.random.default_rng(0)
     with torch.no_grad():
         for t in tracks[:songs]:
-            w = np.load(os.path.join(cache_dir, t + ".npy"), mmap_mode="r")
+            path = os.path.join(cache_dir, t + ".npy")
             n = int(seconds * SR)
-            if w.shape[2] <= n:
+            if npy_header(path)[0][2] <= n:
                 continue
             if (t, n) not in _EVAL_START:
-                # the loudest-vocal window, like the harness (lead + other vocal); found once
-                v = np.asarray(w[0]).astype(np.float32) + np.asarray(w[1]).astype(np.float32)
-                e = np.cumsum((v ** 2).sum(0)); idx = np.arange(0, w.shape[2] - n, 5 * SR)
-                _EVAL_START[(t, n)] = idx[int(np.argmax(e[idx + n - 1] - e[idx]))] if len(idx) else 0
+                _EVAL_START[(t, n)] = dev_excerpt(path, n)     # the loudest-vocal window, like the harness; found once
             s = _EVAL_START[(t, n)]
-            x = torch.as_tensor(merge_groups(np.asarray(w[:, :, s:s + n]), merge_idx)[None], device=dev) / 32768
+            x = torch.as_tensor(merge_groups(read_window(path, s, n), merge_idx)[None], device=dev) / 32768
             f, irm, wt, P = targets_and_features(torch, x, rng, augment=False, fine=net_is_fine(net))
             lg = net._logits(f)
             m = net.forward(f)
@@ -1078,10 +1101,11 @@ def write_mask(path, prot):
         fh.write(b"HSSRMSK0"); fh.write(np.array([prot.shape[0], N_BINS], np.uint32).tobytes()); fh.write(prot.tobytes())
 
 
-def dev_excerpt(w, n):
-    """The loudest-vocal window of a cached song, like the harness / evaluate()."""
-    v = np.asarray(w[0]).astype(np.float32) + np.asarray(w[1]).astype(np.float32)
-    e = np.cumsum((v ** 2).sum(0)); idx = np.arange(0, w.shape[2] - n, 5 * SR)
+def dev_excerpt(path, n):
+    """Start of the loudest-vocal window of a cached song, like the harness / evaluate()."""
+    N = npy_header(path)[0][2]
+    v = read_window(path, 0, N, slots=(0, 1)).astype(np.float32).sum(0)
+    e = np.cumsum((v ** 2).sum(0)); idx = np.arange(0, N - n, 5 * SR)
     return idx[int(np.argmax(e[idx + n - 1] - e[idx]))] if len(idx) else 0
 
 
@@ -1101,11 +1125,11 @@ def calibrate(a):
     n = int(a.seconds * SR)
     with torch.no_grad():
         for t in split["dev"][:a.songs]:
-            w = np.load(os.path.join(a.cache, t + ".npy"), mmap_mode="r")
-            if w.shape[2] <= n:
+            path = os.path.join(a.cache, t + ".npy")
+            if npy_header(path)[0][2] <= n:
                 continue
-            s0 = dev_excerpt(w, n)
-            x = torch.as_tensor(merge_groups(np.asarray(w[:, :, s0:s0 + n]), merge_idx)[None], device=dev) / 32768
+            s0 = dev_excerpt(path, n)
+            x = torch.as_tensor(merge_groups(read_window(path, s0, n), merge_idx)[None], device=dev) / 32768
             f, irm, wt, P = targets_and_features(torch, x, rng, augment=False, fine=net_is_fine(net))
             e = rear_eligibility(net.forward(f), roles)[0]
             Z.append(torch.logit(e.clamp(1e-4, 1 - 1e-4)).flatten()); Tt.append(irm[0][..., roles.eligible].sum(-1).flatten())
