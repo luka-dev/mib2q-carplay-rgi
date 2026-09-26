@@ -202,7 +202,7 @@ def analyse_song(render, args, out, track_dir, excerpt_s, mask_model=None, oracl
         extra = protect_mask_args(src, out, tag, mask_model) if mask_model else \
             oracle_mask_args(stems, k, out, tag) if oracle else []
     try:
-        subprocess.run([render] + args + extra + [src, dst], check=True,
+        subprocess.run(render.split() + args + extra + [src, dst], check=True,   # a command line (no spaces in our paths)
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         out6 = T.read_wav6(dst)
     except (subprocess.CalledProcessError, OSError, ValueError) as e:   # one bad song (D: stall) must not kill the table
