@@ -443,6 +443,49 @@ Not useful: GPL per-bin MLPs (our idea without protection), MagicSpatial
 (the DSP second scene without learning), stem-routing via Demucs (the teacher
 path: 14 % of the voice in "other"), generative / offline upmixers.
 
+## 🔁 Review 6 (astra, after the teacher-through-DSP, the confound and the baselines)
+
+1. **Distil the rendered quantity.**  Finish the clean two-stage run unchanged
+   (keep the stage-one checkpoint: it separates representation learning from
+   routing-objective damage).  Next: **direct eligibility distillation** —
+   predict e, supervise the amplitude `a = sqrt(e)` (Huber on `sqrt ê` vs
+   `sqrt e_T`) + 0.2 BCE(ê, e_T) + 0.1 role CE; all audible cells with capped
+   energy weights, confidence filtering only on the auxiliary role labels
+   ("excluding ambiguous cells leaves exactly the difficult boundaries
+   unsupervised"); teacher target matched to the deployed control update:
+   energy-weighted mean eligibility over the held hops `ē = Σ|X|²e / Σ|X|²`;
+   no sharpening; 600 masters first, the library after.  AUC 0.85 is not a
+   capacity wall: compare teacher and student on identical cells, overfit a
+   few songs; a non-causal teacher may use future context a causal student
+   cannot — "copying its eligibility is plausibly much easier than copying
+   its waveforms, but the ceiling is unmeasured."
+2. **Budget → frequency modelling.**  At ~230 M: freq conv 257→129 (k5,
+   12→24 ch, 17 M) → freq conv 129→65 (k3, 24→32, 14 M) → bidirectional
+   frequency GRU over 65 bins (hidden 40/dir, 105 M) → causal temporal GRU
+   shared across bins (input 80, hidden 16, 28 M) → full-resolution decoder
+   (interpolate 96 + 12 local descriptors → 16 → 1, 42 M) = 207 M.
+   Frequency bidirectionality costs no future time.  Reconcile 200 vs 230 M,
+   benchmark activations / memory traffic / requantisation / worst-case
+   worker deadlines; retire the controllers only after a functional ablation.
+3. **The matrix is a serious competitor; postpone the hybrid.**  It shows
+   rear-share rewards width extraction as much as routing.  Companion metric:
+   **oracle-referenced rear reconstruction error** — oracle Ls/Rs from the
+   same renderer, latency-aligned, bandwise normalised squared error, reported
+   at fixed gain and after one global positive gain fit (level vs
+   waveform/image mismatch); no per-bin phase fitting.  Rear correlation alone
+   is useless (identical difference signals in both rears correlate +1).
+4. **Listening: five conditions** — stereo/front-only, passive matrix, best
+   deployable student, clean-KD candidate, oracle routing (the teacher in a
+   separate engineering check); loudness-matched, rear level logged; excerpts
+   with sustained guitar/keys, vocal entries, width changes, drum fills,
+   30–60 s; rate separately *identifiable rear source*, *stable rear
+   position/presence*, *vocal intrusion*, *distracting diffuse wash*; identify
+   the rear instrument before scoring; duplicate trials.
+5. **Stop:** interpreting contaminated runs; optimising sharpness as
+   progress; tuning solely against rear share; treating the 40 inspected DEV
+   songs as final evidence — the 24-song TEST split stays untouched until the
+   next winner is chosen.
+
 ## 📝 Publication (astra review 5, 2026-09-26)
 
 Asked whether there is a paper in this work.  Verdict: **a credible systems +
