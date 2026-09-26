@@ -180,6 +180,9 @@ struct spa_hssr_dsp {
      * the slot/ridge/coherence heuristics — the mask-driven renderer's upper
      * bound with an oracle mask. */
     float test_mask_drive;
+    /* drive mode: also keep the per-band vocal gate (q6d + guard + comodulation)
+     * on top of the bin mask — the two levels of evidence combined. */
+    uint32_t test_mask_keep_gate;
 #endif
     struct spa_hssr_como como[SPA_HSSR_BINS];
     struct spa_hssr_object_slot object_slot[SPA_HSSR_OBJECT_SLOTS];

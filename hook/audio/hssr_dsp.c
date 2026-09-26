@@ -1713,10 +1713,12 @@ static void spa_hssr_render_hop(
             if (state->test_mask_drive > 0.0f) {
                 mask = (1.0f - protect) * state->test_mask_drive;
                 state->bin[bin].object_pan = state->bin[bin].scene_lr;
+                if (!state->test_mask_keep_gate) goto masked;
             } else {
                 mask *= 1.0f - state->vocal_gate * protect;
+                goto masked;
             }
-        } else
+        }
 #endif
         if (band_gate[band] > 0.0f) {
             const float a = 0.012f;                       /* ~0.22 s at 2.67 ms hops */
@@ -1734,6 +1736,9 @@ static void spa_hssr_render_hop(
             cm->g += 0.05f * (spa_hssr_dsp_smoothstep(corr, 0.0f, 0.40f) - cm->g);
             mask *= 1.0f - band_gate[band] * cm->g;
         }
+#ifdef SPA_HSSR_TEST_MASK
+masked:
+#endif
         {
             float source_l;
             float source_r;
