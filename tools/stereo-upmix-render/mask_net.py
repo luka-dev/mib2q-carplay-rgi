@@ -730,6 +730,18 @@ def loss_presence(torch, pres_logits, irm, w, P, roles, pool):
     return (bce * valid).sum() / (valid.sum() + 1.0)
 
 
+def loss_teacher_vocal(torch, logits, irm, w, roles):
+    """Teacher songs, 'vocal' mode: the student's vocal probability against the teacher's vocal
+    power fraction in EVERY audible cell (soft BCE, salience-weighted).  htdemucs is a 40 M-param
+    separator that reaches at the car's STFT what none of our nets can fit even on TRAIN (train AUC =
+    DEV AUC ~0.8 for all of them, v22 included): it supplies the sharp cross-spectrum voice evidence
+    over 220 h of real masters; the roles other than vocals still come from MoisesDB only."""
+    p = torch.softmax(logits, -1)[..., roles.vocals].clamp(1e-4, 1 - 1e-4)
+    valid = w * (w > 0.15).float()
+    bce = torch.nn.functional.binary_cross_entropy(p, irm[..., roles.vocals], reduction="none")
+    return (bce * valid).sum() / (valid.sum() + 1.0)
+
+
 def dev_auc_vo(torch, score, irm, w, roles):
     """The probe's AUC: vocal-owned vs other-owned cells on the eligibility score."""
     valid = w > 0.15
@@ -936,8 +948,11 @@ def train(a):
             xt = next(teacher).to(dev, non_blocking=True)
             with torch.no_grad():
                 ft, irm_t, wt, Pt = targets_and_features(torch, xt, rng, augment=True, fine=net_is_fine(net))
-                wt = wt * (irm_t[..., roles.vocals] > 0.9).float()          # confident-vocal cells only
-            loss = loss + a.w_teacher * loss_softmax(torch, net._logits(ft), irm_t, wt, Pt, roles)
+            if a.teacher_mode == "vocal":
+                loss = loss + a.w_teacher * loss_teacher_vocal(torch, net._logits(ft), irm_t, wt, roles)
+            else:
+                wt = wt * (irm_t[..., roles.vocals] > 0.9).float()          # protection-only: confident-vocal cells
+                loss = loss + a.w_teacher * loss_softmax(torch, net._logits(ft), irm_t, wt, Pt, roles)
             if getattr(net, "last_presence", None) is not None and a.w_pres > 0:
                 loss = loss + a.w_teacher * a.w_pres * loss_presence(torch, net.last_presence, irm_t, wt, Pt, roles, pool)
         opt.zero_grad(); loss.backward()
@@ -1262,6 +1277,7 @@ def main():
                         "full = whole-spectrum strided conv + GRU bottleneck + per-cell decoder (proj=channels, hidden=GRU)")
     t.add_argument("--teacher-cache", help="htdemucs cache (teacher_label.py separate): protection-only supervision on confident vocal cells")
     t.add_argument("--teacher-every", type=int, default=2); t.add_argument("--w-teacher", type=float, default=0.3)
+    t.add_argument("--teacher-mode", default="protect", choices=("protect", "vocal"), help="protect = confident vocal cells only; vocal = soft vocal target everywhere")
     t.add_argument("--w-pres", type=float, default=0.5, help="full: weight of the band vocal-presence head")
     t.add_argument("--dec", type=int, default=24, help="full: decoder width"); t.add_argument("--loss-weight", default="valid", choices=("valid", "salience"))
     t.add_argument("--layers", type=int, default=1); t.add_argument("--bidir", action="store_true", help="full: non-causal GRU (ceiling study only)")
