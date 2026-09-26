@@ -61,6 +61,39 @@ Everything runs on the training PC (`100.127.113.11`, RTX 5080, MoisesDB at
    ≤ 0.05, guitar/keys rear ≥ the candidate's, swing and flicker ≤ the
    candidate's.
 
+### Review (Codex, 2026-09-25) and what it changed
+
+Asked whether the grouping is right.  Agreed with caching the roles apart and
+training the first model with all vocals in front, with four corrections, all
+adopted:
+
+1. **Rear eligibility must be explicit.**  "Rear = m_other" would never send
+   cymbals back; the DSP takes the *eligible* masks (other + cymbals/hi-hat)
+   with their own gains.  Percussion (congas, claps) is not rear-safe by
+   default: it stays with the drum core in the first model.  The cache keeps
+   the original stem labels, so a regrouping never rebuilds it.  A per-bin
+   mask is still not object tracking — the harness keeps measuring
+   within-source depth consistency and temporal stability.
+2. **Backing vocals behind** stays a later opt-in experiment: sustained
+   backing evidence *and* a calibrated bound on lead contamination, ambiguity
+   returns the voice forward, loss on lead energy actually admitted rear,
+   hard cases (doubles, harmonies, alternating singers) in the data.
+3. **Ideal ratio masks are targets, not a safety label**: the loss also
+   carries the vocal energy the eligible masks would admit rear, normalised
+   per frame so quiet consonants and breath count; stem gains are randomised
+   with the targets recomputed; the model is judged by leakage, support,
+   depth fragmentation and syllabic modulation, never by mask loss.
+4. **Distillation**: teacher confidence is not correctness; HTDemucs' four
+   stems cannot label lead/backing or core/cymbals and must not be made to;
+   validate the confidence rule on MoisesDB for false rear permission first,
+   keep the teacher at low weight beside a permanent real-stem anchor,
+   freeze thresholds on DEV, test once on the untouched TEST split.
+
+Cache v2 therefore holds seven groups — lead vocal, other vocal, drum core,
+cymbals/hi-hat, percussion, bass, other — as mmap-able int16 with the labels
+beside; training merges them (`--merge`, default vocals whole, percussion
+with the core, cymbals and other eligible).
+
 ## 🛠️ Phase 1 — into the DSP
 
 New blob `HSSRMSK1`, a second job on the existing control worker (own state,

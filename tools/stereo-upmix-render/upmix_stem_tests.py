@@ -120,28 +120,15 @@ def protect_mask_args(src, out, tag, model_path):
     hand the renderer the per-control protect mask (needs a -DSPA_HSSR_TEST_MASK
     build).  The net is loaded once per process."""
     import mask_net as MN
-    torch = MN._torch()
     if "net" not in _MASK:
-        dev = "cuda" if torch.cuda.is_available() else "cpu"
-        ck = torch.load(model_path, map_location=dev)
-        net = MN.MaskNet(torch, MN.bin_band(), ctx=ck["ctx"], proj=ck["proj"], hidden=ck["hidden"]).to(dev)
-        net.modules.load_state_dict(ck["state"]); net.modules.eval()
-        _MASK.update(net=net, dev=dev, torch=torch)
-    net, dev = _MASK["net"], _MASK["dev"]
-    x = T.read_wav2(src) if hasattr(T, "read_wav2") else None
-    if x is None:
-        import wave
-        with wave.open(src, "rb") as w:
-            x = np.frombuffer(w.readframes(w.getnframes()), "<i2").reshape(-1, 2).T.astype(np.float32) / 32768
-    with torch.no_grad():
-        X = MN.stft(torch, torch.as_tensor(x[None], device=dev))
-        f = MN.features(torch, X[:, 0], X[:, 1])
-        Tc = (f.shape[1] // MN.CONTROL) * MN.CONTROL
-        m = net.forward(f[:, MN.CONTROL - 1:Tc:MN.CONTROL])[0]
-    prot = (1 - m[..., 3]).cpu().numpy().astype(np.float32)
+        torch, net, roles, dev = MN.load_model(model_path)
+        _MASK.update(torch=torch, net=net, roles=roles, dev=dev)
+    import wave
+    with wave.open(src, "rb") as w:
+        x = np.frombuffer(w.readframes(w.getnframes()), "<i2").reshape(-1, 2).T.astype(np.float32) / 32768
+    prot = MN.protect_mask(_MASK["torch"], _MASK["net"], _MASK["roles"], _MASK["dev"], x)
     path = os.path.join(out, tag + ".msk")
-    with open(path, "wb") as fh:
-        fh.write(b"HSSRMSK0"); fh.write(np.array([prot.shape[0], MN.N_BINS], np.uint32).tobytes()); fh.write(prot.tobytes())
+    MN.write_mask(path, prot)
     return ["--protect-mask", path]
 
 

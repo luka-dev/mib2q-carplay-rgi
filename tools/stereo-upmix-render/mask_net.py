@@ -29,8 +29,39 @@ N_FFT = 512
 HOP = 128
 N_BINS = N_FFT // 2 + 1
 CONTROL = 4                                   # the DSP's control cadence, hops
-GROUPS = ("vocals", "drums", "bass", "other")
-GROUP_OF_STEM = {"vocals": 0, "drums": 1, "percussion": 1, "bass": 2}   # everything else -> other
+# Cached groups (v2, 2026-09-25 after the Codex review): keep the musical roles
+# apart in the cache and MERGE at training time, so a grouping change never
+# rebuilds 65 GB.  The original (stemName, trackType) labels are kept per song.
+GROUPS = ("lead_vocal", "other_vocal", "drum_core", "cymbals", "percussion", "bass", "other")
+# First model (conservative): vocals whole and in front, percussion with the
+# drum core in front (congas/claps anchor the foreground), only cymbals/hi-hat
+# and "other" may go rear.
+DEFAULT_MERGE = "vocals=lead_vocal+other_vocal;drum_core=drum_core+percussion;cymbals=cymbals;bass=bass;other=other"
+PROTECT = ("vocals", "drum_core", "bass")          # never rear
+ELIGIBLE = ("other", "cymbals")                     # rear candidates (the DSP's spatial gates decide how much)
+
+
+def group_of(stem_name, track_type):
+    t = (track_type or "").lower()
+    if stem_name == "vocals":
+        return 0 if "lead" in t else 1
+    if stem_name == "drums":
+        return 3 if any(k in t for k in ("hi_hat", "hihat", "cymbal", "ride", "crash", "overhead")) else 2
+    if stem_name == "percussion":
+        return 4
+    if stem_name == "bass":
+        return 5
+    return 6
+
+
+def parse_merge(spec):
+    """'name=g1+g2;...' -> (names, index lists into GROUPS)."""
+    names, idx = [], []
+    for part in spec.split(";"):
+        name, members = part.split("=")
+        names.append(name)
+        idx.append([GROUPS.index(m) for m in members.split("+")])
+    return names, idx
 BAND_EDGES_HZ = [0, 60, 90, 125, 170, 220, 280, 350, 440, 550, 680, 830, 1000, 1200, 1450, 1750,
                  2100, 2500, 3000, 3600, 4300, 5100, 6000, 7000, 8200, 9600, 11200, 13000, 15000,
                  17500, 20000, 22000, 24001]
@@ -67,8 +98,8 @@ def cache(a):
     split = {t: ("dev" if metas[t]["artist"] in dev_a else "test" if metas[t]["artist"] in test_a else "train")
              for t in tracks}
     json.dump({"split": split, "groups": GROUPS, "sr": SR}, open(os.path.join(a.out, "split.json"), "w"), indent=1)
-    jobs = [(os.path.join(a.moisesdb, t), os.path.join(a.out, t + ".npz"), metas[t]) for t in tracks
-            if not os.path.exists(os.path.join(a.out, t + ".npz"))]
+    jobs = [(os.path.join(a.moisesdb, t), os.path.join(a.out, t + ".npy"), metas[t]) for t in tracks
+            if not os.path.exists(os.path.join(a.out, t + ".npy"))]
     print(f"{len(tracks)} songs, {len(jobs)} to cache; split train/dev/test = "
           f"{sum(v == 'train' for v in split.values())}/{sum(v == 'dev' for v in split.values())}/"
           f"{sum(v == 'test' for v in split.values())}")
@@ -81,13 +112,15 @@ def _cache_one(job):
     import soundfile as sf
     from scipy.signal import resample_poly
     track_dir, out, meta = job
-    groups = [None] * 4
+    groups = [None] * len(GROUPS)
+    labels = []
     for stem in meta["stems"]:
-        g = GROUP_OF_STEM.get(stem["stemName"], 3)
         for t in stem["tracks"]:
+            g = group_of(stem["stemName"], t.get("trackType"))
             p = os.path.join(track_dir, stem["stemName"], t["id"] + ".wav")
             if not os.path.exists(p):
                 continue
+            labels.append({"stem": stem["stemName"], "type": t.get("trackType"), "group": GROUPS[g]})
             x, sr = sf.read(p, dtype="float32", always_2d=True)
             if x.shape[1] == 1:
                 x = np.repeat(x, 2, 1)
@@ -98,15 +131,16 @@ def _cache_one(job):
                 m = min(groups[g].shape[1], x.shape[1])
                 groups[g] = groups[g][:, :m] + x[:, :m]
     n = min(g.shape[1] for g in groups if g is not None)
-    stack = np.zeros((4, 2, n), np.float32)
+    stack = np.zeros((len(GROUPS), 2, n), np.float32)
     for gi, g in enumerate(groups):
         if g is not None:
             stack[gi] = g[:, :n]
     stack = resample_poly(stack, 160, 147, axis=2).astype(np.float32)
     peak = np.abs(stack.sum(0)).max() + 1e-9
     stack *= 0.7 / peak                                  # the harness level
-    np.savez(out, wav=(np.clip(stack, -1, 1) * 32767).astype(np.int16),
-             present=np.array([g is not None for g in groups]))
+    np.save(out, (np.clip(stack, -1, 1) * 32767).astype(np.int16))     # [7, 2, n] int16, mmap-able
+    json.dump({"present": [g is not None for g in groups], "labels": labels, "artist": meta["artist"],
+               "song": meta["song"], "genre": meta.get("genre")}, open(out[:-4] + ".json", "w"))
     return f"{meta['artist']} - {meta['song']}: {stack.shape[2] / SR:.0f} s"
 
 
@@ -137,7 +171,7 @@ def features(torch, L, R):
 class MaskNet:
     """Per-band GRU context + per-bin MLP.  ~0.18 M MAC per control."""
 
-    def __init__(self, torch, band, ctx=64, proj=8, hidden=32):
+    def __init__(self, torch, band, ctx=64, proj=8, hidden=32, n_out=4):
         nn = torch.nn
         self.torch = torch
         self.band = torch.as_tensor(band)
@@ -146,7 +180,8 @@ class MaskNet:
         self.pool = self.pool / bins_per_band.clamp(min=1)[:, None]
         self.gru = nn.GRU(N_BANDS * 5, ctx, batch_first=True)
         self.ctx_proj = nn.Linear(ctx, N_BANDS * proj)
-        self.mlp = nn.Sequential(nn.Linear(4 + proj + 1, hidden), nn.Tanh(), nn.Linear(hidden, 4))
+        self.mlp = nn.Sequential(nn.Linear(4 + proj + 1, hidden), nn.Tanh(), nn.Linear(hidden, n_out))
+        self.n_out = n_out
         self.proj = proj
         self.modules = nn.ModuleList([self.gru, self.ctx_proj, self.mlp])
         self.pos = (torch.arange(N_BINS, dtype=torch.float32) / N_BINS)
@@ -159,7 +194,7 @@ class MaskNet:
         return self.modules.parameters()
 
     def forward(self, f):
-        """f: [B, T, 257, 4] at control cadence -> masks [B, T, 257, 4] in (0,1)."""
+        """f: [B, T, 257, 4] at control cadence -> masks [B, T, 257, n_out] in (0,1)."""
         torch = self.torch
         B, T = f.shape[:2]
         e = f[..., :2].mean(-1)                                   # log energy per bin
@@ -183,30 +218,33 @@ def master(torch, mix, rng):
 
 def load_split(cache_dir):
     s = json.load(open(os.path.join(cache_dir, "split.json")))["split"]
-    return {k: [t for t, v in s.items() if v == k and os.path.exists(os.path.join(cache_dir, t + ".npz"))]
+    return {k: [t for t, v in s.items() if v == k and os.path.exists(os.path.join(cache_dir, t + ".npy"))]
             for k in ("train", "dev", "test")}
 
 
-def batch_windows(torch, cache_dir, tracks, seconds, batch, rng, dev):
+def merge_groups(w, merge_idx):
+    """[7, 2, n] cached groups -> [G, 2, n] merged (numpy, int16 sums in int32)."""
+    return np.stack([w[idx].astype(np.int32).sum(0) for idx in merge_idx]).astype(np.float32)
+
+
+def batch_windows(torch, cache_dir, tracks, seconds, batch, rng, dev, merge_idx):
     n = int(seconds * SR)
     wavs = []
     for _ in range(batch):
         t = tracks[rng.integers(len(tracks))]
-        z = np.load(os.path.join(cache_dir, t + ".npz"))
-        w = z["wav"]
+        w = np.load(os.path.join(cache_dir, t + ".npy"), mmap_mode="r")   # reads only the window
         if w.shape[2] <= n:
             continue
         s = rng.integers(0, w.shape[2] - n)
-        wavs.append(w[:, :, s:s + n])
-    x = torch.as_tensor(np.stack(wavs), device=dev).float() / 32768   # [B,4,2,n]
-    return x
+        wavs.append(merge_groups(np.asarray(w[:, :, s:s + n]), merge_idx))
+    return torch.as_tensor(np.stack(wavs), device=dev) / 32768         # [B,G,2,n]
 
 
 def targets_and_features(torch, x, rng, augment):
-    """x [B,4,2,n] group waveforms -> f [B,Tc,257,4], irm [B,Tc,257,4], weight [B,Tc,257]."""
-    B = x.shape[0]
+    """x [B,G,2,n] group waveforms -> f [B,Tc,257,4], irm [B,Tc,257,G], weight [B,Tc,257], power [B,Tc,257,G]."""
+    B, G = x.shape[:2]
     if augment:
-        gains = 10 ** (torch.empty(B, 4, 1, 1, device=x.device).uniform_(-6, 6) / 20)
+        gains = 10 ** (torch.empty(B, G, 1, 1, device=x.device).uniform_(-6, 6) / 20)
         x = x * gains
     mix = x.sum(1)                                                # [B,2,n]
     if augment:
@@ -214,37 +252,73 @@ def targets_and_features(torch, x, rng, augment):
     else:
         mix_in = mix
     X = stft(torch, mix_in)                                       # [B,2,T,257]
-    G = stft(torch, x)                                            # [B,4,2,T,257]
-    P = (G.real ** 2 + G.imag ** 2).sum(2)                        # [B,4,T,257]
+    Gs = stft(torch, x)                                           # [B,G,2,T,257]
+    P = (Gs.real ** 2 + Gs.imag ** 2).sum(2)                      # [B,G,T,257]
     irm = P / (P.sum(1, keepdim=True) + 1e-9)
     f = features(torch, X[:, 0], X[:, 1])                         # [B,T,257,4]
     T = (f.shape[1] // CONTROL) * CONTROL
     f = f[:, CONTROL - 1:T:CONTROL]                               # the control hop's features
-    irm = irm[:, :, :T].reshape(B, 4, T // CONTROL, CONTROL, N_BINS).mean(3).permute(0, 2, 3, 1)
-    Pm = P.sum(1)[:, :T].reshape(B, T // CONTROL, CONTROL, N_BINS).mean(2)
+    irm = irm[:, :, :T].reshape(B, G, T // CONTROL, CONTROL, N_BINS).mean(3).permute(0, 2, 3, 1)
+    Pc = P[:, :, :T].reshape(B, G, T // CONTROL, CONTROL, N_BINS).mean(3).permute(0, 2, 3, 1)   # [B,Tc,257,G]
+    Pm = Pc.sum(-1)
     weight = torch.clamp(torch.log10(Pm + 1e-9) + 6, 0, 6) / 6    # salience: silent cells count nothing
-    return f, irm, weight
+    return f, irm, weight, Pc
 
 
-def loss_fn(torch, m, irm, w):
-    """Asymmetric BCE: protected energy sent rear costs 4x; + temporal smoothness."""
-    protect = irm[..., 0] + irm[..., 1] + irm[..., 2]              # vocal+drums+bass share of the cell
-    bce = -(irm * torch.log(m + 1e-6) + (1 - irm) * torch.log(1 - m + 1e-6))   # [B,T,257,4]
+class Roles:
+    """Indices of the protected / rear-eligible outputs for a merge config."""
+
+    def __init__(self, names):
+        self.names = names
+        self.protect = [names.index(n) for n in PROTECT if n in names]
+        self.eligible = [names.index(n) for n in ELIGIBLE if n in names]
+        self.vocals = names.index("vocals") if "vocals" in names else names.index("lead_vocal")
+
+
+def rear_eligibility(m, roles):
+    """What the DSP may send rear: the eligible masks summed, bounded to 1."""
+    return torch_clamp_sum(m, roles.eligible)
+
+
+def torch_clamp_sum(m, idx):
+    return m[..., idx].sum(-1).clamp(max=1.0)
+
+
+def loss_fn(torch, m, irm, w, P, roles):
+    """Asymmetric BCE on the ideal ratio masks (protected cells 4x) + a leak term on
+    the vocal ENERGY the eligible masks would admit rear, normalised per frame so
+    quiet vocal passages (consonants, breath) matter as much as loud ones
+    (Codex review 2026-09-25) + temporal smoothness."""
+    protect = irm[..., roles.protect].sum(-1)
+    bce = -(irm * torch.log(m + 1e-6) + (1 - irm) * torch.log(1 - m + 1e-6))
     per_cell = bce.mean(-1) * (1 + 3 * protect)
-    # the "other" mask on a protected cell is the leak we care about most
-    leak = m[..., 3] * protect
+    elig = rear_eligibility(m, roles)                              # [B,T,257]
+    Pv = P[..., roles.vocals]                                      # vocal power per cell
+    frame_voc = Pv.sum(-1)                                         # [B,T]
+    active = (frame_voc > 1e-4 * P.sum(-1).sum(-1).mean()).float()
+    leak_frame = (Pv * elig).sum(-1) / (frame_voc + 1e-9)          # share of this frame's vocal energy admitted rear
+    leak = (leak_frame * active).sum() / (active.sum() + 1e-9)
+    # protected drums/bass leak, energy-weighted (louder = matters)
+    Pp = P[..., roles.protect].sum(-1)
+    leak_p = (Pp * elig).sum() / (Pp.sum() + 1e-9)
     smooth = (m[:, 1:] - m[:, :-1]).abs().mean(-1)
-    core = (per_cell * w).sum() / (w.sum() + 1e-9) + 2.0 * (leak * w).sum() / (w.sum() + 1e-9)
+    core = (per_cell * w).sum() / (w.sum() + 1e-9) + 3.0 * leak + 1.0 * leak_p
     return core + 0.05 * (smooth * w[:, 1:]).sum() / (w[:, 1:].sum() + 1e-9)
 
 
-def mask_space_metrics(torch, m, irm, w):
-    """Energy-weighted: vocal energy the 'other' mask would send rear; rearable energy it keeps."""
-    Pv = irm[..., 0] * w; Po = irm[..., 3] * w; Pd = irm[..., 1] * w
-    return {"vocal_to_rear": float((Pv * m[..., 3]).sum() / (Pv.sum() + 1e-9)),
-            "drums_to_rear": float((Pd * m[..., 3]).sum() / (Pd.sum() + 1e-9)),
-            "other_kept_rear": float((Po * m[..., 3]).sum() / (Po.sum() + 1e-9)),
-            "irm_mae": float(((m - irm).abs().mean(-1) * w).sum() / (w.sum() + 1e-9))}
+def mask_space_metrics(torch, m, irm, w, P, roles):
+    """vocal_to_rear = per-frame-normalised vocal energy admitted rear (the leak);
+    *_kept_rear = share of that group's energy the eligible masks keep for the rear."""
+    elig = rear_eligibility(m, roles)
+    Pv = P[..., roles.vocals]; fv = Pv.sum(-1); act = (fv > 1e-4 * P.sum(-1).sum(-1).mean()).float()
+    out = {"vocal_to_rear": float((((Pv * elig).sum(-1) / (fv + 1e-9)) * act).sum() / (act.sum() + 1e-9))}
+    for name in roles.names:
+        if name == "vocals":
+            continue
+        Pg = P[..., roles.names.index(name)]
+        out[f"{name}_to_rear"] = float((Pg * elig).sum() / (Pg.sum() + 1e-9))
+    out["irm_mae"] = float(((m - irm).abs().mean(-1) * w).sum() / (w.sum() + 1e-9))
+    return out
 
 
 def train(a):
@@ -253,10 +327,13 @@ def train(a):
     torch.manual_seed(a.seed)
     rng = np.random.default_rng(a.seed)
     split = load_split(a.cache)
-    print(f"device {dev}; train {len(split['train'])} dev {len(split['dev'])} songs", flush=True)
-    net = MaskNet(torch, bin_band(), ctx=a.ctx, proj=a.proj, hidden=a.hidden).to(dev)
+    names, merge_idx = parse_merge(a.merge)
+    roles = Roles(names)
+    print(f"device {dev}; train {len(split['train'])} dev {len(split['dev'])} songs; outputs {names}; "
+          f"protect {[names[i] for i in roles.protect]} eligible {[names[i] for i in roles.eligible]}", flush=True)
+    net = MaskNet(torch, bin_band(), ctx=a.ctx, proj=a.proj, hidden=a.hidden, n_out=len(names)).to(dev)
     n_par = sum(p.numel() for p in net.parameters())
-    macs = 3 * (N_BANDS * 5 * a.ctx + a.ctx * a.ctx) + a.ctx * N_BANDS * a.proj + N_BINS * ((4 + a.proj + 1) * a.hidden + a.hidden * 4)
+    macs = 3 * (N_BANDS * 5 * a.ctx + a.ctx * a.ctx) + a.ctx * N_BANDS * a.proj + N_BINS * ((4 + a.proj + 1) * a.hidden + a.hidden * len(names))
     print(f"params {n_par}, ~{macs} MAC per control = {macs * SR / HOP / CONTROL / 1e6:.1f} M MAC/s", flush=True)
     opt = torch.optim.AdamW(net.parameters(), lr=a.lr, weight_decay=1e-4)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, a.steps)
@@ -264,71 +341,86 @@ def train(a):
     best = 1e9
     t0 = time.time()
     for step in range(1, a.steps + 1):
-        x = batch_windows(torch, a.cache, split["train"], a.seconds, a.batch, rng, dev)
+        x = batch_windows(torch, a.cache, split["train"], a.seconds, a.batch, rng, dev, merge_idx)
         with torch.no_grad():
-            f, irm, w = targets_and_features(torch, x, rng, augment=True)
+            f, irm, w, P = targets_and_features(torch, x, rng, augment=True)
         m = net.forward(f)
-        loss = loss_fn(torch, m, irm, w)
+        loss = loss_fn(torch, m, irm, w, P, roles)
         opt.zero_grad(); loss.backward()
         torch.nn.utils.clip_grad_norm_(net.parameters(), 2.0)
         opt.step(); sched.step()
         if step % a.eval_every == 0 or step == a.steps:
-            met = evaluate(torch, net, a.cache, split["dev"], dev, a.seconds, songs=a.eval_songs)
+            met = evaluate(torch, net, a.cache, split["dev"], dev, a.seconds, merge_idx, roles, songs=a.eval_songs)
             line = f"step {step} loss {loss.item():.4f} dev " + " ".join(f"{k}={v:.3f}" for k, v in met.items()) + f"  {time.time() - t0:.0f}s"
             print(line, flush=True)
-            score = met["vocal_to_rear"] * 4 + (1 - met["other_kept_rear"]) + met["irm_mae"]
+            score = met["vocal_to_rear"] * 4 + (1 - met["other_to_rear"]) + met["irm_mae"]
             if score < best:
                 best = score
                 torch.save({"state": net.modules.state_dict(), "ctx": a.ctx, "proj": a.proj, "hidden": a.hidden,
-                            "step": step, "dev": met}, os.path.join(a.out, "mask_net.pt"))
+                            "names": names, "merge": a.merge, "step": step, "dev": met},
+                           os.path.join(a.out, "mask_net.pt"))
                 with open(os.path.join(a.out, "best.txt"), "w") as fh:
                     fh.write(line + "\n")
     print("best", open(os.path.join(a.out, "best.txt")).read().strip())
 
 
-def evaluate(torch, net, cache_dir, tracks, dev, seconds, songs=20):
+def evaluate(torch, net, cache_dir, tracks, dev, seconds, merge_idx, roles, songs=20):
     net.modules.eval()
     acc = {}
     rng = np.random.default_rng(0)
     with torch.no_grad():
         for t in tracks[:songs]:
-            z = np.load(os.path.join(cache_dir, t + ".npz"))
-            w = z["wav"]
+            w = np.load(os.path.join(cache_dir, t + ".npy"), mmap_mode="r")
             n = int(seconds * SR)
             if w.shape[2] <= n:
                 continue
-            # the loudest-vocal window, like the harness
-            v = w[0].astype(np.float32)
+            # the loudest-vocal window, like the harness (lead + other vocal)
+            v = np.asarray(w[0]).astype(np.float32) + np.asarray(w[1]).astype(np.float32)
             e = np.cumsum((v ** 2).sum(0)); idx = np.arange(0, w.shape[2] - n, 5 * SR)
             s = idx[int(np.argmax(e[idx + n - 1] - e[idx]))] if len(idx) else 0
-            x = torch.as_tensor(w[None, :, :, s:s + n], device=dev).float() / 32768
-            f, irm, wt = targets_and_features(torch, x, rng, augment=False)
+            x = torch.as_tensor(merge_groups(np.asarray(w[:, :, s:s + n]), merge_idx)[None], device=dev) / 32768
+            f, irm, wt, P = targets_and_features(torch, x, rng, augment=False)
             m = net.forward(f)
-            for k, val in mask_space_metrics(torch, m, irm, wt).items():
+            for k, val in mask_space_metrics(torch, m, irm, wt, P, roles).items():
                 acc.setdefault(k, []).append(val)
     net.modules.train()
     return {k: float(np.median(v)) for k, v in acc.items()}
 
 
-def export(a):
-    """Write the per-control 'protect' mask (1 - m_other) of one DEV excerpt for --protect-mask."""
+def load_model(model_path):
+    """-> (torch, net, roles, device).  Old 4-output checkpoints map to vocals/drum_core/bass/other."""
     torch = _torch()
     dev = "cuda" if torch.cuda.is_available() else "cpu"
-    ck = torch.load(a.model, map_location=dev)
-    net = MaskNet(torch, bin_band(), ctx=ck["ctx"], proj=ck["proj"], hidden=ck["hidden"]).to(dev)
+    ck = torch.load(model_path, map_location=dev)
+    names = ck.get("names", ["vocals", "drum_core", "bass", "other"])
+    net = MaskNet(torch, bin_band(), ctx=ck["ctx"], proj=ck["proj"], hidden=ck["hidden"], n_out=len(names)).to(dev)
     net.modules.load_state_dict(ck["state"]); net.modules.eval()
+    return torch, net, Roles(names), dev
+
+
+def protect_mask(torch, net, roles, dev, x):
+    """x [2, n] float stereo -> per-control protect mask [Tc, 257] = 1 - rear eligibility."""
+    with torch.no_grad():
+        X = stft(torch, torch.as_tensor(x[None], device=dev, dtype=torch.float32))
+        f = features(torch, X[:, 0], X[:, 1])
+        T = (f.shape[1] // CONTROL) * CONTROL
+        m = net.forward(f[:, CONTROL - 1:T:CONTROL])[0]
+        return (1 - rear_eligibility(m, roles)).cpu().numpy().astype(np.float32)
+
+
+def write_mask(path, prot):
+    with open(path, "wb") as fh:
+        fh.write(b"HSSRMSK0"); fh.write(np.array([prot.shape[0], N_BINS], np.uint32).tobytes()); fh.write(prot.tobytes())
+
+
+def export(a):
+    """Write the per-control protect mask of one excerpt for the renderer's --protect-mask."""
+    torch, net, roles, dev = load_model(a.model)
     import soundfile as sf
     x, sr = sf.read(a.wav, dtype="float32", always_2d=True)
     assert sr == SR and x.shape[1] == 2
-    xt = torch.as_tensor(x.T[None], device=dev)
-    with torch.no_grad():
-        X = stft(torch, xt)
-        f = features(torch, X[:, 0], X[:, 1])
-        T = (f.shape[1] // CONTROL) * CONTROL
-        m = net.forward(f[:, CONTROL - 1:T:CONTROL])[0]            # [Tc,257,4]
-    prot = (1 - m[..., 3]).cpu().numpy().astype(np.float32)
-    with open(a.out, "wb") as fh:
-        fh.write(b"HSSRMSK0"); fh.write(np.array([prot.shape[0], N_BINS], np.uint32).tobytes()); fh.write(prot.tobytes())
+    prot = protect_mask(torch, net, roles, dev, x.T)
+    write_mask(a.out, prot)
     print(f"{a.out}: {prot.shape[0]} controls x {N_BINS} bins, mean protect {prot.mean():.3f}")
 
 
@@ -341,6 +433,7 @@ def main():
     t.add_argument("--lr", type=float, default=1e-3); t.add_argument("--seed", type=int, default=1)
     t.add_argument("--ctx", type=int, default=64); t.add_argument("--proj", type=int, default=8); t.add_argument("--hidden", type=int, default=32)
     t.add_argument("--eval-every", type=int, default=250); t.add_argument("--eval-songs", type=int, default=20)
+    t.add_argument("--merge", default=DEFAULT_MERGE, help="output groups as name=cached+cached;...")
     e = sub.add_parser("export"); e.add_argument("--model", required=True); e.add_argument("--wav", required=True); e.add_argument("--out", required=True)
     a = ap.parse_args()
     {"cache": cache, "train": train, "export": export}[a.cmd](a)
