@@ -125,13 +125,20 @@ with the core, cymbals and other eligible).
 | **oracle drives, G = 1.0** | 0.01 / 0.08 | **0.16 / 0.24, 7/39** | 0.12 / 0.12 | 0.15 / 0.20 | 0.04 / 0.08 | 0.08 / 0.10 |
 | oracle drives, G = 0.5 | 0.01 / 0.05 | 0.04 / 0.07 | 0.02 / 0.04 | 0.05 / 0.07 | 0.01 / 0.03 | 0.06 / 0.06 |
 
-With a perfect mask driving the rear, guitars and keys sit behind at
-0.15–0.16 (top bands 0.28–0.37) with a third of the candidate's swinging
-songs, while the voice, bass and drum core do not move at all.  That is the
-"confident rear" the plan is after, and it exists — the amount is a gain
-choice (the energy share was used as an amplitude here; the sqrt mapping and
-G = 1.5 are the next reads), the rest is how close a network gets to the
-oracle.
+With the energy share converted to an amplitude gain (`--oracle-amp`,
+`a = sqrt(eligibility)`, Codex review 2):
+
+| | vocals | guitar | piano | keys | bass | drums |
+|---|---|---|---|---|---|---|
+| **oracle drives, amplitude, G = 1.0** | 0.03 / 0.12 | **0.20 / 0.22, 7/39** | 0.14 / 0.12 | 0.17 / 0.19 | 0.07 / 0.11 | 0.12 / 0.15 |
+| oracle drives, amplitude, G = 1.5 | 0.06 / 0.19 | 0.36 / 0.31, 20/39 | 0.28 / 0.17 | 0.31 / 0.21 | 0.15 / 0.19 | 0.16 / 0.24, 13/40 |
+
+At G = 1.0 the guitars' top bands sit at 0.39–0.43 rear — the 22.09 car's
+level (0.47–0.53) — with a third of its swinging songs and the voice at 0.03.
+G = 1.5 buys a fuller rear and brings the swing back (20/39) and the bass
+with it (0.15): the amplitude mapping at unity gain is the operating point.
+That is the "confident rear" the plan is after, and it exists with a perfect
+mask; everything else is how close a network gets to the oracle.
 
 ### Review 2 (Codex, after the oracle)
 
