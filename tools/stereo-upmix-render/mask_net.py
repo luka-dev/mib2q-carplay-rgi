@@ -193,7 +193,7 @@ def out_act(net, torch, lg):
 class MaskNet:
     """Per-band GRU context + per-bin MLP.  ~0.18 M MAC per control."""
 
-    def __init__(self, torch, band, ctx=64, proj=8, hidden=32, n_out=4, neigh=0):
+    def __init__(self, torch, band, ctx=64, proj=8, hidden=32, n_out=4, neigh=0, **_):
         nn = torch.nn
         self.torch = torch
         self.band = torch.as_tensor(band)
@@ -260,7 +260,7 @@ class TFNet(MaskNet):
     across bins.  ~1.9 M MAC per control at hidden 16 (Q3 was 3.9 M/frame at
     4x the frame rate)."""
 
-    def __init__(self, torch, band, ctx=64, proj=8, hidden=16, n_out=4, neigh=2):
+    def __init__(self, torch, band, ctx=64, proj=8, hidden=16, n_out=4, neigh=2, **_):
         MaskNet.__init__(self, torch, band, ctx=ctx, proj=proj, hidden=hidden, n_out=n_out, neigh=neigh)
         nn = torch.nn
         n_in = 4 * (1 + 2 * neigh) + proj + 1
