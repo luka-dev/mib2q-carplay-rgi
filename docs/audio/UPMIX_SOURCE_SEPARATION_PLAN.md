@@ -109,6 +109,38 @@ material than MoisesDB and, unlike the stem sums, real masters.  Used as
 **soft targets where the teacher is confident** (mask < 0.1 or > 0.9),
 never as truth; DEV stays MoisesDB.  This is what V12/V15 got wrong.
 
+### The teacher measured (2026-09-25, `teacher_label.py validate`)
+
+htdemucs_ft on 40 MoisesDB DEV excerpts (60 s, loudest vocal), its ideal
+ratio masks at the car's STFT against the real stems, cells ≥ 220 Hz:
+
+| teacher "other" share > | coverage | protected energy inside those cells | of which vocal | "other" recall |
+|---|---|---|---|---|
+| 0.60 | 33 % | 18.1 % | 11.2 % | 72 % |
+| 0.80 | 26 % | 12.8 % | 6.8 % | 61 % |
+| 0.90 | 19 % | 8.8 % | 4.4 % | 49 % |
+| 0.95 | 14 % | 6.6 % | 3.0 % | 38 % |
+
+The teacher leaves **14 % of the vocal energy in "other"** (median; p90
+24 %).  That is the V12/V15 mechanism in one number: a mask trained on
+teacher rear-permission would learn to send a seventh of the voice behind.
+Confidence gating does not repair it — even at 0.95 the confident rear cells
+still hold 6.6 % protected energy and cover only 14 % of the mix.
+
+The protection direction is clean enough (run 2, same songs):
+
+| teacher "vocals" share > | precision (truly vocal energy inside) | recall (of all vocal energy) |
+|---|---|---|
+| 0.80 | 90.8 % | 73 % |
+| 0.90 | 93.6 % | 62 % |
+| 0.95 | 95.1 % | 50 % |
+
+Decision: teacher songs never supervise rear permission.  They supervise
+**protection only** — cells where the teacher's vocal share exceeds 0.9 are
+labelled protected (the 6 % of non-vocal energy this over-protects costs a
+little rear, the safe direction) — at low weight beside the real-stem anchor,
+with no loss term at all on the other cells of a teacher song.
+
 ## ⚖️ Licensing
 
 MoisesDB is CC BY-NC-SA 4.0, teacher checkpoints unverified: weights stay

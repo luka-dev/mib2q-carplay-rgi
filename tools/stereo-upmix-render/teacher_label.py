@@ -92,8 +92,14 @@ def validate(a):
             vocal_perm = float((m_truth["vocals"] * cell_e).sum() / (cell_e.sum() + 1e-9))
             coverage = float(cell_e.sum() / (tot_t * band_ok).sum())
             other_recall = float((m_truth["other"] * cell_e).sum() / ((m_truth["other"] * tot_t * band_ok).sum() + 1e-9))
+            # the other direction (protection): cells the teacher calls confidently VOCAL
+            vconf = (m_t["vocals"] > th) & band_ok
+            vcell = tot_t * vconf
+            vocal_precision = float((m_truth["vocals"] * vcell).sum() / (vcell.sum() + 1e-9))
+            vocal_recall = float((m_truth["vocals"] * vcell).sum() / ((m_truth["vocals"] * tot_t * band_ok).sum() + 1e-9))
             rows.append({"song": t, "th": th, "false_perm": false_perm, "vocal_perm": vocal_perm,
-                         "coverage": coverage, "other_recall": other_recall})
+                         "coverage": coverage, "other_recall": other_recall,
+                         "vocal_precision": vocal_precision, "vocal_recall": vocal_recall})
         # vocal-only agreement, the V12/V15 failure axis: vocal energy the teacher puts in other
         vt = float((m_t["other"] * truth["vocals"] * band_ok).sum() / ((truth["vocals"] * band_ok).sum() + 1e-9))
         rows.append({"song": t, "th": -1, "vocal_in_teacher_other": vt})
@@ -106,6 +112,11 @@ def validate(a):
         rs = [r for r in rows if r["th"] == th]
         print(f"{th:9.2f} {np.median([r['coverage'] for r in rs]):9.3f} {np.median([r['false_perm'] for r in rs]):16.3f} "
               f"{np.median([r['vocal_perm'] for r in rs]):15.3f} {np.median([r['other_recall'] for r in rs]):13.3f}")
+    print(f"\nprotection direction: cells the teacher calls vocal with share > th")
+    print(f"{'vocal>th':>9s} {'precision':>10s} {'recall':>8s}   (precision = truly vocal energy inside them; recall = share of all vocal energy they cover)")
+    for th in thresholds:
+        rs = [r for r in rows if r["th"] == th]
+        print(f"{th:9.2f} {np.median([r['vocal_precision'] for r in rs]):10.3f} {np.median([r['vocal_recall'] for r in rs]):8.3f}")
     vt = [r["vocal_in_teacher_other"] for r in rows if r["th"] == -1]
     print(f"\nvocal energy the teacher leaves in 'other' (median / p90): {np.median(vt):.3f} / {np.percentile(vt, 90):.3f}")
 
