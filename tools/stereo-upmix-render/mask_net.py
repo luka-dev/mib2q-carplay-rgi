@@ -1057,6 +1057,7 @@ def train(a):
         torch.nn.utils.clip_grad_norm_(net.parameters(), 2.0)
         opt.step(); sched.step()
         if step % a.eval_every == 0 or step == a.steps:
+            import gc; gc.collect()                       # the PC ran out of host RAM mid-run (54 GB working set, cause unknown)
             met = evaluate(torch, net, a.cache, split["dev"], dev, a.seconds, merge_idx, roles, songs=a.eval_songs)
             line = f"step {step} loss {loss.item():.4f} dev " + " ".join(f"{k}={v:.3f}" for k, v in met.items()) + f"  {time.time() - t0:.0f}s"
             print(line, flush=True)
