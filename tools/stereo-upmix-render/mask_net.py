@@ -601,6 +601,27 @@ def loss_softmax(torch, logits, irm, w, P, roles):
     return (ce * valid).sum() / (valid.sum() + 1.0)
 
 
+def loss_softmax_ramp(torch, logits, irm, w, P, roles, ramp):
+    """astra review 3, point 5: discrimination first (softmax CE), then protection
+    ramped in with an explicit retention constraint: vocal energy admitted rear
+    in vocal-owned cells (leak) against eligible energy held back in
+    eligible-owned cells (missed), both energy-weighted."""
+    ce = loss_softmax(torch, logits, irm, w, P, roles)
+    m = torch.softmax(logits, -1)
+    elig = rear_eligibility(m, roles)
+    valid = (w > 0.15).float()
+    Pv = P[..., roles.vocals] * (irm[..., roles.vocals] > 0.3).float() * valid
+    leak = (Pv * elig).sum() / (Pv.sum() + 1e-9)
+    Pp = P[..., roles.protect].sum(-1) * (irm[..., roles.protect].sum(-1) > 0.5).float() * valid
+    leak_p = (Pp * elig).sum() / (Pp.sum() + 1e-9)
+    missed = 0.0
+    for g in roles.eligible:
+        Pg = P[..., g] * (irm[..., g] > 0.6).float() * valid
+        missed = missed + (Pg * (1 - elig)).sum() / (Pg.sum() + 1e-9)
+    missed = missed / max(1, len(roles.eligible))
+    return ce + ramp * (LOSS_W["leak"] * leak + LOSS_W["leakp"] * leak_p) + LOSS_W["missed"] * missed
+
+
 def dev_auc_vo(torch, score, irm, w, roles):
     """The probe's AUC: vocal-owned vs other-owned cells on the eligibility score."""
     valid = w > 0.15
@@ -730,6 +751,12 @@ def train(a):
     print(f"device {dev}; train {len(split['train'])} dev {len(split['dev'])} songs; outputs {names}; "
           f"protect {[names[i] for i in roles.protect]} eligible {[names[i] for i in roles.eligible]}", flush=True)
     net = build_net(torch, a.arch, bin_band(), ctx=a.ctx, proj=a.proj, hidden=a.hidden, n_out=len(names), neigh=a.neigh, tctx=a.tctx).to(dev)
+    if a.init:
+        ck0 = torch.load(a.init, map_location=dev)
+        net.modules.load_state_dict(ck0["state"])
+        if ck0.get("feat_stats"):
+            FEAT_STATS.update(ck0["feat_stats"])
+        print(f"warm start from {a.init} (step {ck0.get('step')})", flush=True)
     n_par = sum(p.numel() for p in net.parameters())
     n_in = 4 * (1 + 2 * a.neigh) + a.proj + 1
     if a.arch in ("probe", "probe_roles", "probe_ctx"):
@@ -754,10 +781,11 @@ def train(a):
     best = 1e9
     t0 = time.time()
     batches = prefetch(lambda: batch_windows(torch, a.cache, split["train"], a.seconds, a.batch, rng, "cpu", merge_idx))
-    with torch.no_grad():                                 # feature statistics from 8 batches, then frozen
-        fs = [targets_and_features(torch, next(batches).to(dev), rng, augment=True, fine=net_is_fine(net))[0] for _ in range(8)]
-        fs = torch.cat(fs)
-        fit_feat_stats(torch, probe_descriptor(torch, fs, net.neigh) if isinstance(net, (ProbeNet, ProbeCtxNet)) else fs)
+    if FEAT_STATS["mean"] is None:
+        with torch.no_grad():                             # feature statistics from 8 batches, then frozen
+            fs = [targets_and_features(torch, next(batches).to(dev), rng, augment=True, fine=net_is_fine(net))[0] for _ in range(8)]
+            fs = torch.cat(fs)
+            fit_feat_stats(torch, probe_descriptor(torch, fs, net.neigh) if isinstance(net, (ProbeNet, ProbeCtxNet)) else fs)
     print("feature mean", [round(v, 2) for v in FEAT_STATS["mean"]], "std", [round(v, 2) for v in FEAT_STATS["std"]], flush=True)
     for step in range(1, a.steps + 1):
         x = next(batches).to(dev, non_blocking=True)
@@ -767,6 +795,9 @@ def train(a):
             loss = loss_probe(torch, net._logits(f), irm, w, roles)
         elif LOSS_MODE == "softmax":
             loss = loss_softmax(torch, net._logits(f), irm, w, P, roles)
+        elif LOSS_MODE == "softmax_ramp":
+            ramp = min(1.0, max(0.0, (step - a.ramp_start) / max(1, a.ramp_steps)))
+            loss = loss_softmax_ramp(torch, net._logits(f), irm, w, P, roles, ramp)
         elif LOSS_MODE == "balanced":
             logits = net._logits(f)
             ramp = min(1.0, max(0.0, (step - a.ramp_start) / max(1, a.ramp_steps)))
@@ -783,6 +814,10 @@ def train(a):
             print(line, flush=True)
             score = (met["vocal_own_to_rear"] * 4 + (1 - met["other_own_to_rear"]) +
                      0.5 * (1 - met.get("cymbals_own_to_rear", 1.0)) + met["irm_mae"]) if LOSS_MODE not in ("probe", "softmax") else -met["auc"]
+            if LOSS_MODE == "softmax_ramp" and step > a.ramp_start:      # after the ramp: the milestone's own trade
+                score = met["vocal_own_to_rear"] * 4 + (1 - met["other_own_to_rear"])
+            elif LOSS_MODE == "softmax_ramp":
+                score = 1e9
             if score < best:
                 best = score
                 torch.save({"state": net.modules.state_dict(), "ctx": a.ctx, "proj": a.proj, "hidden": a.hidden,
@@ -1010,7 +1045,8 @@ def main():
     t.add_argument("--neigh", type=int, default=0, help="+-bins of per-bin features fed to the MLP")
     t.add_argument("--arch", default="mlp", choices=("mlp", "tf", "conv2048", "probe", "probe_roles", "probe_ctx"),
                    help="tf = per-bin GRUs over frequency and time; conv2048 = 2048-point analysis + frequency conv (ctx=channels, hidden=time GRU)")
-    t.add_argument("--loss", default="own", choices=("own", "balanced", "probe", "softmax"))
+    t.add_argument("--loss", default="own", choices=("own", "balanced", "probe", "softmax", "softmax_ramp"))
+    t.add_argument("--init", help="warm start: checkpoint whose weights and feature stats to load (same arch)")
     t.add_argument("--target-hop", default="mean", choices=("mean", "single"))
     t.add_argument("--tctx", type=int, default=0, help="probe nets: previous controls stacked as extra inputs (causal, stateless)")
     t.add_argument("--ramp-start", type=int, default=1200, help="balanced: step where the leak penalty starts ramping in")
