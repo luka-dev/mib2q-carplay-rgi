@@ -171,7 +171,7 @@ def features(torch, L, R):
 class MaskNet:
     """Per-band GRU context + per-bin MLP.  ~0.18 M MAC per control."""
 
-    def __init__(self, torch, band, ctx=64, proj=8, hidden=32, n_out=4):
+    def __init__(self, torch, band, ctx=64, proj=8, hidden=32, n_out=4, neigh=0):
         nn = torch.nn
         self.torch = torch
         self.band = torch.as_tensor(band)
@@ -180,7 +180,8 @@ class MaskNet:
         self.pool = self.pool / bins_per_band.clamp(min=1)[:, None]
         self.gru = nn.GRU(N_BANDS * 5, ctx, batch_first=True)
         self.ctx_proj = nn.Linear(ctx, N_BANDS * proj)
-        self.mlp = nn.Sequential(nn.Linear(4 + proj + 1, hidden), nn.Tanh(), nn.Linear(hidden, n_out))
+        self.neigh = neigh                                   # +-neigh bins of per-bin features as extra inputs
+        self.mlp = nn.Sequential(nn.Linear(4 * (1 + 2 * neigh) + proj + 1, hidden), nn.Tanh(), nn.Linear(hidden, n_out))
         self.n_out = n_out
         self.proj = proj
         self.modules = nn.ModuleList([self.gru, self.ctx_proj, self.mlp])
@@ -204,8 +205,56 @@ class MaskNet:
         h, _ = self.gru(ctx_in)                                    # [B,T,ctx]
         c = self.ctx_proj(h).reshape(B, T, N_BANDS, self.proj)    # [B,T,32,proj]
         cb = c[:, :, self.band]                                   # [B,T,257,proj]
-        x = torch.cat([f, cb, self.pos.expand(B, T, N_BINS)[..., None]], -1)
+        parts = [f]
+        for d in range(1, self.neigh + 1):                        # a partial's neighbours: frequency context
+            parts.append(torch.cat([f[:, :, d:], f[:, :, -1:].expand(B, T, d, 4)], 2))
+            parts.append(torch.cat([f[:, :, :1].expand(B, T, d, 4), f[:, :, :-d]], 2))
+        x = torch.cat(parts + [cb, self.pos.expand(B, T, N_BINS)[..., None]], -1)
         return torch.sigmoid(self.mlp(x))
+
+
+class TFNet(MaskNet):
+    """v5: the per-bin MLP cannot tell a vocal partial from a guitar partial
+    from four numbers and a band context (v2-v4 protected everything).  Give
+    every bin its own memory and its harmonic neighbourhood: a bidirectional
+    GRU across the 257 bins per control (harmonic structure) and a causal GRU
+    over time per bin (vibrato, syllables vs held partials), weights shared
+    across bins.  ~1.9 M MAC per control at hidden 16 (Q3 was 3.9 M/frame at
+    4x the frame rate)."""
+
+    def __init__(self, torch, band, ctx=64, proj=8, hidden=16, n_out=4, neigh=2):
+        MaskNet.__init__(self, torch, band, ctx=ctx, proj=proj, hidden=hidden, n_out=n_out, neigh=neigh)
+        nn = torch.nn
+        n_in = 4 * (1 + 2 * neigh) + proj + 1
+        self.inp = nn.Linear(n_in, 24)
+        self.freq = nn.GRU(24, hidden, batch_first=True, bidirectional=True)
+        self.time = nn.GRU(2 * hidden, hidden, batch_first=True)
+        self.head = nn.Linear(3 * hidden, n_out)
+        self.modules = nn.ModuleList([self.gru, self.ctx_proj, self.inp, self.freq, self.time, self.head])
+        self.hidden = hidden
+
+    def forward(self, f):
+        torch = self.torch
+        B, T = f.shape[:2]
+        e = f[..., :2].mean(-1)
+        bandf = torch.einsum("kn,btnf->btkf", self.pool, f)
+        bande = torch.einsum("kn,btn->btk", self.pool, e)[..., None]
+        h, _ = self.gru(torch.cat([bandf, bande], -1).reshape(B, T, -1))
+        cb = self.ctx_proj(h).reshape(B, T, N_BANDS, self.proj)[:, :, self.band]
+        parts = [f]
+        for d in range(1, self.neigh + 1):
+            parts.append(torch.cat([f[:, :, d:], f[:, :, -1:].expand(B, T, d, 4)], 2))
+            parts.append(torch.cat([f[:, :, :1].expand(B, T, d, 4), f[:, :, :-d]], 2))
+        x = torch.tanh(self.inp(torch.cat(parts + [cb, self.pos.expand(B, T, N_BINS)[..., None]], -1)))   # [B,T,257,24]
+        fq, _ = self.freq(x.reshape(B * T, N_BINS, -1))                                   # over bins
+        fq = fq.reshape(B, T, N_BINS, 2 * self.hidden)
+        tm, _ = self.time(fq.permute(0, 2, 1, 3).reshape(B * N_BINS, T, 2 * self.hidden))  # over time, per bin
+        tm = tm.reshape(B, N_BINS, T, self.hidden).permute(0, 2, 1, 3)
+        return torch.sigmoid(self.head(torch.cat([fq, tm], -1)))
+
+
+def build_net(torch, arch, band, **kw):
+    return (TFNet if arch == "tf" else MaskNet)(torch, band, **kw)
 
 
 def master(torch, mix, rng):
@@ -293,16 +342,26 @@ def loss_fn(torch, m, irm, w, P, roles):
     bce = -(irm * torch.log(m + 1e-6) + (1 - irm) * torch.log(1 - m + 1e-6))
     per_cell = bce.mean(-1) * (1 + 3 * protect)
     elig = rear_eligibility(m, roles)                              # [B,T,257]
-    Pv = P[..., roles.vocals]                                      # vocal power per cell
+    # v4: placement is decided where a source DOMINATES a cell.  Vocal bleed
+    # sits in nearly every cell at 93.75 Hz bins, so an energy-accounting leak
+    # over all cells punished eligibility everywhere and the net protected
+    # everything (v2 0.016, v3 0.047 of "other" admitted).  Leak = vocal energy
+    # admitted rear in cells the voice owns (share > 0.3), per frame; missed
+    # support = eligible energy held back in cells an eligible group owns (> 0.6).
+    Pv = P[..., roles.vocals] * (irm[..., roles.vocals] > 0.3).float()
     frame_voc = Pv.sum(-1)                                         # [B,T]
     active = (frame_voc > 1e-4 * P.sum(-1).sum(-1).mean()).float()
-    leak_frame = (Pv * elig).sum(-1) / (frame_voc + 1e-9)          # share of this frame's vocal energy admitted rear
+    leak_frame = (Pv * elig).sum(-1) / (frame_voc + 1e-9)
     leak = (leak_frame * active).sum() / (active.sum() + 1e-9)
-    # protected drums/bass leak, energy-weighted (louder = matters)
-    Pp = P[..., roles.protect].sum(-1)
+    Pp = P[..., roles.protect].sum(-1) * (irm[..., roles.protect].sum(-1) > 0.5).float()
     leak_p = (Pp * elig).sum() / (Pp.sum() + 1e-9)
+    missed = 0.0
+    for g in roles.eligible:
+        Pg = P[..., g] * (irm[..., g] > 0.6).float()
+        missed = missed + (Pg * (1 - elig)).sum() / (Pg.sum() + 1e-9)
+    missed = missed / max(1, len(roles.eligible))
     smooth = (m[:, 1:] - m[:, :-1]).abs().mean(-1)
-    core = (per_cell * w).sum() / (w.sum() + 1e-9) + 3.0 * leak + 1.0 * leak_p
+    core = (per_cell * w).sum() / (w.sum() + 1e-9) + 3.0 * leak + 1.0 * leak_p + 2.0 * missed
     return core + 0.05 * (smooth * w[:, 1:]).sum() / (w[:, 1:].sum() + 1e-9)
 
 
@@ -317,6 +376,12 @@ def mask_space_metrics(torch, m, irm, w, P, roles):
             continue
         Pg = P[..., roles.names.index(name)]
         out[f"{name}_to_rear"] = float((Pg * elig).sum() / (Pg.sum() + 1e-9))
+    # dominant-cell versions (what the stem harness measures: cells a stem owns)
+    Pv = P[..., roles.vocals] * (irm[..., roles.vocals] > 0.5).float()
+    out["vocal_own_to_rear"] = float((Pv * elig).sum() / (Pv.sum() + 1e-9))
+    for g in roles.eligible:
+        Pg = P[..., g] * (irm[..., g] > 0.6).float()
+        out[f"{roles.names[g]}_own_to_rear"] = float((Pg * elig).sum() / (Pg.sum() + 1e-9))
     out["irm_mae"] = float(((m - irm).abs().mean(-1) * w).sum() / (w.sum() + 1e-9))
     return out
 
@@ -331,9 +396,16 @@ def train(a):
     roles = Roles(names)
     print(f"device {dev}; train {len(split['train'])} dev {len(split['dev'])} songs; outputs {names}; "
           f"protect {[names[i] for i in roles.protect]} eligible {[names[i] for i in roles.eligible]}", flush=True)
-    net = MaskNet(torch, bin_band(), ctx=a.ctx, proj=a.proj, hidden=a.hidden, n_out=len(names)).to(dev)
+    net = build_net(torch, a.arch, bin_band(), ctx=a.ctx, proj=a.proj, hidden=a.hidden, n_out=len(names), neigh=a.neigh).to(dev)
     n_par = sum(p.numel() for p in net.parameters())
-    macs = 3 * (N_BANDS * 5 * a.ctx + a.ctx * a.ctx) + a.ctx * N_BANDS * a.proj + N_BINS * ((4 + a.proj + 1) * a.hidden + a.hidden * len(names))
+    n_in = 4 * (1 + 2 * a.neigh) + a.proj + 1
+    if a.arch == "tf":
+        macs = (3 * (N_BANDS * 5 * a.ctx + a.ctx * a.ctx) + a.ctx * N_BANDS * a.proj +
+                N_BINS * (n_in * 24 + 2 * 3 * (24 * a.hidden + a.hidden ** 2) + 3 * (2 * a.hidden * a.hidden + a.hidden ** 2)
+                          + 3 * a.hidden * len(names)))
+    else:
+        macs = (3 * (N_BANDS * 5 * a.ctx + a.ctx * a.ctx) + a.ctx * N_BANDS * a.proj +
+                N_BINS * (n_in * a.hidden + a.hidden * len(names)))
     print(f"params {n_par}, ~{macs} MAC per control = {macs * SR / HOP / CONTROL / 1e6:.1f} M MAC/s", flush=True)
     opt = torch.optim.AdamW(net.parameters(), lr=a.lr, weight_decay=1e-4)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, a.steps)
@@ -353,11 +425,12 @@ def train(a):
             met = evaluate(torch, net, a.cache, split["dev"], dev, a.seconds, merge_idx, roles, songs=a.eval_songs)
             line = f"step {step} loss {loss.item():.4f} dev " + " ".join(f"{k}={v:.3f}" for k, v in met.items()) + f"  {time.time() - t0:.0f}s"
             print(line, flush=True)
-            score = met["vocal_to_rear"] * 4 + (1 - met["other_to_rear"]) + met["irm_mae"]
+            score = (met["vocal_own_to_rear"] * 4 + (1 - met["other_own_to_rear"]) +
+                     0.5 * (1 - met.get("cymbals_own_to_rear", 1.0)) + met["irm_mae"])
             if score < best:
                 best = score
                 torch.save({"state": net.modules.state_dict(), "ctx": a.ctx, "proj": a.proj, "hidden": a.hidden,
-                            "names": names, "merge": a.merge, "step": step, "dev": met},
+                            "neigh": a.neigh, "arch": a.arch, "names": names, "merge": a.merge, "step": step, "dev": met},
                            os.path.join(a.out, "mask_net.pt"))
                 with open(os.path.join(a.out, "best.txt"), "w") as fh:
                     fh.write(line + "\n")
@@ -393,7 +466,8 @@ def load_model(model_path):
     dev = "cuda" if torch.cuda.is_available() else "cpu"
     ck = torch.load(model_path, map_location=dev)
     names = ck.get("names", ["vocals", "drum_core", "bass", "other"])
-    net = MaskNet(torch, bin_band(), ctx=ck["ctx"], proj=ck["proj"], hidden=ck["hidden"], n_out=len(names)).to(dev)
+    net = build_net(torch, ck.get("arch", "mlp"), bin_band(), ctx=ck["ctx"], proj=ck["proj"], hidden=ck["hidden"],
+                    n_out=len(names), neigh=ck.get("neigh", 0)).to(dev)
     net.modules.load_state_dict(ck["state"]); net.modules.eval()
     return torch, net, Roles(names), dev
 
@@ -434,6 +508,8 @@ def main():
     t.add_argument("--ctx", type=int, default=64); t.add_argument("--proj", type=int, default=8); t.add_argument("--hidden", type=int, default=32)
     t.add_argument("--eval-every", type=int, default=250); t.add_argument("--eval-songs", type=int, default=20)
     t.add_argument("--merge", default=DEFAULT_MERGE, help="output groups as name=cached+cached;...")
+    t.add_argument("--neigh", type=int, default=0, help="+-bins of per-bin features fed to the MLP")
+    t.add_argument("--arch", default="mlp", choices=("mlp", "tf"), help="tf = per-bin GRUs over frequency and time")
     e = sub.add_parser("export"); e.add_argument("--model", required=True); e.add_argument("--wav", required=True); e.add_argument("--out", required=True)
     a = ap.parse_args()
     {"cache": cache, "train": train, "export": export}[a.cmd](a)
