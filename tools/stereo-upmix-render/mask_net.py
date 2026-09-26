@@ -355,11 +355,12 @@ class ProbeNet:
 
     SINGLE = True
 
-    def __init__(self, torch, band, hidden=64, neigh=2, n_out=1, **_):
+    def __init__(self, torch, band, hidden=64, neigh=2, n_out=1, tctx=0, **_):
         nn = torch.nn
         self.torch = torch
         self.neigh = neigh
-        n_in = 2 * neigh + 1 + 1 + 2 + 1
+        self.tctx = tctx                                      # previous controls stacked (causal, stateless)
+        n_in = (2 * neigh + 1 + 1 + 2 + 1) * (1 + tctx)
         self.mlp = nn.Sequential(nn.Linear(n_in, hidden), nn.Tanh(), nn.Linear(hidden, hidden), nn.Tanh(), nn.Linear(hidden, n_out))
         self.modules = nn.ModuleList([self.mlp])
         self.n_out = n_out
@@ -372,7 +373,13 @@ class ProbeNet:
         return self.modules.parameters()
 
     def _logits(self, f):
-        d = standardize(self.torch, probe_descriptor(self.torch, f, self.neigh)).clamp(-6, 6)
+        torch = self.torch
+        d = standardize(torch, probe_descriptor(torch, f, self.neigh)).clamp(-6, 6)
+        if self.tctx:
+            parts = [d]
+            for k in range(1, self.tctx + 1):                 # frame t-k, zero-padded at the start
+                parts.append(torch.cat([torch.zeros_like(d[:, :k]), d[:, :-k]], 1))
+            d = torch.cat(parts, -1)
         return self.mlp(d)
 
     def forward(self, f):
@@ -382,9 +389,9 @@ class ProbeNet:
 
 def build_net(torch, arch, band, **kw):
     if arch == "probe":
-        return ProbeNet(torch, band, hidden=kw.get("hidden", 64), neigh=kw.get("neigh", 2), n_out=kw.get("n_out", 1))
+        return ProbeNet(torch, band, hidden=kw.get("hidden", 64), neigh=kw.get("neigh", 2), n_out=kw.get("n_out", 1), tctx=kw.get("tctx", 0))
     if arch == "probe_roles":
-        return ProbeNet(torch, band, hidden=kw.get("hidden", 64), neigh=kw.get("neigh", 2), n_out=kw["n_out"])
+        return ProbeNet(torch, band, hidden=kw.get("hidden", 64), neigh=kw.get("neigh", 2), n_out=kw["n_out"], tctx=kw.get("tctx", 0))
     if arch == "conv2048":
         return ConvNet(torch, band, ch=kw.get("ctx", 16), hidden=kw.get("hidden", 8), n_out=kw.get("n_out", 5))
     return (TFNet if arch == "tf" else MaskNet)(torch, band, **kw)
@@ -668,11 +675,11 @@ def train(a):
     roles = Roles(names)
     print(f"device {dev}; train {len(split['train'])} dev {len(split['dev'])} songs; outputs {names}; "
           f"protect {[names[i] for i in roles.protect]} eligible {[names[i] for i in roles.eligible]}", flush=True)
-    net = build_net(torch, a.arch, bin_band(), ctx=a.ctx, proj=a.proj, hidden=a.hidden, n_out=len(names), neigh=a.neigh).to(dev)
+    net = build_net(torch, a.arch, bin_band(), ctx=a.ctx, proj=a.proj, hidden=a.hidden, n_out=len(names), neigh=a.neigh, tctx=a.tctx).to(dev)
     n_par = sum(p.numel() for p in net.parameters())
     n_in = 4 * (1 + 2 * a.neigh) + a.proj + 1
     if a.arch in ("probe", "probe_roles"):
-        n_in = 2 * a.neigh + 1 + 1 + 2 + 1
+        n_in = (2 * a.neigh + 1 + 1 + 2 + 1) * (1 + a.tctx)
         macs = N_BINS * (n_in * a.hidden + a.hidden * a.hidden + a.hidden * (1 if a.arch == "probe" else len(names)))
     elif a.arch == "conv2048":
         ch, hd = a.ctx, a.hidden
@@ -724,7 +731,7 @@ def train(a):
                 best = score
                 torch.save({"state": net.modules.state_dict(), "ctx": a.ctx, "proj": a.proj, "hidden": a.hidden,
                             "neigh": a.neigh, "arch": a.arch, "names": names, "merge": a.merge, "step": step, "dev": met,
-                            "feat_stats": dict(FEAT_STATS)},
+                            "feat_stats": dict(FEAT_STATS), "tctx": a.tctx},
                            os.path.join(a.out, "mask_net.pt"))
                 with open(os.path.join(a.out, "best.txt"), "w") as fh:
                     fh.write(line + "\n")
@@ -776,7 +783,7 @@ def load_model(model_path):
              for k, v in ck["state"].items() if k.endswith(".weight") and v.dim() == 2]
     n_out = max(heads)[1] if heads else len(names)
     net = build_net(torch, ck.get("arch", "mlp"), bin_band(), ctx=ck["ctx"], proj=ck["proj"], hidden=ck["hidden"],
-                    n_out=n_out, neigh=ck.get("neigh", 0)).to(dev)
+                    n_out=n_out, neigh=ck.get("neigh", 0), tctx=ck.get("tctx", 0)).to(dev)
     net.modules.load_state_dict(ck["state"]); net.modules.eval()
     return torch, net, Roles(names), dev
 
@@ -949,6 +956,7 @@ def main():
                    help="tf = per-bin GRUs over frequency and time; conv2048 = 2048-point analysis + frequency conv (ctx=channels, hidden=time GRU)")
     t.add_argument("--loss", default="own", choices=("own", "balanced", "probe", "softmax"))
     t.add_argument("--target-hop", default="mean", choices=("mean", "single"))
+    t.add_argument("--tctx", type=int, default=0, help="probe nets: previous controls stacked as extra inputs (causal, stateless)")
     t.add_argument("--ramp-start", type=int, default=1200, help="balanced: step where the leak penalty starts ramping in")
     t.add_argument("--ramp-steps", type=int, default=1000)
     e = sub.add_parser("export"); e.add_argument("--model", required=True); e.add_argument("--wav", required=True); e.add_argument("--out", required=True)

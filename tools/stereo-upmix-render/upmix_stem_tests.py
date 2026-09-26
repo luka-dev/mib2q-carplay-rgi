@@ -127,8 +127,14 @@ def protect_mask_args(src, out, tag, model_path):
     with wave.open(src, "rb") as w:
         x = np.frombuffer(w.readframes(w.getnframes()), "<i2").reshape(-1, 2).T.astype(np.float32) / 32768
     prot = MN.protect_mask(_MASK["torch"], _MASK["net"], _MASK["roles"], _MASK["dev"], x)
+    elig = np.clip(1 - prot, 0, 1)
+    if MASK_THRESH > 0:
+        elig = np.clip((elig - MASK_THRESH) / (1 - MASK_THRESH), 0, 1)
+    if MASK_SHARPEN != 1.0:
+        elig = elig ** MASK_SHARPEN
     if ORACLE_AMP:                                   # drive mode wants an amplitude gain: sqrt of the eligibility
-        prot = (1 - np.sqrt(np.clip(1 - prot, 0, 1))).astype(np.float32)
+        elig = np.sqrt(elig)
+    prot = (1 - elig).astype(np.float32)
     path = os.path.join(out, tag + ".msk")
     MN.write_mask(path, prot)
     return ["--protect-mask", path]
@@ -138,6 +144,8 @@ ORACLE_PROTECT = ("vocals", "bass", "drums")   # MoisesDB stem names never allow
 
 
 ORACLE_AMP = False   # --oracle-amp: write 1 - sqrt(eligibility) so the drive mode's (1 - protect) is an AMPLITUDE gain
+MASK_THRESH = 0.0    # --mask-thresh t: eligibility below t is 0, above rescaled (a conservative operating point)
+MASK_SHARPEN = 1.0   # --mask-sharpen k: eligibility ** k (k > 1 = only confident cells go rear)
 
 
 def oracle_mask_args(stems, k, out, tag):
@@ -213,11 +221,14 @@ def main():
     ap.add_argument("--oracle-mask", action="store_true", help="protect mask from the real stems (upper bound)")
     ap.add_argument("--render-extra", default="", help="extra renderer flags, e.g. '--mask-drive 1.0'")
     ap.add_argument("--oracle-amp", action="store_true", help="mask (oracle or model) as amplitude gain (sqrt of the eligibility) for --mask-drive")
+    ap.add_argument("--mask-thresh", type=float, default=0.0)
+    ap.add_argument("--mask-sharpen", type=float, default=1.0)
     ap.add_argument("--split-file", help="masknet_cache/split.json")
     ap.add_argument("--split", default="dev", help="with --split-file: which split to take songs from")
     a = ap.parse_args()
-    global ORACLE_AMP
+    global ORACLE_AMP, MASK_THRESH, MASK_SHARPEN
     ORACLE_AMP = a.oracle_amp
+    MASK_THRESH, MASK_SHARPEN = a.mask_thresh, a.mask_sharpen
     os.makedirs(a.out, exist_ok=True)
     args = T.VARIANTS[a.variant] + ["--model", a.model] + (["--guard-model", a.guard] if a.guard else []) + a.render_extra.split()
     tracks = sorted(d for d in os.listdir(a.moisesdb) if os.path.isdir(os.path.join(a.moisesdb, d)))
@@ -237,7 +248,8 @@ def main():
         wr = csv.DictWriter(fh, keys); wr.writeheader(); wr.writerows(rows)
 
     print(f"{len(picked)} songs, variant {a.variant}" + (f" + protect mask {a.mask_model}" if a.mask_model else "")
-          + (" + ORACLE protect mask from the real stems" if a.oracle_mask else "") + (f" {a.render_extra}" if a.render_extra else "") + "\n")
+          + (" + ORACLE protect mask from the real stems" if a.oracle_mask else "") + (f" {a.render_extra}" if a.render_extra else "")
+          + (f" thresh {a.mask_thresh} sharpen {a.mask_sharpen}" if (a.mask_thresh or a.mask_sharpen != 1.0) else "") + "\n")
     print(f"{'stem':14s} {'n':>3s} {'rear med':>9s} {'rear IQR':>12s} {'std med':>8s} {'range1s med':>11s} "
           f"{'slope/6dB med':>13s} {'corr med':>9s}  flags")
     for stem in STEMS:
