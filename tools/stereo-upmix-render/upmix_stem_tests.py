@@ -150,6 +150,7 @@ MASK_THRESH = 0.0    # --mask-thresh t: eligibility below t is 0, above rescaled
 MASK_SHARPEN = 1.0   # --mask-sharpen k: eligibility ** k (k > 1 = only confident cells go rear)
 MASK_ELIGIBLE = ""   # --mask-eligible other  (default: the model's other+cymbals)
 RESUME = False
+TEACHER_MASK = False   # --teacher-mask: the mask from htdemucs's stems of the excerpt (jobs must be 1: one GPU model)
 
 
 def oracle_mask_args(stems, k, out, tag):
@@ -191,8 +192,15 @@ def analyse_song(render, args, out, track_dir, excerpt_s, mask_model=None, oracl
     src = os.path.join(out, f"{tag}.wav")
     dst = os.path.join(out, f"{tag}.6ch.wav")
     T.write_wav(src, mix * k)
-    extra = protect_mask_args(src, out, tag, mask_model) if mask_model else \
-        oracle_mask_args(stems, k, out, tag) if oracle else []
+    if TEACHER_MASK:                                   # htdemucs's own mask through the DSP: the ceiling of the distillation route
+        import teacher_label as TL
+        if "sep" not in _MASK:
+            _MASK["sep"] = TL.separator()
+        est = TL.separate_array(_MASK["sep"], (mix * k).astype(np.float32))   # vocals / drums / bass / other, already scaled
+        extra = oracle_mask_args(est, 1.0, out, tag + ".teacher")
+    else:
+        extra = protect_mask_args(src, out, tag, mask_model) if mask_model else \
+            oracle_mask_args(stems, k, out, tag) if oracle else []
     try:
         subprocess.run([render] + args + extra + [src, dst], check=True,
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -241,11 +249,12 @@ def main():
     ap.add_argument("--mask-eligible", default="", help="roles allowed rear at routing time, e.g. 'other' (default other+cymbals)")
     ap.add_argument("--mask-presence", type=float, default=0.0, help="full nets: e * (1 - alpha * band vocal presence) at routing")
     ap.add_argument("--resume", action="store_true", help="reuse per-song results already in --out")
+    ap.add_argument("--teacher-mask", action="store_true", help="mask from htdemucs's stems (ceiling of the distillation route)")
     ap.add_argument("--split-file", help="masknet_cache/split.json")
     ap.add_argument("--split", default="dev", help="with --split-file: which split to take songs from")
     a = ap.parse_args()
-    global ORACLE_AMP, MASK_THRESH, MASK_SHARPEN, MASK_ELIGIBLE, RESUME
-    ORACLE_AMP = a.oracle_amp; RESUME = a.resume
+    global ORACLE_AMP, MASK_THRESH, MASK_SHARPEN, MASK_ELIGIBLE, RESUME, TEACHER_MASK
+    ORACLE_AMP = a.oracle_amp; RESUME = a.resume; TEACHER_MASK = a.teacher_mask
     MASK_THRESH, MASK_SHARPEN, MASK_ELIGIBLE = a.mask_thresh, a.mask_sharpen, a.mask_eligible
     import mask_net as MN; MN.PRESENCE_ALPHA = a.mask_presence
     os.makedirs(a.out, exist_ok=True)
