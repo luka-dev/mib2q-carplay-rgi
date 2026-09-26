@@ -150,9 +150,14 @@ def separate(a):
         os.remove(tmp)
         x = x / (np.abs(x).max() + 1e-9) * 0.7
         est = separate_array(sep, x)
-        stack = np.stack([est["vocals"], x - est["vocals"]])                 # [2, 2, n]: vocals, the rest of the master
+        if a.stems == 4:                                                      # [4, 2, n]: vocals, drums, bass, other (other = master - the rest)
+            stack = np.stack([est["vocals"], est["drums"], est["bass"], x - est["vocals"] - est["drums"] - est["bass"]])
+            layout = "vocals_drums_bass_other"
+        else:
+            stack = np.stack([est["vocals"], x - est["vocals"]])             # [2, 2, n]: vocals, the rest of the master
+            layout = "vocals_rest"
         np.save(out, (np.clip(stack, -1, 1) * 32767).astype(np.int16))
-        json.dump({"teacher": a.model, "source": os.path.basename(path), "layout": "vocals_rest"},
+        json.dump({"teacher": a.model, "source": os.path.basename(path), "layout": layout},
                   open(os.path.join(a.out, tag + ".json"), "w"))
         names.append((tag, path))
         print(f"  [{i + 1}/{len(picked)}] {tag} {os.path.basename(path)[:50]} ({time.time() - t0:.0f}s)", flush=True)
@@ -169,7 +174,7 @@ def main():
     v.add_argument("--model", default="htdemucs_ft")
     s = sub.add_parser("separate"); s.add_argument("--music", required=True); s.add_argument("--out", required=True)
     s.add_argument("--ffmpeg", default="ffmpeg"); s.add_argument("--songs", type=int, default=0, help="0 = the whole folder"); s.add_argument("--seed", type=int, default=3)
-    s.add_argument("--model", default="htdemucs_ft")
+    s.add_argument("--model", default="htdemucs_ft"); s.add_argument("--stems", type=int, default=2, choices=(2, 4))
     a = ap.parse_args()
     {"validate": validate, "separate": separate}[a.cmd](a)
 

@@ -598,6 +598,8 @@ def batch_windows(torch, cache_dir, tracks, seconds, batch, rng, dev, merge_idx)
         win = read_window(path, s, n)
         if win.shape[0] == 2:                                # teacher cache: [vocals, rest] -> lead_vocal / other slots
             full = np.zeros((len(GROUPS), 2, n), np.int16); full[0] = win[0]; full[6] = win[1]; win = full
+        elif win.shape[0] == 4:                              # teacher cache: [vocals, drums, bass, other] -> lead_vocal / drum_core / bass / other
+            full = np.zeros((len(GROUPS), 2, n), np.int16); full[0] = win[0]; full[2] = win[1]; full[5] = win[2]; full[6] = win[3]; win = full
         wavs.append(merge_groups(win, merge_idx))
     return torch.as_tensor(np.stack(wavs), device=dev) / 32768         # [B,G,2,n]
 
@@ -988,6 +990,8 @@ def train(a):
                 ft, irm_t, wt, Pt = targets_and_features(torch, xt, rng, augment=True, fine=net_is_fine(net))
             if a.teacher_mode == "vocal":
                 loss = loss + a.w_teacher * loss_teacher_vocal(torch, net._logits(ft), irm_t, wt, roles)
+            elif a.teacher_mode == "roles":                   # four-stem teacher: the full softmax target (cymbals fold into drum_core)
+                loss = loss + a.w_teacher * loss_softmax(torch, net._logits(ft), irm_t, wt, Pt, roles)
             else:
                 wt = wt * (irm_t[..., roles.vocals] > 0.9).float()          # protection-only: confident-vocal cells
                 loss = loss + a.w_teacher * loss_softmax(torch, net._logits(ft), irm_t, wt, Pt, roles)
@@ -1317,7 +1321,8 @@ def main():
                         "full = whole-spectrum strided conv + GRU bottleneck + per-cell decoder (proj=channels, hidden=GRU)")
     t.add_argument("--teacher-cache", help="htdemucs cache (teacher_label.py separate): protection-only supervision on confident vocal cells")
     t.add_argument("--teacher-every", type=int, default=2); t.add_argument("--w-teacher", type=float, default=0.3)
-    t.add_argument("--teacher-mode", default="protect", choices=("protect", "vocal"), help="protect = confident vocal cells only; vocal = soft vocal target everywhere")
+    t.add_argument("--teacher-mode", default="protect", choices=("protect", "vocal", "roles"),
+                   help="protect = confident vocal cells only; vocal = soft vocal target everywhere; roles = full softmax target (4-stem teacher cache)")
     t.add_argument("--w-pres", type=float, default=0.5, help="full: weight of the band vocal-presence head")
     t.add_argument("--dec", type=int, default=24, help="full: decoder width"); t.add_argument("--loss-weight", default="valid", choices=("valid", "salience"))
     t.add_argument("--layers", type=int, default=1); t.add_argument("--bidir", action="store_true", help="full: non-causal GRU (ceiling study only)")
