@@ -771,10 +771,10 @@ def load_model(model_path):
     if ck.get("feat_stats"):
         FEAT_STATS.update(ck["feat_stats"])
     # output width from the saved head (a ProbeNet has one eligibility logit, role nets len(names))
-    n_out = len(names)
-    for key, val in ck["state"].items():
-        if key in ("mlp.4.weight", "head.weight") or key.endswith("mlp.2.weight") and ck.get("arch") == "mlp":
-            n_out = int(val.shape[0])
+    # the head is the last Linear in the ModuleList (keys like "0.4.weight", "5.weight")
+    heads = [(tuple(int(t) for t in k[:-7].split(".") if t.isdigit()), v.shape[0])
+             for k, v in ck["state"].items() if k.endswith(".weight") and v.dim() == 2]
+    n_out = max(heads)[1] if heads else len(names)
     net = build_net(torch, ck.get("arch", "mlp"), bin_band(), ctx=ck["ctx"], proj=ck["proj"], hidden=ck["hidden"],
                     n_out=n_out, neigh=ck.get("neigh", 0)).to(dev)
     net.modules.load_state_dict(ck["state"]); net.modules.eval()
