@@ -367,6 +367,58 @@ Not useful: GPL per-bin MLPs (our idea without protection), MagicSpatial
 (the DSP second scene without learning), stem-routing via Demucs (the teacher
 path: 14 % of the voice in "other"), generative / offline upmixers.
 
+## 📝 Publication (astra review 5, 2026-09-26)
+
+Asked whether there is a paper in this work.  Verdict: **a credible systems +
+evaluation paper now, a useful white paper immediately; no evidence yet for a
+new separation method or a general impossibility result.**
+
+* Ranking: (1) system + evaluation — AES convention / DAFx, WASPAA with
+  perceptual validation; (2) the evaluation method (rear share / swing /
+  flicker) — WASPAA / DAFx, ICASSP with validation, *if* it predicts perceived
+  instability across several renderers, not only ours; (3) the negative result
+  — arXiv / GitHub white paper, weak as standalone conference material ("25
+  variants are evidence of a persistent engineering frontier, not proof of a
+  fundamental limit"); (4) a positive result — first in rank *only* with a new
+  mechanism; successful distillation alone is not novelty.  Write one
+  integrated paper before splitting.
+* Reviewers will demand: a blinded listening study (~24–30 listeners, 8–12
+  excerpts, separate ratings for depth stability / vocal anchoring /
+  envelopment / preference; MUSHRA-inspired, but stereo is a baseline, the old
+  car a comparator, the oracle a diagnostic condition — plus deliberately
+  unstable and rear-heavy anchors); baselines (documented passive
+  sum/difference matrix, a classical primary/ambient decomposition, the old
+  and fixed heuristic renderers, the oracle, a teacher-driven renderer;
+  commercial systems cited, not measured); paired song-level bootstrap
+  statistics (frames are not samples; explain every denominator 28 / 39 / 40
+  / 120); reproducibility (renderer, metric definitions, generators, configs,
+  device latency / load) and a frozen MUSDB18-HQ evaluation beside MoisesDB.
+* Cite first: Avendano & Jot (frequency-domain multichannel upmix), Faller
+  (multiple-loudspeaker playback of stereo), Goodwin & Jot (primary-ambient
+  decomposition), Rouard / Massa / Défossez (HTDemucs).  Primary/ambient
+  extraction, coherence masks, decorrelation and source-informed routing are
+  established; the oracle-through-renderer is an application of a known
+  methodology; rear share resembles routing-energy / leakage measures, swing
+  resembles image-instability measures — the specific definitions and their
+  perceptual validation may be publishable.
+* Corrections to our reading: train AUC ≈ DEV AUC does not establish
+  underfitting (AUC is ranking, not calibration); conditional-mean outputs are
+  expected under uncertainty — "does not commit" needs an operating-point
+  analysis; the oracle shows feasible renderer behaviour with privileged
+  information, not a perceptual ceiling.
+* Minimum experiments (weeks): finish teacher-through-renderer; best student
+  vs the classical baselines on one locked test set; drive-vs-veto ablation at
+  matched rear energy and temporal smoothing; the listening study with
+  metric–rating correlation.  Audit the ≥ 10 dB ownership rule (coverage,
+  threshold sensitivity, what it excludes); separate "stable because quiet"
+  from "stable at useful rear energy".  Stop broad architecture sweeps.
+* Claim: a reproducible deployment case study and a measured
+  stability–selectivity trade-off.  Do not claim recovered surround intent,
+  universal budget impossibility, or listening superiority before testing.
+  Check dataset / audio / weights licences separately; the vehicle is one
+  tested configuration, no manufacturer claims; reverse-engineering detail
+  proportional to reproducibility.
+
 ## ⚖️ Licensing
 
 MoisesDB is CC BY-NC-SA 4.0, teacher checkpoints unverified: weights stay
