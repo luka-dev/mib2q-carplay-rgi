@@ -461,9 +461,10 @@ class FullNet:
     back to the cell, and the global GRU state.  ~0.92 M MAC per control
     (~86 M MAC/s), stateful."""
 
-    def __init__(self, torch, band, n_out=5, ch=16, hidden=64, dec=24, probe=False, **_):
+    def __init__(self, torch, band, n_out=5, ch=16, hidden=64, dec=24, probe=False, layers=1, bidir=False, **_):
         nn = torch.nn
         self.torch = torch
+        self.layers, self.bidir = layers, bidir  # bidir = NON-causal: ceiling studies only, never the car
         self.probe = probe                       # full_probe: the proven per-cell descriptor joins the decoder input
         n_desc = 9 if probe else 0
         c1, c2, c3 = 2 * ch, 3 * ch, 4 * ch
@@ -472,8 +473,8 @@ class FullNet:
                                    for ci, co in ((ch, c1), (c1, c2), (c2, c3))])
         n_pos = (((N_BINS + 1) // 2 + 1) // 2 + 1) // 2                    # 257 -> 129 -> 65 -> 33
         self.flat = nn.Sequential(nn.Linear(n_pos * c3, hidden), nn.Tanh())
-        self.gru = nn.GRU(hidden, hidden, batch_first=True)
-        self.gproj = nn.Linear(hidden, ch)
+        self.gru = nn.GRU(hidden, hidden, num_layers=layers, batch_first=True, bidirectional=bidir)
+        self.gproj = nn.Linear(hidden * (2 if bidir else 1), ch)
         self.lproj = nn.Conv1d(c3, ch, 1)
         self.dec = (nn.Sequential(nn.Linear(3 * ch + n_desc, dec), nn.Tanh(), nn.Linear(dec, dec), nn.Tanh(), nn.Linear(dec, n_out)) if probe
                     else nn.Sequential(nn.Linear(3 * ch, dec), nn.Tanh(), nn.Linear(dec, n_out)))
@@ -523,7 +524,7 @@ class FullNet:
 def build_net(torch, arch, band, **kw):
     if arch in ("full", "full_probe"):
         return FullNet(torch, band, n_out=kw.get("n_out", 5), ch=kw.get("proj", 16), hidden=kw.get("hidden", 64),
-                       dec=kw.get("dec", 24), probe=arch == "full_probe")
+                       dec=kw.get("dec", 24), probe=arch == "full_probe", layers=kw.get("layers", 1), bidir=kw.get("bidir", False))
     if arch == "probe":
         return ProbeNet(torch, band, hidden=kw.get("hidden", 64), neigh=kw.get("neigh", 2), n_out=kw.get("n_out", 1), tctx=kw.get("tctx", 0))
     if arch == "probe_roles":
@@ -857,7 +858,8 @@ def train(a):
     roles = Roles(names)
     print(f"device {dev}; train {len(split['train'])} dev {len(split['dev'])} songs; outputs {names}; "
           f"protect {[names[i] for i in roles.protect]} eligible {[names[i] for i in roles.eligible]}", flush=True)
-    net = build_net(torch, a.arch, bin_band(), ctx=a.ctx, proj=a.proj, hidden=a.hidden, n_out=len(names), neigh=a.neigh, tctx=a.tctx, dec=a.dec).to(dev)
+    net = build_net(torch, a.arch, bin_band(), ctx=a.ctx, proj=a.proj, hidden=a.hidden, n_out=len(names), neigh=a.neigh, tctx=a.tctx, dec=a.dec,
+                    layers=a.layers, bidir=a.bidir).to(dev)
     net.softmax_out = LOSS_MODE in ("softmax", "softmax_ramp")
     if a.init:
         ck0 = torch.load(a.init, map_location=dev)
@@ -955,7 +957,8 @@ def train(a):
                 best = score
                 torch.save({"state": net.modules.state_dict(), "ctx": a.ctx, "proj": a.proj, "hidden": a.hidden,
                             "neigh": a.neigh, "arch": a.arch, "names": names, "merge": a.merge, "step": step, "dev": met,
-                            "feat_stats": dict(FEAT_STATS), "desc_stats": dict(DESC_STATS), "tctx": a.tctx, "loss": a.loss, "dec": a.dec},
+                            "feat_stats": dict(FEAT_STATS), "desc_stats": dict(DESC_STATS), "tctx": a.tctx, "loss": a.loss, "dec": a.dec,
+                            "layers": a.layers, "bidir": a.bidir},
                            os.path.join(a.out, "mask_net.pt"))
                 with open(os.path.join(a.out, "best.txt"), "w") as fh:
                     fh.write(line + "\n")
@@ -1009,7 +1012,8 @@ def load_model(model_path):
              for k, v in ck["state"].items() if k.endswith(".weight") and v.dim() == 2]
     n_out = max(heads)[1] if heads else len(names)
     net = build_net(torch, ck.get("arch", "mlp"), bin_band(), ctx=ck["ctx"], proj=ck["proj"], hidden=ck["hidden"],
-                    n_out=n_out, neigh=ck.get("neigh", 0), tctx=ck.get("tctx", 0), dec=ck.get("dec", 24)).to(dev)
+                    n_out=n_out, neigh=ck.get("neigh", 0), tctx=ck.get("tctx", 0), dec=ck.get("dec", 24),
+                    layers=ck.get("layers", 1), bidir=ck.get("bidir", False)).to(dev)
     net.modules.load_state_dict(ck["state"]); net.modules.eval()
     net.softmax_out = ck.get("loss", "") in ("softmax", "softmax_ramp")
     net.calib = ck.get("calib")
@@ -1260,6 +1264,7 @@ def main():
     t.add_argument("--teacher-every", type=int, default=2); t.add_argument("--w-teacher", type=float, default=0.3)
     t.add_argument("--w-pres", type=float, default=0.5, help="full: weight of the band vocal-presence head")
     t.add_argument("--dec", type=int, default=24, help="full: decoder width"); t.add_argument("--loss-weight", default="valid", choices=("valid", "salience"))
+    t.add_argument("--layers", type=int, default=1); t.add_argument("--bidir", action="store_true", help="full: non-causal GRU (ceiling study only)")
     t.add_argument("--loss", default="own", choices=("own", "balanced", "probe", "softmax", "softmax_ramp"))
     t.add_argument("--init", help="warm start: checkpoint whose weights and feature stats to load (same arch)")
     t.add_argument("--target-hop", default="mean", choices=("mean", "single"))
