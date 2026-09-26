@@ -191,6 +191,10 @@ Ranked by expected impact, all adopted as the next steps:
 | v11 operating-point sweep | threshold 0.3 / 0.5, sharpening ² / ³, both | voice / guitars: 0.05 / 0.07, 0.01 / 0.03, 0.05 / 0.07, 0.03 / 0.04, 0.02 / 0.03 (raw 0.09 / 0.13) | every point sits on the same line, guitars ≈ 1.4 × voice: the ranking cannot separate better at any threshold; the classifier, not the operating point, is the limit |
 | v11, rear = "other" only | routing-time role choice (cymbals no longer eligible) | drums 0.28 → **0.17**, guitars 0.13 → 0.12, voice 0.09 → 0.08 | the drum-core leak was the cymbals class; "other only" is the routing default from here |
 | v14 | v13 warm-started, softmax CE + ramped leak / retention terms (astra point 5), rear = other only at routing | mask space after the ramp: vocal-owned 0.035, other-owned 0.21 | the ramp still walks the same trade line, without collapsing |
+| v15 / v16 | TFNet / conv2048 under the softmax loss (the sigmoid nets are now read through the softmax when trained with it — before this fix their eval and DSP masks were uncalibrated) | queued | do the older front-ends move off the line with the right objective? |
+| v17 | **whole-spectrum net** (astra review 4, point 1): strided frequency conv over all 257 cells → GRU(64) bottleneck → per-cell decoder with a full-resolution skip; 170k params, 86 M MAC/s; softmax loss | queued | the first net that can see formants and the comb |
+| v18 | v17 + ramped leak / retention | queued | |
+| v19 | v18 + teacher protection-only (300 real masters through htdemucs_ft, confident vocal cells only, weight 0.3) | queued | Phase 2 starts |
 
 ### Review 3 (astra, after the probe)
 
@@ -218,6 +222,54 @@ ineligible-energy leakage weighted by real stem power, per protected class;
 swings need the DSP itself.  Engineering milestone at G = 1.0: guitars ≥ 0.15,
 voice ≤ 0.04, ≤ 10/39 swinging songs.  Stop: architecture searches and gain
 increases; keep TEST untouched.
+
+### Review 4 (astra, at the frontier)
+
+Asked with the whole state of play after v13/v14: every model and every
+operating point sits on one line, guitars ≈ 1.4 × voice, and the milestone's
+voice side (≤ 0.04) is missed by ~3×.  The diagnosis: **missing
+cross-frequency information** — but "AUC is not accuracy", the frontier is not
+shown to be irreducible, and v13's better ranking may still help at matched
+leakage.  Ranked:
+
+1. **Whole spectrum + temporal memory at a shared bottleneck (A1 + A3), first.**
+   Log power, ILD, cos/sin IPD over all 257 cells → kernel-5 stem (4→16 ch) →
+   three depthwise-separable stride-2 layers (16→32→48→64) → flatten 33×64 →
+   64 → GRU(64,64) → per-cell decoder on [16-ch full-resolution skip, local
+   context, global context] (48→24→5).  ≈ 84 M MAC/s neural, room below 150 M
+   incl. features and quantisation.  Train on multi-second sequences with
+   state warm-up; a long receptive field must actually connect distant
+   harmonics.  Acceptance stays guitars ≥ 0.15 at voice ≤ 0.04; no forecast.
+   → **v17** (`--arch full`, 170k params, 0.92 M MAC per control = 86 M MAC/s).
+2. **Run the vocal-veto A/B now; a learned presence head second (A4).**
+   "Presence × eligibility" has the wrong polarity; the rule is
+   `e' = e_cell · (1 − α·p_presence)`, trained jointly, smoothed with fast
+   attack / ~300 ms release, applied before `a = sqrt(e)`.  It is the old veto:
+   it cannot create rear content, only protect a mask that is already useful.
+3. **Teacher data now, conservatively (A5, C(a)).**  Interleave real-master
+   examples; on confident teacher-vocal cells a low-weight protection loss,
+   uncertain cells masked out; teacher silence is never permission.  Audit
+   the 94 % precision by energy and frequency (treble).  No full teacher-role
+   training (14 % of the vocal energy in "other" teaches the exact failure).
+   → **v19** (`--teacher-cache`, every 2nd step, weight 0.3, cells with
+   teacher vocal share > 0.9 only).
+4. Explicit harmonic features only after the shared-context baseline (A2):
+   guitar is harmonic too; pitch trajectories + envelope + position together
+   discriminate, harmonicity alone does not.
+5. Loss changes are operating-point tools (A6): finish v14's DSP run
+   (mask-space averages do not predict rendered leakage), mine high-energy
+   vocal false permissions, keep a supervised retention term.
+
+On D: 0.08–0.11 own-cell energy in the rears ≈ −11 … −9.6 dB, audible as
+spaciousness or vocal wash with the 12 ms delay depending on the cabin; keep
+≤ 0.04 pending level-matched listening; delay / high-pass changes buy no
+selective 2×.  **Stop:** threshold sweeps, more isolated per-band memory,
+selecting on the 40 DEV songs (TEST stays untouched).  Re-run the oracle with
+other-only eligibility — already the case: the oracle protects the drums
+stem whole, so its 0.20 / 0.03 / 0.12 ceiling *is* the other-only ceiling.
+
+Queued behind v15/v16 (`run_v17.ps1`): v17 full-spectrum softmax → DSP; v18 =
+v17 + ramp → DSP; v19 = v18 + teacher protection-only → DSP.
 
 ## 🛠️ Phase 1 — into the DSP
 

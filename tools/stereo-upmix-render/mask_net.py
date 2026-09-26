@@ -184,6 +184,12 @@ def features(torch, L, R):
     return f
 
 
+def out_act(net, torch, lg):
+    """The sigmoid nets (mlp / tf / conv2048) trained under a softmax loss must be read
+    through the softmax too, else evaluate() and the DSP see uncalibrated eligibilities."""
+    return torch.softmax(lg, -1) if getattr(net, "softmax_out", False) else torch.sigmoid(lg)
+
+
 class MaskNet:
     """Per-band GRU context + per-bin MLP.  ~0.18 M MAC per control."""
 
@@ -227,7 +233,7 @@ class MaskNet:
             parts.append(torch.cat([f[:, :, d:], f[:, :, -1:].expand(B, T, d, 4)], 2))
             parts.append(torch.cat([f[:, :, :1].expand(B, T, d, 4), f[:, :, :-d]], 2))
         x = torch.cat(parts + [cb, self.pos.expand(B, T, N_BINS)[..., None]], -1)
-        return torch.sigmoid(self.mlp(x))
+        return out_act(self, torch, self.mlp(x))
 
     def _logits(self, f):
         torch = self.torch
@@ -266,7 +272,7 @@ class TFNet(MaskNet):
         self.hidden = hidden
 
     def forward(self, f):
-        return self.torch.sigmoid(self._logits(f))
+        return out_act(self, self.torch, self._logits(f))
 
     def _logits_tf(self, f):
         torch = self.torch
@@ -333,7 +339,7 @@ class ConvNet:
         return self.head(torch.cat([x, tm], -1))
 
     def forward(self, f):
-        return self.torch.sigmoid(self._logits(f))
+        return out_act(self, self.torch, self._logits(f))
 
 
 def probe_descriptor(torch, f, neigh=2):
@@ -442,7 +448,69 @@ class ProbeNet:
         return self.torch.sigmoid(lg) if self.n_out == 1 else self.torch.softmax(lg, -1)
 
 
+class FullNet:
+    """v17 (astra review 4, point 1): the whole spectrum at once.  Every net so
+    far decided a cell from its 5-bin neighbourhood (+ its own band's history)
+    and sat on one frontier, guitars ~1.4 x voice: at that scale a vocal
+    partial and a guitar partial are the same thing.  What tells them apart
+    is spread over the spectrum (formants, the harmonic comb moving together)
+    and over time (phrasing): a strided frequency conv over all 257 cells to a
+    33-position map, flattened into a 64-wide causal GRU over controls, and a
+    per-cell decoder fed by three things: the full-resolution stem output (the
+    skip path that keeps localisation), the local 33-map context interpolated
+    back to the cell, and the global GRU state.  ~0.92 M MAC per control
+    (~86 M MAC/s), stateful."""
+
+    def __init__(self, torch, band, n_out=5, ch=16, hidden=64, **_):
+        nn = torch.nn
+        self.torch = torch
+        c1, c2, c3 = 2 * ch, 3 * ch, 4 * ch
+        self.stem = nn.Sequential(nn.Conv1d(5, ch, 5, padding=2), nn.Tanh())
+        self.down = nn.ModuleList([nn.Sequential(nn.Conv1d(ci, ci, 5, stride=2, padding=2, groups=ci), nn.Conv1d(ci, co, 1), nn.Tanh())
+                                   for ci, co in ((ch, c1), (c1, c2), (c2, c3))])
+        n_pos = (((N_BINS + 1) // 2 + 1) // 2 + 1) // 2                    # 257 -> 129 -> 65 -> 33
+        self.flat = nn.Sequential(nn.Linear(n_pos * c3, hidden), nn.Tanh())
+        self.gru = nn.GRU(hidden, hidden, batch_first=True)
+        self.gproj = nn.Linear(hidden, ch)
+        self.lproj = nn.Conv1d(c3, ch, 1)
+        self.dec = nn.Sequential(nn.Linear(3 * ch, 24), nn.Tanh(), nn.Linear(24, n_out))
+        self.modules = nn.ModuleList([self.stem, self.down, self.flat, self.gru, self.gproj, self.lproj, self.dec])
+        self.n_out, self.n_pos, self.ch = n_out, n_pos, ch
+        self.pos = torch.arange(N_BINS, dtype=torch.float32) / N_BINS * 2 - 1
+        self.macs = (5 * 5 * ch * N_BINS + (5 * ch + ch * c1) * 129 + (5 * c1 + c1 * c2) * 65 + (5 * c2 + c2 * c3) * 33
+                     + n_pos * c3 * hidden + 3 * 2 * hidden * hidden + hidden * ch + c3 * ch * n_pos + (3 * ch * 24 + 24 * n_out) * N_BINS)
+
+    def to(self, dev):
+        self.modules.to(dev); self.pos = self.pos.to(dev); return self
+
+    def parameters(self):
+        return self.modules.parameters()
+
+    def _logits(self, f):
+        torch = self.torch
+        B, T = f.shape[:2]
+        s = standardize(torch, f).clamp(-6, 6)                                          # [B,T,257,4]
+        x = torch.stack([s[..., 0] + s[..., 1], s[..., 0] - s[..., 1], s[..., 2], s[..., 3],
+                         self.pos.expand(B, T, N_BINS)], -1)                            # level, ILD, IPD, position
+        x = x.reshape(B * T, N_BINS, 5).transpose(1, 2)                                  # [BT,5,257]
+        skip = self.stem(x)                                                             # [BT,ch,257]
+        h = skip
+        for d in self.down:
+            h = d(h)                                                                    # [BT,c3,33]
+        g = self.flat(h.reshape(B * T, -1)).reshape(B, T, -1)
+        g, _ = self.gru(g)                                                              # [B,T,hidden] causal
+        g = self.gproj(g).reshape(B * T, self.ch, 1).expand(-1, -1, N_BINS)
+        loc = torch.nn.functional.interpolate(self.lproj(h), size=N_BINS, mode="linear", align_corners=True)
+        z = torch.cat([skip, loc, g], 1).transpose(1, 2)                                # [BT,257,3ch]
+        return self.dec(z).reshape(B, T, N_BINS, self.n_out)
+
+    def forward(self, f):
+        return self.torch.softmax(self._logits(f), -1)
+
+
 def build_net(torch, arch, band, **kw):
+    if arch == "full":
+        return FullNet(torch, band, n_out=kw.get("n_out", 5), ch=kw.get("proj", 16), hidden=kw.get("hidden", 64))
     if arch == "probe":
         return ProbeNet(torch, band, hidden=kw.get("hidden", 64), neigh=kw.get("neigh", 2), n_out=kw.get("n_out", 1), tctx=kw.get("tctx", 0))
     if arch == "probe_roles":
@@ -755,6 +823,7 @@ def train(a):
     print(f"device {dev}; train {len(split['train'])} dev {len(split['dev'])} songs; outputs {names}; "
           f"protect {[names[i] for i in roles.protect]} eligible {[names[i] for i in roles.eligible]}", flush=True)
     net = build_net(torch, a.arch, bin_band(), ctx=a.ctx, proj=a.proj, hidden=a.hidden, n_out=len(names), neigh=a.neigh, tctx=a.tctx).to(dev)
+    net.softmax_out = LOSS_MODE in ("softmax", "softmax_ramp")
     if a.init:
         ck0 = torch.load(a.init, map_location=dev)
         net.modules.load_state_dict(ck0["state"])
@@ -763,7 +832,9 @@ def train(a):
         print(f"warm start from {a.init} (step {ck0.get('step')})", flush=True)
     n_par = sum(p.numel() for p in net.parameters())
     n_in = 4 * (1 + 2 * a.neigh) + a.proj + 1
-    if a.arch in ("probe", "probe_roles", "probe_ctx"):
+    if hasattr(net, "macs"):
+        macs = net.macs
+    elif a.arch in ("probe", "probe_roles", "probe_ctx"):
         n_in = (2 * a.neigh + 1 + 1 + 2 + 1) * (1 + a.tctx) + (a.proj if a.arch == "probe_ctx" else 0)
         macs = N_BINS * (n_in * a.hidden + a.hidden * a.hidden + a.hidden * (1 if a.arch == "probe" else len(names)))
         if a.arch == "probe_ctx":
@@ -785,6 +856,14 @@ def train(a):
     best = 1e9
     t0 = time.time()
     batches = prefetch(lambda: batch_windows(torch, a.cache, split["train"], a.seconds, a.batch, rng, "cpu", merge_idx))
+    teacher = None
+    if a.teacher_cache:
+        # astra review 4, point 3: real masters through htdemucs_ft, protection-only. Only the cells the
+        # teacher calls vocal with share > 0.9 (94 % precise vs real stems) carry a target; the rest of the
+        # song is masked out of the loss, so teacher silence never becomes rear permission.
+        t_tracks = sorted(f[:-4] for f in os.listdir(a.teacher_cache) if f.endswith(".npy"))
+        teacher = prefetch(lambda: batch_windows(torch, a.teacher_cache, t_tracks, a.seconds, a.batch, rng, "cpu", merge_idx))
+        print(f"teacher songs {len(t_tracks)} from {a.teacher_cache}, every {a.teacher_every} steps at weight {a.w_teacher}", flush=True)
     if FEAT_STATS["mean"] is None:
         with torch.no_grad():                             # feature statistics from 8 batches, then frozen
             fs = [targets_and_features(torch, next(batches).to(dev), rng, augment=True, fine=net_is_fine(net))[0] for _ in range(8)]
@@ -809,6 +888,12 @@ def train(a):
         else:
             m = net.forward(f)
             loss = loss_fn(torch, m, irm, w, P, roles)
+        if teacher is not None and step % a.teacher_every == 0:
+            xt = next(teacher).to(dev, non_blocking=True)
+            with torch.no_grad():
+                ft, irm_t, wt, Pt = targets_and_features(torch, xt, rng, augment=True, fine=net_is_fine(net))
+                wt = wt * (irm_t[..., roles.vocals] > 0.9).float()          # confident-vocal cells only
+            loss = loss + a.w_teacher * loss_softmax(torch, net._logits(ft), irm_t, wt, Pt, roles)
         opt.zero_grad(); loss.backward()
         torch.nn.utils.clip_grad_norm_(net.parameters(), 2.0)
         opt.step(); sched.step()
@@ -826,7 +911,7 @@ def train(a):
                 best = score
                 torch.save({"state": net.modules.state_dict(), "ctx": a.ctx, "proj": a.proj, "hidden": a.hidden,
                             "neigh": a.neigh, "arch": a.arch, "names": names, "merge": a.merge, "step": step, "dev": met,
-                            "feat_stats": dict(FEAT_STATS), "tctx": a.tctx},
+                            "feat_stats": dict(FEAT_STATS), "tctx": a.tctx, "loss": a.loss},
                            os.path.join(a.out, "mask_net.pt"))
                 with open(os.path.join(a.out, "best.txt"), "w") as fh:
                     fh.write(line + "\n")
@@ -880,6 +965,7 @@ def load_model(model_path):
     net = build_net(torch, ck.get("arch", "mlp"), bin_band(), ctx=ck["ctx"], proj=ck["proj"], hidden=ck["hidden"],
                     n_out=n_out, neigh=ck.get("neigh", 0), tctx=ck.get("tctx", 0)).to(dev)
     net.modules.load_state_dict(ck["state"]); net.modules.eval()
+    net.softmax_out = ck.get("loss", "") in ("softmax", "softmax_ramp")
     return torch, net, Roles(names), dev
 
 
@@ -1047,8 +1133,11 @@ def main():
     t.add_argument("--eval-every", type=int, default=250); t.add_argument("--eval-songs", type=int, default=20)
     t.add_argument("--merge", default=DEFAULT_MERGE, help="output groups as name=cached+cached;...")
     t.add_argument("--neigh", type=int, default=0, help="+-bins of per-bin features fed to the MLP")
-    t.add_argument("--arch", default="mlp", choices=("mlp", "tf", "conv2048", "probe", "probe_roles", "probe_ctx"),
-                   help="tf = per-bin GRUs over frequency and time; conv2048 = 2048-point analysis + frequency conv (ctx=channels, hidden=time GRU)")
+    t.add_argument("--arch", default="mlp", choices=("mlp", "tf", "conv2048", "probe", "probe_roles", "probe_ctx", "full"),
+                   help="tf = per-bin GRUs over frequency and time; conv2048 = 2048-point analysis + frequency conv (ctx=channels, hidden=time GRU); "
+                        "full = whole-spectrum strided conv + GRU bottleneck + per-cell decoder (proj=channels, hidden=GRU)")
+    t.add_argument("--teacher-cache", help="htdemucs cache (teacher_label.py separate): protection-only supervision on confident vocal cells")
+    t.add_argument("--teacher-every", type=int, default=2); t.add_argument("--w-teacher", type=float, default=0.3)
     t.add_argument("--loss", default="own", choices=("own", "balanced", "probe", "softmax", "softmax_ramp"))
     t.add_argument("--init", help="warm start: checkpoint whose weights and feature stats to load (same arch)")
     t.add_argument("--target-hop", default="mean", choices=("mean", "single"))
