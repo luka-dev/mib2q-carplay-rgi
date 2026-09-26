@@ -946,7 +946,15 @@ def train(a):
     t0 = time.time()
     batches = prefetch(lambda: batch_windows(torch, a.cache, split["train"], a.seconds, a.batch, rng, "cpu", merge_idx))
     teacher = None
-    if a.teacher_cache:
+    if a.teacher_cache and a.teacher_only:
+        # diagnostic: train on the teacher's labels ALONE (softmax CE everywhere), evaluate on MoisesDB DEV.
+        # If this alone puts 0.8 eligibility into truth-vocal cells, the teacher's labels at the car's STFT
+        # systematically call those cells "other" and role distillation is biased for this target.
+        t_tracks = sorted(f[:-4] for f in os.listdir(a.teacher_cache)
+                          if f.endswith(".npy") and os.path.exists(os.path.join(a.teacher_cache, f[:-4] + ".json")))
+        batches = prefetch(lambda: batch_windows(torch, a.teacher_cache, t_tracks, a.seconds, a.batch, rng, "cpu", merge_idx))
+        print(f"TEACHER-ONLY training on {len(t_tracks)} songs from {a.teacher_cache}", flush=True)
+    elif a.teacher_cache:
         # astra review 4, point 3: real masters through htdemucs_ft, protection-only. Only the cells the
         # teacher calls vocal with share > 0.9 (94 % precise vs real stems) carry a target; the rest of the
         # song is masked out of the loss, so teacher silence never becomes rear permission.
@@ -1380,6 +1388,7 @@ def main():
     t.add_argument("--teacher-every", type=int, default=2); t.add_argument("--w-teacher", type=float, default=0.3)
     t.add_argument("--teacher-conf", type=float, default=0.8, help="roles: teacher cells count only when a role holds more than this share")
     t.add_argument("--teacher-balance", type=int, default=1, help="roles: equal total weight per dominant role in every teacher batch")
+    t.add_argument("--teacher-only", action="store_true", help="diagnostic: training windows from the teacher cache only")
     t.add_argument("--teacher-mode", default="protect", choices=("protect", "vocal", "roles"),
                    help="protect = confident vocal cells only; vocal = soft vocal target everywhere; roles = full softmax target (4-stem teacher cache)")
     t.add_argument("--w-pres", type=float, default=0.5, help="full: weight of the band vocal-presence head")
