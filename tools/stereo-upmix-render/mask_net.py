@@ -636,6 +636,9 @@ def targets_and_features(torch, x, rng, augment, fine=False):
     if TARGET_HOP == "single":
         irm = irm[:, :, CONTROL - 1:T:CONTROL].permute(0, 2, 3, 1)
         Pc = P[:, :, CONTROL - 1:T:CONTROL].permute(0, 2, 3, 1)
+    elif TARGET_HOP == "ewmean":                                  # energy-weighted mean over the held hops = ratio of summed powers
+        Pc = P[:, :, :T].reshape(B, G, T // CONTROL, CONTROL, N_BINS).sum(3).permute(0, 2, 3, 1)
+        irm = Pc / (Pc.sum(-1, keepdim=True) + 1e-9)
     else:
         irm = irm[:, :, :T].reshape(B, G, T // CONTROL, CONTROL, N_BINS).mean(3).permute(0, 2, 3, 1)
         Pc = P[:, :, :T].reshape(B, G, T // CONTROL, CONTROL, N_BINS).mean(3).permute(0, 2, 3, 1)   # [B,Tc,257,G]
@@ -771,6 +774,19 @@ def loss_teacher_vocal(torch, logits, irm, w, roles):
     valid = w * (w > 0.15).float()
     bce = torch.nn.functional.binary_cross_entropy(p, irm[..., roles.vocals], reduction="none")
     return (bce * valid).sum() / (valid.sum() + 1.0)
+
+
+def loss_teacher_elig(torch, logits, irm, w, roles, bce_w=0.2):
+    """astra review 6: distil the rendered quantity.  The student's eligibility (p_other) against the
+    teacher's other-share: Huber on the amplitudes sqrt(e) (what multiplies the audio) + a small BCE,
+    every audible cell, salience-weighted."""
+    io = roles.names.index("other")
+    e_hat = torch.softmax(logits, -1)[..., io]
+    e_t = irm[..., io]
+    valid = w * (w > 0.15).float()
+    h = torch.nn.functional.smooth_l1_loss(e_hat.clamp(min=1e-6).sqrt(), e_t.clamp(min=1e-6).sqrt(), reduction="none", beta=0.1)
+    b = torch.nn.functional.binary_cross_entropy(e_hat.clamp(1e-4, 1 - 1e-4), e_t, reduction="none")
+    return ((h + bce_w * b) * valid).sum() / (valid.sum() + 1.0)
 
 
 def dev_auc_vo(torch, score, irm, w, roles):
@@ -1001,6 +1017,10 @@ def train(a):
                 ft, irm_t, wt, Pt = targets_and_features(torch, xt, rng, augment=True, fine=net_is_fine(net))
             if a.teacher_mode == "vocal":
                 loss = loss + a.w_teacher * loss_teacher_vocal(torch, net._logits(ft), irm_t, wt, roles)
+            elif a.teacher_mode == "elig":                    # astra 6: eligibility directly + 0.1 x role CE on confident cells
+                lg_t = net._logits(ft)
+                wc = wt * (irm_t.max(-1).values > a.teacher_conf).float()
+                loss = loss + a.w_teacher * (loss_teacher_elig(torch, lg_t, irm_t, wt, roles) + 0.1 * loss_softmax(torch, lg_t, irm_t, wc, Pt, roles))
             elif a.teacher_mode == "roles":                   # four-stem teacher: the full softmax target (cymbals fold into drum_core)
                 # only where the teacher is confident: its "other" is a residual (master - stems) that carries the
                 # leakage of every source, so unconfident cells teach "other is everywhere" (v20 / v24: eligibility
@@ -1392,7 +1412,7 @@ def main():
     t.add_argument("--teacher-conf", type=float, default=0.8, help="roles: teacher cells count only when a role holds more than this share")
     t.add_argument("--teacher-balance", type=int, default=1, help="roles: equal total weight per dominant role in every teacher batch")
     t.add_argument("--teacher-only", action="store_true", help="diagnostic: training windows from the teacher cache only")
-    t.add_argument("--teacher-mode", default="protect", choices=("protect", "vocal", "roles"),
+    t.add_argument("--teacher-mode", default="protect", choices=("protect", "vocal", "roles", "elig"),
                    help="protect = confident vocal cells only; vocal = soft vocal target everywhere; roles = full softmax target (4-stem teacher cache)")
     t.add_argument("--w-pres", type=float, default=0.5, help="full: weight of the band vocal-presence head")
     t.add_argument("--dec", type=int, default=24, help="full: decoder width"); t.add_argument("--loss-weight", default="valid", choices=("valid", "salience"))
@@ -1400,7 +1420,7 @@ def main():
     t.add_argument("--loss", default="own", choices=("own", "balanced", "probe", "softmax", "softmax_ramp"))
     t.add_argument("--init", help="warm start: checkpoint whose weights and feature stats to load (same arch)")
     t.add_argument("--start-step", type=int, default=0, help="with --init last.pt: continue the schedule from this step")
-    t.add_argument("--target-hop", default="mean", choices=("mean", "single"))
+    t.add_argument("--target-hop", default="mean", choices=("mean", "single", "ewmean"))
     t.add_argument("--tctx", type=int, default=0, help="probe nets: previous controls stacked as extra inputs (causal, stateless)")
     t.add_argument("--ramp-start", type=int, default=1200, help="balanced: step where the leak penalty starts ramping in")
     t.add_argument("--ramp-steps", type=int, default=1000)

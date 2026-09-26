@@ -143,6 +143,35 @@ def protect_mask_args(src, out, tag, model_path):
 
 
 ORACLE_PROTECT = ("vocals", "bass", "drums")   # MoisesDB stem names never allowed rear (drums whole: conservative)
+ORACLE_REF = ""      # --oracle-ref DIR: renders of the oracle condition; rear reconstruction error against them (astra review 6)
+
+
+def rear_error(out6, tag):
+    """Oracle-referenced rear reconstruction error: the candidate's Ls+Rs against the oracle's from the same
+    renderer, latency-aligned by cross-correlation (+-50 ms), normalised squared error broadband and in the
+    treble (2-16 kHz), at fixed gain and after one global positive gain fit (level vs waveform/image mismatch).
+    A difference-signal wash scores badly here while rear share cannot tell it from a routed source."""
+    path = os.path.join(ORACLE_REF, f"{tag}.6ch.wav")
+    if not os.path.exists(path):
+        return {}
+    ref = T.read_wav6(path)
+    n = min(ref.shape[1], out6.shape[1])
+    a = out6[4, :n] + out6[5, :n]; b = ref[4, :n] + ref[5, :n]
+    m = int(0.05 * T.SR); L = 1 << int(np.ceil(np.log2(n + m)))
+    xc = np.fft.irfft(np.fft.rfft(a, L) * np.conj(np.fft.rfft(b, L)), L)
+    lags = np.concatenate([xc[:m + 1], xc[-m:]]); k = int(np.argmax(lags)); lag = k if k <= m else k - (2 * m + 1)
+    if lag > 0: a, b = a[lag:], b[:n - lag]
+    elif lag < 0: a, b = a[:n + lag], b[-lag:]
+    A = np.fft.rfft(a); B = np.fft.rfft(b); freqs = np.fft.rfftfreq(len(a), 1 / T.SR)
+    out = {}
+    for band, sel in (("rear_nse", freqs >= 200), ("rear_nse_treble", (freqs >= 2000) & (freqs < 16000))):
+        Ab, Bb = A[sel], B[sel]
+        ref_e = float(np.sum(np.abs(Bb) ** 2)) + 1e-12
+        out[band] = float(np.sum(np.abs(Ab - Bb) ** 2) / ref_e)
+        g = max(0.0, float(np.real(np.vdot(Ab, Bb)) / (np.sum(np.abs(Ab) ** 2) + 1e-12)))
+        out[band + "_gainfit"] = float(np.sum(np.abs(g * Ab - Bb) ** 2) / ref_e)
+    out["rear_lag_ms"] = lag * 1000.0 / T.SR
+    return out
 
 
 ORACLE_AMP = False   # --oracle-amp: write 1 - sqrt(eligibility) so the drive mode's (1 - protect) is an AMPLITUDE gain
@@ -210,6 +239,7 @@ def analyse_song(render, args, out, track_dir, excerpt_s, mask_model=None, oracl
         return []
     print(f"  rendered {tag}", flush=True)
     on = np.ones(n, bool)
+    nse = rear_error(out6, tag) if ORACLE_REF else {}
     rows = []
     for name, stem in stems.items():
         lead = stem * k; rest = (mix - stem) * k
@@ -219,7 +249,7 @@ def analyse_song(render, args, out, track_dir, excerpt_s, mask_model=None, oracl
         m = T.metrics(share, w, dt, on)
         slope6, corr, ratio_db = level_dependence(lead, rest, share, dt)
         bands = dict(zip(BAND_KEYS, band_shares(lead, rest, out6)))
-        rows.append({"song": tag, "genre": meta.get("genre", "?"), "stem": name, **bands,
+        rows.append({"song": tag, "genre": meta.get("genre", "?"), "stem": name, **bands, **nse,
                      "median_rear": m["median_rear"], "steady_std": m["steady_std"],
                      "range_1s": m["range_1s"], "worst_half_s": m["worst_half_s"],
                      "slope_per_6dB": slope6, "level_corr": corr, "level_db": ratio_db,
@@ -250,11 +280,12 @@ def main():
     ap.add_argument("--mask-presence", type=float, default=0.0, help="full nets: e * (1 - alpha * band vocal presence) at routing")
     ap.add_argument("--resume", action="store_true", help="reuse per-song results already in --out")
     ap.add_argument("--teacher-mask", action="store_true", help="mask from htdemucs's stems (ceiling of the distillation route)")
+    ap.add_argument("--oracle-ref", default="", help="dir with the oracle condition's *.6ch.wav renders: rear reconstruction error vs them")
     ap.add_argument("--split-file", help="masknet_cache/split.json")
     ap.add_argument("--split", default="dev", help="with --split-file: which split to take songs from")
     a = ap.parse_args()
-    global ORACLE_AMP, MASK_THRESH, MASK_SHARPEN, MASK_ELIGIBLE, RESUME, TEACHER_MASK
-    ORACLE_AMP = a.oracle_amp; RESUME = a.resume; TEACHER_MASK = a.teacher_mask
+    global ORACLE_AMP, MASK_THRESH, MASK_SHARPEN, MASK_ELIGIBLE, RESUME, TEACHER_MASK, ORACLE_REF
+    ORACLE_AMP = a.oracle_amp; RESUME = a.resume; TEACHER_MASK = a.teacher_mask; ORACLE_REF = a.oracle_ref
     MASK_THRESH, MASK_SHARPEN, MASK_ELIGIBLE = a.mask_thresh, a.mask_sharpen, a.mask_eligible
     import mask_net as MN; MN.PRESENCE_ALPHA = a.mask_presence
     os.makedirs(a.out, exist_ok=True)
@@ -272,6 +303,14 @@ def main():
     rows = [r for rs in results for r in rs]
     keys = ["song", "genre", "stem", "median_rear", "steady_std", "range_1s", "worst_half_s",
             "slope_per_6dB", "level_corr", "level_db", "frames"] + BAND_KEYS
+    if ORACLE_REF:
+        keys += ["rear_nse", "rear_nse_gainfit", "rear_nse_treble", "rear_nse_treble_gainfit", "rear_lag_ms"]
+        per_song = {r["song"]: r for r in rows if "rear_nse" in r}
+        if per_song:
+            v = list(per_song.values())
+            print(f"rear reconstruction error vs the oracle ({len(v)} songs, median): broadband {np.median([r['rear_nse'] for r in v]):.2f} "
+                  f"(gain-fit {np.median([r['rear_nse_gainfit'] for r in v]):.2f}), treble {np.median([r['rear_nse_treble'] for r in v]):.2f} "
+                  f"(gain-fit {np.median([r['rear_nse_treble_gainfit'] for r in v]):.2f}), lag med {np.median([r['rear_lag_ms'] for r in v]):.1f} ms")
     with open(os.path.join(a.out, "stems.csv"), "w", newline="") as fh:
         wr = csv.DictWriter(fh, keys); wr.writeheader(); wr.writerows(rows)
 
