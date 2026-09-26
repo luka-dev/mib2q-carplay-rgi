@@ -183,6 +183,33 @@ Ranked by expected impact, all adopted as the next steps:
 | probe | balanced vocal-owned vs other-owned cells, local spectrum only, small classifier, proper split | **DEV AUC 0.81 / 0.81** (512 and 2048 features), accuracy 0.71 | the cells ARE separable per cell; the mask nets were not seeing it |
 | v9a | conv2048 + **input standardisation** (raw log powers −16..+8 saturated the tanh/GRU gates; the C runtime standardises its features too), mastering gain 0..6 dB | running | the probe standardised its inputs, the nets did not |
 
+### Review 3 (astra, after the probe)
+
+Standardisation is plausible but not shown to be the sole cause (v9a with it:
+still 0.71 / 0.74 at step 1000).  Three objective problems named: per-output
+positive/negative balancing destroys calibration (each sigmoid learns under an
+artificial prior, and two such outputs summed as "other + cymbals" mean
+nothing); the clamp at 1 kills gradients and hides compensating errors; the
+ambiguous-cell term may dominate.  The contamination ramp then rewards the
+easiest solution, suppress everything — a consequence, not evidence.
+
+Prescription, in order: (1) transplant the probe's exact recipe into the
+pipeline — its descriptor (spectrum relative to the local mean + the mean +
+IPD + position), standardisation from representative augmented TRAIN data,
+one direct eligibility logit, plain BCE on owned cells, no ambiguous term, no
+penalty, no clamp — and reproduce the DEV AUC first (`--arch probe --loss
+probe`, v10); (2) align the target's temporal support with the features
+(`--target-hop single`); (3) calibrate afterwards with soft-target BCE on the
+eligible power fraction, keep `a = sqrt(e)`; (4) roles, if needed, as a
+softmax over fractional stem-power targets, not independent sigmoids; (5)
+discrimination first, protection later with an explicit retention constraint;
+(6) fixed LR and a small sweep before any architecture change.  The best
+cell-level predictor of the DSP result is eligible-energy retention vs
+ineligible-energy leakage weighted by real stem power, per protected class;
+swings need the DSP itself.  Engineering milestone at G = 1.0: guitars ≥ 0.15,
+voice ≤ 0.04, ≤ 10/39 swinging songs.  Stop: architecture searches and gain
+increases; keep TEST untouched.
+
 ## 🛠️ Phase 1 — into the DSP
 
 New blob `HSSRMSK1`, a second job on the existing control worker (own state,

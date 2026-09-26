@@ -332,7 +332,55 @@ class ConvNet:
         return self.torch.sigmoid(self._logits(f))
 
 
+def probe_descriptor(torch, f, neigh=2):
+    """The probe's per-bin descriptor from the 512 features [B,T,257,4]:
+    log power (L+R) of the +-neigh bins relative to their local mean, the local
+    mean, cos/sin IPD, bin position -> [B,T,257, 2*neigh+1 + 1 + 2 + 1]."""
+    B, T = f.shape[:2]
+    lp = torch.log(torch.exp(f[..., 0]) + torch.exp(f[..., 1]))                # [B,T,257]
+    pad = torch.nn.functional.pad(lp, (neigh, neigh), mode="replicate")
+    idx = torch.arange(N_BINS, device=f.device) + neigh
+    offs = torch.arange(-neigh, neigh + 1, device=f.device)
+    desc = pad[..., (idx[:, None] + offs[None])]                                # [B,T,257,2n+1]
+    mean = desc.mean(-1, keepdim=True)
+    pos = (torch.arange(N_BINS, device=f.device).float() / N_BINS).expand(B, T, N_BINS)[..., None]
+    return torch.cat([desc - mean, mean, f[..., 2:4], pos], -1)
+
+
+class ProbeNet:
+    """v10: exactly the probe's recipe inside the training pipeline (astra
+    review 3): the descriptor above, a 64-64 tanh MLP per bin, ONE eligibility
+    logit, plain BCE on owned cells, no ambiguous term, no contamination
+    penalty, no clamp.  Reproduce the probe's DEV AUC first; extend after."""
+
+    SINGLE = True
+
+    def __init__(self, torch, band, hidden=64, neigh=2, **_):
+        nn = torch.nn
+        self.torch = torch
+        self.neigh = neigh
+        n_in = 2 * neigh + 1 + 1 + 2 + 1
+        self.mlp = nn.Sequential(nn.Linear(n_in, hidden), nn.Tanh(), nn.Linear(hidden, hidden), nn.Tanh(), nn.Linear(hidden, 1))
+        self.modules = nn.ModuleList([self.mlp])
+        self.n_out = 1
+
+    def to(self, dev):
+        self.modules.to(dev); return self
+
+    def parameters(self):
+        return self.modules.parameters()
+
+    def _logits(self, f):
+        d = standardize(self.torch, probe_descriptor(self.torch, f, self.neigh)).clamp(-6, 6)
+        return self.mlp(d)
+
+    def forward(self, f):
+        return self.torch.sigmoid(self._logits(f))
+
+
 def build_net(torch, arch, band, **kw):
+    if arch == "probe":
+        return ProbeNet(torch, band, hidden=kw.get("hidden", 64), neigh=kw.get("neigh", 2))
     if arch == "conv2048":
         return ConvNet(torch, band, ch=kw.get("ctx", 16), hidden=kw.get("hidden", 8), n_out=kw.get("n_out", 5))
     return (TFNet if arch == "tf" else MaskNet)(torch, band, **kw)
@@ -374,6 +422,9 @@ def batch_windows(torch, cache_dir, tracks, seconds, batch, rng, dev, merge_idx)
     return torch.as_tensor(np.stack(wavs), device=dev) / 32768         # [B,G,2,n]
 
 
+TARGET_HOP = "mean"   # "mean" = IRM averaged over the control's 4 hops; "single" = the control hop only (aligned with the features)
+
+
 def targets_and_features(torch, x, rng, augment, fine=False):
     """x [B,G,2,n] group waveforms -> f [B,Tc,257,4], irm [B,Tc,257,G], weight [B,Tc,257], power [B,Tc,257,G]."""
     B, G = x.shape[:2]
@@ -400,8 +451,12 @@ def targets_and_features(torch, x, rng, augment, fine=False):
         f_cut = n_t
     else:
         f_cut = f.shape[1]
-    irm = irm[:, :, :T].reshape(B, G, T // CONTROL, CONTROL, N_BINS).mean(3).permute(0, 2, 3, 1)
-    Pc = P[:, :, :T].reshape(B, G, T // CONTROL, CONTROL, N_BINS).mean(3).permute(0, 2, 3, 1)   # [B,Tc,257,G]
+    if TARGET_HOP == "single":
+        irm = irm[:, :, CONTROL - 1:T:CONTROL].permute(0, 2, 3, 1)
+        Pc = P[:, :, CONTROL - 1:T:CONTROL].permute(0, 2, 3, 1)
+    else:
+        irm = irm[:, :, :T].reshape(B, G, T // CONTROL, CONTROL, N_BINS).mean(3).permute(0, 2, 3, 1)
+        Pc = P[:, :, :T].reshape(B, G, T // CONTROL, CONTROL, N_BINS).mean(3).permute(0, 2, 3, 1)   # [B,Tc,257,G]
     irm, Pc = irm[:, :f_cut], Pc[:, :f_cut]
     Pm = Pc.sum(-1)
     weight = torch.clamp(torch.log10(Pm + 1e-9) + 6, 0, 6) / 6    # salience: silent cells count nothing
@@ -419,7 +474,10 @@ class Roles:
 
 
 def rear_eligibility(m, roles):
-    """What the DSP may send rear: the eligible masks summed, bounded to 1."""
+    """What the DSP may send rear: the eligible masks summed, bounded to 1 (or
+    the single eligibility output of a ProbeNet)."""
+    if m.shape[-1] == 1:
+        return m[..., 0]
     return torch_clamp_sum(m, roles.eligible)
 
 
@@ -453,6 +511,31 @@ def fit_feat_stats(torch, f):
 
 LOSS_W = {"leak": 3.0, "leakp": 1.0, "missed": 2.0}   # overridden by --w-leak/--w-leakp/--w-missed
 LOSS_MODE = "own"     # "own" = v4 ownership loss on probabilities; "balanced" = v7 (Codex review 2)
+
+
+def loss_probe(torch, logits, irm, w, roles):
+    """One eligibility logit [B,T,257,1]; positives = cells an eligible group owns
+    (> 0.6 of the power), negatives = cells a protected group owns; each side
+    averaged (the probe's balanced sampling); nothing else."""
+    valid = (w > 0.15).float()
+    elig_t = irm[..., roles.eligible].sum(-1)
+    prot_t = irm[..., roles.protect].sum(-1)
+    pos = (elig_t > 0.6).float() * valid
+    neg = (prot_t > 0.6).float() * valid
+    bce = torch.nn.functional.binary_cross_entropy_with_logits(logits[..., 0], (elig_t > 0.6).float(), reduction="none")
+    return (bce * pos).sum() / (pos.sum() + 1.0) + (bce * neg).sum() / (neg.sum() + 1.0)
+
+
+def dev_auc(torch, logits, irm, w, roles):
+    """AUC of the eligibility logit, eligible-owned vs protected-owned cells."""
+    valid = w > 0.15
+    sc = logits[..., 0]
+    pos = sc[(irm[..., roles.eligible].sum(-1) > 0.6) & valid]
+    neg = sc[(irm[..., roles.protect].sum(-1) > 0.6) & valid]
+    if len(pos) == 0 or len(neg) == 0:
+        return float("nan")
+    pos = pos[torch.randperm(len(pos), device=pos.device)[:4000]]; neg = neg[torch.randperm(len(neg), device=neg.device)[:4000]]
+    return float((pos[:, None] > neg[None, :]).float().mean())
 
 
 def loss_balanced(torch, logits, irm, w, P, roles, ramp):
@@ -530,7 +613,10 @@ def mask_space_metrics(torch, m, irm, w, P, roles):
     for g in roles.eligible:
         Pg = P[..., g] * (irm[..., g] > 0.6).float()
         out[f"{roles.names[g]}_own_to_rear"] = float((Pg * elig).sum() / (Pg.sum() + 1e-9))
-    out["irm_mae"] = float(((m - irm).abs().mean(-1) * w).sum() / (w.sum() + 1e-9))
+    if m.shape[-1] == irm.shape[-1]:
+        out["irm_mae"] = float(((m - irm).abs().mean(-1) * w).sum() / (w.sum() + 1e-9))
+    else:
+        out["irm_mae"] = float(((elig - irm[..., roles.eligible].sum(-1)).abs() * w).sum() / (w.sum() + 1e-9))
     return out
 
 
@@ -559,7 +645,10 @@ def train(a):
     net = build_net(torch, a.arch, bin_band(), ctx=a.ctx, proj=a.proj, hidden=a.hidden, n_out=len(names), neigh=a.neigh).to(dev)
     n_par = sum(p.numel() for p in net.parameters())
     n_in = 4 * (1 + 2 * a.neigh) + a.proj + 1
-    if a.arch == "conv2048":
+    if a.arch == "probe":
+        n_in = 2 * a.neigh + 1 + 1 + 2 + 1
+        macs = N_BINS * (n_in * a.hidden + a.hidden * a.hidden + a.hidden)
+    elif a.arch == "conv2048":
         ch, hd = a.ctx, a.hidden
         macs = N_BINS * (8 * 4 * ch + 2 * 5 * ch * ch + 3 * (ch * hd + hd * hd) + (ch + hd) * len(names))
     elif a.arch == "tf":
@@ -578,13 +667,16 @@ def train(a):
     batches = prefetch(lambda: batch_windows(torch, a.cache, split["train"], a.seconds, a.batch, rng, "cpu", merge_idx))
     with torch.no_grad():                                 # feature statistics from 8 batches, then frozen
         fs = [targets_and_features(torch, next(batches).to(dev), rng, augment=True, fine=net_is_fine(net))[0] for _ in range(8)]
-        fit_feat_stats(torch, torch.cat(fs))
+        fs = torch.cat(fs)
+        fit_feat_stats(torch, probe_descriptor(torch, fs, net.neigh) if getattr(net, "SINGLE", False) else fs)
     print("feature mean", [round(v, 2) for v in FEAT_STATS["mean"]], "std", [round(v, 2) for v in FEAT_STATS["std"]], flush=True)
     for step in range(1, a.steps + 1):
         x = next(batches).to(dev, non_blocking=True)
         with torch.no_grad():
             f, irm, w, P = targets_and_features(torch, x, rng, augment=True, fine=net_is_fine(net))
-        if LOSS_MODE == "balanced":
+        if LOSS_MODE == "probe":
+            loss = loss_probe(torch, net._logits(f), irm, w, roles)
+        elif LOSS_MODE == "balanced":
             logits = net._logits(f)
             ramp = min(1.0, max(0.0, (step - a.ramp_start) / max(1, a.ramp_steps)))
             loss = loss_balanced(torch, logits, irm, w, P, roles, ramp)
@@ -599,7 +691,7 @@ def train(a):
             line = f"step {step} loss {loss.item():.4f} dev " + " ".join(f"{k}={v:.3f}" for k, v in met.items()) + f"  {time.time() - t0:.0f}s"
             print(line, flush=True)
             score = (met["vocal_own_to_rear"] * 4 + (1 - met["other_own_to_rear"]) +
-                     0.5 * (1 - met.get("cymbals_own_to_rear", 1.0)) + met["irm_mae"])
+                     0.5 * (1 - met.get("cymbals_own_to_rear", 1.0)) + met["irm_mae"]) if LOSS_MODE != "probe" else -met["auc"]
             if score < best:
                 best = score
                 torch.save({"state": net.modules.state_dict(), "ctx": a.ctx, "proj": a.proj, "hidden": a.hidden,
@@ -632,9 +724,11 @@ def evaluate(torch, net, cache_dir, tracks, dev, seconds, merge_idx, roles, song
             s = _EVAL_START[(t, n)]
             x = torch.as_tensor(merge_groups(np.asarray(w[:, :, s:s + n]), merge_idx)[None], device=dev) / 32768
             f, irm, wt, P = targets_and_features(torch, x, rng, augment=False, fine=net_is_fine(net))
-            m = net.forward(f)
+            lg = net._logits(f)
+            m = torch.sigmoid(lg)
             for k, val in mask_space_metrics(torch, m, irm, wt, P, roles).items():
                 acc.setdefault(k, []).append(val)
+            acc.setdefault("auc", []).append(dev_auc(torch, lg, irm, wt, roles))
     net.modules.train()
     return {k: float(np.median(v)) for k, v in acc.items()}
 
@@ -817,9 +911,10 @@ def main():
     t.add_argument("--eval-every", type=int, default=250); t.add_argument("--eval-songs", type=int, default=20)
     t.add_argument("--merge", default=DEFAULT_MERGE, help="output groups as name=cached+cached;...")
     t.add_argument("--neigh", type=int, default=0, help="+-bins of per-bin features fed to the MLP")
-    t.add_argument("--arch", default="mlp", choices=("mlp", "tf", "conv2048"),
+    t.add_argument("--arch", default="mlp", choices=("mlp", "tf", "conv2048", "probe"),
                    help="tf = per-bin GRUs over frequency and time; conv2048 = 2048-point analysis + frequency conv (ctx=channels, hidden=time GRU)")
-    t.add_argument("--loss", default="own", choices=("own", "balanced"))
+    t.add_argument("--loss", default="own", choices=("own", "balanced", "probe"))
+    t.add_argument("--target-hop", default="mean", choices=("mean", "single"))
     t.add_argument("--ramp-start", type=int, default=1200, help="balanced: step where the leak penalty starts ramping in")
     t.add_argument("--ramp-steps", type=int, default=1000)
     e = sub.add_parser("export"); e.add_argument("--model", required=True); e.add_argument("--wav", required=True); e.add_argument("--out", required=True)
@@ -833,8 +928,9 @@ def main():
     a = ap.parse_args()
     if a.cmd == "train":
         LOSS_W.update(leak=a.w_leak, leakp=a.w_leakp, missed=a.w_missed)
-        global LOSS_MODE
+        global LOSS_MODE, TARGET_HOP
         LOSS_MODE = a.loss
+        TARGET_HOP = a.target_hop
     {"cache": cache, "train": train, "export": export, "audit": audit, "probe": probe}[a.cmd](a)
 
 
