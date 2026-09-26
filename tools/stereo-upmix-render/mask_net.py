@@ -461,9 +461,11 @@ class FullNet:
     back to the cell, and the global GRU state.  ~0.92 M MAC per control
     (~86 M MAC/s), stateful."""
 
-    def __init__(self, torch, band, n_out=5, ch=16, hidden=64, **_):
+    def __init__(self, torch, band, n_out=5, ch=16, hidden=64, dec=24, probe=False, **_):
         nn = torch.nn
         self.torch = torch
+        self.probe = probe                       # full_probe: the proven per-cell descriptor joins the decoder input
+        n_desc = 9 if probe else 0
         c1, c2, c3 = 2 * ch, 3 * ch, 4 * ch
         self.stem = nn.Sequential(nn.Conv1d(5, ch, 5, padding=2), nn.Tanh())
         self.down = nn.ModuleList([nn.Sequential(nn.Conv1d(ci, ci, 5, stride=2, padding=2, groups=ci), nn.Conv1d(ci, co, 1), nn.Tanh())
@@ -473,7 +475,8 @@ class FullNet:
         self.gru = nn.GRU(hidden, hidden, batch_first=True)
         self.gproj = nn.Linear(hidden, ch)
         self.lproj = nn.Conv1d(c3, ch, 1)
-        self.dec = nn.Sequential(nn.Linear(3 * ch, 24), nn.Tanh(), nn.Linear(24, n_out))
+        self.dec = (nn.Sequential(nn.Linear(3 * ch + n_desc, dec), nn.Tanh(), nn.Linear(dec, dec), nn.Tanh(), nn.Linear(dec, n_out)) if probe
+                    else nn.Sequential(nn.Linear(3 * ch, dec), nn.Tanh(), nn.Linear(dec, n_out)))
         # astra review 4, point 2: a band-level vocal PRESENCE head off the same state, applied at routing as
         # e * (1 - alpha * presence).  Listed before `dec` so load_model still reads n_out from the last Linear.
         self.pres = nn.Linear(hidden, N_BANDS)
@@ -482,7 +485,8 @@ class FullNet:
         self.n_out, self.n_pos, self.ch = n_out, n_pos, ch
         self.pos = torch.arange(N_BINS, dtype=torch.float32) / N_BINS * 2 - 1
         self.macs = (5 * 5 * ch * N_BINS + (5 * ch + ch * c1) * 129 + (5 * c1 + c1 * c2) * 65 + (5 * c2 + c2 * c3) * 33
-                     + n_pos * c3 * hidden + 3 * 2 * hidden * hidden + hidden * ch + c3 * ch * n_pos + (3 * ch * 24 + 24 * n_out) * N_BINS)
+                     + n_pos * c3 * hidden + 3 * 2 * hidden * hidden + hidden * ch + c3 * ch * n_pos
+                     + ((3 * ch + n_desc) * dec + (dec * dec if probe else 0) + dec * n_out) * N_BINS)
 
     def to(self, dev):
         self.modules.to(dev); self.pos = self.pos.to(dev); return self
@@ -507,6 +511,9 @@ class FullNet:
         g = self.gproj(g).reshape(B * T, self.ch, 1).expand(-1, -1, N_BINS)
         loc = torch.nn.functional.interpolate(self.lproj(h), size=N_BINS, mode="linear", align_corners=True)
         z = torch.cat([skip, loc, g], 1).transpose(1, 2)                                # [BT,257,3ch]
+        if self.probe:
+            d = standardize(torch, probe_descriptor(torch, f, 2), DESC_STATS).clamp(-6, 6)
+            z = torch.cat([z, d.reshape(B * T, N_BINS, -1)], -1)
         return self.dec(z).reshape(B, T, N_BINS, self.n_out)
 
     def forward(self, f):
@@ -514,8 +521,9 @@ class FullNet:
 
 
 def build_net(torch, arch, band, **kw):
-    if arch == "full":
-        return FullNet(torch, band, n_out=kw.get("n_out", 5), ch=kw.get("proj", 16), hidden=kw.get("hidden", 64))
+    if arch in ("full", "full_probe"):
+        return FullNet(torch, band, n_out=kw.get("n_out", 5), ch=kw.get("proj", 16), hidden=kw.get("hidden", 64),
+                       dec=kw.get("dec", 24), probe=arch == "full_probe")
     if arch == "probe":
         return ProbeNet(torch, band, hidden=kw.get("hidden", 64), neigh=kw.get("neigh", 2), n_out=kw.get("n_out", 1), tctx=kw.get("tctx", 0))
     if arch == "probe_roles":
@@ -637,21 +645,22 @@ def torch_clamp_sum(m, idx):
 # its features too (hssr_neon.c).  Stats are measured on the first training
 # batches, frozen, and saved in the checkpoint.
 FEAT_STATS = {"mean": None, "std": None}
+DESC_STATS = {"mean": None, "std": None}     # full_probe: the raw features AND the descriptor need their own stats
 
 
-def standardize(torch, f):
-    if FEAT_STATS["mean"] is None:
+def standardize(torch, f, stats=FEAT_STATS):
+    if stats["mean"] is None:
         return f
-    mu = torch.as_tensor(FEAT_STATS["mean"], device=f.device, dtype=f.dtype)
-    sd = torch.as_tensor(FEAT_STATS["std"], device=f.device, dtype=f.dtype)
+    mu = torch.as_tensor(stats["mean"], device=f.device, dtype=f.dtype)
+    sd = torch.as_tensor(stats["std"], device=f.device, dtype=f.dtype)
     return (f - mu) / sd
 
 
-def fit_feat_stats(torch, f):
+def fit_feat_stats(torch, f, stats=FEAT_STATS):
     """f [B,T,bins,4] -> per-feature mean/std (over batch, time, bins), clamped ±6 at use."""
     flat = f.reshape(-1, f.shape[-1])
-    FEAT_STATS["mean"] = flat.mean(0).tolist()
-    FEAT_STATS["std"] = (flat.std(0) + 1e-3).tolist()
+    stats["mean"] = flat.mean(0).tolist()
+    stats["std"] = (flat.std(0) + 1e-3).tolist()
 
 
 LOSS_W = {"leak": 3.0, "leakp": 1.0, "missed": 2.0}   # overridden by --w-leak/--w-leakp/--w-missed
@@ -671,11 +680,14 @@ def loss_probe(torch, logits, irm, w, roles):
     return (bce * pos).sum() / (pos.sum() + 1.0) + (bce * neg).sum() / (neg.sum() + 1.0)
 
 
+CE_WEIGHT = "valid"   # "valid" = every audible cell counts once; "salience" = the log-level weight (loud cells matter more, like the DSP metric)
+
+
 def loss_softmax(torch, logits, irm, w, P, roles):
     """astra review 3, point 4: roles as a softmax over fractional stem-power
     targets (the IRMs of a cell sum to 1), soft-target cross-entropy weighted
     by salience.  Eligibility = p_other + p_cymbals, no clamp needed."""
-    valid = (w > 0.15).float()
+    valid = w * (w > 0.15).float() if CE_WEIGHT == "salience" else (w > 0.15).float()
     logp = torch.log_softmax(logits, -1)
     ce = -(irm * logp).sum(-1)
     return (ce * valid).sum() / (valid.sum() + 1.0)
@@ -845,13 +857,15 @@ def train(a):
     roles = Roles(names)
     print(f"device {dev}; train {len(split['train'])} dev {len(split['dev'])} songs; outputs {names}; "
           f"protect {[names[i] for i in roles.protect]} eligible {[names[i] for i in roles.eligible]}", flush=True)
-    net = build_net(torch, a.arch, bin_band(), ctx=a.ctx, proj=a.proj, hidden=a.hidden, n_out=len(names), neigh=a.neigh, tctx=a.tctx).to(dev)
+    net = build_net(torch, a.arch, bin_band(), ctx=a.ctx, proj=a.proj, hidden=a.hidden, n_out=len(names), neigh=a.neigh, tctx=a.tctx, dec=a.dec).to(dev)
     net.softmax_out = LOSS_MODE in ("softmax", "softmax_ramp")
     if a.init:
         ck0 = torch.load(a.init, map_location=dev)
         net.modules.load_state_dict(ck0["state"])
         if ck0.get("feat_stats"):
             FEAT_STATS.update(ck0["feat_stats"])
+        if ck0.get("desc_stats"):
+            DESC_STATS.update(ck0["desc_stats"])
         print(f"warm start from {a.init} (step {ck0.get('step')})", flush=True)
     n_par = sum(p.numel() for p in net.parameters())
     n_in = 4 * (1 + 2 * a.neigh) + a.proj + 1
@@ -893,6 +907,8 @@ def train(a):
             fs = [targets_and_features(torch, next(batches).to(dev), rng, augment=True, fine=net_is_fine(net))[0] for _ in range(8)]
             fs = torch.cat(fs)
             fit_feat_stats(torch, probe_descriptor(torch, fs, net.neigh) if isinstance(net, (ProbeNet, ProbeCtxNet)) else fs)
+            if a.arch == "full_probe":
+                fit_feat_stats(torch, probe_descriptor(torch, fs, 2), DESC_STATS)
     print("feature mean", [round(v, 2) for v in FEAT_STATS["mean"]], "std", [round(v, 2) for v in FEAT_STATS["std"]], flush=True)
     for step in range(1, a.steps + 1):
         x = next(batches).to(dev, non_blocking=True)
@@ -939,7 +955,7 @@ def train(a):
                 best = score
                 torch.save({"state": net.modules.state_dict(), "ctx": a.ctx, "proj": a.proj, "hidden": a.hidden,
                             "neigh": a.neigh, "arch": a.arch, "names": names, "merge": a.merge, "step": step, "dev": met,
-                            "feat_stats": dict(FEAT_STATS), "tctx": a.tctx, "loss": a.loss},
+                            "feat_stats": dict(FEAT_STATS), "desc_stats": dict(DESC_STATS), "tctx": a.tctx, "loss": a.loss, "dec": a.dec},
                            os.path.join(a.out, "mask_net.pt"))
                 with open(os.path.join(a.out, "best.txt"), "w") as fh:
                     fh.write(line + "\n")
@@ -985,13 +1001,15 @@ def load_model(model_path):
     names = ck.get("names", ["vocals", "drum_core", "bass", "other"])
     if ck.get("feat_stats"):
         FEAT_STATS.update(ck["feat_stats"])
+    if ck.get("desc_stats"):
+        DESC_STATS.update(ck["desc_stats"])
     # output width from the saved head (a ProbeNet has one eligibility logit, role nets len(names))
     # the head is the last Linear in the ModuleList (keys like "0.4.weight", "5.weight")
     heads = [(tuple(int(t) for t in k[:-7].split(".") if t.isdigit()), v.shape[0])
              for k, v in ck["state"].items() if k.endswith(".weight") and v.dim() == 2]
     n_out = max(heads)[1] if heads else len(names)
     net = build_net(torch, ck.get("arch", "mlp"), bin_band(), ctx=ck["ctx"], proj=ck["proj"], hidden=ck["hidden"],
-                    n_out=n_out, neigh=ck.get("neigh", 0), tctx=ck.get("tctx", 0)).to(dev)
+                    n_out=n_out, neigh=ck.get("neigh", 0), tctx=ck.get("tctx", 0), dec=ck.get("dec", 24)).to(dev)
     net.modules.load_state_dict(ck["state"]); net.modules.eval()
     net.softmax_out = ck.get("loss", "") in ("softmax", "softmax_ramp")
     net.calib = ck.get("calib")
@@ -1235,12 +1253,13 @@ def main():
     t.add_argument("--eval-every", type=int, default=250); t.add_argument("--eval-songs", type=int, default=20)
     t.add_argument("--merge", default=DEFAULT_MERGE, help="output groups as name=cached+cached;...")
     t.add_argument("--neigh", type=int, default=0, help="+-bins of per-bin features fed to the MLP")
-    t.add_argument("--arch", default="mlp", choices=("mlp", "tf", "conv2048", "probe", "probe_roles", "probe_ctx", "full"),
+    t.add_argument("--arch", default="mlp", choices=("mlp", "tf", "conv2048", "probe", "probe_roles", "probe_ctx", "full", "full_probe"),
                    help="tf = per-bin GRUs over frequency and time; conv2048 = 2048-point analysis + frequency conv (ctx=channels, hidden=time GRU); "
                         "full = whole-spectrum strided conv + GRU bottleneck + per-cell decoder (proj=channels, hidden=GRU)")
     t.add_argument("--teacher-cache", help="htdemucs cache (teacher_label.py separate): protection-only supervision on confident vocal cells")
     t.add_argument("--teacher-every", type=int, default=2); t.add_argument("--w-teacher", type=float, default=0.3)
     t.add_argument("--w-pres", type=float, default=0.5, help="full: weight of the band vocal-presence head")
+    t.add_argument("--dec", type=int, default=24, help="full: decoder width"); t.add_argument("--loss-weight", default="valid", choices=("valid", "salience"))
     t.add_argument("--loss", default="own", choices=("own", "balanced", "probe", "softmax", "softmax_ramp"))
     t.add_argument("--init", help="warm start: checkpoint whose weights and feature stats to load (same arch)")
     t.add_argument("--target-hop", default="mean", choices=("mean", "single"))
@@ -1261,8 +1280,8 @@ def main():
     a = ap.parse_args()
     if a.cmd == "train":
         LOSS_W.update(leak=a.w_leak, leakp=a.w_leakp, missed=a.w_missed)
-        global LOSS_MODE, TARGET_HOP
-        LOSS_MODE = a.loss
+        global LOSS_MODE, TARGET_HOP, CE_WEIGHT
+        LOSS_MODE = a.loss; CE_WEIGHT = a.loss_weight
         TARGET_HOP = a.target_hop
     {"cache": cache, "train": train, "export": export, "audit": audit, "probe": probe, "calib": calibrate}[a.cmd](a)
 
