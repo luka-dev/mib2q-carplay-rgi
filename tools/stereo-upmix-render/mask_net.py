@@ -930,8 +930,17 @@ def train(a):
     opt = torch.optim.AdamW(net.parameters(), lr=a.lr, weight_decay=1e-4)
     pool = band_pool(torch, dev)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, a.steps)
+    if a.init and a.start_step:                       # crash-restart (the PC's GPU/driver dies mid-run): continue the schedule
+        ck0 = torch.load(a.init, map_location=dev)
+        if ck0.get("opt"):
+            opt.load_state_dict(ck0["opt"])
+        for _ in range(a.start_step):
+            sched.step()
+        print(f"resuming at step {a.start_step}", flush=True)
     os.makedirs(a.out, exist_ok=True)
     best = 1e9
+    if a.init and a.start_step:
+        best = torch.load(a.init, map_location="cpu").get("best", 1e9)
     t0 = time.time()
     batches = prefetch(lambda: batch_windows(torch, a.cache, split["train"], a.seconds, a.batch, rng, "cpu", merge_idx))
     teacher = None
@@ -953,8 +962,8 @@ def train(a):
             if a.arch == "full_probe":
                 fit_feat_stats(torch, probe_descriptor(torch, fs, 2), DESC_STATS)
     print("feature mean", [round(v, 2) for v in FEAT_STATS["mean"]], "std", [round(v, 2) for v in FEAT_STATS["std"]], flush=True)
-    for step in range(1, a.steps + 1):
-        x = next(batches).to(dev, non_blocking=True)
+    for step in range(a.start_step + 1, a.steps + 1):
+        x = next(batches).to(dev)          # synchronous: the prefetch thread's array must not be reused mid-copy
         with torch.no_grad():
             f, irm, w, P = targets_and_features(torch, x, rng, augment=True, fine=net_is_fine(net))
         if LOSS_MODE == "probe":
@@ -974,7 +983,7 @@ def train(a):
         if getattr(net, "last_presence", None) is not None and a.w_pres > 0:
             loss = loss + a.w_pres * loss_presence(torch, net.last_presence, irm, w, P, roles, pool)
         if teacher is not None and step % a.teacher_every == 0:
-            xt = next(teacher).to(dev, non_blocking=True)
+            xt = next(teacher).to(dev)
             with torch.no_grad():
                 ft, irm_t, wt, Pt = targets_and_features(torch, xt, rng, augment=True, fine=net_is_fine(net))
             if a.teacher_mode == "vocal":
@@ -997,16 +1006,20 @@ def train(a):
                 score = met["vocal_own_to_rear"] * 4 + (1 - met["other_own_to_rear"])
             elif LOSS_MODE == "softmax_ramp":
                 score = 1e9
+            ck = {"state": net.modules.state_dict(), "ctx": a.ctx, "proj": a.proj, "hidden": a.hidden,
+                  "neigh": a.neigh, "arch": a.arch, "names": names, "merge": a.merge, "step": step, "dev": met,
+                  "feat_stats": dict(FEAT_STATS), "desc_stats": dict(DESC_STATS), "tctx": a.tctx, "loss": a.loss, "dec": a.dec,
+                  "layers": a.layers, "bidir": a.bidir}
+            torch.save({**ck, "opt": opt.state_dict(), "best": best}, os.path.join(a.out, "last.pt"))   # for a crash-restart
             if score < best:
                 best = score
-                torch.save({"state": net.modules.state_dict(), "ctx": a.ctx, "proj": a.proj, "hidden": a.hidden,
-                            "neigh": a.neigh, "arch": a.arch, "names": names, "merge": a.merge, "step": step, "dev": met,
-                            "feat_stats": dict(FEAT_STATS), "desc_stats": dict(DESC_STATS), "tctx": a.tctx, "loss": a.loss, "dec": a.dec,
-                            "layers": a.layers, "bidir": a.bidir},
-                           os.path.join(a.out, "mask_net.pt"))
+                torch.save(ck, os.path.join(a.out, "mask_net.pt"))
                 with open(os.path.join(a.out, "best.txt"), "w") as fh:
                     fh.write(line + "\n")
-    print("best", open(os.path.join(a.out, "best.txt")).read().strip())
+    if os.path.exists(os.path.join(a.out, "best.txt")):
+        print("best", open(os.path.join(a.out, "best.txt")).read().strip())
+    with open(os.path.join(a.out, "train_done.txt"), "w") as fh:
+        fh.write(f"{a.steps}\n")
 
 
 _EVAL_START = {}
@@ -1310,6 +1323,7 @@ def main():
     t.add_argument("--layers", type=int, default=1); t.add_argument("--bidir", action="store_true", help="full: non-causal GRU (ceiling study only)")
     t.add_argument("--loss", default="own", choices=("own", "balanced", "probe", "softmax", "softmax_ramp"))
     t.add_argument("--init", help="warm start: checkpoint whose weights and feature stats to load (same arch)")
+    t.add_argument("--start-step", type=int, default=0, help="with --init last.pt: continue the schedule from this step")
     t.add_argument("--target-hop", default="mean", choices=("mean", "single"))
     t.add_argument("--tctx", type=int, default=0, help="probe nets: previous controls stacked as extra inputs (causal, stateless)")
     t.add_argument("--ramp-start", type=int, default=1200, help="balanced: step where the leak penalty starts ramping in")
