@@ -309,6 +309,32 @@ where the gate is today; QEMU instruction count and a real Krait bench
 (`tools/stereo-upmix-render/bench/`) before any car run.  Float parity ≤ 2 LSB
 with the host renderer (`-ffp-contract=off`).
 
+## 🎚️ Depth layering (per-source depth) — after the single-class student
+
+Today one class goes rear (`other`: everything but vocals / drums / bass) at
+one depth (G = 1.0); instruments inside it differ only in pan (each cell keeps
+its own L/R balance), never in depth.  Real 5.1 mixes layer the scene: pads /
+strings / backing deep, keys mid, lead guitar near the front.  Two ways:
+
+1. **By instrument class** — split `other` into `guitar / keys / rest` with a
+   G per class.  Deferred: the student cannot yet separate voice from the
+   rest; guitar-vs-keys is harder; htdemucs (4 stems) cannot label it
+   (`htdemucs_6s` has guitar / piano but is markedly weaker).  Only if a
+   student that really separates ever exists.
+2. **By signal property, no classes** — one multiplier on the mask from what
+   the DSP already measures per cell: inter-channel coherence, stationarity
+   (pad vs pluck), width.  Sustained + decorrelated + wide → deeper;
+   transient + narrow + coherent → nearer.  This is the classical
+   primary/ambient idea (Avendano & Jot) inside our renderer:
+   `G_cell = G · f(coherence, stationarity)`.  Cheap, no new network,
+   testable as an A/B in the stem harness (guitars / keys / pads by MoisesDB
+   group, swing), deployable at once.
+
+Order: finish the one-class student first (v24 →), then route 2 as a
+separate A/B, route 1 only with a separating student.  Note that the users'
+complaint was *instability*, not "guitars too shallow": layering is the
+"gorgeous" step, not the fix, and it must be judged by ear, not by the metric.
+
 ## 📈 Phase 2 — the library through a teacher
 
 Demucs (`htdemucs_ft`) on the RTX 5080 over `D:\music` gives ~14× more
