@@ -226,7 +226,7 @@ Ranked by expected impact, all adopted as the next steps:
 | v25t | **diagnostic**: train on the teacher's labels ALONE (softmax CE everywhere, 449 real masters), evaluate on MoisesDB DEV | **0.34 / 0.38** in vocal- / other-owned cells, AUC 0.63 / 0.77 — no drift at all | **the teacher was never the cause.** What v20 and v24a–c shared was `--loss softmax_ramp` from scratch with `ramp-start 5000`: the *retention* term (`missed`, eligible energy held back) was **not on the ramp** — 5000 steps of "maximise eligibility in eligible-owned cells" with no leak counterweight, which a weak discriminator satisfies by making everything eligible (0.8–0.9). Every "distillation drift" of the day was this term. Fixed: `missed` rides the ramp |
 | v26a | clean role distillation (confident + balanced teacher cells) under plain softmax CE, 4000 steps | mask space 0.44 / 0.55, AUC 0.74 / 0.83 (= v21a); **teacher-vs-student on identical cells** (`diag_copy.py`, 12 held-out masters, 14.7 M audible cells): correlation with the teacher's other-share 0.34 → **0.61**, weighted MAE 0.20 → 0.16 — but where the teacher says e > 0.8 (7.8 % of cells) the student says 0.37 on average and exceeds 0.8 in 0.7 % of cells (v21a: 0.33, 0.0 %) | KD makes the student *follow* the teacher (corr ×1.8) without letting it *commit*: the conditional mean rises from 0.33 to 0.37 in the teacher's confident cells. DSP pending |
 | v26a through the DSP | | voice 0.09, guitars 0.12, keys 0.11, drums 0.19, bass 0.13, 2/39 swinging | = v21a: the clean role distillation changes nothing the renderer can use |
-| v26b | v26a + the fully ramped leak / retention terms | running (one guard restart when the PC's RAM ran out) | |
+| v26b | v26a + the fully ramped leak / retention terms | mask space **0.052 / 0.22** (best 1750), AUC 0.72 / 0.75; DSP pending | the ramp lands where it always lands (v14 0.035 / 0.22, v20 0.047 / 0.25): the clean KD did not move the trade |
 | v28o | **overfit test** (astra 6): teacher-only on 4 masters, evaluated on the same 4 | died at step 1250 (host RAM); at 1000–1250: **AUC 0.92 / 0.96** on the memorised songs, yet eligibility 0.32–0.34 in other-owned cells, 0.21–0.24 in vocal-owned. `diag_softmax.py`: in teacher-dominant cells (target ≈ 0.9 on one role) the student's softmax is ≈ 0.45–0.57 on that role and 0.2–0.25 on each of two others — *the same on its own training songs and on held-out ones* (v26a held-out: other-dominant → p_other 0.51, vocal-dominant → p_vocal 0.44) | **the student ranks (AUC 0.96 when memorising) but never becomes confident, not even on 4 songs it has seen 65 times.** The balanced owned-cell AUC does not involve the mixed cells; relative to *them* the dominant cells are not distinguishable, so the softmax settles near the mixed-cell mean. What the student lacks is a *purity* cue (how much of the cell is one source) — exactly what eligibility (a = sqrt e) needs and what a separator has. v27's direct sqrt-eligibility target attacks this head-on |
 | v20 (launches 1–3) | | died within ~200 steps each time: access violation in `c10.dll`; `faulthandler` shows the faulting thread has no Python frame (torch / driver native thread) — the GPU is shared with demucs and two unkillable zombie processes hold CUDA contexts. Not the mmap (removed anyway: cache windows are now plain file reads), not the growing file (json marker). Mitigation: `train_guard.ps1` restarts from `last.pt` (optimizer state, `--start-step`) until `train_done.txt`; batch 4 | the PC needs a reboot |
 | v21a / v21b | **full_probe**: the whole-spectrum context (skip + local + global) *and* the proven per-cell descriptor feed a 32-wide decoder (128 M MAC/s); v21b adds salience-weighted CE (loud cells weigh more, like the DSP metric) | queued | does context + sharp per-cell input beat both parents? |
@@ -342,8 +342,24 @@ the same per-stem rear-share metric:
 | htdemucs mask | 0.03 | 0.20 | 0.14 | 0.16 | 0.11 | 0.11 | 8/39 |
 | oracle | 0.03 | 0.20 | 0.14 | 0.17 | 0.07 | 0.12 | 7/39 |
 
-A 1970s difference-signal matrix sits on our students' frontier by this
-metric — more keys, far less drums and bass, voice 0.05 by construction
+**The companion metric answers (astra review 6, `--oracle-ref`): rear
+reconstruction error against the oracle's Ls+Rs from the same renderer,
+latency-aligned, normalised squared error, median over the DEV songs:**
+
+| | broadband | after one gain fit | treble 2–16 kHz | gain-fit |
+|---|---|---|---|---|
+| passive matrix | **5.59** | **0.99** | 2.41 | 1.00 |
+| v13 + soft veto 0.5 | 0.15 | 0.15 | 0.09 | 0.08 |
+| v21a (raw student) | 0.23 | 0.15 | 0.12 | 0.08 |
+
+The matrix's rear shares *nothing* with the oracle's: after the best possible
+gain it is as far from the target as silence (error 1.0), and 5.6× too loud
+before it.  The students' rears are within 0.15 of the oracle waveform.  So
+the rear-share tie was the metric's blind spot, not a real tie: the matrix
+extracts width, the mask routes sources.  Both numbers go into the paper.
+
+A 1970s difference-signal matrix sits on our students' frontier by the
+rear-share metric — more keys, far less drums and bass, voice 0.05 by construction
 (centre-panned sources cancel).  The metric cannot tell a routed source from
 a difference-signal wash (anti-phase artefacts, mono incompatibility, reverb
 and width riding along), which is exactly why the listening study is the
