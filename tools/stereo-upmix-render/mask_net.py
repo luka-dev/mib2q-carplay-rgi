@@ -994,6 +994,7 @@ def load_model(model_path):
                     n_out=n_out, neigh=ck.get("neigh", 0), tctx=ck.get("tctx", 0)).to(dev)
     net.modules.load_state_dict(ck["state"]); net.modules.eval()
     net.softmax_out = ck.get("loss", "") in ("softmax", "softmax_ramp")
+    net.calib = ck.get("calib")
     return torch, net, Roles(names), dev
 
 
@@ -1025,6 +1026,8 @@ def protect_mask(torch, net, roles, dev, x):
             f = f[:, CONTROL - 1:T:CONTROL]
         m = net.forward(f)[0]
         elig = rear_eligibility(m, roles)
+        if getattr(net, "calib", None):
+            elig = torch.sigmoid(net.calib["a"] * torch.logit(elig.clamp(1e-4, 1 - 1e-4)) + net.calib["b"])
         if PRESENCE_ALPHA > 0 and getattr(net, "last_presence", None) is not None:
             elig = apply_presence(torch, net, elig)
         return (1 - elig).cpu().numpy().astype(np.float32)
@@ -1033,6 +1036,60 @@ def protect_mask(torch, net, roles, dev, x):
 def write_mask(path, prot):
     with open(path, "wb") as fh:
         fh.write(b"HSSRMSK0"); fh.write(np.array([prot.shape[0], N_BINS], np.uint32).tobytes()); fh.write(prot.tobytes())
+
+
+def dev_excerpt(w, n):
+    """The loudest-vocal window of a cached song, like the harness / evaluate()."""
+    v = np.asarray(w[0]).astype(np.float32) + np.asarray(w[1]).astype(np.float32)
+    e = np.cumsum((v ** 2).sum(0)); idx = np.arange(0, w.shape[2] - n, 5 * SR)
+    return idx[int(np.argmax(e[idx + n - 1] - e[idx]))] if len(idx) else 0
+
+
+def calibrate(a):
+    """astra review 3 point 3 / review 4 point 5: the conv nets (v16, v17) RANK the cells
+    better than anything before (vocal-vs-other AUC 0.82) but leave the probabilities flat
+    (0.43 / 0.51 in vocal- / other-owned cells).  Ranking is the hard part; calibration is
+    two numbers: e' = sigmoid(a * logit(e) + b) fitted on DEV to the true eligible power
+    fraction (weighted soft-target BCE), stored in the checkpoint, applied by protect_mask."""
+    torch, net, roles, dev = load_model(a.model)
+    if a.eligible:
+        roles.eligible = [roles.names.index(n) for n in a.eligible.split("+")]
+    split = load_split(a.cache)
+    names, merge_idx = parse_merge(a.merge)
+    rng = np.random.default_rng(0)
+    Z, Tt, W, PV, PE, OV, OE = [], [], [], [], [], [], []
+    n = int(a.seconds * SR)
+    with torch.no_grad():
+        for t in split["dev"][:a.songs]:
+            w = np.load(os.path.join(a.cache, t + ".npy"), mmap_mode="r")
+            if w.shape[2] <= n:
+                continue
+            s0 = dev_excerpt(w, n)
+            x = torch.as_tensor(merge_groups(np.asarray(w[:, :, s0:s0 + n]), merge_idx)[None], device=dev) / 32768
+            f, irm, wt, P = targets_and_features(torch, x, rng, augment=False, fine=net_is_fine(net))
+            e = rear_eligibility(net.forward(f), roles)[0]
+            Z.append(torch.logit(e.clamp(1e-4, 1 - 1e-4)).flatten()); Tt.append(irm[0][..., roles.eligible].sum(-1).flatten())
+            W.append(wt[0].flatten())
+            PV.append((P[0][..., roles.vocals] * (irm[0][..., roles.vocals] > 0.5)).flatten())
+            PE.append((P[0][..., roles.eligible].sum(-1) * (irm[0][..., roles.eligible].sum(-1) > 0.6)).flatten())
+    z, tt, w, pv, pe = (torch.cat(v) for v in (Z, Tt, W, PV, PE))
+    valid = (w > 0.15).float()
+    ab = torch.tensor([1.0, 0.0], device=dev, requires_grad=True)
+    opt = torch.optim.Adam([ab], lr=0.05)
+    for _ in range(400):
+        q = torch.sigmoid(ab[0] * z + ab[1])
+        loss = (torch.nn.functional.binary_cross_entropy(q, tt, reduction="none") * valid).sum() / valid.sum()
+        opt.zero_grad(); loss.backward(); opt.step()
+    def report(tag, e):
+        print(f"{tag}: vocal-owned -> rear {float((pv * e).sum() / pv.sum()):.3f}   eligible-owned -> rear {float((pe * e).sum() / pe.sum()):.3f}   "
+              f"mean |e - t| {float(((e - tt).abs() * valid).sum() / valid.sum()):.3f}")
+    with torch.no_grad():
+        report("before", torch.sigmoid(z)); report("after ", torch.sigmoid(ab[0] * z + ab[1]))
+        print(f"a = {float(ab[0]):.3f}  b = {float(ab[1]):.3f}  (logit std {float(z[valid > 0].std()):.2f})")
+    ck = torch.load(a.model, map_location="cpu")
+    ck["calib"] = {"a": float(ab[0]), "b": float(ab[1]), "eligible": [roles.names[i] for i in roles.eligible]}
+    torch.save(ck, a.model)
+    print("saved calib into", a.model)
 
 
 def audit(a):
@@ -1193,6 +1250,9 @@ def main():
     e = sub.add_parser("export"); e.add_argument("--model", required=True); e.add_argument("--wav", required=True); e.add_argument("--out", required=True)
     pr = sub.add_parser("probe"); pr.add_argument("--cache", required=True); pr.add_argument("--songs", type=int, default=60)
     pr.add_argument("--seconds", type=float, default=30.0); pr.add_argument("--steps", type=int, default=3000); pr.add_argument("--merge", default=DEFAULT_MERGE)
+    cb = sub.add_parser("calib"); cb.add_argument("--model", required=True); cb.add_argument("--cache", required=True)
+    cb.add_argument("--songs", type=int, default=20); cb.add_argument("--seconds", type=float, default=60.0)
+    cb.add_argument("--eligible", default="other"); cb.add_argument("--merge", default=DEFAULT_MERGE)
     u = sub.add_parser("audit"); u.add_argument("--cache", required=True); u.add_argument("--steps", type=int, default=400); u.add_argument("--seconds", type=float, default=6.0)
     u.add_argument("--ctx", type=int, default=64); u.add_argument("--proj", type=int, default=8); u.add_argument("--hidden", type=int, default=32)
     u.add_argument("--neigh", type=int, default=0); u.add_argument("--arch", default="mlp", choices=("mlp", "tf", "conv2048")); u.add_argument("--merge", default=DEFAULT_MERGE)
@@ -1204,7 +1264,7 @@ def main():
         global LOSS_MODE, TARGET_HOP
         LOSS_MODE = a.loss
         TARGET_HOP = a.target_hop
-    {"cache": cache, "train": train, "export": export, "audit": audit, "probe": probe}[a.cmd](a)
+    {"cache": cache, "train": train, "export": export, "audit": audit, "probe": probe, "calib": calibrate}[a.cmd](a)
 
 
 if __name__ == "__main__":
