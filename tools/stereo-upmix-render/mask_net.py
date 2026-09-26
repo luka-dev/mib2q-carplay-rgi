@@ -212,6 +212,20 @@ class MaskNet:
         x = torch.cat(parts + [cb, self.pos.expand(B, T, N_BINS)[..., None]], -1)
         return torch.sigmoid(self.mlp(x))
 
+    def _logits(self, f):
+        torch = self.torch
+        B, T = f.shape[:2]
+        e = f[..., :2].mean(-1)
+        bandf = torch.einsum("kn,btnf->btkf", self.pool, f)
+        bande = torch.einsum("kn,btn->btk", self.pool, e)[..., None]
+        h, _ = self.gru(torch.cat([bandf, bande], -1).reshape(B, T, -1))
+        cb = self.ctx_proj(h).reshape(B, T, N_BANDS, self.proj)[:, :, self.band]
+        parts = [f]
+        for d in range(1, self.neigh + 1):
+            parts.append(torch.cat([f[:, :, d:], f[:, :, -1:].expand(B, T, d, 4)], 2))
+            parts.append(torch.cat([f[:, :, :1].expand(B, T, d, 4), f[:, :, :-d]], 2))
+        return self.mlp(torch.cat(parts + [cb, self.pos.expand(B, T, N_BINS)[..., None]], -1))
+
 
 class TFNet(MaskNet):
     """v5: the per-bin MLP cannot tell a vocal partial from a guitar partial
@@ -251,6 +265,25 @@ class TFNet(MaskNet):
         tm, _ = self.time(fq.permute(0, 2, 1, 3).reshape(B * N_BINS, T, 2 * self.hidden))  # over time, per bin
         tm = tm.reshape(B, N_BINS, T, self.hidden).permute(0, 2, 1, 3)
         return torch.sigmoid(self.head(torch.cat([fq, tm], -1)))
+
+    def _logits(self, f):
+        torch = self.torch
+        B, T = f.shape[:2]
+        e = f[..., :2].mean(-1)
+        bandf = torch.einsum("kn,btnf->btkf", self.pool, f)
+        bande = torch.einsum("kn,btn->btk", self.pool, e)[..., None]
+        h, _ = self.gru(torch.cat([bandf, bande], -1).reshape(B, T, -1))
+        cb = self.ctx_proj(h).reshape(B, T, N_BANDS, self.proj)[:, :, self.band]
+        parts = [f]
+        for d in range(1, self.neigh + 1):
+            parts.append(torch.cat([f[:, :, d:], f[:, :, -1:].expand(B, T, d, 4)], 2))
+            parts.append(torch.cat([f[:, :, :1].expand(B, T, d, 4), f[:, :, :-d]], 2))
+        x = torch.tanh(self.inp(torch.cat(parts + [cb, self.pos.expand(B, T, N_BINS)[..., None]], -1)))
+        fq, _ = self.freq(x.reshape(B * T, N_BINS, -1))
+        fq = fq.reshape(B, T, N_BINS, 2 * self.hidden)
+        tm, _ = self.time(fq.permute(0, 2, 1, 3).reshape(B * N_BINS, T, 2 * self.hidden))
+        tm = tm.reshape(B, N_BINS, T, self.hidden).permute(0, 2, 1, 3)
+        return self.head(torch.cat([fq, tm], -1))
 
 
 def build_net(torch, arch, band, **kw):
@@ -334,6 +367,32 @@ def torch_clamp_sum(m, idx):
 
 
 LOSS_W = {"leak": 3.0, "leakp": 1.0, "missed": 2.0}   # overridden by --w-leak/--w-leakp/--w-missed
+LOSS_MODE = "own"     # "own" = v4 ownership loss on probabilities; "balanced" = v7 (Codex review 2)
+
+
+def loss_balanced(torch, logits, irm, w, P, roles, ramp):
+    """v7 (Codex review 2): per-output BCE-with-logits on CONFIDENT cells only
+    (owned > 0.6 = positive, < 0.2 = negative), positives and negatives of every
+    output normalised separately so the sparse eligible cells weigh as much as
+    the plentiful protected ones; a soft regression on the ambiguous cells at
+    low weight; silent cells excluded by a validity mask.  The contamination
+    penalty (vocal energy admitted rear in vocal-owned cells) is ramped in by
+    `ramp` (0..1) only after support is established."""
+    valid = (w > 0.15).float()
+    bce = torch.nn.functional.binary_cross_entropy_with_logits(logits, irm, reduction="none")   # [B,T,257,G]
+    total = 0.0
+    for g in range(irm.shape[-1]):
+        pos = (irm[..., g] > 0.6).float() * valid
+        neg = (irm[..., g] < 0.2).float() * valid
+        total = total + (bce[..., g] * pos).sum() / (pos.sum() + 1.0) + (bce[..., g] * neg).sum() / (neg.sum() + 1.0)
+    amb = ((irm > 0.2) & (irm < 0.6)).float() * valid[..., None]
+    total = total + 0.25 * (bce * amb).sum() / (amb.sum() + 1.0)
+    m = torch.sigmoid(logits)
+    elig = rear_eligibility(m, roles)
+    Pv = P[..., roles.vocals] * (irm[..., roles.vocals] > 0.3).float() * valid
+    leak = (Pv * elig).sum() / (Pv.sum() + 1e-9)
+    smooth = (m[:, 1:] - m[:, :-1]).abs().mean(-1)
+    return total / irm.shape[-1] + ramp * LOSS_W["leak"] * leak + 0.05 * (smooth * valid[:, 1:]).sum() / (valid[:, 1:].sum() + 1e-9)
 
 
 def loss_fn(torch, m, irm, w, P, roles):
@@ -420,8 +479,13 @@ def train(a):
         x = batch_windows(torch, a.cache, split["train"], a.seconds, a.batch, rng, dev, merge_idx)
         with torch.no_grad():
             f, irm, w, P = targets_and_features(torch, x, rng, augment=True)
-        m = net.forward(f)
-        loss = loss_fn(torch, m, irm, w, P, roles)
+        if LOSS_MODE == "balanced":
+            logits = net._logits(f)
+            ramp = min(1.0, max(0.0, (step - a.ramp_start) / max(1, a.ramp_steps)))
+            loss = loss_balanced(torch, logits, irm, w, P, roles, ramp)
+        else:
+            m = net.forward(f)
+            loss = loss_fn(torch, m, irm, w, P, roles)
         opt.zero_grad(); loss.backward()
         torch.nn.utils.clip_grad_norm_(net.parameters(), 2.0)
         opt.step(); sched.step()
@@ -568,6 +632,9 @@ def main():
     t.add_argument("--merge", default=DEFAULT_MERGE, help="output groups as name=cached+cached;...")
     t.add_argument("--neigh", type=int, default=0, help="+-bins of per-bin features fed to the MLP")
     t.add_argument("--arch", default="mlp", choices=("mlp", "tf"), help="tf = per-bin GRUs over frequency and time")
+    t.add_argument("--loss", default="own", choices=("own", "balanced"))
+    t.add_argument("--ramp-start", type=int, default=1200, help="balanced: step where the leak penalty starts ramping in")
+    t.add_argument("--ramp-steps", type=int, default=1000)
     e = sub.add_parser("export"); e.add_argument("--model", required=True); e.add_argument("--wav", required=True); e.add_argument("--out", required=True)
     u = sub.add_parser("audit"); u.add_argument("--cache", required=True); u.add_argument("--steps", type=int, default=400); u.add_argument("--seconds", type=float, default=6.0)
     u.add_argument("--ctx", type=int, default=64); u.add_argument("--proj", type=int, default=8); u.add_argument("--hidden", type=int, default=32)
@@ -577,6 +644,8 @@ def main():
     a = ap.parse_args()
     if a.cmd == "train":
         LOSS_W.update(leak=a.w_leak, leakp=a.w_leakp, missed=a.w_missed)
+        global LOSS_MODE
+        LOSS_MODE = a.loss
     {"cache": cache, "train": train, "export": export, "audit": audit}[a.cmd](a)
 
 
