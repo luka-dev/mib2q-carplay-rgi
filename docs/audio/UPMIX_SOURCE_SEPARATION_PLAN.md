@@ -351,10 +351,14 @@ latency-aligned, normalised squared error, median over the DEV songs:**
 | passive matrix | **5.59** | **0.99** | 2.41 | 1.00 |
 | v13 + soft veto 0.5 | 0.15 | 0.15 | 0.09 | 0.08 |
 | v21a (raw student) | 0.23 | 0.15 | 0.12 | 0.08 |
+| the car candidate (heuristic path, master 0ffe8eb) | 0.41 | 0.36 | 0.25 | 0.17 |
 
 The matrix's rear shares *nothing* with the oracle's: after the best possible
 gain it is as far from the target as silence (error 1.0), and 5.6× too loud
-before it.  The students' rears are within 0.15 of the oracle waveform.  So
+before it.  The students' rears are within 0.15 of the oracle waveform; the heuristic
+candidate that is going to the car sits at 0.41 (0.36 after gain) with 24/39
+guitar and 29/40 drum songs swinging — the mask-driven students are both
+closer to the oracle and an order of magnitude steadier.  So
 the rear-share tie was the metric's blind spot, not a real tie: the matrix
 extracts width, the mask routes sources.  Both numbers go into the paper.
 
