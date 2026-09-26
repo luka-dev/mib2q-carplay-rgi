@@ -173,6 +173,14 @@ Ranked by expected impact, all adopted as the next steps:
    permission; judging models through the veto-only DSP; the 176 M MAC/s
    TFNet is a diagnostic, not a deployment candidate.
 
+### Training log (Phase 0)
+
+| run | net / loss | DEV mask space (vocal-owned → rear / other-owned → rear) | note |
+|---|---|---|---|
+| v2–v4 | per-bin MLP, ownership loss | 0.02–0.03 / 0.02–0.08 | protect-everything collapse |
+| v7 | TFNet 67k, balanced BCE-with-logits, contamination ramp from step 1200 | before the ramp 0.73 / 0.78 — no discrimination; after 0.025 / 0.14 | the balanced loss opens the eligible cells, but on 512-point features the net cannot tell vocal cells from other cells across songs (it can on one excerpt), so the ramp collapses it again |
+| v8a | conv2048: 2048-point analysis, frequency conv stride 4 (23 Hz resolution into each DSP bin), causal GRU per bin, 3.9k params, ~0.97 M MAC per control | running | Codex review 2, point 3 |
+
 ## 🛠️ Phase 1 — into the DSP
 
 New blob `HSSRMSK1`, a second job on the existing control worker (own state,

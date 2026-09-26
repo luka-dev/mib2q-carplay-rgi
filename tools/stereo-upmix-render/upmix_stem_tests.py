@@ -127,6 +127,8 @@ def protect_mask_args(src, out, tag, model_path):
     with wave.open(src, "rb") as w:
         x = np.frombuffer(w.readframes(w.getnframes()), "<i2").reshape(-1, 2).T.astype(np.float32) / 32768
     prot = MN.protect_mask(_MASK["torch"], _MASK["net"], _MASK["roles"], _MASK["dev"], x)
+    if ORACLE_AMP:                                   # drive mode wants an amplitude gain: sqrt of the eligibility
+        prot = (1 - np.sqrt(np.clip(1 - prot, 0, 1))).astype(np.float32)
     path = os.path.join(out, tag + ".msk")
     MN.write_mask(path, prot)
     return ["--protect-mask", path]
@@ -210,7 +212,7 @@ def main():
     ap.add_argument("--mask-model", help="mask_net.pt: render with its protect mask (test-mask build)")
     ap.add_argument("--oracle-mask", action="store_true", help="protect mask from the real stems (upper bound)")
     ap.add_argument("--render-extra", default="", help="extra renderer flags, e.g. '--mask-drive 1.0'")
-    ap.add_argument("--oracle-amp", action="store_true", help="oracle mask as amplitude gain (sqrt of the energy share)")
+    ap.add_argument("--oracle-amp", action="store_true", help="mask (oracle or model) as amplitude gain (sqrt of the eligibility) for --mask-drive")
     ap.add_argument("--split-file", help="masknet_cache/split.json")
     ap.add_argument("--split", default="dev", help="with --split-file: which split to take songs from")
     a = ap.parse_args()

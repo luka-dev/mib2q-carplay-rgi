@@ -158,6 +158,18 @@ def stft(torch, x):
     return X.reshape(*shp[:-1], N_BINS, -1).transpose(-1, -2)
 
 
+N_FFT_FINE = 2048           # mask-net-only analysis: 23.4 Hz bins, hop 512 = the control cadence
+N_BINS_FINE = N_FFT_FINE // 2 + 1
+
+
+def stft_fine(torch, x):
+    """x [..., n] -> complex [..., frames, 1025] at hop 512 (= one DSP control), Hann, centred."""
+    win = torch.hann_window(N_FFT_FINE, device=x.device, dtype=x.dtype)
+    shp = x.shape
+    X = torch.stft(x.reshape(-1, shp[-1]), N_FFT_FINE, HOP * CONTROL, N_FFT_FINE, win, center=True, return_complex=True)
+    return X.reshape(*shp[:-1], N_BINS_FINE, -1).transpose(-1, -2)
+
+
 def features(torch, L, R):
     """Per-bin [log|L|^2, log|R|^2, cos IPD, sin IPD] and per-band context [32 x 5]."""
     pl = (L.real ** 2 + L.imag ** 2)
@@ -286,8 +298,57 @@ class TFNet(MaskNet):
         return self.head(torch.cat([fq, tm], -1))
 
 
+class ConvNet:
+    """v8: the fine 2048-point analysis (23 Hz bins) seen through a frequency
+    convolution with stride 4, so every DSP bin's decision is made from the
+    harmonic structure of its 187 Hz neighbourhood at 23 Hz resolution, plus a
+    small causal GRU per bin over time.  ~0.6 M MAC per control (~55 M MAC/s)
+    on top of one 2048-point FFT per control."""
+
+    FINE = True
+
+    def __init__(self, torch, band, ch=16, hidden=8, n_out=5, **_):
+        nn = torch.nn
+        self.torch = torch
+        self.c1 = nn.Conv1d(4, ch, kernel_size=8, stride=4, padding=4)    # 1025 -> 257
+        self.c2 = nn.Conv1d(ch, ch, kernel_size=5, padding=2)
+        self.c3 = nn.Conv1d(ch, ch, kernel_size=5, padding=2)
+        self.time = nn.GRU(ch, hidden, batch_first=True)
+        self.head = nn.Linear(ch + hidden, n_out)
+        self.modules = nn.ModuleList([self.c1, self.c2, self.c3, self.time, self.head])
+        self.hidden = hidden; self.n_out = n_out; self.ch = ch
+
+    def to(self, dev):
+        self.modules.to(dev); return self
+
+    def parameters(self):
+        return self.modules.parameters()
+
+    def _logits(self, f):
+        """f [B, T, 1025, 4] fine features -> logits [B, T, 257, n_out]."""
+        torch = self.torch
+        B, T = f.shape[:2]
+        x = f.reshape(B * T, N_BINS_FINE, 4).transpose(1, 2)              # [BT, 4, 1025]
+        x = torch.tanh(self.c1(x))[:, :, :N_BINS]                          # [BT, ch, 257]
+        x = torch.tanh(self.c2(x) + x)
+        x = torch.tanh(self.c3(x) + x)
+        x = x.transpose(1, 2).reshape(B, T, N_BINS, self.ch)               # [B, T, 257, ch]
+        tm, _ = self.time(x.permute(0, 2, 1, 3).reshape(B * N_BINS, T, self.ch))
+        tm = tm.reshape(B, N_BINS, T, self.hidden).permute(0, 2, 1, 3)
+        return self.head(torch.cat([x, tm], -1))
+
+    def forward(self, f):
+        return self.torch.sigmoid(self._logits(f))
+
+
 def build_net(torch, arch, band, **kw):
+    if arch == "conv2048":
+        return ConvNet(torch, band, ch=kw.get("ctx", 16), hidden=kw.get("hidden", 8), n_out=kw.get("n_out", 5))
     return (TFNet if arch == "tf" else MaskNet)(torch, band, **kw)
+
+
+def net_is_fine(net):
+    return getattr(net, "FINE", False)
 
 
 def master(torch, mix, rng):
@@ -322,7 +383,7 @@ def batch_windows(torch, cache_dir, tracks, seconds, batch, rng, dev, merge_idx)
     return torch.as_tensor(np.stack(wavs), device=dev) / 32768         # [B,G,2,n]
 
 
-def targets_and_features(torch, x, rng, augment):
+def targets_and_features(torch, x, rng, augment, fine=False):
     """x [B,G,2,n] group waveforms -> f [B,Tc,257,4], irm [B,Tc,257,G], weight [B,Tc,257], power [B,Tc,257,G]."""
     B, G = x.shape[:2]
     if augment:
@@ -340,8 +401,17 @@ def targets_and_features(torch, x, rng, augment):
     f = features(torch, X[:, 0], X[:, 1])                         # [B,T,257,4]
     T = (f.shape[1] // CONTROL) * CONTROL
     f = f[:, CONTROL - 1:T:CONTROL]                               # the control hop's features
+    if fine:
+        Xf = stft_fine(torch, mix_in)                             # [B,2,Tf,1025], frame k centred on k*512
+        ff = features(torch, Xf[:, 0], Xf[:, 1])[:, 1:]           # frame k+1 ~ the DSP's control k (hop 4k-1 ends at 512k+384)
+        n_t = min(ff.shape[1], f.shape[1])
+        f = ff[:, :n_t]
+        f_cut = n_t
+    else:
+        f_cut = f.shape[1]
     irm = irm[:, :, :T].reshape(B, G, T // CONTROL, CONTROL, N_BINS).mean(3).permute(0, 2, 3, 1)
     Pc = P[:, :, :T].reshape(B, G, T // CONTROL, CONTROL, N_BINS).mean(3).permute(0, 2, 3, 1)   # [B,Tc,257,G]
+    irm, Pc = irm[:, :f_cut], Pc[:, :f_cut]
     Pm = Pc.sum(-1)
     weight = torch.clamp(torch.log10(Pm + 1e-9) + 6, 0, 6) / 6    # salience: silent cells count nothing
     return f, irm, weight, Pc
@@ -474,7 +544,10 @@ def train(a):
     net = build_net(torch, a.arch, bin_band(), ctx=a.ctx, proj=a.proj, hidden=a.hidden, n_out=len(names), neigh=a.neigh).to(dev)
     n_par = sum(p.numel() for p in net.parameters())
     n_in = 4 * (1 + 2 * a.neigh) + a.proj + 1
-    if a.arch == "tf":
+    if a.arch == "conv2048":
+        ch, hd = a.ctx, a.hidden
+        macs = N_BINS * (8 * 4 * ch + 2 * 5 * ch * ch + 3 * (ch * hd + hd * hd) + (ch + hd) * len(names))
+    elif a.arch == "tf":
         macs = (3 * (N_BANDS * 5 * a.ctx + a.ctx * a.ctx) + a.ctx * N_BANDS * a.proj +
                 N_BINS * (n_in * 24 + 2 * 3 * (24 * a.hidden + a.hidden ** 2) + 3 * (2 * a.hidden * a.hidden + a.hidden ** 2)
                           + 3 * a.hidden * len(names)))
@@ -491,7 +564,7 @@ def train(a):
     for step in range(1, a.steps + 1):
         x = next(batches).to(dev, non_blocking=True)
         with torch.no_grad():
-            f, irm, w, P = targets_and_features(torch, x, rng, augment=True)
+            f, irm, w, P = targets_and_features(torch, x, rng, augment=True, fine=net_is_fine(net))
         if LOSS_MODE == "balanced":
             logits = net._logits(f)
             ramp = min(1.0, max(0.0, (step - a.ramp_start) / max(1, a.ramp_steps)))
@@ -538,7 +611,7 @@ def evaluate(torch, net, cache_dir, tracks, dev, seconds, merge_idx, roles, song
                 _EVAL_START[(t, n)] = idx[int(np.argmax(e[idx + n - 1] - e[idx]))] if len(idx) else 0
             s = _EVAL_START[(t, n)]
             x = torch.as_tensor(merge_groups(np.asarray(w[:, :, s:s + n]), merge_idx)[None], device=dev) / 32768
-            f, irm, wt, P = targets_and_features(torch, x, rng, augment=False)
+            f, irm, wt, P = targets_and_features(torch, x, rng, augment=False, fine=net_is_fine(net))
             m = net.forward(f)
             for k, val in mask_space_metrics(torch, m, irm, wt, P, roles).items():
                 acc.setdefault(k, []).append(val)
@@ -561,10 +634,16 @@ def load_model(model_path):
 def protect_mask(torch, net, roles, dev, x):
     """x [2, n] float stereo -> per-control protect mask [Tc, 257] = 1 - rear eligibility."""
     with torch.no_grad():
-        X = stft(torch, torch.as_tensor(x[None], device=dev, dtype=torch.float32))
-        f = features(torch, X[:, 0], X[:, 1])
-        T = (f.shape[1] // CONTROL) * CONTROL
-        m = net.forward(f[:, CONTROL - 1:T:CONTROL])[0]
+        xt = torch.as_tensor(x[None], device=dev, dtype=torch.float32)
+        if net_is_fine(net):
+            Xf = stft_fine(torch, xt)
+            f = features(torch, Xf[:, 0], Xf[:, 1])[:, 1:]
+        else:
+            X = stft(torch, xt)
+            f = features(torch, X[:, 0], X[:, 1])
+            T = (f.shape[1] // CONTROL) * CONTROL
+            f = f[:, CONTROL - 1:T:CONTROL]
+        m = net.forward(f)[0]
         return (1 - rear_eligibility(m, roles)).cpu().numpy().astype(np.float32)
 
 
@@ -602,11 +681,11 @@ def audit(a):
     print(f"excerpt {t[:8]} @ {st / SR:.1f}s: vocal {100 * (g[roles.vocals] ** 2).sum() / (g ** 2).sum():.0f} % / other "
           f"{100 * (g[names.index('other')] ** 2).sum() / (g ** 2).sum():.0f} % of energy", flush=True)
     x = torch.as_tensor(g[None], device=dev) / 32768
-    f, irm, wt, P = targets_and_features(torch, x, rng, augment=False)
+    net = build_net(torch, a.arch, bin_band(), ctx=a.ctx, proj=a.proj, hidden=a.hidden, n_out=len(names), neigh=a.neigh).to(dev)
+    f, irm, wt, P = targets_and_features(torch, x, rng, augment=False, fine=net_is_fine(net))
     own_o = (irm[..., names.index("other")] > 0.6); own_v = (irm[..., roles.vocals] > 0.5)
     print(f"cells: other-owned {int(own_o.sum())}, vocal-owned {int(own_v.sum())}, total {irm.shape[1] * N_BINS}; "
           f"IRM_other mean in other-owned cells {float(irm[..., names.index('other')][own_o].mean()):.3f}", flush=True)
-    net = build_net(torch, a.arch, bin_band(), ctx=a.ctx, proj=a.proj, hidden=a.hidden, n_out=len(names), neigh=a.neigh).to(dev)
     opt = torch.optim.Adam(net.parameters(), lr=3e-3)
     for step in range(1, a.steps + 1):
         m = net.forward(f)
@@ -644,14 +723,15 @@ def main():
     t.add_argument("--eval-every", type=int, default=250); t.add_argument("--eval-songs", type=int, default=20)
     t.add_argument("--merge", default=DEFAULT_MERGE, help="output groups as name=cached+cached;...")
     t.add_argument("--neigh", type=int, default=0, help="+-bins of per-bin features fed to the MLP")
-    t.add_argument("--arch", default="mlp", choices=("mlp", "tf"), help="tf = per-bin GRUs over frequency and time")
+    t.add_argument("--arch", default="mlp", choices=("mlp", "tf", "conv2048"),
+                   help="tf = per-bin GRUs over frequency and time; conv2048 = 2048-point analysis + frequency conv (ctx=channels, hidden=time GRU)")
     t.add_argument("--loss", default="own", choices=("own", "balanced"))
     t.add_argument("--ramp-start", type=int, default=1200, help="balanced: step where the leak penalty starts ramping in")
     t.add_argument("--ramp-steps", type=int, default=1000)
     e = sub.add_parser("export"); e.add_argument("--model", required=True); e.add_argument("--wav", required=True); e.add_argument("--out", required=True)
     u = sub.add_parser("audit"); u.add_argument("--cache", required=True); u.add_argument("--steps", type=int, default=400); u.add_argument("--seconds", type=float, default=6.0)
     u.add_argument("--ctx", type=int, default=64); u.add_argument("--proj", type=int, default=8); u.add_argument("--hidden", type=int, default=32)
-    u.add_argument("--neigh", type=int, default=0); u.add_argument("--arch", default="mlp", choices=("mlp", "tf")); u.add_argument("--merge", default=DEFAULT_MERGE)
+    u.add_argument("--neigh", type=int, default=0); u.add_argument("--arch", default="mlp", choices=("mlp", "tf", "conv2048")); u.add_argument("--merge", default=DEFAULT_MERGE)
     for k in ("leak", "leakp", "missed"):
         t.add_argument(f"--w-{k}", type=float, default=LOSS_W[k])
     a = ap.parse_args()
