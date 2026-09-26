@@ -103,3 +103,14 @@ build/stereo-upmix-bench/host/stereo_upmix_bench \
   --backend hssr-universal \
   --model models/hssr-selection-v11/hssr_guard.bin
 ```
+
+## Mask-net runtime parity (Phase 1)
+
+```
+cc -std=c99 -O2 -ffp-contract=off -Wall -Wextra -Werror -I../../hook/audio \
+   mask_infer_test.c ../../hook/audio/hssr_mask.c -lm -o mask_infer_test
+python3 mask_net.py export-blob   --model RUN/a/mask_net.pt --out student.msk1        # full_probe only
+python3 mask_net.py dump-features --model RUN/a/mask_net.pt --wav scene.wav --out scene
+./mask_infer_test student.msk1 scene.feat scene.elig      # compare scene.elig with scene.ref (float32 [T,257])
+```
+Expected: max |Δ| ~1e-7 (v21a, 749 controls: 3.6e-7).

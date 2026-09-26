@@ -309,6 +309,18 @@ where the gate is today; QEMU instruction count and a real Krait bench
 (`tools/stereo-upmix-render/bench/`) before any car run.  Float parity ≤ 2 LSB
 with the host renderer (`-ffp-contract=off`).
 
+**Done 2026-09-26 — the float reference.**  `hook/audio/hssr_mask.{h,c}`
+implements the `full_probe` student operation for operation (standardised
+features → stem conv → three depthwise-stride-2 stages → flatten → GRU(64) →
+global / local / presence heads → per-cell decoder → softmax, eligibility =
+p_other); no allocation, no locks in `spa_mask_infer`; blob `HSSRMSK1` =
+magic + u32 count + float32 arrays (`mask_net.py export-blob`, 173 711
+floats = 0.69 MB for the 128 M MAC/s student).  Parity against PyTorch on a
+synthetic scene (`mask_net.py dump-features` → `mask_infer_test`): 749
+controls, **max |Δ eligibility| 3.6 × 10⁻⁷**.  Next: the int8 / NEON port of
+the same graph (the gemv / GRU primitives of `hssr_neon.c`), the worker job,
+the render-loop application (`--mask-drive` semantics), QEMU + Krait bench.
+
 ## 🎚️ Depth layering (per-source depth) — after the single-class student
 
 Today one class goes rear (`other`: everything but vocals / drums / bass) at

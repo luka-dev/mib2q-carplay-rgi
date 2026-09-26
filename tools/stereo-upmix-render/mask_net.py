@@ -1305,6 +1305,49 @@ def export(a):
     print(f"{a.out}: {prot.shape[0]} controls x {N_BINS} bins, mean protect {prot.mean():.3f}")
 
 
+def export_blob(a):
+    """full_probe checkpoint -> HSSRMSK1 float blob in the order hook/audio/hssr_mask.c reads it."""
+    torch, net, roles, dev = load_model(a.model)
+    if not isinstance(net, FullNet) or not net.probe:
+        raise SystemExit("export-blob: the runtime implements full_probe only")
+    sd = {k: v.detach().cpu().numpy().astype(np.float32) for k, v in net.modules.state_dict().items()}
+    parts = [np.asarray(FEAT_STATS["mean"], np.float32), np.asarray(FEAT_STATS["std"], np.float32),
+             np.asarray(DESC_STATS["mean"], np.float32), np.asarray(DESC_STATS["std"], np.float32),
+             sd["0.0.weight"], sd["0.0.bias"]]
+    for i in range(3):
+        parts += [sd[f"1.{i}.0.weight"].reshape(-1), sd[f"1.{i}.0.bias"], sd[f"1.{i}.1.weight"].reshape(sd[f"1.{i}.1.weight"].shape[0], -1), sd[f"1.{i}.1.bias"]]
+    parts += [sd["2.0.weight"], sd["2.0.bias"], sd["3.weight_ih_l0"], sd["3.weight_hh_l0"], sd["3.bias_ih_l0"], sd["3.bias_hh_l0"],
+              sd["4.weight"], sd["4.bias"], sd["5.weight"].reshape(sd["5.weight"].shape[0], -1), sd["5.bias"], sd["6.weight"], sd["6.bias"],
+              sd["7.0.weight"], sd["7.0.bias"], sd["7.2.weight"], sd["7.2.bias"], sd["7.4.weight"], sd["7.4.bias"]]
+    flat = np.concatenate([p.reshape(-1) for p in parts]).astype("<f4")
+    with open(a.out, "wb") as fh:
+        fh.write(b"HSSRMSK1"); fh.write(np.array([len(flat)], "<u4").tobytes()); fh.write(flat.tobytes())
+    print(f"wrote {a.out}: {len(flat)} floats ({len(flat) * 4 / 1e6:.2f} MB)")
+
+
+def dump_features(a):
+    """stereo wav -> control-hop features [T,257,4] (float32, u32 T header) + the model's eligibility [T,257]
+    (no calibration, no presence) for the C parity test."""
+    import wave
+    torch, net, roles, dev = load_model(a.model)
+    net.calib = None
+    roles.eligible = [roles.names.index("other")]
+    with wave.open(a.wav, "rb") as w:
+        x = np.frombuffer(w.readframes(w.getnframes()), "<i2").reshape(-1, w.getnchannels()).T.astype(np.float32) / 32768
+    with torch.no_grad():
+        X = stft(torch, torch.as_tensor(x[None], device=dev))
+        f = features(torch, X[:, 0], X[:, 1])
+        T = (f.shape[1] // CONTROL) * CONTROL
+        f = f[:, CONTROL - 1:T:CONTROL]
+        e = rear_eligibility(net.forward(f), roles)[0].cpu().numpy().astype("<f4")
+    f = f[0].cpu().numpy().astype("<f4")
+    with open(a.out + ".feat", "wb") as fh:
+        fh.write(np.array([f.shape[0]], "<u4").tobytes()); fh.write(f.tobytes())
+    with open(a.out + ".ref", "wb") as fh:
+        fh.write(e.tobytes())
+    print(f"{f.shape[0]} controls; reference eligibility mean {e.mean():.3f}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -1339,6 +1382,8 @@ def main():
     cb = sub.add_parser("calib"); cb.add_argument("--model", required=True); cb.add_argument("--cache", required=True)
     cb.add_argument("--songs", type=int, default=20); cb.add_argument("--seconds", type=float, default=60.0)
     cb.add_argument("--eligible", default="other"); cb.add_argument("--merge", default=DEFAULT_MERGE)
+    eb = sub.add_parser("export-blob"); eb.add_argument("--model", required=True); eb.add_argument("--out", required=True)
+    df = sub.add_parser("dump-features"); df.add_argument("--model", required=True); df.add_argument("--wav", required=True); df.add_argument("--out", required=True)
     u = sub.add_parser("audit"); u.add_argument("--cache", required=True); u.add_argument("--steps", type=int, default=400); u.add_argument("--seconds", type=float, default=6.0)
     u.add_argument("--ctx", type=int, default=64); u.add_argument("--proj", type=int, default=8); u.add_argument("--hidden", type=int, default=32)
     u.add_argument("--neigh", type=int, default=0); u.add_argument("--arch", default="mlp", choices=("mlp", "tf", "conv2048")); u.add_argument("--merge", default=DEFAULT_MERGE)
@@ -1350,7 +1395,8 @@ def main():
         global LOSS_MODE, TARGET_HOP, CE_WEIGHT
         LOSS_MODE = a.loss; CE_WEIGHT = a.loss_weight
         TARGET_HOP = a.target_hop
-    {"cache": cache, "train": train, "export": export, "audit": audit, "probe": probe, "calib": calibrate}[a.cmd](a)
+    {"cache": cache, "train": train, "export": export, "audit": audit, "probe": probe, "calib": calibrate,
+     "export-blob": export_blob, "dump-features": dump_features}[a.cmd](a)
 
 
 if __name__ == "__main__":
