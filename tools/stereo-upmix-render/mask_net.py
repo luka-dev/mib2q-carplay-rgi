@@ -585,6 +585,18 @@ def merge_groups(w, merge_idx):
     return np.stack([w[idx].astype(np.int32).sum(0) for idx in merge_idx]).astype(np.float32)
 
 
+def expand_slots(win):
+    """Teacher caches -> the seven-slot layout: [vocals, rest] or [vocals, drums, bass, other]."""
+    if win.shape[0] == len(GROUPS):
+        return win
+    full = np.zeros((len(GROUPS), 2, win.shape[2]), np.int16)
+    if win.shape[0] == 2:
+        full[0] = win[0]; full[6] = win[1]
+    else:
+        full[0] = win[0]; full[2] = win[1]; full[5] = win[2]; full[6] = win[3]
+    return full
+
+
 def batch_windows(torch, cache_dir, tracks, seconds, batch, rng, dev, merge_idx):
     n = int(seconds * SR)
     wavs = []
@@ -595,12 +607,7 @@ def batch_windows(torch, cache_dir, tracks, seconds, batch, rng, dev, merge_idx)
         if shape[2] <= n:
             continue
         s = rng.integers(0, shape[2] - n)
-        win = read_window(path, s, n)
-        if win.shape[0] == 2:                                # teacher cache: [vocals, rest] -> lead_vocal / other slots
-            full = np.zeros((len(GROUPS), 2, n), np.int16); full[0] = win[0]; full[6] = win[1]; win = full
-        elif win.shape[0] == 4:                              # teacher cache: [vocals, drums, bass, other] -> lead_vocal / drum_core / bass / other
-            full = np.zeros((len(GROUPS), 2, n), np.int16); full[0] = win[0]; full[2] = win[1]; full[5] = win[2]; full[6] = win[3]; win = full
-        wavs.append(merge_groups(win, merge_idx))
+        wavs.append(merge_groups(expand_slots(read_window(path, s, n)), merge_idx))
     return torch.as_tensor(np.stack(wavs), device=dev) / 32768         # [B,G,2,n]
 
 
@@ -971,8 +978,12 @@ def train(a):
         # systematically call those cells "other" and role distillation is biased for this target.
         t_tracks = sorted(f[:-4] for f in os.listdir(a.teacher_cache)
                           if f.endswith(".npy") and os.path.exists(os.path.join(a.teacher_cache, f[:-4] + ".json")))
+        if a.teacher_songs:
+            t_tracks = t_tracks[:a.teacher_songs]
         batches = prefetch(lambda: batch_windows(torch, a.teacher_cache, t_tracks, a.seconds, a.batch, rng, "cpu", merge_idx))
         print(f"TEACHER-ONLY training on {len(t_tracks)} songs from {a.teacher_cache}", flush=True)
+        if a.eval_on_train:                                  # the overfit test: can the student COMMIT on songs it memorises?
+            split["dev"] = [os.path.join(a.teacher_cache, t + ".npy") for t in t_tracks]
     elif a.teacher_cache:
         # astra review 4, point 3: real masters through htdemucs_ft, protection-only. Only the cells the
         # teacher calls vocal with share > 0.9 (94 % precise vs real stems) carry a target; the rest of the
@@ -1080,14 +1091,14 @@ def evaluate(torch, net, cache_dir, tracks, dev, seconds, merge_idx, roles, song
     rng = np.random.default_rng(0)
     with torch.no_grad():
         for t in tracks[:songs]:
-            path = os.path.join(cache_dir, t + ".npy")
+            path = t if t.endswith(".npy") else os.path.join(cache_dir, t + ".npy")
             n = int(seconds * SR)
             if npy_header(path)[0][2] <= n:
                 continue
             if (t, n) not in _EVAL_START:
                 _EVAL_START[(t, n)] = dev_excerpt(path, n)     # the loudest-vocal window, like the harness; found once
             s = _EVAL_START[(t, n)]
-            x = torch.as_tensor(merge_groups(read_window(path, s, n), merge_idx)[None], device=dev) / 32768
+            x = torch.as_tensor(merge_groups(expand_slots(read_window(path, s, n)), merge_idx)[None], device=dev) / 32768
             f, irm, wt, P = targets_and_features(torch, x, rng, augment=False, fine=net_is_fine(net))
             lg = net._logits(f)
             m = net.forward(f)
@@ -1412,6 +1423,8 @@ def main():
     t.add_argument("--teacher-conf", type=float, default=0.8, help="roles: teacher cells count only when a role holds more than this share")
     t.add_argument("--teacher-balance", type=int, default=1, help="roles: equal total weight per dominant role in every teacher batch")
     t.add_argument("--teacher-only", action="store_true", help="diagnostic: training windows from the teacher cache only")
+    t.add_argument("--teacher-songs", type=int, default=0, help="teacher-only: limit to the first N songs (overfit test)")
+    t.add_argument("--eval-on-train", action="store_true", help="teacher-only: evaluate on the training songs themselves")
     t.add_argument("--teacher-mode", default="protect", choices=("protect", "vocal", "roles", "elig"),
                    help="protect = confident vocal cells only; vocal = soft vocal target everywhere; roles = full softmax target (4-stem teacher cache)")
     t.add_argument("--w-pres", type=float, default=0.5, help="full: weight of the band vocal-presence head")
