@@ -995,6 +995,16 @@ def train(a):
                 # leakage of every source, so unconfident cells teach "other is everywhere" (v20 / v24: eligibility
                 # 0.8-0.9 in vocal-owned cells from step 250)
                 wt = wt * (irm_t.max(-1).values > a.teacher_conf).float()
+                if a.teacher_balance:
+                    # a real master is mostly instrumental cells: unbalanced, the teacher adds a flood of "other"
+                    # positives and shifts the class prior (v24b: eligibility 0.8-0.9 in vocal-owned DEV cells even
+                    # with the confidence mask).  Give every role the same total weight per batch.
+                    dom = irm_t.argmax(-1)
+                    for r in range(irm_t.shape[-1]):
+                        sel = (dom == r).float() * wt
+                        tot = sel.sum()
+                        if tot > 0:
+                            wt = wt * (1 - (dom == r).float()) + sel / tot * (wt.sum() / irm_t.shape[-1])
                 loss = loss + a.w_teacher * loss_softmax(torch, net._logits(ft), irm_t, wt, Pt, roles)
             else:
                 wt = wt * (irm_t[..., roles.vocals] > 0.9).float()          # protection-only: confident-vocal cells
@@ -1369,6 +1379,7 @@ def main():
     t.add_argument("--teacher-cache", help="htdemucs cache (teacher_label.py separate): protection-only supervision on confident vocal cells")
     t.add_argument("--teacher-every", type=int, default=2); t.add_argument("--w-teacher", type=float, default=0.3)
     t.add_argument("--teacher-conf", type=float, default=0.8, help="roles: teacher cells count only when a role holds more than this share")
+    t.add_argument("--teacher-balance", type=int, default=1, help="roles: equal total weight per dominant role in every teacher batch")
     t.add_argument("--teacher-mode", default="protect", choices=("protect", "vocal", "roles"),
                    help="protect = confident vocal cells only; vocal = soft vocal target everywhere; roles = full softmax target (4-stem teacher cache)")
     t.add_argument("--w-pres", type=float, default=0.5, help="full: weight of the band vocal-presence head")
