@@ -496,6 +496,55 @@ def write_mask(path, prot):
         fh.write(b"HSSRMSK0"); fh.write(np.array([prot.shape[0], N_BINS], np.uint32).tobytes()); fh.write(prot.tobytes())
 
 
+def audit(a):
+    """Codex review 2: before any wider net, overfit ONE balanced excerpt with the
+    pure supervised loss and check the eligible-owned cells actually open.  If
+    they do not, the collapse is an objective/implementation bug, not capacity."""
+    torch = _torch()
+    dev = "cuda" if torch.cuda.is_available() else "cpu"
+    torch.manual_seed(0)
+    rng = np.random.default_rng(0)
+    split = load_split(a.cache)
+    names, merge_idx = parse_merge(a.merge); roles = Roles(names)
+    LOSS_W.update(leak=0.0, leakp=0.0, missed=0.0)
+    # a window where both the voice and "other" are present
+    best = None
+    for t in split["train"][:60]:
+        w = np.load(os.path.join(a.cache, t + ".npy"), mmap_mode="r")
+        n = int(a.seconds * SR)
+        if w.shape[2] <= n:
+            continue
+        for _ in range(4):
+            st = rng.integers(0, w.shape[2] - n)
+            g = merge_groups(np.asarray(w[:, :, st:st + n]), merge_idx)
+            ev = (g[roles.vocals] ** 2).sum(); eo = (g[names.index("other")] ** 2).sum(); et = (g ** 2).sum()
+            score = min(ev, eo) / (et + 1e-9)
+            if best is None or score > best[0]:
+                best = (score, t, st, g)
+    score, t, st, g = best
+    print(f"excerpt {t[:8]} @ {st / SR:.1f}s: vocal {100 * (g[roles.vocals] ** 2).sum() / (g ** 2).sum():.0f} % / other "
+          f"{100 * (g[names.index('other')] ** 2).sum() / (g ** 2).sum():.0f} % of energy", flush=True)
+    x = torch.as_tensor(g[None], device=dev) / 32768
+    f, irm, wt, P = targets_and_features(torch, x, rng, augment=False)
+    own_o = (irm[..., names.index("other")] > 0.6); own_v = (irm[..., roles.vocals] > 0.5)
+    print(f"cells: other-owned {int(own_o.sum())}, vocal-owned {int(own_v.sum())}, total {irm.shape[1] * N_BINS}; "
+          f"IRM_other mean in other-owned cells {float(irm[..., names.index('other')][own_o].mean()):.3f}", flush=True)
+    net = build_net(torch, a.arch, bin_band(), ctx=a.ctx, proj=a.proj, hidden=a.hidden, n_out=len(names), neigh=a.neigh).to(dev)
+    opt = torch.optim.Adam(net.parameters(), lr=3e-3)
+    for step in range(1, a.steps + 1):
+        m = net.forward(f)
+        loss = loss_fn(torch, m, irm, wt, P, roles)
+        opt.zero_grad(); loss.backward()
+        gn = float(sum(p.grad.norm() ** 2 for p in net.parameters() if p.grad is not None) ** 0.5)
+        opt.step()
+        if step % 50 == 0 or step == 1:
+            with torch.no_grad():
+                mo = m[..., names.index("other")]
+                print(f"step {step:4d} loss {loss.item():.4f} grad {gn:.3f}  m_other in other-owned cells {float(mo[own_o].mean()):.3f} "
+                      f"(target {float(irm[..., names.index('other')][own_o].mean()):.3f}); m_other in vocal-owned {float(mo[own_v].mean()):.3f}; "
+                      f"elig(other+cymb) own-other {float(rear_eligibility(m, roles)[own_o].mean()):.3f}", flush=True)
+
+
 def export(a):
     """Write the per-control protect mask of one excerpt for the renderer's --protect-mask."""
     torch, net, roles, dev = load_model(a.model)
@@ -520,12 +569,15 @@ def main():
     t.add_argument("--neigh", type=int, default=0, help="+-bins of per-bin features fed to the MLP")
     t.add_argument("--arch", default="mlp", choices=("mlp", "tf"), help="tf = per-bin GRUs over frequency and time")
     e = sub.add_parser("export"); e.add_argument("--model", required=True); e.add_argument("--wav", required=True); e.add_argument("--out", required=True)
+    u = sub.add_parser("audit"); u.add_argument("--cache", required=True); u.add_argument("--steps", type=int, default=400); u.add_argument("--seconds", type=float, default=6.0)
+    u.add_argument("--ctx", type=int, default=64); u.add_argument("--proj", type=int, default=8); u.add_argument("--hidden", type=int, default=32)
+    u.add_argument("--neigh", type=int, default=0); u.add_argument("--arch", default="mlp", choices=("mlp", "tf")); u.add_argument("--merge", default=DEFAULT_MERGE)
     for k in ("leak", "leakp", "missed"):
         t.add_argument(f"--w-{k}", type=float, default=LOSS_W[k])
     a = ap.parse_args()
     if a.cmd == "train":
         LOSS_W.update(leak=a.w_leak, leakp=a.w_leakp, missed=a.w_missed)
-    {"cache": cache, "train": train, "export": export}[a.cmd](a)
+    {"cache": cache, "train": train, "export": export, "audit": audit}[a.cmd](a)
 
 
 if __name__ == "__main__":

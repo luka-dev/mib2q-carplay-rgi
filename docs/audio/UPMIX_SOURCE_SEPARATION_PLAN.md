@@ -115,6 +115,39 @@ with the core, cymbals and other eligible).
   build has `--mask-drive G` for exactly this; the oracle through it is the
   true ceiling of a mask-driven renderer and the next number to read.
 
+### Review 2 (Codex, after the oracle)
+
+Ranked by expected impact, all adopted as the next steps:
+
+1. **Finish the mask-driven oracle first.**  Rear = `G · a · X` with `a` a
+   bounded *amplitude* gain (an energy-share mask is not that gain — convert),
+   separate constant depths for "other" and cymbals; pan = the mixture's L/R
+   balance averaged over a local T-F region with extremes compressed, never
+   instantaneous per-bin pan or discrete slots.  Gains, not audio, are
+   smoothed: protection engages within one hop and releases over 80–150 ms;
+   permission opens over 30–60 ms, releases over 80–150 ms unless protection
+   overrides.  Shared cells (0.3–0.7): front retention plus a conservative
+   continuous taper, never "hold the last decision" through new vocal
+   evidence.
+2. **Treat the collapse as an objective / implementation bug until
+   disproven.**  Overfit one balanced excerpt with the pure supervised loss and
+   audit alignment, logits vs probabilities, reductions and gradient
+   magnitudes (`mask_net.py audit`).  Then: two independent sigmoid heads —
+   *eligible support* and *protected presence* — combined conservatively at
+   routing time, balanced BCE-with-logits on confident cells normalised per
+   group, ramp the contamination penalty only after support is useful, hard
+   examples last.  Per-frame normalisation needs floors and validity masks.
+   The pure-IRM run is an objective ablation, not a separability bound.
+3. **Buy spectral structure before recurrent width**: five adjacent bins at
+   93.75 Hz are unlikely to tell guitar/keys from voice; the first candidate
+   is a 2048/512 analysis for the mask net with a small frequency-convolution
+   front-end and causal temporal context, under 150 M MAC/s including
+   features, masks aligned by timestamp and the analysis delay counted in
+   the protection timing.
+4. **Stop**: widening bin-wise MLPs before the audit; teacher "other" as
+   permission; judging models through the veto-only DSP; the 176 M MAC/s
+   TFNet is a diagnostic, not a deployment candidate.
+
 ## 🛠️ Phase 1 — into the DSP
 
 New blob `HSSRMSK1`, a second job on the existing control worker (own state,
