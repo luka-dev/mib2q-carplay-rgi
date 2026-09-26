@@ -1706,9 +1706,16 @@ static void spa_hssr_render_hop(
 #ifdef SPA_HSSR_TEST_MASK
         if (state->test_mask) {
             uint32_t idx = state->control_sequence ? state->control_sequence - 1u : 0u;
+            float protect;
 
             if (idx >= state->test_mask_controls) idx = state->test_mask_controls - 1u;
-            mask *= 1.0f - state->vocal_gate * state->test_mask[idx * SPA_HSSR_BINS + bin];
+            protect = state->test_mask[idx * SPA_HSSR_BINS + bin];
+            if (state->test_mask_drive > 0.0f) {
+                mask = (1.0f - protect) * state->test_mask_drive;
+                state->bin[bin].object_pan = state->bin[bin].scene_lr;
+            } else {
+                mask *= 1.0f - state->vocal_gate * protect;
+            }
         } else
 #endif
         if (band_gate[band] > 0.0f) {

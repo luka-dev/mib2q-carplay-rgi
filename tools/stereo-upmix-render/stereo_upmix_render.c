@@ -66,6 +66,7 @@ struct options {
     double rear_air_db;              /* <= -100 = off */
     double front_treble_db;
     const char *protect_mask_path;   /* HSSRMSK0 file, see mask_net.py export */
+    double mask_drive;               /* > 0: the mask drives the rear object (test build) */
     long retention_hf_lo_hz;
     long retention_hf_hi_hz;
     double lfe_gain_db;            /* re SPA_STEREO_UPMIX_LFE_Q15_DEFAULT */
@@ -364,7 +365,7 @@ static void usage(const char *program)
             "usage: %s [--mode off|hssr-universal] "
             "[--model HSSR.bin] "
             "[--lfe off|assist] [--lfe-gain -24..12] [--surround 0.0..0.5] [--front-bass -12..0] "
-            "[--front-retention 0..1] [--bed-delays] [--bed-attack off|owner|front] [--attack-collapse 0..1] [--retention-hf LO:HI] [--rear-body -12..0] [--vocal-gate 0..1] [--rear-air -40..0] [--front-treble -12..0] [--protect-mask FILE] "
+            "[--front-retention 0..1] [--bed-delays] [--bed-attack off|owner|front] [--attack-collapse 0..1] [--retention-hf LO:HI] [--rear-body -12..0] [--vocal-gate 0..1] [--rear-air -40..0] [--front-treble -12..0] [--protect-mask FILE] [--mask-drive 0..2] "
             "INPUT.wav OUTPUT.wav\n"
             "  --surround controls OUR rear gain, not the MMI Surround setting.\n",
             program);
@@ -438,6 +439,7 @@ static int parse_options(int argc, char **argv, struct options *options)
     options->rear_air_db = -1000.0;
     options->front_treble_db = 0.0;
     options->protect_mask_path = NULL;
+    options->mask_drive = 0.0;
     options->retention_hf_lo_hz = SPA_STEREO_UPMIX_RETENTION_HF_LO_HZ;
     options->retention_hf_hi_hz = SPA_STEREO_UPMIX_RETENTION_HF_HI_HZ;
     options->lfe_gain_db = 0.0;
@@ -563,6 +565,17 @@ static int parse_options(int argc, char **argv, struct options *options)
         if (strcmp(argument, "--protect-mask") == 0) {
             if (++index >= argc) return 0;
             options->protect_mask_path = argv[index];
+            continue;
+        }
+        if (strcmp(argument, "--mask-drive") == 0) {
+            char *end;
+            if (++index >= argc) return 0;
+            options->mask_drive = strtod(argv[index], &end);
+            if (end == argv[index] || *end || !isfinite(options->mask_drive) ||
+                options->mask_drive < 0.0 || options->mask_drive > 2.0) {
+                fprintf(stderr, "error: --mask-drive must be 0..2\n");
+                return 0;
+            }
             continue;
         }
         if (strcmp(argument, "--front-treble") == 0) {
@@ -717,6 +730,7 @@ static void make_upmix_config(const struct options *options,
 #ifdef SPA_HSSR_TEST_MASK
 static float *g_protect_mask;
 static uint32_t g_protect_mask_controls;
+static float g_mask_drive;
 
 static int load_protect_mask(const char *path)
 {
@@ -771,6 +785,7 @@ static int render(FILE *input_file, FILE *output_file, uint32_t total_frames,
 #ifdef SPA_HSSR_TEST_MASK
     state._runtime._hssr.test_mask = g_protect_mask;
     state._runtime._hssr.test_mask_controls = g_protect_mask_controls;
+    state._runtime._hssr.test_mask_drive = g_mask_drive;
 #endif
     if (!write_wav_header(output_file, total_frames)) {
         fprintf(stderr, "error: cannot write output WAV header\n");
@@ -833,6 +848,7 @@ int main(int argc, char **argv)
     make_upmix_config(&options, &config);
 #ifdef SPA_HSSR_TEST_MASK
     if (options.protect_mask_path && !load_protect_mask(options.protect_mask_path)) return 2;
+    g_mask_drive = (float)options.mask_drive;
 #else
     if (options.protect_mask_path) {
         fprintf(stderr, "error: --protect-mask needs a build with -DSPA_HSSR_TEST_MASK\n");

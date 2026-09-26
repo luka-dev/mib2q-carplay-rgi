@@ -94,6 +94,27 @@ cymbals/hi-hat, percussion, bass, other — as mmap-able int16 with the labels
 beside; training merges them (`--merge`, default vocals whole, percussion
 with the core, cymbals and other eligible).
 
+### Phase 0 findings so far (2026-09-25/26, 40 DEV songs through the real DSP)
+
+* **A mask that only protects is not enough.**  Trained masks v2–v4 collapsed
+  to "protect everything" (other admitted 0.02–0.08): vocal bleed sits in
+  nearly every 93.75 Hz cell, so any energy-accounting leak term wins over
+  support.  Through the DSP the v2 mask gave an empty rear (guitar 0.01).
+* **The oracle says where the ceiling is.**  With the protect mask computed
+  from the *real* stems (everything but vocals/bass/drums eligible) and the
+  DSP otherwise unchanged: vocals 0.01 (top bands 0.04–0.09), drums 0.20 →
+  0.08 with their swing 0.42 → 0.10, bass 0.04 — but guitars only 0.06 →
+  0.09 and keys 0.08 → 0.11, guitar swing 0.35 → 0.32.  A perfect protect
+  mask stabilises what it protects and does **not** create a confident rear:
+  the amount and the flicker of the rear are decided by the DSP's own object
+  heuristics (slots, ridge, coherence, per-bin memories), which the mask only
+  vetoes.
+* Therefore the mask must **drive** the rear, not veto it: rear object =
+  eligibility × the bin's content at a constant per-source depth, pan from
+  the bin's measured balance, the heuristic object path bypassed.  The test
+  build has `--mask-drive G` for exactly this; the oracle through it is the
+  true ceiling of a mask-driven renderer and the next number to read.
+
 ## 🛠️ Phase 1 — into the DSP
 
 New blob `HSSRMSK1`, a second job on the existing control worker (own state,

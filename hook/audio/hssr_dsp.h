@@ -174,6 +174,12 @@ struct spa_hssr_dsp {
      * runtime integration (docs/audio/UPMIX_SOURCE_SEPARATION_PLAN.md). */
     const float *test_mask;
     uint32_t test_mask_controls;
+    /* 0 = the mask only replaces the vocal-gate factor (protects); > 0 = the
+     * mask DRIVES the rear: the per-bin object mask becomes (1 - protect) *
+     * test_mask_drive and the bin's measured L/R balance is its pan, bypassing
+     * the slot/ridge/coherence heuristics — the mask-driven renderer's upper
+     * bound with an oracle mask. */
+    float test_mask_drive;
 #endif
     struct spa_hssr_como como[SPA_HSSR_BINS];
     struct spa_hssr_object_slot object_slot[SPA_HSSR_OBJECT_SLOTS];

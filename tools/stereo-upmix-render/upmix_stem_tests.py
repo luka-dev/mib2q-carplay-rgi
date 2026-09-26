@@ -132,7 +132,30 @@ def protect_mask_args(src, out, tag, model_path):
     return ["--protect-mask", path]
 
 
-def analyse_song(render, args, out, track_dir, excerpt_s, mask_model=None):
+ORACLE_PROTECT = ("vocals", "bass", "drums")   # MoisesDB stem names never allowed rear (drums whole: conservative)
+
+
+def oracle_mask_args(stems, k, out, tag):
+    """Upper bound of the whole approach: the protect mask from the REAL stems at
+    the DSP's geometry.  If even this gives a poor rear through the DSP, the mask
+    is not the bottleneck."""
+    import mask_net as MN
+    torch = MN._torch()
+    P = {}
+    for name, x in stems.items():
+        X = MN.stft(torch, torch.as_tensor(x * k))                       # [2, T, 257]
+        P[name] = (X.real ** 2 + X.imag ** 2).sum(0)
+    tot = sum(P.values()) + 1e-9
+    elig = sum(v for n, v in P.items() if n not in ORACLE_PROTECT) / tot  # [T, 257]
+    T = (elig.shape[0] // MN.CONTROL) * MN.CONTROL
+    elig = elig[:T].reshape(T // MN.CONTROL, MN.CONTROL, MN.N_BINS).mean(1)
+    prot = (1 - elig).numpy().astype(np.float32)
+    path = os.path.join(out, tag + ".oracle.msk")
+    MN.write_mask(path, prot)
+    return ["--protect-mask", path]
+
+
+def analyse_song(render, args, out, track_dir, excerpt_s, mask_model=None, oracle=False):
     meta, stems = load_song(track_dir, excerpt_s)
     if len(stems) < 2:
         return []
@@ -144,7 +167,8 @@ def analyse_song(render, args, out, track_dir, excerpt_s, mask_model=None):
     src = os.path.join(out, f"{tag}.wav")
     dst = os.path.join(out, f"{tag}.6ch.wav")
     T.write_wav(src, mix * k)
-    extra = protect_mask_args(src, out, tag, mask_model) if mask_model else []
+    extra = protect_mask_args(src, out, tag, mask_model) if mask_model else \
+        oracle_mask_args(stems, k, out, tag) if oracle else []
     subprocess.run([render] + args + extra + [src, dst], check=True,
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     out6 = T.read_wav6(dst)
@@ -179,11 +203,13 @@ def main():
     ap.add_argument("--variant", default="shipped", help="knob set from upmix_behavior_tests.VARIANTS")
     ap.add_argument("--jobs", type=int, default=4)
     ap.add_argument("--mask-model", help="mask_net.pt: render with its protect mask (test-mask build)")
+    ap.add_argument("--oracle-mask", action="store_true", help="protect mask from the real stems (upper bound)")
+    ap.add_argument("--render-extra", default="", help="extra renderer flags, e.g. '--mask-drive 1.0'")
     ap.add_argument("--split-file", help="masknet_cache/split.json")
     ap.add_argument("--split", default="dev", help="with --split-file: which split to take songs from")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
-    args = T.VARIANTS[a.variant] + ["--model", a.model] + (["--guard-model", a.guard] if a.guard else [])
+    args = T.VARIANTS[a.variant] + ["--model", a.model] + (["--guard-model", a.guard] if a.guard else []) + a.render_extra.split()
     tracks = sorted(d for d in os.listdir(a.moisesdb) if os.path.isdir(os.path.join(a.moisesdb, d)))
     if a.split_file:
         wanted = {t for t, v in json.load(open(a.split_file))["split"].items() if v == a.split}
@@ -193,14 +219,15 @@ def main():
 
     from concurrent.futures import ThreadPoolExecutor
     with ThreadPoolExecutor(a.jobs) as ex:
-        results = list(ex.map(lambda d: analyse_song(a.render, args, a.out, d, a.seconds, a.mask_model), picked))
+        results = list(ex.map(lambda d: analyse_song(a.render, args, a.out, d, a.seconds, a.mask_model, a.oracle_mask), picked))
     rows = [r for rs in results for r in rs]
     keys = ["song", "genre", "stem", "median_rear", "steady_std", "range_1s", "worst_half_s",
             "slope_per_6dB", "level_corr", "level_db", "frames"] + BAND_KEYS
     with open(os.path.join(a.out, "stems.csv"), "w", newline="") as fh:
         wr = csv.DictWriter(fh, keys); wr.writeheader(); wr.writerows(rows)
 
-    print(f"{len(picked)} songs, variant {a.variant}" + (f" + protect mask {a.mask_model}" if a.mask_model else "") + "\n")
+    print(f"{len(picked)} songs, variant {a.variant}" + (f" + protect mask {a.mask_model}" if a.mask_model else "")
+          + (" + ORACLE protect mask from the real stems" if a.oracle_mask else "") + (f" {a.render_extra}" if a.render_extra else "") + "\n")
     print(f"{'stem':14s} {'n':>3s} {'rear med':>9s} {'rear IQR':>12s} {'std med':>8s} {'range1s med':>11s} "
           f"{'slope/6dB med':>13s} {'corr med':>9s}  flags")
     for stem in STEMS:

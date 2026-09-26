@@ -333,6 +333,9 @@ def torch_clamp_sum(m, idx):
     return m[..., idx].sum(-1).clamp(max=1.0)
 
 
+LOSS_W = {"leak": 3.0, "leakp": 1.0, "missed": 2.0}   # overridden by --w-leak/--w-leakp/--w-missed
+
+
 def loss_fn(torch, m, irm, w, P, roles):
     """Asymmetric BCE on the ideal ratio masks (protected cells 4x) + a leak term on
     the vocal ENERGY the eligible masks would admit rear, normalised per frame so
@@ -361,7 +364,8 @@ def loss_fn(torch, m, irm, w, P, roles):
         missed = missed + (Pg * (1 - elig)).sum() / (Pg.sum() + 1e-9)
     missed = missed / max(1, len(roles.eligible))
     smooth = (m[:, 1:] - m[:, :-1]).abs().mean(-1)
-    core = (per_cell * w).sum() / (w.sum() + 1e-9) + 3.0 * leak + 1.0 * leak_p + 2.0 * missed
+    core = ((per_cell * w).sum() / (w.sum() + 1e-9) + LOSS_W["leak"] * leak +
+            LOSS_W["leakp"] * leak_p + LOSS_W["missed"] * missed)
     return core + 0.05 * (smooth * w[:, 1:]).sum() / (w[:, 1:].sum() + 1e-9)
 
 
@@ -437,6 +441,9 @@ def train(a):
     print("best", open(os.path.join(a.out, "best.txt")).read().strip())
 
 
+_EVAL_START = {}
+
+
 def evaluate(torch, net, cache_dir, tracks, dev, seconds, merge_idx, roles, songs=20):
     net.modules.eval()
     acc = {}
@@ -447,10 +454,12 @@ def evaluate(torch, net, cache_dir, tracks, dev, seconds, merge_idx, roles, song
             n = int(seconds * SR)
             if w.shape[2] <= n:
                 continue
-            # the loudest-vocal window, like the harness (lead + other vocal)
-            v = np.asarray(w[0]).astype(np.float32) + np.asarray(w[1]).astype(np.float32)
-            e = np.cumsum((v ** 2).sum(0)); idx = np.arange(0, w.shape[2] - n, 5 * SR)
-            s = idx[int(np.argmax(e[idx + n - 1] - e[idx]))] if len(idx) else 0
+            if (t, n) not in _EVAL_START:
+                # the loudest-vocal window, like the harness (lead + other vocal); found once
+                v = np.asarray(w[0]).astype(np.float32) + np.asarray(w[1]).astype(np.float32)
+                e = np.cumsum((v ** 2).sum(0)); idx = np.arange(0, w.shape[2] - n, 5 * SR)
+                _EVAL_START[(t, n)] = idx[int(np.argmax(e[idx + n - 1] - e[idx]))] if len(idx) else 0
+            s = _EVAL_START[(t, n)]
             x = torch.as_tensor(merge_groups(np.asarray(w[:, :, s:s + n]), merge_idx)[None], device=dev) / 32768
             f, irm, wt, P = targets_and_features(torch, x, rng, augment=False)
             m = net.forward(f)
@@ -511,7 +520,11 @@ def main():
     t.add_argument("--neigh", type=int, default=0, help="+-bins of per-bin features fed to the MLP")
     t.add_argument("--arch", default="mlp", choices=("mlp", "tf"), help="tf = per-bin GRUs over frequency and time")
     e = sub.add_parser("export"); e.add_argument("--model", required=True); e.add_argument("--wav", required=True); e.add_argument("--out", required=True)
+    for k in ("leak", "leakp", "missed"):
+        t.add_argument(f"--w-{k}", type=float, default=LOSS_W[k])
     a = ap.parse_args()
+    if a.cmd == "train":
+        LOSS_W.update(leak=a.w_leak, leakp=a.w_leakp, missed=a.w_missed)
     {"cache": cache, "train": train, "export": export}[a.cmd](a)
 
 
