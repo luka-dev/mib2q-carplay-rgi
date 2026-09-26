@@ -1703,6 +1703,14 @@ static void spa_hssr_render_hop(
         band = state->bin_band[bin];
         mask = state->bin[bin].mask;
         mask *= 1.0f + state->band_object_boost[band];
+#ifdef SPA_HSSR_TEST_MASK
+        if (state->test_mask) {
+            uint32_t idx = state->control_sequence ? state->control_sequence - 1u : 0u;
+
+            if (idx >= state->test_mask_controls) idx = state->test_mask_controls - 1u;
+            mask *= 1.0f - state->vocal_gate * state->test_mask[idx * SPA_HSSR_BINS + bin];
+        } else
+#endif
         if (band_gate[band] > 0.0f) {
             const float a = 0.012f;                       /* ~0.22 s at 2.67 ms hops */
             struct spa_hssr_como *cm = &state->como[bin];

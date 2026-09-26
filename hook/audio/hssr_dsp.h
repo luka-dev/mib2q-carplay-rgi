@@ -167,6 +167,14 @@ struct spa_hssr_dsp {
      * of the 350-2500 Hz bands the model calls vocal), so a single band the
      * guard misreads on a solo guitar does not pull that guitar forward. */
     float vocal_presence;
+#ifdef SPA_HSSR_TEST_MASK
+    /* Host renderer only (-DSPA_HSSR_TEST_MASK): a per-control, per-bin
+     * "protect" mask from a file replaces the vocal gate factor, so a learned
+     * mask can be judged through the real DSP and the stem harness before any
+     * runtime integration (docs/audio/UPMIX_SOURCE_SEPARATION_PLAN.md). */
+    const float *test_mask;
+    uint32_t test_mask_controls;
+#endif
     struct spa_hssr_como como[SPA_HSSR_BINS];
     struct spa_hssr_object_slot object_slot[SPA_HSSR_OBJECT_SLOTS];
     float scene_confidence;

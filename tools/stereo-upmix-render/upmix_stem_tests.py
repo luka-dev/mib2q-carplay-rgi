@@ -112,7 +112,40 @@ def level_dependence(lead, rest, share, dt):
     return slope * 6, corr, float(np.median(ratio[ok]))  # share change per +6 dB
 
 
-def analyse_song(render, args, out, track_dir, excerpt_s):
+_MASK = {}
+
+
+def protect_mask_args(src, out, tag, model_path):
+    """Phase 0 of the source-separation plan: run mask_net on the excerpt and
+    hand the renderer the per-control protect mask (needs a -DSPA_HSSR_TEST_MASK
+    build).  The net is loaded once per process."""
+    import mask_net as MN
+    torch = MN._torch()
+    if "net" not in _MASK:
+        dev = "cuda" if torch.cuda.is_available() else "cpu"
+        ck = torch.load(model_path, map_location=dev)
+        net = MN.MaskNet(torch, MN.bin_band(), ctx=ck["ctx"], proj=ck["proj"], hidden=ck["hidden"]).to(dev)
+        net.modules.load_state_dict(ck["state"]); net.modules.eval()
+        _MASK.update(net=net, dev=dev, torch=torch)
+    net, dev = _MASK["net"], _MASK["dev"]
+    x = T.read_wav2(src) if hasattr(T, "read_wav2") else None
+    if x is None:
+        import wave
+        with wave.open(src, "rb") as w:
+            x = np.frombuffer(w.readframes(w.getnframes()), "<i2").reshape(-1, 2).T.astype(np.float32) / 32768
+    with torch.no_grad():
+        X = MN.stft(torch, torch.as_tensor(x[None], device=dev))
+        f = MN.features(torch, X[:, 0], X[:, 1])
+        Tc = (f.shape[1] // MN.CONTROL) * MN.CONTROL
+        m = net.forward(f[:, MN.CONTROL - 1:Tc:MN.CONTROL])[0]
+    prot = (1 - m[..., 3]).cpu().numpy().astype(np.float32)
+    path = os.path.join(out, tag + ".msk")
+    with open(path, "wb") as fh:
+        fh.write(b"HSSRMSK0"); fh.write(np.array([prot.shape[0], MN.N_BINS], np.uint32).tobytes()); fh.write(prot.tobytes())
+    return ["--protect-mask", path]
+
+
+def analyse_song(render, args, out, track_dir, excerpt_s, mask_model=None):
     meta, stems = load_song(track_dir, excerpt_s)
     if len(stems) < 2:
         return []
@@ -124,7 +157,8 @@ def analyse_song(render, args, out, track_dir, excerpt_s):
     src = os.path.join(out, f"{tag}.wav")
     dst = os.path.join(out, f"{tag}.6ch.wav")
     T.write_wav(src, mix * k)
-    subprocess.run([render] + args + [src, dst], check=True,
+    extra = protect_mask_args(src, out, tag, mask_model) if mask_model else []
+    subprocess.run([render] + args + extra + [src, dst], check=True,
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     out6 = T.read_wav6(dst)
     on = np.ones(n, bool)
@@ -157,23 +191,29 @@ def main():
     ap.add_argument("--seconds", type=float, default=EXCERPT_S)
     ap.add_argument("--variant", default="shipped", help="knob set from upmix_behavior_tests.VARIANTS")
     ap.add_argument("--jobs", type=int, default=4)
+    ap.add_argument("--mask-model", help="mask_net.pt: render with its protect mask (test-mask build)")
+    ap.add_argument("--split-file", help="masknet_cache/split.json")
+    ap.add_argument("--split", default="dev", help="with --split-file: which split to take songs from")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     args = T.VARIANTS[a.variant] + ["--model", a.model] + (["--guard-model", a.guard] if a.guard else [])
     tracks = sorted(d for d in os.listdir(a.moisesdb) if os.path.isdir(os.path.join(a.moisesdb, d)))
+    if a.split_file:
+        wanted = {t for t, v in json.load(open(a.split_file))["split"].items() if v == a.split}
+        tracks = [t for t in tracks if t in wanted]
     rng = np.random.default_rng(a.seed)
     picked = [os.path.join(a.moisesdb, t) for t in rng.permutation(tracks)[:a.songs]]
 
     from concurrent.futures import ThreadPoolExecutor
     with ThreadPoolExecutor(a.jobs) as ex:
-        results = list(ex.map(lambda d: analyse_song(a.render, args, a.out, d, a.seconds), picked))
+        results = list(ex.map(lambda d: analyse_song(a.render, args, a.out, d, a.seconds, a.mask_model), picked))
     rows = [r for rs in results for r in rs]
     keys = ["song", "genre", "stem", "median_rear", "steady_std", "range_1s", "worst_half_s",
             "slope_per_6dB", "level_corr", "level_db", "frames"] + BAND_KEYS
     with open(os.path.join(a.out, "stems.csv"), "w", newline="") as fh:
         wr = csv.DictWriter(fh, keys); wr.writeheader(); wr.writerows(rows)
 
-    print(f"{len(picked)} songs, variant {a.variant}\n")
+    print(f"{len(picked)} songs, variant {a.variant}" + (f" + protect mask {a.mask_model}" if a.mask_model else "") + "\n")
     print(f"{'stem':14s} {'n':>3s} {'rear med':>9s} {'rear IQR':>12s} {'std med':>8s} {'range1s med':>11s} "
           f"{'slope/6dB med':>13s} {'corr med':>9s}  flags")
     for stem in STEMS:

@@ -65,6 +65,7 @@ struct options {
     double vocal_gate;
     double rear_air_db;              /* <= -100 = off */
     double front_treble_db;
+    const char *protect_mask_path;   /* HSSRMSK0 file, see mask_net.py export */
     long retention_hf_lo_hz;
     long retention_hf_hi_hz;
     double lfe_gain_db;            /* re SPA_STEREO_UPMIX_LFE_Q15_DEFAULT */
@@ -363,7 +364,7 @@ static void usage(const char *program)
             "usage: %s [--mode off|hssr-universal] "
             "[--model HSSR.bin] "
             "[--lfe off|assist] [--lfe-gain -24..12] [--surround 0.0..0.5] [--front-bass -12..0] "
-            "[--front-retention 0..1] [--bed-delays] [--bed-attack off|owner|front] [--attack-collapse 0..1] [--retention-hf LO:HI] [--rear-body -12..0] [--vocal-gate 0..1] [--rear-air -40..0] [--front-treble -12..0] "
+            "[--front-retention 0..1] [--bed-delays] [--bed-attack off|owner|front] [--attack-collapse 0..1] [--retention-hf LO:HI] [--rear-body -12..0] [--vocal-gate 0..1] [--rear-air -40..0] [--front-treble -12..0] [--protect-mask FILE] "
             "INPUT.wav OUTPUT.wav\n"
             "  --surround controls OUR rear gain, not the MMI Surround setting.\n",
             program);
@@ -436,6 +437,7 @@ static int parse_options(int argc, char **argv, struct options *options)
     options->vocal_gate = SPA_STEREO_UPMIX_VOCAL_GATE_Q15_DEFAULT / 32768.0;
     options->rear_air_db = -1000.0;
     options->front_treble_db = 0.0;
+    options->protect_mask_path = NULL;
     options->retention_hf_lo_hz = SPA_STEREO_UPMIX_RETENTION_HF_LO_HZ;
     options->retention_hf_hi_hz = SPA_STEREO_UPMIX_RETENTION_HF_HI_HZ;
     options->lfe_gain_db = 0.0;
@@ -556,6 +558,11 @@ static int parse_options(int argc, char **argv, struct options *options)
                 fprintf(stderr, "error: --vocal-gate must be 0..1\n");
                 return 0;
             }
+            continue;
+        }
+        if (strcmp(argument, "--protect-mask") == 0) {
+            if (++index >= argc) return 0;
+            options->protect_mask_path = argv[index];
             continue;
         }
         if (strcmp(argument, "--front-treble") == 0) {
@@ -707,6 +714,40 @@ static void make_upmix_config(const struct options *options,
     }
 }
 
+#ifdef SPA_HSSR_TEST_MASK
+static float *g_protect_mask;
+static uint32_t g_protect_mask_controls;
+
+static int load_protect_mask(const char *path)
+{
+    FILE *f = fopen(path, "rb");
+    unsigned char header[16];
+    uint32_t controls;
+    uint32_t bins;
+    size_t count;
+
+    if (!f) { fprintf(stderr, "error: cannot open %s\n", path); return 0; }
+    if (fread(header, 1, 16, f) != 16 || memcmp(header, "HSSRMSK0", 8) != 0) {
+        fprintf(stderr, "error: %s is not an HSSRMSK0 file\n", path); fclose(f); return 0;
+    }
+    controls = load_u32le(header + 8);
+    bins = load_u32le(header + 12);
+    if (bins != SPA_HSSR_BINS || controls == 0) {
+        fprintf(stderr, "error: protect mask wants %u bins, %u controls\n", (unsigned)bins, (unsigned)controls);
+        fclose(f); return 0;
+    }
+    count = (size_t)controls * SPA_HSSR_BINS;
+    g_protect_mask = (float *)malloc(count * sizeof(float));
+    if (!g_protect_mask || fread(g_protect_mask, sizeof(float), count, f) != count) {
+        fprintf(stderr, "error: short protect mask\n"); fclose(f); return 0;
+    }
+    fclose(f);
+    g_protect_mask_controls = controls;
+    fprintf(stderr, "protect mask: %u controls x %u bins from %s\n", (unsigned)controls, (unsigned)bins, path);
+    return 1;
+}
+#endif
+
 static int render(FILE *input_file, FILE *output_file, uint32_t total_frames,
                   const struct spa_stereo_upmix_config *config)
 {
@@ -727,6 +768,10 @@ static int render(FILE *input_file, FILE *output_file, uint32_t total_frames,
         fprintf(stderr, "error: upmixer initialisation failed (%d)\n", status);
         return 0;
     }
+#ifdef SPA_HSSR_TEST_MASK
+    state._runtime._hssr.test_mask = g_protect_mask;
+    state._runtime._hssr.test_mask_controls = g_protect_mask_controls;
+#endif
     if (!write_wav_header(output_file, total_frames)) {
         fprintf(stderr, "error: cannot write output WAV header\n");
         return 0;
@@ -786,6 +831,14 @@ int main(int argc, char **argv)
     memset(&hssr_model, 0, sizeof(hssr_model));
     if (!parse_options(argc, argv, &options)) return 2;
     make_upmix_config(&options, &config);
+#ifdef SPA_HSSR_TEST_MASK
+    if (options.protect_mask_path && !load_protect_mask(options.protect_mask_path)) return 2;
+#else
+    if (options.protect_mask_path) {
+        fprintf(stderr, "error: --protect-mask needs a build with -DSPA_HSSR_TEST_MASK\n");
+        return 2;
+    }
+#endif
     if (options.backend == SPA_STEREO_UPMIX_HSSR_UNIVERSAL) {
         int model_status;
 
