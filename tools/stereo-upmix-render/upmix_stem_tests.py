@@ -149,6 +149,7 @@ ORACLE_AMP = False   # --oracle-amp: write 1 - sqrt(eligibility) so the drive mo
 MASK_THRESH = 0.0    # --mask-thresh t: eligibility below t is 0, above rescaled (a conservative operating point)
 MASK_SHARPEN = 1.0   # --mask-sharpen k: eligibility ** k (k > 1 = only confident cells go rear)
 MASK_ELIGIBLE = ""   # --mask-eligible other  (default: the model's other+cymbals)
+RESUME = False
 
 
 def oracle_mask_args(stems, k, out, tag):
@@ -174,6 +175,11 @@ def oracle_mask_args(stems, k, out, tag):
 
 
 def analyse_song(render, args, out, track_dir, excerpt_s, mask_model=None, oracle=False):
+    # per-song result cache: the D: volume (WinBtrfs) stalls CloseHandle under load, so a run can be
+    # killed by its runner and resumed (--resume) without redoing the songs that finished
+    cache = os.path.join(out, os.path.basename(track_dir) + ".rows.json")
+    if RESUME and os.path.exists(cache):
+        return json.load(open(cache))
     meta, stems = load_song(track_dir, excerpt_s)
     if len(stems) < 2:
         return []
@@ -206,6 +212,7 @@ def analyse_song(render, args, out, track_dir, excerpt_s, mask_model=None, oracl
                      "range_1s": m["range_1s"], "worst_half_s": m["worst_half_s"],
                      "slope_per_6dB": slope6, "level_corr": corr, "level_db": ratio_db,
                      "frames": int(np.sum(~np.isnan(share)))})
+    json.dump(rows, open(cache, "w"))
     return rows
 
 
@@ -229,11 +236,12 @@ def main():
     ap.add_argument("--mask-sharpen", type=float, default=1.0)
     ap.add_argument("--mask-eligible", default="", help="roles allowed rear at routing time, e.g. 'other' (default other+cymbals)")
     ap.add_argument("--mask-presence", type=float, default=0.0, help="full nets: e * (1 - alpha * band vocal presence) at routing")
+    ap.add_argument("--resume", action="store_true", help="reuse per-song results already in --out")
     ap.add_argument("--split-file", help="masknet_cache/split.json")
     ap.add_argument("--split", default="dev", help="with --split-file: which split to take songs from")
     a = ap.parse_args()
-    global ORACLE_AMP, MASK_THRESH, MASK_SHARPEN, MASK_ELIGIBLE
-    ORACLE_AMP = a.oracle_amp
+    global ORACLE_AMP, MASK_THRESH, MASK_SHARPEN, MASK_ELIGIBLE, RESUME
+    ORACLE_AMP = a.oracle_amp; RESUME = a.resume
     MASK_THRESH, MASK_SHARPEN, MASK_ELIGIBLE = a.mask_thresh, a.mask_sharpen, a.mask_eligible
     import mask_net as MN; MN.PRESENCE_ALPHA = a.mask_presence
     os.makedirs(a.out, exist_ok=True)
