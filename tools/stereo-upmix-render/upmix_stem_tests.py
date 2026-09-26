@@ -122,6 +122,8 @@ def protect_mask_args(src, out, tag, model_path):
     import mask_net as MN
     if "net" not in _MASK:
         torch, net, roles, dev = MN.load_model(model_path)
+        if MASK_ELIGIBLE:                                  # routing-time choice of which roles may go rear
+            roles.eligible = [roles.names.index(n) for n in MASK_ELIGIBLE.split("+")]
         _MASK.update(torch=torch, net=net, roles=roles, dev=dev)
     import wave
     with wave.open(src, "rb") as w:
@@ -146,6 +148,7 @@ ORACLE_PROTECT = ("vocals", "bass", "drums")   # MoisesDB stem names never allow
 ORACLE_AMP = False   # --oracle-amp: write 1 - sqrt(eligibility) so the drive mode's (1 - protect) is an AMPLITUDE gain
 MASK_THRESH = 0.0    # --mask-thresh t: eligibility below t is 0, above rescaled (a conservative operating point)
 MASK_SHARPEN = 1.0   # --mask-sharpen k: eligibility ** k (k > 1 = only confident cells go rear)
+MASK_ELIGIBLE = ""   # --mask-eligible other  (default: the model's other+cymbals)
 
 
 def oracle_mask_args(stems, k, out, tag):
@@ -223,12 +226,13 @@ def main():
     ap.add_argument("--oracle-amp", action="store_true", help="mask (oracle or model) as amplitude gain (sqrt of the eligibility) for --mask-drive")
     ap.add_argument("--mask-thresh", type=float, default=0.0)
     ap.add_argument("--mask-sharpen", type=float, default=1.0)
+    ap.add_argument("--mask-eligible", default="", help="roles allowed rear at routing time, e.g. 'other' (default other+cymbals)")
     ap.add_argument("--split-file", help="masknet_cache/split.json")
     ap.add_argument("--split", default="dev", help="with --split-file: which split to take songs from")
     a = ap.parse_args()
-    global ORACLE_AMP, MASK_THRESH, MASK_SHARPEN
+    global ORACLE_AMP, MASK_THRESH, MASK_SHARPEN, MASK_ELIGIBLE
     ORACLE_AMP = a.oracle_amp
-    MASK_THRESH, MASK_SHARPEN = a.mask_thresh, a.mask_sharpen
+    MASK_THRESH, MASK_SHARPEN, MASK_ELIGIBLE = a.mask_thresh, a.mask_sharpen, a.mask_eligible
     os.makedirs(a.out, exist_ok=True)
     args = T.VARIANTS[a.variant] + ["--model", a.model] + (["--guard-model", a.guard] if a.guard else []) + a.render_extra.split()
     tracks = sorted(d for d in os.listdir(a.moisesdb) if os.path.isdir(os.path.join(a.moisesdb, d)))
