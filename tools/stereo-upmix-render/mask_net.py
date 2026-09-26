@@ -913,7 +913,10 @@ def train(a):
         # astra review 4, point 3: real masters through htdemucs_ft, protection-only. Only the cells the
         # teacher calls vocal with share > 0.9 (94 % precise vs real stems) carry a target; the rest of the
         # song is masked out of the loss, so teacher silence never becomes rear permission.
-        t_tracks = sorted(f[:-4] for f in os.listdir(a.teacher_cache) if f.endswith(".npy"))
+        # the .json is written after the .npy: a song without it is still being written by the teacher
+        # (mmap of a growing file = access violation in c10.dll, v20's first death)
+        t_tracks = sorted(f[:-4] for f in os.listdir(a.teacher_cache)
+                          if f.endswith(".npy") and os.path.exists(os.path.join(a.teacher_cache, f[:-4] + ".json")))
         teacher = prefetch(lambda: batch_windows(torch, a.teacher_cache, t_tracks, a.seconds, a.batch, rng, "cpu", merge_idx))
         print(f"teacher songs {len(t_tracks)} from {a.teacher_cache}, every {a.teacher_every} steps at weight {a.w_teacher}", flush=True)
     if FEAT_STATS["mean"] is None:
