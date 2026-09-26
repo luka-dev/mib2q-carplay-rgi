@@ -480,7 +480,7 @@ class FullNet:
                     else nn.Sequential(nn.Linear(3 * ch, dec), nn.Tanh(), nn.Linear(dec, n_out)))
         # astra review 4, point 2: a band-level vocal PRESENCE head off the same state, applied at routing as
         # e * (1 - alpha * presence).  Listed before `dec` so load_model still reads n_out from the last Linear.
-        self.pres = nn.Linear(hidden, N_BANDS)
+        self.pres = nn.Linear(hidden * (2 if bidir else 1), N_BANDS)
         self.modules = nn.ModuleList([self.stem, self.down, self.flat, self.gru, self.gproj, self.lproj, self.pres, self.dec])
         self.last_presence = None
         self.n_out, self.n_pos, self.ch = n_out, n_pos, ch
