@@ -227,12 +227,14 @@ def main():
     ap.add_argument("--mask-thresh", type=float, default=0.0)
     ap.add_argument("--mask-sharpen", type=float, default=1.0)
     ap.add_argument("--mask-eligible", default="", help="roles allowed rear at routing time, e.g. 'other' (default other+cymbals)")
+    ap.add_argument("--mask-presence", type=float, default=0.0, help="full nets: e * (1 - alpha * band vocal presence) at routing")
     ap.add_argument("--split-file", help="masknet_cache/split.json")
     ap.add_argument("--split", default="dev", help="with --split-file: which split to take songs from")
     a = ap.parse_args()
     global ORACLE_AMP, MASK_THRESH, MASK_SHARPEN, MASK_ELIGIBLE
     ORACLE_AMP = a.oracle_amp
     MASK_THRESH, MASK_SHARPEN, MASK_ELIGIBLE = a.mask_thresh, a.mask_sharpen, a.mask_eligible
+    import mask_net as MN; MN.PRESENCE_ALPHA = a.mask_presence
     os.makedirs(a.out, exist_ok=True)
     args = T.VARIANTS[a.variant] + ["--model", a.model] + (["--guard-model", a.guard] if a.guard else []) + a.render_extra.split()
     tracks = sorted(d for d in os.listdir(a.moisesdb) if os.path.isdir(os.path.join(a.moisesdb, d)))

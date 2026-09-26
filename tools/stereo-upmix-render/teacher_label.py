@@ -7,9 +7,11 @@ vocal / bass / drum core (false rear permission), measured against real stems.
   validate  run htdemucs_ft on MoisesDB DEV mixes (from the mask-net cache),
             compare its ideal-ratio masks at the car's STFT with the truth,
             report false rear permission and coverage per confidence threshold
-  separate  run the teacher over a song folder (mp3 via ffmpeg), write the
-            four stems as 48 kHz int16 .npy + json beside the mask-net cache
-            layout so training can mix real and teacher songs
+  separate  run the teacher over a song folder (mp3 via ffmpeg), write
+            [vocals, master - vocals] as 48 kHz int16 .npy + json (a compact
+            two-slot cache: the sum IS the real master, and protection-only
+            supervision needs nothing but the vocal share); mask_net expands
+            it to the seven-slot layout when it loads a window
 
 Teacher stems: drums / bass / other / vocals.  They cannot label lead vs
 backing or drum core vs cymbals (Codex): teacher songs only ever supervise the
@@ -131,7 +133,7 @@ def separate(a):
     files = [os.path.join(r, f) for r, _, fs in os.walk(a.music) for f in fs
              if f.lower().endswith((".mp3", ".m4a", ".flac", ".wav"))]
     rng = np.random.default_rng(a.seed)
-    picked = [files[i] for i in rng.permutation(len(files))[:a.songs]]
+    picked = [files[i] for i in rng.permutation(len(files))[:a.songs or len(files)]]
     names = []
     t0 = time.time()
     for i, path in enumerate(picked):
@@ -148,15 +150,9 @@ def separate(a):
         os.remove(tmp)
         x = x / (np.abs(x).max() + 1e-9) * 0.7
         est = separate_array(sep, x)
-        # cache layout of mask_net v2: seven roles; the teacher fills vocals->other_vocal? no: lead_vocal
-        # slot holds ALL vocals, drums->drum_core holds ALL drums (the 4-way merge is the only valid one)
-        stack = np.zeros((len(MN.GROUPS), 2, x.shape[1]), np.float32)
-        stack[MN.GROUPS.index("lead_vocal")] = est["vocals"]
-        stack[MN.GROUPS.index("drum_core")] = est["drums"]
-        stack[MN.GROUPS.index("bass")] = est["bass"]
-        stack[MN.GROUPS.index("other")] = est["other"]
+        stack = np.stack([est["vocals"], x - est["vocals"]])                 # [2, 2, n]: vocals, the rest of the master
         np.save(out, (np.clip(stack, -1, 1) * 32767).astype(np.int16))
-        json.dump({"teacher": a.model, "source": os.path.basename(path), "present": [True, False, True, False, False, True, True]},
+        json.dump({"teacher": a.model, "source": os.path.basename(path), "layout": "vocals_rest"},
                   open(os.path.join(a.out, tag + ".json"), "w"))
         names.append((tag, path))
         print(f"  [{i + 1}/{len(picked)}] {tag} {os.path.basename(path)[:50]} ({time.time() - t0:.0f}s)", flush=True)
@@ -172,7 +168,7 @@ def main():
     v.add_argument("--split", default="dev"); v.add_argument("--songs", type=int, default=40); v.add_argument("--seconds", type=float, default=60.0)
     v.add_argument("--model", default="htdemucs_ft")
     s = sub.add_parser("separate"); s.add_argument("--music", required=True); s.add_argument("--out", required=True)
-    s.add_argument("--ffmpeg", default="ffmpeg"); s.add_argument("--songs", type=int, default=200); s.add_argument("--seed", type=int, default=3)
+    s.add_argument("--ffmpeg", default="ffmpeg"); s.add_argument("--songs", type=int, default=0, help="0 = the whole folder"); s.add_argument("--seed", type=int, default=3)
     s.add_argument("--model", default="htdemucs_ft")
     a = ap.parse_args()
     {"validate": validate, "separate": separate}[a.cmd](a)

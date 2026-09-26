@@ -474,7 +474,11 @@ class FullNet:
         self.gproj = nn.Linear(hidden, ch)
         self.lproj = nn.Conv1d(c3, ch, 1)
         self.dec = nn.Sequential(nn.Linear(3 * ch, 24), nn.Tanh(), nn.Linear(24, n_out))
-        self.modules = nn.ModuleList([self.stem, self.down, self.flat, self.gru, self.gproj, self.lproj, self.dec])
+        # astra review 4, point 2: a band-level vocal PRESENCE head off the same state, applied at routing as
+        # e * (1 - alpha * presence).  Listed before `dec` so load_model still reads n_out from the last Linear.
+        self.pres = nn.Linear(hidden, N_BANDS)
+        self.modules = nn.ModuleList([self.stem, self.down, self.flat, self.gru, self.gproj, self.lproj, self.pres, self.dec])
+        self.last_presence = None
         self.n_out, self.n_pos, self.ch = n_out, n_pos, ch
         self.pos = torch.arange(N_BINS, dtype=torch.float32) / N_BINS * 2 - 1
         self.macs = (5 * 5 * ch * N_BINS + (5 * ch + ch * c1) * 129 + (5 * c1 + c1 * c2) * 65 + (5 * c2 + c2 * c3) * 33
@@ -499,6 +503,7 @@ class FullNet:
             h = d(h)                                                                    # [BT,c3,33]
         g = self.flat(h.reshape(B * T, -1)).reshape(B, T, -1)
         g, _ = self.gru(g)                                                              # [B,T,hidden] causal
+        self.last_presence = self.pres(g)                                               # [B,T,32] logits
         g = self.gproj(g).reshape(B * T, self.ch, 1).expand(-1, -1, N_BINS)
         loc = torch.nn.functional.interpolate(self.lproj(h), size=N_BINS, mode="linear", align_corners=True)
         z = torch.cat([skip, loc, g], 1).transpose(1, 2)                                # [BT,257,3ch]
@@ -555,7 +560,10 @@ def batch_windows(torch, cache_dir, tracks, seconds, batch, rng, dev, merge_idx)
         if w.shape[2] <= n:
             continue
         s = rng.integers(0, w.shape[2] - n)
-        wavs.append(merge_groups(np.asarray(w[:, :, s:s + n]), merge_idx))
+        win = np.asarray(w[:, :, s:s + n])
+        if win.shape[0] == 2:                                # teacher cache: [vocals, rest] -> lead_vocal / other slots
+            full = np.zeros((len(GROUPS), 2, n), np.int16); full[0] = win[0]; full[6] = win[1]; win = full
+        wavs.append(merge_groups(win, merge_idx))
     return torch.as_tensor(np.stack(wavs), device=dev) / 32768         # [B,G,2,n]
 
 
@@ -692,6 +700,21 @@ def loss_softmax_ramp(torch, logits, irm, w, P, roles, ramp):
         missed = missed + (Pg * (1 - elig)).sum() / (Pg.sum() + 1e-9)
     missed = missed / max(1, len(roles.eligible))
     return ce + ramp * (LOSS_W["leak"] * leak + LOSS_W["leakp"] * leak_p) + LOSS_W["missed"] * missed
+
+
+def band_pool(torch, dev):
+    band = torch.as_tensor(bin_band(), device=dev)
+    return torch.zeros(N_BANDS, N_BINS, device=dev).scatter_(0, band[None], torch.ones(1, N_BINS, device=dev))
+
+
+def loss_presence(torch, pres_logits, irm, w, P, roles, pool):
+    """Band-level vocal presence: BCE on 'the band's vocal power share > 0.5',
+    weighted by the band's salience so silent bands teach nothing."""
+    Pv = torch.einsum("kn,btn->btk", pool, P[..., roles.vocals])
+    Pt = torch.einsum("kn,btn->btk", pool, P.sum(-1)) + 1e-9
+    valid = (torch.clamp(torch.log10(Pt) + 6, 0, 6) / 6 > 0.15).float()
+    bce = torch.nn.functional.binary_cross_entropy_with_logits(pres_logits, (Pv / Pt > 0.5).float(), reduction="none")
+    return (bce * valid).sum() / (valid.sum() + 1.0)
 
 
 def dev_auc_vo(torch, score, irm, w, roles):
@@ -851,6 +874,7 @@ def train(a):
                 N_BINS * (n_in * a.hidden + a.hidden * len(names)))
     print(f"params {n_par}, ~{macs} MAC per control = {macs * SR / HOP / CONTROL / 1e6:.1f} M MAC/s", flush=True)
     opt = torch.optim.AdamW(net.parameters(), lr=a.lr, weight_decay=1e-4)
+    pool = band_pool(torch, dev)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, a.steps)
     os.makedirs(a.out, exist_ok=True)
     best = 1e9
@@ -888,12 +912,16 @@ def train(a):
         else:
             m = net.forward(f)
             loss = loss_fn(torch, m, irm, w, P, roles)
+        if getattr(net, "last_presence", None) is not None and a.w_pres > 0:
+            loss = loss + a.w_pres * loss_presence(torch, net.last_presence, irm, w, P, roles, pool)
         if teacher is not None and step % a.teacher_every == 0:
             xt = next(teacher).to(dev, non_blocking=True)
             with torch.no_grad():
                 ft, irm_t, wt, Pt = targets_and_features(torch, xt, rng, augment=True, fine=net_is_fine(net))
                 wt = wt * (irm_t[..., roles.vocals] > 0.9).float()          # confident-vocal cells only
             loss = loss + a.w_teacher * loss_softmax(torch, net._logits(ft), irm_t, wt, Pt, roles)
+            if getattr(net, "last_presence", None) is not None and a.w_pres > 0:
+                loss = loss + a.w_teacher * a.w_pres * loss_presence(torch, net.last_presence, irm_t, wt, Pt, roles, pool)
         opt.zero_grad(); loss.backward()
         torch.nn.utils.clip_grad_norm_(net.parameters(), 2.0)
         opt.step(); sched.step()
@@ -969,6 +997,20 @@ def load_model(model_path):
     return torch, net, Roles(names), dev
 
 
+PRESENCE_ALPHA = 0.0      # routing: e * (1 - alpha * presence), presence held with a ~300 ms release
+PRESENCE_RELEASE = 28     # controls (10.7 ms each)
+
+
+def apply_presence(torch, net, elig):
+    """elig [Tc, 257] -> elig * (1 - alpha * p_band), p = sigmoid(presence) with instant attack, exponential release."""
+    p = torch.sigmoid(net.last_presence[0]).cpu().numpy()                     # [Tc, 32]
+    decay = np.exp(-1.0 / PRESENCE_RELEASE)
+    held = np.zeros(N_BANDS, np.float32)
+    for t in range(p.shape[0]):
+        held = np.maximum(p[t], held * decay); p[t] = held
+    return elig * (1 - PRESENCE_ALPHA * torch.as_tensor(p[:, bin_band()], device=elig.device))
+
+
 def protect_mask(torch, net, roles, dev, x):
     """x [2, n] float stereo -> per-control protect mask [Tc, 257] = 1 - rear eligibility."""
     with torch.no_grad():
@@ -982,7 +1024,10 @@ def protect_mask(torch, net, roles, dev, x):
             T = (f.shape[1] // CONTROL) * CONTROL
             f = f[:, CONTROL - 1:T:CONTROL]
         m = net.forward(f)[0]
-        return (1 - rear_eligibility(m, roles)).cpu().numpy().astype(np.float32)
+        elig = rear_eligibility(m, roles)
+        if PRESENCE_ALPHA > 0 and getattr(net, "last_presence", None) is not None:
+            elig = apply_presence(torch, net, elig)
+        return (1 - elig).cpu().numpy().astype(np.float32)
 
 
 def write_mask(path, prot):
@@ -1138,6 +1183,7 @@ def main():
                         "full = whole-spectrum strided conv + GRU bottleneck + per-cell decoder (proj=channels, hidden=GRU)")
     t.add_argument("--teacher-cache", help="htdemucs cache (teacher_label.py separate): protection-only supervision on confident vocal cells")
     t.add_argument("--teacher-every", type=int, default=2); t.add_argument("--w-teacher", type=float, default=0.3)
+    t.add_argument("--w-pres", type=float, default=0.5, help="full: weight of the band vocal-presence head")
     t.add_argument("--loss", default="own", choices=("own", "balanced", "probe", "softmax", "softmax_ramp"))
     t.add_argument("--init", help="warm start: checkpoint whose weights and feature stats to load (same arch)")
     t.add_argument("--target-hop", default="mean", choices=("mean", "single"))
