@@ -991,6 +991,10 @@ def train(a):
             if a.teacher_mode == "vocal":
                 loss = loss + a.w_teacher * loss_teacher_vocal(torch, net._logits(ft), irm_t, wt, roles)
             elif a.teacher_mode == "roles":                   # four-stem teacher: the full softmax target (cymbals fold into drum_core)
+                # only where the teacher is confident: its "other" is a residual (master - stems) that carries the
+                # leakage of every source, so unconfident cells teach "other is everywhere" (v20 / v24: eligibility
+                # 0.8-0.9 in vocal-owned cells from step 250)
+                wt = wt * (irm_t.max(-1).values > a.teacher_conf).float()
                 loss = loss + a.w_teacher * loss_softmax(torch, net._logits(ft), irm_t, wt, Pt, roles)
             else:
                 wt = wt * (irm_t[..., roles.vocals] > 0.9).float()          # protection-only: confident-vocal cells
@@ -1364,6 +1368,7 @@ def main():
                         "full = whole-spectrum strided conv + GRU bottleneck + per-cell decoder (proj=channels, hidden=GRU)")
     t.add_argument("--teacher-cache", help="htdemucs cache (teacher_label.py separate): protection-only supervision on confident vocal cells")
     t.add_argument("--teacher-every", type=int, default=2); t.add_argument("--w-teacher", type=float, default=0.3)
+    t.add_argument("--teacher-conf", type=float, default=0.8, help="roles: teacher cells count only when a role holds more than this share")
     t.add_argument("--teacher-mode", default="protect", choices=("protect", "vocal", "roles"),
                    help="protect = confident vocal cells only; vocal = soft vocal target everywhere; roles = full softmax target (4-stem teacher cache)")
     t.add_argument("--w-pres", type=float, default=0.5, help="full: weight of the band vocal-presence head")
