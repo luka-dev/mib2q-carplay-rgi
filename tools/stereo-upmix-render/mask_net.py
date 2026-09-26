@@ -347,6 +347,57 @@ def probe_descriptor(torch, f, neigh=2):
     return torch.cat([desc - mean, mean, f[..., 2:4], pos], -1)
 
 
+class ProbeCtxNet:
+    """v13: the probe descriptor per bin PLUS a per-band GRU context (the band's
+    recent history: is this register currently vocal-dominated?) projected to
+    `proj` values per band and appended to every bin of the band.  The probe
+    showed per-cell information is the limit (train AUC = DEV AUC); the band
+    context is the cheapest evidence a single cell cannot see.  Stateful
+    (GRU over controls): the streaming-state gate applies."""
+
+    def __init__(self, torch, band, hidden=64, neigh=2, n_out=5, ctx=64, proj=8, tctx=0, **_):
+        nn = torch.nn
+        self.torch = torch
+        self.neigh, self.tctx, self.proj = neigh, tctx, proj
+        self.band = torch.as_tensor(band)
+        bins_per_band = torch.zeros(N_BANDS).scatter_add_(0, self.band, torch.ones(N_BINS))
+        self.pool = torch.zeros(N_BANDS, N_BINS).scatter_(0, self.band[None], torch.ones(1, N_BINS)) / bins_per_band.clamp(min=1)[:, None]
+        n_desc = (2 * neigh + 1 + 1 + 2 + 1) * (1 + tctx)
+        self.gru = nn.GRU(N_BANDS * 5, ctx, batch_first=True)
+        self.ctx_proj = nn.Linear(ctx, N_BANDS * proj)
+        self.mlp = nn.Sequential(nn.Linear(n_desc + proj, hidden), nn.Tanh(), nn.Linear(hidden, hidden), nn.Tanh(), nn.Linear(hidden, n_out))
+        self.modules = nn.ModuleList([self.gru, self.ctx_proj, self.mlp])
+        self.n_out = n_out
+
+    def to(self, dev):
+        self.modules.to(dev); self.band = self.band.to(dev); self.pool = self.pool.to(dev); return self
+
+    def parameters(self):
+        return self.modules.parameters()
+
+    def _logits(self, f):
+        torch = self.torch
+        B, T = f.shape[:2]
+        d = standardize(torch, probe_descriptor(torch, f, self.neigh)).clamp(-6, 6)
+        if self.tctx:
+            parts = [d]
+            for k in range(1, self.tctx + 1):
+                parts.append(torch.cat([torch.zeros_like(d[:, :k]), d[:, :-k]], 1))
+            d = torch.cat(parts, -1)
+        fs = f.clamp(-30, 30)
+        e = fs[..., :2].mean(-1)
+        bandf = torch.einsum("kn,btnf->btkf", self.pool, fs)
+        bande = torch.einsum("kn,btn->btk", self.pool, e)[..., None]
+        ctx_in = torch.cat([bandf, bande], -1).reshape(B, T, -1)
+        ctx_in = (ctx_in - ctx_in.mean(-1, keepdim=True)) / (ctx_in.std(-1, keepdim=True) + 1e-3)
+        h, _ = self.gru(ctx_in)
+        cb = self.ctx_proj(h).reshape(B, T, N_BANDS, self.proj)[:, :, self.band]
+        return self.mlp(torch.cat([d, cb], -1))
+
+    def forward(self, f):
+        return self.torch.softmax(self._logits(f), -1)
+
+
 class ProbeNet:
     """v10: exactly the probe's recipe inside the training pipeline (astra
     review 3): the descriptor above, a 64-64 tanh MLP per bin, ONE eligibility
@@ -392,6 +443,9 @@ def build_net(torch, arch, band, **kw):
         return ProbeNet(torch, band, hidden=kw.get("hidden", 64), neigh=kw.get("neigh", 2), n_out=kw.get("n_out", 1), tctx=kw.get("tctx", 0))
     if arch == "probe_roles":
         return ProbeNet(torch, band, hidden=kw.get("hidden", 64), neigh=kw.get("neigh", 2), n_out=kw["n_out"], tctx=kw.get("tctx", 0))
+    if arch == "probe_ctx":
+        return ProbeCtxNet(torch, band, hidden=kw.get("hidden", 64), neigh=kw.get("neigh", 2), n_out=kw["n_out"],
+                           ctx=kw.get("ctx", 64), proj=kw.get("proj", 8), tctx=kw.get("tctx", 0))
     if arch == "conv2048":
         return ConvNet(torch, band, ch=kw.get("ctx", 16), hidden=kw.get("hidden", 8), n_out=kw.get("n_out", 5))
     return (TFNet if arch == "tf" else MaskNet)(torch, band, **kw)
@@ -678,9 +732,11 @@ def train(a):
     net = build_net(torch, a.arch, bin_band(), ctx=a.ctx, proj=a.proj, hidden=a.hidden, n_out=len(names), neigh=a.neigh, tctx=a.tctx).to(dev)
     n_par = sum(p.numel() for p in net.parameters())
     n_in = 4 * (1 + 2 * a.neigh) + a.proj + 1
-    if a.arch in ("probe", "probe_roles"):
-        n_in = (2 * a.neigh + 1 + 1 + 2 + 1) * (1 + a.tctx)
+    if a.arch in ("probe", "probe_roles", "probe_ctx"):
+        n_in = (2 * a.neigh + 1 + 1 + 2 + 1) * (1 + a.tctx) + (a.proj if a.arch == "probe_ctx" else 0)
         macs = N_BINS * (n_in * a.hidden + a.hidden * a.hidden + a.hidden * (1 if a.arch == "probe" else len(names)))
+        if a.arch == "probe_ctx":
+            macs += 3 * (N_BANDS * 5 * a.ctx + a.ctx * a.ctx) + a.ctx * N_BANDS * a.proj
     elif a.arch == "conv2048":
         ch, hd = a.ctx, a.hidden
         macs = N_BINS * (8 * 4 * ch + 2 * 5 * ch * ch + 3 * (ch * hd + hd * hd) + (ch + hd) * len(names))
@@ -701,7 +757,7 @@ def train(a):
     with torch.no_grad():                                 # feature statistics from 8 batches, then frozen
         fs = [targets_and_features(torch, next(batches).to(dev), rng, augment=True, fine=net_is_fine(net))[0] for _ in range(8)]
         fs = torch.cat(fs)
-        fit_feat_stats(torch, probe_descriptor(torch, fs, net.neigh) if isinstance(net, ProbeNet) else fs)
+        fit_feat_stats(torch, probe_descriptor(torch, fs, net.neigh) if isinstance(net, (ProbeNet, ProbeCtxNet)) else fs)
     print("feature mean", [round(v, 2) for v in FEAT_STATS["mean"]], "std", [round(v, 2) for v in FEAT_STATS["std"]], flush=True)
     for step in range(1, a.steps + 1):
         x = next(batches).to(dev, non_blocking=True)
@@ -952,7 +1008,7 @@ def main():
     t.add_argument("--eval-every", type=int, default=250); t.add_argument("--eval-songs", type=int, default=20)
     t.add_argument("--merge", default=DEFAULT_MERGE, help="output groups as name=cached+cached;...")
     t.add_argument("--neigh", type=int, default=0, help="+-bins of per-bin features fed to the MLP")
-    t.add_argument("--arch", default="mlp", choices=("mlp", "tf", "conv2048", "probe", "probe_roles"),
+    t.add_argument("--arch", default="mlp", choices=("mlp", "tf", "conv2048", "probe", "probe_roles", "probe_ctx"),
                    help="tf = per-bin GRUs over frequency and time; conv2048 = 2048-point analysis + frequency conv (ctx=channels, hidden=time GRU)")
     t.add_argument("--loss", default="own", choices=("own", "balanced", "probe", "softmax"))
     t.add_argument("--target-hop", default="mean", choices=("mean", "single"))
