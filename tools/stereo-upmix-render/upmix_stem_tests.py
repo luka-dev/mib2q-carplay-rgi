@@ -190,6 +190,7 @@ def analyse_song(render, args, out, track_dir, excerpt_s, mask_model=None, oracl
     subprocess.run([render] + args + extra + [src, dst], check=True,
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     out6 = T.read_wav6(dst)
+    print(f"  rendered {tag}", flush=True)
     on = np.ones(n, bool)
     rows = []
     for name, stem in stems.items():
