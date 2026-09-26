@@ -449,6 +449,18 @@ def mask_space_metrics(torch, m, irm, w, P, roles):
     return out
 
 
+def prefetch(make_batch, depth=3):
+    """Prepare the next batches on worker threads while the GPU trains on this one
+    (the mmap reads and the numpy merge dominate a step otherwise)."""
+    from concurrent.futures import ThreadPoolExecutor
+    ex = ThreadPoolExecutor(depth)
+    pending = [ex.submit(make_batch) for _ in range(depth)]
+    while True:
+        fut = pending.pop(0)
+        pending.append(ex.submit(make_batch))
+        yield fut.result()
+
+
 def train(a):
     torch = _torch()
     dev = "cuda" if torch.cuda.is_available() else "cpu"
@@ -475,8 +487,9 @@ def train(a):
     os.makedirs(a.out, exist_ok=True)
     best = 1e9
     t0 = time.time()
+    batches = prefetch(lambda: batch_windows(torch, a.cache, split["train"], a.seconds, a.batch, rng, "cpu", merge_idx))
     for step in range(1, a.steps + 1):
-        x = batch_windows(torch, a.cache, split["train"], a.seconds, a.batch, rng, dev, merge_idx)
+        x = next(batches).to(dev, non_blocking=True)
         with torch.no_grad():
             f, irm, w, P = targets_and_features(torch, x, rng, augment=True)
         if LOSS_MODE == "balanced":
