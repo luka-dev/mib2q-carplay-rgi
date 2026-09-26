@@ -324,6 +324,29 @@ controls, **max |Δ eligibility| 3.6 × 10⁻⁷**.  Next: the int8 / NEON port 
 the same graph (the gemv / GRU primitives of `hssr_neon.c`), the worker job,
 the render-loop application (`--mask-drive` semantics), QEMU + Krait bench.
 
+## 📏 Classical baselines through the same harness (2026-09-26, `baseline_upmix.py`)
+
+Reviewers will ask (astra review 5); the answer is humbling.  40 DEV songs,
+the same per-stem rear-share metric:
+
+| | vocals | guitar | piano | keys | bass | drums | swinging |
+|---|---|---|---|---|---|---|---|
+| **passive matrix** (S = (L−R)/√2, 7 kHz LP, 12 ms, −3 dB) | 0.05 | **0.13** | 0.19 | **0.21** | 0.02 | **0.05** | guitars 4/39, vocals 7/40, keys 4/27 |
+| primary/ambient (Avendano–Jot, simplified: a = 1 − coherence) | 0.02 | 0.06 | 0.11 | 0.12 | 0.02 | 0.07 | drums 18/40, vocals 12/40 |
+| our best student (v13 + soft veto 0.5) | 0.04 | 0.09 | — | 0.09 | 0.09 | 0.17 | 2/39 |
+| our best raw student (v21a / v22b) | 0.09 | 0.13 | 0.08 | 0.11 | 0.12 | 0.19 | 0–1 |
+| htdemucs mask | 0.03 | 0.20 | 0.14 | 0.16 | 0.11 | 0.11 | 8/39 |
+| oracle | 0.03 | 0.20 | 0.14 | 0.17 | 0.07 | 0.12 | 7/39 |
+
+A 1970s difference-signal matrix sits on our students' frontier by this
+metric — more keys, far less drums and bass, voice 0.05 by construction
+(centre-panned sources cancel).  The metric cannot tell a routed source from
+a difference-signal wash (anti-phase artefacts, mono incompatibility, reverb
+and width riding along), which is exactly why the listening study is the
+missing experiment and why "stable at useful rear energy" must be judged by
+ear.  For the paper: the matrix is the baseline to beat *perceptually*; on
+the objective metric only the teacher and the oracle beat it.
+
 ## 🎚️ Depth layering (per-source depth) — after the single-class student
 
 Today one class goes rear (`other`: everything but vocals / drums / bass) at
