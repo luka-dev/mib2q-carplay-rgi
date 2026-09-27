@@ -415,7 +415,14 @@ mean 6e-8; **NEON (QEMU) vs scalar (host) max |Δe| 1e-6** on 12 controls
 (~0.15 M): 4-output-row grouping of the pointwise / stem convs with
 transposed weights (`vmla` by lane instead of `vdup` + `vmla`), and, if the
 Krait bench shows the 540 KB flat-layer weight stream missing L2, int8 for
-`flat_w` (135 KB).
+`flat_w` (135 KB).  What QEMU can still say about memory (`qemu_l1d_plugin`,
+one 16 KB / 4-way / 64 B L1D, the Krait geometry): the mask adds per control
+937 k data accesses and 24 k L1D misses (2.5 %, the same rate as the DSP
+itself) = 1.47 MB of line fills per control ≈ 138 MB/s — the 0.69 MB float
+model plus the ~200 KB of stage scratch stream through L1 once per control;
+whether they stay in the 1 MB L2 next to the DSP is the one question only
+the Krait bench answers (bandwidth-wise it is nothing, latency-wise the
+sequential streams are prefetchable).
 
 **The production path validated on the 40 DEV songs (2026-09-27 12:00,
 `--mask-model v21a.msk1 --mask-drive-prod 1.0 --vocal-gate 0.5`).**  Test
