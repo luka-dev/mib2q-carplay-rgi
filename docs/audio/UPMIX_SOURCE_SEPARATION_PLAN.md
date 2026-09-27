@@ -571,6 +571,51 @@ path: 14 % of the voice in "other"), generative / offline upmixers.
    init, after model creation, after batches; workers / caches / pinned
    batches are the plausible causes.
 
+## 🧭 Review 8 (astra, on the system architecture — 2026-09-27 01:00)
+
+Asked whether "per-cell role eligibility at 512/128, predicted causally,
+driving the rear at sqrt(e)" is the right decomposition at all.  Verdict:
+**"The architecture is wrong as a final commitment to the product goal.  It
+is a useful, stable baseline, but 'predict fractional ownership, then send
+that fraction of the mixture rearward' makes separation uncertainty directly
+audible."**
+
+* Ranking of what is wrong: (1) **the target** — five-way cell ownership is
+  indirect; classification rewards explaining ambiguous cells, the product
+  rewards reconstructing usable rear content; (2) input / representation —
+  longer analysis and context plausibly missing, but a waveform front-end is
+  not intrinsically the answer; (3) the grid — hard, not proven unlearnable;
+  (4) consumption — magnifies uncertainty but is not the bottleneck ("a
+  transfer curve cannot manufacture discrimination"); (5) do not retreat to
+  ambience synthesis for this brief.
+* **The one bet: replace the eligibility interface with an estimate of the
+  rear-eligible AUDIO** — a two-output protected / eligible separator with
+  longer analysis (2048/512) and 0.5–1 s of causal history, complex spectral
+  estimation (not `(1 − p_protected) × mixture`, which recreates today's
+  system), its eligible estimate fed into the existing rear object path, the
+  front kept.  Design budget 120–150 M MAC/s after retiring the controllers
+  (unverified), ~50–65 ms aligned pipeline delay.
+* **The one-day interface test:** inject the oracle's eligible-stem *audio*
+  and the teacher's eligible-stem *audio* through the object path; compare
+  each with its mask-driven version at matched rear instrument level; measure
+  vocal leakage, instrument share, swing, artefacts.  This decides whether
+  reconstruction beats masking perceptually; it cannot validate a causal
+  150 M separator — nothing using existing masks can.  If reconstruction
+  brings little, keep the present interface.
+* Hysteresis on a good ranking: legitimate when errors are brief and true
+  eligibility persists; may never open on material the student scores at
+  0.37; test connected persistent regions, not cell latches.  Rear error 0.15
+  after gain fit does not show only commitment is missing — the decisive
+  test is more guitar/key energy at *matched* vocal leakage.
+* Longer analysis: yes; 2048/512 is the same 93.75 decisions/s, not fewer;
+  keep a short-window transient / protection path.
+* **Timing correction:** at 48 kHz, 512/128 is a 2.67 ms hop and 10.67 ms
+  between controls — the "43 ms application lag" claimed earlier is wrong;
+  measure timestamp-to-application latency before comparing architectures.
+* **Stop:** the ramp-weight sweep, dominant-cell calibration as a route,
+  the whole-library four-stem teacher (pause; the material suffices), and
+  the C port of the frequency student (defer: it hardens a compromise).
+
 ## 📝 Publication (astra review 5, 2026-09-26)
 
 Asked whether there is a paper in this work.  Verdict: **a credible systems +
