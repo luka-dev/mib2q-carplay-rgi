@@ -773,6 +773,8 @@ def loss_probe(torch, logits, irm, w, roles):
 
 
 CE_WEIGHT = "valid"   # "valid" = every audible cell counts once; "salience" = the log-level weight (loud cells matter more, like the DSP metric)
+CE_PURITY_BALANCE = False   # astra 7 arm c: pure (max share > 0.8) and mixed cells get equal total weight within every dominant role
+CE_LAST = {}                # diagnostics of the last loss_softmax call: weighted target entropy, ce - entropy
 
 
 def loss_softmax(torch, logits, irm, w, P, roles):
@@ -780,9 +782,24 @@ def loss_softmax(torch, logits, irm, w, P, roles):
     targets (the IRMs of a cell sum to 1), soft-target cross-entropy weighted
     by salience.  Eligibility = p_other + p_cymbals, no clamp needed."""
     valid = w * (w > 0.15).float() if CE_WEIGHT == "salience" else (w > 0.15).float()
+    if CE_PURITY_BALANCE:
+        dom = irm.argmax(-1); pure = (irm.max(-1).values > 0.8)
+        total = valid.sum()
+        strata = []
+        for r in range(irm.shape[-1]):
+            for pm in (True, False):
+                sel = ((dom == r) & (pure == pm)).float() * valid
+                if sel.sum() > 0:
+                    strata.append(sel / sel.sum())
+        if strata:
+            valid = torch.stack(strata).sum(0) * (total / len(strata))
     logp = torch.log_softmax(logits, -1)
     ce = -(irm * logp).sum(-1)
-    return (ce * valid).sum() / (valid.sum() + 1.0)
+    ent = -(irm * torch.log(irm.clamp(min=1e-9))).sum(-1)
+    loss = (ce * valid).sum() / (valid.sum() + 1.0)
+    CE_LAST.update(entropy=float((ent * valid).sum() / (valid.sum() + 1.0)), excess=float(loss) - float((ent * valid).sum() / (valid.sum() + 1.0)),
+                   logit_std=float(logits.detach().std()))
+    return loss
 
 
 def loss_softmax_ramp(torch, logits, irm, w, P, roles, ramp):
@@ -1008,7 +1025,8 @@ def train(a):
         macs = (3 * (N_BANDS * 5 * a.ctx + a.ctx * a.ctx) + a.ctx * N_BANDS * a.proj +
                 N_BINS * (n_in * a.hidden + a.hidden * len(names)))
     print(f"params {n_par}, ~{macs} MAC per control = {macs * SR / HOP / CONTROL / 1e6:.1f} M MAC/s", flush=True)
-    opt = torch.optim.AdamW(net.parameters(), lr=a.lr, weight_decay=1e-4)
+    opt = torch.optim.AdamW(net.parameters(), lr=a.lr, weight_decay=a.weight_decay)
+    _GN = []
     pool = band_pool(torch, dev)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, a.steps)
     if a.init and a.start_step:                       # crash-restart (the PC's GPU/driver dies mid-run): continue the schedule
@@ -1058,7 +1076,7 @@ def train(a):
     for step in range(a.start_step + 1, a.steps + 1):
         x = next(batches).to(dev)          # synchronous: the prefetch thread's array must not be reused mid-copy
         with torch.no_grad():
-            f, irm, w, P = targets_and_features(torch, x, rng, augment=True, fine=net_is_fine(net))
+            f, irm, w, P = targets_and_features(torch, x, rng, augment=not a.no_augment, fine=net_is_fine(net))
         if LOSS_MODE == "probe":
             loss = loss_probe(torch, net._logits(f), irm, w, roles)
         elif LOSS_MODE == "softmax":
@@ -1107,12 +1125,16 @@ def train(a):
             if getattr(net, "last_presence", None) is not None and a.w_pres > 0:
                 loss = loss + a.w_teacher * a.w_pres * loss_presence(torch, net.last_presence, irm_t, wt, Pt, roles, pool)
         opt.zero_grad(); loss.backward()
-        torch.nn.utils.clip_grad_norm_(net.parameters(), 2.0)
+        gnorm = float(torch.nn.utils.clip_grad_norm_(net.parameters(), 2.0))
+        _GN.append(gnorm)
         opt.step(); sched.step()
         if step % a.eval_every == 0 or step == a.steps:
             import gc; gc.collect()                       # the PC ran out of host RAM mid-run (54 GB working set, cause unknown)
             met = evaluate(torch, net, a.cache, split["dev"], dev, a.seconds, merge_idx, roles, songs=a.eval_songs)
-            line = f"step {step} loss {loss.item():.4f} dev " + " ".join(f"{k}={v:.3f}" for k, v in met.items()) + f"  {time.time() - t0:.0f}s"
+            diag = (f" | H={CE_LAST.get('entropy', 0):.3f} ce-H={CE_LAST.get('excess', 0):.3f} logit_std={CE_LAST.get('logit_std', 0):.2f}"
+                    f" gnorm={np.mean(_GN[-a.eval_every:]):.2f} clipped={np.mean([g > 2.0 for g in _GN[-a.eval_every:]]):.2f}") if _GN else ""
+            _GN = _GN[-a.eval_every:]
+            line = f"step {step} loss {loss.item():.4f} dev " + " ".join(f"{k}={v:.3f}" for k, v in met.items()) + f"  {time.time() - t0:.0f}s" + diag
             print(line, flush=True)
             score = (met["vocal_own_to_rear"] * 4 + (1 - met["other_own_to_rear"]) +
                      0.5 * (1 - met.get("cymbals_own_to_rear", 1.0)) + met["irm_mae"]) if LOSS_MODE not in ("probe", "softmax") else -met["auc"]
@@ -1265,6 +1287,8 @@ def calibrate(a):
             PE.append((P[0][..., roles.eligible].sum(-1) * (irm[0][..., roles.eligible].sum(-1) > 0.6)).flatten())
     z, tt, w, pv, pe = (torch.cat(v) for v in (Z, Tt, W, PV, PE))
     valid = (w > 0.15).float()
+    if a.dominant:
+        valid = valid * ((pv > 0) | (pe > 0)).float()      # vocal-owned or eligible-owned cells only
     ab = torch.tensor([1.0, 0.0], device=dev, requires_grad=True)
     opt = torch.optim.Adam([ab], lr=0.05)
     for _ in range(400):
@@ -1477,6 +1501,8 @@ def main():
     t.add_argument("--teacher-conf", type=float, default=0.8, help="roles: teacher cells count only when a role holds more than this share")
     t.add_argument("--teacher-balance", type=int, default=1, help="roles: equal total weight per dominant role in every teacher batch")
     t.add_argument("--teacher-only", action="store_true", help="diagnostic: training windows from the teacher cache only")
+    t.add_argument("--no-augment", action="store_true"); t.add_argument("--weight-decay", type=float, default=1e-4)
+    t.add_argument("--purity-balance", action="store_true", help="astra 7 arm c: equal weight for pure and mixed cells within each role")
     t.add_argument("--teacher-songs", type=int, default=0, help="teacher-only: limit to the first N songs (overfit test)")
     t.add_argument("--eval-on-train", action="store_true", help="teacher-only: evaluate on the training songs themselves")
     t.add_argument("--teacher-mode", default="protect", choices=("protect", "vocal", "roles", "elig"),
@@ -1497,6 +1523,7 @@ def main():
     cb = sub.add_parser("calib"); cb.add_argument("--model", required=True); cb.add_argument("--cache", required=True)
     cb.add_argument("--songs", type=int, default=20); cb.add_argument("--seconds", type=float, default=60.0)
     cb.add_argument("--eligible", default="other"); cb.add_argument("--merge", default=DEFAULT_MERGE)
+    cb.add_argument("--dominant", action="store_true", help="fit the temperature on cells one role owns > 0.6 (astra 7)")
     eb = sub.add_parser("export-blob"); eb.add_argument("--model", required=True); eb.add_argument("--out", required=True)
     df = sub.add_parser("dump-features"); df.add_argument("--model", required=True); df.add_argument("--wav", required=True); df.add_argument("--out", required=True)
     u = sub.add_parser("audit"); u.add_argument("--cache", required=True); u.add_argument("--steps", type=int, default=400); u.add_argument("--seconds", type=float, default=6.0)
@@ -1509,6 +1536,8 @@ def main():
         LOSS_W.update(leak=a.w_leak, leakp=a.w_leakp, missed=a.w_missed)
         global LOSS_MODE, TARGET_HOP, CE_WEIGHT
         LOSS_MODE = a.loss; CE_WEIGHT = a.loss_weight
+        global CE_PURITY_BALANCE
+        CE_PURITY_BALANCE = a.purity_balance
         TARGET_HOP = a.target_hop
     {"cache": cache, "train": train, "export": export, "audit": audit, "probe": probe, "calib": calibrate,
      "export-blob": export_blob, "dump-features": dump_features}[a.cmd](a)
