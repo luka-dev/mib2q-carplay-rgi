@@ -247,14 +247,14 @@ int spa_mask_infer(const struct spa_mask_model *m, struct spa_mask_state *s,
     /* 3. stem + three strided stages */
     spa_mask_conv5(m->stem_w, m->stem_b, SPA_MASK_STEM_IN, SPA_MASK_CH, SPA_MASK_BINS,
                    &s->x[0][0], &s->skip[0][0]);
-    spa_mask_down(m, 0, &s->skip[0][0], &s->b[0][0], &s->a[0][0]);   /* -> a [32][129] */
-    spa_mask_down(m, 1, &s->a[0][0], &s->b[0][0], &s->a[0][0]);      /* -> a [48][65]  */
-    spa_mask_down(m, 2, &s->a[0][0], &s->b[0][0], &s->a[0][0]);      /* -> a [64][33]  */
+    spa_mask_down(m, 0, &s->skip[0][0], s->b, s->a);   /* -> a [32][129] */
+    spa_mask_down(m, 1, s->a, s->b, s->a);      /* -> a [48][65]  */
+    spa_mask_down(m, 2, s->a, s->b, s->a);      /* -> a [64][33]  */
 
     /* 4. flatten (channel-major) -> 64, tanh; GRU over controls */
     for (c = 0; c < SPA_MASK_C3; ++c)
         for (i = 0; i < SPA_MASK_N3; ++i)
-            flat_in[c * SPA_MASK_N3 + i] = s->a[0][(size_t)c * SPA_MASK_N3 + i];
+            flat_in[c * SPA_MASK_N3 + i] = s->a[(size_t)c * SPA_MASK_N3 + i];
     spa_mask_gemv(m->flat_w, m->flat_b, SPA_MASK_HIDDEN, SPA_MASK_C3 * SPA_MASK_N3, flat_in, gin);
     for (i = 0; i < SPA_MASK_HIDDEN; ++i) gin[i] = tanhf(gin[i]);
     spa_mask_gemv(m->gru_wih, m->gru_bih, SPA_MASK_GATES, SPA_MASK_HIDDEN, gin, s->gates);
@@ -279,7 +279,7 @@ int spa_mask_infer(const struct spa_mask_model *m, struct spa_mask_state *s,
         const float *wr = m->lproj_w + (size_t)c * SPA_MASK_C3;
         for (i = 0; i < SPA_MASK_N3; ++i) {
             float acc = m->lproj_b[c];
-            for (k = 0; k < SPA_MASK_C3; ++k) acc += wr[k] * s->a[0][(size_t)k * SPA_MASK_N3 + i];
+            for (k = 0; k < SPA_MASK_C3; ++k) acc += wr[k] * s->a[(size_t)k * SPA_MASK_N3 + i];
             s->loc[c][i] = acc;
         }
     }

@@ -67,8 +67,10 @@ struct spa_mask_state {
     /* scratch (sized for the largest stage; never allocated at run time) */
     float x[SPA_MASK_STEM_IN][SPA_MASK_BINS];
     float skip[SPA_MASK_CH][SPA_MASK_BINS];
-    float a[SPA_MASK_C3][SPA_MASK_N1];
-    float b[SPA_MASK_C3][SPA_MASK_N1];
+    /* flat: the strided stages index them as [channel * positions + position] with
+     * a different stride per stage (129 / 65 / 33) */
+    float a[SPA_MASK_C3 * SPA_MASK_N1];
+    float b[SPA_MASK_C3 * SPA_MASK_N1];
     float loc[SPA_MASK_CH][SPA_MASK_N3];
     float g[SPA_MASK_CH];
     float desc[SPA_MASK_BINS][SPA_MASK_DESC];
