@@ -530,6 +530,45 @@ path: 14 % of the voice in "other"), generative / offline upmixers.
    songs as final evidence — the 24-song TEST split stays untouched until the
    next winner is chosen.
 
+## 🔎 Review 7 (astra, on the commitment failure)
+
+1. **Diagnose confidence before changing architecture.**  Ranking: conditional
+   averaging from unresolved purity/context; optimisation or implementation
+   pathology; intrinsic input insufficiency (unproven — "no single finite
+   training run proves that the inputs contain no purity information").
+   High dominant-vs-dominant AUC does not establish pure-vs-mixed
+   discrimination, and four songs are still millions of cells.  **One
+   diagnostic run, three arms on a tiny fixed set of complete windows
+   stratified by role and purity, no augmentation:** (a) the model + soft
+   CE; (b) unbounded linear logits, no weight decay; (c) b + purity-stratum
+   balancing.  Log the exact weighted target entropy, CE − entropy, logit
+   scale, pre-clip gradient norms and clip frequency.  a fits → duration /
+   data complexity; only b → decoder / optimisation; only c → weighting /
+   capacity allocation; none → audit target alignment, normalisation,
+   gradient plumbing before blaming information.
+2. **Go to the listening study; stop architecture-shopping.**  Provisional
+   product candidate: frequency student + soft veto, with the raw frequency
+   student as a mandatory comparison (measure the veto's rear-error cost
+   first), the heuristic candidate and the oracle as references; compare at
+   intended levels *and* level-matched (quiet rears win leakage judgements
+   trivially).  One more model experiment only: the diagnostic above.
+3. **The student's rear is not "the oracle at lower level".**  The gain fit
+   removes 0.04 of 0.19; substantial shape mismatch remains.  A gain sweep
+   is legitimate but preserves leakage ratios (guitars 0.12 → 0.20 would take
+   voice 0.08 → ~0.13); choose the point with the lowest *fixed-gain* rear
+   error under pre-declared voice and swing limits, then listen.
+4. **Confidence interventions, by risk:** temperature calibration fitted on
+   dominant cells, selected on all strata + DSP; two heads (hard role CE on
+   dominant cells + purity Huber on all, `e = p_other · q̂`, `a = sqrt e` — an
+   approximation that cannot manufacture missing purity); hard CE with label
+   smoothing on dominant cells only; margin loss last.
+5. **One small ramp sweep is worthwhile** (leak:missed 1:1 and 1:2) against
+   calibrated raw-student points at matched voice share; keep the ramp only
+   if it wins reconstruction, guitars or swing at that leakage.
+6. Host RAM: don't blame CUDA caching yet; isolate by measuring before CUDA
+   init, after model creation, after batches; workers / caches / pinned
+   batches are the plausible causes.
+
 ## 📝 Publication (astra review 5, 2026-09-26)
 
 Asked whether there is a paper in this work.  Verdict: **a credible systems +
