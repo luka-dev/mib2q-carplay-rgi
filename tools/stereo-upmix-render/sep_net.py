@@ -142,7 +142,7 @@ def si_sdr(torch, est, ref):
 def evaluate(torch, net, tracks, dev, seconds=20.0, songs=12):
     """SI-SDR of the eligible estimate vs the truth on DEV (MoisesDB) excerpts, and the leak: vocal energy in the estimate."""
     net.modules.eval()
-    sdrs, leaks = [], []
+    sdrs, leaks, base = [], [], []
     rng = np.random.default_rng(0)
     with torch.no_grad():
         for p in tracks[:songs]:
@@ -153,12 +153,14 @@ def evaluate(torch, net, tracks, dev, seconds=20.0, songs=12):
             mix = w.sum(0)[None]; elig = w[list(ELIGIBLE_SLOTS)].sum(0)[None]; voc = (w[0] + w[1])[None]
             est = istft(torch, net.separate_stft(stft(torch, mix)), n)
             sdrs.append(float(si_sdr(torch, est, elig).mean()))
+            base.append(float(si_sdr(torch, mix, elig).mean()))                     # the mixture itself as the estimate
             # leak: how much of the vocal ends up in the estimate, relative to the vocal's own energy
             Xv = stft(torch, voc); Xe = stft(torch, est); Xt = stft(torch, elig)
             vcell = (Xv.abs() ** 2) > 10 * ((stft(torch, mix) - Xv).abs() ** 2 + 1e-9)     # vocal-owned cells (>= 10 dB)
             leaks.append(float(((Xe.abs() ** 2) * vcell).sum() / ((Xv.abs() ** 2) * vcell).sum().clamp(min=1e-9)))
     net.modules.train()
-    return {"si_sdr": float(np.median(sdrs)) if sdrs else 0.0, "vocal_leak": float(np.median(leaks)) if leaks else 1.0}
+    return {"si_sdr": float(np.median(sdrs)) if sdrs else 0.0, "vocal_leak": float(np.median(leaks)) if leaks else 1.0,
+            "mix_si_sdr": float(np.median(base)) if base else 0.0}
 
 
 def train(a):
@@ -201,12 +203,13 @@ def train(a):
         opt.step(); sched.step()
         if step % a.eval_every == 0 or step == a.steps:
             met = evaluate(torch, net, dev_tracks, dev)
-            line = f"step {step} loss {loss.item():.4f} dev si_sdr {met['si_sdr']:.2f} dB vocal_leak {met['vocal_leak']:.3f}  {time.time() - t0:.0f}s"
+            line = (f"step {step} loss {loss.item():.4f} dev si_sdr {met['si_sdr']:.2f} dB (mixture {met['mix_si_sdr']:.2f}) "
+                    f"vocal_leak {met['vocal_leak']:.3f}  {time.time() - t0:.0f}s")
             print(line, flush=True)
             ck = {"state": net.modules.state_dict(), "stats": dict(STATS), "step": step, "dev": met,
                   "ht": a.ht, "hg": a.hg, "dec": a.dec}
             torch.save({**ck, "opt": opt.state_dict()}, os.path.join(a.out, "last.pt"))
-            score = met["si_sdr"] - 20 * met["vocal_leak"]
+            score = met["si_sdr"]                    # sep1's leak-penalised score picked a near-silent checkpoint
             if score > best:
                 best = score; torch.save(ck, os.path.join(a.out, "sep_net.pt"))
                 open(os.path.join(a.out, "best.txt"), "w").write(line + "\n")
