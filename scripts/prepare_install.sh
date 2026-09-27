@@ -42,6 +42,9 @@ if [ -f "$IN/libcarplay_apac.so" ]; then
   cp "$IN/libcarplay_apac.so" "$HOOKS/"
   cp "$PROJECT_DIR/models/hssr-q6d-moises-a/hssr_model.bin" "$HOOKS/"
   cp "$PROJECT_DIR/models/hssr-selection-v11/hssr_guard.bin" "$HOOKS/"
+  # the per-cell rear-eligibility mask net (Phase 1, docs/audio/UPMIX_SOURCE_SEPARATION_PLAN.md);
+  # read beside hssr_model.bin, active only with AUDIO_HSSR_MASK_DRIVE > 0
+  cp "$PROJECT_DIR/models/mask-full-probe-v21a/hssr_mask.bin" "$HOOKS/"
   AUDIO=yes
 else
   AUDIO=no

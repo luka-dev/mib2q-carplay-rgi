@@ -91,8 +91,17 @@ export AUDIO_HSSR_BED_ATTACK=off
 # memories let a band that just belonged to a guitar send the next syllable's top to the rear
 # (vocal 2.5-10 kHz was 34-38 % rear, flickering at syllable rate).  The gate applies the
 # model's per-band vocal veto to the rendered object instantly, held ~0.35 s, per bin by
-# comodulation with the voice body.  0 = the 22.09 behaviour.
-export AUDIO_HSSR_VOCAL_GATE=0.95
+# comodulation with the voice body.  0 = the 22.09 behaviour.  0.95 was the setting without
+# the mask net; with it the gate is the "soft veto" and 0.5 is the operating point measured on
+# the 40 DEV songs (vocals 4 % rear, guitars 7 %, 2/40 swinging; 0.95 halves the guitars).
+export AUDIO_HSSR_VOCAL_GATE=0.5
+# Mask net (2026-09-27, Phase 1 of docs/audio/UPMIX_SOURCE_SEPARATION_PLAN.md): a per-cell
+# rear-eligibility student (models/mask-full-probe-v21a) run on the control worker; the object
+# path becomes sqrt(eligibility) * drive with the bin's own balance as its pan, the vocal gate
+# stays on top; three late controls hand the object back to the heuristic path.  DRIVE 0 = off
+# (the heuristic object path), 1.0 = the measured operating point, range 0..2.
+export AUDIO_HSSR_MASK_MODEL="$H/hssr_mask.bin"
+export AUDIO_HSSR_MASK_DRIVE=1.0
 # Rear air bed (2026-09-25): the input above ~2.5 kHz copied into the scene bed at a constant
 # level (rides the bed delays, never subtracted from the front).  Gives the rears back the
 # treble the gate and the attack-off removed (-12 dB = the 22.09 rear treble level on 12
