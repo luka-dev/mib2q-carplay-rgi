@@ -651,6 +651,26 @@ budget (2048/512 with 0.5–1 s of history, complex or magnitude+phase mask,
 trained on the teachers' *audio* with a spectral/waveform loss, not per-cell
 CE) — and nothing measured so far establishes that it fits ≤ 150 M MAC/s.
 
+## 🎛️ The separator student (2026-09-27 04:00, `sep_net.py`)
+
+The first feasibility run of the architecture the interface test chose:
+two-way (protected = vocals + drums + bass, eligible = the rest), causal,
+2048/512 at 48 kHz: log|L|, log|R| → strided frequency convs 1025 → 513 →
+257 → 129 → a causal GRU per position (shared) + a global causal GRU → a head
+at 257 positions giving 4 bins × 2 channels of magnitude-ratio mask → linear
+upsample to 1025 → eligible = mask × mixture STFT (mixture phase) → iSTFT.
+31.7k params, **154 M MAC/s** + one 2048-point FFT/iFFT pair per hop.  Loss
+in the audio domain (L1 on |STFT| + 0.5 L1 on the complex STFT of the
+estimate vs the eligible target), 950 songs (MoisesDB train + the four-stem
+teacher cache), 8 s windows, 6000 steps.  Evaluated on DEV as SI-SDR of the
+estimate vs the true eligible audio and the vocal leak (estimate energy in
+vocal-owned cells / vocal energy), then through the DSP with
+`--inject student:CKPT` beside the oracle-audio / teacher-audio rows above.
+
+| run | | result |
+|---|---|---|
+| sep1 | the recipe above | running |
+
 ## 📝 Publication (astra review 5, 2026-09-26)
 
 Asked whether there is a paper in this work.  Verdict: **a credible systems +
