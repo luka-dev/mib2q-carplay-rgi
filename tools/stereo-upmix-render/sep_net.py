@@ -195,14 +195,21 @@ class BandSepNet:
         return X * mask
 
 
-def multires_loss(torch, est_wav, tgt_wav):
-    """L1 on |STFT| at three resolutions of the waveforms (log-compressed magnitudes)."""
+def multires_loss(torch, est_wav, tgt_wav, floor=None):
+    """L1 on |STFT| at three resolutions of the waveforms: log1p-compressed magnitudes (default), or with
+    `floor` [rows,1,1] (diag_gap 27.09: the treble is erased at -19 dB because quiet cells cost nothing under
+    log1p, which is linear for small values) LOG magnitudes with a relative floor, so a quiet treble cell
+    costs as much as a loud bass cell.  The floor is given at the 2048 grid and scaled per resolution."""
     total = 0.0
     for n_fft, hop in ((512, 128), (1024, 256), (2048, 512)):
         win = torch.hann_window(n_fft, device=est_wav.device)
         E = torch.stft(est_wav.reshape(-1, est_wav.shape[-1]), n_fft, hop, window=win, return_complex=True)
         Tg = torch.stft(tgt_wav.reshape(-1, tgt_wav.shape[-1]), n_fft, hop, window=win, return_complex=True)
-        total = total + (torch.log1p(E.abs()) - torch.log1p(Tg.abs())).abs().mean()
+        if floor is None:
+            total = total + (torch.log1p(E.abs()) - torch.log1p(Tg.abs())).abs().mean()
+        else:
+            fl = floor * (n_fft / N_FFT)
+            total = total + (torch.log(E.abs() + fl) - torch.log(Tg.abs() + fl)).abs().mean()
     return total / 3
 
 
@@ -226,9 +233,11 @@ def windows(torch, tracks, seconds, batch, rng, merge_none=None):
     return torch.as_tensor(np.stack(mixes)), torch.as_tensor(np.stack(eligs))
 
 
-def loss_audio(torch, est, tgt):
-    """L1 on the magnitude STFT + L1 on the complex STFT (both 2048/512), plus a small waveform L1."""
-    return ((est.abs() - tgt.abs()).abs().mean() + 0.5 * (est - tgt).abs().mean())
+def loss_audio(torch, est, tgt, floor=None):
+    """L1 on the magnitude STFT (linear, or log with a relative `floor` [B,1,1,1]) + 0.5 L1 on the complex STFT."""
+    mag = ((est.abs() - tgt.abs()).abs().mean() if floor is None
+           else (torch.log(est.abs() + floor) - torch.log(tgt.abs() + floor)).abs().mean())
+    return mag + 0.5 * (est - tgt).abs().mean()
 
 
 def si_sdr(torch, est, ref):
@@ -305,10 +314,11 @@ def train(a):
             mix, elig = (t.to(dev) for t in next(batches))
             X = stft(torch, mix); Tt = stft(torch, elig)
             Est = net.separate_stft(X)
-            loss = loss_audio(torch, Est, Tt)
+            floor = a.loss_floor * X.abs().mean(dim=(1, 2, 3)) if a.loss == "log" else None     # [B], per window
+            loss = loss_audio(torch, Est, Tt, None if floor is None else floor.view(-1, 1, 1, 1))
             if a.arch == "band":
                 est_wav = istft(torch, Est, mix.shape[-1])
-                loss = loss + multires_loss(torch, est_wav, elig)
+                loss = loss + multires_loss(torch, est_wav, elig, None if floor is None else floor.repeat_interleave(2).view(-1, 1, 1))
                 if a.sisdr_after and step > a.sisdr_after:
                     loss = loss - 0.02 * si_sdr(torch, est_wav, elig).mean()
             (loss / a.accum).backward()
@@ -368,6 +378,8 @@ def main():
     t.add_argument("--warmup", type=int, default=2000); t.add_argument("--sisdr-after", type=int, default=0)
     t.add_argument("--feat", type=int, default=48); t.add_argument("--h1", type=int, default=32); t.add_argument("--h2", type=int, default=32); t.add_argument("--bhg", type=int, default=32)
     t.add_argument("--band-rnn", type=int, default=0, help="band model: hidden size of a bidirectional GRU across the bands (0 = the depthwise mixers)")
+    t.add_argument("--loss", default="lin", choices=("lin", "log"), help="magnitude terms: linear L1 (default) or log-magnitude L1 with a relative floor")
+    t.add_argument("--loss-floor", type=float, default=3e-3, help="--loss log: floor relative to the window's mean |X| (3e-3 = -50 dB)")
     t.add_argument("--accum", type=int, default=1, help="gradient accumulation steps (effective batch = batch x accum)")
     s = sub.add_parser("separate"); s.add_argument("--model", required=True); s.add_argument("--wav", required=True); s.add_argument("--out", required=True)
     a = ap.parse_args()
