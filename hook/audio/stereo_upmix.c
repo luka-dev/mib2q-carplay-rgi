@@ -605,6 +605,7 @@ void spa_stereo_upmix_default_config(struct spa_stereo_upmix_config *config)
     config->hssr_guard_model = NULL;
     config->hssr_mask_model = NULL;
     config->mask_drive_q15 = 0;
+    config->mask_treble_db10 = 0;
 }
 
 void spa_stereo_upmix_config_set_lfe(
@@ -630,6 +631,15 @@ void spa_stereo_upmix_config_set_hssr_guard_model(
 {
     if (config) config->hssr_guard_model =
         model && spa_hssr_model_ready(model) ? model : NULL;
+}
+
+void spa_stereo_upmix_config_set_hssr_mask_treble(struct spa_stereo_upmix_config *config,
+                                                  int32_t treble_db10)
+{
+    if (!config) return;
+    if (treble_db10 > 120) treble_db10 = 120;
+    if (treble_db10 < -120) treble_db10 = -120;
+    config->mask_treble_db10 = treble_db10;
 }
 
 void spa_stereo_upmix_config_set_hssr_mask_model(
@@ -673,7 +683,8 @@ int spa_stereo_upmix_init(struct spa_stereo_upmix *state,
         state->_runtime._hssr.guard_model = saved.hssr_guard_model;
         spa_hssr_state_reset(&state->_runtime._hssr.guard_network);
         state->_runtime._hssr.mask_model = saved.hssr_mask_model;
-        state->_runtime._hssr.mask_drive = (float)saved.mask_drive_q15 / 32768.0f;
+        spa_hssr_dsp_set_mask_drive(&state->_runtime._hssr,
+                                    (float)saved.mask_drive_q15 / 32768.0f, saved.mask_treble_db10);
         spa_mask_state_reset(&state->_runtime._hssr.mask_network);
         if (saved.hssr_control_provider)
             saved.hssr_control_provider->reset(
@@ -715,7 +726,9 @@ int spa_stereo_upmix_reset(struct spa_stereo_upmix *state)
          * the first stream — found on the unit 2026-09-27: maskReady=0 */
         state->_runtime._hssr.guard_model = state->config.hssr_guard_model;
         state->_runtime._hssr.mask_model = state->config.hssr_mask_model;
-        state->_runtime._hssr.mask_drive = (float)state->config.mask_drive_q15 / 32768.0f;
+        spa_hssr_dsp_set_mask_drive(&state->_runtime._hssr,
+                                    (float)state->config.mask_drive_q15 / 32768.0f,
+                                    state->config.mask_treble_db10);
         if (state->config.hssr_control_provider)
             state->config.hssr_control_provider->reset(
                 state->config.hssr_control_provider->context, generation);

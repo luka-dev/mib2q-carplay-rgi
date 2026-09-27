@@ -245,6 +245,11 @@ struct spa_hssr_dsp {
     const struct spa_mask_model *mask_model;
     struct spa_mask_state mask_network;
     float mask_drive;
+    /* mask_drive per bin: flat below 1.5 kHz, mask_drive * 10^(treble/20)
+     * above 3 kHz (smoothstep between) — the mask keeps instrument bodies
+     * and left the rear darker than the 22.09 heuristic; this gives the
+     * instruments' highs back without touching the net's decisions */
+    float mask_drive_bin[SPA_HSSR_BINS];
     float mask_features[SPA_MASK_BINS * SPA_MASK_FEATURES];
     float mask_eligibility[SPA_MASK_BINS];
     uint32_t mask_ready;
@@ -252,6 +257,8 @@ struct spa_hssr_dsp {
     uint32_t mask_fallbacks;   /* times three late controls handed the object back to the heuristic path */
 };
 
+/* Fill mask_drive / mask_drive_bin from a drive and a treble shelf in tenths of dB. */
+void spa_hssr_dsp_set_mask_drive(struct spa_hssr_dsp *state, float drive, int32_t treble_db10);
 void spa_hssr_dsp_prepare(struct spa_hssr_dsp *state);
 void spa_hssr_dsp_reset(struct spa_hssr_dsp *state);
 

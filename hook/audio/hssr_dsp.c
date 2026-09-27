@@ -1190,6 +1190,18 @@ static void spa_hssr_extract_mask_features(struct spa_hssr_dsp *state)
     }
 }
 
+void spa_hssr_dsp_set_mask_drive(struct spa_hssr_dsp *state, float drive, int32_t treble_db10)
+{
+    unsigned bin;
+    const float treble = powf(10.0f, (float)treble_db10 / 200.0f);
+    state->mask_drive = drive;
+    for (bin = 0; bin < SPA_HSSR_BINS; ++bin) {
+        float hz = (float)bin * (48000.0f / (float)SPA_HSSR_FFT_SIZE);
+        float t = spa_hssr_dsp_smoothstep(hz, 1500.0f, 3000.0f);
+        state->mask_drive_bin[bin] = drive * (1.0f + t * (treble - 1.0f));
+    }
+}
+
 static void spa_hssr_mask_missed(struct spa_hssr_dsp *state)
 {
     /* One late period keeps the previous eligibility; repeated lateness
@@ -1781,7 +1793,7 @@ static void spa_hssr_render_hop(
 
             if (e < 0.0f) e = 0.0f;
             if (e > 1.0f) e = 1.0f;
-            mask = sqrtf(e) * state->mask_drive;
+            mask = sqrtf(e) * state->mask_drive_bin[bin];
             state->bin[bin].object_pan = state->bin[bin].scene_lr;
         }
 #ifdef SPA_HSSR_TEST_MASK

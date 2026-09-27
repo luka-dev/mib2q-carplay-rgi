@@ -76,6 +76,7 @@ struct options {
     const char *guard_model_path;
     const char *mask_model_path;      /* Phase 1 mask net (HSSRMSK1) on the PRODUCTION path */
     double mask_drive_prod;
+    double mask_treble_db;           /* the mask drive's shelf above ~2.5 kHz, dB */
 };
 
 static uint16_t load_u16le(const uint8_t *bytes)
@@ -453,6 +454,7 @@ static int parse_options(int argc, char **argv, struct options *options)
     options->guard_model_path = NULL;
     options->mask_model_path = NULL;
     options->mask_drive_prod = 0.0;
+    options->mask_treble_db = 0.0;
 
     for (index = 1; index < argc; index++) {
         const char *argument = argv[index];
@@ -488,6 +490,17 @@ static int parse_options(int argc, char **argv, struct options *options)
         if (strcmp(argument, "--mask-model") == 0) {
             if (++index >= argc) return 0;
             options->mask_model_path = argv[index];
+            continue;
+        }
+        if (strcmp(argument, "--mask-treble") == 0) {
+            char *end;
+            if (++index >= argc) return 0;
+            options->mask_treble_db = strtod(argv[index], &end);
+            if (end == argv[index] || *end || !isfinite(options->mask_treble_db) ||
+                options->mask_treble_db < -12.0 || options->mask_treble_db > 12.0) {
+                fprintf(stderr, "error: --mask-treble must be -12..12 dB\n");
+                return 0;
+            }
             continue;
         }
         if (strcmp(argument, "--mask-drive-prod") == 0) {
@@ -958,6 +971,8 @@ int main(int argc, char **argv)
             }
             spa_stereo_upmix_config_set_hssr_mask_model(&config, &hssr_mask,
                 (uint32_t)(options.mask_drive_prod * 32768.0 + 0.5));
+            spa_stereo_upmix_config_set_hssr_mask_treble(&config,
+                (int32_t)(options.mask_treble_db * 10.0 + (options.mask_treble_db >= 0.0 ? 0.5 : -0.5)));
         }
     }
     if (paths_are_same_file(options.input_path, options.output_path)) {
