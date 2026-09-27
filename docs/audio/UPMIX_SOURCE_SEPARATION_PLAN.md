@@ -670,6 +670,7 @@ vocal-owned cells / vocal energy), then through the DSP with
 | run | | result |
 |---|---|---|
 | sep1 | the recipe above, 6000 steps (25 min) | SI-SDR of the estimate vs the eligible truth −5.9 → **−2.3 dB** by step 2000 and flat after; vocal leak 0.24–0.41. The checkpoint selection (`si_sdr − 20·leak`) picked step 750 (leak 0.06, SI-SDR −4.3): a near-silent estimate — through the DSP: rear −42 dBFS (5 dB below every other row), guitars 0.02, voice 0.01 | not a feasibility answer yet: a 31k-param magnitude mask trained 25 min does not separate (SI-SDR must clear the mixture's own baseline by a wide margin); the selection metric was wrong. sep2: select by SI-SDR, log the mixture baseline, 20 000 steps |
+| sep2 | sep1 + selection by SI-SDR, the mixture baseline logged, 20 000 steps | at step 2000: SI-SDR −2.5 dB vs the **mixture's −6.3 dB** (+3.8 dB), vocal leak 0.40; running | the student does separate something, far from a separator (htdemucs' "other" sits around +5 dB on MUSDB); the curve flattened by step 1500 in both runs |
 
 ## 📝 Publication (astra review 5, 2026-09-26)
 
