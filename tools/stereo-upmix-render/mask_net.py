@@ -521,7 +521,60 @@ class FullNet:
         return self.torch.softmax(self._logits(f), -1)
 
 
+class FreqNet:
+    """astra review 6, point 2 — the ~230 M MAC/s student built for FREQUENCY modelling, the one
+    untested lever after every per-cell student sat on the same line: (1) strided frequency convs
+    257 -> 129 -> 65 over the standardised cell features + the probe descriptor (12 inputs/cell);
+    (2) a bidirectional GRU ACROSS the 65 bins per control (partial-level evidence across the
+    spectrum, no future time needed); (3) a causal GRU over controls shared across bins (state per
+    bin); (4) a full-resolution decoder: the 65-map interpolated back to 257 + the 12 local
+    descriptors -> per-cell roles.  Stateful (65 x hidden_t per stream)."""
+
+    def __init__(self, torch, band, n_out=5, c1=24, c2=32, hf=40, ht=16, dec=16, **_):
+        nn = torch.nn
+        self.torch = torch
+        self.n_in = 4 + 9                                            # standardised f + descriptor
+        self.conv1 = nn.Sequential(nn.Conv1d(self.n_in, c1, 5, stride=2, padding=2), nn.Tanh())     # 257 -> 129
+        self.conv2 = nn.Sequential(nn.Conv1d(c1, c2, 3, stride=2, padding=1), nn.Tanh())            # 129 -> 65
+        self.fgru = nn.GRU(c2, hf, batch_first=True, bidirectional=True)                            # across the 65 bins
+        self.tgru = nn.GRU(2 * hf, ht, batch_first=True)                                            # over controls, per bin
+        self.dec = nn.Sequential(nn.Linear(2 * hf + ht + self.n_in, dec), nn.Tanh(), nn.Linear(dec, n_out))
+        self.pres = nn.Linear(2 * hf + ht, 1)                                                     # per-bin vocal logit (unused for now)
+        self.modules = nn.ModuleList([self.conv1, self.conv2, self.fgru, self.tgru, self.pres, self.dec])
+        self.n_out, self.c1, self.c2, self.hf, self.ht = n_out, c1, c2, hf, ht
+        self.last_presence = None
+        n65 = 65
+        self.macs = (5 * self.n_in * c1 * 129 + 3 * c1 * c2 * n65 + 2 * 3 * (c2 * hf + hf * hf) * n65
+                     + 3 * (2 * hf * ht + ht * ht) * n65 + ((2 * hf + ht + self.n_in) * dec + dec * n_out) * N_BINS)
+
+    def to(self, dev):
+        self.modules.to(dev); return self
+
+    def parameters(self):
+        return self.modules.parameters()
+
+    def _logits(self, f):
+        torch = self.torch
+        B, T = f.shape[:2]
+        s = standardize(torch, f).clamp(-6, 6)
+        d = standardize(torch, probe_descriptor(torch, f, 2), DESC_STATS).clamp(-6, 6)
+        x = torch.cat([s, d], -1)                                                  # [B,T,257,13]
+        h = self.conv2(self.conv1(x.reshape(B * T, N_BINS, self.n_in).transpose(1, 2)))   # [BT,c2,65]
+        fq, _ = self.fgru(h.transpose(1, 2))                                        # [BT,65,2hf]
+        tm, _ = self.tgru(fq.reshape(B, T, 65, 2 * self.hf).permute(0, 2, 1, 3).reshape(B * 65, T, 2 * self.hf))
+        tm = tm.reshape(B, 65, T, self.ht).permute(0, 2, 1, 3)                       # [B,T,65,ht]
+        ctx = torch.cat([fq.reshape(B, T, 65, 2 * self.hf), tm], -1)                 # [B,T,65,2hf+ht]
+        up = torch.nn.functional.interpolate(ctx.reshape(B * T, 65, -1).transpose(1, 2), size=N_BINS,
+                                             mode="linear", align_corners=True).transpose(1, 2).reshape(B, T, N_BINS, -1)
+        return self.dec(torch.cat([up, x], -1))
+
+    def forward(self, f):
+        return self.torch.softmax(self._logits(f), -1)
+
+
 def build_net(torch, arch, band, **kw):
+    if arch == "freq":
+        return FreqNet(torch, band, n_out=kw.get("n_out", 5), hf=kw.get("hidden", 40), ht=kw.get("ctx", 16), dec=kw.get("dec", 16))
     if arch in ("full", "full_probe"):
         return FullNet(torch, band, n_out=kw.get("n_out", 5), ch=kw.get("proj", 16), hidden=kw.get("hidden", 64),
                        dec=kw.get("dec", 24), probe=arch == "full_probe", layers=kw.get("layers", 1), bidir=kw.get("bidir", False))
@@ -999,7 +1052,7 @@ def train(a):
             fs = [targets_and_features(torch, next(batches).to(dev), rng, augment=True, fine=net_is_fine(net))[0] for _ in range(8)]
             fs = torch.cat(fs)
             fit_feat_stats(torch, probe_descriptor(torch, fs, net.neigh) if isinstance(net, (ProbeNet, ProbeCtxNet)) else fs)
-            if a.arch == "full_probe":
+            if a.arch in ("full_probe", "freq"):
                 fit_feat_stats(torch, probe_descriptor(torch, fs, 2), DESC_STATS)
     print("feature mean", [round(v, 2) for v in FEAT_STATS["mean"]], "std", [round(v, 2) for v in FEAT_STATS["std"]], flush=True)
     for step in range(a.start_step + 1, a.steps + 1):
@@ -1416,7 +1469,7 @@ def main():
     t.add_argument("--eval-every", type=int, default=250); t.add_argument("--eval-songs", type=int, default=20)
     t.add_argument("--merge", default=DEFAULT_MERGE, help="output groups as name=cached+cached;...")
     t.add_argument("--neigh", type=int, default=0, help="+-bins of per-bin features fed to the MLP")
-    t.add_argument("--arch", default="mlp", choices=("mlp", "tf", "conv2048", "probe", "probe_roles", "probe_ctx", "full", "full_probe"),
+    t.add_argument("--arch", default="mlp", choices=("mlp", "tf", "conv2048", "probe", "probe_roles", "probe_ctx", "full", "full_probe", "freq"),
                    help="tf = per-bin GRUs over frequency and time; conv2048 = 2048-point analysis + frequency conv (ctx=channels, hidden=time GRU); "
                         "full = whole-spectrum strided conv + GRU bottleneck + per-cell decoder (proj=channels, hidden=GRU)")
     t.add_argument("--teacher-cache", help="htdemucs cache (teacher_label.py separate): protection-only supervision on confident vocal cells")
