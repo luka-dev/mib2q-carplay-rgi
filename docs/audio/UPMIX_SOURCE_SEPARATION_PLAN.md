@@ -436,8 +436,10 @@ identical).  The pick: v27a + veto 0.5 ties on share (voice 0.04 / guitars
 2/40, 1/39, 0/40); v29a + veto 0.5 the same story (voice 0.03 / guitars 0.07
 / keys 0.08, swinging 3/40, 3/39, 2/27, drums 1/40) — **v21a stays the
 blob**: the same shares with the fewest swings.  The rerun with the
-Phase 1b runtime (fast exp/log, clamped tanh, padded convs — the PC build of
-the exact shipped arithmetic) is queued as `prod9`.  Next: the Krait bench on
+Phase 1b runtime (fast exp/log, clamped tanh, padded convs, int8 decoder —
+the PC build of the exact shipped arithmetic, `prod9`) gives the identical
+row again: voice 0.04 (2/40), guitars 0.07 (1/39), keys 0.08 (1/27), rear
+−37.6 dBFS, error 0.16 (gain-fit 0.15).  Next: the Krait bench on
 the unit (`stereo_upmix_bench --mask-model`, the QNX build), then the car
 install (blob beside `hssr_model.bin`, `AUDIO_HSSR_MASK_DRIVE=1.0`,
 `AUDIO_HSSR_VOCAL_GATE=0.5`).
