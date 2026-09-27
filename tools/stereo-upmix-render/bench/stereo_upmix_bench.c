@@ -310,7 +310,7 @@ static void print_usage(const char *program)
 {
     fprintf(stderr,
             "usage: %s [--backend hssr-universal] "
-            "[--model HSSR.bin] "
+            "[--model HSSR.bin] [--mask-model HSSRMSK1.bin] "
             "[--blocks 1..%u] [--warmup 1..%u] "
             "[--scene] [--async-controller] [--realtime-pacing] [--qemu-icount]\n",
             program, (unsigned)BENCH_MAX_BLOCKS,
@@ -381,6 +381,8 @@ int main(int argc, char **argv)
     int scene = 0;
     int realtime_pacing = 0;
     const char *model_path = NULL;
+    const char *mask_model_path = NULL;
+    static struct spa_mask_model hssr_mask;
     size_t index;
     int argument;
 
@@ -415,6 +417,9 @@ int main(int argc, char **argv)
             realtime_pacing = 1;
         } else if (strcmp(argv[argument], "--realtime-pacing") == 0) {
             realtime_pacing = 1;
+        } else if (strcmp(argv[argument], "--mask-model") == 0 &&
+                   argument + 1 < argc) {
+            mask_model_path = argv[++argument];
         } else if (strcmp(argv[argument], "--model") == 0 &&
                    argument + 1 < argc) {
             model_path = argv[++argument];
@@ -462,6 +467,13 @@ int main(int argc, char **argv)
             return 1;
         }
         spa_stereo_upmix_config_set_hssr_model(&config, &hssr_model);
+        if (mask_model_path) {
+            if (spa_mask_model_load_file(&hssr_mask, mask_model_path) != 0) {
+                fprintf(stderr, "error: failed to load mask net %s\n", mask_model_path);
+                return 1;
+            }
+            spa_stereo_upmix_config_set_hssr_mask_model(&config, &hssr_mask, 32768u);
+        }
         if (async_controller) {
             if (spa_hssr_control_worker_start(
                     &g_control_worker, &hssr_model, 1u,
@@ -475,6 +487,8 @@ int main(int argc, char **argv)
                 spa_hssr_model_unload(&hssr_model);
                 return 1;
             }
+            if (mask_model_path)
+                spa_hssr_control_worker_set_mask(&g_control_worker, &hssr_mask);
             spa_stereo_upmix_config_set_hssr_control_provider(
                 &config,
                 spa_hssr_control_worker_provider(&g_control_worker));

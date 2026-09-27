@@ -46,10 +46,12 @@ $CC $CFLAGS -mfpu=neon -mfloat-abi=softfp -c \
     hook/audio/hssr_dsp.c -o "$OUT/hssr_dsp.o"
 $CC $CFLAGS -mfpu=neon -mfloat-abi=softfp -c \
     hook/audio/hssr_neon.c -o "$OUT/hssr_neon.o"
+$CC $CFLAGS -mfpu=neon -mfloat-abi=softfp -c \
+    hook/audio/hssr_mask.c -o "$OUT/hssr_mask.o"
 $CC $CFLAGS -c hook/audio/hssr_control_worker.c \
     -o "$OUT/hssr_control_worker.o"
 $CC "$OUT/stereo_upmix_bench.o" "$OUT/stereo_upmix.o" \
-    "$OUT/hssr_dsp.o" "$OUT/hssr_neon.o" \
+    "$OUT/hssr_dsp.o" "$OUT/hssr_neon.o" "$OUT/hssr_mask.o" \
     "$OUT/hssr_control_worker.o" "$OUT/soundcheck.o" \
     -o "$OUT/stereo_upmix_bench" -lm
 

@@ -10,6 +10,7 @@
 #include <stdint.h>
 
 #include "hssr_neon.h"
+#include "hssr_mask.h"
 
 enum {
     SPA_HSSR_FFT_SIZE = 512,
@@ -37,8 +38,11 @@ enum spa_hssr_bed_attack {
  * non-blocking mailboxes. */
 struct spa_hssr_control_provider {
     void *context;
+    /* mask_features: the per-bin features of the control hop for the mask net
+     * (SPA_MASK_BINS x SPA_MASK_FEATURES), or NULL when no mask model runs. */
     int (*submit)(void *context, uint32_t generation, uint32_t sequence,
-                  const float features[SPA_HSSR_FEATURES]);
+                  const float features[SPA_HSSR_FEATURES],
+                  const float *mask_features);
     int (*receive)(void *context, uint32_t generation,
                    uint32_t maximum_sequence,
                    float control[SPA_HSSR_OUTPUTS],
@@ -47,6 +51,9 @@ struct spa_hssr_control_provider {
     /* Optional: copy the guard model's control block for the result just
      * returned by receive().  NULL when the provider runs no guard model. */
     int (*receive_guard)(void *context, float control[SPA_HSSR_OUTPUTS]);
+    /* Optional: the mask net's rear eligibility for the result just returned
+     * by receive().  NULL when the provider runs no mask model. */
+    int (*receive_mask)(void *context, float eligibility[SPA_MASK_BINS]);
 };
 
 /* Interleaved per-bin state; scene_lr is the smoothed (PL-PR)/(PL+PR). */
@@ -229,6 +236,19 @@ struct spa_hssr_dsp {
     struct spa_hssr_state guard_network;
     float guard_control[SPA_HSSR_OUTPUTS];
     uint32_t guard_valid;
+    /* Mask net (Phase 1 of the source-separation plan): per-bin rear
+     * eligibility e from the control hop's features, one control old like the
+     * GRU controls.  While a fresh eligibility exists the object mask becomes
+     * sqrt(e) * mask_drive with the bin's own balance as its pan (the
+     * measured "mask-drive" renderer); the per-band vocal gate stays on top.
+     * mask_drive 0 = the heuristic object path (unchanged production). */
+    const struct spa_mask_model *mask_model;
+    struct spa_mask_state mask_network;
+    float mask_drive;
+    float mask_features[SPA_MASK_BINS * SPA_MASK_FEATURES];
+    float mask_eligibility[SPA_MASK_BINS];
+    uint32_t mask_ready;
+    uint32_t mask_missed;
 };
 
 void spa_hssr_dsp_prepare(struct spa_hssr_dsp *state);

@@ -603,6 +603,8 @@ void spa_stereo_upmix_default_config(struct spa_stereo_upmix_config *config)
     config->hssr_model = NULL;
     config->hssr_control_provider = NULL;
     config->hssr_guard_model = NULL;
+    config->hssr_mask_model = NULL;
+    config->mask_drive_q15 = 0;
 }
 
 void spa_stereo_upmix_config_set_lfe(
@@ -628,6 +630,15 @@ void spa_stereo_upmix_config_set_hssr_guard_model(
 {
     if (config) config->hssr_guard_model =
         model && spa_hssr_model_ready(model) ? model : NULL;
+}
+
+void spa_stereo_upmix_config_set_hssr_mask_model(
+    struct spa_stereo_upmix_config *config,
+    const struct spa_mask_model *model, uint32_t drive_q15)
+{
+    if (!config) return;
+    config->hssr_mask_model = model && spa_mask_model_ready(model) ? model : NULL;
+    config->mask_drive_q15 = config->hssr_mask_model ? (drive_q15 > 65536u ? 65536u : drive_q15) : 0u;
 }
 
 void spa_stereo_upmix_config_set_hssr_control_provider(
@@ -661,6 +672,9 @@ int spa_stereo_upmix_init(struct spa_stereo_upmix *state,
         state->_runtime._hssr.control_generation = 1u;
         state->_runtime._hssr.guard_model = saved.hssr_guard_model;
         spa_hssr_state_reset(&state->_runtime._hssr.guard_network);
+        state->_runtime._hssr.mask_model = saved.hssr_mask_model;
+        state->_runtime._hssr.mask_drive = (float)saved.mask_drive_q15 / 32768.0f;
+        spa_mask_state_reset(&state->_runtime._hssr.mask_network);
         if (saved.hssr_control_provider)
             saved.hssr_control_provider->reset(
                 saved.hssr_control_provider->context, 1u);

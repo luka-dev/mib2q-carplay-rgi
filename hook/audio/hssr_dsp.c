@@ -1167,6 +1167,37 @@ static int spa_hssr_analyze_hop(
     return full_frame;
 }
 
+/* The mask net's per-bin features of the control hop: log|L|^2, log|R|^2 and
+ * the inter-channel phase (cos, sin), exactly mask_net.py features(). */
+static void spa_hssr_extract_mask_features(struct spa_hssr_dsp *state)
+{
+    unsigned bin;
+
+    for (bin = 0; bin < SPA_HSSR_BINS; ++bin) {
+        float lr = state->fft_re[SPA_HSSR_LEFT][bin];
+        float li = state->fft_im[SPA_HSSR_LEFT][bin];
+        float rr = state->fft_re[SPA_HSSR_RIGHT][bin];
+        float ri = state->fft_im[SPA_HSSR_RIGHT][bin];
+        float pl = lr * lr + li * li;
+        float pr = rr * rr + ri * ri;
+        float mag = sqrtf(pl * pr) + 1.0e-9f;
+        float *f = state->mask_features + (size_t)bin * SPA_MASK_FEATURES;
+
+        f[0] = logf(pl + 1.0e-7f);
+        f[1] = logf(pr + 1.0e-7f);
+        f[2] = (lr * rr + li * ri) / mag;          /* Re(L * conj(R)) / |L||R| */
+        f[3] = (li * rr - lr * ri) / mag;          /* Im(L * conj(R)) / |L||R| */
+    }
+}
+
+static void spa_hssr_mask_missed(struct spa_hssr_dsp *state)
+{
+    /* One late period keeps the previous eligibility; repeated lateness
+     * hands the object back to the heuristic path (never a silent rear). */
+    if (state->mask_missed < UINT32_MAX) state->mask_missed++;
+    if (state->mask_missed >= 3u) state->mask_ready = 0;
+}
+
 static void spa_hssr_control_failsafe(struct spa_hssr_dsp *state)
 {
     unsigned band;
@@ -1195,6 +1226,7 @@ static void spa_hssr_run_control(
 
     state->control_hop = 0;
     spa_hssr_extract_features(state, bands);
+    if (state->mask_model) spa_hssr_extract_mask_features(state);
     state->control_sequence++;
     if (!state->control_sequence) {
         state->control_sequence = 1u;
@@ -1219,6 +1251,15 @@ static void spa_hssr_run_control(
         } else {
             spa_hssr_control_failsafe(state);
         }
+        if (state->mask_model && state->mask_drive > 0.0f) {
+            if (spa_mask_infer(state->mask_model, &state->mask_network,
+                               state->mask_features, state->mask_eligibility, NULL) == 0) {
+                state->mask_ready = 1u;
+                state->mask_missed = 0;
+            } else {
+                spa_hssr_mask_missed(state);
+            }
+        }
         return;
     }
 
@@ -1237,6 +1278,15 @@ static void spa_hssr_run_control(
             state->guard_valid = provider->receive_guard &&
                 provider->receive_guard(provider->context, state->guard_control) > 0;
             spa_hssr_update_controls(state);
+            if (state->mask_model && state->mask_drive > 0.0f) {
+                if (provider->receive_mask &&
+                    provider->receive_mask(provider->context, state->mask_eligibility) > 0) {
+                    state->mask_ready = 1u;
+                    state->mask_missed = 0;
+                } else {
+                    spa_hssr_mask_missed(state);
+                }
+            }
         } else {
             deadline_missed = 1;
         }
@@ -1246,10 +1296,12 @@ static void spa_hssr_run_control(
         provider->submit(provider->context,
                          state->control_generation,
                          state->control_sequence,
-                         state->features) <= 0) {
+                         state->features,
+                         state->mask_model ? state->mask_features : NULL) <= 0) {
         deadline_missed = 1;
     }
     if (deadline_missed) {
+        if (state->mask_model) spa_hssr_mask_missed(state);
         state->control_deadlines_missed++;
         /* One late period is harmless: keep the preceding stable mask.
          * Repeated lateness decays toward a quiet, bounded rear image. */
@@ -1718,6 +1770,17 @@ static void spa_hssr_render_hop(
         band = state->bin_band[bin];
         mask = state->bin[bin].mask;
         mask *= 1.0f + state->band_object_boost[band];
+        if (state->mask_ready && state->mask_drive > 0.0f) {
+            /* Phase 1: the learned eligibility drives the object (amplitude
+             * sqrt(e), pan = the bin's own balance); the heuristic slots /
+             * ridge / coherence are bypassed, the vocal gate below stays. */
+            float e = state->mask_eligibility[bin];
+
+            if (e < 0.0f) e = 0.0f;
+            if (e > 1.0f) e = 1.0f;
+            mask = sqrtf(e) * state->mask_drive;
+            state->bin[bin].object_pan = state->bin[bin].scene_lr;
+        }
 #ifdef SPA_HSSR_TEST_MASK
         if (state->test_inject_pcm) {
             float pl, pr;

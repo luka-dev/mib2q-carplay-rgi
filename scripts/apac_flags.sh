@@ -33,6 +33,6 @@ APAC_CFLAGS_NOINC="-O2 -g -std=gnu99 -Wall -Wextra -fdata-sections -ffunction-se
 # errno sqrtf is a bare vsqrt.  Measured bit-identical and -6.9% instructions
 # in tools/stereo-upmix-render/bench.  No -mfpu=neon-vfpv4: fused multiply-add
 # changes the arithmetic.  The hook and the bench both compile these files so.
-UPMIX_DSP_SRCS="audio/stereo_upmix.c audio/hssr_dsp.c audio/hssr_neon.c \
+UPMIX_DSP_SRCS="audio/stereo_upmix.c audio/hssr_dsp.c audio/hssr_neon.c audio/hssr_mask.c \
 audio/hssr_control_worker.c audio/soundcheck.c"
 UPMIX_DSP_CFLAGS="-O3 -fno-math-errno"

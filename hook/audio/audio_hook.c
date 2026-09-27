@@ -1870,6 +1870,62 @@ static const struct spa_hssr_model *spa_hssr_runtime_guard_model(void)
     return spa_hssr_guard_status == SPA_HSSR_OK ? &spa_hssr_guard_value : NULL;
 }
 
+static struct spa_mask_model spa_hssr_mask_value;
+static int spa_hssr_mask_status = -5;
+
+static void spa_hssr_mask_init_once(void)
+{
+    /* AUDIO_HSSR_MASK_MODEL, else hssr_mask.bin beside the main model; absent
+     * file = no mask net (silently): the object path stays the heuristic one. */
+    const char *path = getenv(SPA_AUDIO_HSSR_MASK_MODEL_ENV);
+    char derived[512];
+
+    if (!path || !path[0]) {
+        const char *main_path = getenv(SPA_AUDIO_HSSR_MODEL_ENV);
+        const char *slash;
+        size_t dir_length;
+
+        if (!main_path || !main_path[0]) main_path = SPA_AUDIO_HSSR_MODEL_DEFAULT;
+        slash = strrchr(main_path, '/');
+        dir_length = slash ? (size_t)(slash - main_path + 1) : 0u;
+        if (dir_length + sizeof("hssr_mask.bin") > sizeof(derived)) return;
+        memcpy(derived, main_path, dir_length);
+        memcpy(derived + dir_length, "hssr_mask.bin", sizeof("hssr_mask.bin"));
+        path = derived;
+        if (access(path, R_OK) != 0) return;
+    }
+    spa_hssr_mask_status = spa_mask_model_load_file(&spa_hssr_mask_value, path);
+    if (spa_hssr_mask_status == 0)
+        LOG_WARN(LOG_MODULE, "HSSR: mask net ready path=%s floats=%u",
+                 path, (unsigned)spa_hssr_mask_value.float_count);
+    else
+        LOG_ERROR(LOG_MODULE, "HSSR: mask net rejected path=%s status=%d",
+                  path, spa_hssr_mask_status);
+}
+
+static const struct spa_mask_model *spa_hssr_runtime_mask_model(void)
+{
+    static pthread_once_t once = PTHREAD_ONCE_INIT;
+    pthread_once(&once, spa_hssr_mask_init_once);
+    return spa_hssr_mask_status == 0 ? &spa_hssr_mask_value : NULL;
+}
+
+/* AUDIO_HSSR_MASK_DRIVE 0..2 -> Q15 (0 = off). */
+static uint32_t spa_parse_hssr_mask_drive_q15(void)
+{
+    const char *value = getenv(SPA_AUDIO_HSSR_MASK_DRIVE_ENV);
+    char *end;
+    double drive;
+
+    if (!value || !value[0]) return 0;
+    drive = strtod(value, &end);
+    if (end == value || *end || !(drive >= 0.0 && drive <= 2.0)) {
+        LOG_WARN(LOG_MODULE, "%s=%s ignored (expected 0..2)", SPA_AUDIO_HSSR_MASK_DRIVE_ENV, value);
+        return 0;
+    }
+    return (uint32_t)(drive * 32768.0 + 0.5);
+}
+
 static const struct spa_hssr_model *spa_hssr_runtime_model(void)
 {
     pthread_once(&spa_hssr_model_once, spa_hssr_model_init_once);
@@ -2050,10 +2106,15 @@ static void spa103_render_start(uint32_t generation, int64_t formatIndex, int ha
                 &spa103_render.hssrControlWorker, hssrModel, 1u, 17);
             {
                 const struct spa_hssr_model *guard = spa_hssr_runtime_guard_model();
+                const struct spa_mask_model *mask = spa_hssr_runtime_mask_model();
                 spa_stereo_upmix_config_set_hssr_guard_model(&upmixConfig, guard);
-                if (hssrWorkerStatus == SPA_HSSR_OK)
+                spa_stereo_upmix_config_set_hssr_mask_model(&upmixConfig, mask, spa_parse_hssr_mask_drive_q15());
+                if (hssrWorkerStatus == SPA_HSSR_OK) {
                     spa_hssr_control_worker_set_guard(
                         &spa103_render.hssrControlWorker, guard);
+                    spa_hssr_control_worker_set_mask(
+                        &spa103_render.hssrControlWorker, mask);
+                }
             }
             if (hssrWorkerStatus == SPA_HSSR_OK)
                 spa_stereo_upmix_config_set_hssr_control_provider(
@@ -4049,6 +4110,8 @@ static void spa_rt_upmix_start(snd_pcm_t *handle)
         if (workerStatus == SPA_HSSR_OK) {
             spa_hssr_control_worker_set_guard(&spa_rt_upmix.worker,
                                               spa_hssr_runtime_guard_model());
+            spa_hssr_control_worker_set_mask(&spa_rt_upmix.worker,
+                                             spa_hssr_runtime_mask_model());
             spa_rt_upmix.workerStarted = 1;
         }
     } else {
@@ -4071,6 +4134,7 @@ static void spa_rt_upmix_start(snd_pcm_t *handle)
     upmixConfig.lfe_gain_q15 = config->stereoLfeGainQ15;
     spa_stereo_upmix_config_set_hssr_model(&upmixConfig, model);
     spa_stereo_upmix_config_set_hssr_guard_model(&upmixConfig, spa_hssr_runtime_guard_model());
+    spa_stereo_upmix_config_set_hssr_mask_model(&upmixConfig, spa_hssr_runtime_mask_model(), spa_parse_hssr_mask_drive_q15());
     if (workerStatus == SPA_HSSR_OK)
         spa_stereo_upmix_config_set_hssr_control_provider(
             &upmixConfig, spa_hssr_control_worker_provider(&spa_rt_upmix.worker));

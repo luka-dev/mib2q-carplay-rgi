@@ -15,6 +15,8 @@ struct spa_hssr_control_job {
     uint32_t generation;
     uint32_t sequence;
     float features[SPA_HSSR_FEATURES];
+    uint32_t has_mask;
+    float mask_features[SPA_MASK_BINS * SPA_MASK_FEATURES];
 };
 
 struct spa_hssr_control_result {
@@ -23,6 +25,8 @@ struct spa_hssr_control_result {
     float control[SPA_HSSR_OUTPUTS];
     float guard_control[SPA_HSSR_OUTPUTS];
     uint32_t guard_valid;
+    float eligibility[SPA_MASK_BINS];
+    uint32_t mask_valid;
 };
 
 struct spa_hssr_control_worker_stats {
@@ -41,6 +45,8 @@ struct spa_hssr_control_worker {
     struct spa_hssr_state _network;
     const struct spa_hssr_model *_guard_model;   /* optional second model, see set_guard */
     struct spa_hssr_state _guard_network;
+    const struct spa_mask_model *_mask_model;    /* optional mask net, see set_mask */
+    struct spa_mask_state _mask_network;
     struct spa_hssr_control_provider provider;
     struct spa_hssr_control_job _jobs[2];
     struct spa_hssr_control_result _results[2];
@@ -70,6 +76,11 @@ void spa_hssr_control_worker_stop(struct spa_hssr_control_worker *worker);
 void spa_hssr_control_worker_set_guard(
     struct spa_hssr_control_worker *worker,
     const struct spa_hssr_model *guard);
+/* Optional mask net run after the controllers on every job that carries mask
+ * features; NULL disables. */
+void spa_hssr_control_worker_set_mask(
+    struct spa_hssr_control_worker *worker,
+    const struct spa_mask_model *mask);
 const struct spa_hssr_control_provider *spa_hssr_control_worker_provider(
     struct spa_hssr_control_worker *worker);
 void spa_hssr_control_worker_get_stats(

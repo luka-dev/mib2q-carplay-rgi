@@ -118,6 +118,9 @@ struct spa_stereo_upmix_config {
     const struct spa_hssr_model *hssr_model;
     const struct spa_hssr_control_provider *hssr_control_provider;
     const struct spa_hssr_model *hssr_guard_model;   /* scene builds: V11 vocal safety net, optional */
+    /* Phase 1 mask net (optional) and its drive gain, Q15 (0 = off, 32768 = 1.0). */
+    const struct spa_mask_model *hssr_mask_model;
+    uint32_t mask_drive_q15;
 };
 
 /* Runtime details are public only so callers can embed the complete state and
@@ -193,6 +196,9 @@ void spa_stereo_upmix_config_set_hssr_model(
 void spa_stereo_upmix_config_set_hssr_guard_model(
     struct spa_stereo_upmix_config *config,
     const struct spa_hssr_model *model);
+void spa_stereo_upmix_config_set_hssr_mask_model(
+    struct spa_stereo_upmix_config *config,
+    const struct spa_mask_model *model, uint32_t drive_q15);
 void spa_stereo_upmix_config_set_hssr_control_provider(
     struct spa_stereo_upmix_config *config,
     const struct spa_hssr_control_provider *provider);

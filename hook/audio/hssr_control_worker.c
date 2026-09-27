@@ -24,7 +24,8 @@ static void spa_hssr_atomic_increment(volatile uint32_t *value)
 
 static int spa_hssr_worker_submit(
     void *context, uint32_t generation, uint32_t sequence,
-    const float features[SPA_HSSR_FEATURES])
+    const float features[SPA_HSSR_FEATURES],
+    const float *mask_features)
 {
     struct spa_hssr_control_worker *worker =
         (struct spa_hssr_control_worker *)context;
@@ -47,6 +48,9 @@ static int spa_hssr_worker_submit(
     job->generation = generation;
     job->sequence = sequence;
     memcpy(job->features, features, sizeof(job->features));
+    job->has_mask = mask_features != NULL;
+    if (mask_features)
+        memcpy(job->mask_features, mask_features, sizeof(job->mask_features));
     spa_hssr_atomic_store(&worker->_job_published, next);
     spa_hssr_atomic_increment(&worker->_submitted);
     return 1;
@@ -103,6 +107,21 @@ static int spa_hssr_worker_receive_guard(void *context,
     return 1;
 }
 
+static int spa_hssr_worker_receive_mask(void *context,
+                                        float eligibility[SPA_MASK_BINS])
+{
+    struct spa_hssr_control_worker *worker =
+        (struct spa_hssr_control_worker *)context;
+    const struct spa_hssr_control_result *result;
+
+    if (!worker || !eligibility || !spa_hssr_atomic_load(&worker->_started))
+        return 0;
+    result = &worker->_results[spa_hssr_atomic_load(&worker->_result_consumed) & 1u];
+    if (!result->mask_valid) return 0;
+    memcpy(eligibility, result->eligibility, sizeof(result->eligibility));
+    return 1;
+}
+
 static void spa_hssr_worker_reset(void *context, uint32_t generation)
 {
     struct spa_hssr_control_worker *worker =
@@ -139,6 +158,8 @@ static void *spa_hssr_worker_main(void *opaque)
     float local_control[SPA_HSSR_OUTPUTS];
     float local_guard[SPA_HSSR_OUTPUTS];
     uint32_t local_guard_valid = 0;
+    float local_eligibility[SPA_MASK_BINS];
+    uint32_t local_mask_valid = 0;
     uint32_t active_generation = 0;
     /* Busy: poll every 250 us (jobs arrive every 4 hops = 10.7 ms).  Parked
      * (no job for ~10 ms, e.g. the realtime upmixer while type 103 plays):
@@ -157,6 +178,8 @@ static void *spa_hssr_worker_main(void *opaque)
 
         if (requested != active_generation) {
             spa_hssr_state_reset(&worker->_network);
+            spa_hssr_state_reset(&worker->_guard_network);
+            spa_mask_state_reset(&worker->_mask_network);
             active_generation = requested;
             spa_hssr_atomic_increment(&worker->_resets);
         }
@@ -193,6 +216,12 @@ static void *spa_hssr_worker_main(void *opaque)
                 spa_hssr_infer(guard, &worker->_guard_network,
                                local_job.features, local_guard) == SPA_HSSR_OK;
         }
+        {
+            const struct spa_mask_model *mask = worker->_mask_model;
+            local_mask_valid = mask && local_job.has_mask &&
+                spa_mask_infer(mask, &worker->_mask_network,
+                               local_job.mask_features, local_eligibility, NULL) == 0;
+        }
         if (spa_hssr_atomic_load(&worker->_requested_generation) !=
                 local_job.generation) {
             spa_hssr_atomic_increment(&worker->_stale_discarded);
@@ -216,6 +245,10 @@ static void *spa_hssr_worker_main(void *opaque)
         if (local_guard_valid)
             memcpy(worker->_results[next & 1u].guard_control,
                    local_guard, sizeof(local_guard));
+        worker->_results[next & 1u].mask_valid = local_mask_valid;
+        if (local_mask_valid)
+            memcpy(worker->_results[next & 1u].eligibility,
+                   local_eligibility, sizeof(local_eligibility));
         spa_hssr_atomic_store(&worker->_result_published, next);
         spa_hssr_atomic_increment(&worker->_completed);
     }
@@ -239,6 +272,7 @@ int spa_hssr_control_worker_start(
     worker->provider.receive = spa_hssr_worker_receive;
     worker->provider.reset = spa_hssr_worker_reset;
     worker->provider.receive_guard = spa_hssr_worker_receive_guard;
+    worker->provider.receive_mask = spa_hssr_worker_receive_mask;
     spa_hssr_atomic_store(&worker->_requested_generation,
                           initial_generation);
     if (pthread_create(&worker->_thread, NULL,
@@ -258,6 +292,14 @@ void spa_hssr_control_worker_set_guard(
     if (guard && !spa_hssr_model_ready(guard)) guard = NULL;
     spa_hssr_state_reset(&worker->_guard_network);
     worker->_guard_model = guard;
+}
+
+void spa_hssr_control_worker_set_mask(
+    struct spa_hssr_control_worker *worker,
+    const struct spa_mask_model *mask)
+{
+    if (!worker) return;
+    worker->_mask_model = mask && spa_mask_model_ready(mask) ? mask : NULL;
 }
 
 void spa_hssr_control_worker_stop(struct spa_hssr_control_worker *worker)

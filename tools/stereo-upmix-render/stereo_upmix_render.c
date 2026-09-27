@@ -74,6 +74,8 @@ struct options {
     double lfe_gain_db;            /* re SPA_STEREO_UPMIX_LFE_Q15_DEFAULT */
     const char *model_path;
     const char *guard_model_path;
+    const char *mask_model_path;      /* Phase 1 mask net (HSSRMSK1) on the PRODUCTION path */
+    double mask_drive_prod;
 };
 
 static uint16_t load_u16le(const uint8_t *bytes)
@@ -449,6 +451,8 @@ static int parse_options(int argc, char **argv, struct options *options)
     options->lfe_gain_db = 0.0;
     options->model_path = NULL;
     options->guard_model_path = NULL;
+    options->mask_model_path = NULL;
+    options->mask_drive_prod = 0.0;
 
     for (index = 1; index < argc; index++) {
         const char *argument = argv[index];
@@ -479,6 +483,22 @@ static int parse_options(int argc, char **argv, struct options *options)
                 return 0;
             }
             options->model_path = argv[index];
+            continue;
+        }
+        if (strcmp(argument, "--mask-model") == 0) {
+            if (++index >= argc) return 0;
+            options->mask_model_path = argv[index];
+            continue;
+        }
+        if (strcmp(argument, "--mask-drive-prod") == 0) {
+            char *end;
+            if (++index >= argc) return 0;
+            options->mask_drive_prod = strtod(argv[index], &end);
+            if (end == argv[index] || *end || !isfinite(options->mask_drive_prod) ||
+                options->mask_drive_prod < 0.0 || options->mask_drive_prod > 2.0) {
+                fprintf(stderr, "error: --mask-drive-prod must be 0..2\n");
+                return 0;
+            }
             continue;
         }
         if (strcmp(argument, "--guard-model") == 0) {
@@ -922,6 +942,15 @@ int main(int argc, char **argv)
                 return 2;
             }
             spa_stereo_upmix_config_set_hssr_guard_model(&config, &hssr_guard);
+        }
+        if (options.mask_model_path) {
+            static struct spa_mask_model hssr_mask;
+            if (spa_mask_model_load_file(&hssr_mask, options.mask_model_path) != 0) {
+                fprintf(stderr, "error: cannot load mask net %s\n", options.mask_model_path);
+                return 2;
+            }
+            spa_stereo_upmix_config_set_hssr_mask_model(&config, &hssr_mask,
+                (uint32_t)(options.mask_drive_prod * 32768.0 + 0.5));
         }
     }
     if (paths_are_same_file(options.input_path, options.output_path)) {
