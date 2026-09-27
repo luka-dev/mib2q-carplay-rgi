@@ -260,7 +260,8 @@ def train(a):
     if a.teacher_cache and a.half_half:
         tracks = (tracks[:len(split["train"])], tracks[len(split["train"]):])      # (truth, pseudo-labels)
         print(f"half/half batches: {len(tracks[0])} truth songs, {len(tracks[1])} pseudo-labelled", flush=True)
-    print(f"device {dev}; {len(tracks)} training songs; params {sum(p.numel() for p in net.parameters())}, "
+    n_songs = sum(len(t) for t in tracks) if isinstance(tracks, tuple) else len(tracks)
+    print(f"device {dev}; {n_songs} training songs; params {sum(p.numel() for p in net.parameters())}, "
           f"~{net.macs} MAC per frame = {net.macs * FPS / 1e6:.0f} M MAC/s (+ one 2048-point FFT/iFFT pair per hop)", flush=True)
     os.makedirs(a.out, exist_ok=True)
     start = 0
