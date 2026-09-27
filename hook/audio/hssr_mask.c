@@ -114,20 +114,29 @@ static inline float spa_mask_hsum(float32x4_t v)
     return vget_lane_f32(vpadd_f32(s, s), 0);
 }
 
-/* int8 dot of one weight row against `chunks` 16-lane input chunks; the four
- * int32 lanes still need adding (spa_mask_hsum4_s32).  Two products fit an
- * int16 lane (127 * 127 * 2 < 32768), so vmlal before the widening add. */
-static inline int32x4_t spa_mask_dot_s8_row(const int8_t *w, const int8x16_t *x, int chunks)
+/* int8 dot of one weight row against 16-lane input chunks held in registers;
+ * the four int32 lanes still need adding (spa_mask_hsum4_s32).  Two products
+ * fit an int16 lane (127 * 127 * 2 < 32768), so vmlal before the widening
+ * add: one load, two multiplies, one add per 16 MACs. */
+static inline int16x8_t spa_mask_mul16_s8(int8x16_t w, int8x16_t x)
 {
-    int32x4_t acc = vdupq_n_s32(0);
-    int c;
-    for (c = 0; c < chunks; ++c) {
-        int8x16_t wv = vld1q_s8(w + 16 * c);
-        int16x8_t p = vmull_s8(vget_low_s8(wv), vget_low_s8(x[c]));
-        p = vmlal_s8(p, vget_high_s8(wv), vget_high_s8(x[c]));
-        acc = vpadalq_s16(acc, p);
-    }
-    return acc;
+    int16x8_t p = vmull_s8(vget_low_s8(w), vget_low_s8(x));
+    return vmlal_s8(p, vget_high_s8(w), vget_high_s8(x));
+}
+
+static inline int32x4_t spa_mask_dot_s8_x2(const int8_t *w, int8x16_t x0, int8x16_t x1)
+{
+    int32x4_t acc = vpaddlq_s16(spa_mask_mul16_s8(vld1q_s8(w), x0));
+    return vpadalq_s16(acc, spa_mask_mul16_s8(vld1q_s8(w + 16), x1));
+}
+
+static inline int32x4_t spa_mask_dot_s8_x4(const int8_t *w, int8x16_t x0, int8x16_t x1,
+                                           int8x16_t x2, int8x16_t x3)
+{
+    int32x4_t acc = vpaddlq_s16(spa_mask_mul16_s8(vld1q_s8(w), x0));
+    acc = vpadalq_s16(acc, spa_mask_mul16_s8(vld1q_s8(w + 16), x1));
+    acc = vpadalq_s16(acc, spa_mask_mul16_s8(vld1q_s8(w + 32), x2));
+    return vpadalq_s16(acc, spa_mask_mul16_s8(vld1q_s8(w + 48), x3));
 }
 
 static inline int32x4_t spa_mask_hsum4_s32(int32x4_t a0, int32x4_t a1, int32x4_t a2, int32x4_t a3)
@@ -139,26 +148,88 @@ static inline int32x4_t spa_mask_hsum4_s32(int32x4_t a0, int32x4_t a1, int32x4_t
     return vcombine_s32(vpadd_s32(s0, s1), vpadd_s32(s2, s3));
 }
 
-/* one int8 decoder layer, `rows` (a multiple of 16) rows of `chunks` chunks:
- * out[r] = q8(tanh(dot[r] * scale[r] + bias[r]), 127), packed 16 per chunk */
-static void spa_mask_layer_s8(const int8_t *wq, int stride, const float *scale, const float *bias,
-                              int rows, const int8x16_t *x, int chunks, int8x16_t *out)
+/* four rows' dots -> tanh(dot * scale + bias) as one float vector */
+static inline float32x4_t spa_mask_rows4(int32x4_t d0, int32x4_t d1, int32x4_t d2, int32x4_t d3,
+                                         const float *scale, const float *bias)
 {
+    int32x4_t d = spa_mask_hsum4_s32(d0, d1, d2, d3);
+    return spa_mask_tanh4(vmlaq_f32(vld1q_f32(bias), vcvtq_f32_s32(d), vld1q_f32(scale)));
+}
+
+/* the 32-row int8 decoder layers: out = q8(tanh(dot * scale + bias), 127),
+ * two chunks of 16; layer 1 reads four input chunks, layer 2 two.  Four rows
+ * per loop step with the inputs in registers and the float results parked in
+ * f[]: a fully expanded version spilled 600 registers per cell. */
+static inline void spa_mask_layer1_s8(const int8_t *wq, const float *scale, const float *bias,
+                                      int8x16_t x0, int8x16_t x1, int8x16_t x2, int8x16_t x3,
+                                      int8x16_t *out)
+{
+    float f[SPA_MASK_DEC];
     int r;
-    for (r = 0; r < rows; r += 16) {
-        float32x4_t f[4];
-        int g;
-        for (g = 0; g < 4; ++g) {
-            const int8_t *w = wq + (size_t)(r + 4 * g) * stride;
-            int32x4_t d = spa_mask_hsum4_s32(spa_mask_dot_s8_row(w, x, chunks),
-                                             spa_mask_dot_s8_row(w + stride, x, chunks),
-                                             spa_mask_dot_s8_row(w + 2 * stride, x, chunks),
-                                             spa_mask_dot_s8_row(w + 3 * stride, x, chunks));
-            f[g] = spa_mask_tanh4(vmlaq_f32(vld1q_f32(bias + r + 4 * g), vcvtq_f32_s32(d),
-                                            vld1q_f32(scale + r + 4 * g)));
-        }
-        out[r / 16] = spa_mask_q8x16(f[0], f[1], f[2], f[3], vdupq_n_f32(127.0f));
+#pragma GCC unroll 1
+    for (r = 0; r < SPA_MASK_DEC; r += 4) {
+        const int8_t *w = wq + (size_t)r * SPA_MASK_DEC_PAD;
+        int32x4_t d0 = spa_mask_dot_s8_x4(w, x0, x1, x2, x3);
+        int32x4_t d1 = spa_mask_dot_s8_x4(w + SPA_MASK_DEC_PAD, x0, x1, x2, x3);
+        int32x4_t d2 = spa_mask_dot_s8_x4(w + 2 * SPA_MASK_DEC_PAD, x0, x1, x2, x3);
+        int32x4_t d3 = spa_mask_dot_s8_x4(w + 3 * SPA_MASK_DEC_PAD, x0, x1, x2, x3);
+        vst1q_f32(f + r, spa_mask_rows4(d0, d1, d2, d3, scale + r, bias + r));
     }
+    out[0] = spa_mask_q8x16(vld1q_f32(f), vld1q_f32(f + 4), vld1q_f32(f + 8), vld1q_f32(f + 12),
+                            vdupq_n_f32(127.0f));
+    out[1] = spa_mask_q8x16(vld1q_f32(f + 16), vld1q_f32(f + 20), vld1q_f32(f + 24), vld1q_f32(f + 28),
+                            vdupq_n_f32(127.0f));
+}
+
+static inline void spa_mask_layer2_s8(const int8_t *wq, const float *scale, const float *bias,
+                                      int8x16_t x0, int8x16_t x1, int8x16_t *out)
+{
+    float f[SPA_MASK_DEC];
+    int r;
+#pragma GCC unroll 1
+    for (r = 0; r < SPA_MASK_DEC; r += 4) {
+        const int8_t *w = wq + (size_t)r * SPA_MASK_DEC;
+        int32x4_t d0 = spa_mask_dot_s8_x2(w, x0, x1);
+        int32x4_t d1 = spa_mask_dot_s8_x2(w + SPA_MASK_DEC, x0, x1);
+        int32x4_t d2 = spa_mask_dot_s8_x2(w + 2 * SPA_MASK_DEC, x0, x1);
+        int32x4_t d3 = spa_mask_dot_s8_x2(w + 3 * SPA_MASK_DEC, x0, x1);
+        vst1q_f32(f + r, spa_mask_rows4(d0, d1, d2, d3, scale + r, bias + r));
+    }
+    out[0] = spa_mask_q8x16(vld1q_f32(f), vld1q_f32(f + 4), vld1q_f32(f + 8), vld1q_f32(f + 12),
+                            vdupq_n_f32(127.0f));
+    out[1] = spa_mask_q8x16(vld1q_f32(f + 16), vld1q_f32(f + 20), vld1q_f32(f + 24), vld1q_f32(f + 28),
+                            vdupq_n_f32(127.0f));
+}
+
+/* y = b + ws * (Wq xq): int8 gemv, rows a multiple of 4, cols of 16 */
+static void spa_mask_gemv_s8(const int8_t *wq, const float *ws, const float *b, int rows, int cols,
+                             const int8_t *xq, float *y)
+{
+    int r, c;
+    for (r = 0; r < rows; r += 4) {
+        const int8_t *w0 = wq + (size_t)r * cols;
+        int32x4_t a0 = vdupq_n_s32(0), a1 = a0, a2 = a0, a3 = a0;
+        for (c = 0; c < cols; c += 16) {
+            int8x16_t x = vld1q_s8(xq + c);
+            a0 = vpadalq_s16(a0, spa_mask_mul16_s8(vld1q_s8(w0 + c), x));
+            a1 = vpadalq_s16(a1, spa_mask_mul16_s8(vld1q_s8(w0 + cols + c), x));
+            a2 = vpadalq_s16(a2, spa_mask_mul16_s8(vld1q_s8(w0 + 2 * cols + c), x));
+            a3 = vpadalq_s16(a3, spa_mask_mul16_s8(vld1q_s8(w0 + 3 * cols + c), x));
+        }
+        vst1q_f32(y + r, vmlaq_f32(vld1q_f32(b + r),
+                                   vcvtq_f32_s32(spa_mask_hsum4_s32(a0, a1, a2, a3)),
+                                   vld1q_f32(ws + r)));
+    }
+}
+
+/* n floats (a multiple of 16) -> int8 at a fixed scale of 127 */
+static void spa_mask_quantize_fixed(const float *v, int n, int8_t *q)
+{
+    const float32x4_t mult = vdupq_n_f32(127.0f);
+    int k;
+    for (k = 0; k < n; k += 16)
+        vst1q_s8(q + k, spa_mask_q8x16(vld1q_f32(v + k), vld1q_f32(v + k + 4),
+                                       vld1q_f32(v + k + 8), vld1q_f32(v + k + 12), mult));
 }
 #else
 static int32_t spa_mask_dot_s8(const int8_t *a, const int8_t *b, int count)
@@ -167,6 +238,20 @@ static int32_t spa_mask_dot_s8(const int8_t *a, const int8_t *b, int count)
     int at;
     for (at = 0; at < count; ++at) sum += (int32_t)a[at] * (int32_t)b[at];
     return sum;
+}
+
+static void spa_mask_gemv_s8(const int8_t *wq, const float *ws, const float *b, int rows, int cols,
+                             const int8_t *xq, float *y)
+{
+    int r;
+    for (r = 0; r < rows; ++r)
+        y[r] = (float)spa_mask_dot_s8(wq + (size_t)r * cols, xq, cols) * ws[r] + b[r];
+}
+
+static void spa_mask_quantize_fixed(const float *v, int n, int8_t *q)
+{
+    int k;
+    for (k = 0; k < n; ++k) q[k] = spa_mask_q8(v[k], 127.0f);
 }
 #endif
 
@@ -233,16 +318,40 @@ static int8_t *spa_mask_quantize_rows(const float *w, int rows, int cols, int pa
     return q;
 }
 
+/* [rows][cols] -> [cols][rows] */
+static float *spa_mask_transpose(const float *w, int rows, int cols)
+{
+    float *t = (float *)malloc((size_t)rows * cols * sizeof(float));
+    int r, c;
+    if (!t) return NULL;
+    for (r = 0; r < rows; ++r)
+        for (c = 0; c < cols; ++c) t[(size_t)c * rows + r] = w[(size_t)r * cols + c];
+    return t;
+}
+
+static int spa_mask_transpose_convs(struct spa_mask_model *m)
+{
+    int stage;
+    m->stem_wt = spa_mask_transpose(m->stem_w, SPA_MASK_CH, SPA_MASK_STEM_IN * SPA_MASK_KERNEL);
+    m->lproj_wt = spa_mask_transpose(m->lproj_w, SPA_MASK_CH, SPA_MASK_C3);
+    for (stage = 0; stage < 3; ++stage)
+        m->pw_wt[stage] = spa_mask_transpose(m->pw_w[stage], spa_mask_cout[stage], spa_mask_cin[stage]);
+    return (m->stem_wt && m->lproj_wt && m->pw_wt[0] && m->pw_wt[1] && m->pw_wt[2]) ? 0 : -1;
+}
+
 static int spa_mask_quantize_decoder(struct spa_mask_model *m)
 {
     int k;
+    m->flat_wq = spa_mask_quantize_rows(m->flat_w, SPA_MASK_HIDDEN, SPA_MASK_C3 * SPA_MASK_N3,
+                                        SPA_MASK_C3 * SPA_MASK_N3, m->flat_ws);
+    for (k = 0; k < SPA_MASK_HIDDEN; ++k) m->flat_ws[k] *= 1.0f / 127.0f;
     m->dec1_wq = spa_mask_quantize_rows(m->dec1_w, SPA_MASK_DEC, SPA_MASK_DEC_IN, SPA_MASK_DEC_PAD, m->dec1_ws);
     m->dec2_wq = spa_mask_quantize_rows(m->dec2_w, SPA_MASK_DEC, SPA_MASK_DEC, SPA_MASK_DEC, m->dec2_ws);
     m->dec3_wq = spa_mask_quantize_rows(m->dec3_w, SPA_MASK_ROLES, SPA_MASK_DEC, SPA_MASK_DEC, m->dec3_ws);
     /* layers 2 and 3 read tanh outputs quantised at a fixed 127 */
     for (k = 0; k < SPA_MASK_DEC; ++k) m->dec2_ws[k] *= 1.0f / 127.0f;
     for (k = 0; k < SPA_MASK_ROLES; ++k) m->dec3_ws[k] *= 1.0f / 127.0f;
-    return (m->dec1_wq && m->dec2_wq && m->dec3_wq) ? 0 : -1;
+    return (m->flat_wq && m->dec1_wq && m->dec2_wq && m->dec3_wq) ? 0 : -1;
 }
 
 int spa_mask_model_load_file(struct spa_mask_model *model, const char *path)
@@ -281,9 +390,8 @@ int spa_mask_model_load_file(struct spa_mask_model *model, const char *path)
     }
     model->_allocation = data;
     model->float_count = count;
-    if (spa_mask_quantize_decoder(model) != 0) {
-        free(data);
-        memset(model, 0, sizeof(*model));
+    if (spa_mask_quantize_decoder(model) != 0 || spa_mask_transpose_convs(model) != 0) {
+        spa_mask_model_unload(model);
         return -4;
     }
     model->valid = SPA_MASK_VALID;
@@ -292,8 +400,11 @@ int spa_mask_model_load_file(struct spa_mask_model *model, const char *path)
 
 void spa_mask_model_unload(struct spa_mask_model *model)
 {
+    int stage;
     if (!model) return;
-    free(model->dec1_wq); free(model->dec2_wq); free(model->dec3_wq);
+    free(model->flat_wq); free(model->dec1_wq); free(model->dec2_wq); free(model->dec3_wq);
+    free(model->stem_wt); free(model->lproj_wt);
+    for (stage = 0; stage < 3; ++stage) free(model->pw_wt[stage]);
     free(model->_allocation);
     memset(model, 0, sizeof(*model));
 }
@@ -325,28 +436,50 @@ static int spa_mask_pad_rows(const float *in, int rows, int n, float *pad)
     return stride;
 }
 
-/* out[co][i] = tanh(b[co] + sum_ci sum_k w[co][ci][k] * in[ci][i + k - 2]) */
-static void spa_mask_conv5(const float *w, const float *b, int cin, int cout, int n,
+#if SPA_MASK_HAVE_NEON
+/* four output rows at once: acc[j] += x * w4[j] (w4 = the four rows' weights
+ * of one input, loaded as one vector from the transposed layout) */
+#define SPA_MASK_MLA4(A0, A1, A2, A3, X, W4) do { \
+    A0 = vmlaq_lane_f32(A0, X, vget_low_f32(W4), 0); \
+    A1 = vmlaq_lane_f32(A1, X, vget_low_f32(W4), 1); \
+    A2 = vmlaq_lane_f32(A2, X, vget_high_f32(W4), 0); \
+    A3 = vmlaq_lane_f32(A3, X, vget_high_f32(W4), 1); \
+} while (0)
+#endif
+
+/* out[co][i] = tanh(b[co] + sum_ci sum_k w[co][ci][k] * in[ci][i + k - 2]);
+ * wt = w transposed to [ci*5+k][cout] (NEON path), cout a multiple of 4 */
+static void spa_mask_conv5(const float *w, const float *wt, const float *b, int cin, int cout, int n,
                            const float *in, float *out, float *pad)
 {
     const int stride = spa_mask_pad_rows(in, cin, n, pad);
     int co, ci, i, k;
-    for (co = 0; co < cout; ++co) {
-        float *o = out + (size_t)co * n;
 #if SPA_MASK_HAVE_NEON
+    (void)w;
+    for (co = 0; co < cout; co += 4) {
         for (i = 0; i < n; i += 4) {
-            float32x4_t acc;
+            float32x4_t a0, a1, a2, a3;
             if (i + 4 > n) i = n - 4;
-            acc = vdupq_n_f32(b[co]);
+            a0 = vdupq_n_f32(b[co]);
+            a1 = vdupq_n_f32(b[co + 1]);
+            a2 = vdupq_n_f32(b[co + 2]);
+            a3 = vdupq_n_f32(b[co + 3]);
             for (ci = 0; ci < cin; ++ci) {
                 const float *x = pad + (size_t)ci * stride + SPA_MASK_PAD + i - 2;
-                const float *wk = w + ((size_t)co * cin + ci) * SPA_MASK_KERNEL;
+                const float *w4 = wt + (size_t)ci * SPA_MASK_KERNEL * cout + co;
                 for (k = 0; k < SPA_MASK_KERNEL; ++k)
-                    acc = vmlaq_n_f32(acc, vld1q_f32(x + k), wk[k]);
+                    SPA_MASK_MLA4(a0, a1, a2, a3, vld1q_f32(x + k), vld1q_f32(w4 + (size_t)k * cout));
             }
-            vst1q_f32(o + i, spa_mask_tanh4(acc));
+            vst1q_f32(out + (size_t)co * n + i, spa_mask_tanh4(a0));
+            vst1q_f32(out + (size_t)(co + 1) * n + i, spa_mask_tanh4(a1));
+            vst1q_f32(out + (size_t)(co + 2) * n + i, spa_mask_tanh4(a2));
+            vst1q_f32(out + (size_t)(co + 3) * n + i, spa_mask_tanh4(a3));
         }
+    }
 #else
+    (void)wt;
+    for (co = 0; co < cout; ++co) {
+        float *o = out + (size_t)co * n;
         for (i = 0; i < n; ++i) {
             float acc = b[co];
             for (ci = 0; ci < cin; ++ci) {
@@ -356,35 +489,51 @@ static void spa_mask_conv5(const float *w, const float *b, int cin, int cout, in
             }
             o[i] = spa_mask_tanh_fast(acc);
         }
-#endif
     }
+#endif
 }
 
-/* out[co][i] = act(b[co] + sum_c w[co][c] * in[c][i]) */
-static void spa_mask_pointwise(const float *w, const float *b, int cin, int cout, int n,
+/* out[co][i] = act(b[co] + sum_c w[co][c] * in[c][i]); wt = w transposed to
+ * [cin][cout] (NEON path), cout a multiple of 4 */
+static void spa_mask_pointwise(const float *w, const float *wt, const float *b, int cin, int cout, int n,
                                const float *in, float *out, int activate)
 {
     int co, c, i;
+#if SPA_MASK_HAVE_NEON
+    (void)w;
+    for (co = 0; co < cout; co += 4) {
+        for (i = 0; i < n; i += 4) {
+            float32x4_t a0, a1, a2, a3;
+            if (i + 4 > n) i = n - 4;
+            a0 = vdupq_n_f32(b[co]);
+            a1 = vdupq_n_f32(b[co + 1]);
+            a2 = vdupq_n_f32(b[co + 2]);
+            a3 = vdupq_n_f32(b[co + 3]);
+            for (c = 0; c < cin; ++c)
+                SPA_MASK_MLA4(a0, a1, a2, a3, vld1q_f32(in + (size_t)c * n + i),
+                              vld1q_f32(wt + (size_t)c * cout + co));
+            if (activate) {
+                a0 = spa_mask_tanh4(a0); a1 = spa_mask_tanh4(a1);
+                a2 = spa_mask_tanh4(a2); a3 = spa_mask_tanh4(a3);
+            }
+            vst1q_f32(out + (size_t)co * n + i, a0);
+            vst1q_f32(out + (size_t)(co + 1) * n + i, a1);
+            vst1q_f32(out + (size_t)(co + 2) * n + i, a2);
+            vst1q_f32(out + (size_t)(co + 3) * n + i, a3);
+        }
+    }
+#else
+    (void)wt;
     for (co = 0; co < cout; ++co) {
         const float *wr = w + (size_t)co * cin;
         float *o = out + (size_t)co * n;
-#if SPA_MASK_HAVE_NEON
-        for (i = 0; i < n; i += 4) {
-            float32x4_t acc;
-            if (i + 4 > n) i = n - 4;
-            acc = vdupq_n_f32(b[co]);
-            for (c = 0; c < cin; ++c)
-                acc = vmlaq_n_f32(acc, vld1q_f32(in + (size_t)c * n + i), wr[c]);
-            vst1q_f32(o + i, activate ? spa_mask_tanh4(acc) : acc);
-        }
-#else
         for (i = 0; i < n; ++i) {
             float acc = b[co];
             for (c = 0; c < cin; ++c) acc += wr[c] * in[(size_t)c * n + i];
             o[i] = activate ? spa_mask_tanh_fast(acc) : acc;
         }
-#endif
     }
+#endif
 }
 
 /* depthwise k5 stride 2 pad 2 (no activation), then pointwise 1x1 + tanh */
@@ -426,7 +575,7 @@ static void spa_mask_down(const struct spa_mask_model *m, int stage,
         }
 #endif
     }
-    spa_mask_pointwise(m->pw_w[stage], m->pw_b[stage], cin, cout, nout, tmp, out, 1);
+    spa_mask_pointwise(m->pw_w[stage], m->pw_wt[stage], m->pw_b[stage], cin, cout, nout, tmp, out, 1);
 }
 
 /* y = b + W x; rows and cols are multiples of 4 for every caller */
@@ -469,6 +618,8 @@ int spa_mask_infer(const struct spa_mask_model *m, struct spa_mask_state *s,
     float hnew[SPA_MASK_HIDDEN];
     float dec1_scale[SPA_MASK_DEC];
     float zmax = 1.0e-6f, zscale, zmult;
+    float lp_max = -1.0e30f, lp_floor;
+    int8_t aq[SPA_MASK_C3 * SPA_MASK_N3];
 
     if (!spa_mask_model_ready(m) || !s || !features || !eligibility) return -1;
 
@@ -484,7 +635,9 @@ int spa_mask_infer(const struct spa_mask_model *m, struct spa_mask_state *s,
         s->x[3][i] = st[3];
         s->x[4][i] = (float)i / (float)SPA_MASK_BINS * 2.0f - 1.0f;
         lp[i] = spa_mask_logaddexp(f[0], f[1]);
+        if (lp[i] > lp_max) lp_max = lp[i];
     }
+    lp_floor = lp_max - (float)SPA_MASK_SKIP_DB * 0.230258509f;   /* dB -> nepers of power */
 
     /* 2. the probe descriptor per bin (replicate-padded 5-bin neighbourhood) */
     for (i = 0; i < SPA_MASK_BINS; ++i) {
@@ -507,14 +660,16 @@ int spa_mask_infer(const struct spa_mask_model *m, struct spa_mask_state *s,
     }
 
     /* 3. stem + three strided stages -> a [64][33] */
-    spa_mask_conv5(m->stem_w, m->stem_b, SPA_MASK_STEM_IN, SPA_MASK_CH, SPA_MASK_BINS,
+    spa_mask_conv5(m->stem_w, m->stem_wt, m->stem_b, SPA_MASK_STEM_IN, SPA_MASK_CH, SPA_MASK_BINS,
                    &s->x[0][0], &s->skip[0][0], s->pad);
     spa_mask_down(m, 0, &s->skip[0][0], s->b, s->a, s->pad);   /* -> a [32][129] */
     spa_mask_down(m, 1, s->a, s->b, s->a, s->pad);      /* -> a [48][65]  */
     spa_mask_down(m, 2, s->a, s->b, s->a, s->pad);      /* -> a [64][33]  */
 
-    /* 4. flatten (channel-major = the a layout) -> 64, tanh; GRU over controls */
-    spa_mask_gemv(m->flat_w, m->flat_b, SPA_MASK_HIDDEN, SPA_MASK_C3 * SPA_MASK_N3, s->a, gin);
+    /* 4. flatten (channel-major = the a layout) -> 64, tanh; GRU over controls.
+     * The flat layer runs int8: its input is the last stage's tanh output. */
+    spa_mask_quantize_fixed(s->a, SPA_MASK_C3 * SPA_MASK_N3, aq);
+    spa_mask_gemv_s8(m->flat_wq, m->flat_ws, m->flat_b, SPA_MASK_HIDDEN, SPA_MASK_C3 * SPA_MASK_N3, aq, gin);
     for (i = 0; i < SPA_MASK_HIDDEN; ++i) gin[i] = spa_mask_tanh_fast(gin[i]);
     spa_mask_gemv(m->gru_wih, m->gru_bih, SPA_MASK_GATES, SPA_MASK_HIDDEN, gin, s->gates);
     spa_mask_gemv(m->gru_whh, m->gru_bhh, SPA_MASK_GATES, SPA_MASK_HIDDEN, s->hidden, s->gates_h);
@@ -534,7 +689,7 @@ int spa_mask_infer(const struct spa_mask_model *m, struct spa_mask_state *s,
     }
 
     /* 6. local context: 1x1 over the 33-map (interpolated to the bins below) */
-    spa_mask_pointwise(m->lproj_w, m->lproj_b, SPA_MASK_C3, SPA_MASK_CH, SPA_MASK_N3,
+    spa_mask_pointwise(m->lproj_w, m->lproj_wt, m->lproj_b, SPA_MASK_C3, SPA_MASK_CH, SPA_MASK_N3,
                        s->a, &s->loc[0][0], 0);
 
     /* 7. per-cell decoder, int8: gather every cell's 57 inputs, one dynamic
@@ -542,6 +697,8 @@ int spa_mask_infer(const struct spa_mask_model *m, struct spa_mask_state *s,
     for (i = 0; i < SPA_MASK_BINS; ++i) {
         float *z = s->zf[i];
         float src = (float)i * (float)(SPA_MASK_N3 - 1) / (float)(SPA_MASK_BINS - 1);   /* align_corners */
+        s->cell_active[i] = (uint8_t)(!((float)SPA_MASK_SKIP_DB > 0.0f && lp[i] < lp_floor));
+        if (!s->cell_active[i]) continue;
         int j0 = (int)src;
         float fr = src - (float)j0;
         int j1 = j0 + 1 < SPA_MASK_N3 ? j0 + 1 : j0;
@@ -567,8 +724,14 @@ int spa_mask_infer(const struct spa_mask_model *m, struct spa_mask_state *s,
     zscale = zmax / 127.0f;
     zmult = 1.0f / zscale;
     for (k = 0; k < SPA_MASK_DEC; ++k) dec1_scale[k] = zscale * m->dec1_ws[k];
+    s->cells_total += SPA_MASK_BINS;
     for (i = 0; i < SPA_MASK_BINS; ++i) {
         float logit[SPA_MASK_ROLES], mx = -1e30f, sum = 0.0f;
+        if (!s->cell_active[i]) {
+            eligibility[i] = s->last_eligibility[i];
+            s->cells_skipped++;
+            continue;
+        }
 #if SPA_MASK_HAVE_NEON
         const float *z = s->zf[i];
         int8x16_t zq[4], h1[2], h2[2];
@@ -578,14 +741,14 @@ int spa_mask_infer(const struct spa_mask_model *m, struct spa_mask_state *s,
         for (k = 0; k < 4; ++k)
             zq[k] = spa_mask_q8x16(vld1q_f32(z + 16 * k), vld1q_f32(z + 16 * k + 4),
                                    vld1q_f32(z + 16 * k + 8), vld1q_f32(z + 16 * k + 12), mult);
-        spa_mask_layer_s8(m->dec1_wq, SPA_MASK_DEC_PAD, dec1_scale, m->dec1_b, SPA_MASK_DEC, zq, 4, h1);
-        spa_mask_layer_s8(m->dec2_wq, SPA_MASK_DEC, m->dec2_ws, m->dec2_b, SPA_MASK_DEC, h1, 2, h2);
-        d = spa_mask_hsum4_s32(spa_mask_dot_s8_row(m->dec3_wq, h2, 2),
-                               spa_mask_dot_s8_row(m->dec3_wq + SPA_MASK_DEC, h2, 2),
-                               spa_mask_dot_s8_row(m->dec3_wq + 2 * SPA_MASK_DEC, h2, 2),
-                               spa_mask_dot_s8_row(m->dec3_wq + 3 * SPA_MASK_DEC, h2, 2));
+        spa_mask_layer1_s8(m->dec1_wq, dec1_scale, m->dec1_b, zq[0], zq[1], zq[2], zq[3], h1);
+        spa_mask_layer2_s8(m->dec2_wq, m->dec2_ws, m->dec2_b, h1[0], h1[1], h2);
+        d = spa_mask_hsum4_s32(spa_mask_dot_s8_x2(m->dec3_wq, h2[0], h2[1]),
+                               spa_mask_dot_s8_x2(m->dec3_wq + SPA_MASK_DEC, h2[0], h2[1]),
+                               spa_mask_dot_s8_x2(m->dec3_wq + 2 * SPA_MASK_DEC, h2[0], h2[1]),
+                               spa_mask_dot_s8_x2(m->dec3_wq + 3 * SPA_MASK_DEC, h2[0], h2[1]));
         vst1q_f32(logit, vmlaq_f32(vld1q_f32(m->dec3_b), vcvtq_f32_s32(d), vld1q_f32(m->dec3_ws)));
-        d = spa_mask_dot_s8_row(m->dec3_wq + 4 * SPA_MASK_DEC, h2, 2);
+        d = spa_mask_dot_s8_x2(m->dec3_wq + 4 * SPA_MASK_DEC, h2[0], h2[1]);
         d2 = vadd_s32(vget_low_s32(d), vget_high_s32(d));
         d2 = vpadd_s32(d2, d2);
         logit[4] = (float)vget_lane_s32(d2, 0) * m->dec3_ws[4] + m->dec3_b[4];
@@ -609,6 +772,7 @@ int spa_mask_infer(const struct spa_mask_model *m, struct spa_mask_state *s,
         for (k = 0; k < SPA_MASK_ROLES; ++k) if (logit[k] > mx) mx = logit[k];
         for (k = 0; k < SPA_MASK_ROLES; ++k) sum += spa_mask_exp_fast(logit[k] - mx);
         eligibility[i] = spa_mask_exp_fast(logit[SPA_MASK_ROLE_OTHER] - mx) / sum;
+        s->last_eligibility[i] = eligibility[i];
     }
     s->inference_count++;
     return 0;

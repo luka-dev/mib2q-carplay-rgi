@@ -55,7 +55,8 @@ int main(int argc, char **argv)
     }
     fclose(in);
     fclose(out);
-    printf("%u controls, %zu blob floats\n", n, model.float_count);
+    printf("%u controls, %zu blob floats, cells skipped %.1f %% (SPA_MASK_SKIP_DB %.0f)\n", n, model.float_count,
+           state.cells_total ? 100.0 * state.cells_skipped / state.cells_total : 0.0, (double)SPA_MASK_SKIP_DB);
     spa_mask_model_unload(&model);
     free(feat);
     free(elig);

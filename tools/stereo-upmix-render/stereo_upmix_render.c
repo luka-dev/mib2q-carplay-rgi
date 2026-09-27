@@ -888,6 +888,13 @@ static int render(FILE *input_file, FILE *output_file, uint32_t total_frames,
         remaining -= (uint32_t)frames;
     }
 
+    if (state._runtime._hssr.mask_model)
+        fprintf(stderr, "mask: %u controls, cells skipped %.1f %% (SPA_MASK_SKIP_DB %.0f)\n",
+                (unsigned)state._runtime._hssr.mask_network.inference_count,
+                state._runtime._hssr.mask_network.cells_total
+                    ? 100.0 * state._runtime._hssr.mask_network.cells_skipped /
+                          state._runtime._hssr.mask_network.cells_total : 0.0,
+                (double)SPA_MASK_SKIP_DB);
     return 1;
 }
 

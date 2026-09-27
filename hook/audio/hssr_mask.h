@@ -20,6 +20,12 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* Decoder cell skip threshold, dB below the control's loudest bin (0 = decode
+ * every cell).  The PC A/B build passes -DSPA_MASK_SKIP_DB=0. */
+#ifndef SPA_MASK_SKIP_DB
+#define SPA_MASK_SKIP_DB 60.0f
+#endif
+
 enum {
     SPA_MASK_BINS = 257,
     SPA_MASK_FEATURES = 4,
@@ -68,6 +74,15 @@ struct spa_mask_model {
      * output row at load time; layer-1 inputs quantised per control with one
      * dynamic scale, layers 2/3 inputs are tanh outputs (fixed scale 127).
      * Rows padded to SPA_MASK_DEC_PAD lanes for 16-wide int8 dots. */
+    /* the convolution weights transposed at load time, [input][output channel],
+     * so the NEON path loads four output channels' weights as one vector and
+     * multiplies by lane: stem [ci*5+k][16], pw[stage] [cin][cout], lproj [64][16] */
+    float *stem_wt, *pw_wt[3], *lproj_wt;
+    /* the flat layer as int8 (78 % of the blob's weights: 540 KB float streamed
+     * per control -> 135 KB); its input is the last stage's tanh output, so a
+     * fixed input scale of 127 like the decoder's layers 2/3 */
+    int8_t *flat_wq;                             /* [64][2112] */
+    float flat_ws[SPA_MASK_HIDDEN];              /* per-row scale including 1/127 */
     int8_t *dec1_wq, *dec2_wq, *dec3_wq;         /* [32][64], [32][32], [5][32] */
     /* output scales: dec1 per row (times the control's input scale at run
      * time), dec2/dec3 per row including the fixed 1/127 input scale */
@@ -91,7 +106,12 @@ struct spa_mask_state {
     float gates_h[SPA_MASK_GATES];
     float pad[SPA_MASK_CH * SPA_MASK_PAD_STRIDE];  /* zero-padded copy of a stage's input rows */
     float zf[SPA_MASK_BINS][SPA_MASK_DEC_PAD];     /* the decoder inputs of one control; lanes 57.. stay 0 */
+    /* cells more than SPA_MASK_SKIP_DB below the control's loudest bin are not
+     * decoded: they cannot produce an audible rear; they keep their last value */
+    float last_eligibility[SPA_MASK_BINS];
+    uint8_t cell_active[SPA_MASK_BINS];
     uint32_t inference_count;
+    uint32_t cells_total, cells_skipped;
 };
 
 /* natural log of x > 0 (|abs err| ~1e-7): exponent + the atanh series of the
