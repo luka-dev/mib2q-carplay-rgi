@@ -672,6 +672,53 @@ vocal-owned cells / vocal energy), then through the DSP with
 | sep1 | the recipe above, 6000 steps (25 min) | SI-SDR of the estimate vs the eligible truth −5.9 → **−2.3 dB** by step 2000 and flat after; vocal leak 0.24–0.41. The checkpoint selection (`si_sdr − 20·leak`) picked step 750 (leak 0.06, SI-SDR −4.3): a near-silent estimate — through the DSP: rear −42 dBFS (5 dB below every other row), guitars 0.02, voice 0.01 | not a feasibility answer yet: a 31k-param magnitude mask trained 25 min does not separate (SI-SDR must clear the mixture's own baseline by a wide margin); the selection metric was wrong. sep2: select by SI-SDR, log the mixture baseline, 20 000 steps |
 | sep2 | sep1 + selection by SI-SDR, the mixture baseline logged, 20 000 steps | at step 2000: SI-SDR −2.5 dB vs the **mixture's −6.3 dB** (+3.8 dB), vocal leak 0.40; running | the student does separate something, far from a separator (htdemucs' "other" sits around +5 dB on MUSDB); the curve flattened by step 1500 in both runs |
 
+## 🧪 Review 9 (astra, on the separator student — 2026-09-27 11:30)
+
+1. **Feasibility: plausible enough for one bounded experiment, not
+   established.**  No verified published 48 kHz stereo causal < 200 M MAC/s
+   MUSDB-like result exists to lean on; +2 dB SI-SDR is a research target,
+   not a promise, and aggregate SI-SDR does not guarantee the teacher's rear
+   numbers — leakage location and temporal stability matter more.
+2. **Diagnosis of sep1/sep2:** (i) capacity *allocation* — a shared hidden-16
+   recurrence has almost no source identity or cross-frequency reasoning,
+   the budget sits in the 1025-bin head; (ii) the frequency representation —
+   narrow features + interpolated output prevent precise discrimination, the
+   global mean discards frequency identity; (iii) the `[0,1]` real mask cannot
+   restore cancellation or correct phase — its ceiling is unmeasured; (iv)
+   two early plateaus make "just train for days" unconvincing; (v) loss
+   replacement alone will not rescue it; (vi) "other" is heterogeneous but
+   vocals + drums + bass is no more compact.  **First diagnostic: the optimal
+   bounded real mask** (ideal ratio mask of the eligible stem, mixture phase)
+   through SI-SDR and the DSP — separates an output-type limit from a
+   learning failure.
+3. **The feasibility model to build (≈ 125 M neural MAC/s at 2048/512):** 48
+   unequal bands (narrow at LF), learned band encoders and *direct* bin
+   decoders (no interpolation): per-band projection 6 features/bin → 48
+   (27.7 M) → shared band GRU 48→32 (34.6 M) → 32→32 (27.6 M) → two
+   depthwise/pointwise frequency mixers (10.1 M) → global pooled GRU 32
+   (0.6 M) → band + global state → four outputs per bin (24.6 M); inputs =
+   normalised Re/Im L/R + log magnitudes + band identity; output = stereo
+   **complex ratio masks**, initialised near attenuation, allowed beyond
+   unity.  ~25 M reserved for transforms; benchmark real cycles.  Loss:
+   complex L1 + multi-resolution spectral, a modest SI-SDR term after
+   stabilisation, energy checks.  Data: ~half MoisesDB truth, half
+   pseudo-labels from the 3367 masters (RoFormer where it demonstrably cuts
+   vocal contamination), duplicates filtered across splits, stem-remix
+   augmentation on true stems.  **150k steps, batch 12, 8 s crops, AdamW
+   3e-4 warm-up + cosine; 20–60 GPU-hours provisionally.**
+4. **Suppression is not safer:** `eligible = mixture − protected` is the same
+   residual parameterisation; a conservative subtraction gain *increases*
+   protected leakage.  The safe asymmetry is a conservative rear admission
+   gain selected against protected leakage.
+5. **Ship / commit gates:** the per-cell student + soft veto goes to the car
+   now as the next listening build.  Commit the separator to C only when
+   full-DEV, level-matched results reach **guitars ≥ 0.18, voice ≤ 0.03,
+   ≤ 3/39 swinging**, acceptable drum/bass leakage and measured compute /
+   latency; median SI-SDR ≥ +2 dB as a supporting milestone only.  Timeline:
+   1–2 weeks feasibility, 2–4 more for quantisation, C integration and
+   listening; if the bounded experiment fails, keep the current candidate
+   and revise budget or ambition.
+
 ## 📝 Publication (astra review 5, 2026-09-26)
 
 Asked whether there is a paper in this work.  Verdict: **a credible systems +
