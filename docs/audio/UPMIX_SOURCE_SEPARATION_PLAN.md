@@ -433,7 +433,9 @@ own hop features → the C runtime) give the **same row**: voice 0.04 (0/40 >
 int8-decoder build reproduces it to the second decimal (rear −37.6, the rest
 identical).  The pick: v27a + veto 0.5 ties on share (voice 0.04 / guitars
 0.07 / keys 0.07) but swings more (voice 4/40, guitars 3/39, drums 3/40 vs
-2/40, 1/39, 0/40) — **v21a stays the blob**; v29a pending.  The rerun with the
+2/40, 1/39, 0/40); v29a + veto 0.5 the same story (voice 0.03 / guitars 0.07
+/ keys 0.08, swinging 3/40, 3/39, 2/27, drums 1/40) — **v21a stays the
+blob**: the same shares with the fewest swings.  The rerun with the
 Phase 1b runtime (fast exp/log, clamped tanh, padded convs — the PC build of
 the exact shipped arithmetic) is queued as `prod9`.  Next: the Krait bench on
 the unit (`stereo_upmix_bench --mask-model`, the QNX build), then the car
