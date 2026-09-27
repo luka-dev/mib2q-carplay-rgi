@@ -257,7 +257,7 @@ def train(a):
         tracks += [os.path.join(a.teacher_cache, f) for f in sorted(os.listdir(a.teacher_cache))
                    if f.endswith(".npy") and os.path.exists(os.path.join(a.teacher_cache, f[:-4] + ".json"))]
     dev_tracks = [os.path.join(a.cache, t + ".npy") for t in split["dev"]]
-    net = (BandSepNet(torch) if a.arch == "band" else SepNet(torch, ht=a.ht, hg=a.hg, dec=a.dec)).to(dev)
+    net = (BandSepNet(torch, feat=a.feat, h1=a.h1, h2=a.h2, hg=a.bhg) if a.arch == "band" else SepNet(torch, ht=a.ht, hg=a.hg, dec=a.dec)).to(dev)
     if a.teacher_cache and a.half_half:
         tracks = (tracks[:len(split["train"])], tracks[len(split["train"]):])      # (truth, pseudo-labels)
         print(f"half/half batches: {len(tracks[0])} truth songs, {len(tracks[1])} pseudo-labelled", flush=True)
@@ -285,16 +285,18 @@ def train(a):
     print(f"log-mag stats mean {STATS['mean']:.2f} std {STATS['std']:.2f}", flush=True)
     best = -1e9; t0 = time.time()
     for step in range(start + 1, a.steps + 1):
-        mix, elig = (t.to(dev) for t in next(batches))
-        X = stft(torch, mix); Tt = stft(torch, elig)
-        Est = net.separate_stft(X)
-        loss = loss_audio(torch, Est, Tt)
-        if a.arch == "band":
-            est_wav = istft(torch, Est, mix.shape[-1])
-            loss = loss + multires_loss(torch, est_wav, elig)
-            if a.sisdr_after and step > a.sisdr_after:
-                loss = loss - 0.02 * si_sdr(torch, est_wav, elig).mean()
-        opt.zero_grad(); loss.backward()
+        opt.zero_grad()
+        for _ in range(a.accum):                                   # gradient accumulation: batch = a.batch x a.accum
+            mix, elig = (t.to(dev) for t in next(batches))
+            X = stft(torch, mix); Tt = stft(torch, elig)
+            Est = net.separate_stft(X)
+            loss = loss_audio(torch, Est, Tt)
+            if a.arch == "band":
+                est_wav = istft(torch, Est, mix.shape[-1])
+                loss = loss + multires_loss(torch, est_wav, elig)
+                if a.sisdr_after and step > a.sisdr_after:
+                    loss = loss - 0.02 * si_sdr(torch, est_wav, elig).mean()
+            (loss / a.accum).backward()
         torch.nn.utils.clip_grad_norm_(net.parameters(), 5.0)
         opt.step(); sched.step()
         if step % a.eval_every == 0 or step == a.steps:
@@ -303,7 +305,7 @@ def train(a):
                     f"vocal_leak {met['vocal_leak']:.3f}  {time.time() - t0:.0f}s")
             print(line, flush=True)
             ck = {"state": net.modules.state_dict(), "stats": dict(STATS), "step": step, "dev": met,
-                  "ht": a.ht, "hg": a.hg, "dec": a.dec, "arch": a.arch}
+                  "ht": a.ht, "hg": a.hg, "dec": a.dec, "arch": a.arch, "feat": a.feat, "h1": a.h1, "h2": a.h2, "bhg": a.bhg}
             torch.save({**ck, "opt": opt.state_dict()}, os.path.join(a.out, "last.pt"))
             score = met["si_sdr"]                    # sep1's leak-penalised score picked a near-silent checkpoint
             if score > best:
@@ -315,7 +317,8 @@ def train(a):
 def load(model_path):
     torch = _torch(); dev = "cuda" if torch.cuda.is_available() else "cpu"
     ck = torch.load(model_path, map_location=dev)
-    net = (BandSepNet(torch) if ck.get("arch") == "band" else SepNet(torch, ht=ck.get("ht", 16), hg=ck.get("hg", 64), dec=ck.get("dec", 24))).to(dev)
+    net = (BandSepNet(torch, feat=ck.get("feat", 48), h1=ck.get("h1", 32), h2=ck.get("h2", 32), hg=ck.get("bhg", 32)) if ck.get("arch") == "band"
+           else SepNet(torch, ht=ck.get("ht", 16), hg=ck.get("hg", 64), dec=ck.get("dec", 24))).to(dev)
     net.modules.load_state_dict(ck["state"]); net.modules.eval(); STATS.update(ck["stats"])
     return torch, net, dev
 
@@ -348,6 +351,8 @@ def main():
     t.add_argument("--arch", default="sep", choices=("sep", "band")); t.add_argument("--half-half", action="store_true")
     t.add_argument("--truth-frac", type=float, default=0.5, help="with --half-half: probability of drawing a truth window")
     t.add_argument("--warmup", type=int, default=2000); t.add_argument("--sisdr-after", type=int, default=0)
+    t.add_argument("--feat", type=int, default=48); t.add_argument("--h1", type=int, default=32); t.add_argument("--h2", type=int, default=32); t.add_argument("--bhg", type=int, default=32)
+    t.add_argument("--accum", type=int, default=1, help="gradient accumulation steps (effective batch = batch x accum)")
     s = sub.add_parser("separate"); s.add_argument("--model", required=True); s.add_argument("--wav", required=True); s.add_argument("--out", required=True)
     a = ap.parse_args()
     if a.cmd == "train":
