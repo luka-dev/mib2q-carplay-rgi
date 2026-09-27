@@ -709,6 +709,13 @@ int spa_stereo_upmix_reset(struct spa_stereo_upmix *state)
         spa_hssr_dsp_prepare(&state->_runtime._hssr);
         spa_upmix_apply_bed_config(&state->_runtime._hssr, &state->config);
         state->_runtime._hssr.control_generation = generation;
+        /* the memset above dropped the model pointers init() had handed
+         * over; the hook resets on every stream start, so without this the
+         * guard (synchronous path) and the mask net (both paths) die after
+         * the first stream — found on the unit 2026-09-27: maskReady=0 */
+        state->_runtime._hssr.guard_model = state->config.hssr_guard_model;
+        state->_runtime._hssr.mask_model = state->config.hssr_mask_model;
+        state->_runtime._hssr.mask_drive = (float)state->config.mask_drive_q15 / 32768.0f;
         if (state->config.hssr_control_provider)
             state->config.hssr_control_provider->reset(
                 state->config.hssr_control_provider->context, generation);

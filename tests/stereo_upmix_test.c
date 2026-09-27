@@ -28,6 +28,7 @@ static union {
     uint8_t bytes[SPA_HSSR_MODEL_PAYLOAD_BYTES];
 } g_model_payload;
 static struct spa_hssr_model g_model;
+static struct spa_mask_model g_mask_model;
 static int g_model_ready;
 
 struct reset_probe {
@@ -372,9 +373,16 @@ static void test_reset_advances_control_generation(void)
     provider.reset = reset_probe_reset;
     make_universal_config(&config, 0);
     spa_stereo_upmix_config_set_hssr_control_provider(&config, &provider);
+    /* the guard and the mask net ride the config; reset() must hand them
+     * over again like init() does (the hook resets on every stream start) */
+    spa_stereo_upmix_config_set_hssr_guard_model(&config, test_model());
+    if (spa_mask_model_load_file(&g_mask_model, "models/mask-full-probe-v21a/hssr_mask.bin") == 0)
+        spa_stereo_upmix_config_set_hssr_mask_model(&config, &g_mask_model, 55705u);   /* drive 1.7 */
     assert(spa_stereo_upmix_init(&state, &config) == SPA_STEREO_UPMIX_OK);
     assert(probe.resets == 1u && probe.generation == 1u);
     assert(state._runtime._hssr.control_generation == 1u);
+    assert(state._runtime._hssr.guard_model == config.hssr_guard_model);
+    assert(state._runtime._hssr.mask_model == config.hssr_mask_model);
     fill_stereo(UINT32_C(0x4c415445), 0);
     assert(spa_stereo_upmix_process_s16(
                &state, g_input, SPA_STEREO_UPMIX_MAX_FRAMES,
@@ -395,8 +403,13 @@ static void test_reset_advances_control_generation(void)
     assert(spa_stereo_upmix_reset(&state) == SPA_STEREO_UPMIX_OK);
     assert(probe.resets == 2u && probe.generation == 2u);
     assert(state._runtime._hssr.control_generation == 2u);
+    assert(state._runtime._hssr.guard_model == config.hssr_guard_model);
+    assert(state._runtime._hssr.mask_model == config.hssr_mask_model);
+    assert(!config.hssr_mask_model ||
+           (state._runtime._hssr.mask_drive > 1.69f && state._runtime._hssr.mask_drive < 1.71f));
     assert(spa_stereo_upmix_reset(&state) == SPA_STEREO_UPMIX_OK);
     assert(probe.resets == 3u && probe.generation == 3u);
+    spa_mask_model_unload(&g_mask_model);
 }
 
 static void test_off_is_exact_and_overlap_safe(void)
