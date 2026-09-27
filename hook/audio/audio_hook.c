@@ -112,6 +112,7 @@ typedef struct {
     int32_t stereoRearBodyDb10;    /* tenths of dB, <= 0, default -40 */
     uint32_t hssrVocalGateQ15;     /* 0..32768, default 31130 */
     int32_t hssrMaskTrebleDb10;    /* -120..120, the mask drive's shelf above ~2.5 kHz, 0 = flat */
+    int32_t hssrMaskGammaPct;      /* 10..100, eligibility exponent in percent, 100 = as the net says */
     uint32_t stereoRearAirQ15;     /* 0..32768, 0 = off */
     uint32_t stereoFrontRetentionQ15; /* experimental0..32768, default0 */
     uint32_t hssrBedDelays;           /* 0/1 */
@@ -278,6 +279,24 @@ static int32_t spa_parse_stereo_front_bass_db10(void)
 }
 
 /* Front-only treble trim, high shelf @4 kHz, dB (-12..0), unset = off. */
+/* AUDIO_HSSR_MASK_GAMMA 0.1..1.0 -> percent (100 = the net's eligibility as is). */
+static int32_t spa_parse_hssr_mask_gamma_pct(void)
+{
+    const char *value = getenv(SPA_AUDIO_HSSR_MASK_GAMMA_ENV);
+    char *end = 0;
+    double gamma;
+
+    if (!value || !value[0]) return 100;
+    errno = 0;
+    gamma = strtod(value, &end);
+    if (errno || end == value || *end || gamma != gamma || gamma > 1.0 || gamma < 0.1) {
+        LOG_ERROR(LOG_MODULE, "audio config: invalid %s='%s'; expected 0.1..1.0; using 1.0",
+                  SPA_AUDIO_HSSR_MASK_GAMMA_ENV, value);
+        return 100;
+    }
+    return (int32_t)(gamma * 100.0 + 0.5);
+}
+
 /* AUDIO_HSSR_MASK_TREBLE_DB -12..12 -> tenths of dB (0 = flat). */
 static int32_t spa_parse_hssr_mask_treble_db10(void)
 {
@@ -445,6 +464,7 @@ static void spa_audio_config_init_once(void)
     spa_audio_config_value.stereoRearBodyDb10 = spa_parse_stereo_rear_body_db10();
     spa_audio_config_value.hssrVocalGateQ15 = spa_parse_hssr_vocal_gate_q15();
     spa_audio_config_value.hssrMaskTrebleDb10 = spa_parse_hssr_mask_treble_db10();
+    spa_audio_config_value.hssrMaskGammaPct = spa_parse_hssr_mask_gamma_pct();
     spa_audio_config_value.stereoRearAirQ15 = spa_parse_stereo_rear_air_q15();
     spa_audio_config_value.stereoFrontRetentionQ15 = spa_parse_stereo_front_retention_q15();
     {
@@ -2130,6 +2150,7 @@ static void spa103_render_start(uint32_t generation, int64_t formatIndex, int ha
                 spa_stereo_upmix_config_set_hssr_guard_model(&upmixConfig, guard);
                 spa_stereo_upmix_config_set_hssr_mask_model(&upmixConfig, mask, spa_parse_hssr_mask_drive_q15());
                 spa_stereo_upmix_config_set_hssr_mask_treble(&upmixConfig, config->hssrMaskTrebleDb10);
+                spa_stereo_upmix_config_set_hssr_mask_gamma(&upmixConfig, config->hssrMaskGammaPct);
                 if (hssrWorkerStatus == SPA_HSSR_OK) {
                     spa_hssr_control_worker_set_guard(
                         &spa103_render.hssrControlWorker, guard);
@@ -4157,6 +4178,7 @@ static void spa_rt_upmix_start(snd_pcm_t *handle)
     spa_stereo_upmix_config_set_hssr_guard_model(&upmixConfig, spa_hssr_runtime_guard_model());
     spa_stereo_upmix_config_set_hssr_mask_model(&upmixConfig, spa_hssr_runtime_mask_model(), spa_parse_hssr_mask_drive_q15());
                 spa_stereo_upmix_config_set_hssr_mask_treble(&upmixConfig, config->hssrMaskTrebleDb10);
+                spa_stereo_upmix_config_set_hssr_mask_gamma(&upmixConfig, config->hssrMaskGammaPct);
     if (workerStatus == SPA_HSSR_OK)
         spa_stereo_upmix_config_set_hssr_control_provider(
             &upmixConfig, spa_hssr_control_worker_provider(&spa_rt_upmix.worker));
@@ -4172,7 +4194,7 @@ static void spa_rt_upmix_start(snd_pcm_t *handle)
     LOG_WARN(LOG_MODULE,
              "audio realtime upmix: %s (init=%d controller=%s period=%u frames, "
              "surround_q15=%u front_bass_db10=%d front_treble_db10=%d rear_body_db10=%d retention_q15=%u retention_hf=%u:%u "
-             "mask_drive_q15=%u mask_treble_db10=%d "
+             "mask_drive_q15=%u mask_treble_db10=%d mask_gamma_pct=%d "
              "vocal_gate_q15=%u rear_air_q15=%u bed_delays=%u bed_attack=%u)",
              spa_rt_upmix.ready ? "armed" : "NOT armed", status,
              workerStatus == SPA_HSSR_OK ? "async" : "sync-fallback",
@@ -4181,7 +4203,7 @@ static void spa_rt_upmix_start(snd_pcm_t *handle)
              (int)upmixConfig.rear_body_db10,
              (unsigned)upmixConfig.front_retention_q15,
              (unsigned)upmixConfig.retention_hf_lo_hz, (unsigned)upmixConfig.retention_hf_hi_hz,
-             (unsigned)upmixConfig.mask_drive_q15, (int)upmixConfig.mask_treble_db10,
+             (unsigned)upmixConfig.mask_drive_q15, (int)upmixConfig.mask_treble_db10, (int)upmixConfig.mask_gamma_pct,
              (unsigned)upmixConfig.vocal_gate_q15, (unsigned)upmixConfig.rear_air_q15,
              (unsigned)upmixConfig.bed_delays, (unsigned)upmixConfig.bed_attack);
 }

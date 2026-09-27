@@ -122,6 +122,7 @@ struct spa_stereo_upmix_config {
     const struct spa_mask_model *hssr_mask_model;
     uint32_t mask_drive_q15;
     int32_t mask_treble_db10;      /* -120..120: the mask drive's shelf above ~2.5 kHz, 0 = flat */
+    int32_t mask_gamma_pct;        /* 10..100: eligibility exponent in percent, 100 = as the net says */
 };
 
 /* Runtime details are public only so callers can embed the complete state and
@@ -197,6 +198,8 @@ void spa_stereo_upmix_config_set_hssr_model(
 void spa_stereo_upmix_config_set_hssr_guard_model(
     struct spa_stereo_upmix_config *config,
     const struct spa_hssr_model *model);
+void spa_stereo_upmix_config_set_hssr_mask_gamma(struct spa_stereo_upmix_config *config,
+                                                 int32_t gamma_pct);
 void spa_stereo_upmix_config_set_hssr_mask_treble(struct spa_stereo_upmix_config *config,
                                                   int32_t treble_db10);
 void spa_stereo_upmix_config_set_hssr_mask_model(

@@ -100,6 +100,7 @@
 #define SPA_AUDIO_HSSR_MASK_MODEL_ENV  "AUDIO_HSSR_MASK_MODEL"
 #define SPA_AUDIO_HSSR_MASK_DRIVE_ENV  "AUDIO_HSSR_MASK_DRIVE"
 #define SPA_AUDIO_HSSR_MASK_TREBLE_ENV "AUDIO_HSSR_MASK_TREBLE_DB"
+#define SPA_AUDIO_HSSR_MASK_GAMMA_ENV  "AUDIO_HSSR_MASK_GAMMA"
 #define SPA_AUDIO_HSSR_MODEL_DEFAULT   "/mnt/app/root/hooks/hssr_model.bin"
 
 /* Buffered-stream loudness policy.  Apple's/Pioneer's SoundCheck metadata is

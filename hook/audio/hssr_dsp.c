@@ -1190,11 +1190,15 @@ static void spa_hssr_extract_mask_features(struct spa_hssr_dsp *state)
     }
 }
 
-void spa_hssr_dsp_set_mask_drive(struct spa_hssr_dsp *state, float drive, int32_t treble_db10)
+void spa_hssr_dsp_set_mask_drive(struct spa_hssr_dsp *state, float drive, int32_t treble_db10,
+                                 int32_t gamma_pct)
 {
     unsigned bin;
     const float treble = powf(10.0f, (float)treble_db10 / 200.0f);
+    const float gamma = (gamma_pct >= 10 && gamma_pct <= 100) ? (float)gamma_pct / 100.0f : 1.0f;
     state->mask_drive = drive;
+    for (bin = 0; bin < SPA_HSSR_BINS; ++bin)
+        state->mask_gamma_lut[bin] = powf((float)bin / (float)(SPA_HSSR_BINS - 1), gamma);
     for (bin = 0; bin < SPA_HSSR_BINS; ++bin) {
         float hz = (float)bin * (48000.0f / (float)SPA_HSSR_FFT_SIZE);
         float t = spa_hssr_dsp_smoothstep(hz, 1500.0f, 3000.0f);
@@ -1793,6 +1797,7 @@ static void spa_hssr_render_hop(
 
             if (e < 0.0f) e = 0.0f;
             if (e > 1.0f) e = 1.0f;
+            e = state->mask_gamma_lut[(unsigned)(e * (float)(SPA_HSSR_BINS - 1) + 0.5f)];
             mask = sqrtf(e) * state->mask_drive_bin[bin];
             state->bin[bin].object_pan = state->bin[bin].scene_lr;
         }

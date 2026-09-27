@@ -250,6 +250,9 @@ struct spa_hssr_dsp {
      * and left the rear darker than the 22.09 heuristic; this gives the
      * instruments' highs back without touching the net's decisions */
     float mask_drive_bin[SPA_HSSR_BINS];
+    /* e -> e^gamma, gamma < 1 commits the net's mid-confidence cells (the
+     * students rank but sit near 0.5); a 257-entry table over e in [0, 1] */
+    float mask_gamma_lut[SPA_HSSR_BINS];
     float mask_features[SPA_MASK_BINS * SPA_MASK_FEATURES];
     float mask_eligibility[SPA_MASK_BINS];
     uint32_t mask_ready;
@@ -258,7 +261,8 @@ struct spa_hssr_dsp {
 };
 
 /* Fill mask_drive / mask_drive_bin from a drive and a treble shelf in tenths of dB. */
-void spa_hssr_dsp_set_mask_drive(struct spa_hssr_dsp *state, float drive, int32_t treble_db10);
+void spa_hssr_dsp_set_mask_drive(struct spa_hssr_dsp *state, float drive, int32_t treble_db10,
+                                 int32_t gamma_pct);
 void spa_hssr_dsp_prepare(struct spa_hssr_dsp *state);
 void spa_hssr_dsp_reset(struct spa_hssr_dsp *state);
 

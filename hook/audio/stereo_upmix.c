@@ -606,6 +606,7 @@ void spa_stereo_upmix_default_config(struct spa_stereo_upmix_config *config)
     config->hssr_mask_model = NULL;
     config->mask_drive_q15 = 0;
     config->mask_treble_db10 = 0;
+    config->mask_gamma_pct = 100;
 }
 
 void spa_stereo_upmix_config_set_lfe(
@@ -631,6 +632,15 @@ void spa_stereo_upmix_config_set_hssr_guard_model(
 {
     if (config) config->hssr_guard_model =
         model && spa_hssr_model_ready(model) ? model : NULL;
+}
+
+void spa_stereo_upmix_config_set_hssr_mask_gamma(struct spa_stereo_upmix_config *config,
+                                                 int32_t gamma_pct)
+{
+    if (!config) return;
+    if (gamma_pct > 100) gamma_pct = 100;
+    if (gamma_pct < 10) gamma_pct = 10;
+    config->mask_gamma_pct = gamma_pct;
 }
 
 void spa_stereo_upmix_config_set_hssr_mask_treble(struct spa_stereo_upmix_config *config,
@@ -684,7 +694,8 @@ int spa_stereo_upmix_init(struct spa_stereo_upmix *state,
         spa_hssr_state_reset(&state->_runtime._hssr.guard_network);
         state->_runtime._hssr.mask_model = saved.hssr_mask_model;
         spa_hssr_dsp_set_mask_drive(&state->_runtime._hssr,
-                                    (float)saved.mask_drive_q15 / 32768.0f, saved.mask_treble_db10);
+                                    (float)saved.mask_drive_q15 / 32768.0f, saved.mask_treble_db10,
+                                    saved.mask_gamma_pct);
         spa_mask_state_reset(&state->_runtime._hssr.mask_network);
         if (saved.hssr_control_provider)
             saved.hssr_control_provider->reset(
@@ -728,7 +739,7 @@ int spa_stereo_upmix_reset(struct spa_stereo_upmix *state)
         state->_runtime._hssr.mask_model = state->config.hssr_mask_model;
         spa_hssr_dsp_set_mask_drive(&state->_runtime._hssr,
                                     (float)state->config.mask_drive_q15 / 32768.0f,
-                                    state->config.mask_treble_db10);
+                                    state->config.mask_treble_db10, state->config.mask_gamma_pct);
         if (state->config.hssr_control_provider)
             state->config.hssr_control_provider->reset(
                 state->config.hssr_control_provider->context, generation);
