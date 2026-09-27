@@ -228,7 +228,23 @@ Ranked by expected impact, all adopted as the next steps:
 | v26a through the DSP | | voice 0.09, guitars 0.12, keys 0.11, drums 0.19, bass 0.13, 2/39 swinging | = v21a: the clean role distillation changes nothing the renderer can use |
 | v26b | v26a + the fully ramped leak / retention terms | mask space **0.052 / 0.22** (best 1750), AUC 0.72 / 0.75; DSP: voice 0.02, guitars 0.06, keys 0.07, drums 0.19, bass 0.08, 6/39 guitar and 10/40 vocal songs swinging; presence α 0.5: 0.02 / 0.05 | the ramp lands where it always lands (v14 0.02 / 0.06, v18, v20): the clean role KD did not move the trade. Role distillation is closed; v27 (direct eligibility) is the last distillation form |
 | v27a | **direct eligibility distillation** (astra 6): Huber on sqrt(e) + 0.2 BCE + 0.1 role CE, energy-weighted control target, 4000 steps | mask space 0.49 / 0.60 (best-AUC ckpt 0.44 / 0.52), AUC 0.75 / 0.84; DSP: voice 0.08, guitars 0.12, keys 0.11, drums 0.18, 2/39 swinging; rear error vs oracle 0.21 (gain-fit 0.17) | the direct target lifts the other-owned eligibility to 0.60 (highest so far) but the vocal-owned one to 0.49 with it: the same line. Every distillation form (vocal channel, roles, eligibility) now measured on this student |
-| v27b | v27a + the ramped terms | running (the PC restarted it once for RAM) | |
+| v27b | v27a + the ramped terms | mask space 0.045 / 0.21 (best 0.040 / 0.195); DSP: voice 0.02, guitars 0.06, keys 0.06, drums 0.16, bass 0.07, 5/39 swinging; rear error vs oracle 0.31 (gain-fit 0.29), treble 0.12 | the ramp's point once more. **Every distillation form on the 128 M student is now measured: vocal channel, roles (raw / confident / balanced), eligibility — the same line.** |
+
+**State at the end of 2026-09-26.**  The oracle and the teacher prove the
+target (guitars 0.20 at voice 0.03 through this renderer).  Twenty-nine
+students at ≤ 176 M MAC/s — six front-ends, three ceilings, five losses,
+three distillation forms, two operating-point families — sit on one
+frontier, and the overfit test says why: they rank (AUC up to 0.96 when
+memorising) but never become confident, because nothing in their input tells
+them how *pure* a cell is.  The classical matrix ties them on rear share and
+loses by an order of magnitude on the oracle-referenced rear error, which
+is the metric that now separates routing from width.  What is deployable
+today: the mask-driven renderer with v13 + soft veto 0.5 (voice 0.04,
+guitars 0.09, 2/39 swinging, rear error 0.15 vs the car candidate's 0.41
+and 24/39).  What is left to try for the confident rear: the 230 M student
+built for frequency modelling (review 6, point 2) — the only untested lever
+that could carry a purity cue — and the listening study that decides what
+"confident" means by ear.
 | v25 (foreign run on the PC, 26.09 16:23) | TFNet hidden 32 + role distillation + ramp from 5000, 8000 steps | pre-ramp 0.48 / 0.61, **AUC 0.77 / 0.87** (best vocal-vs-other ranking measured); after the ramp **0.053 / 0.14** (best 7250), AUC 0.72 / 0.66; DSP: voice 0.02, guitars 0.05, keys 0.07, drums 0.18, bass 0.03, 7/39 swinging | launched by the previous instance of this session during the 16:05 restart (same script template); the bigger TF student with the clean ramp lands at v18's point — the best ranker still cannot commit, and the ramp trades it away as always |
 | v28o | **overfit test** (astra 6): teacher-only on 4 masters, evaluated on the same 4 | died at step 1250 (host RAM); at 1000–1250: **AUC 0.92 / 0.96** on the memorised songs, yet eligibility 0.32–0.34 in other-owned cells, 0.21–0.24 in vocal-owned. `diag_softmax.py`: in teacher-dominant cells (target ≈ 0.9 on one role) the student's softmax is ≈ 0.45–0.57 on that role and 0.2–0.25 on each of two others — *the same on its own training songs and on held-out ones* (v26a held-out: other-dominant → p_other 0.51, vocal-dominant → p_vocal 0.44) | **the student ranks (AUC 0.96 when memorising) but never becomes confident, not even on 4 songs it has seen 65 times.** The balanced owned-cell AUC does not involve the mixed cells; relative to *them* the dominant cells are not distinguishable, so the softmax settles near the mixed-cell mean. What the student lacks is a *purity* cue (how much of the cell is one source) — exactly what eligibility (a = sqrt e) needs and what a separator has. v27's direct sqrt-eligibility target attacks this head-on |
 | v20 (launches 1–3) | | died within ~200 steps each time: access violation in `c10.dll`; `faulthandler` shows the faulting thread has no Python frame (torch / driver native thread) — the GPU is shared with demucs and two unkillable zombie processes hold CUDA contexts. Not the mmap (removed anyway: cache windows are now plain file reads), not the growing file (json marker). Mitigation: `train_guard.ps1` restarts from `last.pt` (optimizer state, `--start-step`) until `train_done.txt`; batch 4 | the PC needs a reboot |
