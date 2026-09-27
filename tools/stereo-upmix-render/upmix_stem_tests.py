@@ -179,6 +179,29 @@ MASK_THRESH = 0.0    # --mask-thresh t: eligibility below t is 0, above rescaled
 MASK_SHARPEN = 1.0   # --mask-sharpen k: eligibility ** k (k > 1 = only confident cells go rear)
 MASK_ELIGIBLE = ""   # --mask-eligible other  (default: the model's other+cymbals)
 RESUME = False
+INJECT_SMOOTH = 0.0    # --inject-smooth MS: slow per-band gain envelope (fast attack, this release) on the injected estimate
+
+
+def smooth_envelope(elig, mix, release_ms, n_fft=2048, hop=512, bands=32):
+    """Stabiliser for a separator's estimate: per band, the estimate's energy relative to the mixture's is
+    held with a fast attack and a slow release, and the estimate is re-scaled to that held ratio.  The
+    spectral shape stays the estimate's; only its level trajectory per band is slowed down."""
+    import sep_net as SN
+    torch = SN._torch()
+    E = SN.stft(torch, torch.as_tensor(elig.astype(np.float32))[None])[0]        # [T,1025,2]
+    X = SN.stft(torch, torch.as_tensor(mix.astype(np.float32))[None])[0]
+    edges = np.unique(np.round(np.geomspace(1, E.shape[1] - 1, bands + 1)).astype(int))
+    pe = (E.abs() ** 2).sum(-1); px = (X.abs() ** 2).sum(-1) + 1e-9               # [T,1025]
+    alpha = float(np.exp(-hop / 48000 / (release_ms / 1000)))
+    gain = torch.ones_like(pe)
+    for a, b in zip(edges[:-1], edges[1:]):
+        r = (pe[:, a:b].sum(-1) / px[:, a:b].sum(-1)).clamp(1e-4, 4.0)           # the estimate's share of the mixture per band
+        held = r.clone()
+        for t in range(1, len(r)):
+            held[t] = max(float(r[t]), float(held[t - 1]) * alpha) if r[t] < held[t - 1] else float(r[t])
+        gain[:, a:b] = (held / r).sqrt()[:, None]                                  # re-scale the estimate to the held share
+    out = SN.istft(torch, (E * gain[..., None])[None], elig.shape[1])[0]
+    return out.numpy()
 TEACHER_MASK = False   # --teacher-mask: the mask from htdemucs's stems of the excerpt (jobs must be 1: one GPU model)
 INJECT = ""            # --inject oracle|teacher: that source's eligible AUDIO drives the object path (needs --render-extra "--mask-drive G")
 
@@ -251,6 +274,8 @@ def analyse_song(render, args, out, track_dir, excerpt_s, mask_model=None, oracl
             if "sep" not in _MASK:
                 _MASK["sep"] = TL.separator()
             elig = TL.separate_array(_MASK["sep"], (mix * k).astype(np.float32))["other"]
+        if INJECT_SMOOTH > 0:
+            elig = smooth_envelope(elig, mix * k, INJECT_SMOOTH)
         inj = os.path.join(out, f"{tag}.inj.wav")
         T.write_wav(inj, elig)
         extra = ["--rear-audio", inj]
@@ -313,14 +338,16 @@ def main():
     ap.add_argument("--mask-eligible", default="", help="roles allowed rear at routing time, e.g. 'other' (default other+cymbals)")
     ap.add_argument("--mask-presence", type=float, default=0.0, help="full nets: e * (1 - alpha * band vocal presence) at routing")
     ap.add_argument("--resume", action="store_true", help="reuse per-song results already in --out")
+    ap.add_argument("--inject-smooth", type=float, default=0.0, help="ms of release for the per-band gain envelope on the injected estimate")
     ap.add_argument("--teacher-mask", action="store_true", help="mask from htdemucs's stems (ceiling of the distillation route)")
     ap.add_argument("--oracle-ref", default="", help="dir with the oracle condition's *.6ch.wav renders: rear reconstruction error vs them")
     ap.add_argument("--inject", default="", help="interface test: eligible audio through the object path: oracle | teacher | teacher2 | student:CKPT")
     ap.add_argument("--split-file", help="masknet_cache/split.json")
     ap.add_argument("--split", default="dev", help="with --split-file: which split to take songs from")
     a = ap.parse_args()
-    global ORACLE_AMP, MASK_THRESH, MASK_SHARPEN, MASK_ELIGIBLE, RESUME, TEACHER_MASK, ORACLE_REF, INJECT
+    global ORACLE_AMP, MASK_THRESH, MASK_SHARPEN, MASK_ELIGIBLE, RESUME, TEACHER_MASK, ORACLE_REF, INJECT, INJECT_SMOOTH
     ORACLE_AMP = a.oracle_amp; RESUME = a.resume; TEACHER_MASK = a.teacher_mask; ORACLE_REF = a.oracle_ref; INJECT = a.inject
+    INJECT_SMOOTH = a.inject_smooth
     MASK_THRESH, MASK_SHARPEN, MASK_ELIGIBLE = a.mask_thresh, a.mask_sharpen, a.mask_eligible
     import mask_net as MN; MN.PRESENCE_ALPHA = a.mask_presence
     os.makedirs(a.out, exist_ok=True)
