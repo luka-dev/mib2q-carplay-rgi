@@ -365,10 +365,18 @@ a silent rear).  Renderer `--mask-model FILE --mask-drive-prod G` and bench
 `--mask-model` exercise the same code; host parity with the test path on a
 synthetic scene: rear RMS difference 4 % (the test path's mask comes from
 Python's whole-file STFT, the production path's from the DSP's own hop
-analysis).  The QNX hook builds (`libcarplay_hook.so`, emutls = 0).  Still to
-do: the full-DEV production-path run (must reproduce the test-path row), the
-QEMU instruction count with / without the mask, the Krait bench on the unit,
-then the car.
+analysis).  The QNX hook builds (`libcarplay_hook.so`, emutls = 0).  **QEMU instruction count (2026-09-27, `qnx_qemu_bench.sh --variant latest
+--async-controller`, 1024-frame blocks = 21.3 ms):** baseline 4.54 M
+instructions per block; with the float mask net **30.6 M** — the mask alone
+costs ~26 M instructions per block ≈ **1.22 G instructions/s** in scalar
+float, i.e. roughly a whole Krait core.  The float reference is therefore a
+parity tool, not the runtime.  Where it goes: the per-cell decoder (57→32→32→5
+for 257 cells ≈ 0.8 M MAC per control = 60 % of the net) — a [257 × 57] ×
+[57 × 32] matrix product per control, ideal for an int8 NEON GEMM (8 cells per
+vector); the convs / flat / GRU (~0.5 M MAC) fit float NEON.  Estimate after
+the port: ~40–50 M instructions/s ≈ 3 % of a core.  That port (Phase 1b) is
+the next step; the full-DEV production-path run and the Krait bench on the
+unit follow it.
 
 ## 📏 Classical baselines through the same harness (2026-09-26, `baseline_upmix.py`)
 
