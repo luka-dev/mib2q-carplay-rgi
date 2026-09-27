@@ -37,6 +37,45 @@ static float spa_mask_sigmoid(float v)
     return 1.0f / (1.0f + expf(-v));
 }
 
+/* tanh for the decoder / stem nonlinearities: a clamped rational form, |err| < 2e-3
+ * over the range, ~15 instructions instead of a libm call (16k calls per control). */
+static float spa_mask_tanh_fast(float x)
+{
+    float x2;
+    if (x > 4.97f) return 1.0f;
+    if (x < -4.97f) return -1.0f;
+    x2 = x * x;
+    return x * (135135.0f + x2 * (17325.0f + x2 * (378.0f + x2))) /
+           (135135.0f + x2 * (62370.0f + x2 * (3150.0f + x2 * 28.0f)));
+}
+
+/* out[0..n) += w * in[0..n): the vectorised form of every convolution tap. */
+static void spa_mask_axpy(float *out, const float *in, float w, int n)
+{
+    int i = 0;
+#if SPA_MASK_HAVE_NEON
+    float32x4_t wv = vdupq_n_f32(w);
+    for (; i + 3 < n; i += 4)
+        vst1q_f32(out + i, vmlaq_f32(vld1q_f32(out + i), wv, vld1q_f32(in + i)));
+#endif
+    for (; i < n; ++i) out[i] += w * in[i];
+}
+
+static float spa_mask_dot_f32(const float *a, const float *b, int n)
+{
+    int i = 0;
+    float acc = 0.0f;
+#if SPA_MASK_HAVE_NEON
+    float32x4_t sum = vdupq_n_f32(0.0f);
+    float lanes[4];
+    for (; i + 3 < n; i += 4) sum = vmlaq_f32(sum, vld1q_f32(a + i), vld1q_f32(b + i));
+    vst1q_f32(lanes, sum);
+    acc = lanes[0] + lanes[1] + lanes[2] + lanes[3];
+#endif
+    for (; i < n; ++i) acc += a[i] * b[i];
+    return acc;
+}
+
 /* The blob is a flat float array; hand out consecutive views in the export order. */
 static const float *spa_mask_take(const float **cursor, size_t count)
 {
@@ -212,16 +251,15 @@ static void spa_mask_conv5(const float *w, const float *b, int cin, int cout, in
         for (ci = 0; ci < cin; ++ci) {
             const float *x = in + (size_t)ci * n;
             const float *wk = w + ((size_t)co * cin + ci) * SPA_MASK_KERNEL;
-            for (i = 0; i < n; ++i) {
-                float acc = 0.0f;
-                for (k = 0; k < SPA_MASK_KERNEL; ++k) {
-                    int j = i + k - 2;
-                    if (j >= 0 && j < n) acc += wk[k] * x[j];
-                }
-                o[i] += acc;
+            for (k = 0; k < SPA_MASK_KERNEL; ++k) {
+                /* o[i] += wk[k] * x[i + k - 2] for the i where the tap is inside */
+                int shift = k - 2;
+                int start = shift < 0 ? -shift : 0;
+                int count = n - (shift > 0 ? shift : 0) - start;
+                spa_mask_axpy(o + start, x + start + shift, wk[k], count);
             }
         }
-        for (i = 0; i < n; ++i) o[i] = tanhf(o[i]);
+        for (i = 0; i < n; ++i) o[i] = spa_mask_tanh_fast(o[i]);
     }
 }
 
@@ -248,24 +286,18 @@ static void spa_mask_down(const struct spa_mask_model *m, int stage,
     for (co = 0; co < cout; ++co) {
         const float *wr = m->pw_w[stage] + (size_t)co * cin;
         float *o = out + (size_t)co * nout;
-        for (i = 0; i < nout; ++i) {
-            float acc = m->pw_b[stage][co];
-            for (c = 0; c < cin; ++c) acc += wr[c] * tmp[(size_t)c * nout + i];
-            o[i] = tanhf(acc);
-        }
+        for (i = 0; i < nout; ++i) o[i] = m->pw_b[stage][co];
+        for (c = 0; c < cin; ++c) spa_mask_axpy(o, tmp + (size_t)c * nout, wr[c], nout);
+        for (i = 0; i < nout; ++i) o[i] = spa_mask_tanh_fast(o[i]);
     }
 }
 
 static void spa_mask_gemv(const float *w, const float *b, int rows, int cols,
                           const float *x, float *y)
 {
-    int r, c;
-    for (r = 0; r < rows; ++r) {
-        const float *wr = w + (size_t)r * cols;
-        float acc = b ? b[r] : 0.0f;
-        for (c = 0; c < cols; ++c) acc += wr[c] * x[c];
-        y[r] = acc;
-    }
+    int r;
+    for (r = 0; r < rows; ++r)
+        y[r] = (b ? b[r] : 0.0f) + spa_mask_dot_f32(w + (size_t)r * cols, x, cols);
 }
 
 int spa_mask_infer(const struct spa_mask_model *m, struct spa_mask_state *s,
@@ -325,13 +357,13 @@ int spa_mask_infer(const struct spa_mask_model *m, struct spa_mask_state *s,
         for (i = 0; i < SPA_MASK_N3; ++i)
             flat_in[c * SPA_MASK_N3 + i] = s->a[(size_t)c * SPA_MASK_N3 + i];
     spa_mask_gemv(m->flat_w, m->flat_b, SPA_MASK_HIDDEN, SPA_MASK_C3 * SPA_MASK_N3, flat_in, gin);
-    for (i = 0; i < SPA_MASK_HIDDEN; ++i) gin[i] = tanhf(gin[i]);
+    for (i = 0; i < SPA_MASK_HIDDEN; ++i) gin[i] = spa_mask_tanh_fast(gin[i]);
     spa_mask_gemv(m->gru_wih, m->gru_bih, SPA_MASK_GATES, SPA_MASK_HIDDEN, gin, s->gates);
     spa_mask_gemv(m->gru_whh, m->gru_bhh, SPA_MASK_GATES, SPA_MASK_HIDDEN, s->hidden, s->gates_h);
     for (i = 0; i < SPA_MASK_HIDDEN; ++i) {
         float r = spa_mask_sigmoid(s->gates[i] + s->gates_h[i]);
         float z = spa_mask_sigmoid(s->gates[SPA_MASK_HIDDEN + i] + s->gates_h[SPA_MASK_HIDDEN + i]);
-        float n = tanhf(s->gates[2 * SPA_MASK_HIDDEN + i] + r * s->gates_h[2 * SPA_MASK_HIDDEN + i]);
+        float n = spa_mask_tanh_fast(s->gates[2 * SPA_MASK_HIDDEN + i] + r * s->gates_h[2 * SPA_MASK_HIDDEN + i]);
         hnew[i] = (1.0f - z) * n + z * s->hidden[i];
     }
     memcpy(s->hidden, hnew, sizeof(hnew));
@@ -385,12 +417,12 @@ int spa_mask_infer(const struct spa_mask_model *m, struct spa_mask_state *s,
             for (k = 0; k < SPA_MASK_DEC; ++k) {
                 float v = (float)spa_mask_dot_s8(m->dec1_wq + (size_t)k * SPA_MASK_DEC_PAD, s->zq[i], SPA_MASK_DEC_PAD)
                           * zscale * m->dec1_ws[k] + m->dec1_b[k];
-                h1q[k] = spa_mask_q8(tanhf(v), 127.0f);
+                h1q[k] = spa_mask_q8(spa_mask_tanh_fast(v), 127.0f);
             }
             for (k = 0; k < SPA_MASK_DEC; ++k) {
                 float v = (float)spa_mask_dot_s8(m->dec2_wq + (size_t)k * SPA_MASK_DEC, h1q, SPA_MASK_DEC)
                           * (1.0f / 127.0f) * m->dec2_ws[k] + m->dec2_b[k];
-                h2q[k] = spa_mask_q8(tanhf(v), 127.0f);
+                h2q[k] = spa_mask_q8(spa_mask_tanh_fast(v), 127.0f);
             }
             for (k = 0; k < SPA_MASK_ROLES; ++k) {
                 logit[k] = (float)spa_mask_dot_s8(m->dec3_wq + (size_t)k * SPA_MASK_DEC, h2q, SPA_MASK_DEC)
