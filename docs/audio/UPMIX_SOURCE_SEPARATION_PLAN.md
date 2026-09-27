@@ -347,9 +347,28 @@ p_other); no allocation, no locks in `spa_mask_infer`; blob `HSSRMSK1` =
 magic + u32 count + float32 arrays (`mask_net.py export-blob`, 173 711
 floats = 0.69 MB for the 128 M MAC/s student).  Parity against PyTorch on a
 synthetic scene (`mask_net.py dump-features` → `mask_infer_test`): 749
-controls, **max |Δ eligibility| 3.6 × 10⁻⁷**.  Next: the int8 / NEON port of
-the same graph (the gemv / GRU primitives of `hssr_neon.c`), the worker job,
-the render-loop application (`--mask-drive` semantics), QEMU + Krait bench.
+controls, **max |Δ eligibility| 3.6 × 10⁻⁷**.
+
+**Done 2026-09-27 — the production path (Track A).**  The mask net is wired
+into the car's pipeline, float, behind two env knobs that default to off:
+`AUDIO_HSSR_MASK_MODEL` (else `hssr_mask.bin` beside the model, absent = off)
+and `AUDIO_HSSR_MASK_DRIVE` (0..2, 0 = off, 1.0 = the measured operating
+point).  Per control the audio thread extracts the 257 × 4 per-bin features
+of the control hop (log|L|², log|R|², cos/sin IPD — `mask_net.py
+features()`), the control worker runs the mask net after q6d and the guard
+(job / result extended, state reset on generation change), the audio thread
+applies the result one control later like the GRU controls: the object mask
+becomes `sqrt(e) · drive` with the bin's own balance as its pan, the per-band
+vocal gate stays on top (= the harness's `--mask-drive 1.0 --mask-keep-gate`),
+and three missed controls hand the object back to the heuristic path (never
+a silent rear).  Renderer `--mask-model FILE --mask-drive-prod G` and bench
+`--mask-model` exercise the same code; host parity with the test path on a
+synthetic scene: rear RMS difference 4 % (the test path's mask comes from
+Python's whole-file STFT, the production path's from the DSP's own hop
+analysis).  The QNX hook builds (`libcarplay_hook.so`, emutls = 0).  Still to
+do: the full-DEV production-path run (must reproduce the test-path row), the
+QEMU instruction count with / without the mask, the Krait bench on the unit,
+then the car.
 
 ## 📏 Classical baselines through the same harness (2026-09-26, `baseline_upmix.py`)
 

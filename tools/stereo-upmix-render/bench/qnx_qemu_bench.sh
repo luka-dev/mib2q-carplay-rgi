@@ -15,6 +15,7 @@ ASYNC_ARG=""
 PACING_ARG=""
 SCENE_ARG=""
 MODEL="${HSSR_MODEL:-$ROOT/models/hssr-selection-v11/hssr_guard.bin}"
+MASK_MODEL=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -24,10 +25,11 @@ while [[ $# -gt 0 ]]; do
         --warmup) WARMUP="${2:?missing warmup count}"; shift 2 ;;
         --backend) BACKEND="${2:?missing backend}"; shift 2 ;;
         --model) MODEL="${2:?missing model}"; shift 2 ;;
+        --mask-model) MASK_MODEL="${2:?missing mask model}"; shift 2 ;;
         --scene) SCENE_ARG="--scene"; shift ;;
         --async-controller) ASYNC_ARG="--async-controller"; shift ;;
         --realtime-pacing) PACING_ARG="--realtime-pacing"; shift ;;
-        *) echo "usage: $0 [--variant 4.9|8.5] [--shift N] [--blocks N] [--warmup N] [--backend hssr-universal] [--model HSSR.bin] [--scene] [--async-controller] [--realtime-pacing]" >&2; exit 2 ;;
+        *) echo "usage: $0 [--variant 4.9|8.5] [--shift N] [--blocks N] [--warmup N] [--backend hssr-universal] [--model HSSR.bin] [--mask-model HSSRMSK1.bin] [--scene] [--async-controller] [--realtime-pacing]" >&2; exit 2 ;;
     esac
 done
 
@@ -79,6 +81,13 @@ cp "$QEMU_ASSETS/startup-virt" "$QEMU_ASSETS/libstartup.a" \
    "$QEMU_ASSETS/devc-serdebug" "$WORK/"
 cp "$BINARY" "$WORK/stereo_upmix_bench"
 cp "$MODEL" "$WORK/hssr_model.bin"
+MASK_ARG=""
+MASK_FILE=""
+if [[ -n "$MASK_MODEL" ]]; then
+    cp "$MASK_MODEL" "$WORK/hssr_mask.bin"
+    MASK_ARG="--mask-model /proc/boot/hssr_mask.bin"
+    MASK_FILE="hssr_mask.bin"
+fi
 
 cat > "$WORK/bench.build" <<EOF
 [linker="(40;1;)qcc -bootstrap -nostdlib -Wl,--no-keep-memory -Vgcc_ntoarmv7%(m!=3,%(m!=6,%(e==0, -EL%)%(e==1, -EB%)%)%)%(h!=0, -Wl,-Ttext -Wl,0x%t%)%(d!=0, -Wl,-Tdata -Wl,0x%d%) -o%o %i %[M -L%^i -Wl,-uinit_%n -lmod_%n%] /w/libstartup.a -L/opt/qnx650/target/qnx6/armle-v7/lib -L/opt/qnx650/target/qnx6/armle-v7/usr/lib -llzo -lucl -ldrvr"]
@@ -94,7 +103,7 @@ cat > "$WORK/bench.build" <<EOF
     waitfor /dev/ser1 4
     reopen /dev/ser1
     display_msg "@@UPMIX-BENCH-START@@"
-    stereo_upmix_bench --qemu-icount --backend $BACKEND --model /proc/boot/hssr_model.bin --blocks $BLOCKS --warmup $WARMUP $SCENE_ARG $ASYNC_ARG $PACING_ARG
+    stereo_upmix_bench --qemu-icount --backend $BACKEND --model /proc/boot/hssr_model.bin --blocks $BLOCKS --warmup $WARMUP $SCENE_ARG $ASYNC_ARG $PACING_ARG $MASK_ARG
     display_msg "@@UPMIX-BENCH-END@@"
 }
 [type=link] /usr/lib/ldqnx.so.2=/proc/boot/libc.so.3
@@ -105,6 +114,7 @@ procnto-smp
 devc-serdebug
 stereo_upmix_bench
 hssr_model.bin
+$MASK_FILE
 EOF
 
 docker run --rm --platform=linux/amd64 -v "$WORK":/w -w /w \
