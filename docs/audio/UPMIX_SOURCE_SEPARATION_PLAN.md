@@ -456,6 +456,21 @@ int8 flat): both rows equal `prod9` — voice 0.04, guitars 0.07, keys 0.08,
 rear −37.6 dBFS, error 0.16 / 0.15; with the skip one vocal swing fewer (1/40)
 and bass max 0.14 vs 0.16.  The skip and the int8 flat layer ship.
 
+**On the unit (2026-09-27 19:00, Krait 1512 MHz, `stereo_upmix_bench` in
+/ramdisk, 400 blocks of 1024 frames).**  Synchronous (the nets inside the
+audio thread): 4.67 ms per block without the mask, 7.33 ms with it → **the
+mask net costs 1.33 ms per control** (2 controls per block; 1.46 M
+instructions → IPC ~0.7; the timer's grain is ~1 ms, so the means are the
+numbers).  With the production layout (`--async-controller
+--realtime-pacing`): the audio thread stays at 4.0 ms per block with or
+without the mask (+1 %, the feature extraction), and the worker completed
+839 of 839 control jobs, busy 0, stale 0 — no late control in 8.5 s of
+paced operation with all three nets.  Against the failsafe threshold (three
+late controls ≈ 32 ms) that is a 24× margin; on music the 28 % cell skip
+takes it to ~1.2 ms.  Deployed over SSH the same evening (hook, blob,
+startup, `carplay_ncm_cleanup.sh`, jar updated; 12 files byte-identical;
+every file read back and compared); the unit reboots on Luka's decision.
+
 **The production path validated on the 40 DEV songs (2026-09-27 12:00,
 `--mask-model v21a.msk1 --mask-drive-prod 1.0 --vocal-gate 0.5`).**  Test
 path (Python STFT mask, `--inject student`) and production path (the DSP's
