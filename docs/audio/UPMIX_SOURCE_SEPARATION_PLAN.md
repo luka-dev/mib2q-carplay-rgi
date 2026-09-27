@@ -450,7 +450,11 @@ then, through the GRU).  The L1D model: 649 k accesses per control (was 937
 k) but 23 k misses (was 24 k) — with 16 KB the misses are the scratch
 buffers re-touched between stages, not the weights; what shrank is the
 unique working set per control, ~1.0 MB → ~0.6 MB (weights 0.29 MB float +
-0.14 MB int8, state ~0.2 MB), which is the L2 question on Krait.
+0.14 MB int8, state ~0.2 MB), which is the L2 question on Krait.  The 40-song
+production-path A/B of this pass (`prod10a` skip 0, `prod10b` skip 60 dB, both
+int8 flat): both rows equal `prod9` — voice 0.04, guitars 0.07, keys 0.08,
+rear −37.6 dBFS, error 0.16 / 0.15; with the skip one vocal swing fewer (1/40)
+and bass max 0.14 vs 0.16.  The skip and the int8 flat layer ship.
 
 **The production path validated on the 40 DEV songs (2026-09-27 12:00,
 `--mask-model v21a.msk1 --mask-drive-prod 1.0 --vocal-gate 0.5`).**  Test
