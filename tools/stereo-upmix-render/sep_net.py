@@ -1,0 +1,255 @@
+#!/usr/bin/env python3
+"""The separator student (astra review 8): estimate the REAR-ELIGIBLE AUDIO, not a
+cell's ownership.  Two-way (protected = vocals + drums + bass, eligible = the rest),
+causal, 2048/512 at 48 kHz (93.75 frames/s), sized for the car's budget after the
+two GRU controllers are retired (~120-150 M MAC/s):
+
+  log|L|, log|R| per bin (1025) -> strided frequency convs 1025 -> 513 -> 257 -> 129
+  -> a causal GRU per position over time (shared weights) + a global causal GRU
+  -> a head at 257 positions producing 4 bins x 2 channels of magnitude ratio mask
+  -> linear upsample to 1025 -> eligible = mask x mixture STFT (mixture phase) -> iSTFT
+
+Trained in the AUDIO domain: L1 on the magnitude STFT and on the complex STFT of the
+estimate vs the eligible target (MoisesDB truth + the four-stem teacher cache), so the
+objective is "usable rear content", not "explain ambiguous cells".  Evaluated through
+the real DSP with `upmix_stem_tests.py --inject student:CKPT`.
+
+  train     --cache MOISES --teacher-cache TC4 --out DIR
+  separate  --model CKPT --wav IN --out ELIG.wav
+"""
+import argparse
+import json
+import os
+import sys
+import time
+
+import numpy as np
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import mask_net as MN  # noqa: E402  (caches, read_window, expand_slots, split)
+
+SR = 48000
+N_FFT, HOP = 2048, 512
+N_BINS = N_FFT // 2 + 1          # 1025
+FPS = SR / HOP                   # 93.75 frames/s
+# seven cache slots -> protected / eligible
+ELIGIBLE_SLOTS = (6,)            # other
+STATS = {"mean": None, "std": None}
+
+
+def _torch():
+    import torch
+    return torch
+
+
+def stft(torch, x):
+    """x [B, 2, n] -> [B, T, 1025, 2] complex, Hann 2048 / hop 512, centre-padded."""
+    win = torch.hann_window(N_FFT, device=x.device)
+    B, C, n = x.shape
+    X = torch.stft(x.reshape(B * C, n), N_FFT, HOP, window=win, return_complex=True, center=True)   # [BC, 1025, T]
+    return X.reshape(B, C, N_BINS, -1).permute(0, 3, 2, 1)
+
+
+def istft(torch, X, n):
+    """[B, T, 1025, 2] complex -> [B, 2, n]."""
+    win = torch.hann_window(N_FFT, device=X.device)
+    B, T, _, C = X.shape
+    y = torch.istft(X.permute(0, 3, 2, 1).reshape(B * C, N_BINS, T), N_FFT, HOP, window=win, length=n, center=True)
+    return y.reshape(B, C, n)
+
+
+class SepNet:
+    def __init__(self, torch, c1=16, c2=32, c3=48, ht=16, hg=64, dec=24):
+        nn = torch.nn
+        self.torch = torch
+        self.enc1 = nn.Sequential(nn.Conv1d(2, c1, 7, stride=2, padding=3), nn.Tanh())                                  # 1025 -> 513
+        self.enc2 = nn.Sequential(nn.Conv1d(c1, c1, 5, stride=2, padding=2, groups=c1), nn.Conv1d(c1, c2, 1), nn.Tanh())  # -> 257
+        self.enc3 = nn.Sequential(nn.Conv1d(c2, c2, 5, stride=2, padding=2, groups=c2), nn.Conv1d(c2, c3, 1), nn.Tanh())  # -> 129
+        self.tgru = nn.GRU(c3, ht, batch_first=True)             # causal, per position over time, shared
+        self.ggru = nn.GRU(c3, hg, batch_first=True)             # causal, global (mean over positions)
+        self.gproj = nn.Linear(hg, 16)
+        # head at 257 positions: [enc2 32, upsampled (c3 + ht) 64, global 16] -> 4 bins x 2 channels
+        self.head = nn.Sequential(nn.Linear(c2 + c3 + ht + 16, dec), nn.Tanh(), nn.Linear(dec, 8))
+        self.modules = nn.ModuleList([self.enc1, self.enc2, self.enc3, self.tgru, self.ggru, self.gproj, self.head])
+        self.c1, self.c2, self.c3, self.ht, self.hg, self.dec = c1, c2, c3, ht, hg, dec
+        self.macs = (7 * 2 * c1 * 513 + (5 * c1 + c1 * c2) * 257 + (5 * c2 + c2 * c3) * 129
+                     + 3 * (c3 * ht + ht * ht) * 129 + 3 * (c3 * hg + hg * hg) + hg * 16
+                     + ((c2 + c3 + ht + 16) * dec + dec * 8) * 257)
+
+    def to(self, dev):
+        self.modules.to(dev); return self
+
+    def parameters(self):
+        return self.modules.parameters()
+
+    def mask(self, logmag):
+        """logmag [B,T,1025,2] (standardised) -> mask [B,T,1025,2] in (0,1)."""
+        torch = self.torch
+        B, T = logmag.shape[:2]
+        x = logmag.reshape(B * T, N_BINS, 2).transpose(1, 2)                  # [BT,2,1025]
+        e1 = self.enc1(x)                                                       # [BT,c1,513]
+        e2 = self.enc2(e1)                                                      # [BT,c2,257]
+        e3 = self.enc3(e2)                                                      # [BT,c3,129]
+        tm, _ = self.tgru(e3.reshape(B, T, self.c3, 129).permute(0, 3, 1, 2).reshape(B * 129, T, self.c3))
+        tm = tm.reshape(B, 129, T, self.ht).permute(0, 2, 3, 1).reshape(B * T, self.ht, 129)
+        gm, _ = self.ggru(e3.reshape(B, T, self.c3, 129).mean(-1))              # [B,T,hg]
+        g = self.gproj(gm).reshape(B * T, 16, 1).expand(-1, -1, 257)
+        up = torch.nn.functional.interpolate(torch.cat([e3, tm], 1), size=257, mode="linear", align_corners=True)
+        z = torch.cat([e2, up, g], 1).transpose(1, 2)                           # [BT,257,c2+c3+ht+16]
+        m = torch.sigmoid(self.head(z)).reshape(B * T, 257, 4, 2)               # 4 bins per position
+        m = m.permute(0, 3, 1, 2).reshape(B * T, 2, 1028)[:, :, :N_BINS]        # [BT,2,1025]
+        return m.transpose(1, 2).reshape(B, T, N_BINS, 2)
+
+    def separate_stft(self, X):
+        """X [B,T,1025,2] complex mixture -> eligible estimate, same shape."""
+        torch = self.torch
+        lm = torch.log(X.abs() + 1e-5)
+        lm = (lm - STATS["mean"]) / STATS["std"] if STATS["mean"] is not None else lm
+        return X * self.mask(lm.clamp(-6, 6))
+
+
+def windows(torch, tracks, seconds, batch, rng, merge_none=None):
+    """[B, 2, n] mixture and [B, 2, n] eligible target from seven-slot (or expanded) caches."""
+    n = int(seconds * SR)
+    mixes, eligs = [], []
+    while len(mixes) < batch:
+        path = tracks[rng.integers(len(tracks))]
+        N = MN.npy_header(path)[0][2]
+        if N <= n:
+            continue
+        s = rng.integers(0, N - n)
+        w = MN.expand_slots(MN.read_window(path, s, n)).astype(np.float32) / 32768   # [7,2,n]
+        gains = (10 ** (rng.uniform(-6, 6, size=(7, 1, 1)) / 20)).astype(np.float32)
+        w = w * gains
+        mixes.append(w.sum(0)); eligs.append(w[list(ELIGIBLE_SLOTS)].sum(0))
+    return torch.as_tensor(np.stack(mixes)), torch.as_tensor(np.stack(eligs))
+
+
+def loss_audio(torch, est, tgt):
+    """L1 on the magnitude STFT + L1 on the complex STFT (both 2048/512), plus a small waveform L1."""
+    return ((est.abs() - tgt.abs()).abs().mean() + 0.5 * (est - tgt).abs().mean())
+
+
+def si_sdr(torch, est, ref):
+    ref = ref - ref.mean(-1, keepdim=True); est = est - est.mean(-1, keepdim=True)
+    a = (est * ref).sum(-1, keepdim=True) / ((ref ** 2).sum(-1, keepdim=True) + 1e-9)
+    proj = a * ref; noise = est - proj
+    return 10 * torch.log10(((proj ** 2).sum(-1) + 1e-9) / ((noise ** 2).sum(-1) + 1e-9))
+
+
+def evaluate(torch, net, tracks, dev, seconds=20.0, songs=12):
+    """SI-SDR of the eligible estimate vs the truth on DEV (MoisesDB) excerpts, and the leak: vocal energy in the estimate."""
+    net.modules.eval()
+    sdrs, leaks = [], []
+    rng = np.random.default_rng(0)
+    with torch.no_grad():
+        for p in tracks[:songs]:
+            N = MN.npy_header(p)[0][2]
+            n = min(int(seconds * SR), N)
+            s = MN.dev_excerpt(p, n) if N > n else 0
+            w = torch.as_tensor(MN.expand_slots(MN.read_window(p, s, n)).astype(np.float32) / 32768, device=dev)
+            mix = w.sum(0)[None]; elig = w[list(ELIGIBLE_SLOTS)].sum(0)[None]; voc = (w[0] + w[1])[None]
+            est = istft(torch, net.separate_stft(stft(torch, mix)), n)
+            sdrs.append(float(si_sdr(torch, est, elig).mean()))
+            # leak: how much of the vocal ends up in the estimate, relative to the vocal's own energy
+            Xv = stft(torch, voc); Xe = stft(torch, est); Xt = stft(torch, elig)
+            vcell = (Xv.abs() ** 2) > 10 * ((stft(torch, mix) - Xv).abs() ** 2 + 1e-9)     # vocal-owned cells (>= 10 dB)
+            leaks.append(float(((Xe.abs() ** 2) * vcell).sum() / ((Xv.abs() ** 2) * vcell).sum().clamp(min=1e-9)))
+    net.modules.train()
+    return {"si_sdr": float(np.median(sdrs)) if sdrs else 0.0, "vocal_leak": float(np.median(leaks)) if leaks else 1.0}
+
+
+def train(a):
+    torch = _torch()
+    dev = "cuda" if torch.cuda.is_available() else "cpu"
+    torch.manual_seed(a.seed); rng = np.random.default_rng(a.seed)
+    split = MN.load_split(a.cache)
+    tracks = [os.path.join(a.cache, t + ".npy") for t in split["train"]]
+    if a.teacher_cache:
+        tracks += [os.path.join(a.teacher_cache, f) for f in sorted(os.listdir(a.teacher_cache))
+                   if f.endswith(".npy") and os.path.exists(os.path.join(a.teacher_cache, f[:-4] + ".json"))]
+    dev_tracks = [os.path.join(a.cache, t + ".npy") for t in split["dev"]]
+    net = SepNet(torch, ht=a.ht, hg=a.hg, dec=a.dec).to(dev)
+    print(f"device {dev}; {len(tracks)} training songs; params {sum(p.numel() for p in net.parameters())}, "
+          f"~{net.macs} MAC per frame = {net.macs * FPS / 1e6:.0f} M MAC/s (+ one 2048-point FFT/iFFT pair per hop)", flush=True)
+    os.makedirs(a.out, exist_ok=True)
+    start = 0
+    opt = torch.optim.AdamW(net.parameters(), lr=a.lr, weight_decay=1e-4)
+    sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, a.steps)
+    if a.init:
+        ck = torch.load(a.init, map_location=dev)
+        net.modules.load_state_dict(ck["state"]); STATS.update(ck["stats"])
+        if ck.get("opt"): opt.load_state_dict(ck["opt"])
+        start = ck.get("step", 0)
+        for _ in range(start): sched.step()
+        print(f"resumed at step {start}", flush=True)
+    batches = MN.prefetch(lambda: windows(torch, tracks, a.seconds, a.batch, rng))
+    if STATS["mean"] is None:
+        with torch.no_grad():
+            lm = torch.cat([torch.log(stft(torch, next(batches)[0].to(dev)).abs() + 1e-5).flatten() for _ in range(4)])
+            STATS["mean"], STATS["std"] = float(lm.mean()), float(lm.std() + 1e-3)
+    print(f"log-mag stats mean {STATS['mean']:.2f} std {STATS['std']:.2f}", flush=True)
+    best = -1e9; t0 = time.time()
+    for step in range(start + 1, a.steps + 1):
+        mix, elig = (t.to(dev) for t in next(batches))
+        X = stft(torch, mix); Tt = stft(torch, elig)
+        loss = loss_audio(torch, net.separate_stft(X), Tt)
+        opt.zero_grad(); loss.backward()
+        torch.nn.utils.clip_grad_norm_(net.parameters(), 5.0)
+        opt.step(); sched.step()
+        if step % a.eval_every == 0 or step == a.steps:
+            met = evaluate(torch, net, dev_tracks, dev)
+            line = f"step {step} loss {loss.item():.4f} dev si_sdr {met['si_sdr']:.2f} dB vocal_leak {met['vocal_leak']:.3f}  {time.time() - t0:.0f}s"
+            print(line, flush=True)
+            ck = {"state": net.modules.state_dict(), "stats": dict(STATS), "step": step, "dev": met,
+                  "ht": a.ht, "hg": a.hg, "dec": a.dec}
+            torch.save({**ck, "opt": opt.state_dict()}, os.path.join(a.out, "last.pt"))
+            score = met["si_sdr"] - 20 * met["vocal_leak"]
+            if score > best:
+                best = score; torch.save(ck, os.path.join(a.out, "sep_net.pt"))
+                open(os.path.join(a.out, "best.txt"), "w").write(line + "\n")
+    open(os.path.join(a.out, "train_done.txt"), "w").write(f"{a.steps}\n")
+
+
+def load(model_path):
+    torch = _torch(); dev = "cuda" if torch.cuda.is_available() else "cpu"
+    ck = torch.load(model_path, map_location=dev)
+    net = SepNet(torch, ht=ck.get("ht", 16), hg=ck.get("hg", 64), dec=ck.get("dec", 24)).to(dev)
+    net.modules.load_state_dict(ck["state"]); net.modules.eval(); STATS.update(ck["stats"])
+    return torch, net, dev
+
+
+def separate_array(loaded, x48):
+    """x48 [2, n] float32 -> eligible estimate [2, n] (whole file; the model is causal by construction)."""
+    torch, net, dev = loaded
+    with torch.no_grad():
+        x = torch.as_tensor(x48, device=dev, dtype=torch.float32)
+        return istft(torch, net.separate_stft(stft(torch, x[None])), x.shape[1])[0].cpu().numpy()
+
+
+def separate(a):
+    import wave
+    with wave.open(a.wav, "rb") as w:
+        x = np.frombuffer(w.readframes(w.getnframes()), "<i2").reshape(-1, w.getnchannels()).T.astype(np.float32) / 32768
+    y = separate_array(load(a.model), x)
+    with wave.open(a.out, "wb") as w:
+        w.setnchannels(2); w.setsampwidth(2); w.setframerate(SR); w.writeframes((np.clip(y, -1, 1).T * 32767).astype("<i2").tobytes())
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    t = sub.add_parser("train"); t.add_argument("--cache", required=True); t.add_argument("--teacher-cache"); t.add_argument("--out", required=True)
+    t.add_argument("--steps", type=int, default=6000); t.add_argument("--batch", type=int, default=6); t.add_argument("--seconds", type=float, default=8.0)
+    t.add_argument("--lr", type=float, default=1e-3); t.add_argument("--seed", type=int, default=1); t.add_argument("--eval-every", type=int, default=250)
+    t.add_argument("--ht", type=int, default=16); t.add_argument("--hg", type=int, default=64); t.add_argument("--dec", type=int, default=24)
+    t.add_argument("--init")
+    s = sub.add_parser("separate"); s.add_argument("--model", required=True); s.add_argument("--wav", required=True); s.add_argument("--out", required=True)
+    a = ap.parse_args()
+    {"train": train, "separate": separate}[a.cmd](a)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
