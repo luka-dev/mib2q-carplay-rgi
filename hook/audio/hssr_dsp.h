@@ -249,6 +249,7 @@ struct spa_hssr_dsp {
     float mask_eligibility[SPA_MASK_BINS];
     uint32_t mask_ready;
     uint32_t mask_missed;
+    uint32_t mask_fallbacks;   /* times three late controls handed the object back to the heuristic path */
 };
 
 void spa_hssr_dsp_prepare(struct spa_hssr_dsp *state);

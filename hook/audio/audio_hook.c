@@ -6334,6 +6334,39 @@ static size_t spa_tap_limit(void)
 #endif
 }
 
+/* The HSSR controllers' health, for the periodic sink line: the counters
+ * behind a rear that goes quiet without an error.  Three late controls send
+ * q6d into its failsafe (inference_failures, the rear decays 0.75 per late
+ * control) and hand the mask net's object back to the heuristic path
+ * (mask_fallbacks); the worker's busy/stale say whether the control thread
+ * kept up.  Also a WARN the first time either happens since the last line. */
+static void spa_hssr_log_health(const char *path, const struct spa_stereo_upmix *upmix,
+                                struct spa_hssr_control_worker *worker,
+                                uint32_t *lastFailsafe, uint32_t *lastMaskFallbacks)
+{
+    const struct spa_hssr_dsp *dsp = &upmix->_runtime._hssr;
+    struct spa_hssr_control_worker_stats stats;
+
+    if (!dsp->control_sequence) return;                /* this path has not run */
+    memset(&stats, 0, sizeof(stats));
+    if (worker) spa_hssr_control_worker_get_stats(worker, &stats);
+    if (dsp->inference_failures != *lastFailsafe)
+        LOG_WARN(LOG_MODULE, "HSSR %s: REAR FAILSAFE +%u (total %u): the controller missed three controls in a row",
+                 path, (unsigned)(dsp->inference_failures - *lastFailsafe), (unsigned)dsp->inference_failures);
+    if (dsp->mask_fallbacks != *lastMaskFallbacks)
+        LOG_WARN(LOG_MODULE, "HSSR %s: MASK FALLBACK +%u (total %u): the object went back to the heuristic path",
+                 path, (unsigned)(dsp->mask_fallbacks - *lastMaskFallbacks), (unsigned)dsp->mask_fallbacks);
+    *lastFailsafe = dsp->inference_failures;
+    *lastMaskFallbacks = dsp->mask_fallbacks;
+    LOG_WARN(LOG_MODULE,
+             "HSSR health %s: controls=%u lateNow=%u failsafeTotal=%u maskReady=%u maskLateNow=%u "
+             "maskFallbacks=%u worker=%u/%u busy=%u stale=%u resets=%u",
+             path, (unsigned)dsp->control_sequence, (unsigned)dsp->control_deadlines_missed,
+             (unsigned)dsp->inference_failures, (unsigned)dsp->mask_ready, (unsigned)dsp->mask_missed,
+             (unsigned)dsp->mask_fallbacks, (unsigned)stats.completed, (unsigned)stats.submitted,
+             (unsigned)stats.busy, (unsigned)stats.stale_discarded, (unsigned)stats.resets);
+}
+
 static void spa_tap_write(const char *path, size_t *taken, const void *buf, size_t len)
 {
     size_t limit = spa_tap_limit();
@@ -6633,6 +6666,13 @@ HOOK_EXPORT ssize_t snd_pcm_plugin_write(snd_pcm_t *handle, const void *buffer, 
                      (unsigned long long)spa_pcm_sink.reclaimedOpens,
                      (unsigned long long)spa_pcm_sink.skippedReclaimParams,
                      (unsigned long long)spa_pcm_sink.skippedReclaimPrepares);
+        {
+            static uint32_t lastFailsafe103, lastMaskFallbacks103, lastFailsafeRt, lastMaskFallbacksRt;
+            spa_hssr_log_health("103", &spa103_render.stereoUpmix, &spa103_render.hssrControlWorker,
+                                &lastFailsafe103, &lastMaskFallbacks103);
+            spa_hssr_log_health("rt", &spa_rt_upmix.upmix, &spa_rt_upmix.worker,
+                                &lastFailsafeRt, &lastMaskFallbacksRt);
+        }
 #if ENABLE_STATE_TRACE
         traceQsaHealth = 1;
         traceWriteNumber = spa_pcm_sink.writes;

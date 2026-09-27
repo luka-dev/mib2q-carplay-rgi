@@ -15,7 +15,7 @@ int main(int argc, char **argv)
     for (i = 0; i < SPA_HSSR_FEATURES; ++i) features[i] = 0.1f * (float)((i * 7) % 11) - 0.5f;
     for (i = 1; i <= 40; ++i) {
         const struct spa_hssr_control_provider *p = spa_hssr_control_worker_provider(&worker);
-        if (p->submit(p->context, 1u, i, features) <= 0) { /* busy is fine */ }
+        if (p->submit(p->context, 1u, i, features, NULL) <= 0) { /* busy is fine */ }
         usleep(3000);
         if (p->receive(p->context, 1u, i, control, &seq) > 0) {
             got++;

@@ -14,7 +14,7 @@ fi
     -Wno-unused-function "$@" -Itests/mocks -Ihook \
     tests/audio_interposer_test.c \
     hook/audio/stereo_upmix.c hook/audio/hssr_dsp.c hook/audio/hssr_neon.c \
-    hook/audio/hssr_control_worker.c hook/audio/soundcheck.c \
+    hook/audio/hssr_control_worker.c hook/audio/hssr_mask.c hook/audio/soundcheck.c \
     hook/audio/spatial_downmix.c hook/audio/apap_lifecycle.c \
     hook/audio/apap_crypto.c hook/audio/aac_bridge.c hook/framework/iap2_protocol.c \
     -lpthread -lm -o "$audio_test_dir/audio_interposers"

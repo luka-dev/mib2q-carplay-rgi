@@ -1195,7 +1195,10 @@ static void spa_hssr_mask_missed(struct spa_hssr_dsp *state)
     /* One late period keeps the previous eligibility; repeated lateness
      * hands the object back to the heuristic path (never a silent rear). */
     if (state->mask_missed < UINT32_MAX) state->mask_missed++;
-    if (state->mask_missed >= 3u) state->mask_ready = 0;
+    if (state->mask_missed >= 3u) {
+        if (state->mask_ready) state->mask_fallbacks++;
+        state->mask_ready = 0;
+    }
 }
 
 static void spa_hssr_control_failsafe(struct spa_hssr_dsp *state)

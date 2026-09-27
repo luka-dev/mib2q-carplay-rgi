@@ -38,7 +38,7 @@ static int submit_until_ready(
 
     for (attempt = 0; attempt < 2000u; ++attempt) {
         if (provider->submit(provider->context, generation, sequence,
-                             features) > 0)
+                             features, NULL) > 0)
             return 1;
         (void)nanosleep(&pause, NULL);
     }

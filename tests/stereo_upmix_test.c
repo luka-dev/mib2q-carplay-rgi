@@ -37,12 +37,13 @@ struct reset_probe {
 
 static int reset_probe_submit(
     void *context, uint32_t generation, uint32_t sequence,
-    const float features[SPA_HSSR_FEATURES])
+    const float features[SPA_HSSR_FEATURES], const float *mask_features)
 {
     (void)context;
     (void)generation;
     (void)sequence;
     (void)features;
+    (void)mask_features;
     return 1;
 }
 
