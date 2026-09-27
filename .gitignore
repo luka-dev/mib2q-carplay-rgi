@@ -14,10 +14,12 @@
 !/models/hssr-selection-v11/
 /models/hssr-selection-v11/*
 !/models/hssr-selection-v11/hssr_guard.bin
+!/models/hssr-selection-v11/settings.json
 !/models/hssr-q6d-moises-a/
 /models/hssr-q6d-moises-a/*
 !/models/hssr-q6d-moises-a/hssr_model.bin
 !/models/hssr-q6d-moises-a/manifest.json
+!/models/hssr-q6d-moises-a/settings.json
 /local_logs/
 
 # Phone-side captures: sysdiagnose tarballs and log archives are hundreds of MB

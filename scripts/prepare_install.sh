@@ -37,6 +37,9 @@ mkdir -p "$HOOKS" "$ROOT/mnt/app/eso/hmi/lsd/jars" "$ROOT/mnt/app/eso/bin/apps" 
 cp "$PROJECT_DIR/install_MoreIncredibleBash/mod/custom.sh" "$PROJECT_DIR/install_MoreIncredibleBash/mod/command.sh" "$MOD/"
 cp "$SI/carplay_child.json" "$MOD/carplay/"
 
+# the knob values recorded beside each model must be the ones the startup script ships
+python3 "$PROJECT_DIR/scripts/check_model_settings.py" "$SI/carplay_startup.sh" "$PROJECT_DIR"/models/*/settings.json
+
 cp "$IN/libcarplay_hook.so" "$HOOKS/"
 if [ -f "$IN/libcarplay_apac.so" ]; then
   cp "$IN/libcarplay_apac.so" "$HOOKS/"

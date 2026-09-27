@@ -1,0 +1,27 @@
+{
+  "model": "hssr-q6d-moises-a (hssr_model.bin): the q6d scene controller, 93.75 controls/s",
+  "set_in": "deploy/smartphone_integrator/carplay_startup.sh (every value below is checked against it by scripts/check_model_settings.py at package time)",
+  "harness": "tools/stereo-upmix-render/upmix_behavior_tests.py VARIANTS['shipped'] = the same knobs as renderer flags",
+  "knobs": {
+    "AUDIO_HSSR_MODEL": {"value": "$H/hssr_model.bin", "flag": "--model", "what": "the controller blob"},
+    "AUDIO_STEREO_UPMIX": {"value": "on", "flag": "--mode hssr-universal", "what": "stereo -> 5.1 upmix on the buffered CarPlay stream"},
+    "AUDIO_REALTIME_UPMIX": {"value": "on", "what": "the same upmix for the stock realtime media stream (type 100), own DSP state"},
+    "AUDIO_STEREO_SURROUND": {"value": "0.40", "flag": "--surround 0.40", "what": "rear object level; 0.5 was tried 25.09 and flickered +45 %"},
+    "AUDIO_STEREO_FRONT_RETENTION": {"value": "0.5", "flag": "--front-retention 0.5", "what": "half of each rear object stays in front (21.09)"},
+    "AUDIO_HSSR_RETENTION_HF": {"value": null, "flag": "--retention-hf", "what": "HF retention taper; unset = renderer default, the taper itself rode on the attack detector and is off with it"},
+    "AUDIO_HSSR_BED_DELAYS": {"value": "on", "flag": "--bed-delays", "what": "per-band bed decorrelation delays, 12 ms (21.09)"},
+    "AUDIO_HSSR_BED_ATTACK": {"value": "off", "flag": "--bed-attack off", "what": "attack detector off since 25.09: its per-hit collapse was the largest jump generator; 22.09 ran owner"},
+    "AUDIO_HSSR_ATTACK_COLLAPSE": {"value": null, "flag": "--attack-collapse", "what": "collapse depth of the attack detector; unused while BED_ATTACK=off (22.09: 0.75)"},
+    "AUDIO_STEREO_REAR_BODY_DB": {"value": null, "flag": "--rear-body", "what": "rear body trim; unset = renderer default"},
+    "AUDIO_STEREO_REAR_AIR_DB": {"value": "-12", "flag": "--rear-air -12", "what": "static rear air bed above ~2.5 kHz (25.09): the 22.09 rear treble level without per-hit decisions; unset = off"},
+    "AUDIO_STEREO_FRONT_TREBLE_DB": {"value": null, "flag": "--front-treble", "what": "front high shelf @4 kHz, -12..0; unset = off (the static lever if the front is too bright, -3 tried)"},
+    "AUDIO_STEREO_FRONT_BASS_DB": {"value": "-3", "flag": "--front-bass -3", "what": "front-only bass trim, sub and rears untouched"},
+    "AUDIO_STEREO_LFE": {"value": "assist", "flag": "--lfe assist", "what": "sub from the front bass assist"},
+    "AUDIO_STEREO_LFE_GAIN": {"value": "0", "flag": "--lfe-gain 0", "what": "dB re the 07.09 calibration; the 18.09 build ran +9.5 and boomed"}
+  },
+  "history": {
+    "2026-09-22 (car, listened)": "BED_ATTACK=owner, ATTACK_COLLAPSE=0.75, VOCAL_GATE=0, no rear air (harness VARIANTS['car_0922'])",
+    "2026-09-25 (master 0ffe8eb, not listened)": "BED_ATTACK=off, VOCAL_GATE=0.95, REAR_AIR_DB=-12",
+    "2026-09-27 (branch, not listened)": "+ mask net (models/mask-full-probe-v21a), VOCAL_GATE=0.5"
+  }
+}

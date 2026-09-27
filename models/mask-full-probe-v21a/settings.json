@@ -1,0 +1,10 @@
+{
+  "model": "mask-full-probe-v21a (hssr_mask.bin): the per-cell rear-eligibility student, run as the control worker's third job; provenance and the DEV row in manifest.json",
+  "set_in": "deploy/smartphone_integrator/carplay_startup.sh (checked by scripts/check_model_settings.py at package time)",
+  "harness": "stereo_upmix_render --mask-model v21a.msk1 --mask-drive-prod 1.0 --vocal-gate 0.5 on top of VARIANTS['shipped'] (upmix_stem_tests.py --render-extra)",
+  "knobs": {
+    "AUDIO_HSSR_MASK_MODEL": {"value": "$H/hssr_mask.bin", "flag": "--mask-model", "what": "unset = hssr_mask.bin beside AUDIO_HSSR_MODEL; absent file = mask off"},
+    "AUDIO_HSSR_MASK_DRIVE": {"value": "1.0", "flag": "--mask-drive-prod 1.0", "what": "object = sqrt(eligibility) * drive, pan = the bin's own L/R balance; 0 = off (the heuristic object path), range 0..2; three late controls fall back to the heuristic path"},
+    "AUDIO_HSSR_VOCAL_GATE": {"value": "0.5", "flag": "--vocal-gate 0.5", "what": "the soft veto over the mask (see models/hssr-selection-v11/settings.json)"}
+  }
+}
