@@ -225,6 +225,17 @@ def analyse_song(render, args, out, track_dir, excerpt_s, mask_model=None, oracl
     if INJECT:                                         # interface test (astra 8): the rear-eligible AUDIO through the object path
         if INJECT == "oracle":
             elig = sum(v for nme, v in stems.items() if nme not in ORACLE_PROTECT) * k
+        elif INJECT == "irm":                              # astra 9: the optimal BOUNDED REAL mask (ideal ratio mask, mixture phase) at 2048/512
+            import sep_net as SN
+            torch = SN._torch()
+            e = torch.as_tensor((sum(v for nme, v in stems.items() if nme not in ORACLE_PROTECT) * k).astype(np.float32))[None]
+            m = torch.as_tensor((mix * k).astype(np.float32))[None]
+            E, X = SN.stft(torch, e), SN.stft(torch, m)
+            irm = (E.abs() / (X.abs() + 1e-7)).clamp(0.0, 1.0)
+            est = SN.istft(torch, X * irm, m.shape[-1])[0]
+            sdr = float(SN.si_sdr(torch, est, e[0]).mean()); sdr_mix = float(SN.si_sdr(torch, m[0], e[0]).mean())
+            print(f"  IRM {tag}: si_sdr {sdr:.2f} dB (mixture {sdr_mix:.2f})", flush=True)
+            elig = est.numpy()
         elif INJECT.startswith("student:"):                # the separator student's eligible estimate (sep_net.py)
             import sep_net as SN
             if "student" not in _MASK:
