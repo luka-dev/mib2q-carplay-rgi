@@ -623,12 +623,13 @@ harness `--inject`), same renderer, same 40 DEV songs, G = 1.0:
 
 | | vocals | guitar | piano | keys | bass | drums | swinging | rear level |
 |---|---|---|---|---|---|---|---|---|
-| oracle **mask** (real-stem eligibility × mixture) | 0.03 | 0.20 | 0.14 | 0.17 | 0.07 | 0.12 | 7/39 | pending |
+| oracle **mask** (real-stem eligibility × mixture) | 0.03 | 0.20 | 0.14 | 0.17 | 0.07 | 0.12 | 7/39 | −37.2 dBFS |
 | oracle **audio** (the non-protected stems themselves) | **0.01** | **0.26** | **0.17** | **0.23** | 0.01 | 0.07 | **3/39** | −37.6 dBFS |
 | teacher mask (htdemucs eligibility × mixture) | 0.03 | 0.20 | 0.14 | 0.16 | 0.11 | 0.11 | 8/39 | pending |
 | teacher audio (htdemucs "other" stem) | pending | | | | | | | |
 
-Reconstruction beats masking on every axis at the oracle level: more of every
+Rear levels match within 0.4 dB (−37.2 vs −37.6 dBFS), so this is not a
+level effect.  Reconstruction beats masking on every axis at the oracle level: more of every
 instrument behind (guitars 0.20 → 0.26), less voice (0.03 → 0.01), less than
 half the swing (7 → 3).  The mask's ceiling was never the renderer's ceiling —
 it was the mask interface's: a fraction of the *mixture* carries the mixture's
