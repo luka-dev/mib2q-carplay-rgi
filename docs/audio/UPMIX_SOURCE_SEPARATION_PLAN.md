@@ -424,6 +424,34 @@ whether they stay in the 1 MB L2 next to the DSP is the one question only
 the Krait bench answers (bandwidth-wise it is nothing, latency-wise the
 sequential streams are prefetchable).
 
+**Phase 1b, third pass (2026-09-27 13:30, commits 6d667c7).**  Per-line
+attribution at -O3 is unreliable (inlined intrinsics land on `arm_neon.h`),
+so the next cut came from the function counts plus `objdump` histograms: the
+pointwise stage spent 1.6 instructions per MAC (`vmlaq_n` = `vdup` + `vmla`
+plus the address arithmetic per 4 MACs), and the decoder's first layer, once
+macro-expanded over 32 rows, spent 601 of its 1787 instructions per cell on
+`vldr`/`vstr` — register spills.  (1) The convs now run four output rows per
+pass over weights transposed at load time (`[input][output]`, one vector
+load of four rows' weights, `vmla` by lane): the same per-row accumulation
+order, bit-identical output.  (2) The decoder layers as 4-row loops with the
+input chunks in registers and the float results parked in a 32-float buffer
+(`#pragma GCC unroll 1`): spills gone.  (3) The flat layer int8: its input is
+the last stage's tanh output (fixed scale 127 like decoder layers 2/3), per-
+row weight scales; vs PyTorch max |Δe| 0.0168, mean 0.0011, corr 0.99991 —
+the same as before — and 540 KB → 135 KB of weights per control.  (4) Cells
+more than 60 dB below the control's loudest bin are not decoded and keep
+their last eligibility (`SPA_MASK_SKIP_DB`, compile-time, 0 = off; a bin at
+−60 dB cannot produce an audible rear; 29.8 % of the cells on the synthetic
+scene, the harness measures the effect on music with a skip-0 build beside
+it).  **1.97 → 1.77 → 1.46 M instructions per control** (blocks 8.47 → 8.07
+→ 7.45 M; the white-noise bench barely skips, so (4) is not in that number);
+NEON vs scalar max |Δe| 4e-5 (a 1-LSB int8 flip on the flat input now and
+then, through the GRU).  The L1D model: 649 k accesses per control (was 937
+k) but 23 k misses (was 24 k) — with 16 KB the misses are the scratch
+buffers re-touched between stages, not the weights; what shrank is the
+unique working set per control, ~1.0 MB → ~0.6 MB (weights 0.29 MB float +
+0.14 MB int8, state ~0.2 MB), which is the L2 question on Krait.
+
 **The production path validated on the 40 DEV songs (2026-09-27 12:00,
 `--mask-model v21a.msk1 --mask-drive-prod 1.0 --vocal-gate 0.5`).**  Test
 path (Python STFT mask, `--inject student`) and production path (the DSP's
