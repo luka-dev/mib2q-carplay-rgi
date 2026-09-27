@@ -166,7 +166,8 @@ def validate(a):
 
 
 def separate(a):
-    sep = separator(a.model)
+    sep2 = separator2() if a.model == "roformer2" else None      # BS-RoFormer vocals + demucs drums/bass (cleaner pseudo-labels)
+    sep = sep2["demucs"] if sep2 else separator(a.model)
     os.makedirs(a.out, exist_ok=True)
     files = [os.path.join(r, f) for r, _, fs in os.walk(a.music) for f in fs
              if f.lower().endswith((".mp3", ".m4a", ".flac", ".wav"))]
@@ -187,7 +188,7 @@ def separate(a):
             x = np.frombuffer(w.readframes(w.getnframes()), "<i2").reshape(-1, 2).T.astype(np.float32) / 32768
         os.remove(tmp)
         x = x / (np.abs(x).max() + 1e-9) * 0.7
-        est = separate_array(sep, x)
+        est = separate_array2(sep2, x) if sep2 else separate_array(sep, x)
         if a.stems == 4:                                                      # [4, 2, n]: vocals, drums, bass, other (other = master - the rest)
             stack = np.stack([est["vocals"], est["drums"], est["bass"], x - est["vocals"] - est["drums"] - est["bass"]])
             layout = "vocals_drums_bass_other"
