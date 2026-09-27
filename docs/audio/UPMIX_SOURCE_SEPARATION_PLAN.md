@@ -373,10 +373,16 @@ float, i.e. roughly a whole Krait core.  The float reference is therefore a
 parity tool, not the runtime.  Where it goes: the per-cell decoder (57→32→32→5
 for 257 cells ≈ 0.8 M MAC per control = 60 % of the net) — a [257 × 57] ×
 [57 × 32] matrix product per control, ideal for an int8 NEON GEMM (8 cells per
-vector); the convs / flat / GRU (~0.5 M MAC) fit float NEON.  Estimate after
-the port: ~40–50 M instructions/s ≈ 3 % of a core.  That port (Phase 1b) is
-the next step; the full-DEV production-path run and the Krait bench on the
-unit follow it.
+vector); the convs / flat / GRU (~0.5 M MAC) fit float NEON.  Phase 1b so far (same bench, per 1024-frame block): float 30.6 M → int8
+decoder (per-row weight scales, one dynamic input scale per control, NEON
+`vmull.s8`/`vpadal`; vs float max |Δe| 0.017, corr 0.99991) 25.3 M → + NEON
+float taps for the convs / gemvs (`axpy` / `dot` with `vmlaq_f32`) and a
+rational tanh (|err| < 2e-3, 16k calls per control) **12.5 M** — the mask now
+costs ~8 M instructions per block ≈ 4 M per control ≈ 3–4 ms of a Krait core
+per 10.67 ms control period: feasible on the worker with ~2.5× margin, not
+yet frugal.  Next: a function profile on QEMU (`qemu_fnprof_plugin`) to find
+the remaining 4 M, the full-DEV production-path run (float and int8 builds),
+the Krait bench on the unit, then the car.
 
 ## 📏 Classical baselines through the same harness (2026-09-26, `baseline_upmix.py`)
 
