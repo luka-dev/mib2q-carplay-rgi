@@ -39,7 +39,8 @@ enum {
     SPA_MASK_DEC = 32,
     SPA_MASK_ROLES = 5,              /* vocals, drum_core, cymbals, bass, other */
     SPA_MASK_ROLE_OTHER = 4,
-    SPA_MASK_KERNEL = 5
+    SPA_MASK_KERNEL = 5,
+    SPA_MASK_DEC_PAD = 64            /* 57 decoder inputs padded to 64 int8 lanes */
 };
 
 struct spa_mask_model {
@@ -59,6 +60,13 @@ struct spa_mask_model {
     const float *dec1_w, *dec1_b;               /* [32][57], [32] */
     const float *dec2_w, *dec2_b;               /* [32][32], [32] */
     const float *dec3_w, *dec3_b;               /* [5][32], [5] */
+    /* Phase 1b: the per-cell decoder as int8 (60 % of the net's MACs; a
+     * [257 x 57] x [57 x 32] product per control).  Weights quantised per
+     * output row at load time; layer-1 inputs quantised per control with one
+     * dynamic scale, layers 2/3 inputs are tanh outputs (fixed scale 127).
+     * Rows padded to SPA_MASK_DEC_PAD lanes for 16-wide int8 dots. */
+    int8_t *dec1_wq, *dec2_wq, *dec3_wq;         /* [32][64], [32][32], [5][32] */
+    float dec1_ws[SPA_MASK_DEC], dec2_ws[SPA_MASK_DEC], dec3_ws[SPA_MASK_ROLES];
     uint32_t valid;
 };
 
@@ -76,6 +84,8 @@ struct spa_mask_state {
     float desc[SPA_MASK_BINS][SPA_MASK_DESC];
     float gates[SPA_MASK_GATES];
     float gates_h[SPA_MASK_GATES];
+    float zf[SPA_MASK_BINS][SPA_MASK_DEC_IN];      /* the decoder inputs of one control (float) */
+    int8_t zq[SPA_MASK_BINS][SPA_MASK_DEC_PAD];   /* the same, quantised (16-lane padded) */
     uint32_t inference_count;
 };
 

@@ -12,6 +12,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if defined(__ARM_NEON) || defined(__ARM_NEON__)
+#include <arm_neon.h>
+#define SPA_MASK_HAVE_NEON 1
+#else
+#define SPA_MASK_HAVE_NEON 0
+#endif
+
 #define SPA_MASK_MAGIC "HSSRMSK1"
 #define SPA_MASK_VALID UINT32_C(0x4d534b31)
 
@@ -75,6 +82,62 @@ static size_t spa_mask_assign(struct spa_mask_model *m, const float *base)
     return (size_t)(c - base);
 }
 
+static int8_t spa_mask_q8(float value, float multiplier)
+{
+    float scaled = value * multiplier;
+    if (scaled >= 127.0f) return 127;
+    if (scaled <= -127.0f) return -127;
+    return (int8_t)(scaled >= 0.0f ? (int)(scaled + 0.5f) : (int)(scaled - 0.5f));
+}
+
+/* Symmetric per-row int8 weights: w ~ wq * ws[row]. */
+static int8_t *spa_mask_quantize_rows(const float *w, int rows, int cols, int pad, float *ws)
+{
+    int8_t *q = (int8_t *)calloc((size_t)rows * pad, 1);
+    int r, c;
+    if (!q) return NULL;
+    for (r = 0; r < rows; ++r) {
+        float mx = 0.0f, mult;
+        for (c = 0; c < cols; ++c) if (fabsf(w[r * cols + c]) > mx) mx = fabsf(w[r * cols + c]);
+        ws[r] = mx > 0.0f ? mx / 127.0f : 1.0f;
+        mult = 1.0f / ws[r];
+        for (c = 0; c < cols; ++c) q[(size_t)r * pad + c] = spa_mask_q8(w[r * cols + c], mult);
+    }
+    return q;
+}
+
+static int spa_mask_quantize_decoder(struct spa_mask_model *m)
+{
+    m->dec1_wq = spa_mask_quantize_rows(m->dec1_w, SPA_MASK_DEC, SPA_MASK_DEC_IN, SPA_MASK_DEC_PAD, m->dec1_ws);
+    m->dec2_wq = spa_mask_quantize_rows(m->dec2_w, SPA_MASK_DEC, SPA_MASK_DEC, SPA_MASK_DEC, m->dec2_ws);
+    m->dec3_wq = spa_mask_quantize_rows(m->dec3_w, SPA_MASK_ROLES, SPA_MASK_DEC, SPA_MASK_DEC, m->dec3_ws);
+    return (m->dec1_wq && m->dec2_wq && m->dec3_wq) ? 0 : -1;
+}
+
+/* int8 dot over `count` lanes (a multiple of 16), the same integer arithmetic
+ * on every target: NEON on the car, scalar on the host = bit-exact parity. */
+static int32_t spa_mask_dot_s8(const int8_t *a, const int8_t *b, unsigned count)
+{
+#if SPA_MASK_HAVE_NEON
+    int32x4_t sum = vdupq_n_s32(0);
+    int32_t lanes[4];
+    unsigned at;
+    for (at = 0; at < count; at += 16u) {
+        int8x16_t x = vld1q_s8(a + at);
+        int8x16_t y = vld1q_s8(b + at);
+        sum = vpadalq_s16(sum, vmull_s8(vget_low_s8(x), vget_low_s8(y)));
+        sum = vpadalq_s16(sum, vmull_s8(vget_high_s8(x), vget_high_s8(y)));
+    }
+    vst1q_s32(lanes, sum);
+    return lanes[0] + lanes[1] + lanes[2] + lanes[3];
+#else
+    int32_t sum = 0;
+    unsigned at;
+    for (at = 0; at < count; ++at) sum += (int32_t)a[at] * (int32_t)b[at];
+    return sum;
+#endif
+}
+
 int spa_mask_model_load_file(struct spa_mask_model *model, const char *path)
 {
     FILE *f;
@@ -111,6 +174,11 @@ int spa_mask_model_load_file(struct spa_mask_model *model, const char *path)
     }
     model->_allocation = data;
     model->float_count = count;
+    if (spa_mask_quantize_decoder(model) != 0) {
+        free(data);
+        memset(model, 0, sizeof(*model));
+        return -4;
+    }
     model->valid = SPA_MASK_VALID;
     return 0;
 }
@@ -118,6 +186,7 @@ int spa_mask_model_load_file(struct spa_mask_model *model, const char *path)
 void spa_mask_model_unload(struct spa_mask_model *model)
 {
     if (!model) return;
+    free(model->dec1_wq); free(model->dec2_wq); free(model->dec3_wq);
     free(model->_allocation);
     memset(model, 0, sizeof(*model));
 }
@@ -284,28 +353,53 @@ int spa_mask_infer(const struct spa_mask_model *m, struct spa_mask_state *s,
         }
     }
 
-    /* 7. per-cell decoder */
-    for (i = 0; i < SPA_MASK_BINS; ++i) {
-        float z[SPA_MASK_DEC_IN], h1[SPA_MASK_DEC], h2[SPA_MASK_DEC], logit[SPA_MASK_ROLES];
-        float src = (float)i * (float)(SPA_MASK_N3 - 1) / (float)(SPA_MASK_BINS - 1);   /* align_corners */
-        int j0 = (int)src;
-        float fr = src - (float)j0;
-        int j1 = j0 + 1 < SPA_MASK_N3 ? j0 + 1 : j0;
-        float mx = -1e30f, sum = 0.0f;
-        for (c = 0; c < SPA_MASK_CH; ++c) {
-            z[c] = s->skip[c][i];
-            z[SPA_MASK_CH + c] = s->loc[c][j0] + fr * (s->loc[c][j1] - s->loc[c][j0]);
-            z[2 * SPA_MASK_CH + c] = s->g[c];
+    /* 7. per-cell decoder, int8: gather every cell's 57 inputs, one dynamic
+     * scale per control for layer 1, tanh outputs at a fixed scale after. */
+    {
+        float zmax = 1.0e-6f, zmult, zscale;
+        for (i = 0; i < SPA_MASK_BINS; ++i) {
+            float z[SPA_MASK_DEC_IN];
+            float src = (float)i * (float)(SPA_MASK_N3 - 1) / (float)(SPA_MASK_BINS - 1);   /* align_corners */
+            int j0 = (int)src;
+            float fr = src - (float)j0;
+            int j1 = j0 + 1 < SPA_MASK_N3 ? j0 + 1 : j0;
+            for (c = 0; c < SPA_MASK_CH; ++c) {
+                z[c] = s->skip[c][i];
+                z[SPA_MASK_CH + c] = s->loc[c][j0] + fr * (s->loc[c][j1] - s->loc[c][j0]);
+                z[2 * SPA_MASK_CH + c] = s->g[c];
+            }
+            for (k = 0; k < SPA_MASK_DESC; ++k) z[3 * SPA_MASK_CH + k] = s->desc[i][k];
+            for (k = 0; k < SPA_MASK_DEC_IN; ++k) if (fabsf(z[k]) > zmax) zmax = fabsf(z[k]);
+            /* stash the float row in the padded int8 slot's shadow: quantise below */
+            memcpy(s->zf[i], z, sizeof(z));
         }
-        for (k = 0; k < SPA_MASK_DESC; ++k) z[3 * SPA_MASK_CH + k] = s->desc[i][k];
-        spa_mask_gemv(m->dec1_w, m->dec1_b, SPA_MASK_DEC, SPA_MASK_DEC_IN, z, h1);
-        for (k = 0; k < SPA_MASK_DEC; ++k) h1[k] = tanhf(h1[k]);
-        spa_mask_gemv(m->dec2_w, m->dec2_b, SPA_MASK_DEC, SPA_MASK_DEC, h1, h2);
-        for (k = 0; k < SPA_MASK_DEC; ++k) h2[k] = tanhf(h2[k]);
-        spa_mask_gemv(m->dec3_w, m->dec3_b, SPA_MASK_ROLES, SPA_MASK_DEC, h2, logit);
-        for (k = 0; k < SPA_MASK_ROLES; ++k) if (logit[k] > mx) mx = logit[k];
-        for (k = 0; k < SPA_MASK_ROLES; ++k) sum += expf(logit[k] - mx);
-        eligibility[i] = expf(logit[SPA_MASK_ROLE_OTHER] - mx) / sum;
+        zscale = zmax / 127.0f;
+        zmult = 1.0f / zscale;
+        for (i = 0; i < SPA_MASK_BINS; ++i) {
+            for (k = 0; k < SPA_MASK_DEC_IN; ++k) s->zq[i][k] = spa_mask_q8(s->zf[i][k], zmult);
+            for (k = SPA_MASK_DEC_IN; k < SPA_MASK_DEC_PAD; ++k) s->zq[i][k] = 0;
+        }
+        for (i = 0; i < SPA_MASK_BINS; ++i) {
+            int8_t h1q[SPA_MASK_DEC], h2q[SPA_MASK_DEC];
+            float logit[SPA_MASK_ROLES], mx = -1e30f, sum = 0.0f;
+            for (k = 0; k < SPA_MASK_DEC; ++k) {
+                float v = (float)spa_mask_dot_s8(m->dec1_wq + (size_t)k * SPA_MASK_DEC_PAD, s->zq[i], SPA_MASK_DEC_PAD)
+                          * zscale * m->dec1_ws[k] + m->dec1_b[k];
+                h1q[k] = spa_mask_q8(tanhf(v), 127.0f);
+            }
+            for (k = 0; k < SPA_MASK_DEC; ++k) {
+                float v = (float)spa_mask_dot_s8(m->dec2_wq + (size_t)k * SPA_MASK_DEC, h1q, SPA_MASK_DEC)
+                          * (1.0f / 127.0f) * m->dec2_ws[k] + m->dec2_b[k];
+                h2q[k] = spa_mask_q8(tanhf(v), 127.0f);
+            }
+            for (k = 0; k < SPA_MASK_ROLES; ++k) {
+                logit[k] = (float)spa_mask_dot_s8(m->dec3_wq + (size_t)k * SPA_MASK_DEC, h2q, SPA_MASK_DEC)
+                           * (1.0f / 127.0f) * m->dec3_ws[k] + m->dec3_b[k];
+                if (logit[k] > mx) mx = logit[k];
+            }
+            for (k = 0; k < SPA_MASK_ROLES; ++k) sum += expf(logit[k] - mx);
+            eligibility[i] = expf(logit[SPA_MASK_ROLE_OTHER] - mx) / sum;
+        }
     }
     s->inference_count++;
     return 0;
