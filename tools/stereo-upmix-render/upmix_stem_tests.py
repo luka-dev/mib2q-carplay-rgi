@@ -225,6 +225,11 @@ def analyse_song(render, args, out, track_dir, excerpt_s, mask_model=None, oracl
     if INJECT:                                         # interface test (astra 8): the rear-eligible AUDIO through the object path
         if INJECT == "oracle":
             elig = sum(v for nme, v in stems.items() if nme not in ORACLE_PROTECT) * k
+        elif INJECT == "teacher2":                       # BS-RoFormer vocals + demucs drums/bass
+            import teacher_label as TL
+            if "sep2" not in _MASK:
+                _MASK["sep2"] = TL.separator2()
+            elig = TL.separate_array2(_MASK["sep2"], (mix * k).astype(np.float32))["other"]
         else:
             import teacher_label as TL
             if "sep" not in _MASK:
@@ -294,7 +299,7 @@ def main():
     ap.add_argument("--resume", action="store_true", help="reuse per-song results already in --out")
     ap.add_argument("--teacher-mask", action="store_true", help="mask from htdemucs's stems (ceiling of the distillation route)")
     ap.add_argument("--oracle-ref", default="", help="dir with the oracle condition's *.6ch.wav renders: rear reconstruction error vs them")
-    ap.add_argument("--inject", default="", choices=("", "oracle", "teacher"), help="interface test: eligible audio (real stems / htdemucs 'other') through the object path")
+    ap.add_argument("--inject", default="", choices=("", "oracle", "teacher", "teacher2"), help="interface test: eligible audio (real stems / htdemucs 'other') through the object path")
     ap.add_argument("--split-file", help="masknet_cache/split.json")
     ap.add_argument("--split", default="dev", help="with --split-file: which split to take songs from")
     a = ap.parse_args()

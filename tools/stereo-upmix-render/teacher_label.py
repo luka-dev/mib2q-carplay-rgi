@@ -59,6 +59,44 @@ def separate_array(sep, x48):
     return out
 
 
+ROFORMER_MODEL = "model_bs_roformer_ep_317_sdr_12.9755.ckpt"     # BS-RoFormer (viperx), vocals / instrumental, the public SOTA on vocals
+
+
+def separator2():
+    """Second teacher: BS-RoFormer for the vocals (cleaner than htdemucs by ~2-3 dB SDR), htdemucs_ft for
+    drums and bass; other = master - vocals - drums - bass.  audio-separator's file API."""
+    from audio_separator.separator import Separator
+    import tempfile
+    d = tempfile.mkdtemp(prefix="rofo_")
+    sep = Separator(output_dir=d, output_format="WAV", model_file_dir=os.path.join(os.path.dirname(os.path.abspath(__file__)), "rofo_models"), log_level=40)
+    sep.load_model(model_filename=ROFORMER_MODEL)
+    return {"rofo": sep, "dir": d, "demucs": separator()}
+
+
+def separate_array2(sep2, x48):
+    """x48 [2, n] float32 at 48 kHz -> dict vocals / drums / bass / other at 48 kHz (RoFormer vocals + demucs drums/bass)."""
+    import soundfile as sf
+    import torch
+    import torchaudio
+    d = sep2["dir"]
+    src = os.path.join(d, "in.wav")
+    sf.write(src, x48.T, MN.SR, subtype="PCM_16")
+    outs = sep2["rofo"].separate(src)
+    voc_path = next(os.path.join(d, f) for f in outs if "(Vocals)" in f)
+    v, sr = sf.read(voc_path, dtype="float32", always_2d=True)
+    v = torch.as_tensor(v.T)
+    if sr != MN.SR:
+        v = torchaudio.functional.resample(v, sr, MN.SR)
+    v = v.numpy()
+    v = v[:, :x48.shape[1]] if v.shape[1] >= x48.shape[1] else np.pad(v, ((0, 0), (0, x48.shape[1] - v.shape[1])))
+    for f in outs:
+        try: os.remove(os.path.join(d, f))
+        except OSError: pass
+    dem = separate_array(sep2["demucs"], x48)
+    other = x48 - v - dem["drums"] - dem["bass"]
+    return {"vocals": v, "drums": dem["drums"], "bass": dem["bass"], "other": other}
+
+
 def validate(a):
     import torch
     sep = separator(a.model)
