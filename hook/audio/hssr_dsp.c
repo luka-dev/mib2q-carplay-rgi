@@ -1086,6 +1086,19 @@ static int spa_hssr_analyze_hop(
         const unsigned start = state->input_position & (SPA_HSSR_FFT_SIZE - 1);
         const unsigned first = SPA_HSSR_FFT_SIZE - start;
 
+#ifdef SPA_HSSR_TEST_MASK
+        if (state->test_inject_pcm) {
+            for (channel = 0; channel < 2; ++channel) {
+                spa_hssr_window_run(state->fft_re[channel], state->fft_im[channel],
+                                    state->inject[channel] + start, state->analysis_window, first);
+                spa_hssr_window_run(state->fft_re[channel] + first, state->fft_im[channel] + first,
+                                    state->inject[channel], state->analysis_window + first, SPA_HSSR_FFT_SIZE - first);
+                spa_hssr_fft(state, channel, 0);
+                memcpy(state->inject_re[channel], state->fft_re[channel], sizeof(state->inject_re[channel]));
+                memcpy(state->inject_im[channel], state->fft_im[channel], sizeof(state->inject_im[channel]));
+            }
+        }
+#endif
         for (channel = 0; channel < 2; ++channel) {
             spa_hssr_window_run(state->fft_re[channel], state->fft_im[channel],
                                 state->input[channel] + start,
@@ -1699,11 +1712,23 @@ static void spa_hssr_render_hop(
         float mid_im = 0.5f * (left_im + right_im);
         float mask;
         float pan;
+        /* the OBJECT's source spectrum: the mixture, or the injected eligible audio */
+        float obj_l_re = left_re, obj_l_im = left_im, obj_r_re = right_re, obj_r_im = right_im;
 
         band = state->bin_band[bin];
         mask = state->bin[bin].mask;
         mask *= 1.0f + state->band_object_boost[band];
 #ifdef SPA_HSSR_TEST_MASK
+        if (state->test_inject_pcm) {
+            float pl, pr;
+            obj_l_re = state->inject_re[SPA_HSSR_LEFT][bin]; obj_l_im = state->inject_im[SPA_HSSR_LEFT][bin];
+            obj_r_re = state->inject_re[SPA_HSSR_RIGHT][bin]; obj_r_im = state->inject_im[SPA_HSSR_RIGHT][bin];
+            pl = obj_l_re * obj_l_re + obj_l_im * obj_l_im;
+            pr = obj_r_re * obj_r_re + obj_r_im * obj_r_im;
+            mask = state->test_mask_drive > 0.0f ? state->test_mask_drive : 1.0f;
+            state->bin[bin].object_pan = (pl - pr) / (pl + pr + 1.0e-9f);
+            goto masked;
+        }
         if (state->test_mask) {
             uint32_t idx = state->control_sequence ? state->control_sequence - 1u : 0u;
             float protect;
@@ -1794,9 +1819,9 @@ masked:
             extraction_l = source_l;
             extraction_r = source_r;
             projected_re = 0.5f *
-                (extraction_l * left_re + extraction_r * right_re);
+                (extraction_l * obj_l_re + extraction_r * obj_r_re);
             projected_im = 0.5f *
-                (extraction_l * left_im + extraction_r * right_im);
+                (extraction_l * obj_l_im + extraction_r * obj_r_im);
             {
                 /* Original source image, BEFORE steering or ambience.  The
                  * subtraction never exceeds the source itself (mask <= 1). */
@@ -1987,6 +2012,14 @@ static void spa_hssr_dsp_process_frame(
         (float)input_l * (1.0f / 32768.0f);
     state->input[SPA_HSSR_RIGHT][position] =
         (float)input_r * (1.0f / 32768.0f);
+#ifdef SPA_HSSR_TEST_MASK
+    if (state->test_inject_pcm) {
+        uint32_t k = state->test_inject_pos < state->test_inject_frames ? state->test_inject_pos : state->test_inject_frames - 1u;
+        state->inject[SPA_HSSR_LEFT][position] = (float)state->test_inject_pcm[2u * k] * (1.0f / 32768.0f);
+        state->inject[SPA_HSSR_RIGHT][position] = (float)state->test_inject_pcm[2u * k + 1u] * (1.0f / 32768.0f);
+        state->test_inject_pos++;
+    }
+#endif
     if (state->frames_seen != UINT32_MAX) state->frames_seen++;
 
     state->input_position = (uint16_t)((position + 1) &

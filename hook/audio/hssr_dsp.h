@@ -183,6 +183,18 @@ struct spa_hssr_dsp {
     /* drive mode: also keep the per-band vocal gate (q6d + guard + comodulation)
      * on top of the bin mask — the two levels of evidence combined. */
     uint32_t test_mask_keep_gate;
+    /* Interface test (astra review 8): a second stereo input — the rear-eligible
+     * AUDIO (oracle stems or a separator's estimate) — analysed with the same
+     * window and FFT; in the render loop it replaces "mask x mixture" as the
+     * object's source, at gain test_mask_drive, pan from its own balance.  The
+     * bed / ambience / front subtraction stay on the mixture.  Decides whether
+     * reconstruction beats masking before any separator is built. */
+    const int16_t *test_inject_pcm;      /* interleaved L/R, one frame per input frame */
+    uint32_t test_inject_frames;
+    uint32_t test_inject_pos;
+    float inject[2][SPA_HSSR_FFT_SIZE];
+    float inject_re[2][SPA_HSSR_BINS];
+    float inject_im[2][SPA_HSSR_BINS];
 #endif
     struct spa_hssr_como como[SPA_HSSR_BINS];
     struct spa_hssr_object_slot object_slot[SPA_HSSR_OBJECT_SLOTS];

@@ -66,6 +66,7 @@ struct options {
     double rear_air_db;              /* <= -100 = off */
     double front_treble_db;
     const char *protect_mask_path;   /* HSSRMSK0 file, see mask_net.py export */
+    const char *rear_audio_path;     /* interface test: the rear-eligible audio as a second stereo WAV */
     double mask_drive;               /* > 0: the mask drives the rear object (test build) */
     int mask_keep_gate;              /* drive mode keeps the per-band vocal gate too */
     long retention_hf_lo_hz;
@@ -440,6 +441,7 @@ static int parse_options(int argc, char **argv, struct options *options)
     options->rear_air_db = -1000.0;
     options->front_treble_db = 0.0;
     options->protect_mask_path = NULL;
+    options->rear_audio_path = NULL;
     options->mask_drive = 0.0;
     options->mask_keep_gate = 0;
     options->retention_hf_lo_hz = SPA_STEREO_UPMIX_RETENTION_HF_LO_HZ;
@@ -567,6 +569,11 @@ static int parse_options(int argc, char **argv, struct options *options)
         if (strcmp(argument, "--protect-mask") == 0) {
             if (++index >= argc) return 0;
             options->protect_mask_path = argv[index];
+            continue;
+        }
+        if (strcmp(argument, "--rear-audio") == 0) {
+            if (++index >= argc) return 0;
+            options->rear_audio_path = argv[index];
             continue;
         }
         if (strcmp(argument, "--mask-keep-gate") == 0) {
@@ -735,6 +742,31 @@ static void make_upmix_config(const struct options *options,
 
 #ifdef SPA_HSSR_TEST_MASK
 static float *g_protect_mask;
+static int16_t *g_rear_audio;
+static uint32_t g_rear_audio_frames;
+
+/* 16-bit stereo 48 kHz WAV -> interleaved samples (the harness writes exactly that). */
+static int load_rear_audio(const char *path)
+{
+    FILE *f = fopen(path, "rb");
+    unsigned char head[44];
+    uint32_t data_bytes;
+    long pos;
+    if (!f) { fprintf(stderr, "error: cannot open %s\n", path); return 0; }
+    if (fread(head, 1, 44, f) != 44 || memcmp(head, "RIFF", 4) != 0 || memcmp(head + 36, "data", 4) != 0) {
+        fprintf(stderr, "error: %s must be a plain 44-byte-header WAV\n", path); fclose(f); return 0;
+    }
+    data_bytes = (uint32_t)head[40] | ((uint32_t)head[41] << 8) | ((uint32_t)head[42] << 16) | ((uint32_t)head[43] << 24);
+    g_rear_audio_frames = data_bytes / 4u;
+    g_rear_audio = (int16_t *)malloc((size_t)g_rear_audio_frames * 4u);
+    pos = 0;
+    if (!g_rear_audio || fread(g_rear_audio, 4, g_rear_audio_frames, f) != g_rear_audio_frames) {
+        fprintf(stderr, "error: short read on %s\n", path); fclose(f); return 0;
+    }
+    (void)pos;
+    fclose(f);
+    return 1;
+}
 static uint32_t g_protect_mask_controls;
 static float g_mask_drive;
 static int g_mask_keep_gate;
@@ -794,6 +826,9 @@ static int render(FILE *input_file, FILE *output_file, uint32_t total_frames,
     state._runtime._hssr.test_mask_controls = g_protect_mask_controls;
     state._runtime._hssr.test_mask_drive = g_mask_drive;
     state._runtime._hssr.test_mask_keep_gate = (uint32_t)g_mask_keep_gate;
+    state._runtime._hssr.test_inject_pcm = g_rear_audio;
+    state._runtime._hssr.test_inject_frames = g_rear_audio_frames;
+    state._runtime._hssr.test_inject_pos = 0;
 #endif
     if (!write_wav_header(output_file, total_frames)) {
         fprintf(stderr, "error: cannot write output WAV header\n");
@@ -856,11 +891,12 @@ int main(int argc, char **argv)
     make_upmix_config(&options, &config);
 #ifdef SPA_HSSR_TEST_MASK
     if (options.protect_mask_path && !load_protect_mask(options.protect_mask_path)) return 2;
+    if (options.rear_audio_path && !load_rear_audio(options.rear_audio_path)) return 2;
     g_mask_drive = (float)options.mask_drive;
     g_mask_keep_gate = options.mask_keep_gate;
 #else
-    if (options.protect_mask_path) {
-        fprintf(stderr, "error: --protect-mask needs a build with -DSPA_HSSR_TEST_MASK\n");
+    if (options.protect_mask_path || options.rear_audio_path) {
+        fprintf(stderr, "error: --protect-mask / --rear-audio need a build with -DSPA_HSSR_TEST_MASK\n");
         return 2;
     }
 #endif

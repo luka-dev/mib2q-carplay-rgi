@@ -180,6 +180,7 @@ MASK_SHARPEN = 1.0   # --mask-sharpen k: eligibility ** k (k > 1 = only confiden
 MASK_ELIGIBLE = ""   # --mask-eligible other  (default: the model's other+cymbals)
 RESUME = False
 TEACHER_MASK = False   # --teacher-mask: the mask from htdemucs's stems of the excerpt (jobs must be 1: one GPU model)
+INJECT = ""            # --inject oracle|teacher: that source's eligible AUDIO drives the object path (needs --render-extra "--mask-drive G")
 
 
 def oracle_mask_args(stems, k, out, tag):
@@ -221,7 +222,18 @@ def analyse_song(render, args, out, track_dir, excerpt_s, mask_model=None, oracl
     src = os.path.join(out, f"{tag}.wav")
     dst = os.path.join(out, f"{tag}.6ch.wav")
     T.write_wav(src, mix * k)
-    if TEACHER_MASK:                                   # htdemucs's own mask through the DSP: the ceiling of the distillation route
+    if INJECT:                                         # interface test (astra 8): the rear-eligible AUDIO through the object path
+        if INJECT == "oracle":
+            elig = sum(v for nme, v in stems.items() if nme not in ORACLE_PROTECT) * k
+        else:
+            import teacher_label as TL
+            if "sep" not in _MASK:
+                _MASK["sep"] = TL.separator()
+            elig = TL.separate_array(_MASK["sep"], (mix * k).astype(np.float32))["other"]
+        inj = os.path.join(out, f"{tag}.inj.wav")
+        T.write_wav(inj, elig)
+        extra = ["--rear-audio", inj]
+    elif TEACHER_MASK:                                 # htdemucs's own mask through the DSP: the ceiling of the distillation route
         import teacher_label as TL
         if "sep" not in _MASK:
             _MASK["sep"] = TL.separator()
@@ -240,6 +252,7 @@ def analyse_song(render, args, out, track_dir, excerpt_s, mask_model=None, oracl
     print(f"  rendered {tag}", flush=True)
     on = np.ones(n, bool)
     nse = rear_error(out6, tag) if ORACLE_REF else {}
+    nse["rear_rms_db"] = float(20 * np.log10(np.sqrt(((out6[4] ** 2 + out6[5] ** 2) / 2).mean()) + 1e-9))   # for level matching across conditions
     rows = []
     for name, stem in stems.items():
         lead = stem * k; rest = (mix - stem) * k
@@ -281,11 +294,12 @@ def main():
     ap.add_argument("--resume", action="store_true", help="reuse per-song results already in --out")
     ap.add_argument("--teacher-mask", action="store_true", help="mask from htdemucs's stems (ceiling of the distillation route)")
     ap.add_argument("--oracle-ref", default="", help="dir with the oracle condition's *.6ch.wav renders: rear reconstruction error vs them")
+    ap.add_argument("--inject", default="", choices=("", "oracle", "teacher"), help="interface test: eligible audio (real stems / htdemucs 'other') through the object path")
     ap.add_argument("--split-file", help="masknet_cache/split.json")
     ap.add_argument("--split", default="dev", help="with --split-file: which split to take songs from")
     a = ap.parse_args()
-    global ORACLE_AMP, MASK_THRESH, MASK_SHARPEN, MASK_ELIGIBLE, RESUME, TEACHER_MASK, ORACLE_REF
-    ORACLE_AMP = a.oracle_amp; RESUME = a.resume; TEACHER_MASK = a.teacher_mask; ORACLE_REF = a.oracle_ref
+    global ORACLE_AMP, MASK_THRESH, MASK_SHARPEN, MASK_ELIGIBLE, RESUME, TEACHER_MASK, ORACLE_REF, INJECT
+    ORACLE_AMP = a.oracle_amp; RESUME = a.resume; TEACHER_MASK = a.teacher_mask; ORACLE_REF = a.oracle_ref; INJECT = a.inject
     MASK_THRESH, MASK_SHARPEN, MASK_ELIGIBLE = a.mask_thresh, a.mask_sharpen, a.mask_eligible
     import mask_net as MN; MN.PRESENCE_ALPHA = a.mask_presence
     os.makedirs(a.out, exist_ok=True)
@@ -303,6 +317,10 @@ def main():
     rows = [r for rs in results for r in rs]
     keys = ["song", "genre", "stem", "median_rear", "steady_std", "range_1s", "worst_half_s",
             "slope_per_6dB", "level_corr", "level_db", "frames"] + BAND_KEYS
+    keys += ["rear_rms_db"]
+    per = {r["song"]: r["rear_rms_db"] for r in rows if "rear_rms_db" in r}
+    if per:
+        print(f"rear level (Ls/Rs RMS, {len(per)} songs): median {np.median(list(per.values())):.1f} dBFS")
     if ORACLE_REF:
         keys += ["rear_nse", "rear_nse_gainfit", "rear_nse_treble", "rear_nse_treble_gainfit", "rear_lag_ms"]
         per_song = {r["song"]: r for r in rows if "rear_nse" in r}
