@@ -628,6 +628,7 @@ harness `--inject`), same renderer, same 40 DEV songs, G = 1.0:
 | teacher **mask** (htdemucs eligibility × mixture) | 0.03 | 0.20 | 0.14 | 0.17 | 0.11 | 0.11 | 8/39 (vocal 11/40) | −37.0 dBFS |
 | teacher **audio** (htdemucs "other" stem) | **0.01** | 0.20 | 0.15 | 0.19 | 0.04 | 0.08 | 5/39 (vocal 4/40) | −38.0 dBFS |
 | teacher-2 **audio** (BS-RoFormer vocals + demucs drums/bass → "other") | **0.01** | **0.23** | **0.17** | **0.22** | 0.06 | 0.10 | **3/39** (vocal 7/40) | −38.0 dBFS |
+| **optimal bounded real mask** (ideal ratio mask of the eligible stem at 2048/512, mixture phase, `--inject irm`; astra 9) | 0.01 | 0.23 | — | 0.23 | 0.02 | 0.08 | 3/39 | −37.8 dBFS |
 
 Rear error vs the mask-oracle render: teacher mask 0.04, teacher audio 0.18,
 teacher-2 audio 0.23 — the audio rows differ from the mask render by
@@ -670,6 +671,8 @@ vocal-owned cells / vocal energy), then through the DSP with
 | run | | result |
 |---|---|---|
 | sep1 | the recipe above, 6000 steps (25 min) | SI-SDR of the estimate vs the eligible truth −5.9 → **−2.3 dB** by step 2000 and flat after; vocal leak 0.24–0.41. The checkpoint selection (`si_sdr − 20·leak`) picked step 750 (leak 0.06, SI-SDR −4.3): a near-silent estimate — through the DSP: rear −42 dBFS (5 dB below every other row), guitars 0.02, voice 0.01 | not a feasibility answer yet: a 31k-param magnitude mask trained 25 min does not separate (SI-SDR must clear the mixture's own baseline by a wide margin); the selection metric was wrong. sep2: select by SI-SDR, log the mixture baseline, 20 000 steps |
+| IRM ceiling | the optimal `[0,1]` real mask at the student's grid, mixture phase | through the DSP: guitars 0.23, keys 0.23, voice 0.01, 3/39 — the oracle-audio row | **the real-mask output type is not the ceiling**: a bounded magnitude mask can carry the confident rear; sep1/sep2's failure is representation / learning, not the mask form |
+| sep3 | **the bandwise recurrent separator** (astra 9 §3): 48 unequal bands, band encoders, shared band GRUs 48→32→32, two frequency mixers, global GRU, direct bin decoders, stereo complex ratio masks, 587k params, **125 M MAC/s**; complex L1 + multi-resolution spectral (+ SI-SDR after 20k), half MoisesDB / half four-stem pseudo-labels, 150k steps, batch 12, 8 s, AdamW 3e-4 warm-up 2k + cosine | queued behind sep2 (~17 h) | the bounded feasibility experiment; gates: guitars ≥ 0.18, voice ≤ 0.03, ≤ 3/39, level-matched |
 | sep2 | sep1 + selection by SI-SDR, the mixture baseline logged, 20 000 steps | at step 2000: SI-SDR −2.5 dB vs the **mixture's −6.3 dB** (+3.8 dB), vocal leak 0.40; running | the student does separate something, far from a separator (htdemucs' "other" sits around +5 dB on MUSDB); the curve flattened by step 1500 in both runs |
 
 ## 🧪 Review 9 (astra, on the separator student — 2026-09-27 11:30)
