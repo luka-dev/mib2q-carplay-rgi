@@ -16,6 +16,7 @@ PACING_ARG=""
 SCENE_ARG=""
 MODEL="${HSSR_MODEL:-$ROOT/models/hssr-selection-v11/hssr_guard.bin}"
 MASK_MODEL=""
+SELFTEST_ARG=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -26,10 +27,11 @@ while [[ $# -gt 0 ]]; do
         --backend) BACKEND="${2:?missing backend}"; shift 2 ;;
         --model) MODEL="${2:?missing model}"; shift 2 ;;
         --mask-model) MASK_MODEL="${2:?missing mask model}"; shift 2 ;;
+        --mask-selftest) SELFTEST_ARG="--mask-selftest"; shift ;;
         --scene) SCENE_ARG="--scene"; shift ;;
         --async-controller) ASYNC_ARG="--async-controller"; shift ;;
         --realtime-pacing) PACING_ARG="--realtime-pacing"; shift ;;
-        *) echo "usage: $0 [--variant 4.9|8.5] [--shift N] [--blocks N] [--warmup N] [--backend hssr-universal] [--model HSSR.bin] [--mask-model HSSRMSK1.bin] [--scene] [--async-controller] [--realtime-pacing]" >&2; exit 2 ;;
+        *) echo "usage: $0 [--variant 4.9|8.5] [--shift N] [--blocks N] [--warmup N] [--backend hssr-universal] [--model HSSR.bin] [--mask-model HSSRMSK1.bin] [--mask-selftest] [--scene] [--async-controller] [--realtime-pacing]" >&2; exit 2 ;;
     esac
 done
 
@@ -103,7 +105,7 @@ cat > "$WORK/bench.build" <<EOF
     waitfor /dev/ser1 4
     reopen /dev/ser1
     display_msg "@@UPMIX-BENCH-START@@"
-    stereo_upmix_bench --qemu-icount --backend $BACKEND --model /proc/boot/hssr_model.bin --blocks $BLOCKS --warmup $WARMUP $SCENE_ARG $ASYNC_ARG $PACING_ARG $MASK_ARG
+    stereo_upmix_bench --qemu-icount --backend $BACKEND --model /proc/boot/hssr_model.bin --blocks $BLOCKS --warmup $WARMUP $SCENE_ARG $ASYNC_ARG $PACING_ARG $MASK_ARG $SELFTEST_ARG
     display_msg "@@UPMIX-BENCH-END@@"
 }
 [type=link] /usr/lib/ldqnx.so.2=/proc/boot/libc.so.3

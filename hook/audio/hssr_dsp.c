@@ -1183,8 +1183,8 @@ static void spa_hssr_extract_mask_features(struct spa_hssr_dsp *state)
         float mag = sqrtf(pl * pr) + 1.0e-9f;
         float *f = state->mask_features + (size_t)bin * SPA_MASK_FEATURES;
 
-        f[0] = logf(pl + 1.0e-7f);
-        f[1] = logf(pr + 1.0e-7f);
+        f[0] = spa_mask_log_fast(pl + 1.0e-7f);    /* libm logf is software double on QNX 6.5 */
+        f[1] = spa_mask_log_fast(pr + 1.0e-7f);
         f[2] = (lr * rr + li * ri) / mag;          /* Re(L * conj(R)) / |L||R| */
         f[3] = (li * rr - lr * ri) / mag;          /* Im(L * conj(R)) / |L||R| */
     }

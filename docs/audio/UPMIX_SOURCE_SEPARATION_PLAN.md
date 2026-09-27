@@ -380,9 +380,58 @@ float taps for the convs / gemvs (`axpy` / `dot` with `vmlaq_f32`) and a
 rational tanh (|err| < 2e-3, 16k calls per control) **12.5 M** — the mask now
 costs ~8 M instructions per block ≈ 4 M per control ≈ 3–4 ms of a Krait core
 per 10.67 ms control period: feasible on the worker with ~2.5× margin, not
-yet frugal.  Next: a function profile on QEMU (`qemu_fnprof_plugin`) to find
-the remaining 4 M, the full-DEV production-path run (float and int8 builds),
-the Krait bench on the unit, then the car.
+yet frugal.
+
+**Phase 1b, the profile and the second pass (2026-09-27 12:30).**  A QEMU
+TCG plugin (`bench/qemu_fnprof_plugin.c`, per function and per source line)
+against the same run without the mask put the 3.9 M instructions per control
+where nobody would have guessed: the scalar int8 quantiser of the decoder
+inputs 0.7 M (31 k calls, branches and converts), the scalar rational tanh
+0.4 M (30 k calls), the int8 dots 0.5 M, the decoder's float glue 0.3 M, the
+float convs as `axpy` (load + load + mla + store per 4 MACs) 0.6 M, the
+depthwise stride-2 taps with bounds checks 0.2 M — and **0.5 M in libm**: QNX
+6.5's `expf` / `logf` run in software double precision on this softfp build
+(~180 instructions a call; the feature prep, the softmax and the feature
+extractor made ~2.8 k calls per control).  The second pass, all in
+`hssr_mask.c` (+ two lines in the extractor): float-epsilon polynomial exp /
+log (degree-6 on [−½, ½] with the exponent in the float bits; the atanh
+series of the mantissa, |err| ~1e-7) for every transcendental; the quantiser
+16 lanes at a time (`vcvt` after a sign-copied ½, saturating narrows, bit-
+identical to the scalar rounding); the tanh 4-wide (same rational form, `vrecpe`
++ 2 Newton steps); the decoder in 4-row groups over the input chunks kept in
+registers (`vmull.s8` + `vmlal.s8` before one `vpadal`, horizontal sums
+pairwise, the scale · dot + bias and the tanh 4-wide); the convs in direct
+form over zero-padded rows (one load + one `vmla` per 4 MACs, the last block
+of a row recomputed at n−4 instead of a scalar tail), the stride-2 depthwise
+via `vld2` + `vext` lane windows; the gemvs 4 rows per pass sharing the input
+loads.  The scalar path (host, PC harness) accumulates in the same order, so
+the NEON path differs only by reduction lane order and the reciprocal
+estimate.  **Result: 12.5 M → 8.47 M per block, the mask net 3.92 M → 1.97 M
+instructions per control** (~1.3–2 ms of a Krait core per 10.67 ms at IPC
+1–1.5).  Parity: host runtime vs PyTorch unchanged (max |Δe| 0.017 = the int8
+quantisation, mean 0.001, corr 0.99991); new vs previous host build max 8e-4,
+mean 6e-8; **NEON (QEMU) vs scalar (host) max |Δe| 1e-6** on 12 controls
+(`--mask-selftest`, `bench/mask_selftest_compare.py`).  Left on the table
+(~0.15 M): 4-output-row grouping of the pointwise / stem convs with
+transposed weights (`vmla` by lane instead of `vdup` + `vmla`), and, if the
+Krait bench shows the 540 KB flat-layer weight stream missing L2, int8 for
+`flat_w` (135 KB).
+
+**The production path validated on the 40 DEV songs (2026-09-27 12:00,
+`--mask-model v21a.msk1 --mask-drive-prod 1.0 --vocal-gate 0.5`).**  Test
+path (Python STFT mask, `--inject student`) and production path (the DSP's
+own hop features → the C runtime) give the **same row**: voice 0.04 (0/40 >
+15 %, 2/40 swinging), guitars 0.07, keys 0.08, piano 0.04, bass 0.07, drums
+0.17, rear −37.5 dBFS, rear error vs the oracle 0.16 (gain-fit 0.15); the
+int8-decoder build reproduces it to the second decimal (rear −37.6, the rest
+identical).  The pick: v27a + veto 0.5 ties on share (voice 0.04 / guitars
+0.07 / keys 0.07) but swings more (voice 4/40, guitars 3/39, drums 3/40 vs
+2/40, 1/39, 0/40) — **v21a stays the blob**; v29a pending.  The rerun with the
+Phase 1b runtime (fast exp/log, clamped tanh, padded convs — the PC build of
+the exact shipped arithmetic) is queued as `prod9`.  Next: the Krait bench on
+the unit (`stereo_upmix_bench --mask-model`, the QNX build), then the car
+install (blob beside `hssr_model.bin`, `AUDIO_HSSR_MASK_DRIVE=1.0`,
+`AUDIO_HSSR_VOCAL_GATE=0.5`).
 
 ## 📏 Classical baselines through the same harness (2026-09-26, `baseline_upmix.py`)
 

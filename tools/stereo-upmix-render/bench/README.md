@@ -55,6 +55,40 @@ grep metric=l1d_cache /tmp/qemu.log
 
 Miss counts are a functional cache model over the whole guest run, not a timing
 model and not scoped to one function; use them to compare two builds on the same
-workload.  The final measured results
+workload.
+
+**Per-function / per-line instruction profile.**  [`qemu_fnprof_plugin.c`](qemu_fnprof_plugin.c)
+(built like the cache plugin) attributes every retired instruction to the
+function that contains it, from an `nm -S` symbol table of the bench binary
+(the 4-column `addr size type name` form), and with `focus=FUNCTION` also
+counts per address inside one function, which `addr2line` maps to source
+lines (the QNX build carries `-g`):
+
+```sh
+B=build/stereo-upmix-bench/qnx-latest/stereo_upmix_bench
+nm -S --defined-only $B | grep -E ' [tT] ' > /tmp/syms.txt
+BENCH_QEMU_PLUGIN=/tmp/libfnprof.so,symbols=/tmp/syms.txt,focus=spa_mask_infer QEMU_KEEP_LOG=/tmp/qemu.log tools/stereo-upmix-render/bench/qnx_qemu_bench.sh --variant latest   --backend hssr-universal --model models/hssr-q6d-moises-a/hssr_model.bin   --mask-model build/hssr_mask.bin --blocks 8 --warmup 2 --async-controller
+grep -A 20 metric=instructions_per_function /tmp/qemu.log
+grep '^  0x' /tmp/qemu.log | awk '{print $1}' | addr2line -e $B   # (binutils addr2line) per-line counts
+```
+
+Compare against the same run without `--mask-model`: the difference is the
+mask net's cost, including what lands in libc/libm ("unattributed").
+
+**NEON parity of the mask net** (`--mask-selftest`): the bench runs
+`spa_mask_infer` alone on deterministic synthetic features for 12 controls and
+prints every eligibility and presence value; the host build takes the scalar
+path, the QEMU build the NEON one, and
+[`mask_selftest_compare.py`](mask_selftest_compare.py) reports the largest
+difference (expected ~1e-6: the int8 decoder is bit-exact, the float stages
+differ by the lane order of the reductions and the reciprocal-estimate divide):
+
+```sh
+tools/stereo-upmix-render/bench/build_host.sh
+build/stereo-upmix-bench/host/stereo_upmix_bench --backend hssr-universal   --model models/hssr-q6d-moises-a/hssr_model.bin --mask-model build/hssr_mask.bin   --mask-selftest > /tmp/host_selftest.txt
+QEMU_KEEP_LOG=/tmp/qemu_selftest.log tools/stereo-upmix-render/bench/qnx_qemu_bench.sh   --variant latest --backend hssr-universal --model models/hssr-q6d-moises-a/hssr_model.bin   --mask-model build/hssr_mask.bin --mask-selftest --blocks 1 --warmup 1
+grep '^mask_selftest' /tmp/qemu_selftest.log | tr -d '\r' > /tmp/qemu_selftest.txt
+python3 tools/stereo-upmix-render/bench/mask_selftest_compare.py /tmp/host_selftest.txt /tmp/qemu_selftest.txt
+```  The final measured results
 are in
 [`results/2026-09-07-hssr-selection-v11.md`](results/2026-09-07-hssr-selection-v11.md).

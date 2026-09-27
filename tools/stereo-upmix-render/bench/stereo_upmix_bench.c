@@ -16,6 +16,7 @@
 #include "hssr_control_worker.h"
 
 #include <errno.h>
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -206,6 +207,48 @@ static void make_input(uint32_t *random_state)
     }
 }
 
+/* --mask-selftest: run the mask net alone on deterministic synthetic features
+ * and print every output, so the host (scalar) and QEMU (NEON) builds can be
+ * compared number for number (bench/README.md). */
+static float unit_random(uint32_t *state)
+{
+    return (float)((next_random(state) >> 8) & UINT32_C(0xffffff)) / 16777216.0f;
+}
+
+static int mask_selftest(const struct spa_mask_model *model)
+{
+    static struct spa_mask_state state;
+    static float features[SPA_MASK_BINS * SPA_MASK_FEATURES];
+    float eligibility[SPA_MASK_BINS], presence[SPA_MASK_BANDS];
+    uint32_t random_state = UINT32_C(0x5eed1234);
+    int control, bin;
+
+    spa_mask_state_reset(&state);
+    for (control = 0; control < 12; control++) {
+        for (bin = 0; bin < SPA_MASK_BINS; bin++) {
+            float *f = features + bin * SPA_MASK_FEATURES;
+            float u0 = unit_random(&random_state);
+            float u1 = unit_random(&random_state);
+            float cs = 2.0f * unit_random(&random_state) - 1.0f;
+
+            f[0] = -16.0f + 18.0f * u0;                 /* log|L|^2 */
+            f[1] = f[0] + 8.0f * (u1 - 0.5f);           /* log|R|^2 */
+            f[2] = cs;                                  /* cos IPD */
+            f[3] = sqrtf(1.0f - cs * cs) * (u1 > 0.5f ? 1.0f : -1.0f);
+        }
+        if (spa_mask_infer(model, &state, features, eligibility, presence) != 0) {
+            fprintf(stderr, "error: mask inference failed\n");
+            return 1;
+        }
+        printf("mask_selftest control=%d eligibility", control);
+        for (bin = 0; bin < SPA_MASK_BINS; bin++) printf(" %.6f", eligibility[bin]);
+        printf("\nmask_selftest control=%d presence", control);
+        for (bin = 0; bin < SPA_MASK_BANDS; bin++) printf(" %.6f", presence[bin]);
+        printf("\n");
+    }
+    return 0;
+}
+
 static uint64_t checksum_output(uint64_t checksum)
 {
     size_t sample;
@@ -310,7 +353,7 @@ static void print_usage(const char *program)
 {
     fprintf(stderr,
             "usage: %s [--backend hssr-universal] "
-            "[--model HSSR.bin] [--mask-model HSSRMSK1.bin] "
+            "[--model HSSR.bin] [--mask-model HSSRMSK1.bin] [--mask-selftest] "
             "[--blocks 1..%u] [--warmup 1..%u] "
             "[--scene] [--async-controller] [--realtime-pacing] [--qemu-icount]\n",
             program, (unsigned)BENCH_MAX_BLOCKS,
@@ -382,6 +425,7 @@ int main(int argc, char **argv)
     int realtime_pacing = 0;
     const char *model_path = NULL;
     const char *mask_model_path = NULL;
+    int mask_selftest_only = 0;
     static struct spa_mask_model hssr_mask;
     size_t index;
     int argument;
@@ -420,6 +464,8 @@ int main(int argc, char **argv)
         } else if (strcmp(argv[argument], "--mask-model") == 0 &&
                    argument + 1 < argc) {
             mask_model_path = argv[++argument];
+        } else if (strcmp(argv[argument], "--mask-selftest") == 0) {
+            mask_selftest_only = 1;
         } else if (strcmp(argv[argument], "--model") == 0 &&
                    argument + 1 < argc) {
             model_path = argv[++argument];
@@ -473,6 +519,12 @@ int main(int argc, char **argv)
                 return 1;
             }
             spa_stereo_upmix_config_set_hssr_mask_model(&config, &hssr_mask, 32768u);
+            if (mask_selftest_only) {
+                int status = mask_selftest(&hssr_mask);
+                spa_mask_model_unload(&hssr_mask);
+                spa_hssr_model_unload(&hssr_model);
+                return status;
+            }
         }
         if (async_controller) {
             if (spa_hssr_control_worker_start(
