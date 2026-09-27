@@ -625,16 +625,31 @@ harness `--inject`), same renderer, same 40 DEV songs, G = 1.0:
 |---|---|---|---|---|---|---|---|---|
 | oracle **mask** (real-stem eligibility × mixture) | 0.03 | 0.20 | 0.14 | 0.17 | 0.07 | 0.12 | 7/39 | −37.2 dBFS |
 | oracle **audio** (the non-protected stems themselves) | **0.01** | **0.26** | **0.17** | **0.23** | 0.01 | 0.07 | **3/39** | −37.6 dBFS |
-| teacher mask (htdemucs eligibility × mixture) | 0.03 | 0.20 | 0.14 | 0.16 | 0.11 | 0.11 | 8/39 | pending |
-| teacher audio (htdemucs "other" stem) | pending | | | | | | | |
+| teacher **mask** (htdemucs eligibility × mixture) | 0.03 | 0.20 | 0.14 | 0.17 | 0.11 | 0.11 | 8/39 (vocal 11/40) | −37.0 dBFS |
+| teacher **audio** (htdemucs "other" stem) | **0.01** | 0.20 | 0.15 | 0.19 | 0.04 | 0.08 | 5/39 (vocal 4/40) | −38.0 dBFS |
+| teacher-2 **audio** (BS-RoFormer vocals + demucs drums/bass → "other") | **0.01** | **0.23** | **0.17** | **0.22** | 0.06 | 0.10 | **3/39** (vocal 7/40) | −38.0 dBFS |
+
+Rear error vs the mask-oracle render: teacher mask 0.04, teacher audio 0.18,
+teacher-2 audio 0.23 — the audio rows differ from the mask render by
+construction (they are *cleaner* than it), so the rear-share / swing columns
+are the comparison that counts here.
 
 Rear levels match within 0.4 dB (−37.2 vs −37.6 dBFS), so this is not a
 level effect.  Reconstruction beats masking on every axis at the oracle level: more of every
 instrument behind (guitars 0.20 → 0.26), less voice (0.03 → 0.01), less than
 half the swing (7 → 3).  The mask's ceiling was never the renderer's ceiling —
 it was the mask interface's: a fraction of the *mixture* carries the mixture's
-other sources with it; clean audio does not.  The teacher-audio row decides
-whether a real separator's estimate keeps that advantage.
+other sources with it; clean audio does not.  **A real separator's estimate keeps the advantage.**  With the same
+htdemucs stems, audio instead of mask: voice 0.03 → 0.01, bass 0.11 → 0.04,
+vocal-swinging songs 11 → 4, guitars unchanged at 0.20 — and with the cleaner
+BS-RoFormer vocals the instruments follow the oracle-audio row (guitars 0.23,
+keys 0.22, 3/39 swinging) at the same 0.01 voice, one dB quieter overall.  The
+interface test is decided: *the rear-eligible audio through the object path*
+is the architecture; the mask interface was the ceiling.  What remains is
+the hard part — a causal separator that produces such audio inside the
+budget (2048/512 with 0.5–1 s of history, complex or magnitude+phase mask,
+trained on the teachers' *audio* with a spectral/waveform loss, not per-cell
+CE) — and nothing measured so far establishes that it fits ≤ 150 M MAC/s.
 
 ## 📝 Publication (astra review 5, 2026-09-26)
 
