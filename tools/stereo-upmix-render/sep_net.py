@@ -37,6 +37,7 @@ FPS = SR / HOP                   # 93.75 frames/s
 # seven cache slots -> protected / eligible
 ELIGIBLE_SLOTS = (6,)            # other
 STATS = {"mean": None, "std": None}
+TRUTH_FRAC = 0.5                 # share of windows drawn from the truth pool when a pseudo-label pool is present
 
 
 def _torch():
@@ -197,7 +198,7 @@ def windows(torch, tracks, seconds, batch, rng, merge_none=None):
     mixes, eligs = [], []
     pools = tracks if isinstance(tracks, tuple) else (tracks,)
     while len(mixes) < batch:
-        pool = pools[len(mixes) % len(pools)]
+        pool = pools[0] if (len(pools) == 1 or rng.random() < TRUTH_FRAC) else pools[1]
         path = pool[rng.integers(len(pool))]
         N = MN.npy_header(path)[0][2]
         if N <= n:
@@ -345,9 +346,13 @@ def main():
     t.add_argument("--ht", type=int, default=16); t.add_argument("--hg", type=int, default=64); t.add_argument("--dec", type=int, default=24)
     t.add_argument("--init")
     t.add_argument("--arch", default="sep", choices=("sep", "band")); t.add_argument("--half-half", action="store_true")
+    t.add_argument("--truth-frac", type=float, default=0.5, help="with --half-half: probability of drawing a truth window")
     t.add_argument("--warmup", type=int, default=2000); t.add_argument("--sisdr-after", type=int, default=0)
     s = sub.add_parser("separate"); s.add_argument("--model", required=True); s.add_argument("--wav", required=True); s.add_argument("--out", required=True)
     a = ap.parse_args()
+    if a.cmd == "train":
+        global TRUTH_FRAC
+        TRUTH_FRAC = a.truth_frac
     {"train": train, "separate": separate}[a.cmd](a)
 
 
