@@ -831,6 +831,10 @@ are the comparison that counts here.
 
 These counts come from `D:\upmix\runs\iface8\{mask_oracle,inject_oracle,mask_teacher,inject_teacher,inject_teacher2,inject_irm}\stems.csv`. The original 3/39, 5/39 and 7/39 numbers above count **guitar** only and cannot certify the goal's any-stem limit. On the 39 guitar-present songs, oracle audio still swings in 8, above the ≤ 5/39 target. Oracle audio resolves six of the oracle-mask's 14 swinging songs and adds none, but eight eligible-instrument swings remain, including guitar, piano and keys. Thus clean extraction helps substantially; **even perfect eligible audio does not by itself prove the requested stability**. The C object/bed controller remains part of the problem, and no offline result here substitutes for the owner's car verdict.
 
+The oracle-audio row otherwise clears the listed rear-share limits on this full set: guitar 0.255, keys 0.230, piano 0.171, strings 0.180; voice 0.009, bass 0.013, drums 0.069. Median `slope_per_6dB` is +0.005 for guitar, +0.002 for keys and +0.010 for winds, all within ±0.05. This is an upper bound using true stems, not a deployable candidate. Its vocal-entry ducking has not been measured with the transition diagnostic, so the numerical goal remains unproven even aside from the eight swinging songs.
+
+The real htdemucs eligible-audio condition resolves nine of its mask condition's 23 swinging songs but adds two, leaving 16. Relative to true eligible audio, it resolves one swing and adds nine. The measured gap therefore includes both residual movement in the renderer with perfect audio and errors in extracted audio; optimizing the extractor alone cannot guarantee the stability limit.
+
 Rear levels match within 0.4 dB (−37.2 vs −37.6 dBFS), so the oracle
 mask/audio difference is not a level effect. Reconstruction gives more instruments
 behind (guitars 0.20 → 0.26), less voice (0.03 → 0.01), and fewer guitar swings
