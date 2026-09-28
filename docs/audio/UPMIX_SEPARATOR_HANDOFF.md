@@ -16,7 +16,7 @@ _Read this first, then [the night report](UPMIX_SEPARATOR_NIGHT_REPORT_2026-09-2
 - The renderer interface is solved: fed the teacher's audio (htdemucs) it gives guitar 0.19–0.23 rear share at voice 0.01.
 - Every on-budget student lands on one recall/leak frontier: guitar 0.09–0.12, voice 0.02–0.04, 4–9/39 songs swinging. Width, supervision, spectral structure and loss were each tested as one-change controlled runs and ruled out.
 - Source attribution shows why: students pass 29–37 % of the eligible energy (ideal ratio mask 77 %) at the ideal mask's vocal leak, erase the air above 8 kHz, and duck the instruments 28 % when a voice enters (+47 % when it leaves).
-- One 4k-step screen, a bounded sigmoid mask shared by both channels (`sharedmask`), is the first stability signal on every stem.
+- One 4k-step screen, a bounded sigmoid mask shared by both channels (`sharedmask`), showed a stability signal on every stem — but it did **not** survive to 10k (not promoted).
 - **Review 16 (Codex) paused broad separator training.** Next: the owner's blind in-car listening test, a persistent rear-membership controller, direct optimisation of the product against the real renderer.
 
 **Current review-18 status (later 2026-09-28).** A host-only change to the C renderer's object/bed route passes the numerical full-40 DEV C-render gates **with true isolated eligible audio**: **8→0/40** any-stem swing songs, guitar/keys/piano/strings **.233/.235/.242/.231**, voice/bass/drums **.0038/.0084/.0097**, and rear RMS **+0.472 dB** against a freshly verified control. The same frozen renderer also passes with ideal bounded-mask/audio: **7→0/40**, instrument shares **.205/.215/.213/.208**, protected **.0044/.0112/.0090**, rear RMS **+0.075 dB**. Reused TEST20 gives **5→0/20** for true audio and **4→0/20** for ideal-mask/audio, but its formal gates remain NO because it lacks a valid wind slope; keys/strings coverage is also sparse. These are DEV-selected, noncausal upper bounds, not a new independent set. The frozen sep9 estimate through the new C route improves swings **6→1/20** yet fails guitar/keys/piano and bass (**.105/.144/.089/.070**). No full40 student promotion or new training followed. A causal extractor, source-attributed vocal-entry score, device int8 budget, head-unit port, independent validation and owner listening are still absent. The [direct-object report](UPMIX_DIRECT_OBJECT_RENDERER_PROBE_2026-09-28.md) records all iterations. No Track A or unit file was changed.
@@ -195,7 +195,7 @@ stateDiagram-v2
 | Item | State | Where |
 | --- | --- | --- |
 | sep9 (`--lookahead 8`, 85 ms) | **Done:** best −0.63 dB; renderer G 1.0 voice 0.03 / guitars 0.10 / keys 0.11 / 4/39 — same frontier, lookahead does not help | `D:\upmix\runs\sep9\` |
-| Rapid queue | `sharedmask` (finished, line clears), `sharedmask_10k`, `anchor_10k` (≈09:00) | `D:\upmix\runs\rapid\` |
+| Rapid queue | Empty. The 10k pair is done: **sharedmask not promoted** (ducking and swings back to the anchor's level at 10k; only the guitar depth-follows-level stays better) | `D:\upmix\runs\rapid\` |
 | Paused by review 16 | sep9c (`--dec-skip`, the L = 0 control), sep10 (`--bidir`), sep11/sep12 (`--norm stream`, gated), `attr` (fixed), `sharedmask_log` | Relaunch notes in `D:\upmix\runs\rapid\PAUSED.txt` |
 | Local background pollers (Mac) | Poll `sep9\DONE` and the board; harmless if left | — |
 

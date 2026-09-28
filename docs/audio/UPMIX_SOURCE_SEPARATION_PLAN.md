@@ -1029,6 +1029,19 @@ The owner asked for a fast loop with a trustworthy reference point. My design (4
 
 sep3's backbone + 8-frame output delay + the frame's own band embedding into the decoder (784k params, 144 M MAC/s), sep3's loss. SI-SDR −1.20 / −0.98 / −0.94 / −0.65 / −0.68 at 3k / 10k / 20k / 30k / 40k, best −0.63 at 29k, vocal leak 0.10–0.13. **Renderer G 1.0: voice 0.03, guitars 0.10, keys 0.11, bass 0.06, drums 0.09, 4/39 swinging, level −38.6, error 0.14; G 1.3: voice 0.04, guitars 0.16, keys 0.16, 14/39.** The same frontier as sep3 / sep5 / sep7: 85 ms of future evidence does not move the plateau or the renderer. The decoder-matched control (sep9c) and the bidirectional twin (sep10) stay paused per review 16 — with no gain over sep3 there is nothing for the control to attribute.
 
+### The shared-mask promotion pair at 10k (28.09 evening)
+
+| 20-song screen, G 1.0 | anchor 4k (2 seeds) | sharedmask 4k | anchor 10k | sharedmask 10k |
+| --- | --- | --- | --- | --- |
+| Eligible / vocal transmission | 0.42–0.47 / 0.20–0.24 | 0.48 / 0.171 | 0.39 / 0.226 | 0.44 / 0.247 |
+| Air 8–14 kHz | −23…−24 dB | −28.8 | −21.8 | −19.7 |
+| Entry ducking median / p10 | 0.75–0.76 / 0.39–0.43 | 0.83 / 0.58 | 0.79 / 0.40 | 0.84 / 0.43 |
+| Guitar / piano / keys / strings | 0.11–0.12 / 0.06–0.07 / 0.09–0.10 / 0.13 | 0.11 / 0.09 / 0.11 / 0.16 | 0.12 / 0.07 / 0.11 / 0.11 | 0.13 / 0.08 / 0.11 / 0.12 |
+| Depth follows level: guitar / wind | +0.11…+0.12 / −0.10…−0.23 | +0.02 / +0.03 | +0.13 / −0.15 | +0.05 / −0.15 |
+| Swings (all stems) | 2–3 | 1 | 3 | 5 |
+
+**Not promoted.** At 10k the shared mask keeps a smaller guitar depth-follows-level (+0.05 vs +0.13) and a little more air and guitar, but the entry-ducking p10 falls back to the anchor's band (0.43 vs 0.40, inside seed noise), the vocal transmission rises above the anchor's (0.247 vs 0.226) and it swings more (5 vs 3). The 4k stability signal was an early mechanism response that did not survive training — exactly the case review 15 warned about, and the first proxy-validation data point: a 4k gain in ducking / swings did **not** predict 10k.
+
 ## 🛑 Review 16 (astra, "just training separators is so-so" — 2026-09-28 05:00)
 
 Verdict: **stop broad separator training for 2–3 days.** Five controlled runs gave no useful jump, several exceed the budget, and vocal transitions still move the instruments; the shared-mask result matters because it changes the *failure mechanism* (stability), not because it separates better. Next, in order:
