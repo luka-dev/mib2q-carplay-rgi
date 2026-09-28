@@ -196,6 +196,8 @@ stateDiagram-v2
 
 **Swing timing diagnostic prepared 07:35:** [`diag_oracle_audio_swings.py`](../../tools/stereo-upmix-render/diag_oracle_audio_swings.py) reuses the original C output and the stem tracker to locate each one-second minimum/maximum in the eight oracle-audio swing songs and compare them with vocal level/entry times. The first CPU attempt stalled reading the large MoisesDB source on D: while `anchor_10k` was training; termination was requested and Windows reported `HasExited=True`, with no result produced. Retry only after the rapid queue is idle. This timeline is a mechanism clue, not the official source-attribution transition metric.
 
+**Renderer probe runner revised 07:40:** [`oracle_renderer_sweep.py`](../../tools/stereo-upmix-render/oracle_renderer_sweep.py) loads each selected MoisesDB song only once, runs a fresh baseline and four C-renderer knob conditions, verifies every baseline stem against the original oracle CSV within 0.005, and writes paired results. The PowerShell guard still refuses to start while the rapid queue or a train/stem-harness process is active. The sweep is prepared but unrun; do not infer a knob winner from it yet.
+
 ---
 
 ## 📍 What to do next (review 16's order)
