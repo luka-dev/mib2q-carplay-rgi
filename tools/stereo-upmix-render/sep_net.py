@@ -156,7 +156,7 @@ class BandSepNet:
         dec_skip = bool(dec_skip or lookahead)                     # the frame's own band embedding into the decoder
         dec_in = h2 + hg + (feat if dec_skip else 0)
         self.mask_mode = mask
-        mo = 1 if mask == "shared_sigmoid" else 4                      # role_softmax: four roles, same head size as complex2
+        mo = 1 if mask == "shared_sigmoid" else (8 if mask == "complex_role" else 4)
         self.dec = nn.ModuleList([nn.Linear(dec_in, (b - a) * mo) for a, b in self.bands])
         for d in self.dec:                                     # near attenuation: mask ~ 0.3 + 0i (sigmoid(-0.85) = 0.3)
             nn.init.normal_(d.weight, std=0.01)
@@ -164,6 +164,9 @@ class BandSepNet:
                 d.bias.zero_()
                 if mask == "complex2":
                     d.bias.view(-1, 4)[:, 0] = 0.3; d.bias.view(-1, 4)[:, 2] = 0.3
+                elif mask == "complex_role":
+                    d.bias.view(-1, 8)[:, 0] = 0.3; d.bias.view(-1, 8)[:, 2] = 0.3
+                    d.bias.view(-1, 8)[:, 7] = 0.25
                 elif mask == "role_softmax":
                     d.bias.view(-1, 4)[:, 3] = 0.25       # eligible prior ~0.30; V/D/B share the rest
                 else:
@@ -246,6 +249,9 @@ class BandSepNet:
         if self.mask_mode == "role_softmax":
             self.role_logits = m                              # V, D, B, eligible
             mask = torch.softmax(m, -1)[..., 3, None].expand(-1, -1, -1, 2).to(X.dtype)
+        elif self.mask_mode == "complex_role":
+            self.role_logits = m[..., 4:8]                    # fast V, D, B, eligible auxiliary head
+            mask = torch.complex(m[..., 0:4:2], m[..., 1:4:2]) # stereo complex eligible-audio head
         elif self.mo == 1:
             mask = torch.sigmoid(m).expand(-1, -1, -1, 2).to(X.dtype)            # [B,T,1025,2] one real mask in [0,1] for L and R
         else:
@@ -568,13 +574,13 @@ def main():
     t.add_argument("--dec-skip", action="store_true", help="band model: the frame's own band embedding into the decoder (implied by --lookahead; alone = the L=0 control)")
     t.add_argument("--norm", default="window", choices=("window", "stream"), help="band model input level: one scalar per window (non-causal, default) or a causal 2-s running level")
     t.add_argument("--save-at", default="", help="comma-separated steps at which to save stepN.pt snapshots (proxy validation)")
-    t.add_argument("--mask", default="complex2", choices=("complex2", "shared_sigmoid", "role_softmax"), help="band model head: stereo complex ratio mask (default), one bounded shared real mask, or four competing source roles with one shared eligible mask")
+    t.add_argument("--mask", default="complex2", choices=("complex2", "shared_sigmoid", "role_softmax", "complex_role"), help="band model head: stereo complex ratio mask (default), shared real mask, role mask, or independent complex eligible-audio and auxiliary role heads")
     t.add_argument("--bandbal", type=float, default=0.0, help="weight of the band-balanced magnitude L1 (review 15 exp. 3; 0 = off)")
     t.add_argument("--attr", type=float, default=0.0, help="weight of the attribution loss on the truth stems (review 15 exp. 2; 0 = off)")
     t.add_argument("--source-attr", type=float, default=0.0,
                    help="weight of eligible retention plus separate vocal/drum/bass transmission loss (0 = off)")
     t.add_argument("--role-ce", type=float, default=0.0,
-                   help="weight of four-role stem-power cross entropy (requires --mask role_softmax; 0 = off)")
+                   help="weight of four-role stem-power cross entropy (requires --mask role_softmax or complex_role; 0 = off)")
     t.add_argument("--role-focus", type=float, default=0.0,
                    help="extra equal-role CE on >=80%% pure audible cells; requires --mask role_softmax")
     t.add_argument("--loss", default="lin", choices=("lin", "log"), help="magnitude terms: linear L1 (default) or log-magnitude L1 with a relative floor")
@@ -586,8 +592,8 @@ def main():
     if a.cmd == "train":
         if min(a.attr, a.source_attr, a.role_ce, a.role_focus) < 0 or sum(v > 0 for v in (a.attr, a.source_attr, a.role_ce)) > 1:
             ap.error("--attr, --source-attr and --role-ce must be nonnegative and at most one can be active")
-        if (a.mask == "role_softmax") != (a.role_ce > 0 or a.role_focus > 0):
-            ap.error("--mask role_softmax requires --role-ce or --role-focus, and these require --mask role_softmax")
+        if (a.mask in ("role_softmax", "complex_role")) != (a.role_ce > 0 or a.role_focus > 0):
+            ap.error("--mask role_softmax/complex_role requires --role-ce or --role-focus, and these require a role head")
         global TRUTH_FRAC
         TRUTH_FRAC = a.truth_frac
         a.save_at = {int(x) for x in a.save_at.split(",") if x.strip()}
