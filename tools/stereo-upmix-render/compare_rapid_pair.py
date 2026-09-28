@@ -110,7 +110,7 @@ def main():
         item = metrics.get(stem, {}).get("median_rear")
         if item:
             print(f"{stem:15} n={item['n']:2} rear {item['anchor_median']:.3f} -> "
-                  f"{item['candidate_median']:.3f}; paired Δ {item['paired_median_delta']:+.3f} "
+                  f"{item['candidate_median']:.3f}; paired delta {item['paired_median_delta']:+.3f} "
                   f"90% CI {item['paired_median_delta_ci90']}")
 
 
