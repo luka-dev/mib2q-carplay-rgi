@@ -194,6 +194,8 @@ stateDiagram-v2
 
 **10k result 07:23:** `sharedmask_10k` completed the 20-song C screen. Relative to the 4k shared-mask screen, any-stem swings rose **1 → 5/20**, voice 0.039 → 0.041, guitar 0.111 → 0.131, piano 0.087 → 0.077, strings 0.158 → 0.124 and drums 0.078 → 0.092. Entry-retention p10 fell 0.58 → **0.431**. **Do not promote or extend this student.** It also uses `sep_net.py`'s default whole-window normalisation, so it is non-causal even before any device-port question. The paired 10k anchor is still running; leave it to finish so its comparison tests whether the 4k mechanism survives ordinary training. See the [night report](UPMIX_SEPARATOR_NIGHT_REPORT_2026-09-28.md) and `D:\upmix\runs\rapid\sharedmask_4k_vs_10k.json`.
 
+**Swing timing diagnostic prepared 07:35:** [`diag_oracle_audio_swings.py`](../../tools/stereo-upmix-render/diag_oracle_audio_swings.py) reuses the original C output and the stem tracker to locate each one-second minimum/maximum in the eight oracle-audio swing songs and compare them with vocal level/entry times. The first CPU attempt stalled reading the large MoisesDB source on D: while `anchor_10k` was training; termination was requested and Windows reported `HasExited=True`, with no result produced. Retry only after the rapid queue is idle. This timeline is a mechanism clue, not the official source-attribution transition metric.
+
 ---
 
 ## 📍 What to do next (review 16's order)
