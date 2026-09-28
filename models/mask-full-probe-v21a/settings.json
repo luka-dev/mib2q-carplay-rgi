@@ -11,7 +11,7 @@
     "AUDIO_HSSR_MASK_DRIVE": {
       "value": "1.5",
       "flag": "--mask-drive-prod 1.5",
-      "what": "object = sqrt(eligibility) * drive (clamped at 1.45 in the render), pan = the bin's own L/R balance; 0 = off (heuristic path), range 0..2. Car + harness 27.09: 1.0 thin (guitars 0.07), 1.7 = the 22.09 leak (voice 0.10, swing back), 1.5 = guitars 0.15 / voice 0.07 / relative swing 1.47 vs 2.35 (22.09)"
+      "what": "object = sqrt(eligibility) * drive (clamped at 1.45 in the render), pan = the bin's own L/R balance; 0 = off (heuristic path), range 0..2. Car + harness 27.09: 1.0 thin (guitars 0.07), 1.7 = the 22.09 leak (voice 0.10, swing back), 1.5 = guitars 0.17 / voice 0.08 (4 songs >15 % vs 8) / guitars' relative swing 1.78 vs 2.35 (22.09), all 40 songs"
     },
     "AUDIO_HSSR_VOCAL_GATE": {
       "value": "0.5",

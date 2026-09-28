@@ -493,13 +493,15 @@ by construction and misled the morning's "2/40"):
 |---|---|---|---|---|---|---|
 | 22.09 heuristic | 0.17 | 0.08 (8) | 0.26 | −36.3 | 2.35 | 4.8 |
 | 1.0 | 0.07 | 0.04 (0) | 0.17 | −37.6 | 2.20 | 3.1 |
-| 1.3 | 0.12 | 0.05 (0) | 0.23 | −35.3 | 1.48 | 2.8 |
-| **1.5** | **0.15** | **0.07 (0)** | 0.28 | −33.8 | **1.47** | 2.5 |
-| 1.7 | 0.21 | 0.10 (8) | 0.33 | −33.6 | 1.53 | 2.8 |
+| 1.3 | 0.13 | 0.06 (0) | 0.26 | −35.6 | 2.03 | 3.1 |
+| **1.5** | **0.17** | **0.08 (4)** | 0.30 | −34.4 | **1.78** | 3.0 |
+| 1.7 | 0.21 | 0.10 (8) | 0.33 | −33.6 | 1.64 | 2.9 |
 
-Level-matched, the mask path swings about a third less than the heuristic
-and keeps the voice lower; it is not the "never swings" the thin drive-1.0
-row suggested.  Two more knobs were built and rejected on the harness: a
+Level-matched (drive 1.5 = the 22.09 shares), the mask path's guitars swing
+a quarter less relative to their level (0.34 vs 0.48 absolute range) and the
+voice a third less, with half the songs above 15 % voice (4 vs 8) at the same
+voice share; it is not the "never swings" the thin drive-1.0 row suggested
+(all rows final on the 40 songs).  Two more knobs were built and rejected on the harness: a
 treble shelf on the drive (`AUDIO_HSSR_MASK_TREBLE_DB`, +3/+6: drums 0.44/
 0.50, voice 0.10/0.12 — cymbals and voice sit in the "other" cells' highs)
 and an eligibility gamma (`AUDIO_HSSR_MASK_GAMMA` 0.7/0.5: voice 0.14/0.16 —

@@ -103,8 +103,8 @@ export AUDIO_HSSR_VOCAL_GATE=0.5
 export AUDIO_HSSR_MASK_MODEL="$H/hssr_mask.bin"
 # 1.0 measured "confident" on the PC but thin in the car (guitars 7 % rear vs 17 % in the 22.09
 # build the ear remembers); 1.7 brings the 22.09 fullness back together with its voice leak
-# (10 %); 1.5 = guitars 15 %, voice 7 % (22.09: 8 %), swing a third smaller than 22.09 at equal
-# level (car + 40-song harness, 2026-09-27 evening).  AUDIO_HSSR_MASK_TREBLE_DB and
+# (10 %); 1.5 = guitars 17 %, voice 8 % (as 22.09, on half as many songs above 15 %), guitars'
+# swing a quarter smaller than 22.09 at equal level (car + 40-song harness, 2026-09-27 evening).  AUDIO_HSSR_MASK_TREBLE_DB and
 # AUDIO_HSSR_MASK_GAMMA exist (0 / 1.0 = off); both pull drums and voice back faster than
 # guitars on the harness, so they stay off.
 export AUDIO_HSSR_MASK_DRIVE=1.5

@@ -10,7 +10,7 @@ _LuKa · branch `feature/upmix-source-separation`, commits 0c91d5e → 04fb06d_
 - **Overall:** the mask net runs in the car for the first time tonight, at 1.33 ms per control on the Krait, with every worker job on time; the ear says "something is behind, still less than 22.09".
 - **Progress:** the runtime went from 3.92 M to 1.46 M ARMv7 instructions per control in three passes with NEON parity to 1e-6; the install package, per-model settings files and a health line in the hook log shipped with it.
 - **Found:** `spa_stereo_upmix_reset()` dropped the guard and mask model pointers, so the mask had never run in the car until the fix; the "2/40 swinging" figure of the morning was a level-dependent metric read on a thin rear.
-- **Blocker:** the per-cell student's fullness ceiling. At the 22.09 rear level it swings a third less and leaks less voice than the heuristic, but it cannot give "distinct instruments behind" without the voice creeping back. That is Track B's separator.
+- **Blocker:** the per-cell student's fullness ceiling. At the 22.09 rear level it swings a quarter less (guitars) to a third less (voice) than the heuristic and leaks voice on half as many songs, but it cannot give "distinct instruments behind" without the voice creeping back. That is Track B's separator.
 - **Next:** listen at drive 1.5 over voice-heavy material; read the separator diagnostics (sep6/sep7/sep8) in the morning; keep the two reserve levers (mask every second control, split worker publication) unused until a Krait number asks for them.
 
 ---
@@ -21,7 +21,7 @@ _LuKa · branch `feature/upmix-source-separation`, commits 0c91d5e → 04fb06d_
 | --- | --- | --- | --- |
 | **Runtime cost** | 🟢 On track | ↑ | 1.33 ms per 10.67 ms control on the unit, 24× margin to the failsafe threshold |
 | **Correctness** | 🟢 Good | ↑ | NEON vs scalar 4e-5, scalar vs PyTorch 0.0168 (the int8 decoder), regression test for the reset handoff |
-| **Sound** | 🟡 At risk | → | drive 1.5 shipped: guitars 0.15 rear (22.09: 0.17), voice 0.07 (0.08), relative swing 1.47 (2.35); the ear still wants more |
+| **Sound** | 🟡 At risk | → | drive 1.5 shipped: guitars 0.17 rear (22.09: 0.17), voice 0.08 (0.08, 4 vs 8 songs above 15 %), guitars' relative swing 1.78 (2.35); the ear still wants more |
 | **Stability in the car** | 🟢 Good | → | 30 k+ controls, worker never late, no failsafe, no fallback, no underrun, guard never tripped |
 | **Track B dependency** | 🟡 At risk | → | separator students plateau at −0.3 dB SI-SDR; three diagnostics run overnight |
 
@@ -169,11 +169,11 @@ The 22.09 build is the last one the ear knew. Through the same 40-song harness i
 | --- | --- | --- | --- | --- | --- | --- |
 | 22.09 heuristic | 0.17 | 0.08 (8) | 0.26 | −36.3 | 2.35 | 4.8 |
 | 1.0 | 0.07 | 0.04 (0) | 0.17 | −37.6 | 2.20 | 3.1 |
-| 1.3 | 0.12 | 0.05 (0) | 0.23 | −35.3 | 1.48 | 2.8 |
-| **1.5 (shipped)** | **0.15** | **0.07 (0)** | 0.28 | −33.8 | **1.47** | 2.5 |
-| 1.7 | 0.21 | 0.10 (8) | 0.33 | −33.6 | 1.53 | 2.8 |
+| 1.3 | 0.13 | 0.06 (0) | 0.26 | −35.6 | 2.03 | 3.1 |
+| **1.5 (shipped)** | **0.17** | **0.08 (4)** | 0.30 | −34.4 | **1.78** | 3.0 |
+| 1.7 | 0.21 | 0.10 (8) | 0.33 | −33.6 | 1.64 | 2.9 |
 
-"Relative swing" is the 1-second range of a stem's rear share divided by its median share. The morning's `swing > 0.30` count grows with the level by construction (a thin rear cannot move by 0.30), which is why the drive-1.0 row read as "never swings". Level-matched, the mask path swings about a third less than the heuristic and keeps the voice lower; it does not remove the swing.
+"Relative swing" is the 1-second range of a stem's rear share divided by its median share. The morning's `swing > 0.30` count grows with the level by construction (a thin rear cannot move by 0.30), which is why the drive-1.0 row read as "never swings". Level-matched (drive 1.5 = the 22.09 shares), the guitars swing a quarter less relative to their level (0.34 vs 0.48 absolute range), the voice a third less, and half as many songs leak more than 15 % voice (4 vs 8) at the same voice share. It does not remove the swing.
 
 _Guitar and voice rear share against the mask drive, with the 22.09 heuristic as the first bar group._
 
@@ -182,8 +182,8 @@ xychart-beta
     title "🎸 Rear share vs mask drive (40 DEV songs)"
     x-axis ["22.09", "drive 1.0", "drive 1.3", "drive 1.5", "drive 1.7"]
     y-axis "own-cell rear share" 0 --> 0.25
-    bar [0.17, 0.07, 0.12, 0.15, 0.22]
-    line [0.08, 0.04, 0.05, 0.07, 0.10]
+    bar [0.17, 0.07, 0.13, 0.17, 0.21]
+    line [0.08, 0.04, 0.06, 0.08, 0.10]
 ```
 
 Knobs built tonight and rejected on the harness:
