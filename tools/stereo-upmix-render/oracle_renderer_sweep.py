@@ -9,6 +9,7 @@ run. This is a mechanism screen. A winner must be rerun on the original full
 import argparse
 import csv
 import json
+import math
 import subprocess
 import sys
 from pathlib import Path
@@ -45,7 +46,7 @@ def verify_baseline(actual, expected, song):
     for stem in got:
         for field in CHECK_FIELDS:
             x, y = float(got[stem][field]), float(want[stem][field])
-            if abs(x - y) > 0.005:
+            if math.isfinite(x) != math.isfinite(y) or (math.isfinite(x) and abs(x - y) > 0.005):
                 raise ValueError(f"baseline C render differs for {song}/{stem}/{field}: {x:.4f} vs {y:.4f}")
 
 
