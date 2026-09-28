@@ -37,6 +37,7 @@ def row(d):
         r[k] = grab(sc, r"^%s\s+\d+\s+([\d.]+)" % name)
     r["swing"] = grab(sc, r"^guitar .*?(\d+)/\d+ songs swing", cast=int)
     r["done"] = "done" in job
+    r["_screen"] = sc
     return r
 
 
@@ -54,6 +55,16 @@ def main():
             r["tag"], "" if r["done"] else " (running)", r["args"], fmt(r["sdr"]), fmt(r.get("rec")), fmt(r.get("rec_d")), fmt(r.get("vl"), "{:.3f}"), fmt(r.get("pl"), "{:.3f}"),
             fmt(r["air"], "{:.1f}"), fmt(r["air2"], "{:.1f}"), fmt(r["duck"]), fmt(r["duck10"]), fmt(r["peak"]), fmt(r["release"]),
             fmt(r["voice"]), fmt(r["guitar"]), fmt(r["keys"]), fmt(r["swing"], "{}"), fmt(r["level"], "{:.1f}"), fmt(r["err"])))
+    # every stem (28.09: "not only the voice"): rear share, and how much depth follows level (last column of the screen)
+    stems = ("vocals", "guitar", "piano", "other_keys", "bowed_strings", "wind", "other", "bass", "drums", "percussion")
+    out += ["", "## Every stem: rear share / depth-follows-level", "", "| tag | " + " | ".join(stems) + " | swinging (all stems) |", "|" + "---|" * (len(stems) + 2)]
+    for r in rows:
+        sc = r["_screen"]; cells = []; swing = 0
+        for st in stems:
+            m = re.search(r"^%s\s+\d+\s+([\d.]+)\s.*?([-+][\d.]+)\s+([-+][\d.]+)" % st, sc, re.M)
+            cells.append("—" if not m else f"{float(m.group(1)):.2f} / {float(m.group(3)):+.2f}")
+        swing = sum(int(x) for x in re.findall(r"(\d+)/\d+ songs swing", sc))
+        out.append(f"| {r['tag']} | " + " | ".join(cells) + f" | {swing if sc else '—'} |")
     open(os.path.join(rd, "LEADERBOARD.md"), "w", encoding="utf-8").write("\n".join(out) + "\n")
     print("\n".join(out))
 
