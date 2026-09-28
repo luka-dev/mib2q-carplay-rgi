@@ -156,14 +156,18 @@ class BandSepNet:
         dec_skip = bool(dec_skip or lookahead)                     # the frame's own band embedding into the decoder
         dec_in = h2 + hg + (feat if dec_skip else 0)
         self.mask_mode = mask
-        mo = 1 if mask == "shared_sigmoid" else 4                      # review 15 exp. 7: one bounded real mask for both channels
+        mo = 1 if mask == "shared_sigmoid" else 4                      # role_softmax: four roles, same head size as complex2
         self.dec = nn.ModuleList([nn.Linear(dec_in, (b - a) * mo) for a, b in self.bands])
         for d in self.dec:                                     # near attenuation: mask ~ 0.3 + 0i (sigmoid(-0.85) = 0.3)
             nn.init.normal_(d.weight, std=0.01)
             with torch.no_grad():
                 d.bias.zero_()
-                if mo == 4: d.bias.view(-1, 4)[:, 0] = 0.3; d.bias.view(-1, 4)[:, 2] = 0.3
-                else: d.bias.fill_(-0.85)
+                if mask == "complex2":
+                    d.bias.view(-1, 4)[:, 0] = 0.3; d.bias.view(-1, 4)[:, 2] = 0.3
+                elif mask == "role_softmax":
+                    d.bias.view(-1, 4)[:, 3] = 0.25       # eligible prior ~0.30; V/D/B share the rest
+                else:
+                    d.bias.fill_(-0.85)
         self.modules = nn.ModuleList([self.enc, self.gru1, self.gru2] + cross + [self.ggru, self.dec])
         self.feat, self.h1, self.h2, self.hg, self.nbrnn, self.lookahead, self.bidir, self.dec_skip, self.norm = feat, h1, h2, hg, brnn, lookahead, bidir, dec_skip, norm
         self.mo = mo
@@ -239,7 +243,10 @@ class BandSepNet:
             parts.append(e)
         z = torch.cat(parts, -1)                                                  # [B,T,48,h2+hg(+feat)]
         m = torch.cat([dec(z[:, :, i, :]).reshape(B, T, b - a, self.mo) for i, (dec, (a, b)) in enumerate(zip(self.dec, self.bands))], 2)
-        if self.mo == 1:
+        if self.mask_mode == "role_softmax":
+            self.role_logits = m                              # V, D, B, eligible
+            mask = torch.softmax(m, -1)[..., 3, None].expand(-1, -1, -1, 2).to(X.dtype)
+        elif self.mo == 1:
             mask = torch.sigmoid(m).expand(-1, -1, -1, 2).to(X.dtype)            # [B,T,1025,2] one real mask in [0,1] for L and R
         else:
             mask = torch.complex(m[..., 0::2], m[..., 1::2])                      # [B,T,1025,2] complex (L, R)
@@ -336,6 +343,24 @@ def loss_source_attr(torch, mask, E, V, D, B, floor_rel=3e-3):
     return (eligible + protected).mean()
 
 
+def loss_role_ce(torch, logits, E, V, D, B, floor_rel=3e-3):
+    """Four-role power target from aligned stems, with quiet cells downweighted.
+
+    This trains the shared eligible mask as one member of a competing source
+    distribution. The quarter-power cell weight limits loud bass dominance
+    while retaining evidence from quieter instruments. Silence is excluded by
+    the relative floor; the audio reconstruction loss still trains the output.
+    """
+    powers = torch.stack([(s.abs() ** 2).sum(-1) for s in (V, D, B, E)], -1).detach()
+    total = powers.sum(-1)
+    floor = (floor_rel ** 2 * total.mean(dim=(1, 2), keepdim=True)).clamp_min(1e-8)
+    target = powers / total.clamp_min(1e-8)[..., None]
+    weight = total.clamp_min(floor).pow(0.25)
+    weight = torch.where(total > floor, weight, 0)
+    ce = -(target * torch.log_softmax(logits, -1)).sum(-1)
+    return ((ce * weight).sum(dim=(1, 2)) / weight.sum(dim=(1, 2)).clamp_min(1e-8)).mean()
+
+
 def loss_audio(torch, est, tgt, mix=None, floor_rel=None, scale=1.0):
     """L1 on the magnitude STFT (linear; or, with `mix` + `floor_rel`, log with a floor relative to the mixture's
     mean |X| per window and channel, times `scale`) + 0.5 L1 on the complex STFT (unchanged in both modes)."""
@@ -416,7 +441,7 @@ def train(a):
     import itertools
     counter = itertools.count(start)                            # astra 13: one RNG shared by the prefetch threads was not reproducible
     batches = MN.prefetch(lambda: windows(torch, tracks, a.seconds, a.batch, np.random.default_rng([a.seed, next(counter)]),
-                                        with_vocal=a.attr > 0, with_sources=a.source_attr > 0))
+                                        with_vocal=a.attr > 0, with_sources=a.source_attr > 0 or a.role_ce > 0))
     if STATS["mean"] is None:
         with torch.no_grad():
             lm = torch.cat([torch.log(stft(torch, next(batches)[0].to(dev)).abs() + 1e-5).flatten() for _ in range(4)])
@@ -438,6 +463,9 @@ def train(a):
             if a.source_attr > 0:
                 loss = loss + a.source_attr * loss_source_attr(
                     torch, net.last_mask, Tt, stft(torch, bt[2]), stft(torch, bt[3]), stft(torch, bt[4]))
+            if a.role_ce > 0:
+                loss = loss + a.role_ce * loss_role_ce(
+                    torch, net.role_logits, Tt, stft(torch, bt[2]), stft(torch, bt[3]), stft(torch, bt[4]))
             if a.arch == "band":
                 est_wav = istft(torch, Est, mix.shape[-1])
                 loss = loss + multires_loss(torch, est_wav, elig, mix if log_loss else None, a.loss_floor if log_loss else None, a.loss_scale)
@@ -511,11 +539,13 @@ def main():
     t.add_argument("--dec-skip", action="store_true", help="band model: the frame's own band embedding into the decoder (implied by --lookahead; alone = the L=0 control)")
     t.add_argument("--norm", default="window", choices=("window", "stream"), help="band model input level: one scalar per window (non-causal, default) or a causal 2-s running level")
     t.add_argument("--save-at", default="", help="comma-separated steps at which to save stepN.pt snapshots (proxy validation)")
-    t.add_argument("--mask", default="complex2", choices=("complex2", "shared_sigmoid"), help="band model head: stereo complex ratio mask (default) or one bounded real mask for both channels")
+    t.add_argument("--mask", default="complex2", choices=("complex2", "shared_sigmoid", "role_softmax"), help="band model head: stereo complex ratio mask (default), one bounded shared real mask, or four competing source roles with one shared eligible mask")
     t.add_argument("--bandbal", type=float, default=0.0, help="weight of the band-balanced magnitude L1 (review 15 exp. 3; 0 = off)")
     t.add_argument("--attr", type=float, default=0.0, help="weight of the attribution loss on the truth stems (review 15 exp. 2; 0 = off)")
     t.add_argument("--source-attr", type=float, default=0.0,
                    help="weight of eligible retention plus separate vocal/drum/bass transmission loss (0 = off)")
+    t.add_argument("--role-ce", type=float, default=0.0,
+                   help="weight of four-role stem-power cross entropy (requires --mask role_softmax; 0 = off)")
     t.add_argument("--loss", default="lin", choices=("lin", "log"), help="magnitude terms: linear L1 (default) or log-magnitude L1 with a relative floor")
     t.add_argument("--loss-floor", type=float, default=3e-3, help="--loss log: floor relative to the mixture's mean |X| per window and channel (3e-3 = -50 dB)")
     t.add_argument("--loss-scale", type=float, default=1.0, help="--loss log: fixed factor on the magnitude bundle (calibrate with diag_lossfloor.py)")
@@ -523,8 +553,10 @@ def main():
     s = sub.add_parser("separate"); s.add_argument("--model", required=True); s.add_argument("--wav", required=True); s.add_argument("--out", required=True)
     a = ap.parse_args()
     if a.cmd == "train":
-        if a.attr < 0 or a.source_attr < 0 or (a.attr > 0 and a.source_attr > 0):
-            ap.error("--attr and --source-attr must be nonnegative and cannot both be active")
+        if min(a.attr, a.source_attr, a.role_ce) < 0 or sum(v > 0 for v in (a.attr, a.source_attr, a.role_ce)) > 1:
+            ap.error("--attr, --source-attr and --role-ce must be nonnegative and at most one can be active")
+        if (a.mask == "role_softmax") != (a.role_ce > 0):
+            ap.error("--mask role_softmax requires --role-ce, and --role-ce requires --mask role_softmax")
         global TRUTH_FRAC
         TRUTH_FRAC = a.truth_frac
         a.save_at = {int(x) for x in a.save_at.split(",") if x.strip()}

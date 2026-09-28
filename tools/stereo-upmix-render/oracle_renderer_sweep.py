@@ -83,9 +83,11 @@ def main():
     p.add_argument("--guard", type=Path, required=True)
     p.add_argument("--moisesdb", type=Path, required=True)
     p.add_argument("--probe", type=Path, required=True)
-    p.add_argument("--source", choices=("oracle", "irm", "student", "production"), default="oracle")
+    p.add_argument("--source", choices=("oracle", "irm", "role_power", "student", "production"), default="oracle")
     p.add_argument("--student-ckpt", type=Path,
                    help="sep_net checkpoint for --source student; same frozen estimate in every C condition")
+    p.add_argument("--student-gain", type=float, default=1.0,
+                   help="positive scalar on student eligible audio before both C conditions (for matched rear level)")
     p.add_argument("--mask-bin", type=Path, help="Track A's exported mask binary for --source production")
     p.add_argument("--expected-songs", type=int, default=20)
     p.add_argument("--points", default=",".join(POINTS),
@@ -101,6 +103,8 @@ def main():
         p.error("--source student requires an existing --student-ckpt")
     if a.source != "student" and a.student_ckpt is not None:
         p.error("--student-ckpt is only valid with --source student")
+    if not math.isfinite(a.student_gain) or a.student_gain <= 0 or (a.source != "student" and a.student_gain != 1.0):
+        p.error("--student-gain must be positive and requires --source student")
     names = [name.strip() for name in a.points.split(",")]
     if not names or names[0] != "baseline" or len(names) != len(set(names)) or any(name not in POINTS for name in names):
         p.error("--points must begin with baseline and contain distinct known conditions")
@@ -126,14 +130,15 @@ def main():
     if original is not None and {r["song"] for r in original} != set(song_ids):
         raise ValueError("baseline CSV does not match the frozen manifest")
 
-    harness.INJECT = (a.source if a.source in ("oracle", "irm") else
+    harness.INJECT = (a.source if a.source in ("oracle", "irm", "role_power") else
                       f"student:{a.student_ckpt}" if a.source == "student" else "")
     harness.INJECT_SMOOTH = 0.0
+    harness.INJECT_GAIN = a.student_gain
     harness.ORACLE_REF = ""
     harness.MASK_DIR = ""
     harness.TEACHER_MASK = False
     harness.RESUME = True
-    if a.source in ("oracle", "irm", "student"):
+    if a.source in ("oracle", "irm", "role_power", "student"):
         common = behavior.VARIANTS["shipped"] + ["--model", str(a.model), "--guard-model", str(a.guard),
                                                   "--mask-drive", "1.0"]
     else:

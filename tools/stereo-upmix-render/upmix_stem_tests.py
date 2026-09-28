@@ -180,6 +180,7 @@ MASK_SHARPEN = 1.0   # --mask-sharpen k: eligibility ** k (k > 1 = only confiden
 MASK_ELIGIBLE = ""   # --mask-eligible other  (default: the model's other+cymbals)
 RESUME = False
 INJECT_SMOOTH = 0.0    # --inject-smooth MS: slow per-band gain envelope (fast attack, this release) on the injected estimate
+INJECT_GAIN = 1.0      # --inject-gain G: scalar on injected audio for a matched-rear-level screen
 
 
 def smooth_envelope(elig, mix, release_ms, n_fft=2048, hop=512, bands=32):
@@ -260,6 +261,19 @@ def analyse_song(render, args, out, track_dir, excerpt_s, mask_model=None, oracl
             sdr = float(SN.si_sdr(torch, est, e[0]).mean()); sdr_mix = float(SN.si_sdr(torch, m[0], e[0]).mean())
             print(f"  IRM {tag}: si_sdr {sdr:.2f} dB (mixture {sdr_mix:.2f})", flush=True)
             elig = est.numpy()
+        elif INJECT == "role_power":                       # privileged four-role power target, same amplitude mask as the role head
+            import sep_net as SN
+            torch = SN._torch()
+            source = lambda names: sum((v for name, v in stems.items() if name in names), np.zeros_like(mix))
+            voc = source(("vocals",)) * k
+            drums = source(("drums", "percussion")) * k
+            bass = source(("bass",)) * k
+            eligible = (mix * k) - voc - drums - bass
+            parts = [torch.as_tensor(s.astype(np.float32))[None] for s in (voc, drums, bass, eligible)]
+            power = [((SN.stft(torch, part).abs() ** 2).sum(-1)) for part in parts]
+            role_mask = power[3] / sum(power).clamp_min(1e-8)
+            X = SN.stft(torch, torch.as_tensor((mix * k).astype(np.float32))[None])
+            elig = SN.istft(torch, X * role_mask[..., None], n)[0].numpy()
         elif INJECT.startswith("student:"):                # the separator student's eligible estimate (sep_net.py)
             import sep_net as SN
             if "student" not in _MASK:
@@ -277,6 +291,8 @@ def analyse_song(render, args, out, track_dir, excerpt_s, mask_model=None, oracl
             elig = TL.separate_array(_MASK["sep"], (mix * k).astype(np.float32))["other"]
         if INJECT_SMOOTH > 0:
             elig = smooth_envelope(elig, mix * k, INJECT_SMOOTH)
+        if INJECT_GAIN != 1.0:
+            elig = elig * INJECT_GAIN
         inj = os.path.join(out, f"{tag}.inj.wav")
         T.write_wav(inj, elig)
         extra = ["--rear-audio", inj]
@@ -355,15 +371,19 @@ def main():
     ap.add_argument("--mask-presence", type=float, default=0.0, help="full nets: e * (1 - alpha * band vocal presence) at routing")
     ap.add_argument("--resume", action="store_true", help="reuse per-song results already in --out")
     ap.add_argument("--inject-smooth", type=float, default=0.0, help="ms of release for the per-band gain envelope on the injected estimate")
+    ap.add_argument("--inject-gain", type=float, default=1.0, help="positive scalar on injected eligible audio for level-matched comparisons")
     ap.add_argument("--teacher-mask", action="store_true", help="mask from htdemucs's stems (ceiling of the distillation route)")
     ap.add_argument("--oracle-ref", default="", help="dir with the oracle condition's *.6ch.wav renders: rear reconstruction error vs them")
     ap.add_argument("--inject", default="", help="interface test: eligible audio through the object path: oracle | teacher | teacher2 | student:CKPT")
     ap.add_argument("--split-file", help="masknet_cache/split.json")
     ap.add_argument("--split", default="dev", help="with --split-file: which split to take songs from")
     a = ap.parse_args()
-    global ORACLE_AMP, MASK_THRESH, MASK_SHARPEN, MASK_ELIGIBLE, RESUME, TEACHER_MASK, ORACLE_REF, INJECT, INJECT_SMOOTH, MASK_DIR
+    global ORACLE_AMP, MASK_THRESH, MASK_SHARPEN, MASK_ELIGIBLE, RESUME, TEACHER_MASK, ORACLE_REF, INJECT, INJECT_SMOOTH, INJECT_GAIN, MASK_DIR
     ORACLE_AMP = a.oracle_amp; RESUME = a.resume; TEACHER_MASK = a.teacher_mask; ORACLE_REF = a.oracle_ref; INJECT = a.inject
     INJECT_SMOOTH = a.inject_smooth
+    if not np.isfinite(a.inject_gain) or a.inject_gain <= 0 or (a.inject_gain != 1.0 and not a.inject):
+        ap.error("--inject-gain must be positive and requires --inject")
+    INJECT_GAIN = a.inject_gain
     MASK_DIR = a.mask_dir or ""
     if MASK_DIR and (a.inject or a.teacher_mask or a.mask_model or a.oracle_mask):
         ap.error("--mask-dir cannot be combined with another mask or injection source")
