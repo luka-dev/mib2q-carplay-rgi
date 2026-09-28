@@ -54,6 +54,25 @@ All six original swinging songs still swing at G 1.2; seven additional songs cro
 
 One renderer-knob control kept cue weights at 4 and G at 1.0 but removed the default −4 dB rear-body shelf (`--rear-body 0`). It reached −36.7 dBFS rear RMS, close to the G 1.2 point, **without increasing the swing count (6/20)**. Medians were voice 0.017, guitar 0.167, piano 0.128, keys 0.141, strings 0.100, bass 0.055, and drums 0.082. The body change therefore offers a steadier way to raise some rear energy, but loses strings and still misses drums. Bowed-string median band shares rose only at 300–1,000 Hz (0.086 → 0.101) and fell above 1 kHz, so its overall loss is measured rather than inferred from the shelf curve. This is a 20-song oracle-cue probe (`D:\upmix\runs\membership\oracle_fast_444_g10_body0_screen\`), not a deployable setting. Stop manual gain/shelf guessing here; the owner's verdict and a source-specific controller should guide the next bounded search.
 
+## Per-source membership oracle screen
+
+[`oracle_source_membership.py`](../../tools/stereo-upmix-render/oracle_source_membership.py) gives **each isolated eligible stem** its own slow causal activity latch (300–4,000 Hz cue; −42 dB admission, −50 dB release, 0.3/1.5 s dwell, 0.15 s ramp). Vocal, bass and drum powers remain separate **instantaneous** protection cues. The original mix still enters the C renderer. This is non-deployable: it uses true MoisesDB stems for admission and protection. With every latch forced open, its `HSSRMSK0` output matched the original oracle-cue generator on a checked 60 s song to mean absolute difference **4.3×10⁻⁹**, maximum **1.2×10⁻⁷**; the paired result therefore isolates membership rather than a changed mask formula.
+
+On the same 20 DEV songs at G 1.0, the membership removed a median 0.56% of oracle-passing eligible energy (p90 2.29%, worst 5.41%) and switched source states a median three times per song. Guitar, piano and keys membership was almost always open (median open fractions 0.993, 1.000 and 1.000), while bowed strings were open only 0.138 of the time and percussion 0.000. The real C renderer gave:
+
+| Median rear share | Fast oracle alone | With per-source membership |
+| --- | ---: | ---: |
+| Voice | 0.027 | 0.027 |
+| Guitar | 0.188 | 0.186 |
+| Piano | 0.112 | 0.112 |
+| Keys | 0.164 | 0.164 |
+| Strings | 0.121 | 0.121 |
+| Drums | 0.106 | 0.101 |
+| Percussion (4 paired songs) | 0.329 | 0.109 |
+| Any-stem swing songs | **6/20** | **6/20**, none new or resolved |
+
+**Do not promote this oracle activity-latch family.** It does not change the sustained sources whose depth moves, and its dwell rejects transient percussion. This does not rule out a controller with better stream identity or a clean eligible-audio path; the previous full 40-song oracle-audio experiment remains substantially stronger than oracle mask × mixture. Mask logs: `D:\upmix\runs\membership\oracle_source_membership_v1\report.json`; C results: `D:\upmix\runs\membership\oracle_source_membership_v1_screen\stems.csv`. The CPU-only renderer invocation is [`run_source_membership_screen.ps1`](../../tools/stereo-upmix-render/pc/run_source_membership_screen.ps1).
+
 ## Reproduce
 
 On the PC, the generated masks and report are under `D:\upmix\runs\membership\oracle_sharedmask4k\`; the C harness output is under `D:\upmix\runs\membership\oracle_sharedmask4k_screen\`. The baseline rows are `D:\upmix\runs\masknet-oracle\stems_amp_1.0\stems.csv` restricted to the same 20 songs. The source code is [`persistent_rear_membership.py`](../../tools/stereo-upmix-render/persistent_rear_membership.py), with [`upmix_stem_tests.py`](../../tools/stereo-upmix-render/upmix_stem_tests.py) accepting `--mask-dir` to feed the precomputed masks through the real renderer.
