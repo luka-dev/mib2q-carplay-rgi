@@ -198,6 +198,10 @@ stateDiagram-v2
 
 **Renderer probe runner revised 07:40:** [`oracle_renderer_sweep.py`](../../tools/stereo-upmix-render/oracle_renderer_sweep.py) loads each selected MoisesDB song only once, runs a fresh baseline and four C-renderer knob conditions, verifies every baseline stem against the original oracle CSV within 0.005, and writes paired results. The PowerShell guard still refuses to start while the rapid queue or a train/stem-harness process is active. The sweep is prepared but unrun; do not infer a knob winner from it yet.
 
+**Promotion pair complete 08:00:** matched 20-song C screens give `anchor_10k` → `sharedmask_10k`: guitar 0.119 → 0.131 (paired +0.014, 90% CI +0.009 to +0.020), keys 0.108 → 0.111, strings 0.112 → 0.124, voice 0.041 → 0.041, bass 0.080 → 0.096, drums 0.092 → 0.092, any-stem swings **3 → 5/20** (two new, none resolved), entry-retention p10 0.400 → 0.431. **Reject promotion and do not extend either 10k run.** The [night report](UPMIX_SEPARATOR_NIGHT_REPORT_2026-09-28.md) has the full comparison; paired JSON: `D:\upmix\runs\rapid\anchor10k_vs_sharedmask10k.json`.
+
+**Rapid queue repair 08:01:** the daemon's pipeline did not clear the final queue line when its filter produced no rows; it repeated `anchor_10k`'s already-completed bookkeeping in a tight loop. The daemon was stopped, the sole completed `anchor_10k` line manually cleared, and the GPU lease was absent. [`rapid_daemon.ps1`](../../tools/stereo-upmix-render/pc/rapid_daemon.ps1) now explicitly writes an empty queue file when no lines remain. No train or stem-harness process was active when the line was cleared. The daemon is currently stopped; relaunch it only for a new rapid job. The CPU-only oracle renderer probe may now run.
+
 ---
 
 ## 📍 What to do next (review 16's order)

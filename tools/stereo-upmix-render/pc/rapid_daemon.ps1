@@ -36,6 +36,9 @@ while ($true) {
     Remove-Item Env:\CUDA_VISIBLE_DEVICES -ErrorAction SilentlyContinue
   }
   ("done $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')") | Add-Content "$O\job.txt"
-  $now = @(Get-Content $Q -ErrorAction SilentlyContinue); $now | ? { $_ -ne $job } | Set-Content $Q
+  $now = @(Get-Content $Q -ErrorAction SilentlyContinue)
+  $remaining = @($now | Where-Object { $_ -ne $job })
+  if ($remaining.Count -eq 0) { [System.IO.File]::WriteAllText($Q, '') }
+  else { Set-Content -Path $Q -Value $remaining }
   Invoke-Expression "python `"$T\rapid_board.py`" `"$RD`" > `"$RD\board.log`" 2>&1"
 }
