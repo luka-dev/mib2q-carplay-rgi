@@ -14,14 +14,24 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("cache", type=Path)
     p.add_argument("checkpoint", type=Path)
+    p.add_argument("--split", choices=("train", "dev", "pseudo"), default="dev")
+    p.add_argument("--songs", type=int, default=12)
+    p.add_argument("--teacher-cache", type=Path, help="four-stem teacher cache, required for --split pseudo")
     a = p.parse_args()
     torch, net, dev = SN.load(str(a.checkpoint))
     if net.mask_mode != "role_softmax":
         p.error("checkpoint is not a four-role model")
-    split = MN.load_split(str(a.cache))
-    paths = [a.cache / (song + ".npy") for song in split["dev"][:12]]
+    if a.split == "pseudo":
+        if a.teacher_cache is None:
+            p.error("--split pseudo requires --teacher-cache")
+        paths = sorted(a.teacher_cache.glob("*.npy"))[:a.songs]
+    else:
+        split = MN.load_split(str(a.cache))
+        paths = [a.cache / (song + ".npy") for song in split[a.split][:a.songs]]
+    print(f"split={a.split} songs={len(paths)}")
     rows = {role: [] for role in ("vocal", "drums", "bass", "eligible")}
     emitted = []
+    aucs = []
     for path in paths:
         N = MN.npy_header(str(path))[0][2]
         n = min(20 * SN.SR, N)
@@ -45,6 +55,14 @@ def main():
                                        float(prediction[..., 3][confident].mean()),
                                        float(target[..., 3][confident].mean()),
                                        float(confident.float().mean())))
+            positive = (target[..., 3] >= 0.8) & audible
+            negative = (target[..., :3].max(-1).values >= 0.8) & audible
+            if positive.any() and negative.any():
+                pos = prediction[..., 3][positive].cpu().numpy()
+                neg = np.sort(prediction[..., 3][negative].cpu().numpy())
+                lo = np.searchsorted(neg, pos, side="left")
+                hi = np.searchsorted(neg, pos, side="right")
+                aucs.append(float(np.mean((lo + hi) / (2 * len(neg)))))
             emitted.append((float(((prediction[..., 3] > 0.8) & audible).float().mean()),
                             float(((prediction[..., 3] < 0.2) & audible).float().mean()),
                             float(((target[..., 3] > 0.8) & audible).float().mean()),
@@ -58,6 +76,9 @@ def main():
     med = np.median(emitted, axis=0)
     print(f"eligible confident/suppressed cell coverage predicted={med[0]:.3f}/{med[1]:.3f} "
           f"target={med[2]:.3f}/{med[3]:.3f}")
+    if aucs:
+        print(f"eligible-vs-protected confident-cell AUC median={np.median(aucs):.3f} "
+              f"range={min(aucs):.3f}..{max(aucs):.3f} songs={len(aucs)}")
 
 
 if __name__ == "__main__":

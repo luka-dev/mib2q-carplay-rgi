@@ -361,6 +361,31 @@ def loss_role_ce(torch, logits, E, V, D, B, floor_rel=3e-3):
     return ((ce * weight).sum(dim=(1, 2)) / weight.sum(dim=(1, 2)).clamp_min(1e-8)).mean()
 
 
+def loss_role_focus(torch, logits, E, V, D, B, floor_rel=3e-3, purity=0.8):
+    """Equal-role CE on source-dominant audible cells, including rare eligible cells.
+
+    The ordinary soft role CE and audio losses still train mixed cells. This
+    extra term only tests whether underweighted confident examples explain the
+    role head's flat eligible output; it does not change the causal graph.
+    """
+    power = torch.stack([(s.abs() ** 2).sum(-1) for s in (V, D, B, E)], -1).detach()
+    total = power.sum(-1)
+    fraction, owner = (power / total.clamp_min(1e-8)[..., None]).max(-1)
+    floor = (floor_rel ** 2 * total.mean(dim=(1, 2), keepdim=True)).clamp_min(1e-8)
+    audible = total > floor
+    cell_loss = -torch.log_softmax(logits, -1).gather(-1, owner[..., None]).squeeze(-1)
+    weight = total.clamp_min(floor).pow(0.25)
+    role_losses = []
+    for role in range(4):
+        chosen = (owner == role) & (fraction >= purity) & audible
+        weighted = weight * chosen
+        if bool(chosen.any()):
+            role_losses.append((cell_loss * weighted).sum() / weighted.sum().clamp_min(1e-8))
+    if not role_losses:
+        return logits.sum() * 0
+    return sum(role_losses) / len(role_losses)
+
+
 def loss_audio(torch, est, tgt, mix=None, floor_rel=None, scale=1.0):
     """L1 on the magnitude STFT (linear; or, with `mix` + `floor_rel`, log with a floor relative to the mixture's
     mean |X| per window and channel, times `scale`) + 0.5 L1 on the complex STFT (unchanged in both modes)."""
@@ -441,7 +466,7 @@ def train(a):
     import itertools
     counter = itertools.count(start)                            # astra 13: one RNG shared by the prefetch threads was not reproducible
     batches = MN.prefetch(lambda: windows(torch, tracks, a.seconds, a.batch, np.random.default_rng([a.seed, next(counter)]),
-                                        with_vocal=a.attr > 0, with_sources=a.source_attr > 0 or a.role_ce > 0))
+                                        with_vocal=a.attr > 0, with_sources=a.source_attr > 0 or a.role_ce > 0 or a.role_focus > 0))
     if STATS["mean"] is None:
         with torch.no_grad():
             lm = torch.cat([torch.log(stft(torch, next(batches)[0].to(dev)).abs() + 1e-5).flatten() for _ in range(4)])
@@ -463,9 +488,13 @@ def train(a):
             if a.source_attr > 0:
                 loss = loss + a.source_attr * loss_source_attr(
                     torch, net.last_mask, Tt, stft(torch, bt[2]), stft(torch, bt[3]), stft(torch, bt[4]))
+            if a.role_ce > 0 or a.role_focus > 0:
+                V, D, B = (stft(torch, bt[2]), stft(torch, bt[3]), stft(torch, bt[4]))
             if a.role_ce > 0:
                 loss = loss + a.role_ce * loss_role_ce(
-                    torch, net.role_logits, Tt, stft(torch, bt[2]), stft(torch, bt[3]), stft(torch, bt[4]))
+                    torch, net.role_logits, Tt, V, D, B)
+            if a.role_focus > 0:
+                loss = loss + a.role_focus * loss_role_focus(torch, net.role_logits, Tt, V, D, B)
             if a.arch == "band":
                 est_wav = istft(torch, Est, mix.shape[-1])
                 loss = loss + multires_loss(torch, est_wav, elig, mix if log_loss else None, a.loss_floor if log_loss else None, a.loss_scale)
@@ -546,6 +575,8 @@ def main():
                    help="weight of eligible retention plus separate vocal/drum/bass transmission loss (0 = off)")
     t.add_argument("--role-ce", type=float, default=0.0,
                    help="weight of four-role stem-power cross entropy (requires --mask role_softmax; 0 = off)")
+    t.add_argument("--role-focus", type=float, default=0.0,
+                   help="extra equal-role CE on >=80%% pure audible cells; requires --mask role_softmax")
     t.add_argument("--loss", default="lin", choices=("lin", "log"), help="magnitude terms: linear L1 (default) or log-magnitude L1 with a relative floor")
     t.add_argument("--loss-floor", type=float, default=3e-3, help="--loss log: floor relative to the mixture's mean |X| per window and channel (3e-3 = -50 dB)")
     t.add_argument("--loss-scale", type=float, default=1.0, help="--loss log: fixed factor on the magnitude bundle (calibrate with diag_lossfloor.py)")
@@ -553,10 +584,10 @@ def main():
     s = sub.add_parser("separate"); s.add_argument("--model", required=True); s.add_argument("--wav", required=True); s.add_argument("--out", required=True)
     a = ap.parse_args()
     if a.cmd == "train":
-        if min(a.attr, a.source_attr, a.role_ce) < 0 or sum(v > 0 for v in (a.attr, a.source_attr, a.role_ce)) > 1:
+        if min(a.attr, a.source_attr, a.role_ce, a.role_focus) < 0 or sum(v > 0 for v in (a.attr, a.source_attr, a.role_ce)) > 1:
             ap.error("--attr, --source-attr and --role-ce must be nonnegative and at most one can be active")
-        if (a.mask == "role_softmax") != (a.role_ce > 0):
-            ap.error("--mask role_softmax requires --role-ce, and --role-ce requires --mask role_softmax")
+        if (a.mask == "role_softmax") != (a.role_ce > 0 or a.role_focus > 0):
+            ap.error("--mask role_softmax requires --role-ce or --role-focus, and these require --mask role_softmax")
         global TRUTH_FRAC
         TRUTH_FRAC = a.truth_frac
         a.save_at = {int(x) for x in a.save_at.split(",") if x.strip()}
