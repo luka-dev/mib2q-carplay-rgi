@@ -181,7 +181,7 @@ stateDiagram-v2
 
 | Item | State | Where |
 | --- | --- | --- |
-| sep9 (`--lookahead 8`, 85 ms) | Training, 10k: −0.98 dB; renders at G 1.0 / 1.3 after 40k (≈07:00) | `D:\upmix\runs\sep9\` |
+| sep9 (`--lookahead 8`, 85 ms) | **Done:** best −0.63 dB; renderer G 1.0 voice 0.03 / guitars 0.10 / keys 0.11 / 4/39 — same frontier, lookahead does not help | `D:\upmix\runs\sep9\` |
 | Rapid queue | `sharedmask` (finished, line clears), `sharedmask_10k`, `anchor_10k` (≈09:00) | `D:\upmix\runs\rapid\` |
 | Paused by review 16 | sep9c (`--dec-skip`, the L = 0 control), sep10 (`--bidir`), sep11/sep12 (`--norm stream`, gated), `attr` (fixed), `sharedmask_log` | Relaunch notes in `D:\upmix\runs\rapid\PAUSED.txt` |
 | Local background pollers (Mac) | Poll `sep9\DONE` and the board; harmless if left | — |

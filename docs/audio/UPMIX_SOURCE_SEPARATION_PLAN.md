@@ -1025,6 +1025,10 @@ The owner asked for a fast loop with a trustworthy reference point. My design (4
 
 **Built from this review:** `rapid_daemon.ps1` (a queue file of `tag|args` jobs; holds `D:\upmix\runs\GPU_LEASE` while jobs are queued — the long runners wait on it — trains 4k with the full recipe and `--save-at 4000`, runs the attribution and transition diagnostics on the GPU, releases the GPU, runs the frozen 20-song screen on the CPU, and rebuilds the leaderboard with `rapid_board.py`), the anchor (`anchor_s1`, `anchor_s2` = second seed), and the context rows (teacher, oracle, IRM, sep3 best) on the same 20-song screen.
 
+### sep9 result (lookahead 8 = 85 ms, 28.09 06:40)
+
+sep3's backbone + 8-frame output delay + the frame's own band embedding into the decoder (784k params, 144 M MAC/s), sep3's loss. SI-SDR −1.20 / −0.98 / −0.94 / −0.65 / −0.68 at 3k / 10k / 20k / 30k / 40k, best −0.63 at 29k, vocal leak 0.10–0.13. **Renderer G 1.0: voice 0.03, guitars 0.10, keys 0.11, bass 0.06, drums 0.09, 4/39 swinging, level −38.6, error 0.14; G 1.3: voice 0.04, guitars 0.16, keys 0.16, 14/39.** The same frontier as sep3 / sep5 / sep7: 85 ms of future evidence does not move the plateau or the renderer. The decoder-matched control (sep9c) and the bidirectional twin (sep10) stay paused per review 16 — with no gain over sep3 there is nothing for the control to attribute.
+
 ## 🛑 Review 16 (astra, "just training separators is so-so" — 2026-09-28 05:00)
 
 Verdict: **stop broad separator training for 2–3 days.** Five controlled runs gave no useful jump, several exceed the budget, and vocal transitions still move the instruments; the shared-mask result matters because it changes the *failure mechanism* (stability), not because it separates better. Next, in order:
