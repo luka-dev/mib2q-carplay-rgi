@@ -49,7 +49,8 @@ def main():
                 r = dict(mix=sd(mix), st=sd(y), mag=sd(ymag), irm=sd(yirm),
                          rec=float(Ye2.sum() / E2.sum()), rec_d=float((Ye2 * edom).sum() / (E2 * edom).sum().clamp(min=1e-9)),
                          vl=float(Yv2.sum() / V2.sum().clamp(min=1e-9)), vl_o=float((Yv2 * vown).sum() / (V2 * vown).sum().clamp(min=1e-9)),
-                         pl=float(Yp2.sum() / P2.sum()), c_e=float(edom.float().mean()), c_v=float(vown.float().mean()))
+                         pl=float(Yp2.sum() / P2.sum()), c_e=float(edom.float().mean()), c_v=float(vown.float().mean()),
+                         irm_vl=float((A(irm * V).abs() ** 2).sum() / V2.sum().clamp(min=1e-9)), irm_rec=float((A(irm * E).abs() ** 2).sum() / E2.sum()))
                 for gi, (a, b) in enumerate(GROUPS):
                     tx[gi] += float(Ye2[:, :, a:b].sum()); te[gi] += float(E2[:, :, a:b].sum())
                     m = edom[:, :, a:b]
@@ -58,7 +59,7 @@ def main():
             for k, v in r.items(): med.setdefault(k, []).append(v)
             print(f"{os.path.basename(p)[:12]} {r['mix']:+6.2f} {r['st']:+7.2f} {r['mag']:+8.2f} {r['irm']:+7.2f} | {r['rec']:5.2f} {r['rec_d']:5.2f}      | {r['vl']:5.3f} {r['vl_o']:5.3f}    | {r['pl']:5.3f} | {r['c_e']:5.2f} {r['c_v']:5.2f}", flush=True)
         m = {k: float(np.median(v)) for k, v in med.items()}
-        print(f"MEDIAN       {m['mix']:+6.2f} {m['st']:+7.2f} {m['mag']:+8.2f} {m['irm']:+7.2f} | {m['rec']:5.2f} {m['rec_d']:5.2f}      | {m['vl']:5.3f} {m['vl_o']:5.3f}    | {m['pl']:5.3f} | {m['c_e']:5.2f} {m['c_v']:5.2f}")
+        print(f"MEDIAN       {m['mix']:+6.2f} {m['st']:+7.2f} {m['mag']:+8.2f} {m['irm']:+7.2f} | {m['rec']:5.2f} {m['rec_d']:5.2f}      | {m['vl']:5.3f} {m['vl_o']:5.3f}    | {m['pl']:5.3f} | {m['c_e']:5.2f} {m['c_v']:5.2f}   (IRM reference: recall {m['irm_rec']:.2f}, vocal leak {m['irm_vl']:.3f})")
         print("band: transmitted eligible fraction (energy-weighted, dB) / cell-weighted bias on eligible-dominant cells (dB): " +
               "  ".join(f"{nm} {10 * np.log10(tx[i] / max(te[i], 1e-12)):+.1f}/{bias[i] / max(bcount[i], 1):+.1f}" for i, nm in enumerate(NAMES)))
 
