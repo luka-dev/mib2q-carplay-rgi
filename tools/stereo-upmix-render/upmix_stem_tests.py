@@ -295,6 +295,12 @@ def analyse_song(render, args, out, track_dir, excerpt_s, mask_model=None, oracl
         extra = protect_mask_args(src, out, tag, mask_model) if mask_model else \
             oracle_mask_args(stems, k, out, tag) if oracle else []
     try:
+        # An interrupted render may leave an incomplete destination. On the
+        # PC's WinBtrfs volume, stat() can report identical inode numbers for
+        # distinct existing WAV paths and trip the host renderer's same-file
+        # guard. Only the output in this run directory is safe to replace.
+        if os.path.exists(dst):
+            os.remove(dst)
         subprocess.run(render.split() + args + extra + [src, dst], check=True,   # a command line (no spaces in our paths)
                        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         out6 = T.read_wav6(dst)
