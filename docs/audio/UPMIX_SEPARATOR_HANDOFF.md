@@ -185,13 +185,35 @@ stateDiagram-v2
 ## 📍 What to do next (review 16's order)
 
 1. **Read the leftovers, do not extend them.** sep9 at 40k through the renderer against sep3 and sep5; the 10k pair against its anchor. sharedmask goes to 40k only if, against the 10k anchor, instruments in the rear are not worse, depth-follows-level and ducking are better, and bass and voice did not rise.
-2. **Prepare the blind listening kit** for the owner: 8–10 excerpts (vocal entries/exits, sustained instrumentals, dense choruses, exposed vocals, some outside DEV) rendered to 6-channel WAV in four conditions (front-only, Track A's deployable, sharedmask, teacher), level-matched, labels shuffled, a score sheet with the four questions. The owner plays it in the car; you do not touch the head unit.
+2. **Prepare the listening test** (see *Where to look*): in the car it runs **live through CarPlay** — front-only vs Track A's deployable, switched by config on the head unit, same songs from the phone, a score sheet with the four questions. The shared-mask student and the teacher are compared on a headphone preview until a student is ported into the hook (Track A's call). You do not restart the head unit.
 3. **Persistent rear membership in a controller** (coordinate with Track A — it owns `hook/audio`): membership (slow, hysteresis, dwell, conservative admission) separated from protection (fast). Prototype offline in the renderer or in Python first; log membership changes and eligible-audio loss separately.
 4. **Optimise the product directly:** 10–30 controller parameters by bounded search / CMA-ES against `upmix_render_inj.exe` on the 20-song screen, constrained (voice, bass, drums, stability) and maximising instrument delivery across families with a minimum useful rear level; validate on the 20 untouched DEV songs.
 5. **Oracle-cue upper bound:** ground-truth vocal / drum / bass cues driving the same controller. Train small causal cue estimators only if this succeeds.
 6. **Profile the head unit** (half a day, with the owner): deadline misses, memory traffic, thermals, latency — before planning beyond 150 M MAC/s.
 
 Resume separator training only when these identify a specific missing capability (review 16).
+
+---
+
+## 🧭 Where to look — before you ask
+
+| Question | Answer / where |
+| --- | --- |
+| **How is the listening test played in the car?** | **Through CarPlay, live.** The phone streams ordinary stereo (realtime `lpcm` 48 kHz/16/2 on `mpl5_dio_ent`); the hook on the head unit upmixes it to 5.1 itself (`AUDIO_REALTIME_UPMIX=on`). So a candidate is a **renderer build + config on the head unit**, and the owner plays the same songs from the phone for each. No 6-channel WAV playback is needed. See [Stereo to 5.1 Upmix](STEREO_TO_5_1_UPMIX.md), [Dolby Atmos](DOLBY_ATMOS.md) (realtime = PCM passthrough) |
+| Which candidates can play live today? | **Front-only** (`AUDIO_STEREO_UPMIX=off`) and **Track A's deployable** (the shipped config). The shared-mask student and the teacher do **not** run on the head unit: the student needs a port into the hook (coordinate with Track A, which owns `hook/audio`), the teacher never will (non-causal, ~100× budget). For those two, use an offline headphone preview (below), clearly labelled "not the car chain" |
+| How do I switch a candidate on the unit? | Env in `deploy/smartphone_integrator/carplay_startup.sh` (the shipped table: [Upmix Calibration and Tuning](UPMIX_CALIBRATION_AND_TUNING.md), [Stereo to 5.1 Upmix — shipped calibration](STEREO_TO_5_1_UPMIX.md#-the-shipped-calibration)); files go to `/mnt/app/root/hooks/` and take effect on the **next phone connect** — no restart. **Never restart the unit or j9 yourself** |
+| How do I copy files to the head unit? | Traps and the working method: `scripts/deploy_unit.sh`, memory note on SSH transport (no `scp`/`tar` on QNX; `ssh 'cat > f.new' < local` + `mv`, read back and compare; ControlMaster to dodge the auth rate limit; `/mnt/app` needs `mount -uw`; `/tmp` holds no directories). Deploy history and hashes: [Upmix Listening and Deploy Log](UPMIX_LISTENING_AND_DEPLOY_LOG.md) |
+| Why not `qsa_play` a 6-channel file? | It sets no SAD header and inherits the last session's mask — it misled a two-day search. **Verify audio through CarPlay, never with `qsa_play`** ([Landmines](../LANDMINES.md), [QNX Audio Topology](QNX_AUDIO_TOPOLOGY.md)) |
+| How were earlier A/B tests done? | Headphone previews of offline renders (21.09: four 60-s cuts, seven variants) then a sighted in-car confirmation; all by the owner, none blind ([Upmix Listening and Deploy Log](UPMIX_LISTENING_AND_DEPLOY_LOG.md)). Preview tools: `tools/stereo-upmix-render/render_q2_listen.py`, `q5_hssr_ab.py` (crude, not the cabin) |
+| Does the car / amp chain matter for what the owner hears? | Yes: the B&O J525 is the renderer after us. [Virtual Cabin and Amp RE](VIRTUAL_CABIN_AND_AMP_RE.md), [J525 Wiring and Speakers](J525_WIRING_AND_SPEAKERS.md), [Discrete 5.1 Routing](DISCRETE_5_1_ROUTING.md); the input matrix is output-rows / input-columns ([Landmines](../LANDMINES.md)) |
+| What is the renderer and its knobs? | [HSSR Model](HSSR_MODEL.md), [Stereo to 5.1 Upmix](STEREO_TO_5_1_UPMIX.md), [Upmix Calibration and Tuning](UPMIX_CALIBRATION_AND_TUNING.md), [Upmix Compute Budget](UPMIX_COMPUTE_BUDGET.md); C sources `hook/audio/hssr_dsp.c`, host build `tools/stereo-upmix-render/` |
+| What does Track A have in the car? | [Upmix Mask Net Phase 1 Report 2026-09-27](UPMIX_MASK_PHASE1_REPORT_2026-09-27.md) (mask net, drive curve, health line, Krait bench) |
+| The original "back and forth" analysis | [Upmix Stability 2026-09-25](UPMIX_STABILITY_2026-09-25.md) |
+| Data, caches, teachers | [Upmix Datasets and Teachers](UPMIX_DATASETS_AND_TEACHERS.md); training history [Upmix Training History](UPMIX_TRAINING_HISTORY.md) |
+| Every number and review of this track | [Night report](UPMIX_SEPARATOR_NIGHT_REPORT_2026-09-28.md), [the plan](UPMIX_SOURCE_SEPARATION_PLAN.md) (reviews 1–16) |
+| All platform traps | [Landmines](../LANDMINES.md) — read it once, fully |
+
+**What the listening test is, concretely:** the owner in the car, the same 8–10 songs from the phone (vocal entries and exits, sustained instrumentals, dense choruses, exposed vocals), each played with (a) front-only and (b) Track A's deployable, live through CarPlay, level-matched by ear or by the phone-mic check in the deploy log; the owner answers the four questions per song. The shared-mask student and the teacher join only as a headphone preview until the student is ported. Porting a student into the hook is a Track A decision — ask, do not do it.
 
 ---
 
@@ -208,8 +230,8 @@ measured on the device, <= 85 ms extra latency):
   2. Protected stems: voice <= 0.02, bass <= 0.06, drums <= 0.08.
   3. No back-and-forth: <= 5/39 songs swinging (all stems), |depth-follows-level| <= 0.05 for guitar, keys
      and winds, vocal-entry ducking median >= 0.85 and p10 >= 0.60 (diag_transitions, source attribution).
-  4. The owner's blind in-car test (front-only vs Track A vs candidate vs teacher, level-matched, shuffled)
-     rates the candidate "instruments clearly behind, no voice behind, nothing moves when singing starts,
+  4. The owner's in-car test, live through CarPlay (the hook upmixes the phone's stereo; candidates are
+     head-unit configs; front-only vs Track A vs candidate, level-matched), rates the candidate "instruments clearly behind, no voice behind, nothing moves when singing starts,
      would use daily" and prefers it to Track A's current deployable.
 If 1-3 cannot be met on budget after the review-16 plan (listening test, persistent-membership controller,
 CMA-ES against the real renderer, oracle-cue upper bound), stop and deliver instead: the best measured
