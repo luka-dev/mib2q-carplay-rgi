@@ -59,6 +59,27 @@ def main():
             print(f"batch: old bundle {float(old):.4f} |grad| {float(g_old.abs().sum()):.4g} | new (floor {rel:.0e}) {float(new):.4f} |grad| {float(g_new.abs().sum()):.4g} "
                   f"| complex term |grad| {float(g_c.abs().sum()):.4g} | scale old/new {r:.4f}", flush=True)
     print(f"SCALE (median old/new) {np.median(ratios):.4f}  -> --loss-scale {np.median(ratios):.3f}")
+    # (3) astra 13: the output-gradient ratio does not establish equal optimisation pressure - compare the
+    # PARAMETER-gradient L2 norms of the old bundle and of the scaled new bundle on the same batches.
+    # Measured 27.09 23:25: at the output-calibrated 0.007 the new bundle's parameter gradient is 60-400x
+    # smaller than the old bundle's (the 1/f output gradients at near-silent cells are multiplied by |X| ~ 0
+    # on the way to the mask) - the run would have trained on the complex term alone.  So the scale is set
+    # from the PARAMETER gradient: median over batches of |grad_old| / |grad_new at scale 1|.
+    scale = 1.0; pratios = []
+    batches = batches + [SN.windows(torch, tracks, 8.0, 4, rng) for _ in range(4)]
+    for mix, elig in batches:
+        X = SN.stft(torch, mix); Tt = SN.stft(torch, elig)
+        def pgrad(fn):
+            for p in net.parameters(): p.grad = None
+            Est = net.separate_stft(X); fn(Est).backward()
+            return float(torch.sqrt(sum((p.grad ** 2).sum() for p in net.parameters() if p.grad is not None)))
+        g_old = pgrad(lambda Est: (Est.abs() - Tt.abs()).abs().mean() + SN.multires_loss(torch, SN.istft(torch, Est, mix.shape[-1]), elig))
+        g_new = pgrad(lambda Est: SN.loss_audio(torch, Est, Tt, X, 3e-3, scale) - 0.5 * (Est - Tt).abs().mean()
+                      + SN.multires_loss(torch, SN.istft(torch, Est, mix.shape[-1]), elig, mix, 3e-3, scale))
+        g_c = pgrad(lambda Est: 0.5 * (Est - Tt).abs().mean())
+        pratios.append(g_old / g_new)
+        print(f"param-grad L2: old bundle {g_old:.4g} | new bundle at scale 1 {g_new:.4g} (old/new {g_old / g_new:.3f}) | complex term {g_c:.4g}", flush=True)
+    print(f"PARAM-GRAD SCALE (median old/new) {np.median(pratios):.3f}  -> --loss-scale {np.median(pratios):.2f}   (min {min(pratios):.3f} max {max(pratios):.3f})")
 
 
 if __name__ == "__main__":

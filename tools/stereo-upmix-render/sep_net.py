@@ -136,7 +136,7 @@ class BandSepNet:
     frames hold the final mask.  `bidir` (review 12's diagnostic twin): the time GRUs run in both
     directions with half the hidden size per direction (seconds of future context; NOT deployable)."""
 
-    def __init__(self, torch, feat=48, h1=32, h2=32, hg=32, brnn=0, lookahead=0, bidir=False):
+    def __init__(self, torch, feat=48, h1=32, h2=32, hg=32, brnn=0, lookahead=0, bidir=False, dec_skip=False):
         nn = torch.nn
         self.torch = torch
         self.bands = band_edges()
@@ -153,18 +153,20 @@ class BandSepNet:
             self.mix2 = nn.Sequential(nn.Conv1d(h2, h2, 3, padding=1, groups=h2), nn.Conv1d(h2, h2, 1), nn.Tanh())
             cross = [self.mix1, self.mix2]
         self.ggru = nn.GRU(h2, hg // d, batch_first=True, bidirectional=bidir)
-        dec_in = h2 + hg + (feat if lookahead else 0)
+        dec_skip = bool(dec_skip or lookahead)                     # the frame's own band embedding into the decoder
+        dec_in = h2 + hg + (feat if dec_skip else 0)
         self.dec = nn.ModuleList([nn.Linear(dec_in, (b - a) * 4) for a, b in self.bands])
         for d in self.dec:                                     # near attenuation: mask ~ 0.3 + 0i
             nn.init.normal_(d.weight, std=0.01)
             with torch.no_grad():
                 d.bias.zero_(); d.bias.view(-1, 4)[:, 0] = 0.3; d.bias.view(-1, 4)[:, 2] = 0.3
         self.modules = nn.ModuleList([self.enc, self.gru1, self.gru2] + cross + [self.ggru, self.dec])
-        self.feat, self.h1, self.h2, self.hg, self.nbrnn, self.lookahead, self.bidir = feat, h1, h2, hg, brnn, lookahead, bidir
+        self.feat, self.h1, self.h2, self.hg, self.nbrnn, self.lookahead, self.bidir, self.dec_skip = feat, h1, h2, hg, brnn, lookahead, bidir, dec_skip
         nb = len(self.bands)
         cross_macs = (2 * 3 * (h2 * brnn + brnn * brnn) + 2 * brnn * h2) * nb if brnn else 2 * (3 * h2 + h2 * h2) * nb
-        self.macs = (N_BINS * 6 * feat + 3 * (feat * h1 + h1 * h1) * nb + 3 * (h1 * h2 + h2 * h2) * nb
-                     + cross_macs + 3 * (h2 * hg + hg * hg) + N_BINS * 4 * dec_in)
+        rec = lambda i, h: 2 * 3 * (i * (h // 2) + (h // 2) ** 2) if bidir else 3 * (i * h + h * h)   # per direction, half hidden
+        self.macs = (N_BINS * 6 * feat + rec(feat, h1) * nb + rec(h1, h2) * nb
+                     + cross_macs + rec(h2, hg) + N_BINS * 4 * dec_in)
 
     def to(self, dev):
         self.modules.to(dev); return self
@@ -197,15 +199,18 @@ class BandSepNet:
         h = h.reshape(B, T, self.h2, nb)
         g, _ = self.ggru(h.mean(-1))                                             # [B,T,hg]
         L = self.lookahead
-        if L:
-            # output delay: the decoder at step t + L masks frame t, seeing the band state and global state
-            # at t + L plus frame t's own embedding; the last L frames of the stream hold the final mask
-            idx = torch.clamp(torch.arange(T, device=X.device) + L, max=T - 1)
-            z = torch.cat([h.permute(0, 1, 3, 2)[:, idx], g[:, idx, None, :].expand(-1, -1, nb, -1), e], -1)   # [B,T,48,h2+hg+feat]
-        else:
-            z = torch.cat([h.permute(0, 1, 3, 2), g[:, :, None, :].expand(-1, -1, nb, -1)], -1)   # [B,T,48,h2+hg]
+        # output delay: the decoder at step t + L masks frame t, seeing the band and global STATES at t + L (the
+        # last L frames of a stream reuse the final states while e[t] still varies — an end-of-stream convention
+        # the model is trained with; never apply it at ordinary streaming chunk boundaries) plus, with dec_skip,
+        # frame t's own band embedding
+        idx = torch.clamp(torch.arange(T, device=X.device) + L, max=T - 1) if L else slice(None)
+        parts = [h.permute(0, 1, 3, 2)[:, idx], g[:, idx, None, :].expand(-1, -1, nb, -1)]
+        if self.dec_skip:
+            parts.append(e)
+        z = torch.cat(parts, -1)                                                  # [B,T,48,h2+hg(+feat)]
         m = torch.cat([dec(z[:, :, i, :]).reshape(B, T, b - a, 4) for i, (dec, (a, b)) in enumerate(zip(self.dec, self.bands))], 2)
         mask = torch.complex(m[..., 0::2], m[..., 1::2])                          # [B,T,1025,2] complex (L, R)
+        self.last_mask = mask
         return X * mask
 
 
@@ -225,7 +230,7 @@ def multires_loss(torch, est_wav, tgt_wav, mix_wav=None, floor_rel=None, scale=1
             total = total + (torch.log1p(E.abs()) - torch.log1p(Tg.abs())).abs().mean()
         else:
             M = torch.stft(mix_wav.reshape(-1, mix_wav.shape[-1]), n_fft, hop, window=win, return_complex=True).abs()
-            fl = (floor_rel * M.mean(dim=(1, 2), keepdim=True)).detach()              # per (window, channel)
+            fl = (floor_rel * M.mean(dim=(1, 2), keepdim=True)).detach().clamp_min(1e-7)   # per (window, channel); astra 13: silence -> log(0)-log(0) = NaN
             total = total + (torch.log(E.abs() + fl) - torch.log(Tg.abs() + fl)).abs().mean()
     return scale * total / 3
 
@@ -256,7 +261,7 @@ def loss_audio(torch, est, tgt, mix=None, floor_rel=None, scale=1.0):
     if floor_rel is None:
         mag = (est.abs() - tgt.abs()).abs().mean()
     else:
-        fl = (floor_rel * mix.abs().mean(dim=(1, 2), keepdim=True)).detach()          # [B,1,1,2]
+        fl = (floor_rel * mix.abs().mean(dim=(1, 2), keepdim=True)).detach().clamp_min(1e-7)   # [B,1,1,2]
         mag = (torch.log(est.abs() + fl) - torch.log(tgt.abs() + fl)).abs().mean()
     return scale * mag + 0.5 * (est - tgt).abs().mean()
 
@@ -302,7 +307,7 @@ def train(a):
         tracks += [os.path.join(a.teacher_cache, f) for f in sorted(os.listdir(a.teacher_cache))
                    if f.endswith(".npy") and os.path.exists(os.path.join(a.teacher_cache, f[:-4] + ".json"))]
     dev_tracks = [os.path.join(a.cache, t + ".npy") for t in split["dev"]]
-    net = (BandSepNet(torch, feat=a.feat, h1=a.h1, h2=a.h2, hg=a.bhg, brnn=a.band_rnn, lookahead=a.lookahead, bidir=a.bidir) if a.arch == "band" else SepNet(torch, ht=a.ht, hg=a.hg, dec=a.dec)).to(dev)
+    net = (BandSepNet(torch, feat=a.feat, h1=a.h1, h2=a.h2, hg=a.bhg, brnn=a.band_rnn, lookahead=a.lookahead, bidir=a.bidir, dec_skip=a.dec_skip) if a.arch == "band" else SepNet(torch, ht=a.ht, hg=a.hg, dec=a.dec)).to(dev)
     if a.teacher_cache and a.half_half:
         tracks = (tracks[:len(split["train"])], tracks[len(split["train"]):])      # (truth, pseudo-labels)
         print(f"half/half batches: {len(tracks[0])} truth songs, {len(tracks[1])} pseudo-labelled", flush=True)
@@ -315,20 +320,25 @@ def train(a):
     warm = torch.optim.lr_scheduler.LinearLR(opt, start_factor=0.05, total_iters=a.warmup)
     cos = torch.optim.lr_scheduler.CosineAnnealingLR(opt, max(1, a.steps - a.warmup))
     sched = torch.optim.lr_scheduler.SequentialLR(opt, [warm, cos], milestones=[a.warmup])
+    best = -1e9
     if a.init:
         ck = torch.load(a.init, map_location=dev)
         net.modules.load_state_dict(ck["state"]); STATS.update(ck["stats"])
         if ck.get("opt"): opt.load_state_dict(ck["opt"])
         start = ck.get("step", 0)
-        for _ in range(start): sched.step()
-        print(f"resumed at step {start}", flush=True)
+        if ck.get("sched"):                                    # astra 13: replaying the warm-up gave 10x the LR at 1k
+            sched.load_state_dict(ck["sched"])
+        else:
+            for _ in range(start): sched.step()
+        best = ck.get("best", best)                            # astra 13: -1e9 let the next eval overwrite a better checkpoint
+        print(f"resumed at step {start}, best so far {best:.2f}, lr {opt.param_groups[0]['lr']:.2e}", flush=True)
     batches = MN.prefetch(lambda: windows(torch, tracks, a.seconds, a.batch, rng))
     if STATS["mean"] is None:
         with torch.no_grad():
             lm = torch.cat([torch.log(stft(torch, next(batches)[0].to(dev)).abs() + 1e-5).flatten() for _ in range(4)])
             STATS["mean"], STATS["std"] = float(lm.mean()), float(lm.std() + 1e-3)
     print(f"log-mag stats mean {STATS['mean']:.2f} std {STATS['std']:.2f}", flush=True)
-    best = -1e9; t0 = time.time()
+    t0 = time.time()
     for step in range(start + 1, a.steps + 1):
         opt.zero_grad()
         for _ in range(a.accum):                                   # gradient accumulation: batch = a.batch x a.accum
@@ -351,8 +361,8 @@ def train(a):
                     f"vocal_leak {met['vocal_leak']:.3f}  {time.time() - t0:.0f}s")
             print(line, flush=True)
             ck = {"state": net.modules.state_dict(), "stats": dict(STATS), "step": step, "dev": met,
-                  "ht": a.ht, "hg": a.hg, "dec": a.dec, "arch": a.arch, "feat": a.feat, "h1": a.h1, "h2": a.h2, "bhg": a.bhg, "brnn": a.band_rnn, "lookahead": a.lookahead, "bidir": a.bidir}
-            torch.save({**ck, "opt": opt.state_dict()}, os.path.join(a.out, "last.pt"))
+                  "ht": a.ht, "hg": a.hg, "dec": a.dec, "arch": a.arch, "feat": a.feat, "h1": a.h1, "h2": a.h2, "bhg": a.bhg, "brnn": a.band_rnn, "lookahead": a.lookahead, "bidir": a.bidir, "dec_skip": a.dec_skip}
+            torch.save({**ck, "opt": opt.state_dict(), "sched": sched.state_dict(), "best": max(best, met["si_sdr"])}, os.path.join(a.out, "last.pt"))
             score = met["si_sdr"]                    # sep1's leak-penalised score picked a near-silent checkpoint
             if score > best:
                 best = score; torch.save(ck, os.path.join(a.out, "sep_net.pt"))
@@ -363,7 +373,7 @@ def train(a):
 def load(model_path):
     torch = _torch(); dev = "cuda" if torch.cuda.is_available() else "cpu"
     ck = torch.load(model_path, map_location=dev)
-    net = (BandSepNet(torch, feat=ck.get("feat", 48), h1=ck.get("h1", 32), h2=ck.get("h2", 32), hg=ck.get("bhg", 32), brnn=ck.get("brnn", 0), lookahead=ck.get("lookahead", 0), bidir=ck.get("bidir", False)) if ck.get("arch") == "band"
+    net = (BandSepNet(torch, feat=ck.get("feat", 48), h1=ck.get("h1", 32), h2=ck.get("h2", 32), hg=ck.get("bhg", 32), brnn=ck.get("brnn", 0), lookahead=ck.get("lookahead", 0), bidir=ck.get("bidir", False), dec_skip=ck.get("dec_skip", False)) if ck.get("arch") == "band"
            else SepNet(torch, ht=ck.get("ht", 16), hg=ck.get("hg", 64), dec=ck.get("dec", 24))).to(dev)
     net.modules.load_state_dict(ck["state"]); net.modules.eval(); STATS.update(ck["stats"])
     return torch, net, dev
@@ -401,6 +411,7 @@ def main():
     t.add_argument("--band-rnn", type=int, default=0, help="band model: hidden size of a bidirectional GRU across the bands (0 = the depthwise mixers)")
     t.add_argument("--lookahead", type=int, default=0, help="band model: frames of future context (output delay; 8 = 85 ms)")
     t.add_argument("--bidir", action="store_true", help="band model: bidirectional time GRUs (the non-causal diagnostic twin)")
+    t.add_argument("--dec-skip", action="store_true", help="band model: the frame's own band embedding into the decoder (implied by --lookahead; alone = the L=0 control)")
     t.add_argument("--loss", default="lin", choices=("lin", "log"), help="magnitude terms: linear L1 (default) or log-magnitude L1 with a relative floor")
     t.add_argument("--loss-floor", type=float, default=3e-3, help="--loss log: floor relative to the mixture's mean |X| per window and channel (3e-3 = -50 dB)")
     t.add_argument("--loss-scale", type=float, default=1.0, help="--loss log: fixed factor on the magnitude bundle (calibrate with diag_lossfloor.py)")
