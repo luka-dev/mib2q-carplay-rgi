@@ -22,8 +22,10 @@ POINTS = {
     "baseline": [],
     "rear_body0": ["--rear-body", "0"],
     "rear_air_off": ["--rear-air", "-40"],
+    "rear_air_off_gain0427": ["--rear-air", "-40", "--surround", "0.427"],
     "front_retention025": ["--front-retention", "0.25"],
     "front_retention075": ["--front-retention", "0.75"],
+    "front_retention070": ["--front-retention", "0.70"],
 }
 CHECK_FIELDS = ("median_rear", "range_1s")
 

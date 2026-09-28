@@ -14,7 +14,7 @@ New-Item -ItemType Directory -Force $O | Out-Null
 Copy-Item "$R\oracle_renderer_probe\manifest.json" "$O\manifest.json" -Force
 $env:CUDA_VISIBLE_DEVICES = '-1'
 Set-Location $T
-python "$T\oracle_renderer_sweep.py" --render "$T\upmix_render_inj.exe" `
+python "$T\oracle_renderer_sweep.py" --render "$T\upmix_render_mask_v21a.exe" `
     --model "$T\hssr_model.bin" --guard "$T\hssr_guard.bin" `
     --moisesdb 'D:\upmix\datasets\moisesdb\moisesdb_v0.1' --probe $O `
     --source production --mask-bin "$T\hssr_mask_tracka_v21a.bin" `

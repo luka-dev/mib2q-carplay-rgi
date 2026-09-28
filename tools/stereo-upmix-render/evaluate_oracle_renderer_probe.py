@@ -63,9 +63,13 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--probe", type=Path, required=True)
     p.add_argument("--scope", choices=("probe", "full40", "test20", "production20"), default="probe")
+    p.add_argument("--points", help="comma-separated conditions beginning with baseline; defaults to the frozen screen")
+    p.add_argument("--out", type=Path, help="decision JSON path; defaults to PROBE/decision.json")
     a = p.parse_args()
     manifest = json.loads((a.probe / "manifest.json").read_text(encoding="utf-8"))
-    points = PROBE_POINTS if a.scope == "probe" else FULL40_POINTS
+    points = tuple(x.strip() for x in a.points.split(",")) if a.points else (PROBE_POINTS if a.scope == "probe" else FULL40_POINTS)
+    if len(points) < 2 or points[0] != "baseline" or len(points) != len(set(points)):
+        p.error("--points needs baseline followed by distinct variants")
     raw = {name: read(a.probe / name / "stems.csv") for name in points}
     summaries = {name: summary(rows) for name, rows in raw.items()}
     base = summaries["baseline"]
@@ -95,7 +99,7 @@ def main():
              "production20": "enriched 20-song DEV mechanism screen with frozen Track A mask and no oracle injection; not an independent product validation"}[a.scope]
     report = dict(scope=scope,
                   baseline=base, variants=results)
-    (a.probe / "decision.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    (a.out or a.probe / "decision.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     for name, item in results.items():
         failed = [key for key, ok in item["gates"].items() if not ok]
         print(f"{name}: swing {len(base['swings'])}->{len(item['summary']['swings'])}, "
