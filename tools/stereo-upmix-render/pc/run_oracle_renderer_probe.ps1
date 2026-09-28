@@ -22,7 +22,8 @@ $common = "--render $T\upmix_render_inj.exe --model $T\hssr_model.bin --guard $T
 $points = @(
     @{ Tag = 'rear_body0'; Extra = '--mask-drive 1.0 --rear-body 0' },
     @{ Tag = 'rear_air_off'; Extra = '--mask-drive 1.0 --rear-air -40' },
-    @{ Tag = 'front_retention025'; Extra = '--mask-drive 1.0 --front-retention 0.25' }
+    @{ Tag = 'front_retention025'; Extra = '--mask-drive 1.0 --front-retention 0.25' },
+    @{ Tag = 'front_retention075'; Extra = '--mask-drive 1.0 --front-retention 0.75' }
 )
 foreach ($point in $points) {
     $out = "$O\$($point.Tag)"
