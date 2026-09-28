@@ -28,6 +28,8 @@ A knob deserves a full-40 rerender only if it resolves **at least three of the e
 
 If one passes, rerender the original 40 and the untouched 20 DEV songs with exactly the selected setting. The full goal still requires causal ≤ 150 M MAC/s int8 measured on the unit, ≤ 85 ms extra latency, source-attributed vocal-entry ducking, and the owner's blind live-CarPlay preference. An oracle-audio knob screen alone proves none of those deployment or listening gates.
 
+[`evaluate_oracle_renderer_probe.py`](../../tools/stereo-upmix-render/evaluate_oracle_renderer_probe.py) applies this gate to complete CSVs and writes `decision.json`. A self-comparison using the frozen baseline as every condition correctly reported 8 → 8 swings and rejected all four variants for resolving none; the actual variants were still running at that check.
+
 ## Result
 
 Pending. The CPU screen started only after the 10k rapid queue had drained.

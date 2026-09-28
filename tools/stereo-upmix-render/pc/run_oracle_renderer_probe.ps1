@@ -20,3 +20,5 @@ python "$T\oracle_renderer_sweep.py" --render "$T\upmix_render_inj.exe" `
     --model "$T\hssr_model.bin" --guard "$T\hssr_guard.bin" `
     --moisesdb 'D:\upmix\datasets\moisesdb\moisesdb_v0.1' --probe $O
 if ($LASTEXITCODE -ne 0) { throw "Oracle renderer screen failed; inspect $O and resume the same command" }
+python "$T\evaluate_oracle_renderer_probe.py" --probe $O
+if ($LASTEXITCODE -ne 0) { throw "Oracle renderer decision gate failed; inspect $O" }
