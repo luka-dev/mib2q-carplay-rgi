@@ -195,6 +195,34 @@ Resume separator training only when these identify a specific missing capability
 
 ---
 
+## 🎯 Goal for the next agent
+
+```text
+/goal Make the CarPlay stereo->5.1 upmix's rear confident and stable in the owner's Audi, and prove it by ear.
+
+DONE when ALL of these hold on the full harness (40 DEV MoisesDB songs x 60 s, real C renderer, stable gain)
+AND on the 20 untouched DEV songs, for a candidate that fits the head unit (causal, <= 150 M MAC/s int8
+measured on the device, <= 85 ms extra latency):
+  1. Instruments in the rear: guitar >= 0.15, keys >= 0.15, piano >= 0.10, strings >= 0.14 rear share
+     (teacher reference: 0.19 / 0.14 / 0.13 / 0.16).
+  2. Protected stems: voice <= 0.02, bass <= 0.06, drums <= 0.08.
+  3. No back-and-forth: <= 5/39 songs swinging (all stems), |depth-follows-level| <= 0.05 for guitar, keys
+     and winds, vocal-entry ducking median >= 0.85 and p10 >= 0.60 (diag_transitions, source attribution).
+  4. The owner's blind in-car test (front-only vs Track A vs candidate vs teacher, level-matched, shuffled)
+     rates the candidate "instruments clearly behind, no voice behind, nothing moves when singing starts,
+     would use daily" and prefers it to Track A's current deployable.
+If 1-3 cannot be met on budget after the review-16 plan (listening test, persistent-membership controller,
+CMA-ES against the real renderer, oracle-cue upper bound), stop and deliver instead: the best measured
+candidate, the listening verdict, and the evidence of what limits it (extraction, rendering, or compute).
+
+Rules: never reboot the head unit; no Co-Authored-By in commits; English docs; do not touch Track A's files
+(hook/audio/hssr_mask.*, the int8 port) or others' uncommitted files; one GPU tenant; no pip installs into
+the PC env while runs use it; never print NAS credentials or the MoisesDB link. Start by reading
+docs/audio/UPMIX_SEPARATOR_HANDOFF.md, then the night report and the plan.
+```
+
+---
+
 ## 🔗 References
 
 - [Upmix Separator Night Report 2026-09-28](UPMIX_SEPARATOR_NIGHT_REPORT_2026-09-28.md) — every number, chart and resolved issue of the night
