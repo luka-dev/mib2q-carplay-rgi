@@ -268,12 +268,13 @@ def multires_loss(torch, est_wav, tgt_wav, mix_wav=None, floor_rel=None, scale=1
     return scale * total / 3
 
 
-def windows(torch, tracks, seconds, batch, rng, merge_none=None, with_vocal=False):
+def windows(torch, tracks, seconds, batch, rng, merge_none=None, with_vocal=False, with_sources=False):
     """[B, 2, n] mixture and [B, 2, n] eligible target from seven-slot (or expanded) caches (+ the vocal stem with
-    `with_vocal`, for the attribution loss).  `tracks` may be a pair (truth_list, pseudo_list): then half of every
-    batch comes from each."""
+    `with_vocal`, or the separate vocal / drum / bass stems with `with_sources`,
+    for attribution losses).  `tracks` may be a pair (truth_list, pseudo_list):
+    then half of every batch comes from each."""
     n = int(seconds * SR)
-    mixes, eligs, vocs = [], [], []
+    mixes, eligs, vocs, drums, basses = [], [], [], [], []
     pools = tracks if isinstance(tracks, tuple) else (tracks,)
     while len(mixes) < batch:
         pool = pools[0] if (len(pools) == 1 or rng.random() < TRUTH_FRAC) else pools[1]
@@ -285,8 +286,14 @@ def windows(torch, tracks, seconds, batch, rng, merge_none=None, with_vocal=Fals
         w = MN.expand_slots(MN.read_window(path, s, n)).astype(np.float32) / 32768   # [7,2,n]
         gains = (10 ** (rng.uniform(-6, 6, size=(7, 1, 1)) / 20)).astype(np.float32)
         w = w * gains
-        mixes.append(w.sum(0)); eligs.append(w[list(ELIGIBLE_SLOTS)].sum(0)); vocs.append(w[0] + w[1])
+        mixes.append(w.sum(0)); eligs.append(w[list(ELIGIBLE_SLOTS)].sum(0))
+        if with_vocal or with_sources:
+            vocs.append(w[0] + w[1])
+        if with_sources:
+            drums.append(w[2] + w[3] + w[4]); basses.append(w[5])
     out = (torch.as_tensor(np.stack(mixes)), torch.as_tensor(np.stack(eligs)))
+    if with_sources:
+        return out + tuple(torch.as_tensor(np.stack(part)) for part in (vocs, drums, basses))
     return out + (torch.as_tensor(np.stack(vocs)),) if with_vocal else out
 
 
@@ -311,6 +318,22 @@ def loss_attr(torch, mask, V, E, floor_rel=3e-3):
     vocal = energy(mask * V) / (energy(V).detach() + fl)
     elig = energy(mask * E - E) / (energy(E).detach() + fl)
     return (vocal + elig).mean()
+
+
+def loss_source_attr(torch, mask, E, V, D, B, floor_rel=3e-3):
+    """Balanced source-attributed retention and protected transmission.
+
+    The same predicted mask is applied to the aligned truth stems.  Normalising
+    each active source separately prevents a loud drum or bass window from
+    hiding quiet vocal leakage, and the mixture-relative floor keeps silent
+    sources finite.  This is a training loss, not a renderer metric.
+    """
+    energy = lambda Z: (Z.abs() ** 2).sum(dim=(1, 2, 3))
+    floor = (floor_rel ** 2 * (energy(E) + energy(V) + energy(D) + energy(B)).detach()).clamp_min(1e-6)
+    eligible = energy(mask * E - E) / (energy(E).detach() + floor)
+    protected = sum(energy(mask * source) / (energy(source).detach() + floor)
+                    for source in (V, D, B)) / 3.0
+    return (eligible + protected).mean()
 
 
 def loss_audio(torch, est, tgt, mix=None, floor_rel=None, scale=1.0):
@@ -392,7 +415,8 @@ def train(a):
         print(f"resumed at step {start}, best so far {best:.2f}, lr {opt.param_groups[0]['lr']:.2e}", flush=True)
     import itertools
     counter = itertools.count(start)                            # astra 13: one RNG shared by the prefetch threads was not reproducible
-    batches = MN.prefetch(lambda: windows(torch, tracks, a.seconds, a.batch, np.random.default_rng([a.seed, next(counter)]), with_vocal=a.attr > 0))
+    batches = MN.prefetch(lambda: windows(torch, tracks, a.seconds, a.batch, np.random.default_rng([a.seed, next(counter)]),
+                                        with_vocal=a.attr > 0, with_sources=a.source_attr > 0))
     if STATS["mean"] is None:
         with torch.no_grad():
             lm = torch.cat([torch.log(stft(torch, next(batches)[0].to(dev)).abs() + 1e-5).flatten() for _ in range(4)])
@@ -411,6 +435,9 @@ def train(a):
                 loss = loss + a.bandbal * loss_bandbal(torch, Est, Tt, X)
             if a.attr > 0:
                 loss = loss + a.attr * loss_attr(torch, net.last_mask, stft(torch, bt[2]), Tt)
+            if a.source_attr > 0:
+                loss = loss + a.source_attr * loss_source_attr(
+                    torch, net.last_mask, Tt, stft(torch, bt[2]), stft(torch, bt[3]), stft(torch, bt[4]))
             if a.arch == "band":
                 est_wav = istft(torch, Est, mix.shape[-1])
                 loss = loss + multires_loss(torch, est_wav, elig, mix if log_loss else None, a.loss_floor if log_loss else None, a.loss_scale)
@@ -446,7 +473,11 @@ def load(model_path):
 
 
 def separate_array(loaded, x48):
-    """x48 [2, n] float32 -> eligible estimate [2, n] (whole file; the model is causal by construction)."""
+    """x48 [2, n] float32 -> whole-file eligible estimate [2, n].
+
+    Causality also requires streaming normalization, bounded lookahead and a
+    stateful chunk implementation; this convenience path alone proves none.
+    """
     torch, net, dev = loaded
     with torch.no_grad():
         x = torch.as_tensor(x48, device=dev, dtype=torch.float32)
@@ -483,6 +514,8 @@ def main():
     t.add_argument("--mask", default="complex2", choices=("complex2", "shared_sigmoid"), help="band model head: stereo complex ratio mask (default) or one bounded real mask for both channels")
     t.add_argument("--bandbal", type=float, default=0.0, help="weight of the band-balanced magnitude L1 (review 15 exp. 3; 0 = off)")
     t.add_argument("--attr", type=float, default=0.0, help="weight of the attribution loss on the truth stems (review 15 exp. 2; 0 = off)")
+    t.add_argument("--source-attr", type=float, default=0.0,
+                   help="weight of eligible retention plus separate vocal/drum/bass transmission loss (0 = off)")
     t.add_argument("--loss", default="lin", choices=("lin", "log"), help="magnitude terms: linear L1 (default) or log-magnitude L1 with a relative floor")
     t.add_argument("--loss-floor", type=float, default=3e-3, help="--loss log: floor relative to the mixture's mean |X| per window and channel (3e-3 = -50 dB)")
     t.add_argument("--loss-scale", type=float, default=1.0, help="--loss log: fixed factor on the magnitude bundle (calibrate with diag_lossfloor.py)")
@@ -490,6 +523,8 @@ def main():
     s = sub.add_parser("separate"); s.add_argument("--model", required=True); s.add_argument("--wav", required=True); s.add_argument("--out", required=True)
     a = ap.parse_args()
     if a.cmd == "train":
+        if a.attr < 0 or a.source_attr < 0 or (a.attr > 0 and a.source_attr > 0):
+            ap.error("--attr and --source-attr must be nonnegative and cannot both be active")
         global TRUTH_FRAC
         TRUTH_FRAC = a.truth_frac
         a.save_at = {int(x) for x in a.save_at.split(",") if x.strip()}
