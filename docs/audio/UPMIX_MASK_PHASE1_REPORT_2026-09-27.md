@@ -171,7 +171,7 @@ The 22.09 build is the last one the ear knew. Through the same 40-song harness i
 | 1.0 | 0.07 | 0.04 (0) | 0.17 | −37.6 | 2.20 | 3.1 |
 | 1.3 | 0.12 | 0.05 (0) | 0.23 | −35.3 | 1.48 | 2.8 |
 | **1.5 (shipped)** | **0.15** | **0.07 (0)** | 0.28 | −33.8 | **1.47** | 2.5 |
-| 1.7 | 0.22 | 0.10 (6) | 0.36 | −32.9 | 1.53 | 2.8 |
+| 1.7 | 0.21 | 0.10 (8) | 0.33 | −33.6 | 1.53 | 2.8 |
 
 "Relative swing" is the 1-second range of a stem's rear share divided by its median share. The morning's `swing > 0.30` count grows with the level by construction (a thin rear cannot move by 0.30), which is why the drive-1.0 row read as "never swings". Level-matched, the mask path swings about a third less than the heuristic and keeps the voice lower; it does not remove the swing.
 
