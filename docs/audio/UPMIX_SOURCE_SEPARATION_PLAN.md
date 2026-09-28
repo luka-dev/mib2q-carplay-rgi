@@ -957,7 +957,30 @@ Codex read `sep_net.py`, the four diagnostics and the runners (read-only) and ra
 6. **Diagnostics — redo before interpreting tomorrow (in progress).** Recall/leak are output-energy ratios, not source attribution: expose the predicted mask, apply it separately to the true vocal / eligible / protected STFTs and measure transmitted vocal energy against vocal energy on identical support (never rerun the net on isolated stems); standardise on reanalysed audio (`diag_gap` used raw predicted STFTs, the eval reanalyses); reject insufficient-support denominators and report coverage; add energy-weighted band ratios beside the cell-weighted dB bias. `refine()` finds the first block past a threshold, not a directional crossing — select the nearest correctly directed crossing and reject overlapping events; settling must hold within tolerance for three consecutive bins (unsettled = censored); the 0–8 s "peak" can catch another event — report 0–2 s peaks separately and p10 retention for ducking. The bounded-ratio oracle is a reference, not a universal ceiling; negligible learned-phase benefit does not make phase worthless.
 7. **Protocol — mostly fine; freeze before sep9.** The absolute +0.75 gate is acceptable but is not +1 dB against a matched-horizon baseline; record the branch once and compare both future-context models against the selected-loss causal control. G 1.0 primary, 1.3 secondary; report fixed-40k and best-within-40k; held-out songs for conclusions beyond the 12 loud-vocal excerpts. STFT layout passed identity reconstruction; float conversion before stem gains is correct; SI-SDR sign correct (monitor its relative gradient after 20k). Shared RNG across prefetch threads breaks reproducibility (deterministic batch seeds — noted, not changed tonight); "half/half" is probabilistic; two-slot teacher caches must not be used (their "rest" includes protected instruments — they are not).
 
-**Queue after review 13:** sep7 (DSP finishing) → sep8 (log loss, scale 0.74) → sep9 (lookahead 8) → **sep9c (decoder-matched L = 0 control)** → sep10 (bidirectional twin).
+**Queue after review 13:** sep7 (DSP finishing) → sep8 (log loss, scale 0.74) → sep9 (lookahead 8) → **sep9c (decoder-matched L = 0 control)** → sep10 (bidirectional twin) → **sep11 / sep12 (the streaming-normalisation pair: sep9c's and sep9's models with `--norm stream`)**.
+
+### Review 13 follow-up — every finding, its fix, its status (28.09 00:00)
+
+| finding | fix | status |
+|---|---|---|
+| resume restarted `best` at −1e9 and replayed the scheduler onto the loaded LR (10.5× at 1k) | `last.pt` carries `sched` + `best`; resume restores both | **done** before sep8 (1198eff) |
+| runners could render and write DONE after 60 failed tries | FAILED marker; no render without `train_done.txt` + checkpoint; DSP log without its summary → FAILED | **done** for sep8…sep12 |
+| log loss: silence → log(0) − log(0) = NaN | floors `clamp_min(1e-7)` | **done** |
+| output-gradient calibration ≠ optimisation pressure | parameter-gradient calibration → `--loss-scale 0.74` (was 0.007) | **done** before sep8 started |
+| lookahead adds 197k decoder parameters → conflates context with capacity | `--dec-skip` flag; **sep9c** = the L = 0 twin with the identical decoder input | **queued** |
+| tail comment said "holds the mask"; it holds the states | comment corrected; convention documented as end-of-stream only | **done** |
+| whole-window level scalar is non-causal (a frame moves 1e-2 when a later frame is scaled) and differs between 8-s / 20-s / whole-file | `--norm stream`: stereo-linked causal EMA, τ = 2 s, s[0] = q[0], closed-form per 1024-frame chunk (exact to 6e-7 vs the loop; a frame moves **0** when a later frame is perturbed; 30k-frame songs finite); default unchanged | **done**; **sep11 (L = 0) / sep12 (L = 8) queued** as the matched pair after sep10 |
+| bidir MAC formula kept unidirectional costs | corrected (111 M) | **done** |
+| recall / leak were output-energy ratios, not attribution; `diag_gap` on raw STFTs while the eval reanalyses | v2: frozen mask on the true stems, reanalysed, coverage, energy-weighted band ratios, IRM reference | **done**, rerun for sep3/5/6/7 |
+| `refine()` not a directional crossing; overlapping events; settling without tolerance; 0–8 s peak | v2: nearest directed crossing, overlap rejection, 3-bin tolerance with censoring, 0–2 s peak, p10 ducking | **done**, rerun |
+| medians on 12 excerpts without uncertainty | song-level bootstrap 90 % CI on SI-SDR / recall / vocal leak in `diag_gap` | **done** (next runs) |
+| shared RNG across prefetch threads | deterministic per-batch seeds `[seed, batch index]` | **done** (sep9 onward) |
+| +0.75 gate is absolute, not matched-horizon | decision table for the morning: sep9 vs **sep9c** (same loss, same 40k), sep10 vs sep8/sep3 at 40k *and* best-in-40k; G 1.0 primary | **protocol noted** |
+| common interior scores + 8-s context-matched eval for sep10 | post-hoc diagnostic on the checkpoints (not in `evaluate()`, which must stay fixed across the night) | **morning** |
+| deployment must delay every renderer path by the 85 ms + STFT buffering; injection alignment unverified | harness: the estimate stays indexed to frame t, so no shift; the hook-side delay is Track A's when/if a lookahead student is chosen | **noted** |
+| two-slot teacher caches must not be used | not used (teacher_cache4 is four-stem) | n/a |
+| IRM is a reference, not a ceiling; learned-phase benefit ≈ 0 does not make phase worthless | wording in the plan and the paper | **noted** |
+
 
 ## 📝 Publication (astra review 5, 2026-09-26)
 

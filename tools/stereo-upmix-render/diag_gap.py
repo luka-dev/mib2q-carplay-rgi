@@ -59,7 +59,14 @@ def main():
             for k, v in r.items(): med.setdefault(k, []).append(v)
             print(f"{os.path.basename(p)[:12]} {r['mix']:+6.2f} {r['st']:+7.2f} {r['mag']:+8.2f} {r['irm']:+7.2f} | {r['rec']:5.2f} {r['rec_d']:5.2f}      | {r['vl']:5.3f} {r['vl_o']:5.3f}    | {r['pl']:5.3f} | {r['c_e']:5.2f} {r['c_v']:5.2f}", flush=True)
         m = {k: float(np.median(v)) for k, v in med.items()}
+        # astra 13 §7: bootstrap by song (1000 resamples of the excerpt set) for the medians that decide anything
+        rng = np.random.default_rng(0); n = len(paths)
+        ci = {}
+        for k in ("st", "rec", "vl"):
+            v = np.array(med[k]); bs = [np.median(v[rng.integers(0, n, n)]) for _ in range(1000)]
+            ci[k] = (np.percentile(bs, 5), np.percentile(bs, 95))
         print(f"MEDIAN       {m['mix']:+6.2f} {m['st']:+7.2f} {m['mag']:+8.2f} {m['irm']:+7.2f} | {m['rec']:5.2f} {m['rec_d']:5.2f}      | {m['vl']:5.3f} {m['vl_o']:5.3f}    | {m['pl']:5.3f} | {m['c_e']:5.2f} {m['c_v']:5.2f}   (IRM reference: recall {m['irm_rec']:.2f}, vocal leak {m['irm_vl']:.3f})")
+        print(f"90 % bootstrap CI (by song): SI-SDR {ci['st'][0]:+.2f}..{ci['st'][1]:+.2f}  recall {ci['rec'][0]:.2f}..{ci['rec'][1]:.2f}  vocal leak {ci['vl'][0]:.3f}..{ci['vl'][1]:.3f}")
         print("band: transmitted eligible fraction (energy-weighted, dB) / cell-weighted bias on eligible-dominant cells (dB): " +
               "  ".join(f"{nm} {10 * np.log10(tx[i] / max(te[i], 1e-12)):+.1f}/{bias[i] / max(bcount[i], 1):+.1f}" for i, nm in enumerate(NAMES)))
 
