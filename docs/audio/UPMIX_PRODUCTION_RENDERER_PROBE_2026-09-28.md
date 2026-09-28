@@ -22,4 +22,14 @@ The runner refuses to start with a rapid job, training or another stem harness a
 
 ## Result
 
-_Running. Record the complete paired results here before choosing a setting._
+All three 20-song C renders finished with **115 stem rows each**. Paired song results and `decision.json` are in `D:\upmix\runs\production_renderer_probe20\`. The baseline is specific to this oracle-failure-enriched selection; it must not be compared as though it were Track A's full-40 aggregate.
+
+| Condition | Any-stem swing songs / 20 | Guitar | Keys | Piano | Strings | Voice | Bass | Drums | Rear RMS dBFS |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Track A v21a baseline | 15 | 0.176 | 0.166 | 0.118 | 0.225 | 0.075 | 0.150 | 0.285 | −33.534 |
+| Rear air −40 dB | 14 (1 resolved, 0 new) | 0.164 | 0.165 | **0.090** | 0.210 | **0.064** | **0.136** | **0.168** | −34.058 |
+| Front retention 0.75 | 7 (8 resolved, 0 new) | **0.132** | **0.129** | 0.114 | 0.173 | **0.058** | **0.128** | **0.230** | −33.534 |
+
+Bold values in variant rows miss at least one goal direction. Both variants miss the voice ≤0.02, bass ≤0.06 and drums ≤0.08 limits by large margins. Rear air off also lowers rear RMS by 0.524 dB, outside the fixed ±0.5 dB screen tolerance, and piano drops below 0.10. Front retention reduces the swing count substantially, but guitar and keys fall below 0.15 while protected leakage remains high. Median guitar, keys and wind depth-versus-level slopes stay within ±0.05 in all three conditions.
+
+**Decision:** neither variant merits promotion to a 40-song production-mask render or live deployment. Relative to the true-eligible-audio oracle results, the remaining protected-stem leakage with v21a is evidence that mask selectivity is a major limit for these simple knob changes. The oracle tests also show a separate renderer stability contribution. These data do not establish a general impossibility for a new controller or extractor. The owner's listening verdict is still pending.
