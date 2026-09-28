@@ -438,4 +438,10 @@ The student and its diagnostics are PyTorch[^1]; the truth stems are MoisesDB[^2
 
 ---
 
-_Next report: after the listening test or when the 10k promotion pair lands._
+## Post-night closeout (later 2026-09-28)
+
+The “Priorities” and “Key dates” above preserve what was planned when this night report was written. The 10k pair, sep9 full render, controller screens, oracle and production renderer screens, independent TEST check and bounded static-knob CMA pilot have since finished. Their exact paired results, decisions and tooling failures are collected in the [handoff investigation ledger](UPMIX_SEPARATOR_HANDOFF.md). The [source-separation plan](UPMIX_SOURCE_SEPARATION_PLAN.md) now records the review-16 architecture branches.
+
+In brief: sep9 did not improve the separator frontier; shared-mask stability at 4k did not survive 10k; global and true-source activity latches did not solve source persistence. True eligible audio exposed a separate renderer instability (8/40 all-stem swings). Exploratory front retention 0.70 met measured full-DEV render gates but **failed independent TEST keys** (0.128 against 0.15); it is noncausal oracle injection. Track A's frozen production mask still leaked protected stems after simple renderer knob changes, and 0/18 bounded static CMA points passed even a six-song screen. No Track B candidate was ported or deployed, no device resource claim was measured, and the owner has not returned the live CarPlay listening verdict. The rapid queue is empty and stopped; paused separator runs were not resumed.
+
+The next actionable experiment is the prepared live front-only versus Track A CarPlay listening test, followed by an offline oracle **source-identity** controller with separate fast protection if the ear result warrants it. The earlier oracle activity and protection-weight screens do not test that new mechanism. Keep the frozen TEST set independent and the formal keys limit at 0.15 unless a prospective goal change is agreed before another test.
