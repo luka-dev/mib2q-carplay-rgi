@@ -306,7 +306,8 @@ def loss_attr(torch, mask, V, E, floor_rel=3e-3):
     """review 15 exp. 2: source attribution in the loss - the predicted mask on the aligned truth stems:
     transmitted vocal energy / vocal energy  +  eligible reconstruction error / eligible energy (floored)."""
     def energy(Z): return (Z.abs() ** 2).sum(dim=(1, 2, 3))
-    fl = floor_rel ** 2 * energy(V + E).detach()
+    # 28.09: a window whose vocal AND eligible stems are silent gave 0/0 = NaN at step < 1000 -> absolute floor too
+    fl = (floor_rel ** 2 * energy(V + E).detach()).clamp_min(1e-6)
     vocal = energy(mask * V) / (energy(V).detach() + fl)
     elig = energy(mask * E - E) / (energy(E).detach() + fl)
     return (vocal + elig).mean()
