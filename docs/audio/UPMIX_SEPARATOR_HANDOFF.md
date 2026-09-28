@@ -155,6 +155,8 @@ Rapid 4k screens (20 songs): anchors guitar 0.11–0.12, piano 0.06–0.07, stri
 
 **Counting correction:** the older 40-song "swinging" rows count guitar only. The goal counts unique songs with **any stem** swinging: sep3 is 11/40, sep8 16/40, sep9 G 1.0 11/40 and G 1.3 23/40. The PC rapid board now computes the unique-song union from `screen/stems.csv`.
 
+**Interface ceiling correction (07:08):** recounting the original full-40 `iface8` CSVs with that same any-stem definition gives oracle mask × mixture **14/40**, oracle eligible audio **8/40**, ideal bounded real mask/audio **7/40**, teacher mask × mixture **23/40**, and teacher eligible audio **16/40**. The historical oracle-audio 3/39 and teacher-audio 5/39 figures were guitar-only. Clean eligible audio resolves six oracle-mask swing songs without adding any, but even perfect extracted audio misses the ≤ 5/39 stability target. The object/bed renderer therefore also needs a stability remedy; coordinate any hook change with Track A. The full table and source paths are in [the interface test](UPMIX_SOURCE_SEPARATION_PLAN.md).
+
 ---
 
 ## 🔄 Live state at handoff (04:50)

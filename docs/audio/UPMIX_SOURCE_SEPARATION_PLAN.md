@@ -804,7 +804,7 @@ audible."**
 The rear-eligible AUDIO through the object path (test build `--rear-audio`,
 harness `--inject`), same renderer, same 40 DEV songs, G = 1.0:
 
-| | vocals | guitar | piano | keys | bass | drums | swinging | rear level |
+| | vocals | guitar | piano | keys | bass | drums | **guitar** swinging (historical) | rear level |
 |---|---|---|---|---|---|---|---|---|
 | oracle **mask** (real-stem eligibility × mixture) | 0.03 | 0.20 | 0.14 | 0.17 | 0.07 | 0.12 | 7/39 | −37.2 dBFS |
 | oracle **audio** (the non-protected stems themselves) | **0.01** | **0.26** | **0.17** | **0.23** | 0.01 | 0.07 | **3/39** | −37.6 dBFS |
@@ -818,16 +818,29 @@ teacher-2 audio 0.23 — the audio rows differ from the mask render by
 construction (they are *cleaner* than it), so the rear-share / swing columns
 are the comparison that counts here.
 
-Rear levels match within 0.4 dB (−37.2 vs −37.6 dBFS), so this is not a
-level effect.  Reconstruction beats masking on every axis at the oracle level: more of every
-instrument behind (guitars 0.20 → 0.26), less voice (0.03 → 0.01), less than
-half the swing (7 → 3).  The mask's ceiling was never the renderer's ceiling —
+**All-stem recount (28.09, original `stems.csv` files, unique songs where any `range_1s > 0.30`):**
+
+| Renderer input at G 1.0 | Bowed strings rear share | Any-stem swinging songs / 40 |
+| --- | ---: | ---: |
+| Oracle mask × mixture | 0.106 | 14 |
+| Oracle eligible audio | 0.180 | **8** |
+| Teacher mask × mixture | 0.098 | 23 |
+| Teacher eligible audio | 0.131 | 16 |
+| Teacher-2 eligible audio | 0.183 | 20 |
+| Optimal bounded real mask/audio | 0.169 | **7** |
+
+These counts come from `D:\upmix\runs\iface8\{mask_oracle,inject_oracle,mask_teacher,inject_teacher,inject_teacher2,inject_irm}\stems.csv`. The original 3/39, 5/39 and 7/39 numbers above count **guitar** only and cannot certify the goal's any-stem limit. On the 39 guitar-present songs, oracle audio still swings in 8, above the ≤ 5/39 target. Oracle audio resolves six of the oracle-mask's 14 swinging songs and adds none, but eight eligible-instrument swings remain, including guitar, piano and keys. Thus clean extraction helps substantially; **even perfect eligible audio does not by itself prove the requested stability**. The C object/bed controller remains part of the problem, and no offline result here substitutes for the owner's car verdict.
+
+Rear levels match within 0.4 dB (−37.2 vs −37.6 dBFS), so the oracle
+mask/audio difference is not a level effect. Reconstruction gives more instruments
+behind (guitars 0.20 → 0.26), less voice (0.03 → 0.01), and fewer guitar swings
+(7 → 3). The mask's ceiling was never the renderer's ceiling —
 it was the mask interface's: a fraction of the *mixture* carries the mixture's
 other sources with it; clean audio does not.  **A real separator's estimate keeps the advantage.**  With the same
 htdemucs stems, audio instead of mask: voice 0.03 → 0.01, bass 0.11 → 0.04,
 vocal-swinging songs 11 → 4, guitars unchanged at 0.20 — and with the cleaner
 BS-RoFormer vocals the instruments follow the oracle-audio row (guitars 0.23,
-keys 0.22, 3/39 swinging) at the same 0.01 voice, one dB quieter overall.  The
+keys 0.22, 3/39 **guitar** swinging) at the same 0.01 voice, one dB quieter overall. The
 interface test is decided: *the rear-eligible audio through the object path*
 is the architecture; the mask interface was the ceiling.  What remains is
 the hard part — a causal separator that produces such audio inside the

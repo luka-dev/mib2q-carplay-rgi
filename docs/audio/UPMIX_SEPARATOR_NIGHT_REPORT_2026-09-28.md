@@ -110,6 +110,8 @@ At G 1.3 every run buys +0.04…0.06 of guitars for 10–18 **guitar-swinging** 
 
 _Counting correction (later 28.09):_ the historical column above is **guitar-only**, whereas the goal counts unique songs where **any stem** has a one-second rear-share range above 0.30. Recounting completed CSVs gives sep3 **11/40** and sep8 **16/40** any-stem swinging songs. The rapid board now computes this union directly from `stems.csv`.
 
+The same recount on the full 40-song interface experiment changes the interpretation of the apparent ceiling: oracle eligible **audio** swings in **8/40** songs, ideal bounded real-mask audio in **7/40**, htdemucs teacher audio in **16/40**, and oracle mask × mixture in **14/40**. The previously reported 3/39 oracle and 5/39 teacher values were guitar-only. Clean eligible audio reduces mask-induced movement, yet even perfect source audio remains above the any-stem limit; [the interface test](UPMIX_SOURCE_SEPARATION_PLAN.md) lists the six conditions and sources.
+
 **Source attribution (the frozen mask applied to the true stems, reanalysed audio; 12 DEV excerpts, medians):**
 
 | Checkpoint | Eligible transmitted | Vocal transmitted | Protected transmitted | Air 8–14 kHz | Air > 14 kHz | Body 1–8 kHz |
