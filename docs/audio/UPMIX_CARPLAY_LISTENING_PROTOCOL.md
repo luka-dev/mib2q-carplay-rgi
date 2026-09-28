@@ -44,9 +44,9 @@ The first live pass answers whether Track A is preferable to front-only and whic
 
 ## Score sheet
 
-Use one row per slot and condition; copy the table for the repeated passages. Score rear instruments and movement from 1 to 5: **1 = absent/no movement; 5 = clearly behind/obvious movement**. A good candidate has high instrument score and low movement score. For voice, mark yes if any recognizable vocal appears behind. "Daily" is the owner's practical decision.
+Use one row per slot and condition; copy the table for the repeated passages. Score rear instruments and movement from 1 to 5: **1 = absent/no movement; 5 = clearly behind/obvious movement**. For entry slots 01–02, score a change when singing starts; for exit slots 03–04, score a change when singing stops; for the other slots, score movement across the passage, or write N/A if there is no event to judge. A good candidate has high instrument score and low movement score. For voice, mark yes if any recognizable vocal appears behind. "Daily" is the owner's practical decision.
 
-| Slot | Code X/Y | Instruments behind 1–5 | Voice behind? Y/N | Movement when singing starts 1–5 | Would use daily? Y/N | Notes |
+| Slot | Code X/Y | Instruments behind 1–5 | Voice behind? Y/N | Movement/ducking 1–5 or N/A | Would use daily? Y/N | Notes |
 | --- | --- | ---: | --- | ---: | --- | --- |
 | 01 | X |  |  |  |  |  |
 | 01 | Y |  |  |  |  |  |
