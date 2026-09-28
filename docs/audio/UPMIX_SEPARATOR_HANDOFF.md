@@ -202,6 +202,8 @@ stateDiagram-v2
 
 **Rapid queue repair 08:01:** the daemon's pipeline did not clear the final queue line when its filter produced no rows; it repeated `anchor_10k`'s already-completed bookkeeping in a tight loop. The daemon was stopped, the sole completed `anchor_10k` line manually cleared, and the GPU lease was absent. [`rapid_daemon.ps1`](../../tools/stereo-upmix-render/pc/rapid_daemon.ps1) now explicitly writes an empty queue file when no lines remain. No train or stem-harness process was active when the line was cleared. The daemon is currently stopped; relaunch it only for a new rapid job. The CPU-only oracle renderer probe may now run.
 
+**Oracle renderer screen in progress 08:04:** fresh baseline reproduction passed on the first song; the CPU process is rendering all five conditions one song at a time, with no GPU lease. The [precommitted question and promotion rule](UPMIX_ORACLE_RENDERER_PROBE_2026-09-28.md) require at least three of the eight oracle-audio swing songs resolved, no new control swing, protected stems within limits and useful instrument level before any full-40 rerender. Results are not yet available.
+
 ---
 
 ## 📍 What to do next (review 16's order)
