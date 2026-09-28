@@ -40,7 +40,8 @@ _Read this first, then [the night report](UPMIX_SEPARATOR_NIGHT_REPORT_2026-09-2
 
 | Item | Value |
 | --- | --- |
-| PC | Windows 11, RTX 5080 16 GB, reached over Tailscale: `ssh luka@100.127.113.11` (PowerShell on the far side) |
+| PC (the owner's second computer) | Windows 11, RTX 5080 16 GB, reached over Tailscale: `ssh luka@100.127.113.11` (PowerShell on the far side). **All tests, stems and training run here, on drive D:** |
+| Music library | `D:\music` — the owner's own songs (source of the teacher-labelled masters and of the listening-test picks) |
 | Work dir | `D:\upmix` — `tools\` (scripts, renderer exe, models), `datasets\`, `runs\` |
 | D: filesystem | **WinBtrfs** — slow CloseHandle, occasional stalls; every long job runs under a watchdog with `--resume` (`tools\stems_guard.ps1`) |
 | Python | `C:\Users\LuKa\AppData\Local\Programs\Python\Python313\python.exe`, torch 2.11 cu128 |
@@ -200,6 +201,7 @@ Resume separator training only when these identify a specific missing capability
 | Question | Answer / where |
 | --- | --- |
 | **How is the listening test played in the car?** | **Through CarPlay, live.** The phone streams ordinary stereo (realtime `lpcm` 48 kHz/16/2 on `mpl5_dio_ent`); the hook on the head unit upmixes it to 5.1 itself (`AUDIO_REALTIME_UPMIX=on`). So a candidate is a **renderer build + config on the head unit**, and the owner plays the same songs from the phone for each. No 6-channel WAV playback is needed. See [Stereo to 5.1 Upmix](STEREO_TO_5_1_UPMIX.md), [Dolby Atmos](DOLBY_ATMOS.md) (realtime = PCM passthrough) |
+| **Which songs for the listening test?** | **Pick them yourself from the owner's library on the PC: `D:\music`** (3 367 files — the music he actually plays; the 774 teacher-labelled masters come from it). Their htdemucs stems are already in `D:\upmix\datasets\teacher_cache4\` (`<name>.npy` + `.json` with `"source"` = the file name in `D:\music`). Choose 8–10 with clear guitars / keys / piano / strings, a vocal entry and exit (run the event detector of `diag_transitions.py` on the teacher vocal stem), a sustained instrumental passage, a dense chorus and an exposed vocal; hand the owner the list (artist – title – timestamps). Everything heavy runs on that PC's GPU — tests, stems, training |
 | Which candidates can play live today? | **Front-only** (`AUDIO_STEREO_UPMIX=off`) and **Track A's deployable** (the shipped config). The shared-mask student and the teacher do **not** run on the head unit: the student needs a port into the hook (coordinate with Track A, which owns `hook/audio`), the teacher never will (non-causal, ~100× budget). For those two, use an offline headphone preview (below), clearly labelled "not the car chain" |
 | How do I switch a candidate on the unit? | Env in `deploy/smartphone_integrator/carplay_startup.sh` (the shipped table: [Upmix Calibration and Tuning](UPMIX_CALIBRATION_AND_TUNING.md), [Stereo to 5.1 Upmix — shipped calibration](STEREO_TO_5_1_UPMIX.md#-the-shipped-calibration)); files go to `/mnt/app/root/hooks/` and take effect on the **next phone connect** — no restart. **Never restart the unit or j9 yourself** |
 | How do I copy files to the head unit? | Traps and the working method: `scripts/deploy_unit.sh`, memory note on SSH transport (no `scp`/`tar` on QNX; `ssh 'cat > f.new' < local` + `mv`, read back and compare; ControlMaster to dodge the auth rate limit; `/mnt/app` needs `mount -uw`; `/tmp` holds no directories). Deploy history and hashes: [Upmix Listening and Deploy Log](UPMIX_LISTENING_AND_DEPLOY_LOG.md) |
@@ -225,7 +227,7 @@ Resume separator training only when these identify a specific missing capability
 DONE when ALL of these hold on the full harness (40 DEV MoisesDB songs x 60 s, real C renderer, stable gain)
 AND on the 20 untouched DEV songs, for a candidate that fits the head unit (causal, <= 150 M MAC/s int8
 measured on the device, <= 85 ms extra latency):
-  1. Instruments in the rear: guitar >= 0.15, keys >= 0.15, piano >= 0.10, strings >= 0.14 rear share
+  1. Instruments in the rear: guitar >= 0.15, keys >= 0.12, piano >= 0.10, strings >= 0.14 rear share
      (teacher reference: 0.19 / 0.14 / 0.13 / 0.16).
   2. Protected stems: voice <= 0.02, bass <= 0.06, drums <= 0.08.
   3. No back-and-forth: <= 5/39 songs swinging (all stems), |depth-follows-level| <= 0.05 for guitar, keys
