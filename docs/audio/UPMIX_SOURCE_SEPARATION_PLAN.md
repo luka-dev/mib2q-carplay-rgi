@@ -1045,6 +1045,8 @@ Verdict: **stop broad separator training for 2–3 days.** Five controlled runs 
 
 **Playback correction (later 28.09):** the four-condition in-car proposal above cannot be run as written. Live CarPlay supplies stereo PCM and the head-unit hook performs the upmix, so only front-only and Track A's shipped build currently run in the car. A student joins after a Track A-owned hook port and device profile; the non-causal teacher cannot join. The [CarPlay listening protocol](UPMIX_CARPLAY_LISTENING_PROTOCOL.md) gives the executable two-condition car test and a separately labelled rear-only headphone preview for student versus teacher. Neither six-channel WAV playback nor `qsa_play` proves the car chain.
 
+**Oracle renderer full-40 result (later 28.09):** with true eligible audio injected into the real C renderer, rear air −40 dB reduced unique any-stem swings 8 → 5/40 but lowered rear RMS by 0.575 dB, just outside the frozen ±0.5 dB gate. Front retention 0.75 reduced swings 8 → 1/40 but lowered the six-song median string rear share to 0.134, below the 0.14 target. Neither passes the full-harness gate as tested. An explicitly posthoc screen of surround 0.427 with air off and retention 0.70 is prepared. The separate frozen 20-song TEST split is the independent validation set; all 40 DEV songs have already influenced selection. Details and paired results: [oracle renderer probe](UPMIX_ORACLE_RENDERER_PROBE_2026-09-28.md). The production-mask screen uses Track A's frozen v21a binary without oracle injection; it must be read separately before proposing a live candidate.
+
 ## 📝 Publication (astra review 5, 2026-09-26)
 
 Asked whether there is a paper in this work.  Verdict: **a credible systems +

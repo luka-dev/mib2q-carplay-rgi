@@ -44,7 +44,17 @@ The CPU screen finished cleanly on the same 20 songs: **115 stem rows in every c
 
 Both promoted variants also keep median guitar, keys and wind depth-versus-level slopes within ±0.05. The bowed-string median is based on only **three** songs in this enriched screen, so it needs the six-string-song full harness. Front retention changes the amount subtracted from the front while leaving the rear RMS identical here: its 8 → 1 stability result comes with lower instrument rear shares. Whether 0.176 guitar share sounds clearly behind in the owner's cabin is unresolved. Removing the air bed sacrifices a small amount of instrument share and 0.33 dB rear level while reducing drum rear share substantially; its timbre also needs listening.
 
-The exact two settings, plus a fresh baseline, are running on the original 40 DEV songs through [`run_oracle_renderer_full40.ps1`](../../tools/stereo-upmix-render/pc/run_oracle_renderer_full40.ps1). No full-harness, untouched-song, source-attribution, device or in-car verdict is claimed from this 20-song oracle screen.
+The exact two settings, plus a fresh baseline, finished on the original 40 DEV songs through [`run_oracle_renderer_full40.ps1`](../../tools/stereo-upmix-render/pc/run_oracle_renderer_full40.ps1). Every fresh baseline stem again reproduced the original CSV within 0.005. The 231-row results and `decision.json` are at `D:\upmix\runs\oracle_renderer_full40\`.
+
+| Condition | Any-stem swing songs / 40 | Guitar | Keys | Piano | Strings | Voice | Bass | Drums | Rear RMS dBFS | Full-40 gate |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| Fresh baseline | 8 | 0.255 | 0.230 | 0.171 | 0.180 | 0.009 | 0.013 | 0.069 | −37.619 | Reference |
+| Rear air −40 dB | **5** (3 resolved, 0 new) | 0.237 | 0.226 | 0.171 | 0.172 | 0.008 | 0.012 | 0.032 | −38.194 | **Fail:** rear −0.575 dB vs ±0.5 dB gate |
+| Front retention 0.75 | **1** (7 resolved, 0 new) | 0.170 | 0.170 | 0.120 | **0.134** | 0.009 | 0.013 | 0.068 | −37.619 | **Fail:** strings below 0.14 |
+
+All median guitar, keys and wind level-dependence slopes remain within ±0.05. The 20-song screen overestimated string share under front retention: it had only three string songs, and the full set has six. The effect of front retention is partly a change in the front denominator while the rear RMS stays fixed; a 1/40 swing count is therefore not sufficient evidence of audible rear stability. Removing rear air reduces drum share strongly, but also lowers the overall rear level by just over the precommitted tolerance.
+
+Both failures are close to a boundary. An explicitly **posthoc, exploratory** follow-up in [`run_oracle_renderer_full40_tune.ps1`](../../tools/stereo-upmix-render/pc/run_oracle_renderer_full40_tune.ps1) will check rear air −40 dB with surround 0.427 (approximately restoring 0.575 dB) and front retention 0.70 on the same 40 songs. Any apparent success needs the separately frozen test split. No source-attribution, device or in-car verdict follows from perfect injected audio.
 
 **Holdout caveat:** this enriched screen used knowledge of all eight failures in the original 40 DEV songs. The other 20 songs in that set were not rendered under these knob variants, but they are not a strict untouched holdout for choosing the knobs. If the full-40 check passes, freeze and render 20 songs from MoisesDB's separate 24-song `test` split before inspecting their outcomes; report those separately rather than calling a DEV subgroup untouched.
 
