@@ -390,6 +390,8 @@ def train(a):
             ck = {"state": net.modules.state_dict(), "stats": dict(STATS), "step": step, "dev": met,
                   "ht": a.ht, "hg": a.hg, "dec": a.dec, "arch": a.arch, "feat": a.feat, "h1": a.h1, "h2": a.h2, "bhg": a.bhg, "brnn": a.band_rnn, "lookahead": a.lookahead, "bidir": a.bidir, "dec_skip": a.dec_skip, "norm": a.norm}
             torch.save({**ck, "opt": opt.state_dict(), "sched": sched.state_dict(), "best": max(best, met["si_sdr"])}, os.path.join(a.out, "last.pt"))
+            if step in a.save_at:                    # rapid-loop validation: fixed-step snapshots (review 15)
+                torch.save(ck, os.path.join(a.out, f"step{step}.pt"))
             score = met["si_sdr"]                    # sep1's leak-penalised score picked a near-silent checkpoint
             if score > best:
                 best = score; torch.save(ck, os.path.join(a.out, "sep_net.pt"))
@@ -440,6 +442,7 @@ def main():
     t.add_argument("--bidir", action="store_true", help="band model: bidirectional time GRUs (the non-causal diagnostic twin)")
     t.add_argument("--dec-skip", action="store_true", help="band model: the frame's own band embedding into the decoder (implied by --lookahead; alone = the L=0 control)")
     t.add_argument("--norm", default="window", choices=("window", "stream"), help="band model input level: one scalar per window (non-causal, default) or a causal 2-s running level")
+    t.add_argument("--save-at", default="", help="comma-separated steps at which to save stepN.pt snapshots (proxy validation)")
     t.add_argument("--loss", default="lin", choices=("lin", "log"), help="magnitude terms: linear L1 (default) or log-magnitude L1 with a relative floor")
     t.add_argument("--loss-floor", type=float, default=3e-3, help="--loss log: floor relative to the mixture's mean |X| per window and channel (3e-3 = -50 dB)")
     t.add_argument("--loss-scale", type=float, default=1.0, help="--loss log: fixed factor on the magnitude bundle (calibrate with diag_lossfloor.py)")
@@ -449,6 +452,7 @@ def main():
     if a.cmd == "train":
         global TRUTH_FRAC
         TRUTH_FRAC = a.truth_frac
+        a.save_at = {int(x) for x in a.save_at.split(",") if x.strip()}
     {"train": train, "separate": separate}[a.cmd](a)
 
 
