@@ -204,6 +204,8 @@ stateDiagram-v2
 
 **Oracle renderer screen in progress 08:04:** fresh baseline reproduction passed on the first song; the CPU process is rendering all five conditions one song at a time, with no GPU lease. The [precommitted question and promotion rule](UPMIX_ORACLE_RENDERER_PROBE_2026-09-28.md) require at least three of the eight oracle-audio swing songs resolved, no new control swing, protected stems within limits and useful instrument level before any full-40 rerender. Results are not yet available.
 
+**Oracle screen result, later 28.09:** all five 20-song C renders finished; the fresh baseline reproduced the original CSV. `rear_air_off` resolved three of eight any-stem swing songs with none new (8 → 5), guitar/keys/piano/strings 0.242/0.226/0.171/0.262, voice/bass/drums 0.008/0.010/0.032 and rear RMS −36.97 dBFS. `front_retention075` resolved seven with none new (8 → 1), instruments 0.176/0.179/0.122/0.187, protected 0.009/0.012/0.068 and **unchanged** rear RMS −36.64 dBFS. Both passed the precommitted screen gate and are being rerendered on the original full 40 DEV songs with a fresh baseline. `rear_body0` resolved only two and raised rear RMS by 1.47 dB; retention 0.25 created six new swing songs. This is still **perfect injected audio**, not a causal deployable separator or a car verdict. See [the screen report](UPMIX_ORACLE_RENDERER_PROBE_2026-09-28.md) and `D:\upmix\runs\oracle_renderer_probe\decision.json`.
+
 ---
 
 ## 📍 What to do next (review 16's order)

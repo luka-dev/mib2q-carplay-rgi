@@ -9,7 +9,8 @@ import statistics
 from pathlib import Path
 
 
-POINTS = ("baseline", "rear_body0", "rear_air_off", "front_retention025", "front_retention075")
+PROBE_POINTS = ("baseline", "rear_body0", "rear_air_off", "front_retention025", "front_retention075")
+FULL40_POINTS = ("baseline", "rear_air_off", "front_retention075")
 SHARE_LIMITS = {"guitar": (0.15, "min"), "other_keys": (0.15, "min"),
                 "piano": (0.10, "min"), "bowed_strings": (0.14, "min"),
                 "vocals": (0.02, "max"), "bass": (0.06, "max"), "drums": (0.08, "max")}
@@ -39,13 +40,14 @@ def summary(rows):
                 rear_rms_db=statistics.median(rms.values()), shares=shares, slopes=slopes)
 
 
-def passes(candidate, baseline):
+def passes(candidate, baseline, scope):
     old, new = set(baseline["swings"]), set(candidate["swings"])
-    gates = {
-        "resolves_at_least_three": len(old - new) >= 3,
-        "no_new_swing": not (new - old),
-        "rear_rms_within_half_db": abs(candidate["rear_rms_db"] - baseline["rear_rms_db"]) <= 0.5,
-    }
+    gates = {"rear_rms_within_half_db": abs(candidate["rear_rms_db"] - baseline["rear_rms_db"]) <= 0.5}
+    if scope == "probe":
+        gates["resolves_at_least_three"] = len(old - new) >= 3
+        gates["no_new_swing"] = not (new - old)
+    else:
+        gates["any_stem_swing_at_most_five"] = len(new) <= 5
     for stem, (limit, direction) in SHARE_LIMITS.items():
         value = candidate["shares"][stem]
         gates[f"share_{stem}"] = value is not None and (value >= limit if direction == "min" else value <= limit)
@@ -58,34 +60,40 @@ def passes(candidate, baseline):
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--probe", type=Path, required=True)
+    p.add_argument("--scope", choices=("probe", "full40"), default="probe")
     a = p.parse_args()
     manifest = json.loads((a.probe / "manifest.json").read_text(encoding="utf-8"))
-    raw = {name: read(a.probe / name / "stems.csv") for name in POINTS}
+    points = PROBE_POINTS if a.scope == "probe" else FULL40_POINTS
+    raw = {name: read(a.probe / name / "stems.csv") for name in points}
     summaries = {name: summary(rows) for name, rows in raw.items()}
     base = summaries["baseline"]
     base_keys = {(r["song"], r["stem"]) for r in raw["baseline"]}
     expected = set(manifest["song_track_ids"])
     if set(base["songs"]) != expected or set(base["swings"]) != set(manifest["swing_songs"]):
         raise ValueError("fresh baseline no longer matches the frozen screen")
-    if base["rows"] != 115:
-        raise ValueError(f"expected 115 baseline stem rows, got {base['rows']}")
+    expected_songs, expected_rows = (20, 115) if a.scope == "probe" else (40, 231)
+    if len(base["songs"]) != expected_songs or base["rows"] != expected_rows:
+        raise ValueError(f"expected {expected_songs} baseline songs and {expected_rows} stem rows, "
+                         f"got {len(base['songs'])} and {base['rows']}")
     results = {}
-    for name in POINTS[1:]:
+    verdict_key = "promote_to_full40" if a.scope == "probe" else "meets_full40_render_gates"
+    for name in points[1:]:
         item = summaries[name]
         if set(item["songs"]) != expected or {(r["song"], r["stem"]) for r in raw[name]} != base_keys:
             raise ValueError(f"{name} has an incomplete or different screen")
-        gates = passes(item, base)
+        gates = passes(item, base, a.scope)
         results[name] = dict(summary=item, resolved=sorted(set(base["swings"]) - set(item["swings"])),
                              new=sorted(set(item["swings"]) - set(base["swings"])),
-                             gates=gates, promote_to_full40=all(gates.values()))
-    report = dict(scope="enriched 20-song oracle-audio mechanism screen only",
+                             gates=gates, **{verdict_key: all(gates.values())})
+    report = dict(scope=("enriched 20-song oracle-audio mechanism screen only" if a.scope == "probe" else
+                         "full 40-song oracle-audio C render; causality, cue extraction, device and listening unproven"),
                   baseline=base, variants=results)
     (a.probe / "decision.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     for name, item in results.items():
         failed = [key for key, ok in item["gates"].items() if not ok]
         print(f"{name}: swing {len(base['swings'])}->{len(item['summary']['swings'])}, "
               f"resolved {len(item['resolved'])}, new {len(item['new'])}, "
-              f"full40 promotion {'YES' if not failed else 'NO'}; failed {', '.join(failed) or 'none'}")
+              f"{verdict_key} {'YES' if not failed else 'NO'}; failed {', '.join(failed) or 'none'}")
 
 
 if __name__ == "__main__":

@@ -19,6 +19,7 @@ def main():
     p.add_argument("--out", type=Path, required=True)
     p.add_argument("--controls", type=int, default=12)
     p.add_argument("--seed", type=int, default=1609)
+    p.add_argument("--all-songs", action="store_true", help="freeze all original 40 for confirmation")
     a = p.parse_args()
     if a.controls < 0:
         p.error("--controls must be nonnegative")
@@ -30,9 +31,9 @@ def main():
     if len(songs) != 40 or not swings:
         raise ValueError(f"expected 40 original oracle songs and swings, got {len(songs)} and {len(swings)}")
     controls = sorted(songs - swings)
-    if a.controls > len(controls):
+    if not a.all_songs and a.controls > len(controls):
         p.error(f"only {len(controls)} nonswinging controls available")
-    picked_controls = sorted(random.Random(a.seed).sample(controls, a.controls))
+    picked_controls = controls if a.all_songs else sorted(random.Random(a.seed).sample(controls, a.controls))
     selected = swings | set(picked_controls)
 
     track_ids = {}
@@ -57,7 +58,8 @@ def main():
         writer.writerows(r for r in rows if r["song"] in selected)
     manifest = {
         "source": str(a.oracle_run),
-        "scope": "enriched mechanism screen, not an unbiased validation set",
+        "scope": ("full 40-song confirmation after knob selection" if a.all_songs else
+                  "enriched mechanism screen, not an unbiased validation set"),
         "swing_threshold": "any stem range_1s > 0.30",
         "original_songs": len(songs),
         "swing_songs": sorted(swings),

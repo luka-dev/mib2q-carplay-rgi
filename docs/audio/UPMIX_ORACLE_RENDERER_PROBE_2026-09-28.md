@@ -32,4 +32,18 @@ If one passes, rerender the original 40 and the untouched 20 DEV songs with exac
 
 ## Result
 
-Pending. The CPU screen started only after the 10k rapid queue had drained.
+The CPU screen finished cleanly on the same 20 songs: **115 stem rows in every condition**, and the fresh baseline reproduced each original song/stem rear share and one-second range within 0.005. The evaluator wrote `D:\upmix\runs\oracle_renderer_probe\decision.json`; the paired JSON files and C renders are alongside it.
+
+| Condition | Any-stem swing songs / 20 | Resolved / new | Guitar | Keys | Piano | Strings | Voice | Bass | Drums | Rear RMS dBFS | Screen gate |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| Fresh baseline | 8 | — | 0.256 | 0.230 | 0.171 | 0.272 | 0.009 | 0.012 | 0.069 | −36.64 | Reference |
+| Rear body 0 dB | 6 | 2 / 0 | 0.335 | 0.261 | 0.309 | 0.304 | 0.011 | 0.019 | 0.070 | −35.17 | Fail: only two swings resolved; +1.47 dB rear |
+| Rear air −40 dB | **5** | **3 / 0** | 0.242 | 0.226 | 0.171 | 0.262 | 0.008 | 0.010 | **0.032** | −36.97 | **Pass to full 40** |
+| Front retention 0.25 | 14 | 0 / 6 | 0.369 | 0.282 | 0.241 | 0.383 | 0.009 | 0.012 | 0.070 | −36.64 | Fail: six new swings |
+| Front retention 0.75 | **1** | **7 / 0** | **0.176** | **0.179** | **0.122** | **0.187** | 0.009 | 0.012 | 0.068 | −36.64 | **Pass to full 40** |
+
+Both promoted variants also keep median guitar, keys and wind depth-versus-level slopes within ±0.05. The bowed-string median is based on only **three** songs in this enriched screen, so it needs the six-string-song full harness. Front retention changes the amount subtracted from the front while leaving the rear RMS identical here: its 8 → 1 stability result comes with lower instrument rear shares. Whether 0.176 guitar share sounds clearly behind in the owner's cabin is unresolved. Removing the air bed sacrifices a small amount of instrument share and 0.33 dB rear level while reducing drum rear share substantially; its timbre also needs listening.
+
+The exact two settings, plus a fresh baseline, are running on the original 40 DEV songs through [`run_oracle_renderer_full40.ps1`](../../tools/stereo-upmix-render/pc/run_oracle_renderer_full40.ps1). No full-harness, untouched-song, source-attribution, device or in-car verdict is claimed from this 20-song oracle screen.
+
+**Holdout caveat:** this enriched screen used knowledge of all eight failures in the original 40 DEV songs. The other 20 songs in that set were not rendered under these knob variants, but they are not a strict untouched holdout for choosing the knobs. If the full-40 check passes, freeze and render 20 songs from MoisesDB's separate 24-song `test` split before inspecting their outcomes; report those separately rather than calling a DEV subgroup untouched.

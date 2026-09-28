@@ -73,11 +73,18 @@ def main():
     p.add_argument("--guard", type=Path, required=True)
     p.add_argument("--moisesdb", type=Path, required=True)
     p.add_argument("--probe", type=Path, required=True)
+    p.add_argument("--expected-songs", type=int, default=20)
+    p.add_argument("--points", default=",".join(POINTS),
+                   help="comma-separated condition names, including baseline")
     a = p.parse_args()
+    names = [name.strip() for name in a.points.split(",")]
+    if not names or names[0] != "baseline" or len(names) != len(set(names)) or any(name not in POINTS for name in names):
+        p.error("--points must begin with baseline and contain distinct known conditions")
+    selected_points = {name: POINTS[name] for name in names}
     manifest = json.loads((a.probe / "manifest.json").read_text(encoding="utf-8"))
     song_ids = manifest["song_track_ids"]
-    if len(song_ids) != 20:
-        raise ValueError(f"expected 20 frozen songs, got {len(song_ids)}")
+    if len(song_ids) != a.expected_songs:
+        raise ValueError(f"expected {a.expected_songs} frozen songs, got {len(song_ids)}")
     original = csv_rows(a.probe / "baseline_stems.csv")
     if {r["song"] for r in original} != set(song_ids):
         raise ValueError("baseline CSV does not match the frozen manifest")
@@ -90,14 +97,14 @@ def main():
     harness.RESUME = True
     common = behavior.VARIANTS["shipped"] + ["--model", str(a.model), "--guard-model", str(a.guard),
                                               "--mask-drive", "1.0"]
-    folders = {name: a.probe / name for name in POINTS}
+    folders = {name: a.probe / name for name in selected_points}
     for folder in folders.values():
         folder.mkdir(parents=True, exist_ok=True)
 
     for index, (song, track_id) in enumerate(sorted(song_ids.items()), 1):
         missing = [name for name, folder in folders.items() if cached_rows(folder, track_id) is None]
         loaded = harness.load_song(a.moisesdb / track_id, 60.0) if missing else None
-        for name, extra in POINTS.items():
+        for name, extra in selected_points.items():
             rows = harness.analyse_song(str(a.render), common + extra, str(folders[name]),
                                         str(a.moisesdb / track_id), 60.0, loaded=loaded)
             if not rows:
@@ -114,7 +121,7 @@ def main():
             continue
         subprocess.run([sys.executable, str(Path(__file__).with_name("compare_rapid_pair.py")),
                         "--anchor-csv", str(baseline_csv), "--candidate-csv", str(folder / "stems.csv"),
-                        "--out", str(a.probe / f"{name}_paired.json"), "--expected-songs", "20"], check=True)
+                        "--out", str(a.probe / f"{name}_paired.json"), "--expected-songs", str(a.expected_songs)], check=True)
 
 
 if __name__ == "__main__":
