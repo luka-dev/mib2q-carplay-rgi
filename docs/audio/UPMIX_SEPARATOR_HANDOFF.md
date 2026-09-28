@@ -27,6 +27,8 @@ _Read this first, then [the night report](UPMIX_SEPARATOR_NIGHT_REPORT_2026-09-2
 
 **Review-21 update (later 2026-09-28).** A controlled extra loss on rare ≥.8 source-dominant cells did not improve the four-role student: eligible transmission **.337**, vocal/eligible **.439**, vocal-entry median/p10 **.786/.520**; the shared-mask anchor is **.462/.405/.835/.588**. It made confident bass prediction stronger but left confident eligible prediction near **.49** against a **.92** target across sampled train/DEV/pseudo data. The precommitted source/entry gate rejected C screening and longer training for this checkpoint. Exploratory hard thresholding of its role score at .55 gives eligible **.485** and vocal/eligible **.326** on fixed DEV12, nearly meeting the source-only screen but with no stability or audible evidence and with a threshold viewed after DEV results. The [role-focus report](UPMIX_CAUSAL_ROLE_FOCUS_2026-09-28.md) records all negative and diagnostic results. Next: preselect a smooth causal confidence mapping and test source/transition/C behavior at matched rear level. No head-unit/Track A change or owner listening occurred.
 
+**Review-22 update (later 2026-09-28).** Two fixed, smooth causal confidence mappings of the focused four-role checkpoint were screened without new training. The static map passed all four DEV12 source gates narrowly (eligible **.467**, vocal/eligible **.3231** against ≤.324), but failed vocal-entry retention **.826/.473** against ≥.85/.60. The 80 ms causal EMA map failed vocal/drum selectivity (**.409/.067** vs limits .324/.0568) and entry retention **.832/.462**. Both were rejected before C under the frozen rule. There is still **no Track B deployable candidate**, no device int8/latency measurement, no independent candidate validation and no owner listening verdict. See the [confidence-map report](UPMIX_CAUSAL_CONFIDENCE_MAP_2026-09-28.md). Next architecture test should separate persistent eligible-source evidence from fast protection of a newly arriving vocal; a shared mask with symmetric smoothing did not resolve both mechanisms. The PC GPU lease and rapid queue were idle for this CPU screen; no unit/Track A file changed.
+
 ---
 
 ## 🚦 Rules you must follow
@@ -123,6 +125,7 @@ flowchart LR
 | `upmix_stem_tests.py` | The renderer harness: per-stem rear share, swings, depth-follows-level, rear level, error vs the oracle. `--inject oracle\|irm\|teacher\|teacher2\|student:CKPT`, `--render-extra "--mask-drive G"`, `--songs N`, `--resume` |
 | `diag_gap.py` | Source attribution: frozen mask on the true stems, reanalysed audio; eligible / vocal / protected transmission, band ratios, IRM reference, bootstrap CIs |
 | `diag_transitions.py` | Vocal entries / exits / sustained controls: ducking, 0–2 s vocal peak, settling (censored), worst cases |
+| `role_confidence.py`, `diag_role_selectivity.py` | Frozen causal output-score mapping and fixed DEV12 true-source attribution; review 22 rejects both tested mappings before C rendering |
 | `diag_ceiling.py`, `diag_lossfloor.py`, `diag_auxgrad.py`, `bench_precision.py` | Eval-path audit; loss floor coverage + parameter-gradient scale; aux-loss weights; fp32 / TF32 / bf16 benchmark (not yet run) |
 | `pc/rapid_board.py`, `pc/rapid_daemon.ps1`, `pc/rapid_context.ps1` | The rapid loop (below); the board counts unique songs where **any** stem swings from `screen/stems.csv` |
 | `teacher_label.py` | Teacher caches: htdemucs four-stem, BS-RoFormer vocals + demucs d/b (`--model roformer2`) |
@@ -287,7 +290,7 @@ The currently defensible result is a **measured renderer upper bound plus a meas
 4. **Port only after a causal host candidate passes.** Track A owns `hook/audio` and the int8 port. Coordinate the interface and then measure actual ≤150 M int8 MAC/s, deadline misses and ≤85 ms added latency on the head unit, without rebooting it.
 5. **Finish with live CarPlay owner listening.** The current offline bound cannot answer timbre or cabin depth after removing rear body/bed. Only front-only and Track A run live today; the new path needs Track A's port before the requested blind in-car comparison. The owner chose to defer listening while these offline architecture tests ran.
 
-Resume separator training only when these identify a specific missing capability (review 16).
+**Review-22 next action:** the confidence-map screen isolates vocal-entry persistence and mixed-source protection as the paired failure. Define a causal estimator with a persistent eligible-source state and an independently fast protected-source estimate, then precommit a short source/entry screen before training. Do not extend the rejected 4k checkpoint merely because its static remapping passed DEV12 source ratios; that map missed both entry gates. Resume longer separator training only when the short test identifies and demonstrates the missing capability.
 
 ---
 
@@ -349,6 +352,7 @@ docs/audio/UPMIX_SEPARATOR_HANDOFF.md, then the night report and the plan.
 - [Upmix Causal Shared-Mask Source-Loss Pair 2026-09-28](UPMIX_CAUSAL_SOURCE_PAIR_2026-09-28.md) — review-19 matched causal estimator, source attribution, vocal entries, real-C screen and failed promotion
 - [Upmix Causal Four-Role Probe 2026-09-28](UPMIX_CAUSAL_ROLE_PROBE_2026-09-28.md) — review-20 four-role causal student, level-matched real-C result and privileged target upper bound
 - [Upmix Causal Role-Focus Probe 2026-09-28](UPMIX_CAUSAL_ROLE_FOCUS_2026-09-28.md) — review-21 rare-cell supervision failure and hard-threshold ranking bound
+- [Upmix Causal Confidence Map 2026-09-28](UPMIX_CAUSAL_CONFIDENCE_MAP_2026-09-28.md) — review-22 frozen smooth mappings, source/entry results and failed promotion
 - [Upmix Source Separation Plan](UPMIX_SOURCE_SEPARATION_PLAN.md) — the running log, reviews 1–16, run rows
 - [Upmix Mask Net Phase 1 Report 2026-09-27](UPMIX_MASK_PHASE1_REPORT_2026-09-27.md) — Track A in the car
 - [Upmix Stability 2026-09-25](UPMIX_STABILITY_2026-09-25.md) — the original "back and forth" measurement

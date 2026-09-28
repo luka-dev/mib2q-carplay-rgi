@@ -15,6 +15,7 @@ import numpy as np
 
 import mask_net as MN
 import sep_net as SN
+import role_confidence as RC
 
 
 def main():
@@ -23,6 +24,7 @@ def main():
     p.add_argument("anchor", type=Path)
     p.add_argument("candidate", type=Path)
     p.add_argument("--out", type=Path, required=True)
+    p.add_argument("--candidate-role-map", choices=("soft_static", "soft_ema80"))
     a = p.parse_args()
     torch = SN._torch()
     split = MN.load_split(str(a.cache))
@@ -44,7 +46,8 @@ def main():
             with torch.no_grad():
                 X = SN.stft(torch, mix)
                 net.separate_stft(X)
-                mask = net.last_mask
+                mask = (RC.mask_from_logits(torch, net.role_logits, a.candidate_role_map)[0]
+                        if label == "candidate" and a.candidate_role_map else net.last_mask)
                 energy = {}
                 for name, source in zip(("vocal", "drums", "bass", "eligible"), sources):
                     S = SN.stft(torch, source[None])
@@ -81,6 +84,7 @@ def main():
         gates[key + "_ratio_at_most_point8_anchor"] = (
             candidate[ratio_key]["value"] <= 0.8 * anchor[ratio_key]["value"])
     out = {"scope": "same 12 inspected DEV excerpts as diag_gap; gain-invariant source selectivity; not independent validation",
+           "candidate_role_map": a.candidate_role_map,
            "anchor": results["anchor"], "candidate": results["candidate"], "gates": gates}
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(out, indent=2) + "\n", encoding="utf-8")
