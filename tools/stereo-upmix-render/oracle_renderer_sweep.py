@@ -76,6 +76,8 @@ def main():
     p.add_argument("--expected-songs", type=int, default=20)
     p.add_argument("--points", default=",".join(POINTS),
                    help="comma-separated condition names, including baseline")
+    p.add_argument("--skip-original-verify", action="store_true",
+                   help="new test-split songs have no previous C baseline CSV")
     a = p.parse_args()
     names = [name.strip() for name in a.points.split(",")]
     if not names or names[0] != "baseline" or len(names) != len(set(names)) or any(name not in POINTS for name in names):
@@ -85,8 +87,8 @@ def main():
     song_ids = manifest["song_track_ids"]
     if len(song_ids) != a.expected_songs:
         raise ValueError(f"expected {a.expected_songs} frozen songs, got {len(song_ids)}")
-    original = csv_rows(a.probe / "baseline_stems.csv")
-    if {r["song"] for r in original} != set(song_ids):
+    original = None if a.skip_original_verify else csv_rows(a.probe / "baseline_stems.csv")
+    if original is not None and {r["song"] for r in original} != set(song_ids):
         raise ValueError("baseline CSV does not match the frozen manifest")
 
     harness.INJECT = "oracle"
@@ -109,7 +111,7 @@ def main():
                                         str(a.moisesdb / track_id), 60.0, loaded=loaded)
             if not rows:
                 raise RuntimeError(f"C render failed: {song} / {name}")
-            if name == "baseline":
+            if name == "baseline" and original is not None:
                 verify_baseline(rows, original, song)
         print(f"{index}/{len(song_ids)} {song}", flush=True)
 

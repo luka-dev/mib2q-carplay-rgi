@@ -46,8 +46,10 @@ def passes(candidate, baseline, scope):
     if scope == "probe":
         gates["resolves_at_least_three"] = len(old - new) >= 3
         gates["no_new_swing"] = not (new - old)
-    else:
+    elif scope == "full40":
         gates["any_stem_swing_at_most_five"] = len(new) <= 5
+    else:
+        gates["any_stem_swing_at_most_two"] = len(new) <= 2
     for stem, (limit, direction) in SHARE_LIMITS.items():
         value = candidate["shares"][stem]
         gates[f"share_{stem}"] = value is not None and (value >= limit if direction == "min" else value <= limit)
@@ -60,7 +62,7 @@ def passes(candidate, baseline, scope):
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--probe", type=Path, required=True)
-    p.add_argument("--scope", choices=("probe", "full40"), default="probe")
+    p.add_argument("--scope", choices=("probe", "full40", "test20"), default="probe")
     a = p.parse_args()
     manifest = json.loads((a.probe / "manifest.json").read_text(encoding="utf-8"))
     points = PROBE_POINTS if a.scope == "probe" else FULL40_POINTS
@@ -69,14 +71,15 @@ def main():
     base = summaries["baseline"]
     base_keys = {(r["song"], r["stem"]) for r in raw["baseline"]}
     expected = set(manifest["song_track_ids"])
-    if set(base["songs"]) != expected or set(base["swings"]) != set(manifest["swing_songs"]):
+    if set(base["songs"]) != expected or (a.scope != "test20" and set(base["swings"]) != set(manifest["swing_songs"])):
         raise ValueError("fresh baseline no longer matches the frozen screen")
-    expected_songs, expected_rows = (20, 115) if a.scope == "probe" else (40, 231)
-    if len(base["songs"]) != expected_songs or base["rows"] != expected_rows:
-        raise ValueError(f"expected {expected_songs} baseline songs and {expected_rows} stem rows, "
-                         f"got {len(base['songs'])} and {base['rows']}")
+    expected_songs = 40 if a.scope == "full40" else 20
+    expected_rows = 115 if a.scope == "probe" else 231 if a.scope == "full40" else None
+    if len(base["songs"]) != expected_songs or (expected_rows is not None and base["rows"] != expected_rows):
+        raise ValueError(f"unexpected baseline size: {len(base['songs'])} songs and {base['rows']} stem rows")
     results = {}
-    verdict_key = "promote_to_full40" if a.scope == "probe" else "meets_full40_render_gates"
+    verdict_key = {"probe": "promote_to_full40", "full40": "meets_full40_render_gates",
+                   "test20": "meets_test20_render_gates"}[a.scope]
     for name in points[1:]:
         item = summaries[name]
         if set(item["songs"]) != expected or {(r["song"], r["stem"]) for r in raw[name]} != base_keys:
@@ -85,8 +88,10 @@ def main():
         results[name] = dict(summary=item, resolved=sorted(set(base["swings"]) - set(item["swings"])),
                              new=sorted(set(item["swings"]) - set(base["swings"])),
                              gates=gates, **{verdict_key: all(gates.values())})
-    report = dict(scope=("enriched 20-song oracle-audio mechanism screen only" if a.scope == "probe" else
-                         "full 40-song oracle-audio C render; causality, cue extraction, device and listening unproven"),
+    scope = {"probe": "enriched 20-song oracle-audio mechanism screen only",
+             "full40": "full 40-song oracle-audio C render; causality, cue extraction, device and listening unproven",
+             "test20": "independent 20-song MoisesDB test split, oracle audio; deployability and listening unproven"}[a.scope]
+    report = dict(scope=scope,
                   baseline=base, variants=results)
     (a.probe / "decision.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     for name, item in results.items():
