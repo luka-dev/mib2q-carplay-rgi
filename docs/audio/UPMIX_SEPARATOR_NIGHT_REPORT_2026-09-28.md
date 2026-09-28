@@ -274,6 +274,8 @@ What each experiment says:
 - **sharedmask** — the first mechanism response in the stability direction: depth no longer follows level for guitar, keys and wind, entry ducking is 15 points softer at p10, piano / keys / strings rise to or near the teacher, one swing in 20 songs. Costs: bass 0.10, quieter air (−29 dB), SI-SDR −1.46. Being promoted as a pair against the anchor at 10k.
 - **attr** — the first run diverged to NaN at step 1000 (a window with silent vocal and silent eligible stems gave 0 / 0); fixed with an absolute floor and paused by review 16.
 
+_Paired 4k check (later 28.09):_ [`compare_rapid_pair.py`](../../tools/stereo-upmix-render/compare_rapid_pair.py) joined the same 20 songs in `anchor_s1` and `sharedmask` and bootstrapped **songs**, not stem rows. Any-stem swings fell 3 → 1 (two resolved, none new), but guitar median rear share moved only 0.107 → 0.111; the paired median change was +0.007 with a 90% bootstrap interval −0.005 to +0.018. Piano and strings each had only 8 and 5 finite paired songs. This supports a stability mechanism signal, not a confident instrument-delivery promotion; the matched 10k pair is still needed.
+
 ---
 
 ## 🔄 In progress
