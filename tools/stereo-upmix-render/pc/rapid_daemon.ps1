@@ -14,23 +14,25 @@ while ($true) {
   "rapid $(Get-Date)" | Set-Content $LEASE
   while (Busy) { Start-Sleep 30 }
   $job = $lines[0]; $parts = $job -split '\|', 2; $tag = $parts[0].Trim(); $args = $parts[1].Trim()
+  # optional "--steps N" in the job (promotion to 10k): same recipe, snapshot and diagnostics at N
+  $steps = 4000; $m = [regex]::Match($args, '--steps (\d+)'); if ($m.Success) { $steps = [int]$m.Groups[1].Value; $args = ($args -replace '--steps \d+', '').Trim() }
   $O = "$RD\$tag"; New-Item -ItemType Directory -Force $O | Out-Null
   ("start $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') args [" + $args + "]") | Add-Content "$O\job.txt"
   Set-Location $T
   Remove-Item Env:\CUDA_VISIBLE_DEVICES -ErrorAction SilentlyContinue
   if (-not (Test-Path "$O\a\train_done.txt")) {
     $extra = ""; if (Test-Path "$O\a\last.pt") { $extra = "--init `"$O\a\last.pt`"" }
-    Invoke-Expression "python `"$T\sep_net.py`" train --arch band $args --cache $C --teacher-cache $TC --half-half --out `"$O\a`" --steps 4000 --batch 12 --seconds 8 --eval-every 1000 --save-at 4000 --lr 3e-4 --warmup 2000 --sisdr-after 20000 $extra >> `"$O\train.log`" 2>&1"
+    Invoke-Expression "python `"$T\sep_net.py`" train --arch band $args --cache $C --teacher-cache $TC --half-half --out `"$O\a`" --steps $steps --batch 12 --seconds 8 --eval-every 1000 --save-at $steps --lr 3e-4 --warmup 2000 --sisdr-after 20000 $extra >> `"$O\train.log`" 2>&1"
   }
-  if (Test-Path "$O\a\step4000.pt") {
-    if (-not (Test-Path "$O\gap.txt")) { Invoke-Expression "python `"$T\diag_gap.py`" $C `"$O\a\step4000.pt`" > `"$O\gap.txt`" 2>&1" }
-    if (-not (Test-Path "$O\transitions.txt")) { Invoke-Expression "python `"$T\diag_transitions.py`" $C `"$O\a\step4000.pt`" --songs 20 > `"$O\transitions.txt`" 2>&1" }
-  } else { "training did not produce step4000.pt" | Add-Content "$O\job.txt" }
+  if (Test-Path "$O\a\step$steps.pt") {
+    if (-not (Test-Path "$O\gap.txt")) { Invoke-Expression "python `"$T\diag_gap.py`" $C `"$O\a\step$steps.pt`" > `"$O\gap.txt`" 2>&1" }
+    if (-not (Test-Path "$O\transitions.txt")) { Invoke-Expression "python `"$T\diag_transitions.py`" $C `"$O\a\step$steps.pt`" --songs 20 > `"$O\transitions.txt`" 2>&1" }
+  } else { "training did not produce step$steps.pt" | Add-Content "$O\job.txt" }
   $rest = @($lines | Select-Object -Skip 1)
   if ($rest.Count -eq 0) { Remove-Item $LEASE -Force -ErrorAction SilentlyContinue }
-  if ((Test-Path "$O\a\step4000.pt") -and -not (Test-Path "$O\screen.log")) {
+  if ((Test-Path "$O\a\step$steps.pt") -and -not (Test-Path "$O\screen.log")) {
     $env:CUDA_VISIBLE_DEVICES = '-1'
-    & "$T\stems_guard.ps1" -Out "$O\screen" -Log "$O\screen.log" -HArgs "$B --inject student:$O\a\step4000.pt --render-extra `"--mask-drive 1.0`""
+    & "$T\stems_guard.ps1" -Out "$O\screen" -Log "$O\screen.log" -HArgs "$B --inject student:$O\a\step$steps.pt --render-extra `"--mask-drive 1.0`""
     Remove-Item Env:\CUDA_VISIBLE_DEVICES -ErrorAction SilentlyContinue
   }
   ("done $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')") | Add-Content "$O\job.txt"

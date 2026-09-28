@@ -24,7 +24,8 @@ def row(d):
         return raw.decode("utf-16") if raw[:2] in (b"\xff\xfe", b"\xfe\xff") else raw.decode("utf-8", errors="replace")
     job, tl, gap, tr, sc = read("job.txt"), read("train.log"), read("gap.txt"), read("transitions.txt"), read("screen.log")
     r["args"] = grab(job, r"args \[(.*?)\]", cast=str) or grab(job, r"inject \[(.*?)\]", cast=str) or ""
-    r["sdr"] = grab(tl, r"^step 4000 .*?si_sdr (-?[\d.]+)"); r["leak_eval"] = grab(tl, r"^step 4000 .*?vocal_leak ([\d.]+)")
+    last = re.findall(r"^step (\d+) .*?si_sdr (-?[\d.]+|nan)", tl, re.M)
+    r["sdr"] = float(last[-1][1]) if last and last[-1][1] != "nan" else None
     m = re.search(r"^MEDIAN\s+([-+]?[\d.]+)\s+([-+]?[\d.]+)\s+([-+]?[\d.]+)\s+([-+]?[\d.]+)\s*\|\s*([\d.]+)\s+([\d.]+)\s*\|\s*([\d.]+)\s+([\d.]+)\s*\|\s*([\d.]+)", gap, re.M)
     if m:
         r["rec"], r["rec_d"], r["vl"], r["pl"] = float(m.group(5)), float(m.group(6)), float(m.group(7)), float(m.group(9))
@@ -47,7 +48,7 @@ def main():
     rows = [row(d) for d in dirs]
     order = lambda r: (0 if r["tag"].startswith("ctx_") else 1 if r["tag"].startswith("anchor") else 2, r["tag"])
     rows.sort(key=order)
-    head = ("| tag | args | SI-SDR@4k | elig tx (all/edom) | vocal tx | prot tx | air 8-14k / >14k dB | entry duck med/p10 | 0-2 s peak | exit release "
+    head = ("| tag | args | SI-SDR (last) | elig tx (all/edom) | vocal tx | prot tx | air 8-14k / >14k dB | entry duck med/p10 | 0-2 s peak | exit release "
             "| voice | guitars | keys | swing/20 | level | err |")
     out = ["# Rapid board (4k-step mechanism screen; the 20-song CPU screen at G 1.0)", "", head, "|" + "---|" * 16]
     for r in rows:
