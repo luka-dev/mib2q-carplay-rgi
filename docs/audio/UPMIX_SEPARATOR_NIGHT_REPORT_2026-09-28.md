@@ -280,6 +280,8 @@ What each experiment says:
 
 _Paired 4k check (later 28.09):_ [`compare_rapid_pair.py`](../../tools/stereo-upmix-render/compare_rapid_pair.py) joined the same 20 songs in `anchor_s1` and `sharedmask` and bootstrapped **songs**, not stem rows. Any-stem swings fell 3 → 1 (two resolved, none new), but guitar median rear share moved only 0.107 → 0.111; the paired median change was +0.007 with a 90% bootstrap interval −0.005 to +0.018. Piano and strings each had only 8 and 5 finite paired songs. This supports a stability mechanism signal, not a confident instrument-delivery promotion; the matched 10k pair is still needed.
 
+_10k update (07:23 on 28.09):_ `sharedmask_10k` finished training and its 20 × 60 s real-C screen. Against the **same model family at 4k**, any-stem swing songs rose **1 → 5/20** (four new, none resolved). Median rear share: voice 0.039 → 0.041, guitar 0.111 → 0.131, piano 0.087 → 0.077, keys 0.114 → 0.111, strings 0.158 → 0.124, bass 0.097 → 0.096, drums 0.078 → 0.092. The 10k transition diagnostic gives entry-retention median 0.845, p10 **0.431** (4k p10 0.58; goal ≥ 0.60). Eligible transmission is 0.44 but vocal transmission 0.247; rear RMS −36.8 dBFS. The guitar gain does not compensate for worsened movement, ducking and protected stems; **do not extend `sharedmask_10k` to 40k**. `anchor_10k` was training when this was recorded, so the matched 10k comparison remains pending. Paired raw result: `D:\upmix\runs\rapid\sharedmask_4k_vs_10k.json`.
+
 ---
 
 ## 🔄 In progress
