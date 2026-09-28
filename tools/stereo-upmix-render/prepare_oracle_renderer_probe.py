@@ -63,6 +63,7 @@ def main():
         "swing_songs": sorted(swings),
         "controls": picked_controls,
         "track_ids": split,
+        "song_track_ids": {song: track_ids[song] for song in sorted(selected)},
     }
     (a.out / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     print(f"Frozen {len(swings)} swing songs + {len(picked_controls)} controls = {len(selected)}")
