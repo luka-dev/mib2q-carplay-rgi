@@ -18,4 +18,22 @@ For a passing model, run the same frozen direct/no-bed/body0 real C renderer on 
 
 ## Results
 
-Pending.
+Both sequential GPU runs reached step 4000 in the original lease-guarded PC session; no second GPU tenant or pip change was introduced. The control finished in **748 s** with DEV 20 s SI-SDR **−1.21 dB** and its scalar vocal-leak diagnostic **.161**. The complex/role candidate finished in **882 s** with SI-SDR **−1.53 dB** and vocal leak **.091**. This is an apparent leak/retention trade-off, not a source-attribution or renderer verdict. A local fixed-input prefix check of `separate_stft` differed by at most **1.9×10⁻⁷** on the first ten frames whether run alone or as part of a 21-frame spectrogram; it supports zero-lookahead computation for the Python model, not a streaming port.
+
+The transient loss of new Tailscale/SSH connections ended without intervention. The **existing training session returned exit 0 and its completion line**; both `train_done.txt` files and step-4000 checkpoints were verified, the GPU lease and rapid queue were empty, and [`run_dual_head_causal_diag.ps1`](../../tools/stereo-upmix-render/pc/run_dual_head_causal_diag.ps1) completed the frozen CPU diagnostics. Checkpoint SHA-256: control `A38DCCB9DAD5AF382AC34EB38CBD3FB2E6114E60C0C34B4BA8C40279ABB93F12`; candidate `B33EB75AF32DBDFD4A878D703F1D53B7BAC5431AA3224D0F86F62737F013E2F7`.
+
+| Fixed DEV12 reanalyzed source metric | Shared-mask anchor | Complex control | Complex plus role head |
+| --- | ---: | ---: | ---: |
+| Eligible energy transmitted | .4624 | .3851 | **.3623** |
+| Vocal / eligible, per-song median | .4050 | .5036 | **.4497** |
+| Drums / eligible | .0710 | .0830 | .0845 |
+| Bass / eligible | .0424 | .0484 | .0429 |
+| Frozen source gates passed | — | **0/4** | **0/4** |
+
+The extra role head reduces absolute vocal transmission from **.1790 to .1290**, but also reduces eligible transmission from **.3851 to .3623**. Its vocal/eligible ratio improves against the matched control, yet is worse than the shared-mask anchor and exceeds the ≤.324 gate. On the same 43 vocal entries, eligible post/pre retention median/p10 improves **.703/.418 → .837/.542**; the candidate still misses ≥.85/.60. Its pre-entry eligible transmission is already lower (median **.414** versus control **.503**), so improved post/pre ratio alone cannot establish a useful rear.
+
+**Reject both before C under the frozen rule.** No gain-matched renderer screen, full40/TEST20 promotion, device port or listening claim follows. This paired result says that an auxiliary protected-role prediction improves some vocal-entry behavior at this training age, but does not fix aggregate instrument recall or selectivity. It does not isolate whether data, optimisation, temporal context, per-bin output limits or compute ultimately dominates.
+
+One external architecture warning informs a later test, not this verdict: a recent [embedded music-separation study](https://arxiv.org/abs/2609.12201) found that a different convolutional separator trained on independently padded short blocks deteriorated during continuous frame-by-frame inference, despite good block-wise scores. Our model has causal GRUs and 8 s reset crops, so that paper does not establish the same failure here. For a future model passing source and entry screens, compare uninterrupted 60 s inference with controlled state resets and inspect per-time source transmission before a device claim.
+
+PC artifacts: `D:\upmix\runs\dual_head_causal4k\{complex_control,complex_role}\step4000.pt`; at the run root, `{complex_control,complex_role}.selectivity.json`, matching `.txt` files, and `transitions.txt`. The source JSON contains per-song rows; transition text contains the 43-entry summary and worst events. The PC was reachable again after the transient; no head-unit or Track A file changed.

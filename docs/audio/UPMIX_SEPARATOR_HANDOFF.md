@@ -29,6 +29,8 @@ _Read this first, then [the night report](UPMIX_SEPARATOR_NIGHT_REPORT_2026-09-2
 
 **Review-22 update (later 2026-09-28).** Two fixed, smooth causal confidence mappings of the focused four-role checkpoint were screened without new training. The static map passed all four DEV12 source gates narrowly (eligible **.467**, vocal/eligible **.3231** against ≤.324), but failed vocal-entry retention **.826/.473** against ≥.85/.60. The 80 ms causal EMA map failed vocal/drum selectivity (**.409/.067** vs limits .324/.0568) and entry retention **.832/.462**. Both were rejected before C under the frozen rule. There is still **no Track B deployable candidate**, no device int8/latency measurement, no independent candidate validation and no owner listening verdict. See the [confidence-map report](UPMIX_CAUSAL_CONFIDENCE_MAP_2026-09-28.md). Next architecture test should separate persistent eligible-source evidence from fast protection of a newly arriving vocal; a shared mask with symmetric smoothing did not resolve both mechanisms. The PC GPU lease and rapid queue were idle for this CPU screen; no unit/Track A file changed.
 
+**Review-23 update (later 2026-09-28).** A matched 4k causal complex-output pair tested a separate auxiliary four-role head within an estimated **126 M neural MAC/s** candidate, against a **94 M** complex control. The role head lowered scalar vocal leak **.161→.091** and improved 43-entry eligible retention **.703/.418→.837/.542**, but failed the frozen ≥.85/.60 entry limits. On DEV12 it also lowered eligible transmission **.385→.362**; vocal/eligible improved **.504→.450** but both models failed all four source gates versus the shared-mask anchor. Both were rejected before C, full40 or longer training. The [dual-head report](UPMIX_DUAL_HEAD_CAUSAL_PROBE_2026-09-28.md) records the matched pair and PC checkpoints. The brief Tailscale outage at training completion resolved without restarting jobs. No deployable/device/listening claim follows; next host architecture probe can test a causal temporal deep filter while keeping the same source/entry gate.
+
 ---
 
 ## 🚦 Rules you must follow
@@ -353,6 +355,7 @@ docs/audio/UPMIX_SEPARATOR_HANDOFF.md, then the night report and the plan.
 - [Upmix Causal Four-Role Probe 2026-09-28](UPMIX_CAUSAL_ROLE_PROBE_2026-09-28.md) — review-20 four-role causal student, level-matched real-C result and privileged target upper bound
 - [Upmix Causal Role-Focus Probe 2026-09-28](UPMIX_CAUSAL_ROLE_FOCUS_2026-09-28.md) — review-21 rare-cell supervision failure and hard-threshold ranking bound
 - [Upmix Causal Confidence Map 2026-09-28](UPMIX_CAUSAL_CONFIDENCE_MAP_2026-09-28.md) — review-22 frozen smooth mappings, source/entry results and failed promotion
+- [Upmix Dual-Head Causal Probe 2026-09-28](UPMIX_DUAL_HEAD_CAUSAL_PROBE_2026-09-28.md) — review-23 matched complex-audio/role-head pair and failed source/entry promotion
 - [Upmix Source Separation Plan](UPMIX_SOURCE_SEPARATION_PLAN.md) — the running log, reviews 1–16, run rows
 - [Upmix Mask Net Phase 1 Report 2026-09-27](UPMIX_MASK_PHASE1_REPORT_2026-09-27.md) — Track A in the car
 - [Upmix Stability 2026-09-25](UPMIX_STABILITY_2026-09-25.md) — the original "back and forth" measurement
