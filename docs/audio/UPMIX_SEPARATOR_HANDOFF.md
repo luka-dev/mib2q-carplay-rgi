@@ -190,6 +190,8 @@ stateDiagram-v2
 
 **Mechanism update 07:02:** both a global membership latch and a per-source oracle activity latch have now been screened on the same 20 DEV songs through the C renderer. Global membership worsened any-stem swings 6 → 9; per-source membership left them at 6 → 6 while guitar and keys stayed almost always admitted and transient percussion was lost. Neither is a candidate. See [membership screens](UPMIX_PERSISTENT_MEMBERSHIP_SCREEN_2026-09-28.md). `sharedmask_10k` was at 4k; `anchor_10k` still waited in the rapid queue.
 
+**Renderer follow-up prepared 07:16:** [`prepare_oracle_renderer_probe.py`](../../tools/stereo-upmix-render/prepare_oracle_renderer_probe.py) froze all eight full-harness oracle-audio swing songs plus 12 deterministic nonswinging controls in `D:\upmix\runs\oracle_renderer_probe\`. Its paired baseline has 20 songs, 115 stem rows and 8 any-stem swings; a self-comparison passed on the PC. [`run_oracle_renderer_probe.ps1`](../../tools/stereo-upmix-render/pc/run_oracle_renderer_probe.ps1) will screen rear body, rear air and front retention through the real C renderer on true eligible audio, **only after the 10k rapid pair drains**; it has not been run yet. This enriched diagnostic subset cannot certify a fix without the original full 40 and untouched 20. The rapid queue still contained `sharedmask_10k` (step 9k) and `anchor_10k` at 07:16.
+
 ---
 
 ## 📍 What to do next (review 16's order)
