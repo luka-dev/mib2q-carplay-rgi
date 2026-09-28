@@ -108,7 +108,8 @@ def main():
                     L = a1 - a0; cutf = M.shape[1] - SN.stft(torch, mix[:, :, WARM:]).shape[1]     # frames of warm-up to drop
                     A = lambda Z: SN.stft(torch, SN.istft(torch, Z, L))[:, cutf:]
                     E = SN.stft(torch, elig); V = SN.stft(torch, voc)
-                    leak = per_frame(torch, A(M * V), A(V), nf, FLOOR_DB); ret = per_frame(torch, A(M * E), A(E), nf, FLOOR_DB)
+                    filtered = lambda Z: M * Z if a.role_map else net.apply_last_filter(Z)
+                    leak = per_frame(torch, A(filtered(V)), A(V), nf, FLOOR_DB); ret = per_frame(torch, A(filtered(E)), A(E), nf, FLOOR_DB)
                 r = dict(song=os.path.basename(p)[:8], t=s / SR, ret_pre=np.nanmean(ret[pre]), ret_post=np.nanmean(ret[post]),
                          leak_pre=np.nanmean(leak[pre]), leak_0_2=np.nanmean(leak[(t_axis >= 0) & (t_axis < 2)]),
                          peak_0_2=np.nanmax(leak[(t_axis >= 0) & (t_axis < 2)]) if np.isfinite(leak[(t_axis >= 0) & (t_axis < 2)]).any() else np.nan,

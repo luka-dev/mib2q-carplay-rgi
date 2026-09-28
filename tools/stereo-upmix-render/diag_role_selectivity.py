@@ -47,12 +47,13 @@ def main():
                 X = SN.stft(torch, mix)
                 net.separate_stft(X)
                 mask = (RC.mask_from_logits(torch, net.role_logits, a.candidate_role_map)[0]
-                        if label == "candidate" and a.candidate_role_map else net.last_mask)
+                        if label == "candidate" and a.candidate_role_map else None)
                 energy = {}
                 for name, source in zip(("vocal", "drums", "bass", "eligible"), sources):
                     S = SN.stft(torch, source[None])
                     clean = SN.stft(torch, SN.istft(torch, S, n))
-                    sent = SN.stft(torch, SN.istft(torch, mask * S, n))
+                    sent_stft = mask * S if mask is not None else net.apply_last_filter(S)
+                    sent = SN.stft(torch, SN.istft(torch, sent_stft, n))
                     energy[name] = (float((sent.abs() ** 2).sum()), float((clean.abs() ** 2).sum()))
             mix_energy = sum(den for _, den in energy.values())
             transmission = {name: num / den if den > 1e-6 * mix_energy else None
