@@ -1008,6 +1008,20 @@ The owner asked for a fast loop with a trustworthy reference point. My design (4
 
 **Built from this review:** `rapid_daemon.ps1` (a queue file of `tag|args` jobs; holds `D:\upmix\runs\GPU_LEASE` while jobs are queued — the long runners wait on it — trains 4k with the full recipe and `--save-at 4000`, runs the attribution and transition diagnostics on the GPU, releases the GPU, runs the frozen 20-song screen on the CPU, and rebuilds the leaderboard with `rapid_board.py`), the anchor (`anchor_s1`, `anchor_s2` = second seed), and the context rows (teacher, oracle, IRM, sep3 best) on the same 20-song screen.
 
+## 🛑 Review 16 (astra, "just training separators is so-so" — 2026-09-28 05:00)
+
+Verdict: **stop broad separator training for 2–3 days.** Five controlled runs gave no useful jump, several exceed the budget, and vocal transitions still move the instruments; the shared-mask result matters because it changes the *failure mechanism* (stability), not because it separates better. Next, in order:
+
+1. **Owner's in-car listening test first (highest expected value).** Four conditions on identical excerpts through the same chain, level-matched, blind, repeated: front-only stereo, Track A deployable, shared-mask candidate, teacher-fed renderer (aspirational). Excerpts with vocal entries/exits, sustained instrumentals, dense choruses, exposed vocals, some outside the DEV set. Questions: instruments clearly behind? any voice behind? does an instrument move or duck when singing starts? would you use it daily? If even the teacher disappoints → rendering / cabin presentation, not extraction; if the teacher delights and all deployables fail → extraction is the real bottleneck.
+2. **Persistent rear membership by construction (Track A controller):** separate *membership* (does this stream belong in the rear — slow, hysteresis, minimum dwell, conservative admission) from *protection* (is its current audio safe — fast). Not a smoothed mask (that prolongs vocal leak). Log membership changes and eligible-audio loss separately.
+3. **Optimise the product directly, without neural training first:** 10–30 controller parameters (admission thresholds, hysteresis, dwell, protection strength, gain envelopes) searched with bounded search / CMA-ES against the real C renderer, as constrained optimisation (voice / bass / drums / stability as constraints, maximise instrument delivery across families, with entry/exit ducking, depth-follows-level, rear spectral balance, a minimum useful rear level) — otherwise silence wins; validate on untouched songs.
+4. **Oracle-cue upper bound** for a cheap decomposition: ground-truth vocal / drum / bass cues drive the same persistent controller while the mixture is routed; train small causal cue estimators only if the oracle succeeds.
+5. Separator as optional *admission evidence* (sustained agreement), never as the rear audio or a frame-wise gain.
+6. Half a day of real head-unit profiling (deadline misses, memory traffic, thermals, latency) before assuming more than 150 M MAC/s.
+7. Multi-second lookahead is a separate product decision: media buffering is not automatically accessible future PCM; measure where decoded audio exists and seek / pause / track-change behaviour first.
+
+**Applied 05:00:** paused `attr`, `sharedmask_log`, sep9c, sep10, sep11, sep12 (runner files kept; relaunch = start the `run_*.ps1` / re-add the queue lines; note in `D:\upmix\runs\rapid\PAUSED.txt`). Kept: sep9 (already half-trained) and the sharedmask / anchor pair at 10k.
+
 ## 📝 Publication (astra review 5, 2026-09-26)
 
 Asked whether there is a paper in this work.  Verdict: **a credible systems +
