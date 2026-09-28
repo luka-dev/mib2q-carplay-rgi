@@ -129,15 +129,21 @@ class BandSepNet:
     ~125 M neural MAC/s at 93.75 frames/s.  Causal: recurrence over time only.
     `brnn` > 0 (astra review 10, leading diagnosis "inadequate cross-band modelling"): replace the two
     depthwise mixers with a BSRNN-style bidirectional GRU ACROSS THE BANDS at every frame (frequency
-    is not causal), hidden `brnn` per direction, projected back to h2 with a tanh residual."""
+    is not causal), hidden `brnn` per direction, projected back to h2 with a tanh residual.
+    `lookahead` = L > 0 (astra review 12, the budget-compatible future-context test): the mask applied to
+    frame t is produced at step t + L (output delay), and the decoder also receives frame t's own band
+    embedding, so the L future frames are real evidence rather than a memory test.  The stream's last L
+    frames hold the final mask.  `bidir` (review 12's diagnostic twin): the time GRUs run in both
+    directions with half the hidden size per direction (seconds of future context; NOT deployable)."""
 
-    def __init__(self, torch, feat=48, h1=32, h2=32, hg=32, brnn=0):
+    def __init__(self, torch, feat=48, h1=32, h2=32, hg=32, brnn=0, lookahead=0, bidir=False):
         nn = torch.nn
         self.torch = torch
         self.bands = band_edges()
         self.enc = nn.ModuleList([nn.Linear((b - a) * 6, feat) for a, b in self.bands])
-        self.gru1 = nn.GRU(feat, h1, batch_first=True)
-        self.gru2 = nn.GRU(h1, h2, batch_first=True)
+        d = 2 if bidir else 1
+        self.gru1 = nn.GRU(feat, h1 // d, batch_first=True, bidirectional=bidir)
+        self.gru2 = nn.GRU(h1, h2 // d, batch_first=True, bidirectional=bidir)
         if brnn:
             self.brnn = nn.GRU(h2, brnn, batch_first=True, bidirectional=True)
             self.bproj = nn.Linear(2 * brnn, h2)
@@ -146,18 +152,19 @@ class BandSepNet:
             self.mix1 = nn.Sequential(nn.Conv1d(h2, h2, 3, padding=1, groups=h2), nn.Conv1d(h2, h2, 1), nn.Tanh())
             self.mix2 = nn.Sequential(nn.Conv1d(h2, h2, 3, padding=1, groups=h2), nn.Conv1d(h2, h2, 1), nn.Tanh())
             cross = [self.mix1, self.mix2]
-        self.ggru = nn.GRU(h2, hg, batch_first=True)
-        self.dec = nn.ModuleList([nn.Linear(h2 + hg, (b - a) * 4) for a, b in self.bands])
+        self.ggru = nn.GRU(h2, hg // d, batch_first=True, bidirectional=bidir)
+        dec_in = h2 + hg + (feat if lookahead else 0)
+        self.dec = nn.ModuleList([nn.Linear(dec_in, (b - a) * 4) for a, b in self.bands])
         for d in self.dec:                                     # near attenuation: mask ~ 0.3 + 0i
             nn.init.normal_(d.weight, std=0.01)
             with torch.no_grad():
                 d.bias.zero_(); d.bias.view(-1, 4)[:, 0] = 0.3; d.bias.view(-1, 4)[:, 2] = 0.3
         self.modules = nn.ModuleList([self.enc, self.gru1, self.gru2] + cross + [self.ggru, self.dec])
-        self.feat, self.h1, self.h2, self.hg, self.nbrnn = feat, h1, h2, hg, brnn
+        self.feat, self.h1, self.h2, self.hg, self.nbrnn, self.lookahead, self.bidir = feat, h1, h2, hg, brnn, lookahead, bidir
         nb = len(self.bands)
         cross_macs = (2 * 3 * (h2 * brnn + brnn * brnn) + 2 * brnn * h2) * nb if brnn else 2 * (3 * h2 + h2 * h2) * nb
         self.macs = (N_BINS * 6 * feat + 3 * (feat * h1 + h1 * h1) * nb + 3 * (h1 * h2 + h2 * h2) * nb
-                     + cross_macs + 3 * (h2 * hg + hg * hg) + N_BINS * 4 * (h2 + hg))
+                     + cross_macs + 3 * (h2 * hg + hg * hg) + N_BINS * 4 * dec_in)
 
     def to(self, dev):
         self.modules.to(dev); return self
@@ -189,7 +196,14 @@ class BandSepNet:
             h = h + self.mix2(h)
         h = h.reshape(B, T, self.h2, nb)
         g, _ = self.ggru(h.mean(-1))                                             # [B,T,hg]
-        z = torch.cat([h.permute(0, 1, 3, 2), g[:, :, None, :].expand(-1, -1, nb, -1)], -1)   # [B,T,48,h2+hg]
+        L = self.lookahead
+        if L:
+            # output delay: the decoder at step t + L masks frame t, seeing the band state and global state
+            # at t + L plus frame t's own embedding; the last L frames of the stream hold the final mask
+            idx = torch.clamp(torch.arange(T, device=X.device) + L, max=T - 1)
+            z = torch.cat([h.permute(0, 1, 3, 2)[:, idx], g[:, idx, None, :].expand(-1, -1, nb, -1), e], -1)   # [B,T,48,h2+hg+feat]
+        else:
+            z = torch.cat([h.permute(0, 1, 3, 2), g[:, :, None, :].expand(-1, -1, nb, -1)], -1)   # [B,T,48,h2+hg]
         m = torch.cat([dec(z[:, :, i, :]).reshape(B, T, b - a, 4) for i, (dec, (a, b)) in enumerate(zip(self.dec, self.bands))], 2)
         mask = torch.complex(m[..., 0::2], m[..., 1::2])                          # [B,T,1025,2] complex (L, R)
         return X * mask
@@ -288,7 +302,7 @@ def train(a):
         tracks += [os.path.join(a.teacher_cache, f) for f in sorted(os.listdir(a.teacher_cache))
                    if f.endswith(".npy") and os.path.exists(os.path.join(a.teacher_cache, f[:-4] + ".json"))]
     dev_tracks = [os.path.join(a.cache, t + ".npy") for t in split["dev"]]
-    net = (BandSepNet(torch, feat=a.feat, h1=a.h1, h2=a.h2, hg=a.bhg, brnn=a.band_rnn) if a.arch == "band" else SepNet(torch, ht=a.ht, hg=a.hg, dec=a.dec)).to(dev)
+    net = (BandSepNet(torch, feat=a.feat, h1=a.h1, h2=a.h2, hg=a.bhg, brnn=a.band_rnn, lookahead=a.lookahead, bidir=a.bidir) if a.arch == "band" else SepNet(torch, ht=a.ht, hg=a.hg, dec=a.dec)).to(dev)
     if a.teacher_cache and a.half_half:
         tracks = (tracks[:len(split["train"])], tracks[len(split["train"]):])      # (truth, pseudo-labels)
         print(f"half/half batches: {len(tracks[0])} truth songs, {len(tracks[1])} pseudo-labelled", flush=True)
@@ -337,7 +351,7 @@ def train(a):
                     f"vocal_leak {met['vocal_leak']:.3f}  {time.time() - t0:.0f}s")
             print(line, flush=True)
             ck = {"state": net.modules.state_dict(), "stats": dict(STATS), "step": step, "dev": met,
-                  "ht": a.ht, "hg": a.hg, "dec": a.dec, "arch": a.arch, "feat": a.feat, "h1": a.h1, "h2": a.h2, "bhg": a.bhg, "brnn": a.band_rnn}
+                  "ht": a.ht, "hg": a.hg, "dec": a.dec, "arch": a.arch, "feat": a.feat, "h1": a.h1, "h2": a.h2, "bhg": a.bhg, "brnn": a.band_rnn, "lookahead": a.lookahead, "bidir": a.bidir}
             torch.save({**ck, "opt": opt.state_dict()}, os.path.join(a.out, "last.pt"))
             score = met["si_sdr"]                    # sep1's leak-penalised score picked a near-silent checkpoint
             if score > best:
@@ -349,7 +363,7 @@ def train(a):
 def load(model_path):
     torch = _torch(); dev = "cuda" if torch.cuda.is_available() else "cpu"
     ck = torch.load(model_path, map_location=dev)
-    net = (BandSepNet(torch, feat=ck.get("feat", 48), h1=ck.get("h1", 32), h2=ck.get("h2", 32), hg=ck.get("bhg", 32), brnn=ck.get("brnn", 0)) if ck.get("arch") == "band"
+    net = (BandSepNet(torch, feat=ck.get("feat", 48), h1=ck.get("h1", 32), h2=ck.get("h2", 32), hg=ck.get("bhg", 32), brnn=ck.get("brnn", 0), lookahead=ck.get("lookahead", 0), bidir=ck.get("bidir", False)) if ck.get("arch") == "band"
            else SepNet(torch, ht=ck.get("ht", 16), hg=ck.get("hg", 64), dec=ck.get("dec", 24))).to(dev)
     net.modules.load_state_dict(ck["state"]); net.modules.eval(); STATS.update(ck["stats"])
     return torch, net, dev
@@ -385,6 +399,8 @@ def main():
     t.add_argument("--warmup", type=int, default=2000); t.add_argument("--sisdr-after", type=int, default=0)
     t.add_argument("--feat", type=int, default=48); t.add_argument("--h1", type=int, default=32); t.add_argument("--h2", type=int, default=32); t.add_argument("--bhg", type=int, default=32)
     t.add_argument("--band-rnn", type=int, default=0, help="band model: hidden size of a bidirectional GRU across the bands (0 = the depthwise mixers)")
+    t.add_argument("--lookahead", type=int, default=0, help="band model: frames of future context (output delay; 8 = 85 ms)")
+    t.add_argument("--bidir", action="store_true", help="band model: bidirectional time GRUs (the non-causal diagnostic twin)")
     t.add_argument("--loss", default="lin", choices=("lin", "log"), help="magnitude terms: linear L1 (default) or log-magnitude L1 with a relative floor")
     t.add_argument("--loss-floor", type=float, default=3e-3, help="--loss log: floor relative to the mixture's mean |X| per window and channel (3e-3 = -50 dB)")
     t.add_argument("--loss-scale", type=float, default=1.0, help="--loss log: fixed factor on the magnitude bundle (calibrate with diag_lossfloor.py)")
