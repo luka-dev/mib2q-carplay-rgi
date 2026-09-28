@@ -296,10 +296,13 @@ def analyse_song(render, args, out, track_dir, excerpt_s, mask_model=None, oracl
             oracle_mask_args(stems, k, out, tag) if oracle else []
     try:
         subprocess.run(render.split() + args + extra + [src, dst], check=True,   # a command line (no spaces in our paths)
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                       stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         out6 = T.read_wav6(dst)
     except (subprocess.CalledProcessError, OSError, ValueError) as e:   # one bad song (D: stall) must not kill the table
-        print(f"  SKIP {tag}: {e}", flush=True)
+        detail = getattr(e, "stderr", b"") or b""
+        if isinstance(detail, bytes):
+            detail = detail.decode("utf-8", errors="replace")
+        print(f"  SKIP {tag}: {e}; renderer stderr: {detail[-500:].strip()}", flush=True)
         return []
     print(f"  rendered {tag}", flush=True)
     on = np.ones(n, bool)
