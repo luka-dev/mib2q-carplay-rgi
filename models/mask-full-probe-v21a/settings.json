@@ -1,10 +1,32 @@
 {
   "model": "mask-full-probe-v21a (hssr_mask.bin): the per-cell rear-eligibility student, run as the control worker's third job; provenance and the DEV row in manifest.json",
   "set_in": "deploy/smartphone_integrator/carplay_startup.sh (checked by scripts/check_model_settings.py at package time)",
-  "harness": "stereo_upmix_render --mask-model v21a.msk1 --mask-drive-prod 1.0 --vocal-gate 0.5 on top of VARIANTS['shipped'] (upmix_stem_tests.py --render-extra)",
+  "harness": "stereo_upmix_render --mask-model v21a.msk1 --mask-drive-prod 1.5 --vocal-gate 0.5 --rear-air -9 on top of VARIANTS['cand_noair'] (upmix_stem_tests.py --render-extra)",
   "knobs": {
-    "AUDIO_HSSR_MASK_MODEL": {"value": "$H/hssr_mask.bin", "flag": "--mask-model", "what": "unset = hssr_mask.bin beside AUDIO_HSSR_MODEL; absent file = mask off"},
-    "AUDIO_HSSR_MASK_DRIVE": {"value": "1.0", "flag": "--mask-drive-prod 1.0", "what": "object = sqrt(eligibility) * drive, pan = the bin's own L/R balance; 0 = off (the heuristic object path), range 0..2; three late controls fall back to the heuristic path"},
-    "AUDIO_HSSR_VOCAL_GATE": {"value": "0.5", "flag": "--vocal-gate 0.5", "what": "the soft veto over the mask (see models/hssr-selection-v11/settings.json)"}
+    "AUDIO_HSSR_MASK_MODEL": {
+      "value": "$H/hssr_mask.bin",
+      "flag": "--mask-model",
+      "what": "unset = hssr_mask.bin beside AUDIO_HSSR_MODEL; absent file = mask off"
+    },
+    "AUDIO_HSSR_MASK_DRIVE": {
+      "value": "1.5",
+      "flag": "--mask-drive-prod 1.5",
+      "what": "object = sqrt(eligibility) * drive (clamped at 1.45 in the render), pan = the bin's own L/R balance; 0 = off (heuristic path), range 0..2. Car + harness 27.09: 1.0 thin (guitars 0.07), 1.7 = the 22.09 leak (voice 0.10, swing back), 1.5 = guitars 0.15 / voice 0.07 / relative swing 1.47 vs 2.35 (22.09)"
+    },
+    "AUDIO_HSSR_VOCAL_GATE": {
+      "value": "0.5",
+      "flag": "--vocal-gate 0.5",
+      "what": "the soft veto over the mask (see models/hssr-selection-v11/settings.json)"
+    },
+    "AUDIO_HSSR_MASK_TREBLE_DB": {
+      "value": null,
+      "flag": "--mask-treble",
+      "what": "mask drive shelf above ~2.5 kHz, -12..12 dB; unset = flat. +3/+6 raised drums (0.44/0.50) and voice faster than guitars on the harness"
+    },
+    "AUDIO_HSSR_MASK_GAMMA": {
+      "value": null,
+      "flag": "--mask-gamma",
+      "what": "eligibility exponent 0.1..1; unset = 1. 0.7/0.5 lifted voice to 0.14/0.16 and drums past 0.5: the student's voice/guitar contrast is too small for it"
+    }
   }
 }

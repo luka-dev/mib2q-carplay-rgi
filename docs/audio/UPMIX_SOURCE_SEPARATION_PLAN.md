@@ -471,6 +471,47 @@ takes it to ~1.2 ms.  Deployed over SSH the same evening (hook, blob,
 startup, `carplay_ncm_cleanup.sh`, jar updated; 12 files byte-identical;
 every file read back and compared); the unit reboots on Luka's decision.
 
+**In the car (2026-09-27 evening).**  First boot with the mask: "the rear is
+almost gone".  The health line (new: `HSSR health rt: controls lateNow
+failsafeTotal maskReady maskLateNow maskFallbacks worker busy stale`, beside
+the periodic sink stats) showed `maskReady=0` with every worker job on time:
+`spa_stereo_upmix_reset()` memsets the runtime and never handed the guard and
+mask model pointers back (init did), and the hook resets on every stream
+start — **the mask net had never run in the car**; the PC harness never
+resets.  Fixed (c43a17c, regression test fails on the old code).  With the
+mask live: the same complaint, quieter — "instruments were vivid in 22.09,
+they flew, but they were there".  The 22.09 config through the harness
+(`car_0922`, the row the ear remembers): guitars 0.17 rear, keys 0.18, drums
+0.26, **voice 0.08 with 8/40 songs above 15 %**, rear −36.3 dBFS, 27/39 guitars
+swinging — the mask at drive 1.0 sends back less than half of every
+instrument (guitars 0.07) at almost the same level (−37.6).  The drive curve
+(40-song harness, gate 0.5, air −9; "rel" = 1-s range / the stem's own rear
+share, the level-independent swing; the `> 0.30` count grows with the level
+by construction and misled the morning's "2/40"):
+
+| drive | guitars | voice (>15 %) | drums | rear dBFS | guitars rel swing | voice rel |
+|---|---|---|---|---|---|---|
+| 22.09 heuristic | 0.17 | 0.08 (8) | 0.26 | −36.3 | 2.35 | 4.8 |
+| 1.0 | 0.07 | 0.04 (0) | 0.17 | −37.6 | 2.20 | 3.1 |
+| 1.3 | 0.12 | 0.05 (0) | 0.23 | −35.3 | 1.48 | 2.8 |
+| **1.5** | **0.15** | **0.07 (0)** | 0.28 | −33.8 | **1.47** | 2.5 |
+| 1.7 | 0.22 | 0.10 (6) | 0.36 | −32.9 | 1.53 | 2.8 |
+
+Level-matched, the mask path swings about a third less than the heuristic
+and keeps the voice lower; it is not the "never swings" the thin drive-1.0
+row suggested.  Two more knobs were built and rejected on the harness: a
+treble shelf on the drive (`AUDIO_HSSR_MASK_TREBLE_DB`, +3/+6: drums 0.44/
+0.50, voice 0.10/0.12 — cymbals and voice sit in the "other" cells' highs)
+and an eligibility gamma (`AUDIO_HSSR_MASK_GAMMA` 0.7/0.5: voice 0.14/0.16 —
+the student's voice/guitar contrast, 0.41 vs ~0.55, is too small to sharpen);
+surround 0.5 + rear body 0 at drive 1.3: voice 0.12.  **Operating point
+shipped in the evening: drive 1.5, rear air −9 (the mask rear was 1.6 dB
+darker than 22.09 above 2.5 kHz), gate 0.5**; the car says "on rock songs
+there is something behind, still little" at 1.3.  The ceiling is the
+student's (Phase 0): the fullness the ear wants at 22.09's stability or
+better needs the separator (Track B).  On the unit: 1.33 ms per control, the
+worker never late over 30 k controls, no failsafe, no fallback.
+
 **The production path validated on the 40 DEV songs (2026-09-27 12:00,
 `--mask-model v21a.msk1 --mask-drive-prod 1.0 --vocal-gate 0.5`).**  Test
 path (Python STFT mask, `--inject student`) and production path (the DSP's

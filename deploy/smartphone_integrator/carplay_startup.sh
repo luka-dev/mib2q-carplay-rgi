@@ -101,12 +101,20 @@ export AUDIO_HSSR_VOCAL_GATE=0.5
 # stays on top; three late controls hand the object back to the heuristic path.  DRIVE 0 = off
 # (the heuristic object path), 1.0 = the measured operating point, range 0..2.
 export AUDIO_HSSR_MASK_MODEL="$H/hssr_mask.bin"
-export AUDIO_HSSR_MASK_DRIVE=1.0
+# 1.0 measured "confident" on the PC but thin in the car (guitars 7 % rear vs 17 % in the 22.09
+# build the ear remembers); 1.7 brings the 22.09 fullness back together with its voice leak
+# (10 %); 1.5 = guitars 15 %, voice 7 % (22.09: 8 %), swing a third smaller than 22.09 at equal
+# level (car + 40-song harness, 2026-09-27 evening).  AUDIO_HSSR_MASK_TREBLE_DB and
+# AUDIO_HSSR_MASK_GAMMA exist (0 / 1.0 = off); both pull drums and voice back faster than
+# guitars on the harness, so they stay off.
+export AUDIO_HSSR_MASK_DRIVE=1.5
 # Rear air bed (2026-09-25): the input above ~2.5 kHz copied into the scene bed at a constant
 # level (rides the bed delays, never subtracted from the front).  Gives the rears back the
 # treble the gate and the attack-off removed (-12 dB = the 22.09 rear treble level on 12
 # MoisesDB songs) without the per-hit decisions that made it jump.  Unset = off.
-export AUDIO_STEREO_REAR_AIR_DB=-12
+# -9 since 2026-09-27: the mask keeps instrument bodies and leaves the rear ~1.6 dB darker above
+# 2.5 kHz than 22.09; 3 dB more static air brings the brightness back without per-hit decisions.
+export AUDIO_STEREO_REAR_AIR_DB=-9
 # Front-only treble trim (dB, -12..0, high shelf @4 kHz), unset = off.  The static lever if the
 # front sounds too bright (21.09 complaint): -3 lands near the 22.09 front balance without touching
 # the object decisions.  Retention and the taper darken the front too, but they flicker.
