@@ -204,6 +204,7 @@ def smooth_envelope(elig, mix, release_ms, n_fft=2048, hop=512, bands=32):
     return out.numpy()
 TEACHER_MASK = False   # --teacher-mask: the mask from htdemucs's stems of the excerpt (jobs must be 1: one GPU model)
 INJECT = ""            # --inject oracle|teacher: that source's eligible AUDIO drives the object path (needs --render-extra "--mask-drive G")
+MASK_DIR = ""          # --mask-dir: precomputed HSSRMSK0 masks, for offline controller experiments
 
 
 def oracle_mask_args(stems, k, out, tag):
@@ -285,6 +286,11 @@ def analyse_song(render, args, out, track_dir, excerpt_s, mask_model=None, oracl
             _MASK["sep"] = TL.separator()
         est = TL.separate_array(_MASK["sep"], (mix * k).astype(np.float32))   # vocals / drums / bass / other, already scaled
         extra = oracle_mask_args(est, 1.0, out, tag + ".teacher")
+    elif MASK_DIR:
+        mask_path = os.path.join(MASK_DIR, tag + ".msk")
+        if not os.path.isfile(mask_path):
+            raise FileNotFoundError(mask_path)
+        extra = ["--protect-mask", mask_path]
     else:
         extra = protect_mask_args(src, out, tag, mask_model) if mask_model else \
             oracle_mask_args(stems, k, out, tag) if oracle else []
@@ -330,6 +336,7 @@ def main():
     ap.add_argument("--variant", default="shipped", help="knob set from upmix_behavior_tests.VARIANTS")
     ap.add_argument("--jobs", type=int, default=4)
     ap.add_argument("--mask-model", help="mask_net.pt: render with its protect mask (test-mask build)")
+    ap.add_argument("--mask-dir", help="precomputed HSSRMSK0 files named <song>.msk (test-mask build)")
     ap.add_argument("--oracle-mask", action="store_true", help="protect mask from the real stems (upper bound)")
     ap.add_argument("--render-extra", default="", help="extra renderer flags, e.g. '--mask-drive 1.0'")
     ap.add_argument("--oracle-amp", action="store_true", help="mask (oracle or model) as amplitude gain (sqrt of the eligibility) for --mask-drive")
@@ -345,9 +352,12 @@ def main():
     ap.add_argument("--split-file", help="masknet_cache/split.json")
     ap.add_argument("--split", default="dev", help="with --split-file: which split to take songs from")
     a = ap.parse_args()
-    global ORACLE_AMP, MASK_THRESH, MASK_SHARPEN, MASK_ELIGIBLE, RESUME, TEACHER_MASK, ORACLE_REF, INJECT, INJECT_SMOOTH
+    global ORACLE_AMP, MASK_THRESH, MASK_SHARPEN, MASK_ELIGIBLE, RESUME, TEACHER_MASK, ORACLE_REF, INJECT, INJECT_SMOOTH, MASK_DIR
     ORACLE_AMP = a.oracle_amp; RESUME = a.resume; TEACHER_MASK = a.teacher_mask; ORACLE_REF = a.oracle_ref; INJECT = a.inject
     INJECT_SMOOTH = a.inject_smooth
+    MASK_DIR = a.mask_dir or ""
+    if MASK_DIR and (a.inject or a.teacher_mask or a.mask_model or a.oracle_mask):
+        ap.error("--mask-dir cannot be combined with another mask or injection source")
     MASK_THRESH, MASK_SHARPEN, MASK_ELIGIBLE = a.mask_thresh, a.mask_sharpen, a.mask_eligible
     import mask_net as MN; MN.PRESENCE_ALPHA = a.mask_presence
     os.makedirs(a.out, exist_ok=True)

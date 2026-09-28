@@ -382,7 +382,9 @@ flowchart TB
 
 ### Priorities
 
-1. **Blind in-car listening test** — four conditions (front-only, Track A, sharedmask, teacher), level-matched, shuffled, repeated; the kit is prepared on the PC, the owner listens.
+_Playback correction after this review: the car receives ordinary stereo over live CarPlay and the head-unit hook performs the upmix. Only front-only and Track A are currently playable in that chain. The shared-mask student requires a Track A-owned hook port; the non-causal teacher cannot run there. Rear-only headphone previews can screen the student and teacher but cannot count as an in-car result. See the [CarPlay listening protocol](UPMIX_CARPLAY_LISTENING_PROTOCOL.md)._
+
+1. **Blind in-car listening test** — front-only versus Track A through live CarPlay, level-matched, shuffled, repeated; use the shared-mask and teacher only for the separate rear-only headphone preview until a student is ported into the hook.
 2. **Persistent rear membership in Track A's controller** — slow membership with hysteresis and minimum dwell, separated from fast protection; log membership changes and eligible-audio loss separately.
 3. **Optimise the product directly** — 10–30 controller parameters by bounded search / CMA-ES against the real C renderer, as constrained optimisation (voice, bass, drums, stability as constraints; instrument delivery across families maximised; a minimum useful rear level so silence cannot win); validate on untouched songs.
 4. **Oracle-cue upper bound** — ground-truth vocal, drum and bass cues driving the same controller; small causal cue estimators only if the oracle succeeds.

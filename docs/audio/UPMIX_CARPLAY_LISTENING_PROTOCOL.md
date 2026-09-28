@@ -8,6 +8,8 @@ The phone sends stereo PCM through live CarPlay; the head-unit hook creates the 
 
 Offline shared-mask and teacher renders may be used as a separate **headphone preview** to decide whether a port is worth attempting. Record those impressions separately; the preview cannot stand in for the B&O amp and cabin.
 
+A four-song rear-only diagnostic is at `D:\upmix\runs\listening\rear_preview_sharedmask4k\clips` (slots 01, 03, 05, 09). Each A/B WAV is the C renderer's Ls/Rs output from either the 4k shared-mask student or cached teacher `other`, with the same stereo input and a common gain within each pair. `clips_level_matched` attenuates the louder rear to the quieter one's RMS for voice-leak and timbre comparisons. Keep `private_key.json` closed until notes are recorded. Listen for recognizable vocal content, missing instruments, and a jump at the vocal transition; **rear-only headphones cannot answer whether an instrument sounds behind the driver**. The files are 24 seconds at 48 kHz stereo and are never sent through CarPlay as a six-channel test.
+
 ## Prepare the 8–10 song list
 
 The list below was selected from the owner's `D:\music` library using the existing htdemucs four-stem cache. The entry and exit times were verified with `diag_transitions.events` on the teacher vocal stem. The instrumental, dense, and exposed passages were screened from teacher stem energy. The four-stem cache labels everything other than vocals, bass, and drums as `other`; it cannot certify whether a particular sound is guitar, piano, keys, or strings. Those descriptions identify what the listener should check by ear. Match the exact recording/version on the phone; if its timing differs, locate the same musical event before scoring.
@@ -26,6 +28,8 @@ Play the same 24-second section for each condition. All ten songs are outside th
 | 08 | Dense passage | Woodkid — Pale Yellow | **3:12–3:36** | Orchestral strings/keys under voice and drums |
 | 09 | Exposed vocal | Bishop Briggs — The Way I Do | **3:14–3:38** | Any recognizable voice behind the listener |
 | 10 | Exposed vocal / piano | Soap&Skin — Me and the Devil | **1:18–1:42** | Voice anchor and piano/strings depth |
+
+Teacher-cache IDs for reproducibility, slots 01–10: `t00084`, `t00522`, `t00435`, `t00628`, `t00105`, `t00377`, `t00122`, `t00110`, `t00028`, `t00104`. The exact detector's event times for slots 01–04 are 0:42.75, 0:22.00, 1:09.25, and 2:45.50 respectively. The 24-second windows were rounded to whole seconds for phone playback.
 
 ## Run the live comparison
 
