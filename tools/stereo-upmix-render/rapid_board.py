@@ -17,9 +17,11 @@ def fmt(v, f="{:.2f}"):
 
 def row(d):
     r = {"tag": os.path.basename(d)}
-    def read(name):
+    def read(name):                                            # PowerShell redirection writes UTF-16 LE with a BOM
         p = os.path.join(d, name)
-        return open(p, encoding="utf-8", errors="replace").read() if os.path.exists(p) else ""
+        if not os.path.exists(p): return ""
+        raw = open(p, "rb").read()
+        return raw.decode("utf-16") if raw[:2] in (b"\xff\xfe", b"\xfe\xff") else raw.decode("utf-8", errors="replace")
     job, tl, gap, tr, sc = read("job.txt"), read("train.log"), read("gap.txt"), read("transitions.txt"), read("screen.log")
     r["args"] = grab(job, r"args \[(.*?)\]", cast=str) or grab(job, r"inject \[(.*?)\]", cast=str) or ""
     r["sdr"] = grab(tl, r"^step 4000 .*?si_sdr (-?[\d.]+)"); r["leak_eval"] = grab(tl, r"^step 4000 .*?vocal_leak ([\d.]+)")
