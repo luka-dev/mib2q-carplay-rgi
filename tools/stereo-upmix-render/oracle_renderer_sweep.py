@@ -2,7 +2,8 @@
 """One MoisesDB load per song across real-C renderer conditions.
 
 The source can be isolated oracle-eligible audio, an ideal bounded real-mask
-audio estimate, or Track A's frozen deployable mask binary with no injection.
+audio estimate, a frozen sep_net student estimate, or Track A's frozen
+deployable mask binary with no injection.
 A 20-song enriched set is a mechanism screen;
 the full DEV and independent test sets provide broader validation.
 """
@@ -27,6 +28,10 @@ POINTS = {
     "front_retention025": ["--front-retention", "0.25"],
     "front_retention075": ["--front-retention", "0.75"],
     "front_retention070": ["--front-retention", "0.70"],
+    "direct_object": [],
+    "direct_no_bed": [],
+    "direct_no_bed_body0": ["--rear-body", "0"],
+    "direct_no_bed_body0_cal": ["--rear-body", "0", "--surround", "0.3235"],
 }
 CHECK_FIELDS = ("median_rear", "range_1s")
 
@@ -72,11 +77,15 @@ def write_screen_csv(folder, track_ids):
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--render", type=Path, required=True)
+    p.add_argument("--render-overrides", default="",
+                   help="comma-separated point=renderer.exe overrides for host-only architecture comparisons")
     p.add_argument("--model", type=Path, required=True)
     p.add_argument("--guard", type=Path, required=True)
     p.add_argument("--moisesdb", type=Path, required=True)
     p.add_argument("--probe", type=Path, required=True)
-    p.add_argument("--source", choices=("oracle", "irm", "production"), default="oracle")
+    p.add_argument("--source", choices=("oracle", "irm", "student", "production"), default="oracle")
+    p.add_argument("--student-ckpt", type=Path,
+                   help="sep_net checkpoint for --source student; same frozen estimate in every C condition")
     p.add_argument("--mask-bin", type=Path, help="Track A's exported mask binary for --source production")
     p.add_argument("--expected-songs", type=int, default=20)
     p.add_argument("--points", default=",".join(POINTS),
@@ -88,10 +97,27 @@ def main():
         p.error("--source production requires --mask-bin and --skip-original-verify")
     if a.source == "production" and not a.mask_bin.is_file():
         p.error(f"missing production mask binary: {a.mask_bin}")
+    if a.source == "student" and (a.student_ckpt is None or not a.student_ckpt.is_file()):
+        p.error("--source student requires an existing --student-ckpt")
+    if a.source != "student" and a.student_ckpt is not None:
+        p.error("--student-ckpt is only valid with --source student")
     names = [name.strip() for name in a.points.split(",")]
     if not names or names[0] != "baseline" or len(names) != len(set(names)) or any(name not in POINTS for name in names):
         p.error("--points must begin with baseline and contain distinct known conditions")
     selected_points = {name: POINTS[name] for name in names}
+    overrides = {}
+    if a.render_overrides:
+        for item in a.render_overrides.split(","):
+            name, separator, path = item.partition("=")
+            if not separator or name not in selected_points or name == "baseline" or not path:
+                p.error("--render-overrides needs distinct non-baseline point=path entries")
+            if name in overrides:
+                p.error(f"duplicate renderer override: {name}")
+            overrides[name] = path
+    for name in ("direct_object", "direct_no_bed", "direct_no_bed_body0",
+                 "direct_no_bed_body0_cal"):
+        if name in selected_points and name not in overrides:
+            p.error(f"{name} requires a separately named host binary in --render-overrides")
     manifest = json.loads((a.probe / "manifest.json").read_text(encoding="utf-8"))
     song_ids = manifest["song_track_ids"]
     if len(song_ids) != a.expected_songs:
@@ -100,13 +126,14 @@ def main():
     if original is not None and {r["song"] for r in original} != set(song_ids):
         raise ValueError("baseline CSV does not match the frozen manifest")
 
-    harness.INJECT = a.source if a.source in ("oracle", "irm") else ""
+    harness.INJECT = (a.source if a.source in ("oracle", "irm") else
+                      f"student:{a.student_ckpt}" if a.source == "student" else "")
     harness.INJECT_SMOOTH = 0.0
     harness.ORACLE_REF = ""
     harness.MASK_DIR = ""
     harness.TEACHER_MASK = False
     harness.RESUME = True
-    if a.source in ("oracle", "irm"):
+    if a.source in ("oracle", "irm", "student"):
         common = behavior.VARIANTS["shipped"] + ["--model", str(a.model), "--guard-model", str(a.guard),
                                                   "--mask-drive", "1.0"]
     else:
@@ -121,7 +148,7 @@ def main():
         missing = [name for name, folder in folders.items() if cached_rows(folder, track_id) is None]
         loaded = harness.load_song(a.moisesdb / track_id, 60.0) if missing else None
         for name, extra in selected_points.items():
-            rows = harness.analyse_song(str(a.render), common + extra, str(folders[name]),
+            rows = harness.analyse_song(overrides.get(name, str(a.render)), common + extra, str(folders[name]),
                                         str(a.moisesdb / track_id), 60.0, loaded=loaded)
             if not rows:
                 raise RuntimeError(f"C render failed: {song} / {name}")

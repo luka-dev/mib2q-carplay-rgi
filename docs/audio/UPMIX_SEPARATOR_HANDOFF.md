@@ -1,6 +1,6 @@
 # Upmix Separator Track — Handoff
 
-_Complete handoff of the rear-eligible separator track (Track B) to the next agent (Codex). State as of 2026-09-28 04:50, branch `feature/upmix-source-separation`, last commit `6eac814`._
+_Initial handoff of the rear-eligible separator track (Track B), written 2026-09-28 04:50 on `feature/upmix-source-separation` at `6eac814`. Later review sections below update that snapshot._
 _Read this first, then [the night report](UPMIX_SEPARATOR_NIGHT_REPORT_2026-09-28.md) for the numbers and [the plan](UPMIX_SOURCE_SEPARATION_PLAN.md) for the full history (reviews 1–16)._
 
 ---
@@ -11,13 +11,15 @@ _Read this first, then [the night report](UPMIX_SEPARATOR_NIGHT_REPORT_2026-09-2
 
 **Two tracks.** Track A (another agent, another branch, same working tree) owns what ships in the car: a per-cell protect-mask net + mask-drive + soft veto in `hook/audio/`. **Track B (this handoff)** asks whether a causal on-budget estimator of the rear-eligible *audio* can carry the rear the way the non-causal teacher does.
 
-**Where it stands.**
+**At the initial handoff.** The bullets below are historical; see the current status immediately after them and the review ledger below.
 
 - The renderer interface is solved: fed the teacher's audio (htdemucs) it gives guitar 0.19–0.23 rear share at voice 0.01.
 - Every on-budget student lands on one recall/leak frontier: guitar 0.09–0.12, voice 0.02–0.04, 4–9/39 songs swinging. Width, supervision, spectral structure and loss were each tested as one-change controlled runs and ruled out.
 - Source attribution shows why: students pass 29–37 % of the eligible energy (ideal ratio mask 77 %) at the ideal mask's vocal leak, erase the air above 8 kHz, and duck the instruments 28 % when a voice enters (+47 % when it leaves).
 - One 4k-step screen, a bounded sigmoid mask shared by both channels (`sharedmask`), is the first stability signal on every stem.
 - **Review 16 (Codex) paused broad separator training.** Next: the owner's blind in-car listening test, a persistent rear-membership controller, direct optimisation of the product against the real renderer.
+
+**Current review-18 status (later 2026-09-28).** A host-only change to the C renderer's object/bed route passes the numerical full-40 DEV C-render gates **with true isolated eligible audio**: **8→0/40** any-stem swing songs, guitar/keys/piano/strings **.233/.235/.242/.231**, voice/bass/drums **.0038/.0084/.0097**, and rear RMS **+0.472 dB** against a freshly verified control. The same frozen renderer also passes with ideal bounded-mask/audio: **7→0/40**, instrument shares **.205/.215/.213/.208**, protected **.0044/.0112/.0090**, rear RMS **+0.075 dB**. Reused TEST20 gives **5→0/20** for true audio and **4→0/20** for ideal-mask/audio, but its formal gates remain NO because it lacks a valid wind slope; keys/strings coverage is also sparse. These are DEV-selected, noncausal upper bounds, not a new independent set. The frozen sep9 estimate through the new C route improves swings **6→1/20** yet fails guitar/keys/piano and bass (**.105/.144/.089/.070**). No full40 student promotion or new training followed. A causal extractor, source-attributed vocal-entry score, device int8 budget, head-unit port, independent validation and owner listening are still absent. The [direct-object report](UPMIX_DIRECT_OBJECT_RENDERER_PROBE_2026-09-28.md) records all iterations. No Track A or unit file was changed.
 
 ---
 
@@ -255,7 +257,7 @@ This is the current decision record. The 04:50 diagram and timestamped paragraph
 4. The CMA runner's first delivery-loop typo was fixed. An interrupted pass left a destination file, and WinBtrfs reported a same-file/stat guard on retry. [`upmix_stem_tests.py`](../../tools/stereo-upmix-render/upmix_stem_tests.py) now captures the C renderer's stderr and removes only its own incomplete destination before retry. The deterministic six-song cache resumed and all 18 points completed. No pip install or head-unit reboot was involved.
 5. The [CarPlay listening protocol](UPMIX_CARPLAY_LISTENING_PROTOCOL.md) already names ten owner-library songs with timestamps and four rear-only headphone preview cuts. The car plays the same ordinary stereo from the phone over **live CarPlay**; the head-unit hook creates 5.1. Today only front-only and Track A's shipped build can be compared live. Student and teacher previews are explicitly **outside the car chain**. A student needs a Track A-owned hook port; the teacher cannot run on budget. Six-channel WAV playback and `qsa_play` do not validate routing in the car. No owner score sheet has been returned.
 
-### Architecture implications — hypotheses still to test
+### Architecture implications — review-18 evidence and remaining hypotheses
 
 **Correction after the owner chose to continue offline without listening (review 17):** a slow identity latch on the **original mixture** cannot remove voice/bass/drum audio already carried through an overlapping time-frequency cell. The paired interface test (oracle mask × mixture **14/40** swinging, oracle eligible audio **8/40**, ideal bounded real-mask **audio** **7/40**) makes source-aware eligible **audio** the more informative extraction path. It does **not** prove that all real-valued masks are inadequate: the ideal bounded mask/audio row itself is much stronger than the trained students. The independent renderer swing failure persists even with true eligible audio. Treat extraction and rendering as **two separate architectural gates**; another latch or another 40k training continuation alone does not pass both.
 
@@ -263,21 +265,21 @@ This is the current decision record. The 04:50 diagram and timestamped paragraph
 
 | Route | Why it remains plausible | Earliest discriminating test |
 | --- | --- | --- |
-| **Source-aware eligible-audio estimator** | True eligible audio recovers instrument level and protected-stem rejection; the ideal bounded mask/audio row shows that a time-frequency mask output can be sufficient in principle. The sep3–9 learned models remain far from that bound and use noncausal whole-window normalization. | The ideal-mask/audio retention-.70 full40 gate has now **failed on strings** despite 7→3 swings. Train a new causal estimator only after a renderer path survives this bound; require C-render and transition metrics, not SI-SDR alone. |
-| **Stable renderer object/front split** | True eligible audio still swings in 8/40 songs; front retention can suppress the share metric without proving useful depth. The fixed-window diagnostic finds rear-side output change larger in all ten original swing traces, and six of eight songs lack a qualifying vocal entry. | Prototype a host-only rear object/bed change that reduces rear-side variation at useful rear RMS without reducing strings/keys. Test true eligible audio first, ideal-mask audio second, then full40 and an independent set. Track A owns any eventual hook port. |
-| **Persistent source identity + fast protection** | May help an **audio estimator** keep an instrument across vocal entries. The tested global and true-stem activity latches did not preserve source continuity. | Prototype only after the extraction/rendering bounds identify a remaining transition failure. Log membership changes and eligible-audio loss; never substitute an identity latch on the unseparated mixture for source extraction. Track A owns any hook port. |
+| **Source-aware eligible-audio estimator** | True eligible audio and ideal bounded-mask audio both pass full40 in the host direct/no-bed/body-0 C path. The frozen sep9 estimate through that same path still misses guitar/keys/piano and bass, despite swings 6→1/20. The sep3–9 models also use noncausal whole-window normalization. | Define an on-budget causal estimator against the fixed renderer. Measure source-attributed entry ducking, protected leak, instrument transmission and C-render shares at matched rear level. Do not treat more sep9 epochs as the architecture fix. |
+| **Stable renderer object/front split** | The host-only direct/no-bed/body-0 prototype has passed all **measured** DEV40 render gates for true and ideal-mask audio, and shows secondary robustness on reused TEST20. The path bypasses pan projection and removes bed/fallback/rear body together, so no single internal term is isolated. | Once a causal estimator is feasible, test it on a new independent, adequately covered stem set; Track A then decides whether to port the object path. Device profile and owner ear remain necessary. |
+| **Persistent source identity + fast protection** | May help an **audio estimator** keep an instrument across vocal entries. The tested global and true-stem activity latches did not preserve source continuity. | Prototype only if the causal estimator's transition attribution shows a remaining identity failure. Log membership changes and eligible-audio loss; never substitute an identity latch on the unseparated mixture for source extraction. Track A owns any hook port. |
 
-The currently defensible result is a **measured boundary for these tested architectures and settings**, not a proof of general impossibility. Preserve the separate evidence labels: offline oracle, production-mask C render, independent TEST, device feasibility, and owner's live listening. None may stand in for another.
+The currently defensible result is a **measured renderer upper bound plus a measured sep9 extraction failure** for these tested settings, not a proof of general impossibility or a deployable candidate. Preserve the separate evidence labels: offline oracle, trained-student C render, reused TEST, device feasibility, and owner's live listening. None may stand in for another.
 
 ---
 
-## 📍 What to do next (review 17: offline work now, listening later)
+## 📍 What to do next (review 18: offline work now, listening later)
 
-1. **Use the new [architecture-gate report](UPMIX_ARCHITECTURE_GATE_2026-09-28.md) to target the rear path.** The ideal-mask/audio retention-.70 full40 test and the front/rear decomposition have finished. A simple front-denominator change is rejected by strings; an air cut leaves most rear variation. Preserve their exact outputs and do not tune on the already-inspected TEST20.
-2. **Prototype a stable rear object/bed path offline**, in Track B host-only code, using true eligible audio first. The fixed-window rear-side gain variation should fall without quieter rear RMS, lost string/key delivery, extra protected leakage or new swing songs. Then apply the identical change to ideal-mask audio. Use the real C harness before a full40 promotion; do not modify Track A's hook files.
-3. **If the renderer passes with oracle/ideal audio, design a causal eligible-audio estimator toward that bound.** The current trained models under-recover instruments; matching an SI-SDR score alone is insufficient. Require song-level C-render delivery, source-attributed transition retention, and hard protected-stem/swing/level gates before a long run. An identity controller can then support the estimator if a specific transition error remains.
-4. **Validate without recycling TEST as a fresh holdout.** The frozen TEST20 has already supplied a keys failure for oracle retention .70. Use an independent evaluation set that has not steered the new design; then coordinate any hook port with Track A and profile the unit for measured int8 MAC/s, deadline misses, memory traffic, thermals and ≤85 ms added latency. Never modify Track A's files from this track.
-5. **Keep the prepared owner CarPlay listening test as the final gate**, not a blocker for the offline architecture experiments. Only front-only and Track A play live today; a new student needs a Track A-owned port. No unit restart.
+1. **Preserve the selected host bound and its limits.** The [direct-object report](UPMIX_DIRECT_OBJECT_RENDERER_PROBE_2026-09-28.md) has the exact 20/40/TEST outcomes, renderer and sep9 hashes, and failed iterations. Do not change surround .3235 based on the already-inspected TEST20. The selected path is a combined object/bed/body change, not a port or an identified single C coefficient.
+2. **Build a causal eligible-audio estimator toward the ideal-mask/audio bound.** Use streaming normalization and an explicit object-audio output; keep extra latency ≤85 ms and an int8-computable architecture near the 150 M MAC/s device budget. Before another long run, define a short matched-age screen with hard guitar/keys/piano/strings, voice/bass/drums, swing, RMS and source-attributed vocal-entry gates through the fixed C renderer. Sep9 through that path failed guitar/keys/piano and bass, so simply continuing its checkpoint is not a complete fix. Use an identity controller only if attribution shows a specific continuity failure.
+3. **Get independent coverage.** The 40 DEV songs selected this renderer, and the 20 TEST songs were previously inspected and lack a wind slope (five keys songs, one strings song). A new adequately covered set of real instrument/protected stems is needed; do not report reused TEST20 as untouched validation.
+4. **Port only after a causal host candidate passes.** Track A owns `hook/audio` and the int8 port. Coordinate the interface and then measure actual ≤150 M int8 MAC/s, deadline misses and ≤85 ms added latency on the head unit, without rebooting it.
+5. **Finish with live CarPlay owner listening.** The current offline bound cannot answer timbre or cabin depth after removing rear body/bed. Only front-only and Track A run live today; the new path needs Track A's port before the requested blind in-car comparison. The owner chose to defer listening while these offline architecture tests ran.
 
 Resume separator training only when these identify a specific missing capability (review 16).
 
@@ -337,6 +339,7 @@ docs/audio/UPMIX_SEPARATOR_HANDOFF.md, then the night report and the plan.
 ## 🔗 References
 
 - [Upmix Separator Night Report 2026-09-28](UPMIX_SEPARATOR_NIGHT_REPORT_2026-09-28.md) — every number, chart and resolved issue of the night
+- [Upmix Direct-Object Renderer Probe 2026-09-28](UPMIX_DIRECT_OBJECT_RENDERER_PROBE_2026-09-28.md) — review-18 host architecture iterations, oracle/ideal full40, reused TEST20 and frozen sep9 comparison
 - [Upmix Source Separation Plan](UPMIX_SOURCE_SEPARATION_PLAN.md) — the running log, reviews 1–16, run rows
 - [Upmix Mask Net Phase 1 Report 2026-09-27](UPMIX_MASK_PHASE1_REPORT_2026-09-27.md) — Track A in the car
 - [Upmix Stability 2026-09-25](UPMIX_STABILITY_2026-09-25.md) — the original "back and forth" measurement

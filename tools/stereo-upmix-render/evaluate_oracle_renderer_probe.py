@@ -43,7 +43,7 @@ def summary(rows):
 def passes(candidate, baseline, scope):
     old, new = set(baseline["swings"]), set(candidate["swings"])
     gates = {"rear_rms_within_half_db": abs(candidate["rear_rms_db"] - baseline["rear_rms_db"]) <= 0.5}
-    if scope == "probe":
+    if scope in ("probe", "student20"):
         gates["resolves_at_least_three"] = len(old - new) >= 3
         gates["no_new_swing"] = not (new - old)
     elif scope == "full40":
@@ -62,7 +62,7 @@ def passes(candidate, baseline, scope):
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--probe", type=Path, required=True)
-    p.add_argument("--scope", choices=("probe", "full40", "test20", "production20"), default="probe")
+    p.add_argument("--scope", choices=("probe", "full40", "test20", "production20", "student20"), default="probe")
     p.add_argument("--points", help="comma-separated conditions beginning with baseline; defaults to the frozen screen")
     p.add_argument("--source-label", help="override the report's input-source description")
     p.add_argument("--out", type=Path, help="decision JSON path; defaults to PROBE/decision.json")
@@ -79,13 +79,14 @@ def main():
     if set(base["songs"]) != expected or (a.scope in ("probe", "full40") and set(base["swings"]) != set(manifest["swing_songs"])):
         raise ValueError("fresh baseline no longer matches the frozen screen")
     expected_songs = 40 if a.scope == "full40" else 20
-    expected_rows = 115 if a.scope == "probe" else 231 if a.scope == "full40" else None
+    expected_rows = 115 if a.scope in ("probe", "student20") else 231 if a.scope == "full40" else None
     if len(base["songs"]) != expected_songs or (expected_rows is not None and base["rows"] != expected_rows):
         raise ValueError(f"unexpected baseline size: {len(base['songs'])} songs and {base['rows']} stem rows")
     results = {}
     verdict_key = {"probe": "promote_to_full40", "full40": "meets_full40_render_gates",
                    "test20": "meets_test20_render_gates",
-                   "production20": "meets_production20_screen_gates"}[a.scope]
+                   "production20": "meets_production20_screen_gates",
+                   "student20": "promote_student_to_full40"}[a.scope]
     for name in points[1:]:
         item = summaries[name]
         if set(item["songs"]) != expected or {(r["song"], r["stem"]) for r in raw[name]} != base_keys:
@@ -97,7 +98,8 @@ def main():
     scope = {"probe": "enriched 20-song oracle-audio mechanism screen only",
              "full40": "full 40-song oracle-audio C render; causality, cue extraction, device and listening unproven",
              "test20": "independent 20-song MoisesDB test split, oracle audio; deployability and listening unproven",
-             "production20": "enriched 20-song DEV mechanism screen with frozen Track A mask and no oracle injection; not an independent product validation"}[a.scope]
+             "production20": "enriched 20-song DEV mechanism screen with frozen Track A mask and no oracle injection; not an independent product validation",
+             "student20": "enriched 20-song DEV mechanism screen with frozen sep_net student audio; not independent or causal validation"}[a.scope]
     if a.source_label:
         scope = a.source_label
     report = dict(scope=scope,
