@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""One MoisesDB load per song, five real-C oracle-audio renderer conditions.
+"""One MoisesDB load per song across real-C renderer conditions.
 
-The enriched 20-song set contains every swing in the original 40-song oracle
-run. This is a mechanism screen. A winner must be rerun on the original full
-40 and on the untouched 20 before it can support any product claim.
+The source can be isolated oracle-eligible audio or Track A's frozen deployable
+mask binary with no injection. A 20-song enriched set is a mechanism screen;
+the full DEV and independent test sets provide broader validation.
 """
 
 import argparse
@@ -73,12 +73,18 @@ def main():
     p.add_argument("--guard", type=Path, required=True)
     p.add_argument("--moisesdb", type=Path, required=True)
     p.add_argument("--probe", type=Path, required=True)
+    p.add_argument("--source", choices=("oracle", "production"), default="oracle")
+    p.add_argument("--mask-bin", type=Path, help="Track A's exported mask binary for --source production")
     p.add_argument("--expected-songs", type=int, default=20)
     p.add_argument("--points", default=",".join(POINTS),
                    help="comma-separated condition names, including baseline")
     p.add_argument("--skip-original-verify", action="store_true",
                    help="new test-split songs have no previous C baseline CSV")
     a = p.parse_args()
+    if a.source == "production" and (a.mask_bin is None or not a.skip_original_verify):
+        p.error("--source production requires --mask-bin and --skip-original-verify")
+    if a.source == "production" and not a.mask_bin.is_file():
+        p.error(f"missing production mask binary: {a.mask_bin}")
     names = [name.strip() for name in a.points.split(",")]
     if not names or names[0] != "baseline" or len(names) != len(set(names)) or any(name not in POINTS for name in names):
         p.error("--points must begin with baseline and contain distinct known conditions")
@@ -91,14 +97,19 @@ def main():
     if original is not None and {r["song"] for r in original} != set(song_ids):
         raise ValueError("baseline CSV does not match the frozen manifest")
 
-    harness.INJECT = "oracle"
+    harness.INJECT = "oracle" if a.source == "oracle" else ""
     harness.INJECT_SMOOTH = 0.0
     harness.ORACLE_REF = ""
     harness.MASK_DIR = ""
     harness.TEACHER_MASK = False
     harness.RESUME = True
-    common = behavior.VARIANTS["shipped"] + ["--model", str(a.model), "--guard-model", str(a.guard),
-                                              "--mask-drive", "1.0"]
+    if a.source == "oracle":
+        common = behavior.VARIANTS["shipped"] + ["--model", str(a.model), "--guard-model", str(a.guard),
+                                                  "--mask-drive", "1.0"]
+    else:
+        common = behavior.VARIANTS["cand_noair"] + ["--model", str(a.model), "--guard-model", str(a.guard),
+                                                       "--mask-model", str(a.mask_bin), "--mask-drive-prod", "1.5",
+                                                       "--vocal-gate", "0.5", "--rear-air", "-9"]
     folders = {name: a.probe / name for name in selected_points}
     for folder in folders.values():
         folder.mkdir(parents=True, exist_ok=True)
