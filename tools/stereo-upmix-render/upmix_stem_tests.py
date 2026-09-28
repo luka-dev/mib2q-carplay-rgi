@@ -229,13 +229,13 @@ def oracle_mask_args(stems, k, out, tag):
     return ["--protect-mask", path]
 
 
-def analyse_song(render, args, out, track_dir, excerpt_s, mask_model=None, oracle=False):
+def analyse_song(render, args, out, track_dir, excerpt_s, mask_model=None, oracle=False, loaded=None):
     # per-song result cache: the D: volume (WinBtrfs) stalls CloseHandle under load, so a run can be
     # killed by its runner and resumed (--resume) without redoing the songs that finished
     cache = os.path.join(out, os.path.basename(track_dir) + ".rows.json")
     if RESUME and os.path.exists(cache):
         return json.load(open(cache))
-    meta, stems = load_song(track_dir, excerpt_s)
+    meta, stems = loaded if loaded is not None else load_song(track_dir, excerpt_s)
     if len(stems) < 2:
         return []
     n = min(x.shape[1] for x in stems.values())

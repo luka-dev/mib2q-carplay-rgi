@@ -16,23 +16,7 @@ $env:CUDA_VISIBLE_DEVICES = '-1'
 Set-Location $T
 python "$T\prepare_oracle_renderer_probe.py" --oracle-run "$R\iface8\inject_oracle" --out $O
 if ($LASTEXITCODE -ne 0) { throw 'Could not freeze oracle renderer probe' }
-$common = "--render $T\upmix_render_inj.exe --model $T\hssr_model.bin --guard $T\hssr_guard.bin " +
-    "--moisesdb D:\upmix\datasets\moisesdb\moisesdb_v0.1 --split-file $O\split.json " +
-    "--split probe --songs 20 --seed 1 --variant shipped --jobs 1 --inject oracle"
-$points = @(
-    @{ Tag = 'rear_body0'; Extra = '--mask-drive 1.0 --rear-body 0' },
-    @{ Tag = 'rear_air_off'; Extra = '--mask-drive 1.0 --rear-air -40' },
-    @{ Tag = 'front_retention025'; Extra = '--mask-drive 1.0 --front-retention 0.25' },
-    @{ Tag = 'front_retention075'; Extra = '--mask-drive 1.0 --front-retention 0.75' }
-)
-foreach ($point in $points) {
-    $out = "$O\$($point.Tag)"
-    $log = "$O\$($point.Tag).log"
-    $args = "$common --render-extra `"$($point.Extra)`""
-    & "$T\stems_guard.ps1" -Out $out -Log $log -HArgs $args
-    if (-not (Test-Path "$out\stems.csv")) { throw "C renderer screen failed: $log" }
-    python "$T\compare_rapid_pair.py" --anchor-csv "$O\baseline_stems.csv" `
-        --candidate-csv "$out\stems.csv" --out "$O\$($point.Tag)_paired.json" --expected-songs 20
-    if ($LASTEXITCODE -ne 0) { throw "Paired comparison failed: $($point.Tag)" }
-    Write-Output "Completed $($point.Tag): $out\stems.csv"
-}
+python "$T\oracle_renderer_sweep.py" --render "$T\upmix_render_inj.exe" `
+    --model "$T\hssr_model.bin" --guard "$T\hssr_guard.bin" `
+    --moisesdb 'D:\upmix\datasets\moisesdb\moisesdb_v0.1' --probe $O
+if ($LASTEXITCODE -ne 0) { throw "Oracle renderer screen failed; inspect $O and resume the same command" }
