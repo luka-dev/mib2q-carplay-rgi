@@ -1053,6 +1053,8 @@ Verdict: **stop broad separator training for 2–3 days.** Five controlled runs 
 
 **Independent oracle TEST result (later 28.09):** on 20 previously frozen, nonoverlapping TEST songs, retention 0.70 cut any-stem swings 5 → 2/20, but keys were only 0.128 against the unchanged 0.15 target. There were five keys songs, one string song and no measurable wind slope. The independent render gate fails; the apparent full-40 pass is not a robust validation. The user's offered 0.12 keys threshold had not been adopted before inspecting TEST. Do not retune on this holdout. It is not the goal's literally named untouched DEV subgroup, and the oracle signal remains non-deployable. See the [probe report](UPMIX_ORACLE_RENDERER_PROBE_2026-09-28.md).
 
+**Static product-knob CMA-ES pilot (later 28.09):** 18 bounded candidates, ten settings, six fixed enriched DEV songs, Track A's v21a mask and the real C renderer, no oracle injection. None met the small-screen constraints. The lowest scalar score had 0/6 swings but rear RMS 4.03 dB below baseline and guitar/keys 0.089/0.072, with voice/bass/drums still 0.029/0.127/0.141; a stronger-instrument point had guitar/keys 0.206/0.164 but protected 0.062/0.149/0.296 and 3/6 swings. This search tests existing static settings, not the proposed new persistent source-membership controller, and does not prove a global budget limit. Do not promote a point to full40 or the car; see [CMA renderer pilot](UPMIX_CMA_RENDERER_PILOT_2026-09-28.md).
+
 ## 📝 Publication (astra review 5, 2026-09-26)
 
 Asked whether there is a paper in this work.  Verdict: **a credible systems +
