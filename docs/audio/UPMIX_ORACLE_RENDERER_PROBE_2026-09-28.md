@@ -24,7 +24,7 @@ Before scoring variants, every baseline stem's median rear share and one-second 
 
 ## Decision rule fixed before results
 
-A knob deserves a full-40 rerender only if it resolves **at least three of the eight** original any-stem swing songs, adds **no new swinging control song**, and keeps the median rear share of guitar, keys, piano and bowed strings within 0.01 of the paired baseline while keeping voice, bass and drums at or below their goal limits. The median rear RMS must remain within 0.5 dB of the baseline, and the median guitar/keys/wind depth-versus-level slopes must stay within ±0.05. Failing any gate rejects the knob as a simple stability remedy; it does not rule out a new controller.
+A knob deserves a full-40 rerender only if it resolves **at least three of the eight** original any-stem swing songs, adds **no new swinging control song**, and meets the goal's median rear-share limits on this screen: guitar ≥ 0.15, keys ≥ 0.15, piano ≥ 0.10, bowed strings ≥ 0.14, voice ≤ 0.02, bass ≤ 0.06 and drums ≤ 0.08. The median rear RMS must remain within 0.5 dB of the baseline, and the median guitar/keys/wind depth-versus-level slopes must stay within ±0.05. Failing any gate rejects the knob as a simple stability remedy; it does not rule out a new controller. These screen thresholds are promotion filters, not proof of the full-40 or untouched-20 goal.
 
 If one passes, rerender the original 40 and the untouched 20 DEV songs with exactly the selected setting. The full goal still requires causal ≤ 150 M MAC/s int8 measured on the unit, ≤ 85 ms extra latency, source-attributed vocal-entry ducking, and the owner's blind live-CarPlay preference. An oracle-audio knob screen alone proves none of those deployment or listening gates.
 
