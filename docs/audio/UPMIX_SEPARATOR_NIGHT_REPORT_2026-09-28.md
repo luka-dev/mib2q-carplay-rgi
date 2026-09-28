@@ -7,9 +7,9 @@ _Written for the owner and for whoever picks the track up in the morning. Compan
 
 ## 📋 TL;DR
 
-- **Overall:** five controlled 40k-step runs (width, supervision, spectral structure, loss, plus the baseline) all land on **one recall/leak frontier** and give the **same renderer** at the stable gain: voice 0.02–0.04, guitars 0.09–0.12, 4–9 of 39 songs swinging. The teacher's audio through the same renderer gives guitars 0.20–0.23 at voice 0.01.
+- **Overall:** five controlled 40k-step runs (width, supervision, spectral structure, loss, plus the baseline) all land on **one recall/leak frontier** and give the **same renderer** at the stable gain: voice 0.02–0.04, guitars 0.09–0.12, 4–9 of 39 songs with **guitar** swings. The teacher's audio through the same renderer gives guitars 0.20–0.23 at voice 0.01. The all-stem goal needs the unique-song recount below.
 - **Diagnosis:** the students are hedged, treble-less real masks. By source attribution they transmit **29–37 %** of the eligible energy (the ideal mask: 77 %) at the ideal mask's vocal transmission (0.10–0.14 vs 0.105), erase the air above 8 kHz by 14–27 dB, duck the instruments by **28 %** when a voice enters and release them by **47 %** when it leaves. Stable scenes are stable: the "back and forth" is transition-driven.
-- **Untested axis:** future context. sep9 (85-ms lookahead), sep9c (its decoder-matched control) and sep10 (the bidirectional twin) are queued and start when the rapid loop releases the GPU.
+- **Future-context result:** sep9 (8-frame lookahead) completed at G 1.0 / 1.3 and failed the full renderer gates; its decoder-matched control and the bidirectional twin remain paused.
 - **New tool:** a rapid test loop (4k-step full-recipe runs, attribution and transition diagnostics, a frozen 20-song CPU screen, a leaderboard of every stem) answers a mechanism question in ≈25 min instead of 2.7 h.
 - **First stability signal:** one bounded sigmoid mask shared by both channels (`sharedmask`, 387k params, 107 M MAC/s) cuts guitar depth-follows-level from +0.12 to +0.02, softens entry ducking (p10 0.39 → 0.58), lifts piano / keys / strings in the rear, and swings once in 20 songs instead of three.
 - **Direction change (review 16):** stop broad separator training for 2–3 days. Next: the owner's blind in-car listening test, a persistent rear-membership controller, and direct optimisation of the product against the real renderer.
@@ -21,8 +21,8 @@ _Written for the owner and for whoever picks the track up in the morning. Compan
 
 | Area | Status | Trend | Notes |
 | --- | --- | --- | --- |
-| **Stability goal** ("voice never", no back-and-forth) | 🟢 Met by the deployable candidate | → | Mask-drive + v13 + soft veto: voice 0.04, 2/39 swinging, rear error 0.15 |
-| **Rear-share goal** (guitars/keys 0.20+) | 🔴 Not met on budget | → | Every 125–394 M MAC/s student sits at 0.09–0.12 |
+| **Stability goal** ("voice never", no back-and-forth) | 🔴 Not met | → | Historical deployable: voice 0.04 and 2/39 **guitar** swings; all-stem count and blind car verdict are separate gates |
+| **Instrument rear-share goal** | 🔴 Not met on budget | → | Every 125–394 M MAC/s student sits at 0.09–0.12 guitar at G 1.0 |
 | **Understanding** | 🟢 Good | ↑ | Attribution and transition diagnostics explain the gap; four levers ruled out |
 | **Throughput** | 🟢 Improved | ↑ | 2.7 h per controlled run; the rapid loop answers mechanism questions in ≈25 min |
 | **Direction** | 🟡 Changing | ↑ | Review 16: separators paused; listening and product-level optimisation next |
@@ -75,7 +75,7 @@ _Written for the owner and for whoever picks the track up in the morning. Compan
 | Vocal transmission | 0.124 | 0.104 (sep6) | 0.105 | — | ≤ baseline |
 | Renderer guitars, G 1.0 | 0.09 | 0.12 (sep5, sep7) | 0.23 | 0.20–0.23 | ≥ 0.15 (promotion) |
 | Renderer voice, G 1.0 | 0.02 | 0.02–0.04 | 0.01 | 0.01 | ≤ 0.02 |
-| Songs swinging / 39 | 5 | 4–9 | 3 | 3–5 | ≤ 5 |
+| Guitar songs swinging / 39 (historical) | 5 | 4–9 | 3 | 3–5 | —; goal is **any-stem** ≤ 5 |
 
 _The learning curves of the five long runs at matched steps. Every run converges into the same −0.3…−0.8 dB band; the ideal ratio mask on the same evaluation path is +5.27 dB and the mixture −6.34 dB. Curves cross (sep7 trails until 20k and matches at 30k), which is why early SI-SDR cannot rank runs._
 
@@ -98,7 +98,7 @@ _Series in order: sep3 baseline · sep5 width ×2 · sep6 truth only · sep7 ban
 
 **Long runs (40k steps, batch 12 × 8 s; renderer on 40 DEV songs × 60 s at G 1.0):**
 
-| Run | One change vs sep3 | Best SI-SDR | Vocal leak (eval) | Voice | Guitars | Keys | Swinging | Level | Error |
+| Run | One change vs sep3 | Best SI-SDR | Vocal leak (eval) | Voice | Guitars | Keys | Guitar swinging | Level | Error |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | sep3 | — (125 M MAC/s) | −0.24 @47k | 0.15–0.17 | 0.02 | 0.09 | 0.10 | 5/39 | −39.5 | 0.15 |
 | sep5 | widths ×2 (394 M) | −0.34 @18k | 0.10–0.16 | 0.03 | 0.12 | 0.12 | 5/39 | −38.1 | 0.13 |
@@ -106,7 +106,9 @@ _Series in order: sep3 baseline · sep5 width ×2 · sep6 truth only · sep7 ban
 | sep7 | BiGRU across bands (180 M) | −0.33 @30k | 0.10–0.11 | 0.03 | 0.12 | 0.10 | 6/39 | −38.3 | 0.15 |
 | sep8 | log-magnitude loss, scale 0.74 | −0.73 @35k | 0.13–0.15 | 0.04 | 0.11 | 0.11 | 9/39 | −38.7 | 0.14 |
 
-At G 1.3 every run buys +0.04…0.06 of guitars for 10–18 swinging songs and +0.01…0.02 of voice.
+At G 1.3 every run buys +0.04…0.06 of guitars for 10–18 **guitar-swinging** songs and +0.01…0.02 of voice.
+
+_Counting correction (later 28.09):_ the historical column above is **guitar-only**, whereas the goal counts unique songs where **any stem** has a one-second rear-share range above 0.30. Recounting completed CSVs gives sep3 **11/40** and sep8 **16/40** any-stem swinging songs. The rapid board now computes this union directly from `stems.csv`.
 
 **Source attribution (the frozen mask applied to the true stems, reanalysed audio; 12 DEV excerpts, medians):**
 
@@ -251,11 +253,11 @@ xychart-beta
 
 | Row | Guitar | Piano | Keys | Strings | Wind | Bass ↓ | Drums ↓ | Voice ↓ | Swings (all stems) |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Teacher audio | 0.19 | 0.13 | 0.14 | 0.16 | 0.22 | 0.04 | 0.07 | 0.01 | — |
-| Oracle stems | 0.25 | 0.16 | 0.22 | 0.20 | 0.28 | 0.01 | 0.06 | 0.01 | — |
-| sep3 best (40k) | 0.09 | 0.05 | 0.08 | 0.05 | 0.10 | 0.07 | 0.08 | 0.02 | — |
+| Teacher audio | 0.19 | 0.13 | 0.14 | 0.16 | 0.22 | 0.04 | 0.07 | 0.01 | 6 |
+| Oracle stems | 0.25 | 0.16 | 0.22 | 0.20 | 0.28 | 0.01 | 0.06 | 0.01 | 4 |
+| sep3 best (40k) | 0.09 | 0.05 | 0.08 | 0.05 | 0.10 | 0.07 | 0.08 | 0.02 | 4 |
 | anchor seed 1 | 0.11 | 0.06 | 0.09 | 0.13 | 0.16 | 0.07 | 0.10 | 0.04 | 3 |
-| anchor seed 2 | 0.12 | 0.07 | 0.10 | 0.13 | 0.19 | 0.09 | 0.09 | 0.04 | — |
+| anchor seed 2 | 0.12 | 0.07 | 0.10 | 0.13 | 0.19 | 0.09 | 0.09 | 0.04 | 2 |
 | logloss | 0.10 | 0.05 | 0.09 | 0.11 | 0.17 | 0.07 | 0.10 | 0.04 | — |
 | bandbal | 0.08 | 0.05 | 0.09 | 0.12 | 0.14 | 0.04 | 0.08 | 0.03 | — |
 | **sharedmask** | 0.11 | **0.09** | **0.11** | **0.16** | 0.17 | 0.10 | 0.08 | 0.04 | **1** |
@@ -304,21 +306,30 @@ stateDiagram-v2
 
 | Work item | Started | Expected | Status |
 | --- | --- | --- | --- |
-| sep9 — lookahead 8 frames (85 ms), decoder skip | 04:15 | ≈07:00 | Training (9k: −1.09 dB) |
-| sharedmask_10k / anchor_10k — the promotion pair | after sep9 | ≈09:00 | Queued in the rapid loop |
+| sep9 — lookahead 8 frames (85 ms), decoder skip | 04:15 | ≈07:00 | Completed 06:44; full G 1.0 / 1.3 C results below; not promoted |
+| sharedmask_10k / anchor_10k — the promotion pair | after sep9 | ≈09:00 | Rapid loop resumed 06:44; sharedmask_10k started |
 | sep9c, sep10, sep11, sep12, `attr`, `sharedmask_log` | — | — | ⏸️ Paused by review 16 |
 | Track A (int8 port, car deployment) | separate branch | — | Shares the working tree; its uncommitted files are left alone |
 
+**sep9 final, 40 DEV songs × 60 s through the real C renderer.** Training completed at 40k; the best checkpoint was step 29k (SI-SDR −0.63 dB). Both G runs completed with no FAILED marker. These are unique songs where any stem swings, computed from `stems.csv`, rather than the per-guitar count printed in the harness summary.
+
+| sep9 gain | Voice ↓ | Guitar | Piano | Keys | Strings | Bass ↓ | Drums ↓ | Any-stem swings | Rear RMS |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| G 1.0 | 0.031 | 0.102 | 0.080 | 0.106 | 0.081 | 0.065 | 0.092 | 11/40 | −38.6 dBFS |
+| G 1.3 | 0.044 | 0.161 | 0.125 | 0.157 | 0.117 | 0.102 | 0.107 | 23/40 | −36.8 dBFS |
+
+G 1.3 recovers guitar, piano, and keys but misses strings and all three protected-stem limits; 12 additional songs begin swinging and none of the original 11 stop. **Do not promote or extend sep9.** Its 8-frame future context is also not yet a strict causal implementation because whole-window normalisation sees future audio; a device latency/profile gate would still be required if its audio metrics had passed. Paired CSV comparisons against sep3 and sep8 are reproducible with [`compare_rapid_pair.py`](../../tools/stereo-upmix-render/compare_rapid_pair.py) and `D:\upmix\runs\sep9\dsp_g1.0\stems.csv` / `dsp_g1.3\stems.csv`.
+
 **The rapid board so far** (20-song CPU screen at G 1.0; attribution on the 12 DEV excerpts at 4k steps):
 
-| Row | SI-SDR@4k | Eligible tx | Vocal tx | Air 8–14 kHz | Entry duck med / p10 | Voice | Guitars | Keys | Swing/20 |
+| Row | SI-SDR@4k | Eligible tx | Vocal tx | Air 8–14 kHz | Entry duck med / p10 | Voice | Guitars | Keys | Any-stem swing/20 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| ctx_teacher | — | — | — | — | — | 0.01 | 0.19 | 0.14 | 3 |
-| ctx_oracle | — | — | — | — | — | 0.01 | 0.25 | 0.22 | 2 |
-| ctx_irm | — | — | — | — | — | 0.01 | 0.24 | 0.20 | 2 |
-| ctx_sep3best | — | — | — | — | — | 0.02 | 0.09 | 0.08 | 2 |
-| anchor_s1 | −1.14 | 0.42 | 0.197 | −23.0 | 0.76 / 0.39 | 0.04 | 0.11 | 0.09 | 2 |
-| anchor_s2 (seed 2) | −1.05 | 0.47 | 0.236 | −23.7 | 0.75 / 0.43 | 0.04 | 0.12 | 0.10 | 1 |
+| ctx_teacher | — | — | — | — | — | 0.01 | 0.19 | 0.14 | 6 |
+| ctx_oracle | — | — | — | — | — | 0.01 | 0.25 | 0.22 | 4 |
+| ctx_irm | — | — | — | — | — | 0.01 | 0.24 | 0.20 | 3 |
+| ctx_sep3best | — | — | — | — | — | 0.02 | 0.09 | 0.08 | 4 |
+| anchor_s1 | −1.14 | 0.42 | 0.197 | −23.0 | 0.76 / 0.39 | 0.04 | 0.11 | 0.09 | 3 |
+| anchor_s2 (seed 2) | −1.05 | 0.47 | 0.236 | −23.7 | 0.75 / 0.43 | 0.04 | 0.12 | 0.10 | 2 |
 
 The two anchors set the noise floor of the proxy: ±0.05 on eligible transmission, ±0.04 on vocal transmission, ±0.01 on the renderer shares. Review 15's promotion triggers (+0.03 eligible at ≤ +0.01 vocal; ducking 10 points closer to unity; guitars +0.02) must be read against it — a single-seed delta inside that band means nothing. A 4k model is bolder than its 40k self (0.42–0.47 eligible against 0.29 for sep3 at 40k, at twice the vocal transmission): training makes the mask more conservative on both axes.
 

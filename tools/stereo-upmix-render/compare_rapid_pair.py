@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Paired 20-song rapid-screen comparison; never a full-harness certificate.
+"""Paired stem-harness comparison; require explicit scope before certification.
 
 Both CSVs must cover the same songs. Bootstrap units are songs, not stem rows.
 The report preserves absolute operating points alongside paired differences so
@@ -66,6 +66,8 @@ def main():
     p.add_argument("--out", type=Path, required=True)
     p.add_argument("--bootstrap", type=int, default=5000)
     p.add_argument("--seed", type=int, default=1609)
+    p.add_argument("--expected-songs", type=int, default=0,
+                   help="fail if the paired harness has any other song count")
     a = p.parse_args()
     anchor, candidate = read(a.anchor_csv), read(a.candidate_csv)
     anchor_songs = {s for s, _ in anchor}
@@ -74,6 +76,8 @@ def main():
         raise ValueError(f"screens differ: only anchor={sorted(anchor_songs - candidate_songs)}, "
                          f"only candidate={sorted(candidate_songs - anchor_songs)}")
     songs = sorted(anchor_songs)
+    if a.expected_songs and len(songs) != a.expected_songs:
+        raise ValueError(f"expected {a.expected_songs} paired songs, found {len(songs)}")
     rng = np.random.default_rng(a.seed)
     metrics = {}
     for stem in STEMS:
@@ -92,7 +96,7 @@ def main():
         if fields:
             metrics[stem] = fields
     bs, cs = swing_songs(anchor, set(songs)), swing_songs(candidate, set(songs))
-    result = dict(scope="paired rapid screen only; not full-harness or held-out validation",
+    result = dict(scope="paired stem harness; held-out, causality, device budget and listening are separate gates",
                   anchor=str(a.anchor_csv), candidate=str(a.candidate_csv),
                   songs=len(songs), rows_anchor=len(anchor), rows_candidate=len(candidate),
                   any_stem_swing=dict(anchor=len(bs), candidate=len(cs),
