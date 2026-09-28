@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """One MoisesDB load per song across real-C renderer conditions.
 
-The source can be isolated oracle-eligible audio or Track A's frozen deployable
-mask binary with no injection. A 20-song enriched set is a mechanism screen;
+The source can be isolated oracle-eligible audio, an ideal bounded real-mask
+audio estimate, or Track A's frozen deployable mask binary with no injection.
+A 20-song enriched set is a mechanism screen;
 the full DEV and independent test sets provide broader validation.
 """
 
@@ -75,7 +76,7 @@ def main():
     p.add_argument("--guard", type=Path, required=True)
     p.add_argument("--moisesdb", type=Path, required=True)
     p.add_argument("--probe", type=Path, required=True)
-    p.add_argument("--source", choices=("oracle", "production"), default="oracle")
+    p.add_argument("--source", choices=("oracle", "irm", "production"), default="oracle")
     p.add_argument("--mask-bin", type=Path, help="Track A's exported mask binary for --source production")
     p.add_argument("--expected-songs", type=int, default=20)
     p.add_argument("--points", default=",".join(POINTS),
@@ -99,13 +100,13 @@ def main():
     if original is not None and {r["song"] for r in original} != set(song_ids):
         raise ValueError("baseline CSV does not match the frozen manifest")
 
-    harness.INJECT = "oracle" if a.source == "oracle" else ""
+    harness.INJECT = a.source if a.source in ("oracle", "irm") else ""
     harness.INJECT_SMOOTH = 0.0
     harness.ORACLE_REF = ""
     harness.MASK_DIR = ""
     harness.TEACHER_MASK = False
     harness.RESUME = True
-    if a.source == "oracle":
+    if a.source in ("oracle", "irm"):
         common = behavior.VARIANTS["shipped"] + ["--model", str(a.model), "--guard-model", str(a.guard),
                                                   "--mask-drive", "1.0"]
     else:

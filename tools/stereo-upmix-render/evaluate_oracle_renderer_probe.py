@@ -64,6 +64,7 @@ def main():
     p.add_argument("--probe", type=Path, required=True)
     p.add_argument("--scope", choices=("probe", "full40", "test20", "production20"), default="probe")
     p.add_argument("--points", help="comma-separated conditions beginning with baseline; defaults to the frozen screen")
+    p.add_argument("--source-label", help="override the report's input-source description")
     p.add_argument("--out", type=Path, help="decision JSON path; defaults to PROBE/decision.json")
     a = p.parse_args()
     manifest = json.loads((a.probe / "manifest.json").read_text(encoding="utf-8"))
@@ -97,6 +98,8 @@ def main():
              "full40": "full 40-song oracle-audio C render; causality, cue extraction, device and listening unproven",
              "test20": "independent 20-song MoisesDB test split, oracle audio; deployability and listening unproven",
              "production20": "enriched 20-song DEV mechanism screen with frozen Track A mask and no oracle injection; not an independent product validation"}[a.scope]
+    if a.source_label:
+        scope = a.source_label
     report = dict(scope=scope,
                   baseline=base, variants=results)
     (a.out or a.probe / "decision.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")

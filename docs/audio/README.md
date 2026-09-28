@@ -75,7 +75,8 @@ flowchart TB
 | Note | What it covers |
 |---|---|
 | [Upmix Calibration and Tuning](UPMIX_CALIBRATION_AND_TUNING.md) | How every shipped value was reached: bass complaint, corrected matrix, 60 s one-lever grid, scene bed, treble taper. |
-| [Upmix Separator Handoff](UPMIX_SEPARATOR_HANDOFF.md) | Handoff of the separator track to the next agent: rules, the PC and its traps, the tooling, the rapid loop, results, live queue state and review 16's next steps. |
+| [Upmix Separator Handoff](UPMIX_SEPARATOR_HANDOFF.md) | Current separator-track decision record: rules, PC/tooling, complete iteration ledger, stopped queue and offline architecture next steps. |
+| [Upmix Architecture Gate 2026-09-28](UPMIX_ARCHITECTURE_GATE_2026-09-28.md) | Ideal-mask audio full-40 renderer bound, failed string-share gate, and front/rear energy decomposition of the original oracle swings. |
 | [CarPlay Upmix Listening Protocol](UPMIX_CARPLAY_LISTENING_PROTOCOL.md) | Live CarPlay front-only vs Track A score sheet, level matching, and the boundary between in-car evidence and headphone previews. |
 | [Persistent Rear Membership Screen](UPMIX_PERSISTENT_MEMBERSHIP_SCREEN_2026-09-28.md) | First offline global-membership test through the C renderer; paired result and the reason it was not promoted. |
 | [Upmix Separator Night Report 2026-09-28](UPMIX_SEPARATOR_NIGHT_REPORT_2026-09-28.md) | The separator track's night of 27→28.09: five controlled runs on one frontier (width, supervision, structure, loss ruled out), the gap decomposed by source attribution, the transition-driven "back and forth" measured, the rapid test loop, the queue and the open decisions. |
