@@ -56,7 +56,7 @@ def objective(s, reference_rms):
     rms = max(0.0, abs(s["rear_rms_db"] - reference_rms) - 0.5)
     slopes = sum(max(0.0, abs(s["slopes"][k] or 0.0) - 0.05) / 0.05
                  for k in ("guitar", "other_keys", "wind"))
-    delivery = sum(min(1.5, (shares[k] or 0.0) / limit) for k, limit in INSTRUMENTS)
+    delivery = sum(min(1.5, (shares[k] or 0.0) / limit) for k, limit in INSTRUMENTS.items())
     loss = 3.0 * leaking + 2.0 * missing + 2.0 * swings + rms + slopes - 0.15 * delivery
     return float(loss), dict(leaking=leaking, instrument_shortfall=missing,
                              excess_swing_fraction=swings, rear_rms_excess_db=rms,
