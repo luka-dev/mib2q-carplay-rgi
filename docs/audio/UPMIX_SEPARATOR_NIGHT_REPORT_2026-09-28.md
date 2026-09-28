@@ -1,6 +1,6 @@
 # Upmix Separator Track — Night Report 2026-09-27/28
 
-_Status report of the rear-eligible separator track (branch `feature/upmix-source-separation`): decisions, actions, code changes, results and the running queue, from the sep5 capacity test (27.09 17:00) to the first rapid-loop anchors (28.09 03:00)._
+_Status report of the rear-eligible separator track (branch `feature/upmix-source-separation`): decisions, actions, code changes, results and the running queue, from the sep5 capacity test (27.09 17:00) through the rapid-loop screens to review 16's pause of broad separator training (28.09 05:00)._
 _Written for the owner and for whoever picks the track up in the morning. Companion to the running log in [Upmix Source Separation Plan](UPMIX_SOURCE_SEPARATION_PLAN.md)._
 
 ---
@@ -10,8 +10,10 @@ _Written for the owner and for whoever picks the track up in the morning. Compan
 - **Overall:** five controlled 40k-step runs (width, supervision, spectral structure, loss, plus the baseline) all land on **one recall/leak frontier** and give the **same renderer** at the stable gain: voice 0.02–0.04, guitars 0.09–0.12, 4–9 of 39 songs swinging. The teacher's audio through the same renderer gives guitars 0.20–0.23 at voice 0.01.
 - **Diagnosis:** the students are hedged, treble-less real masks. By source attribution they transmit **29–37 %** of the eligible energy (the ideal mask: 77 %) at the ideal mask's vocal transmission (0.10–0.14 vs 0.105), erase the air above 8 kHz by 14–27 dB, duck the instruments by **28 %** when a voice enters and release them by **47 %** when it leaves. Stable scenes are stable: the "back and forth" is transition-driven.
 - **Untested axis:** future context. sep9 (85-ms lookahead), sep9c (its decoder-matched control) and sep10 (the bidirectional twin) are queued and start when the rapid loop releases the GPU.
-- **New tool:** a rapid test loop (4k-step full-recipe runs, attribution and transition diagnostics, a frozen 20-song CPU screen, a leaderboard) is live on the PC. Two anchors are in; four mechanism experiments follow by ≈04:50.
-- **Blocker:** none technical. Two decisions are open below: the GPU priority order and a listening test of the deployable candidate.
+- **New tool:** a rapid test loop (4k-step full-recipe runs, attribution and transition diagnostics, a frozen 20-song CPU screen, a leaderboard of every stem) answers a mechanism question in ≈25 min instead of 2.7 h.
+- **First stability signal:** one bounded sigmoid mask shared by both channels (`sharedmask`, 387k params, 107 M MAC/s) cuts guitar depth-follows-level from +0.12 to +0.02, softens entry ducking (p10 0.39 → 0.58), lifts piano / keys / strings in the rear, and swings once in 20 songs instead of three.
+- **Direction change (review 16):** stop broad separator training for 2–3 days. Next: the owner's blind in-car listening test, a persistent rear-membership controller, and direct optimisation of the product against the real renderer.
+- **Blocker:** the listening test needs the owner in the car.
 
 ---
 
@@ -22,7 +24,8 @@ _Written for the owner and for whoever picks the track up in the morning. Compan
 | **Stability goal** ("voice never", no back-and-forth) | 🟢 Met by the deployable candidate | → | Mask-drive + v13 + soft veto: voice 0.04, 2/39 swinging, rear error 0.15 |
 | **Rear-share goal** (guitars/keys 0.20+) | 🔴 Not met on budget | → | Every 125–394 M MAC/s student sits at 0.09–0.12 |
 | **Understanding** | 🟢 Good | ↑ | Attribution and transition diagnostics explain the gap; four levers ruled out |
-| **Throughput** | 🟡 At risk | ↑ | 2.7 h per controlled run; the rapid loop cuts mechanism questions to ≈25 min |
+| **Throughput** | 🟢 Improved | ↑ | 2.7 h per controlled run; the rapid loop answers mechanism questions in ≈25 min |
+| **Direction** | 🟡 Changing | ↑ | Review 16: separators paused; listening and product-level optimisation next |
 | **Infrastructure** | 🟢 Stable | ↑ | Resume, queue integrity and NaN guards fixed before sep8; lease-based GPU sharing |
 
 **Status key:** 🟢 On track · 🟡 At risk · 🔴 Off track / blocked. **Trend key:** ↑ Improving · → Stable · ↓ Declining.
@@ -31,25 +34,26 @@ _Written for the owner and for whoever picks the track up in the morning. Compan
 
 ## ⚠️ Decisions needed
 
-### Decision 1: keep the rapid loop ahead of the long queue?
+### Decision 1: the blind in-car listening test (review 16's highest-value experiment)
 
-**Context:** the rapid daemon holds `GPU_LEASE` while its queue is non-empty, so sep9 / sep9c / sep10 (the future-context tests, ≈2.7 h each) wait behind every rapid job. Both orders are defensible: the long runs answer the last untested axis; the rapid loop answers target/loss/conditioning questions four times faster.
+**Context:** every number in this report is a proxy; nobody has listened. Four conditions on identical excerpts, level-matched, blind and repeated: front-only stereo, Track A's deployable, the shared-mask candidate, and the teacher-fed renderer as the aspirational ceiling. Excerpts with vocal entries and exits, sustained instrumentals, dense choruses, exposed vocals, some outside the DEV set. Four questions: instruments clearly behind? any voice behind? does an instrument move or duck when singing starts? would you use it daily?
+
+| Outcome | What it means |
+| --- | --- |
+| Even the teacher disappoints | The problem is rendering and cabin presentation, not extraction |
+| Teacher delights, every deployable fails | Extraction is the real bottleneck; the future-context runs resume |
+| Track A or shared-mask is already good | Ship it and tune the controller instead of training |
+
+**Needed from the owner:** the time in the car. The kit (6-channel renders, shuffled labels, a score sheet) can be prepared on the PC.
+
+### Decision 2: resume the paused separator runs or not
+
+**Context:** review 16 paused `attr`, `sharedmask_log`, sep9c, sep10, sep11 and sep12; sep9 (lookahead) and the shared-mask / anchor pair at 10k finish. The runner files and queue lines are kept (`D:\upmix\runs\rapid\PAUSED.txt`).
 
 | Option | Impact | Recommendation |
 | --- | --- | --- |
-| Rapid first (current) | Anchors and four experiments by ≈04:50, then sep9 by ≈07:40, sep10 by ≈13:10 | Recommended for tonight |
-| Long queue first | Empty `QUEUE.txt`; sep9 starts within 5 min; rapid resumes after sep10 | Take if lookahead matters more than mechanism screens |
-
-**Deadline:** none. Change it any time by editing `D:\upmix\runs\rapid\QUEUE.txt`.
-
-### Decision 2: listen to the deployable candidate in the car
-
-**Context:** every number above is a proxy. Nobody has listened to a 0.10–0.12 rear share with 2/39 swinging. If "audibly behind" already starts at 0.12, the product goal is closer than the metric suggests and a static air bed becomes a perceptual experiment worth running (review 12, §3). This is Track A's deployment path, not this branch's.
-
-| Option | Impact | Recommendation |
-| --- | --- | --- |
-| Listen this week | Settles whether 0.10–0.12 is perceptually enough | Recommended |
-| Wait for a 0.20 student | Unknown horizon; may never come on this budget | Not recommended |
+| Keep paused until the listening test | GPU free for the controller search | Recommended |
+| Resume sep9c / sep10 | The future-context verdict in ≈6 h | Only if the listening test says extraction is the bottleneck |
 
 ### Decision 3: compute headroom
 
@@ -155,6 +159,10 @@ timeline
         01:20 : 🚀 Rapid loop live : lease, 4k runs, 20-song screen, leaderboard
         02:30 : 📊 sep8 log loss : air back +5 dB, vocal up too, 9/39 swinging
         02:45 : 📊 Anchors in : seed noise ±0.05 on eligible transmission
+        03:35 : 📊 logloss and bandbal at 4k : air back, then more conservative
+        04:30 : ⚠️ attr went NaN : 0/0 on silent windows, fixed
+        04:30 : ✅ sharedmask at 4k : first stability signal on every stem
+        05:00 : 🧠 Codex 16 : stop broad separator training, listen first
 ```
 
 ### Completed this period
@@ -213,8 +221,58 @@ flowchart TB
 | `caf20ef` | `pc/rapid_daemon.ps1`, `pc/rapid_context.ps1`, `rapid_board.py` | The rapid loop |
 | `5661ba7` | `--attr` (attribution loss), `--bandbal` (band-balanced L1), `--mask shared_sigmoid`; `diag_auxgrad.py` | Rapid experiments 2, 3, 7 with calibrated weights |
 | `1b46009` | `bench_precision.py` | Review 14's first throughput lever, to run when the GPU is free |
+| `d1a1a52`, `8820346`, `c9e0bfd` | Board reads UTF-16 logs, reports every stem with depth-follows-level and total swings; daemon runs `--steps N` promotion jobs | Owner: "not only the voice"; 10k promotion |
+| `c615e35` | Attribution loss floored against silent windows | NaN fix |
+| `78ea330` | Review 16 recorded; queue paused | Change of direction |
 
 Two traps found and fixed on the way: replaying an LR scheduler after loading the optimizer state compounded the warm-up to 10.5× the intended rate; a loss scale calibrated on the output gradient (0.007) would have silenced the new loss entirely, because the mixture factor in `Y = M·X` kills the large output gradients of near-silent cells before they reach the parameters — the parameter-gradient calibration gives 0.74.
+
+---
+
+## 🧪 Rapid-loop results — every stem
+
+The rapid loop trains 4000 steps of the full recipe and reads the model through the same renderer as the long runs, on a frozen 20-song screen at G 1.0. After the owner's remark that the voice is not the only thing that matters, the board reports **all ten stems** and, per stem, how much its rear depth follows its own level — the direct measure of "back and forth".
+
+_Rear share of the instrument families on the 20-song screen: the teacher and the oracle as ceilings, the two anchors as the reference point, and the four 4k-step experiments. Series in order: teacher · oracle · anchor seed 1 · anchor seed 2 · logloss · bandbal · sharedmask._
+
+```mermaid
+xychart-beta
+    title "🎯 Rear share per stem, 20-song screen, G 1.0"
+    x-axis ["guitar", "piano", "keys", "strings", "wind", "bass", "drums", "voice"]
+    y-axis "Rear share" 0 --> 0.3
+    bar [0.19, 0.13, 0.14, 0.16, 0.22, 0.04, 0.07, 0.01]
+    bar [0.25, 0.16, 0.22, 0.20, 0.28, 0.01, 0.06, 0.01]
+    line [0.11, 0.06, 0.09, 0.13, 0.16, 0.07, 0.10, 0.04]
+    line [0.12, 0.07, 0.10, 0.13, 0.19, 0.09, 0.09, 0.04]
+    line [0.10, 0.05, 0.09, 0.11, 0.17, 0.07, 0.10, 0.04]
+    line [0.08, 0.05, 0.09, 0.12, 0.14, 0.04, 0.08, 0.03]
+    line [0.11, 0.09, 0.11, 0.16, 0.17, 0.10, 0.08, 0.04]
+```
+
+| Row | Guitar | Piano | Keys | Strings | Wind | Bass ↓ | Drums ↓ | Voice ↓ | Swings (all stems) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Teacher audio | 0.19 | 0.13 | 0.14 | 0.16 | 0.22 | 0.04 | 0.07 | 0.01 | — |
+| Oracle stems | 0.25 | 0.16 | 0.22 | 0.20 | 0.28 | 0.01 | 0.06 | 0.01 | — |
+| sep3 best (40k) | 0.09 | 0.05 | 0.08 | 0.05 | 0.10 | 0.07 | 0.08 | 0.02 | — |
+| anchor seed 1 | 0.11 | 0.06 | 0.09 | 0.13 | 0.16 | 0.07 | 0.10 | 0.04 | 3 |
+| anchor seed 2 | 0.12 | 0.07 | 0.10 | 0.13 | 0.19 | 0.09 | 0.09 | 0.04 | — |
+| logloss | 0.10 | 0.05 | 0.09 | 0.11 | 0.17 | 0.07 | 0.10 | 0.04 | — |
+| bandbal | 0.08 | 0.05 | 0.09 | 0.12 | 0.14 | 0.04 | 0.08 | 0.03 | — |
+| **sharedmask** | 0.11 | **0.09** | **0.11** | **0.16** | 0.17 | 0.10 | 0.08 | 0.04 | **1** |
+
+| Mechanism metric | anchor s1 / s2 | logloss | bandbal | sharedmask |
+| --- | --- | --- | --- | --- |
+| Eligible / vocal transmission | 0.42–0.47 / 0.20–0.24 | 0.35 / 0.160 | 0.34 / 0.116 | 0.48 / 0.171 |
+| Air 8–14 kHz | −23.0 / −23.7 dB | **−16.2 dB** | −23.2 dB | −28.8 dB |
+| Entry ducking median / p10 | 0.76 / 0.39 · 0.75 / 0.43 | 0.68 / 0.39 | 0.78 / 0.39 | **0.83 / 0.58** |
+| Depth follows level: guitar / keys / wind | +0.12 / −0.03 / −0.23 · +0.11 / −0.05 / −0.10 | — | — | **+0.02 / 0.00 / +0.03** |
+
+What each experiment says:
+
+- **logloss** — the air comes back at 4k exactly as sep8 showed at 40k (the first 4k ↔ 40k agreement of the proxy), but the mask turns more conservative everywhere else.
+- **bandbal** — the band-balanced L1 does not restore the treble; weak-band gradients do not explain the erasure. The mask only becomes more cautious (vocal 0.116, guitar 0.08).
+- **sharedmask** — the first mechanism response in the stability direction: depth no longer follows level for guitar, keys and wind, entry ducking is 15 points softer at p10, piano / keys / strings rise to or near the teacher, one swing in 20 songs. Costs: bass 0.10, quieter air (−29 dB), SI-SDR −1.46. Being promoted as a pair against the anchor at 10k.
+- **attr** — the first run diverged to NaN at step 1000 (a window with silent vocal and silent eligible stems gave 0 / 0); fixed with an absolute floor and paused by review 16.
 
 ---
 
@@ -244,11 +302,9 @@ stateDiagram-v2
 
 | Work item | Started | Expected | Status |
 | --- | --- | --- | --- |
-| Rapid queue: `logloss`, `bandbal`, `attr`, `sharedmask` | 03:08 | ≈04:50 | On track |
-| sep9 — lookahead 8 frames (85 ms), decoder skip | after the rapid queue | ≈07:40 | Waiting on the lease |
-| sep9c — the L = 0 control with the same decoder input | after sep9 | ≈10:25 | Queued |
-| sep10 — bidirectional-in-time twin (non-causal, diagnostic) | after sep9c | ≈13:10 | Queued |
-| sep11 / sep12 — streaming normalisation pair | after sep10 | ≈18:40 | Gated: runs only if sep9 leads sep9c by ≥ 0.5 dB or sep8 cleared +0.75 dB |
+| sep9 — lookahead 8 frames (85 ms), decoder skip | 04:15 | ≈07:00 | Training (9k: −1.09 dB) |
+| sharedmask_10k / anchor_10k — the promotion pair | after sep9 | ≈09:00 | Queued in the rapid loop |
+| sep9c, sep10, sep11, sep12, `attr`, `sharedmask_log` | — | — | ⏸️ Paused by review 16 |
 | Track A (int8 port, car deployment) | separate branch | — | Shares the working tree; its uncommitted files are left alone |
 
 **The rapid board so far** (20-song CPU screen at G 1.0; attribution on the 12 DEV excerpts at 4k steps):
@@ -288,6 +344,8 @@ The two anchors set the noise floor of the proxy: ±0.05 on eligible transmissio
 | Loss scale 0.007 would have trained on the complex term alone | Parameter-gradient calibration → 0.74 | 27.09 23:26 |
 | `$env:CUDA_VISIBLE_DEVICES=''` deletes the variable in PowerShell | Use `'-1'` to force CPU | 27.09 18:40 |
 | Leaderboard read PowerShell's UTF-16 logs as UTF-8 | BOM-aware decoding | 28.09 02:55 |
+| Attribution loss diverged to NaN (0 / 0 on silent windows) | Absolute floor on the denominators; the broken run kept as `attr_nan_bug` | 28.09 04:40 |
+| The rapid daemon could only run 4000 steps | `--steps N` in a job line; snapshot and diagnostics at N | 28.09 04:50 |
 | Cell-weighted recall/leak counted interference as leakage | v2 diagnostics attribute by applying the frozen mask to the true stems | 28.09 00:00 |
 
 </details>
@@ -296,44 +354,48 @@ The two anchors set the noise floor of the proxy: ±0.05 on eligible transmissio
 
 ## 📍 Plan for next period
 
-_The queue of the coming day on the PC: the rapid experiments finish first, then the three future-context runs, then the gated streaming pair; the precision benchmark takes the first free GPU window._
+_Review 16's order for the next three days: listening first, then a persistent-membership controller tuned directly against the real renderer, then an oracle-cue upper bound; separator training resumes only if a specific missing capability is identified._
 
 ```mermaid
-gantt
-    accTitle: PC Queue for 28 September
-    accDescr: Rapid experiments from 03:00 to about 05:00, then sep9, sep9c and sep10 in sequence, the gated sep11 and sep12 pair afterwards, and the precision benchmark in the first free window.
-    title ⏰ PC queue, 28.09
-    dateFormat HH:mm
-    axisFormat %H:%M
-    section 🧪 Rapid loop
-        logloss, bandbal, attr, sharedmask :active, rapid, 03:08, 100m
-    section ⚙️ Future context
-        sep9 lookahead 8            :crit, s9, after rapid, 165m
-        sep9c decoder-matched L=0   :s9c, after s9, 165m
-        sep10 bidirectional twin    :s10, after s9c, 165m
-        🏁 Future-context verdict   :milestone, m1, after s10, 0m
-    section 🔧 Conditional
-        sep11 / sep12 streaming pair (gated) :s11, after s10, 330m
-        Precision benchmark (first free window) :bench, after s10, 15m
+flowchart TB
+    accTitle: Next Steps After Review 16
+    accDescr: The owner's blind listening test decides the branch; a good deployable leads to controller tuning, a delightful teacher with failing deployables resumes extraction work, and a disappointing teacher points at rendering; in parallel a persistent membership controller is tuned against the real renderer and bounded by oracle cues.
+
+    listen([🎯 Blind in-car listening test]) --> verdict{🔍 What wins?}
+    verdict -->|"Deployable good"| tune[⚙️ Tune controller, ship]
+    verdict -->|"Only teacher good"| extract[🧪 Resume future-context runs]
+    verdict -->|"Even teacher weak"| render[🔧 Fix rendering and cabin]
+    controller[⚙️ Persistent membership controller] --> search[🔄 CMA-ES against the C renderer]
+    search --> oracle[🔍 Oracle-cue upper bound]
+    oracle --> tune
+
+    classDef start fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#3b0764
+    classDef decision fill:#fef9c3,stroke:#ca8a04,stroke-width:2px,color:#713f12
+    classDef process fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
+    classDef success fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
+
+    class listen start
+    class verdict decision
+    class controller,search,oracle,extract,render process
+    class tune success
 ```
 
 ### Priorities
 
-1. **Read sep9 against sep9c, not against sep3** — the same decoder input, the same loss, the same 40k; the lookahead's value is the pair's difference. Then sep10 as the upper bound of future context.
-2. **Read the rapid experiments against both anchors** — promote only what clears the seed band on eligible transmission at held vocal transmission, and take promoted candidates to 10k, then 40k.
-3. **Implement the remaining rapid experiments** — oracle vocal-activity conditioning (the ceiling of conditioning before building a detector), entry-centred crops, STFT 1024/256; the guitars+keys target needs a re-cache (the seven-slot cache folds guitars and keys into "other").
-4. **Run the precision benchmark** in the first free GPU window and freeze the precision across candidates and controls.
-5. **Decide the product path with the owner** — listen to the deployable candidate; decide whether a hybrid (separator + protection conditioning + coarse gains, review 14) is the second-night experiment or whether the track closes on review 12's statement.
+1. **Blind in-car listening test** — four conditions (front-only, Track A, sharedmask, teacher), level-matched, shuffled, repeated; the kit is prepared on the PC, the owner listens.
+2. **Persistent rear membership in Track A's controller** — slow membership with hysteresis and minimum dwell, separated from fast protection; log membership changes and eligible-audio loss separately.
+3. **Optimise the product directly** — 10–30 controller parameters by bounded search / CMA-ES against the real C renderer, as constrained optimisation (voice, bass, drums, stability as constraints; instrument delivery across families maximised; a minimum useful rear level so silence cannot win); validate on untouched songs.
+4. **Oracle-cue upper bound** — ground-truth vocal, drum and bass cues driving the same controller; small causal cue estimators only if the oracle succeeds.
+5. **Half a day of head-unit profiling** — deadline misses, memory traffic, thermals, latency, before assuming more than 150 M MAC/s.
+6. **Finish the cheap leftovers** — sep9 (lookahead) and the sharedmask / anchor 10k pair; read them, do not extend them.
 
 ### Key dates
 
 | Time (28.09) | Event |
 | --- | --- |
-| ≈04:50 | Rapid experiments 1–4 on the board |
-| ≈07:40 | sep9 (lookahead) rendered |
-| ≈10:25 | sep9c (control) rendered — the lookahead verdict |
-| ≈13:10 | sep10 (bidirectional twin) rendered — the future-context ceiling |
-| ≈18:40 | sep11/sep12 if the gate opened |
+| ≈07:00 | sep9 (lookahead) rendered |
+| ≈09:00 | sharedmask vs anchor at 10k on the board |
+| Owner's choice | Blind listening test in the car |
 
 ---
 
@@ -355,4 +417,4 @@ The student and its diagnostics are PyTorch[^1]; the truth stems are MoisesDB[^2
 
 ---
 
-_Next report: after sep10 (≈13:10 on 28.09) or when the rapid board changes the picture._
+_Next report: after the listening test or when the 10k promotion pair lands._
