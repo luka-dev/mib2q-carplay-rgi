@@ -13,6 +13,8 @@ _Read this first, then [the night report](UPMIX_SEPARATOR_NIGHT_REPORT_2026-09-2
 
 **Second data result, 2026-09-29 03:41 PC local time:** The [curated OnAir matched pair](UPMIX_ONAIR_DATA_PROBE_2026-09-29.md#completed-4k-result-and-decision) completed 4k and its real-C DEV20 screen. At nearly identical rear RMS, 25% OnAir among true-stem windows lowered eligible transmission **.43→.39**, guitar **.11→.09** and strings **.13→.11**; voice rose **.04→.05**. Entry retention did not improve and any-stem swings remained **3/20**. The joint gate rejects 10k. The PC rapid queue and GPU lease are clear and the daemon is stopped. The next Track B data check is one real TRAIN song through the staged [MoisesDB instrument sidecar](UPMIX_MOISES_INSTRUMENT_SIDECAR_2026-09-29.md), followed by an audited instrument-family remix comparison if closure passes. No Track A, device or car result follows from these data screens.
 
+**Third data probe running, 2026-09-29 03:58 PC local time:** The [MoisesDB instrument-family sidecar](UPMIX_MOISES_INSTRUMENT_SIDECAR_2026-09-29.md) built for all **176 TRAIN songs**, with exact closure to the old eligible slot and a maximum pre-correction discrepancy of **1.219 LSB RMS / 10 LSB peak**. The 20-step training smoke passed. A matched rapid pair now runs on the single GPU: the four-family `--remix 0.5` control, then the same recipe with guitar/keys/piano/strings/winds/other sampled separately. Rapid daemon **PID 44960**, GPU lease active; no result yet. Do not start another GPU job or modify the PC Python environment while the pair runs.
+
 ---
 
 ## 📋 The job in one page

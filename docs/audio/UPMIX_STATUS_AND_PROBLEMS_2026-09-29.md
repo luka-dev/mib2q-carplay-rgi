@@ -2,7 +2,7 @@
 
 One page for the owner: what the stereo→5.1 upmix has achieved, what is still broken, and the order of the next steps. Details live in the linked records; this note only summarises them.
 
-**Later Track B update, 2026-09-29:** The old GPU and "untested causes" rows below describe the original stop snapshot. Execution resumed afterward. A matched 4k MoisesDB four-family remix and a separate 4k curated OnAir supplement both failed their joint source/entry/real-C gates; neither earned 10k. See the [MoisesDB result](UPMIX_MOISES_REMIX_PROBE_2026-09-29.md#completed-4k-result-and-decision), [OnAir result](UPMIX_ONAIR_DATA_PROBE_2026-09-29.md#completed-4k-result-and-decision) and [current handoff](UPMIX_SEPARATOR_HANDOFF.md). The rapid GPU queue is clear; a TRAIN-only instrument-family sidecar is being built on CPU for the next distinct remix comparison. No Track A hook change or car listening result follows from these data screens.
+**Later Track B update, 2026-09-29:** The old GPU and "untested causes" rows below describe the original stop snapshot. Execution resumed afterward. A matched 4k MoisesDB four-family remix and a separate 4k curated OnAir supplement both failed their joint source/entry/real-C gates; neither earned 10k. See the [MoisesDB result](UPMIX_MOISES_REMIX_PROBE_2026-09-29.md#completed-4k-result-and-decision), [OnAir result](UPMIX_ONAIR_DATA_PROBE_2026-09-29.md#completed-4k-result-and-decision) and [current handoff](UPMIX_SEPARATOR_HANDOFF.md). A TRAIN-only instrument-family sidecar passed all 176-song closure checks, and its matched rapid pair is now running on the PC GPU. No Track A hook change or car listening result follows from these data screens.
 
 ---
 
