@@ -395,6 +395,18 @@ def loss_source_attr_operator(torch, net, E, V, D, B, floor_rel=3e-3):
     return (eligible + protected).mean()
 
 
+def loss_vocal_invariance(torch, with_vocal, without_vocal, eligible, mixture, floor_rel=3e-3):
+    """Keep eligible audio fixed when only the training mixture's vocal level changes.
+
+    Both predictions come from ordinary stereo mixtures. True stems construct
+    the paired training inputs and normalize the objective; no stem is supplied
+    at inference. A mixture-relative floor keeps silent eligible crops finite.
+    """
+    energy = lambda Z: (Z.abs() ** 2).sum(dim=(1, 2, 3))
+    floor = (floor_rel ** 2 * energy(mixture).detach()).clamp_min(1e-6)
+    return (energy(with_vocal - without_vocal) / (energy(eligible).detach() + floor)).mean()
+
+
 def loss_role_ce(torch, logits, E, V, D, B, floor_rel=3e-3):
     """Four-role power target from aligned stems, with quiet cells downweighted.
 
@@ -518,7 +530,7 @@ def train(a):
     import itertools
     counter = itertools.count(start)                            # astra 13: one RNG shared by the prefetch threads was not reproducible
     batches = MN.prefetch(lambda: windows(torch, tracks, a.seconds, a.batch, np.random.default_rng([a.seed, next(counter)]),
-                                        with_vocal=a.attr > 0, with_sources=a.source_attr > 0 or a.role_ce > 0 or a.role_focus > 0))
+                                        with_vocal=a.attr > 0, with_sources=a.source_attr > 0 or a.role_ce > 0 or a.role_focus > 0 or a.vocal_invariance > 0))
     if STATS["mean"] is None:
         with torch.no_grad():
             lm = torch.cat([torch.log(stft(torch, next(batches)[0].to(dev)).abs() + 1e-5).flatten() for _ in range(4)])
@@ -543,6 +555,11 @@ def train(a):
                                if getattr(net, "mask_mode", None) == "matrix2" else
                                loss_source_attr(torch, net.last_mask, Tt, V, D, B))
                 loss = loss + a.source_attr * source_loss
+            if a.vocal_invariance > 0:
+                quiet_mix = mix - bt[2]
+                quiet_est = net.separate_stft(stft(torch, quiet_mix))
+                loss = loss + a.vocal_invariance * loss_vocal_invariance(
+                    torch, Est, quiet_est, Tt, X)
             if a.role_ce > 0 or a.role_focus > 0:
                 V, D, B = (stft(torch, bt[2]), stft(torch, bt[3]), stft(torch, bt[4]))
             if a.role_ce > 0:
@@ -628,6 +645,8 @@ def main():
     t.add_argument("--attr", type=float, default=0.0, help="weight of the attribution loss on the truth stems (review 15 exp. 2; 0 = off)")
     t.add_argument("--source-attr", type=float, default=0.0,
                    help="weight of eligible retention plus separate vocal/drum/bass transmission loss (0 = off)")
+    t.add_argument("--vocal-invariance", type=float, default=0.0,
+                   help="weight of paired full-vocal versus no-vocal eligible-output consistency (matrix2 with --source-attr; 0 = off)")
     t.add_argument("--role-ce", type=float, default=0.0,
                    help="weight of four-role stem-power cross entropy (requires --mask role_softmax or complex_role; 0 = off)")
     t.add_argument("--role-focus", type=float, default=0.0,
@@ -639,8 +658,10 @@ def main():
     s = sub.add_parser("separate"); s.add_argument("--model", required=True); s.add_argument("--wav", required=True); s.add_argument("--out", required=True)
     a = ap.parse_args()
     if a.cmd == "train":
-        if min(a.attr, a.source_attr, a.role_ce, a.role_focus) < 0 or sum(v > 0 for v in (a.attr, a.source_attr, a.role_ce)) > 1:
+        if min(a.attr, a.source_attr, a.role_ce, a.role_focus, a.vocal_invariance) < 0 or sum(v > 0 for v in (a.attr, a.source_attr, a.role_ce)) > 1:
             ap.error("--attr, --source-attr and --role-ce must be nonnegative and at most one can be active")
+        if a.vocal_invariance > 0 and (a.mask != "matrix2" or a.source_attr <= 0):
+            ap.error("--vocal-invariance requires --mask matrix2 and --source-attr")
         if (a.mask in ("role_softmax", "complex_role")) != (a.role_ce > 0 or a.role_focus > 0):
             ap.error("--mask role_softmax/complex_role requires --role-ce or --role-focus, and these require a role head")
         if a.mask == "deep2" and (a.attr > 0 or a.source_attr > 0):

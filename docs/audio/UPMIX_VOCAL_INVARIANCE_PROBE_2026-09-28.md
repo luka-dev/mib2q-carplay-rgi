@@ -1,0 +1,19 @@
+# Vocal-Invariance Matrix Probe
+
+_2026-09-28. Review 32, controlled causal training test; gradient weight frozen, DEV results pending._
+
+## Fixed experiment
+
+The [cell-attribution audit](UPMIX_MATRIX_CELL_ATTRIBUTION_2026-09-28.md) located the source-loss arm's extra voice in pure-vocal cells, while a [privileged fast veto](UPMIX_PROTECTED_VETO_UPPER_BOUND_2026-09-28.md) fixed protected ratios but lost eligible output and worsened vocal-entry retention. Test whether a causal full-matrix eligible estimator can learn to keep its output stable when only vocal level changes. This is a supervised training intervention, not a separate inference input: the live model still receives only stereo.
+
+The control is the saved review-29 matrix source-loss model at step 4000, SHA-256 `35B042EBBD44B03697F01444E03861C4D4A185C13F46B23376DD121B1B67FA4A`. The candidate trains from scratch with identical `matrix2` architecture (estimated 126.5 M neural MAC/s before STFT/2×2 arithmetic/rendering), streaming normalization, zero lookahead, seed 1, 176 true/774 pseudo half/half training set, 8 s batch-12 crops, 4000 steps, LR 3e-4/warm-up 2000 and source-attribution weight .0734755788. The **only change** is a paired consistency term: run the same network on the ordinary training mixture and on that mixture with the aligned vocal stem removed, then penalize normalized complex eligible-output difference. Both inputs share eligible/drum/bass audio. The base eligible reconstruction, multiresolution and full-operator source losses remain active; a zero output cannot minimize them. True stems construct the second training mixture and normalize the loss, never enter inference.
+
+[`diag_vocal_invariance_grad.py`](../../tools/stereo-upmix-render/diag_vocal_invariance_grad.py) measures four deterministic real/pseudo **training** batches at random initialization. Freeze the coefficient to `0.30 × median((audio + .0734755788 × source) parameter-gradient norm / unweighted paired-loss parameter-gradient norm)` before any DEV diagnostics. The 30% target is stronger than review 29's 20% source-gradient target because vocal invariance is the specific missing behavior, while still keeping base reconstruction dominant. No DEV/TEST score chooses this coefficient.
+
+The measured base/paired gradient ratios were **.239875/.252665/2.61366/.147773**. The fixed coefficient is **.0738809192**; the third-batch outlier does not control the median. The PC calibration output is `D:\upmix\runs\vocal_invariance4k\grad.txt`. Source hashes: `sep_net.py` **`A8B40E0781D9AD9FFAF228B6C6131C5D1F15EDA74408CC3F32F9BE61676D9A46`**, `diag_vocal_invariance_grad.py` **`35361A0F6EAC970662483263D4063F68E426DC6E8DCE6A4F492F5F0476E13041`**. The one-GPU runner [`run_vocal_invariance4k.ps1`](../../tools/stereo-upmix-render/pc/run_vocal_invariance4k.ps1) guards the code and control checkpoint, queue and GPU lease.
+
+At step 4000, use the unchanged DEV12 reanalyzed source-attribution screen and DEV20 43-entry screen against the saved review-29 control. Require eligible transmission ≥.432, song-median vocal/eligible ≤.324, drums/eligible ≤.0568, bass/eligible ≤.0339, and entry eligible post/pre median ≥.85, p10 ≥.60. Only if every source and entry gate passes, run enriched DEV20 through the frozen direct/no-bed/body0 real C renderer with one global gain chosen from paired rear-RMS delta and verified within ±.1 dB; require guitar ≥.15, keys ≥.15, piano ≥.10, strings ≥.14, voice ≤.02, bass ≤.06, drums ≤.08 and no new any-stem swing song. Then consider full DEV40 plus separately covered real-stem validation and actual head-unit int8/latency measurement with Track A's port before the owner's deferred blind CarPlay verdict. A 4k source or entry failure stops this arm before C or longer training.
+
+## Results
+
+Pending.
