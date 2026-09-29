@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Cache only DSD100 Dev real stems as seven-slot Track B TRAIN truth.
 
-The published Test audio is never opened. First validate the complete archive
-with inspect_dsd100.py --crc and record its SHA-256; pass that hash here.
+This converter never decodes published Test audio. First validate the complete
+archive with inspect_dsd100.py --crc and record its SHA-256; that integrity
+check reads Test ZIP members without analysing their audio.
 The training mixture is the exact sum of the four selected real-stem slots.
 """
 
@@ -164,7 +165,7 @@ def main():
         parser.error("--archive-sha256 must be a 64-digit SHA-256 recorded after full CRC validation")
     with zipfile.ZipFile(args.archive) as zf:
         tracks = manifest(zf)
-        print(f"DSD100 Dev manifest: {len(tracks)} complete four-source tracks; Test audio unopened")
+        print(f"DSD100 Dev manifest: {len(tracks)} complete four-source tracks; Test audio not decoded")
         if args.audit_only:
             return
         args.out.mkdir(parents=True, exist_ok=True)
@@ -197,7 +198,7 @@ def main():
         new_split = args.out / "split.json.new"
         new_split.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
         os.replace(new_split, split_path)
-        print(f"DONE {len(split)} TRAIN tracks; no TEST audio opened", flush=True)
+        print(f"DONE {len(split)} TRAIN tracks; no TEST audio decoded", flush=True)
 
 
 if __name__ == "__main__":
