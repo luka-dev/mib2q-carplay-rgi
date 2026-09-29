@@ -9,6 +9,8 @@ _Read this first, then [the night report](UPMIX_SEPARATOR_NIGHT_REPORT_2026-09-2
 
 **Execution resumed, 2026-09-29 02:24 PC local time:** The owner then authorized the first Track B run. The [frozen MoisesDB remix control](UPMIX_MOISES_REMIX_PROBE_2026-09-29.md) records the baseline hashes, one-change intervention and joint readout. `remix_moises_s1` began on the single PC GPU with `--remix 0.5`; results are pending. This is the rapid BandSepNet data screen, separate from review 43's unrun fine-role probe. No Track A or head-unit file was changed.
 
+**First data result, 2026-09-29 02:50 PC local time:** `remix_moises_s1` completed 4k, attribution, transitions and the real-C DEV20 screen. The [result table and TRAIN/DEV diagnostic](UPMIX_MOISES_REMIX_PROBE_2026-09-29.md#completed-4k-result-and-decision) show no useful instrument gain at matched rear level and worse median vocal-entry retention, so the precommitted joint gate rejects 10k. The GPU lease and queue are empty, and the rapid daemon was stopped. Next compare curated OnAir with the better same-song data recipe; no Track A port or car result follows.
+
 ---
 
 ## 📋 The job in one page

@@ -19,3 +19,23 @@ At 4k, call a data signal only if useful instrument/eligible transmission rises 
 Preflight found no PC GPU lease, active Python trainer or rapid queue line; the aborted earlier `remix` folder has no checkpoint. Keep one GPU tenant and do not install packages into the PC Python environment while runs are active.
 
 **Launch, 2026-09-29 02:24 PC local time.** The owner authorized execution. `remix_moises_s1|--remix 0.5` was queued and the rapid daemon launched detached (PID 29840). Read-back showed `GPU_LEASE = rapid`, the new job record, an active `sep_net.py train` process (PID 12052) and the expected 176-truth/774-pseudo training header. No checkpoint or DEV/C result existed at that read. The daemon's own `job.txt`, checkpoint, diagnostics, screen and board must establish completion; process launch alone does not.
+
+## Completed 4k result and decision
+
+The run finished at 02:50 PC local time. Step 4000, DEV attribution, 43 vocal-entry diagnostics, the 20-song real-C screen and the rapid board all completed. Candidate checkpoint SHA-256: `b509031d93b322419124ffe9578db42d0caa43ffcc5bf9f5923e9907b5951e3f`. The queue and GPU lease were empty; with no Python job active, the rapid daemon was stopped. No second GPU job was queued.
+
+| Fixed screen | Same-song `anchor_s1` | `--remix 0.5`, seed 1 | Reading |
+| --- | ---: | ---: | --- |
+| DEV12 eligible / vocal / all protected transmission | .42 / .197 / .084 | .44 / .208 / .085 | Small recall rise with vocal rise; below the +.03 / ≤+.01 screening signal. |
+| Eligible 8–14 kHz | −23.0 dB | −22.4 dB | Small air change, not a solution to high-frequency suppression. |
+| Entry post/pre median / p10, 43 entries | .758 / .390 | .719 / .395 | Median worsened; both miss the product .85 / .60 target. Absolute median eligible pre/post changed .535/.404 → .551/.392: the post-entry level fell. |
+| Real-C rear level, 20 songs, gain 1.0 | −37.6 dBFS | −37.6 dBFS | Level is matched at board precision. |
+| Real-C guitar / keys / piano / strings rear share | .11 / .09 / .06 / .13 | .10 / .10 / .07 / .13 | No meaningful instrument gain; strings cover only five songs in this screen. |
+| Real-C voice / bass / drums rear share | .04 / .07 / .09 | .04 / .07 / .09 | Protected stems remain above product voice/drum targets. |
+| Songs with any-stem swing | 3/20 | 3/20 | Exactly the same three songs. |
+
+The second same-song anchor (`anchor_s2`) already spans eligible .47, vocal .236, guitar .12, keys .10 and entry .747/.431 at 4k. Paired rows from the two seed-1 `stems.csv` files show guitar median change **−.0011** across 20 songs (9 positive), keys **+.0017** across 15 (8 positive), piano **+.0039** across 8 (7 positive) and strings **−.0077** across 5 (1 positive). These are small compared with the desired instrument movement and mixed in sign; the three swinging songs are unchanged. The fixed joint gate **rejects promotion to 10k**. This bounds this 50%-truth-window remix recipe at 4k; it does not rule out a different remix rate, distinct-song sampler or other training data.
+
+A CPU-only TRAIN12 screen using another agent's existing `DIAG_SPLIT=train` selector completed after the C screen. Same-song versus remix TRAIN SI-SDR was **−1.53→−1.70 dB**, eligible transmission **.38→.39**, vocal transmission **.122→.123**. On DEV12 the corresponding values were **−1.14→−1.19 dB**, **.42→.44**, **.197→.208**. TRAIN12 and DEV12 contain different songs/source balances; these absolute gaps do not by themselves identify underfitting or overfitting. The 4k learning curves and per-source readout agree only that this intervention did not improve the frozen product screen. The CPU script used no GPU and did not edit `diag_gap.py`.
+
+Next data comparison: start from the better same-song control and add curated OnAir at a specified window share, with its own matched no-OnAir control and stem-role/alignment audit. Keep the review-43 fine-role stream experiment separate. No Track A/head-unit change or listening claim follows from this failed screen.

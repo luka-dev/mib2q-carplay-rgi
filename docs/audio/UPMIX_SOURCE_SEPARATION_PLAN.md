@@ -1242,6 +1242,8 @@ The owner found a previously untested data change: [`sep_net.py`](../../tools/st
 
 **Product exit.** No estimated neural MAC count is a device result. A candidate still needs the full 40-song, 60-second real-C harness at stable gain, independent adequately covered real-stem evaluation, measured **≤150 M MAC/s int8 on the head unit and ≤85 ms extra latency**, Track A's decision and work for any hook port, and the owner's blind live-CarPlay verdict. The host direct-object renderer route is a separate Track A integration decision. Do not restart the head unit, touch Track A files, install into the running PC Python environment, or claim an offline headphone preview is the car chain.
 
+**Stage-1 execution update, 2026-09-29.** The owner authorized the first data run after the planning-only snapshot. The [frozen MoisesDB remix probe](UPMIX_MOISES_REMIX_PROBE_2026-09-29.md) completed a matched rapid BandSepNet 4k comparison at `--remix 0.5`: DEV12 eligible/vocal transmission **.42/.197→.44/.208**, entry median/p10 **.758/.390→.719/.395**, and real-C 20-song guitar/keys **.11/.09→.10/.10**, with voice **.04**, rear level **−37.6 dBFS** and the same **3/20** swinging songs. TRAIN12 source attribution was also run on CPU; its different song mix makes absolute TRAIN-versus-DEV levels inconclusive as a fit diagnosis. The joint gate rejects 10k promotion for this recipe. The rapid queue and GPU lease are empty and the daemon was stopped; the next controlled data comparison is curated OnAir against the better same-song control. Review 43 remains separate and unrun.
+
 ## 📝 Publication (astra review 5, 2026-09-26)
 
 Asked whether there is a paper in this work.  Verdict: **a credible systems +
