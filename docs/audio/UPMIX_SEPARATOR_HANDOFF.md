@@ -1,7 +1,7 @@
 # Upmix Separator Track — Handoff
 
 _Initial handoff of the rear-eligible separator track (Track B), written 2026-09-28 04:50 on `feature/upmix-source-separation` at `6eac814`. Later review sections below update that snapshot._
-_Read this first, then [the night report](UPMIX_SEPARATOR_NIGHT_REPORT_2026-09-28.md) for the initial numbers and [the plan](UPMIX_SOURCE_SEPARATION_PLAN.md) for the full history through review 41._
+_Read this first, then [the night report](UPMIX_SEPARATOR_NIGHT_REPORT_2026-09-28.md) for the initial numbers and [the plan](UPMIX_SOURCE_SEPARATION_PLAN.md) for the full history through review 43._
 
 ---
 
@@ -66,6 +66,8 @@ _Read this first, then [the night report](UPMIX_SEPARATOR_NIGHT_REPORT_2026-09-2
 **Review-40 update (2026-09-29).** The [student-cue report](UPMIX_STUDENT_SPATIAL_CUE_2026-09-29.md) fitted the review-39 slow operator from the frozen review-37 **causal fine-role output** on identical first-29.9-s windows and measured identical 30.1–60-s source windows. Cue-fitted full 2×2 eligible **.4806** and bass/E **.03314** passed; vocal/E **.5453>.324** and drums/E **.0714>.0568** failed, with only **2/11** vocal and **5/12** drum songs passing individually. True-stem control reproduced review 39. Frozen source promotion **NO**; no entry or C test for this cue. The spatial representation works with privileged targets but current causal output is too contaminated to identify its operator. Next bounded offline diagnostic: subtract the frozen cue's true-source-attributed vocal and/or drum contribution during fit to isolate the missing cue, before choosing a new architecture. No Track A/unit/device/car change.
 
 **Review-41 update (2026-09-29).** The [cue attribution report](UPMIX_CUE_ATTRIBUTION_BOUND_2026-09-29.md) verified exact algebraic decomposition of the review-37 mixture-inferred output across true sources (maximum normalized squared residual **1.16e-13**) and refit on five preselected protected-subtracted targets. No arm passed the joint source gate. Vocal+drum subtraction gave eligible **.3116<.432** while vocal/E **.2438**, drums/E **.0457**, bass/E **.0316** passed; all-protected subtraction gave eligible **.3028** with even lower ratios. The raw cue's apparently useful eligible energy partly rode on protected content. A posthoc ≈1.18–1.19× gain would restore only the median eligible floor, not the near-zero song; it is not a frozen C operating point. Next one budgeted anchored eligible-audio/slow-operator design with explicit source ownership, then the same source/entry/C gates. No unit, device, independent or ear claim.
+
+**Review-42/43 update (2026-09-29).** The [operator-anchor pair](UPMIX_OPERATOR_ANCHOR_PROBE_2026-09-29.md) is now training control then anchored at 4k with a single GPU lease; TRAIN-only gradient calibration fixed both weights before DEV. Its model is a causal 103.005 M estimated-neural-MAC/s fast/slow 2×2 matrix, with no device claim. The owner then identified a missing data intervention: historical [`sep_net.py`](../../tools/stereo-upmix-render/sep_net.py) samples every stem family from **one song**. The [cross-song probe](UPMIX_CROSSSONG_AUGMENT_PROBE_2026-09-29.md) is staged behind that GPU lease. It will compare the existing review-37 fine-role 4k baseline against the same model with four independently cropped, distinct **TRAIN-only** MoisesDB songs supplying vocal/drum/bass/`other`; synthetic sampler closure passed. Its 176 usable true-stem TRAIN caches exclude DEV/TEST. `other` already folds guitar/keys/strings; the 774 pseudo-labelled library songs stay same-song in both arms. This experiment has **not run** or seen DEV. Do not claim that the earlier architecture failures were caused by augmentation until the paired source/entry/C evidence exists. MUSDB18 was deleted locally and AlbumDB's PC copy is derived 5.1; import more real stems in a separate follow-up if warranted. One GPU tenant, no PC environment installs, no unit or Track A changes, and no ear verdict.
 
 ---
 
@@ -410,7 +412,9 @@ docs/audio/UPMIX_SEPARATOR_HANDOFF.md, then the night report and the plan.
 - [Upmix Spatial Operator Source and Vocal-Entry Bound 2026-09-29](UPMIX_SPATIAL_OVERLAP_BOUND_2026-09-29.md) — review-39 true-stem fitted 2×2 operator passes median source/entry diagnostic gates but has song outliers
 - [Upmix Frozen Student Cue for the Spatial Operator 2026-09-29](UPMIX_STUDENT_SPATIAL_CUE_2026-09-29.md) — review-40 current causal cue retains eligible/bass but fails vocal/drum selectivity
 - [Upmix Protected Contribution to the Spatial Cue 2026-09-29](UPMIX_CUE_ATTRIBUTION_BOUND_2026-09-29.md) — review-41 privileged protected subtraction fixes selectivity but loses eligible recall
-- [Upmix Source Separation Plan](UPMIX_SOURCE_SEPARATION_PLAN.md) — the running log through review 41 and run rows
+- [Upmix Causal Slow-Operator Anchor Probe 2026-09-29](UPMIX_OPERATOR_ANCHOR_PROBE_2026-09-29.md) — review-42 frozen calibrated control/anchor pair and source, transition, mechanism gates
+- [Upmix Cross-Song True-Stem Augmentation Probe 2026-09-29](UPMIX_CROSSSONG_AUGMENT_PROBE_2026-09-29.md) — review-43 previously missing TRAIN-only source remix, matched 4k comparison and gates
+- [Upmix Source Separation Plan](UPMIX_SOURCE_SEPARATION_PLAN.md) — the running log through review 43 and run rows
 - [Upmix Mask Net Phase 1 Report 2026-09-27](UPMIX_MASK_PHASE1_REPORT_2026-09-27.md) — Track A in the car
 - [Upmix Stability 2026-09-25](UPMIX_STABILITY_2026-09-25.md) — the original "back and forth" measurement
 - [Upmix Calibration and Tuning](UPMIX_CALIBRATION_AND_TUNING.md) — the shipped renderer configuration
