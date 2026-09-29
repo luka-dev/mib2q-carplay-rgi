@@ -156,7 +156,7 @@ class BandSepNet:
         dec_skip = bool(dec_skip or lookahead)                     # the frame's own band embedding into the decoder
         dec_in = h2 + hg + (feat if dec_skip else 0)
         self.mask_mode = mask
-        mo = 1 if mask == "shared_sigmoid" else (8 if mask in ("complex_role", "deep2") else 4)
+        mo = 1 if mask == "shared_sigmoid" else (8 if mask in ("complex_role", "deep2", "matrix2") else 4)
         self.dec = nn.ModuleList([nn.Linear(dec_in, (b - a) * mo) for a, b in self.bands])
         for d in self.dec:                                     # near attenuation: mask ~ 0.3 + 0i (sigmoid(-0.85) = 0.3)
             nn.init.normal_(d.weight, std=0.01)
@@ -164,7 +164,7 @@ class BandSepNet:
                 d.bias.zero_()
                 if mask == "complex2":
                     d.bias.view(-1, 4)[:, 0] = 0.3; d.bias.view(-1, 4)[:, 2] = 0.3
-                elif mask in ("complex_role", "deep2"):
+                elif mask in ("complex_role", "deep2", "matrix2"):
                     d.bias.view(-1, 8)[:, 0] = 0.3; d.bias.view(-1, 8)[:, 2] = 0.3
                     if mask == "complex_role":
                         d.bias.view(-1, 8)[:, 7] = 0.25
@@ -217,6 +217,11 @@ class BandSepNet:
             current, previous = self.last_taps
             past = self.torch.cat([self.torch.zeros_like(Z[:, :1]), Z[:, :-1]], 1)
             return current * Z + previous * past
+        if self.mask_mode == "matrix2":
+            diagonal, cross = self.last_matrix
+            left = diagonal[..., 0] * Z[..., 0] + cross[..., 1] * Z[..., 1]
+            right = cross[..., 0] * Z[..., 0] + diagonal[..., 1] * Z[..., 1]
+            return self.torch.stack((left, right), -1)
         return self.last_mask * Z
 
     def separate_stft(self, X):
@@ -270,6 +275,12 @@ class BandSepNet:
             previous = torch.complex(m[..., 4:8:2], m[..., 5:8:2])
             self.last_taps = (current, previous)
             self.last_mask = current
+            return self.apply_last_filter(X)
+        elif self.mask_mode == "matrix2":
+            diagonal = torch.complex(m[..., 0:4:2], m[..., 1:4:2])
+            cross = torch.complex(m[..., 4:8:2], m[..., 5:8:2])  # L->R, R->L
+            self.last_matrix = (diagonal, cross)
+            self.last_mask = diagonal
             return self.apply_last_filter(X)
         elif self.mo == 1:
             mask = torch.sigmoid(m).expand(-1, -1, -1, 2).to(X.dtype)            # [B,T,1025,2] one real mask in [0,1] for L and R
@@ -593,7 +604,7 @@ def main():
     t.add_argument("--dec-skip", action="store_true", help="band model: the frame's own band embedding into the decoder (implied by --lookahead; alone = the L=0 control)")
     t.add_argument("--norm", default="window", choices=("window", "stream"), help="band model input level: one scalar per window (non-causal, default) or a causal 2-s running level")
     t.add_argument("--save-at", default="", help="comma-separated steps at which to save stepN.pt snapshots (proxy validation)")
-    t.add_argument("--mask", default="complex2", choices=("complex2", "shared_sigmoid", "role_softmax", "complex_role", "deep2"), help="band model head: stereo complex ratio mask (default), shared real mask, role mask, complex audio plus role, or current/past complex FIR taps")
+    t.add_argument("--mask", default="complex2", choices=("complex2", "shared_sigmoid", "role_softmax", "complex_role", "deep2", "matrix2"), help="band model head: diagonal stereo complex mask (default), shared real mask, role mask, complex audio plus role, causal two-tap FIR, or full 2x2 stereo complex matrix")
     t.add_argument("--bandbal", type=float, default=0.0, help="weight of the band-balanced magnitude L1 (review 15 exp. 3; 0 = off)")
     t.add_argument("--attr", type=float, default=0.0, help="weight of the attribution loss on the truth stems (review 15 exp. 2; 0 = off)")
     t.add_argument("--source-attr", type=float, default=0.0,
@@ -613,8 +624,8 @@ def main():
             ap.error("--attr, --source-attr and --role-ce must be nonnegative and at most one can be active")
         if (a.mask in ("role_softmax", "complex_role")) != (a.role_ce > 0 or a.role_focus > 0):
             ap.error("--mask role_softmax/complex_role requires --role-ce or --role-focus, and these require a role head")
-        if a.mask == "deep2" and (a.attr > 0 or a.source_attr > 0):
-            ap.error("--mask deep2 requires source losses to apply both FIR taps; use the audio losses for this probe")
+        if a.mask in ("deep2", "matrix2") and (a.attr > 0 or a.source_attr > 0):
+            ap.error("--mask deep2/matrix2 requires source losses to apply the full operator; use audio losses for this probe")
         global TRUTH_FRAC
         TRUTH_FRAC = a.truth_frac
         a.save_at = {int(x) for x in a.save_at.split(",") if x.strip()}
