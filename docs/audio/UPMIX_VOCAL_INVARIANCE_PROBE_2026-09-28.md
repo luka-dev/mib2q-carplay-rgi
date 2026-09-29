@@ -1,6 +1,6 @@
 # Vocal-Invariance Matrix Probe
 
-_2026-09-28. Review 32, controlled causal training test; gradient weight frozen, DEV results pending._
+_2026-09-28. Review 32, controlled causal training test; completed and rejected at the frozen source gate._
 
 ## Fixed experiment
 
@@ -18,4 +18,20 @@ Also run a diagnostic paired vocal-removal check on the same DEV12 excerpts: nor
 
 ## Results
 
-Pending.
+The one-GPU run completed 4000 steps in **1221 s** without a training error. Candidate checkpoint: `D:\upmix\runs\vocal_invariance4k\focused\step4000.pt`, SHA-256 `16E6ED1E1FF9FBB7E80754AE20FE3FAA0F6B7C1C4DA714F0AA221B018C7CEC70`. Its scalar DEV SI-SDR/vocal-leak was **−1.75 dB/.013**, versus control **−.54 dB/.165**. The low scalar leak was a warning of suppression, not evidence of useful rear separation.
+
+The guarded CPU source screen on the fixed 12 already-inspected DEV excerpts gave:
+
+| Checkpoint | Eligible transmission | Vocal transmission | Drums transmission | Bass transmission | Song-median vocal/E | Drums/E | Bass/E |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Saved source-loss matrix control | .4620 | .1811 | .0319 | .0176 | .5061 | .0662 | .0415 |
+| Vocal-invariance candidate | **.0713** | .0146 | .0069 | .0015 | .2829 | .0892 | .0138 |
+| Frozen limits | ≥.432 | — | — | — | ≤.324 | ≤.0568 | ≤.0339 |
+
+The candidate passed the vocal and bass ratio limits but missed drums/eligible and lost **84.6%** of the control's eligible transmission (`1 − .0713/.4620`). Its output is too quiet to make the rear confident, regardless of its low vocal leakage.
+
+The unchanged transition diagnostic found 43 entries. Candidate post/pre eligible retention **1.036/.801** median/p10 exceeds the numerical .85/.60 limits, versus control **.841/.535**; yet candidate median eligible transmission before and after entry was only **.045/.048** versus control **.576/.457**. This is apparent ratio stability from a nearly closed output, not stable audible instruments. Entry 0–2 s vocal transmission fell **.206→.015**. The predeclared counterfactual mechanism check also fired: candidate/control normalized eligible-output sensitivity to removing true vocal was median **.0867**, lower in **12/12** songs, versus the ≤.8 and ≥8/12 mechanism thresholds. Thus the loss strongly enforced its invariance target, but found the degenerate nearly silent solution despite the unchanged reconstruction and source losses.
+
+The PC outputs are `D:\upmix\runs\vocal_invariance4k\focused_vs_matrix.{json,txt}`, `focused_vs_shared.{json,txt}`, `transitions.txt`, `counterfactual.{json,txt}` and `focused\train.log`. [`run_vocal_invariance_diag.ps1`](../../tools/stereo-upmix-render/pc/run_vocal_invariance_diag.ps1) guards the source code and checkpoint hashes, verifies no GPU tenant/queued run, and performs the fixed screens on CPU. The failed eligible and drum gates reject this arm before C, full40, longer training, device port or owner listening, as specified beforehand.
+
+This is a measured **objective degeneracy**, not proof that causal vocal invariance or the 2×2 architecture is impossible. An unconstrained output-difference penalty rewards silence; a next mechanism must preserve a minimum eligible signal while reducing dependence on vocals. A direct paired reconstruction objective (both mixtures independently target the same eligible audio) or an explicit persistent eligible state with a fast protected estimate are bounded alternatives. Do not promote a model on post/pre retention alone without checking its absolute eligible output.
