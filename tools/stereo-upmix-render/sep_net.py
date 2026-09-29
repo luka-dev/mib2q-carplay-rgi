@@ -315,7 +315,7 @@ REMIX_GROUPS = ((0, 1), (2, 3, 4), (5,), (6,))   # vocal / drums / bass / other:
 
 
 def windows(torch, tracks, seconds, batch, rng, merge_none=None, with_vocal=False, with_sources=False,
-            remix=0.0, extra_truth_frac=0.0):
+            remix=0.0, extra_truth_frac=0.0, instrument_sidecars=None):
     """[B, 2, n] mixture and [B, 2, n] eligible target from seven-slot (or expanded) caches (+ the vocal stem with
     `with_vocal`, or the separate vocal / drum / bass stems with `with_sources`,
     for attribution losses).  `remix` = probability that a truth-pool window takes each REMIX_GROUPS group from an
@@ -338,6 +338,17 @@ def windows(torch, tracks, seconds, batch, rng, merge_none=None, with_vocal=Fals
         w = MN.expand_slots(MN.read_window(path, s, n)).astype(np.float32) / 32768   # [7,2,n]
         if remix > 0 and pool is pools[0] and rng.random() < remix:
             for grp in REMIX_GROUPS[1:]:                           # the vocal group stays from the first song
+                if grp == (6,) and instrument_sidecars:
+                    eligible = np.zeros_like(w[6])
+                    for gi in range(6):
+                        side = instrument_sidecars[rng.integers(len(instrument_sidecars))]
+                        Ns = MN.npy_header(side)[0][2]
+                        if Ns <= n:
+                            raise ValueError(f"instrument sidecar shorter than training window: {side}")
+                        ss = rng.integers(0, Ns - n)
+                        eligible += MN.read_window(side, ss, n, slots=[gi])[0].astype(np.float32) / 32768
+                    w[6] = eligible
+                    continue
                 p2 = pool[rng.integers(len(pool))]; N2 = MN.npy_header(p2)[0][2]
                 if N2 <= n:
                     continue
@@ -563,6 +574,18 @@ def train(a):
             raise ValueError("extra truth cache has no present TRAIN tracks")
         tracks = tracks + (extra_tracks,)
         print(f"extra truth: {len(extra_tracks)} songs at {a.extra_truth_frac:.1%} of truth windows", flush=True)
+    side_dir = getattr(a, "instrument_sidecar", None)
+    instrument_sidecars = None
+    if side_dir:
+        side_meta = json.load(open(os.path.join(side_dir, "split.json")))
+        expected = ("guitar", "keys", "piano", "strings", "winds", "other")
+        if tuple(side_meta.get("groups", ())) != expected or side_meta.get("sr") != SR:
+            raise ValueError("instrument sidecar needs six expected 48-kHz groups")
+        side_split = MN.load_split(side_dir)
+        if set(side_split["train"]) != set(split["train"]):
+            raise ValueError("instrument sidecar TRAIN identities do not match base cache")
+        instrument_sidecars = [os.path.join(side_dir, t + ".npy") for t in side_split["train"]]
+        print(f"instrument remix: {len(instrument_sidecars)} TRAIN sidecars", flush=True)
     n_songs = sum(len(t) for t in tracks) if isinstance(tracks, tuple) else len(tracks)
     print(f"device {dev}; {n_songs} training songs; params {sum(p.numel() for p in net.parameters())}, "
           f"~{net.macs} MAC per frame = {net.macs * FPS / 1e6:.0f} M MAC/s (+ one 2048-point FFT/iFFT pair per hop)", flush=True)
@@ -588,6 +611,7 @@ def train(a):
     counter = itertools.count(start)                            # astra 13: one RNG shared by the prefetch threads was not reproducible
     batches = MN.prefetch(lambda: windows(torch, tracks, a.seconds, a.batch, np.random.default_rng([a.seed, next(counter)]),
                                         remix=a.remix, extra_truth_frac=getattr(a, "extra_truth_frac", 0.0),
+                                        instrument_sidecars=instrument_sidecars,
                                         with_vocal=a.attr > 0, with_sources=a.source_attr > 0 or a.role_ce > 0 or a.role_focus > 0 or a.vocal_invariance > 0 or a.vocal_entry_target > 0))
     if STATS["mean"] is None:
         with torch.no_grad():
@@ -724,6 +748,7 @@ def main():
     t.add_argument("--extra-truth", help="additional seven-slot true-stem cache (TRAIN songs only; requires --half-half)")
     t.add_argument("--extra-truth-frac", type=float, default=0.0,
                    help="probability of drawing the extra corpus conditional on a truth window")
+    t.add_argument("--instrument-sidecar", help="six-slot MoisesDB TRAIN sidecar; draw eligible families independently in --remix windows")
     t.add_argument("--accum", type=int, default=1, help="gradient accumulation steps (effective batch = batch x accum)")
     s = sub.add_parser("separate"); s.add_argument("--model", required=True); s.add_argument("--wav", required=True); s.add_argument("--out", required=True)
     a = ap.parse_args()
@@ -744,6 +769,8 @@ def main():
             ap.error("--extra-truth requires --extra-truth-frac in (0, 1]")
         if a.extra_truth and not (a.teacher_cache and a.half_half):
             ap.error("--extra-truth requires --teacher-cache and --half-half")
+        if a.instrument_sidecar and a.remix <= 0:
+            ap.error("--instrument-sidecar requires --remix > 0")
         global TRUTH_FRAC
         TRUTH_FRAC = a.truth_frac
         a.save_at = {int(x) for x in a.save_at.split(",") if x.strip()}
