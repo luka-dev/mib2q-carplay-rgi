@@ -379,6 +379,22 @@ def loss_source_attr(torch, mask, E, V, D, B, floor_rel=3e-3):
     return (eligible + protected).mean()
 
 
+def loss_source_attr_operator(torch, net, E, V, D, B, floor_rel=3e-3):
+    """Source-attributed retention/protection through the full inferred operator.
+
+    The operator must first be inferred from the mixture, then applied without
+    re-inference to each aligned true source. For matrix2 this includes both
+    cross-channel terms. This has the same source normalization as the earlier
+    shared-mask loss, allowing a controlled architecture-specific comparison.
+    """
+    energy = lambda Z: (Z.abs() ** 2).sum(dim=(1, 2, 3))
+    floor = (floor_rel ** 2 * (energy(E) + energy(V) + energy(D) + energy(B)).detach()).clamp_min(1e-6)
+    eligible = energy(net.apply_last_filter(E) - E) / (energy(E).detach() + floor)
+    protected = sum(energy(net.apply_last_filter(source)) / (energy(source).detach() + floor)
+                    for source in (V, D, B)) / 3.0
+    return (eligible + protected).mean()
+
+
 def loss_role_ce(torch, logits, E, V, D, B, floor_rel=3e-3):
     """Four-role power target from aligned stems, with quiet cells downweighted.
 
@@ -522,8 +538,11 @@ def train(a):
             if a.attr > 0:
                 loss = loss + a.attr * loss_attr(torch, net.last_mask, stft(torch, bt[2]), Tt)
             if a.source_attr > 0:
-                loss = loss + a.source_attr * loss_source_attr(
-                    torch, net.last_mask, Tt, stft(torch, bt[2]), stft(torch, bt[3]), stft(torch, bt[4]))
+                V, D, B = (stft(torch, bt[2]), stft(torch, bt[3]), stft(torch, bt[4]))
+                source_loss = (loss_source_attr_operator(torch, net, Tt, V, D, B)
+                               if getattr(net, "mask_mode", None) == "matrix2" else
+                               loss_source_attr(torch, net.last_mask, Tt, V, D, B))
+                loss = loss + a.source_attr * source_loss
             if a.role_ce > 0 or a.role_focus > 0:
                 V, D, B = (stft(torch, bt[2]), stft(torch, bt[3]), stft(torch, bt[4]))
             if a.role_ce > 0:
@@ -624,8 +643,10 @@ def main():
             ap.error("--attr, --source-attr and --role-ce must be nonnegative and at most one can be active")
         if (a.mask in ("role_softmax", "complex_role")) != (a.role_ce > 0 or a.role_focus > 0):
             ap.error("--mask role_softmax/complex_role requires --role-ce or --role-focus, and these require a role head")
-        if a.mask in ("deep2", "matrix2") and (a.attr > 0 or a.source_attr > 0):
-            ap.error("--mask deep2/matrix2 requires source losses to apply the full operator; use audio losses for this probe")
+        if a.mask == "deep2" and (a.attr > 0 or a.source_attr > 0):
+            ap.error("--mask deep2 requires source losses to apply both FIR taps; use audio losses for this probe")
+        if a.mask == "matrix2" and a.attr > 0:
+            ap.error("--mask matrix2 does not support --attr; use --source-attr on the full operator")
         global TRUTH_FRAC
         TRUTH_FRAC = a.truth_frac
         a.save_at = {int(x) for x in a.save_at.split(",") if x.strip()}
