@@ -16,4 +16,6 @@ At 4k, call a data signal only if useful instrument/eligible transmission rises 
 
 ## Execution state
 
-Preflight found no PC GPU lease, active Python trainer or rapid queue line; the aborted earlier `remix` folder has no checkpoint. This document does not claim the new job has started or produced results. Keep one GPU tenant and do not install packages into the PC Python environment while runs are active.
+Preflight found no PC GPU lease, active Python trainer or rapid queue line; the aborted earlier `remix` folder has no checkpoint. Keep one GPU tenant and do not install packages into the PC Python environment while runs are active.
+
+**Launch, 2026-09-29 02:24 PC local time.** The owner authorized execution. `remix_moises_s1|--remix 0.5` was queued and the rapid daemon launched detached (PID 29840). Read-back showed `GPU_LEASE = rapid`, the new job record, an active `sep_net.py train` process (PID 12052) and the expected 176-truth/774-pseudo training header. No checkpoint or DEV/C result existed at that read. The daemon's own `job.txt`, checkpoint, diagnostics, screen and board must establish completion; process launch alone does not.

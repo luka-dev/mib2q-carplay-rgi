@@ -7,6 +7,8 @@ _Read this first, then [the night report](UPMIX_SEPARATOR_NIGHT_REPORT_2026-09-2
 
 **Later planning update, 2026-09-29:** The earlier execution snapshot above is historical. Claude subsequently reported stopping the uncheckpointed review-42 job and cleaning an accidentally queued `remix` rapid job. A read-only check then found no PC GPU lease or Python training process, an empty rapid queue, and only a short log in `remix_aborted`; no remix result exists. The owner is **planning only**. The [data-first, architecture-second decision plan](UPMIX_SOURCE_SEPARATION_PLAN.md#next-decision-data-first-architecture-second-owner-planning-update-2026-09-29) specifies matched MoisesDB remix, curated OnAir, detailed raw MoisesDB instruments, optional audited teacher remix, causal confirmation, joint promotion gates and device/ear requirements. It separates the rapid BandSepNet comparison from review 43's causal fine-role probe. No run or hook port is authorized by this note.
 
+**Execution resumed, 2026-09-29 02:24 PC local time:** The owner then authorized the first Track B run. The [frozen MoisesDB remix control](UPMIX_MOISES_REMIX_PROBE_2026-09-29.md) records the baseline hashes, one-change intervention and joint readout. `remix_moises_s1` began on the single PC GPU with `--remix 0.5`; results are pending. This is the rapid BandSepNet data screen, separate from review 43's unrun fine-role probe. No Track A or head-unit file was changed.
+
 ---
 
 ## 📋 The job in one page
