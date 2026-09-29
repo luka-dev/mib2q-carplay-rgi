@@ -17,3 +17,24 @@ The subsequent network intervention is separate from the cache build: compare th
 **Full cache and launch, 03:58 PC local time.** All **176/176 TRAIN** songs built without a missing-stem, sample-rate, length, overflow or closure failure. The directory has 176 six-slot `.npy`, 176 song metadata JSONs and a TRAIN-only `split.json`; maximum pre-correction residual across songs was **1.219 LSB RMS / 10 LSB peak**, against stop thresholds 3/100 LSB. The split SHA-256 is `451be9435c177a85c5e107da5720336dd9d99967507b25f5ef63c6bfd97270fc`. The PC `sep_net.py` was updated only after the OnAir pair completed and hashes to `f5e17c0f963e2d4b9ab92e3e1ba89b0c254d9eb53f3ccf4c00f05a09ffd42c6a`; the rapid daemon and real-C renderer remained `be2094dd0c2bc43b3ffaab88b71b6f432438775f35f90b5569929f685a884fb3` and `730a2ca9af8bf84db8b8ac9b4abacadeff70190abb1fc7b78f0536012bb74520`. A 20-step GPU smoke with `--remix 0.5 --instrument-sidecar` saved `D:\upmix\runs\smoke_instr6_20\step20.pt`, confirming the real sidecar sampler and training step run; this is not a quality score.
 
 The queue now contains `instr_ctrl_s1|--remix 0.5` followed by `instr6_s1|--remix 0.5 --instrument-sidecar D:\upmix\datasets\moises_instrument_sidecar6`. A detached rapid daemon started as **PID 44960**. Read-back at 03:58:47 found its single control `sep_net.py train` process, a GPU lease, the control start record and expected 176 truth / 774 pseudo header. The first `Start-Process` launch from SSH returned PID 18876 but did not survive the SSH session; the queue was unchanged and no GPU lease or run had started. The successful launch used `Win32_Process.Create` and was verified after SSH disconnected. No second daemon or training tenant was left by the failed attempt. Results are pending.
+
+## Completed matched 4k result and decision
+
+The control finished at 04:23:00 and the candidate at **04:47:33 PC local time**, each with a step-4000 checkpoint, DEV12 source attribution, 43 vocal-entry events and the fixed 20-song × 60 s real-C screen. Control/candidate checkpoint SHA-256 values are `1e6349cb4da65e3e4ae2f80e8f16fc5a574da66323b0d5a01030ca20bb329281` / `065311eece0241db810b7f567b15084029ec04415d6c65b6bc74e71e0355b01c`. This is the unchanged 125 M *estimated neural* MAC/s BandSepNet with noncausal `norm=window`; neither number establishes whole-pipeline device fitness.
+
+| Fixed screen | Four-family remix control | Six-family eligible remix |
+| --- | ---: | ---: |
+| DEV12 SI-SDR, dB | −1.16 | −1.22 |
+| Eligible transmission, all / eligible-dominant | .44 / .48 | .42 / .46 |
+| Vocal / protected transmission | .209 / .088 | .194 / .081 |
+| Eligible 8–14 kHz transmission, dB | −22.3 | −22.3 |
+| Entry retention median / p10, 43 events | .738 / .400 | .727 / .396 |
+| Entry eligible retention pre / post median | .565 / .391 | .539 / .387 |
+| Rear level, dBFS | −37.7 | −37.6 |
+| Guitar / keys / piano / strings rear share | .11 / .10 / .07 / .14 | .10 / .10 / .06 / .12 |
+| Voice / bass / drums rear share | .04 / .06 / .09 | .04 / .06 / .09 |
+| Songs with any-stem swing | 3/20 | 3/20 |
+
+The six-family sampler lowered **both** eligible and protected transmission, reduced guitar/strings rear share at a nearly identical rear level, and slightly worsened vocal-entry retention. The first 1000-step vocal-leak proxy looked better (.116→.076) but by 2000 steps it had reversed (.146→.179); at 4000 it was .183→.173 while SI-SDR changed −1.16→−1.22. This early fluctuation is not a product gain. A paired-song analysis of `screen/stems.csv` (5,000 song-level bootstrap resamples) found guitar median .105→.099 with paired median delta near zero (90% CI −.0021..+.0017), keys .100→.096 with paired delta +.001 (CI −.0028..+.0032), and the same three swinging songs. Strings cover only five songs. The predeclared joint gate **rejects a 10k continuation** of this recipe.
+
+This answers the specific hypothesis that making the existing 50%-truth-window four-family remix more detailed would break the rapid BandSepNet shelf by 4k; it did not. It does not prove that all data mixing fails: pseudo-labelled windows remained same-song, no larger natural corpus entered, the student used whole-window normalization, and the 20-song DEV screen is repeatedly inspected. After completion the queue was empty, the GPU lease absent and no Python process active; rapid daemon PID 44960 was stopped with an exact process check. No Track A, head-unit or car-listening work occurred.
