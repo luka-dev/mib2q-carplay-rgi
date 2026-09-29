@@ -184,7 +184,8 @@ HOOK_EXPORT int AirPlayReceiverSessionSetup(void *session, void *request, void *
     }
 
     beginMs = seam_now_ms();
-    setup.result = real(session, request, respOut, a4);
+    if (!setup.result) setup.result = real(session, request, respOut, a4);
+    else if (respOut) *respOut = NULL;
     realDoneMs = seam_now_ms();
 
     /* Run even when stock produced no response: recording that stock rejected
@@ -292,5 +293,11 @@ HOOK_EXPORT int AirPlayReceiverSessionTearDown(void *session, void *request, int
     }
 
     if (!real) return reason;
-    return real(session, request, reason, a4);
+    int result = real(session, request, reason, a4);
+    for (i = 0; i < n; i++) {
+        const hook_module_def_t *def = hook_framework_module_at(i);
+        if (def && def->airplay.on_teardown_final)
+            def->airplay.on_teardown_final(session, full ? NULL : request, reason);
+    }
+    return result;
 }

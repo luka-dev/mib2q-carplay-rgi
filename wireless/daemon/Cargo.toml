@@ -1,0 +1,31 @@
+[package]
+name = "mhi2q-wireless-daemon"
+version = "0.1.0"
+edition = "2024"
+
+[workspace]
+
+[workspace.package]
+edition = "2024"
+
+[features]
+qemu-probe = []
+
+[[bin]]
+name = "wifi-ie-qemu-probe"
+path = "probes/wifi_ie_qemu_probe.rs"
+required-features = ["qemu-probe"]
+
+[[bin]]
+name = "receiver-control-qemu-probe"
+path = "probes/receiver_control_qemu_probe.rs"
+required-features = ["qemu-probe"]
+
+[[bin]]
+name = "phone-qemu-probe"
+path = "probes/phone_qemu_probe.rs"
+required-features = ["qemu-probe"]
+
+[dependencies]
+iap2-link = { path = "vendor/iap2-link" }
+iap2-csm = { path = "vendor/iap2-csm" }

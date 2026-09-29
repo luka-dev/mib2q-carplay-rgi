@@ -1,0 +1,3 @@
+# Reproducible local builds, firmware-derived images and QEMU captures.
+out/
+/output/

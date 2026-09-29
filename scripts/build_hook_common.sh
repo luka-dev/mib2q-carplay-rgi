@@ -60,6 +60,7 @@ carplay_build_hook() {
   # HOOK_AUDIO=0 builds the hook without the type-103 audio module (stock CarPlay
   # audio; no QSA/AirPlay audio interposers, no libcarplay_apac.so).
   local HOOK_AUDIO="${HOOK_AUDIO:-1}"
+  local HOOK_WIRELESS="${HOOK_WIRELESS:-0}"
   # There is one production image: logging compiled in, WARN only, and every runtime
   # diagnostic behind carplay_verbose (log_verbose()).  The old LOG=0 variant is gone.
   [ "${LOG:-}" = 0 ] && { echo "LOG=0 is gone: the hook always logs WARN; touch carplay_verbose for diagnostics"; return 1; }
@@ -67,12 +68,17 @@ carplay_build_hook() {
   [[ "$AUDIO_STATE_TRACE" == "0" || "$AUDIO_STATE_TRACE" == "1" ]] || { echo "Invalid AUDIO_STATE_TRACE=$AUDIO_STATE_TRACE (0|1)"; return 1; }
   [[ "$ALTSCREEN_PACE_TRACE" == "0" || "$ALTSCREEN_PACE_TRACE" == "1" ]] || { echo "Invalid ALTSCREEN_PACE_TRACE=$ALTSCREEN_PACE_TRACE (0|1)"; return 1; }
   [[ "$HOOK_AUDIO" == "0" || "$HOOK_AUDIO" == "1" ]] || { echo "Invalid HOOK_AUDIO=$HOOK_AUDIO (0|1)"; return 1; }
+  [[ "$HOOK_WIRELESS" == "0" || "$HOOK_WIRELESS" == "1" ]] || { echo "Invalid HOOK_WIRELESS=$HOOK_WIRELESS (0|1)"; return 1; }
   # A trace build writes only its compact ledger, so the normal hook log is compiled out.
   local TRACE_ONLY=0
   [[ "$AUDIO_STATE_TRACE" == "1" || "$ALTSCREEN_PACE_TRACE" == "1" ]] && TRACE_ONLY=1
   [[ "$LOG_RGD_PACKET_RAW" == "1" && "$TRACE_ONLY" == "1" ]] && { echo "LOG_RGD_PACKET_RAW=1 needs the normal log, not a trace build"; return 1; }
 
   local CFLAGS_EXTRA="-D__QNX__ -mfpu=neon -mfloat-abi=softfp"
+  CFLAGS_EXTRA="$CFLAGS_EXTRA -DHOOK_WIRELESS=$HOOK_WIRELESS"
+  if [ "$HOOK_WIRELESS" = "1" ]; then
+      python3 "$PROJECT_DIR/hook/wireless/build_pairing.py" || return 1
+  fi
   if [ "$HOOK_AUDIO" == "0" ]; then
       CFLAGS_EXTRA="$CFLAGS_EXTRA -DHOOK_AUDIO=0"
       echo "Type-103 audio module EXCLUDED (stock CarPlay audio, no libcarplay_apac.so)"
@@ -118,6 +124,7 @@ carplay_build_hook() {
     # compiler-only). Linked into both .so; each gets its own PROT slot.
     PROT_BUILD='"$PROT_BUILD"'
     HOOK_AUDIO='"$HOOK_AUDIO"'
+    HOOK_WIRELESS='"$HOOK_WIRELESS"'
     PROT_SECRET_ENC='"$PROT_SECRET_ENC"'
     PROT_OBJS=""; PROT_CC=""
     if [ "$PROT_BUILD" = "1" ]; then
@@ -157,6 +164,11 @@ carplay_build_hook() {
           audio/apac_codec_loader.c audio/aac_bridge.c audio/audio_hook.c"
     HOOK_CFLAGS="-fPIC -O2 -std=gnu99 -fvisibility=hidden -fdata-sections -ffunction-sections '"$CFLAGS_EXTRA"' $PROT_CC -I. -I/src/apac_decoder/include"
     DSP_OBJS=""
+    WIRELESS_LIB=""
+    if [ "$HOOK_WIRELESS" = "1" ]; then
+        SRCS="$SRCS framework/http210_seams.c wireless/stock210_abi.c wireless/wireless_hook.c wireless/media.c wireless/advertisement.c"
+        WIRELESS_LIB="/src/build/wireless-sdk/libwireless_pairing.a -lbacktrace"
+    fi
     if [ "$HOOK_AUDIO" = "1" ]; then
         SRCS="$SRCS $AUDIO_SRCS"
         # The upmix DSP gets its own optimisation flags (scripts/apac_flags.sh).
@@ -166,7 +178,7 @@ carplay_build_hook() {
             DSP_OBJS="$DSP_OBJS $o"
         done
     fi
-    $CC -shared $HOOK_CFLAGS $SRCS $DSP_OBJS $PROT_OBJS \
+    $CC -shared $HOOK_CFLAGS $SRCS $DSP_OBJS $PROT_OBJS $WIRELESS_LIB \
         -o $OUTD/libcarplay_hook.so -Wl,--gc-sections \
         -Wl,--version-script=/src/hook/carplay_hook.exports.map \
         -lz -lsocket -lm
@@ -174,6 +186,8 @@ carplay_build_hook() {
     fail() { echo "REJECTED: $*"; exit 1; }
     SO=$OUTD/libcarplay_hook.so
     TRACE_ENABLED='"$AUDIO_STATE_TRACE"'
+    n=$($NM -D --undefined-only $SO 2>/dev/null | grep -cE " (cp280_|cp_pair_|xpc_)" || true)
+    [ "$n" = "0" ] || fail "$n unresolved private pairing/XPC symbols"
 
     # 1. emutls trap: the hook must never carry thread-local emutls (QNX 6.5 crash).
     n=$($NM $SO 2>/dev/null | grep -ci emutls || true)
@@ -229,6 +243,11 @@ carplay_build_hook() {
         grep -vE "^(snd_pcm_.*|AudioSessionGetSupportedOutputFormats|AirPlayAudioFormatToASBD|AudioStreamPrepare|AudioStreamStop|AirTunesServer_EnsureCreated|AirPlayReceiverServerPlatformCopyProperty|AirPlayReceiverSessionControl|_ZN3dio11CQNXSoundIF.*createMetadata.*)$" \
             /tmp/hook_exports_expected > /tmp/hook_exports_expected_noaudio
         mv /tmp/hook_exports_expected_noaudio /tmp/hook_exports_expected
+    fi
+    if [ "$HOOK_WIRELESS" = "0" ]; then
+        grep -vE "^(HTTPServerCreate|HTTPMessageReadMessage|SocketWriteData|carplay_wireless_copy_pairing_identity|carplay_wireless_receiver_ready|carplay_wireless_receiver_control|AirPlayGetFeatures|TXTRecordSetValue|HTTPServerSetDispatchQueue|HTTPClientCreateWithSocket|AirPlayReceiverSessionScreen_SetSecurityInfo|AirPlayReceiverSessionScreen_ProcessFrames|SocketRecvFrom|sendto|close)$" \
+            /tmp/hook_exports_expected > /tmp/hook_exports_expected_nowireless
+        mv /tmp/hook_exports_expected_nowireless /tmp/hook_exports_expected
     fi
     $NM -D --defined-only $SO | awk "NF >= 3 { print \$3 }" | sort \
         > /tmp/hook_exports_actual

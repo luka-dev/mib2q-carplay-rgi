@@ -29,8 +29,8 @@ typedef void (*hook_transport_callback_t)(hook_context_t* ctx, uint16_t msgid);
  * framework owns them (framework/airplay_seams.c) and modules subscribe here
  * instead of one module interposing on another's behalf.
  *
- * Callbacks run in module priority order.  `result` starts as stock's return
- * value; a module that cannot fulfil its part of the negotiation writes a
+ * Callbacks run in module priority order. Request callbacks start with result=0
+ * and may reject before stock runs. Response callbacks receive stock's result; a module that cannot fulfil its part of the negotiation writes a
  * non-zero error into it, and later callbacks see it — the same threading the
  * single hand-written wrapper used to do with a local `ret`. */
 typedef struct {
@@ -58,7 +58,21 @@ typedef struct {
      * Full teardown (NULL or absent/empty streams) is normalized to request=NULL;
      * a non-NULL request always has a nonempty, selective stream list. */
     hook_teardown_callback_t on_teardown;
+    /* After stock has stopped/joined its stream workers. */
+    hook_teardown_callback_t on_teardown_final;
 } hook_airplay_seams_t;
+
+/* The 210 HTTP adapter owns the binary ABI. Modules own protocol state.
+ * read/write callbacks return 1 when handled and put an OSStatus in result. */
+typedef struct {
+    int (*on_open)(void *connection);
+    void (*on_close)(void *connection);
+    void (*on_close_final)(void *connection);
+    int (*on_request)(void *connection, void *message, int *result);
+    int (*on_read)(int fd, void *message, int *result);
+    int (*on_write)(int fd, struct iovec **vectors, int *count, int *result);
+    int (*on_write_done)(int fd, int result);
+} hook_http_seams_t;
 
 /* State Events */
 #define HOOK_EVENT_INIT             1
@@ -97,6 +111,8 @@ typedef struct {
     hook_transport_recv_reset_t on_transport_recv_reset;
 
     hook_airplay_seams_t airplay;
+
+    hook_http_seams_t http;
 
     void* user_data;
 } hook_module_def_t;

@@ -1,5 +1,20 @@
 {
     global:
+        HTTPServerCreate;
+        HTTPMessageReadMessage;
+        SocketWriteData;
+        carplay_wireless_copy_pairing_identity;
+        carplay_wireless_receiver_ready;
+        carplay_wireless_receiver_control;
+        AirPlayGetFeatures;
+        TXTRecordSetValue;
+        HTTPServerSetDispatchQueue;
+        HTTPClientCreateWithSocket;
+        AirPlayReceiverSessionScreen_SetSecurityInfo;
+        AirPlayReceiverSessionScreen_ProcessFrames;
+        SocketRecvFrom;
+        sendto;
+        close;
         AirPlayAudioFormatToASBD;
         AirPlayCopyServerInfo;
         AirPlayReceiverServerPlatformCopyProperty;

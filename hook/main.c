@@ -15,6 +15,9 @@
 #include "coverart/coverart_hook.h"
 #include "altscreen/altscreen_hook.h"
 #include "telephony/tel_hook.h"
+#if HOOK_WIRELESS
+#include "wireless/wireless_hook.h"
+#endif
 /* HOOK_AUDIO=0 (scripts/build_hook.sh HOOK_AUDIO=0) leaves the type-103 audio
  * module and its QSA/AirPlay audio interposers out of the build entirely:
  * stock CarPlay audio, no libcarplay_apac.so. */
@@ -26,6 +29,9 @@
 #endif
 
 const hook_module_def_t* const hook_module_table[] = {
+#if HOOK_WIRELESS
+    &wireless_module_def,
+#endif
     &rgd_module_def,
     &coverart_module_def,
     &altscreen_module_def,

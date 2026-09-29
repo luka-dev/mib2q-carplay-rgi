@@ -89,6 +89,8 @@ mindmap
       SI Stack and Replug Race
       USB and NCM Connect
       USB Replug Recovery
+      Wireless CarPlay and Wi-Fi
+      Wireless CarPlay on the Head Unit
     Build and Deploy
       Build System
       Deploy and Release
@@ -247,6 +249,8 @@ Every curated note, alphabetical:
 - [Video Pipeline](altscreen-and-video/VIDEO_PIPELINE.md)
 - [VIN Protection](build-and-deploy/VIN_PROTECTION.md)
 - [Virtual Cabin and Amp RE](audio/VIRTUAL_CABIN_AND_AMP_RE.md)
+- [Wireless CarPlay and Wi-Fi](connect-and-usb/WIRELESS_CARPLAY_AND_WIFI.md)
+- [Wireless CarPlay on the Head Unit](connect-and-usb/WIRELESS_CARPLAY_HU_FEASIBILITY.md)
 
 ---
 
