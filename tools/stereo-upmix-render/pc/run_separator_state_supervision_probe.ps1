@@ -2,11 +2,11 @@
 $ErrorActionPreference = 'Stop'
 $tools = 'D:\upmix\tools'
 $runs = 'D:\upmix\runs'
-$out = "$runs\separator_state_supervision_v1"
+$out = "$runs\separator_state_supervision_v2"
 $lease = "$runs\GPU_LEASE"
 if (Test-Path $out) { throw 'Output exists; preserve it' }
 $hashes = @{
-    'separator_state_supervision_probe.py' = '1E36FF6DE59C70742865D8D05AD58BA246ECB3A852C1B595F30A523E134A3F3D'
+    'separator_state_supervision_probe.py' = '51BC861EA09533AA1D2AE58F98E0CFB38B81F6B8A9B909758990A9FA0C8B48D1'
     'separator_fit_probe.py' = 'CEB3C158D1955E3A384C1F21317D00282F50E1C52B3E56ECB698AA5C05FCEA0D'
     'sep_net.py' = '11E0C4FE89C82D3BE3814E5D2A421C5FD73C40D4E3FA505904C57AE1D7DBA905'
 }
@@ -47,6 +47,7 @@ try {
         & python "$tools\separator_state_supervision_probe.py" --cache 'D:\upmix\datasets\masknet_cache7' `
             --fit "$runs\separator_fit_probe_v1" `
             --teacher-reference "$runs\separator_decoder_oracle_probe_v1\decoder_result.json" `
+            --prepared-targets "$runs\separator_state_supervision_v1" `
             --out $out --steps 2000 2>&1 | Tee-Object -FilePath "$out.log"
         $exit = $LASTEXITCODE
     } finally { $ErrorActionPreference = $previousPreference }

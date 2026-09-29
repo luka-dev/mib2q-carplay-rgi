@@ -9,6 +9,7 @@ import argparse
 import hashlib
 import json
 import time
+import shutil
 from pathlib import Path
 import numpy as np
 import mask_net as MN
@@ -99,45 +100,70 @@ def run(a):
         handle.remove()
     if replay_nse > 1e-10 or abs(initial_loss-terminal["final"]["loss"]) > 1e-6:
         raise ValueError("original checkpoint replay mismatch")
-    for p in net.parameters():
-        p.requires_grad_(False)
-    h, g = torch.nn.Parameter(h0.clone()), torch.nn.Parameter(g0.clone())
-    opt = torch.optim.Adam([h, g], lr=.03)
-    teacher_rows, clock = [], time.monotonic()
-    for step in range(2001):
-        if step:
-            opt.zero_grad(set_to_none=True)
-            loss = objective(torch, decode(torch, net, X, h, g), E, eligible, n)
-            if not bool(torch.isfinite(loss)):
-                raise ValueError("nonfinite teacher fit")
-            loss.backward()
-            opt.step()
-            with torch.no_grad():
-                h.clamp_(-3, 3)
-                g.clamp_(-1, 1)
-        if step % 250 == 0:
-            with torch.no_grad():
-                y = decode(torch, net, X, h, g)
-                row = dict(step=step, loss=float(objective(torch, y, E, eligible, n)),
-                    sdr_db=SN.si_sdr(torch, SN.istft(torch, y, n), eligible).mean(-1).tolist())
-            teacher_rows.append(row)
-            print(f"teacher step {step} loss {row['loss']:.6f} "
-                  f"median_sdr {np.median(row['sdr_db']):.2f}", flush=True)
-    ht, gt = h.detach().clone(), g.detach().clone()
-    # Require reproduction of the completed fixed-weight privileged-state arm.
-    reference = json.loads(a.teacher_reference.read_text())["arms"][0]["rows"][-1]
-    if abs(teacher_rows[-1]["loss"]-reference["loss"]) > 1e-4:
-        raise ValueError("teacher-state reconstruction differs from frozen reference")
-    torch.save(dict(h=ht.cpu(), g=gt.cpu(), initial_h=h0.cpu(), initial_g=g0.cpu(),
-                    checkpoint_sha256=sha(a.fit / "fit.pt"), windows=manifest["windows"]),
-               a.out / "targets.pt")
-    write_json(a.out / "teacher.json", dict(rows=teacher_rows, seconds=time.monotonic()-clock,
-               replay_nse=replay_nse, targets_sha256=sha(a.out / "targets.pt")))
+    if a.prepared_targets:
+        source = a.prepared_targets
+        info = json.loads((source / "teacher.json").read_text())
+        if sha(source / "targets.pt") != info["targets_sha256"]:
+            raise ValueError("prepared target checksum changed")
+        saved = torch.load(source / "targets.pt", map_location=device)
+        if saved["checkpoint_sha256"] != sha(a.fit / "fit.pt") or saved["windows"] != manifest["windows"]:
+            raise ValueError("prepared target source/window mismatch")
+        ht, gt = saved["h"], saved["g"]
+        if ht.shape != h0.shape or gt.shape != g0.shape:
+            raise ValueError("prepared target dimensions changed")
+        if float(ht.abs().max()) > 3.000001 or float(gt.abs().max()) > 1.000001:
+            raise ValueError("prepared state bounds violated")
+        reference = json.loads(a.teacher_reference.read_text())["arms"][0]["rows"][-1]
+        with torch.no_grad():
+            replay_loss = float(objective(torch, decode(torch, net, X, ht, gt), E, eligible, n))
+        if abs(replay_loss-reference["loss"]) > 1e-4:
+            raise ValueError("prepared target reconstruction mismatch")
+        shutil.copyfile(source / "targets.pt", a.out / "targets.pt")
+        info["copied_from"] = str(source)
+        info["reuse_audio_loss"] = replay_loss
+        write_json(a.out / "teacher.json", info)
+        print(f"Reused verified targets: audio_loss {replay_loss:.6f}", flush=True)
+    else:
+        for p in net.parameters():
+            p.requires_grad_(False)
+        h, g = torch.nn.Parameter(h0.clone()), torch.nn.Parameter(g0.clone())
+        opt = torch.optim.Adam([h, g], lr=.03)
+        teacher_rows, clock = [], time.monotonic()
+        for step in range(2001):
+            if step:
+                opt.zero_grad(set_to_none=True)
+                loss = objective(torch, decode(torch, net, X, h, g), E, eligible, n)
+                if not bool(torch.isfinite(loss)):
+                    raise ValueError("nonfinite teacher fit")
+                loss.backward()
+                opt.step()
+                with torch.no_grad():
+                    h.clamp_(-3, 3)
+                    g.clamp_(-1, 1)
+            if step % 250 == 0:
+                with torch.no_grad():
+                    y = decode(torch, net, X, h, g)
+                    row = dict(step=step, loss=float(objective(torch, y, E, eligible, n)),
+                        sdr_db=SN.si_sdr(torch, SN.istft(torch, y, n), eligible).mean(-1).tolist())
+                teacher_rows.append(row)
+                print(f"teacher step {step} loss {row['loss']:.6f} "
+                      f"median_sdr {np.median(row['sdr_db']):.2f}", flush=True)
+        ht, gt = h.detach().clone(), g.detach().clone()
+        # Require reproduction of the completed fixed-weight privileged-state arm.
+        reference = json.loads(a.teacher_reference.read_text())["arms"][0]["rows"][-1]
+        if abs(teacher_rows[-1]["loss"]-reference["loss"]) > 1e-4:
+            raise ValueError("teacher-state reconstruction differs from frozen reference")
+        torch.save(dict(h=ht.cpu(), g=gt.cpu(), initial_h=h0.cpu(), initial_g=g0.cpu(),
+                        checkpoint_sha256=sha(a.fit / "fit.pt"), windows=manifest["windows"]),
+                   a.out / "targets.pt")
+        write_json(a.out / "teacher.json", dict(rows=teacher_rows, seconds=time.monotonic()-clock,
+                   replay_nse=replay_nse, targets_sha256=sha(a.out / "targets.pt")))
 
     # Calibration uses only these TRAIN tensors before either continuation.
     torch.manual_seed(1)
     _, calibration_net, _ = SN.load(str(a.fit / "fit.pt"))
     freeze_decoder(calibration_net)
+    calibration_net.modules.train()  # cuDNN GRU backward requires training mode
     c, hs = capture(calibration_net)
     estimate = calibration_net.separate_stft(X)
     ch, cg = states(torch, calibration_net, c)
@@ -172,6 +198,7 @@ def run(a):
         torch.manual_seed(1)
         _, student, _ = SN.load(str(a.fit / "fit.pt"))
         freeze_decoder(student)
+        student.modules.train()
         frozen = [p.detach().clone() for p in student.dec.parameters()]
         encoder_parameters = [p for p in student.parameters() if p.requires_grad]
         optimizer = torch.optim.AdamW(encoder_parameters, lr=3e-4, weight_decay=1e-4)
@@ -236,6 +263,7 @@ if __name__ == "__main__":
     for name in ("cache", "fit", "teacher-reference", "out"):
         p.add_argument("--"+name, type=Path, required=True)
     p.add_argument("--steps", type=int, default=2000)
+    p.add_argument("--prepared-targets", type=Path)
     a = p.parse_args()
     if a.steps < 1:
         p.error("positive steps required")
