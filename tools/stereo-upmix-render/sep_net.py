@@ -311,10 +311,14 @@ def multires_loss(torch, est_wav, tgt_wav, mix_wav=None, floor_rel=None, scale=1
     return scale * total / 3
 
 
-def windows(torch, tracks, seconds, batch, rng, merge_none=None, with_vocal=False, with_sources=False):
+REMIX_GROUPS = ((0, 1), (2, 3, 4), (5,), (6,))   # vocal / drums / bass / other: each group from its own song with --remix
+
+
+def windows(torch, tracks, seconds, batch, rng, merge_none=None, with_vocal=False, with_sources=False, remix=0.0):
     """[B, 2, n] mixture and [B, 2, n] eligible target from seven-slot (or expanded) caches (+ the vocal stem with
     `with_vocal`, or the separate vocal / drum / bass stems with `with_sources`,
-    for attribution losses).  `tracks` may be a pair (truth_list, pseudo_list):
+    for attribution losses).  `remix` = probability that a truth-pool window takes each REMIX_GROUPS group from an
+    independent random song and offset (the standard cross-song stem remix; teacher windows are never remixed).  `tracks` may be a pair (truth_list, pseudo_list):
     then half of every batch comes from each."""
     n = int(seconds * SR)
     mixes, eligs, vocs, drums, basses = [], [], [], [], []
@@ -327,6 +331,13 @@ def windows(torch, tracks, seconds, batch, rng, merge_none=None, with_vocal=Fals
             continue
         s = rng.integers(0, N - n)
         w = MN.expand_slots(MN.read_window(path, s, n)).astype(np.float32) / 32768   # [7,2,n]
+        if remix > 0 and pool is pools[0] and rng.random() < remix:
+            for grp in REMIX_GROUPS[1:]:                           # the vocal group stays from the first song
+                p2 = pool[rng.integers(len(pool))]; N2 = MN.npy_header(p2)[0][2]
+                if N2 <= n:
+                    continue
+                w2 = MN.expand_slots(MN.read_window(p2, rng.integers(0, N2 - n), n)).astype(np.float32) / 32768
+                w[list(grp)] = w2[list(grp)]
         gains = (10 ** (rng.uniform(-6, 6, size=(7, 1, 1)) / 20)).astype(np.float32)
         w = w * gains
         mixes.append(w.sum(0)); eligs.append(w[list(ELIGIBLE_SLOTS)].sum(0))
@@ -559,7 +570,7 @@ def train(a):
     import itertools
     counter = itertools.count(start)                            # astra 13: one RNG shared by the prefetch threads was not reproducible
     batches = MN.prefetch(lambda: windows(torch, tracks, a.seconds, a.batch, np.random.default_rng([a.seed, next(counter)]),
-                                        with_vocal=a.attr > 0, with_sources=a.source_attr > 0 or a.role_ce > 0 or a.role_focus > 0 or a.vocal_invariance > 0 or a.vocal_entry_target > 0))
+                                        remix=a.remix, with_vocal=a.attr > 0, with_sources=a.source_attr > 0 or a.role_ce > 0 or a.role_focus > 0 or a.vocal_invariance > 0 or a.vocal_entry_target > 0))
     if STATS["mean"] is None:
         with torch.no_grad():
             lm = torch.cat([torch.log(stft(torch, next(batches)[0].to(dev)).abs() + 1e-5).flatten() for _ in range(4)])
@@ -691,6 +702,7 @@ def main():
     t.add_argument("--loss", default="lin", choices=("lin", "log"), help="magnitude terms: linear L1 (default) or log-magnitude L1 with a relative floor")
     t.add_argument("--loss-floor", type=float, default=3e-3, help="--loss log: floor relative to the mixture's mean |X| per window and channel (3e-3 = -50 dB)")
     t.add_argument("--loss-scale", type=float, default=1.0, help="--loss log: fixed factor on the magnitude bundle (calibrate with diag_lossfloor.py)")
+    t.add_argument("--remix", type=float, default=0.0, help="probability of a cross-song stem remix per truth window (0 = off)")
     t.add_argument("--accum", type=int, default=1, help="gradient accumulation steps (effective batch = batch x accum)")
     s = sub.add_parser("separate"); s.add_argument("--model", required=True); s.add_argument("--wav", required=True); s.add_argument("--out", required=True)
     a = ap.parse_args()
