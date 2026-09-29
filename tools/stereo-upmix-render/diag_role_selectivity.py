@@ -25,7 +25,11 @@ def main():
     p.add_argument("candidate", type=Path)
     p.add_argument("--out", type=Path, required=True)
     p.add_argument("--candidate-role-map", choices=("soft_static", "soft_ema80"))
+    p.add_argument("--candidate-zero-cross", action="store_true",
+                   help="matrix2 candidate only: set cross-channel coefficients to zero after mixture inference")
     a = p.parse_args()
+    if a.candidate_zero_cross and a.candidate_role_map:
+        p.error("--candidate-zero-cross and --candidate-role-map are mutually exclusive")
     torch = SN._torch()
     split = MN.load_split(str(a.cache))
     paths = [a.cache / (song + ".npy") for song in split["dev"][:12]]
@@ -46,6 +50,11 @@ def main():
             with torch.no_grad():
                 X = SN.stft(torch, mix)
                 net.separate_stft(X)
+                if label == "candidate" and a.candidate_zero_cross:
+                    if net.mask_mode != "matrix2":
+                        raise ValueError("--candidate-zero-cross requires a matrix2 checkpoint")
+                    diagonal, cross = net.last_matrix
+                    net.last_matrix = (diagonal, torch.zeros_like(cross))
                 mask = (RC.mask_from_logits(torch, net.role_logits, a.candidate_role_map)[0]
                         if label == "candidate" and a.candidate_role_map else None)
                 energy = {}
@@ -86,6 +95,7 @@ def main():
             candidate[ratio_key]["value"] <= 0.8 * anchor[ratio_key]["value"])
     out = {"scope": "same 12 inspected DEV excerpts as diag_gap; gain-invariant source selectivity; not independent validation",
            "candidate_role_map": a.candidate_role_map,
+           "candidate_zero_cross": a.candidate_zero_cross,
            "anchor": results["anchor"], "candidate": results["candidate"], "gates": gates}
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(out, indent=2) + "\n", encoding="utf-8")

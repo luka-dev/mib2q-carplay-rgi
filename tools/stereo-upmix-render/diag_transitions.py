@@ -79,9 +79,12 @@ def settle(leak, t_axis, steady):
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument("cache"); ap.add_argument("ckpts", nargs="+"); ap.add_argument("--songs", type=int, default=20)
     ap.add_argument("--role-map", choices=("soft_static", "soft_ema80"))
+    ap.add_argument("--matrix-zero-cross", action="store_true")
     a = ap.parse_args()
     if a.role_map and len(a.ckpts) != 1:
         ap.error("--role-map requires exactly one four-role checkpoint")
+    if a.matrix_zero_cross and (len(a.ckpts) != 1 or a.role_map):
+        ap.error("--matrix-zero-cross requires exactly one matrix2 checkpoint and no role map")
     torch = SN._torch()
     split = MN.load_split(a.cache)
     songs = []
@@ -94,7 +97,8 @@ def main():
     nf = (PRE + POST) // FR; t_axis = np.arange(nf) * 0.5 - 4.0; pre, post = t_axis < 0, t_axis >= 0
     for ck in a.ckpts:
         _, net, dev = SN.load(ck)
-        print(f"\n##### {ck}" + (f" role-map={a.role_map}" if a.role_map else ""))
+        print(f"\n##### {ck}" + (f" role-map={a.role_map}" if a.role_map else "")
+              + (" matrix-zero-cross" if a.matrix_zero_cross else ""))
         rows = {"entry": [], "exit": [], "sustained": []}
         for p, w, evs in songs:
             for kind, s in evs:
@@ -103,6 +107,11 @@ def main():
                 mix = seg.sum(0)[None]; elig = seg[list(SN.ELIGIBLE_SLOTS)].sum(0)[None]; voc = (seg[0] + seg[1])[None]
                 with torch.no_grad():
                     net.separate_stft(SN.stft(torch, mix))
+                    if a.matrix_zero_cross:
+                        if net.mask_mode != "matrix2":
+                            raise ValueError("--matrix-zero-cross requires a matrix2 checkpoint")
+                        diagonal, cross = net.last_matrix
+                        net.last_matrix = (diagonal, torch.zeros_like(cross))
                     M = (RC.mask_from_logits(torch, net.role_logits, a.role_map)[0]
                          if a.role_map else net.last_mask)
                     L = a1 - a0; cutf = M.shape[1] - SN.stft(torch, mix[:, :, WARM:]).shape[1]     # frames of warm-up to drop
