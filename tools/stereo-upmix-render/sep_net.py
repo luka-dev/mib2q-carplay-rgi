@@ -315,13 +315,16 @@ REMIX_GROUPS = ((0, 1), (2, 3, 4), (5,), (6,))   # vocal / drums / bass / other:
 
 
 def windows(torch, tracks, seconds, batch, rng, merge_none=None, with_vocal=False, with_sources=False,
-            remix=0.0, extra_truth_frac=0.0, instrument_sidecars=None):
+            remix=0.0, extra_truth_frac=0.0, instrument_sidecars=None, cross_corpus_remix=False):
     """[B, 2, n] mixture and [B, 2, n] eligible target from seven-slot (or expanded) caches (+ the vocal stem with
     `with_vocal`, or the separate vocal / drum / bass stems with `with_sources`,
     for attribution losses).  `remix` = probability that a truth-pool window takes each REMIX_GROUPS group from an
     independent random song and offset (the standard cross-song stem remix; teacher windows are never remixed).  `tracks` may be a pair (truth_list, pseudo_list):
     then half of every batch comes from each. A three-pool tuple adds a separate true-stem corpus at
-    `extra_truth_frac` of truth windows while preserving the truth/pseudo ratio."""
+    `extra_truth_frac` of truth windows while preserving the truth/pseudo ratio. With
+    `cross_corpus_remix`, every remixed truth-family donor independently draws
+    from those two true-stem corpora at the same `extra_truth_frac`; pseudo
+    labels never enter a true-stem remix."""
     n = int(seconds * SR)
     mixes, eligs, vocs, drums, basses = [], [], [], [], []
     pools = tracks if isinstance(tracks, tuple) else (tracks,)
@@ -336,7 +339,8 @@ def windows(torch, tracks, seconds, batch, rng, merge_none=None, with_vocal=Fals
             continue
         s = rng.integers(0, N - n)
         w = MN.expand_slots(MN.read_window(path, s, n)).astype(np.float32) / 32768   # [7,2,n]
-        if remix > 0 and pool is pools[0] and rng.random() < remix:
+        truth_pool = pool is pools[0] or (len(pools) == 3 and pool is pools[2])
+        if remix > 0 and truth_pool and (pool is pools[0] or cross_corpus_remix) and rng.random() < remix:
             for grp in REMIX_GROUPS[1:]:                           # the vocal group stays from the first song
                 if grp == (6,) and instrument_sidecars:
                     eligible = np.zeros_like(w[6])
@@ -349,7 +353,9 @@ def windows(torch, tracks, seconds, batch, rng, merge_none=None, with_vocal=Fals
                         eligible += MN.read_window(side, ss, n, slots=[gi])[0].astype(np.float32) / 32768
                     w[6] = eligible
                     continue
-                p2 = pool[rng.integers(len(pool))]; N2 = MN.npy_header(p2)[0][2]
+                donor_pool = ((pools[2] if rng.random() < extra_truth_frac else pools[0])
+                              if cross_corpus_remix else pool)
+                p2 = donor_pool[rng.integers(len(donor_pool))]; N2 = MN.npy_header(p2)[0][2]
                 if N2 <= n:
                     continue
                 w2 = MN.expand_slots(MN.read_window(p2, rng.integers(0, N2 - n), n)).astype(np.float32) / 32768
@@ -612,6 +618,7 @@ def train(a):
     batches = MN.prefetch(lambda: windows(torch, tracks, a.seconds, a.batch, np.random.default_rng([a.seed, next(counter)]),
                                         remix=a.remix, extra_truth_frac=getattr(a, "extra_truth_frac", 0.0),
                                         instrument_sidecars=instrument_sidecars,
+                                        cross_corpus_remix=getattr(a, "cross_corpus_remix", False),
                                         with_vocal=a.attr > 0, with_sources=a.source_attr > 0 or a.role_ce > 0 or a.role_focus > 0 or a.vocal_invariance > 0 or a.vocal_entry_target > 0))
     if STATS["mean"] is None:
         with torch.no_grad():
@@ -748,6 +755,8 @@ def main():
     t.add_argument("--extra-truth", help="additional seven-slot true-stem cache (TRAIN songs only; requires --half-half)")
     t.add_argument("--extra-truth-frac", type=float, default=0.0,
                    help="probability of drawing the extra corpus conditional on a truth window")
+    t.add_argument("--cross-corpus-remix", action="store_true",
+                   help="with --extra-truth and --remix, draw each true-stem family across both TRAIN corpora")
     t.add_argument("--instrument-sidecar", help="six-slot MoisesDB TRAIN sidecar; draw eligible families independently in --remix windows")
     t.add_argument("--accum", type=int, default=1, help="gradient accumulation steps (effective batch = batch x accum)")
     s = sub.add_parser("separate"); s.add_argument("--model", required=True); s.add_argument("--wav", required=True); s.add_argument("--out", required=True)
@@ -771,6 +780,8 @@ def main():
             ap.error("--extra-truth requires --teacher-cache and --half-half")
         if a.instrument_sidecar and a.remix <= 0:
             ap.error("--instrument-sidecar requires --remix > 0")
+        if a.cross_corpus_remix and (not a.extra_truth or a.remix <= 0 or a.instrument_sidecar):
+            ap.error("--cross-corpus-remix requires --extra-truth and --remix > 0, without --instrument-sidecar")
         global TRUTH_FRAC
         TRUTH_FRAC = a.truth_frac
         a.save_at = {int(x) for x in a.save_at.split(",") if x.strip()}
