@@ -407,6 +407,35 @@ def loss_vocal_invariance(torch, with_vocal, without_vocal, eligible, mixture, f
     return (energy(with_vocal - without_vocal) / (energy(eligible).detach() + floor)).mean()
 
 
+def vocal_entry_counterfactual(torch, mixture, vocal):
+    """Training-only pair: remove vocal until crop midpoint, then fade it in over 250 ms.
+
+    Eligible/drum/bass signals stay sample-identical to the ordinary mixture.
+    The live model still receives just its ordinary stereo input.
+    """
+    n = mixture.shape[-1]
+    t = torch.arange(n, device=mixture.device, dtype=mixture.dtype)
+    phase = ((t - n // 2) / (SR // 4)).clamp(0, 1)
+    vocal_gain = 0.5 - 0.5 * torch.cos(np.pi * phase)
+    return mixture - vocal * (1 - vocal_gain)[None, None, :]
+
+
+def loss_vocal_entry_target(torch, entry_est, entry_mix, eligible,
+                            log_loss=False, loss_floor=3e-3, loss_scale=1.0):
+    """Anchor a 0.5-s-pre/3-s-post vocal-entry interval to true eligible audio."""
+    n = entry_mix.shape[-1]
+    estimate = istft(torch, entry_est, n)
+    lo = n // 2 - SR // 2
+    hi = min(n, n // 2 + 3 * SR)
+    observed, target, mixture = (x[..., lo:hi] for x in (estimate, eligible, entry_mix))
+    return (loss_audio(torch, stft(torch, observed), stft(torch, target),
+                       stft(torch, mixture) if log_loss else None,
+                       loss_floor if log_loss else None, loss_scale)
+            + multires_loss(torch, observed, target,
+                            mixture if log_loss else None,
+                            loss_floor if log_loss else None, loss_scale))
+
+
 def loss_role_ce(torch, logits, E, V, D, B, floor_rel=3e-3):
     """Four-role power target from aligned stems, with quiet cells downweighted.
 
@@ -530,7 +559,7 @@ def train(a):
     import itertools
     counter = itertools.count(start)                            # astra 13: one RNG shared by the prefetch threads was not reproducible
     batches = MN.prefetch(lambda: windows(torch, tracks, a.seconds, a.batch, np.random.default_rng([a.seed, next(counter)]),
-                                        with_vocal=a.attr > 0, with_sources=a.source_attr > 0 or a.role_ce > 0 or a.role_focus > 0 or a.vocal_invariance > 0))
+                                        with_vocal=a.attr > 0, with_sources=a.source_attr > 0 or a.role_ce > 0 or a.role_focus > 0 or a.vocal_invariance > 0 or a.vocal_entry_target > 0))
     if STATS["mean"] is None:
         with torch.no_grad():
             lm = torch.cat([torch.log(stft(torch, next(batches)[0].to(dev)).abs() + 1e-5).flatten() for _ in range(4)])
@@ -560,6 +589,12 @@ def train(a):
                 quiet_est = net.separate_stft(stft(torch, quiet_mix))
                 loss = loss + a.vocal_invariance * loss_vocal_invariance(
                     torch, Est, quiet_est, Tt, X)
+            if a.vocal_entry_target > 0:
+                entry_mix = vocal_entry_counterfactual(torch, mix, bt[2])
+                entry_X = stft(torch, entry_mix)
+                entry_est = net.separate_stft(entry_X)
+                loss = loss + a.vocal_entry_target * loss_vocal_entry_target(
+                    torch, entry_est, entry_mix, elig, log_loss, a.loss_floor, a.loss_scale)
             if a.role_ce > 0 or a.role_focus > 0:
                 V, D, B = (stft(torch, bt[2]), stft(torch, bt[3]), stft(torch, bt[4]))
             if a.role_ce > 0:
@@ -647,6 +682,8 @@ def main():
                    help="weight of eligible retention plus separate vocal/drum/bass transmission loss (0 = off)")
     t.add_argument("--vocal-invariance", type=float, default=0.0,
                    help="weight of paired full-vocal versus no-vocal eligible-output consistency (matrix2 with --source-attr; 0 = off)")
+    t.add_argument("--vocal-entry-target", type=float, default=0.0,
+                   help="weight of true eligible reconstruction after a training-only midpoint vocal entry (matrix2 with --source-attr; 0 = off)")
     t.add_argument("--role-ce", type=float, default=0.0,
                    help="weight of four-role stem-power cross entropy (requires --mask role_softmax or complex_role; 0 = off)")
     t.add_argument("--role-focus", type=float, default=0.0,
@@ -658,10 +695,12 @@ def main():
     s = sub.add_parser("separate"); s.add_argument("--model", required=True); s.add_argument("--wav", required=True); s.add_argument("--out", required=True)
     a = ap.parse_args()
     if a.cmd == "train":
-        if min(a.attr, a.source_attr, a.role_ce, a.role_focus, a.vocal_invariance) < 0 or sum(v > 0 for v in (a.attr, a.source_attr, a.role_ce)) > 1:
+        if min(a.attr, a.source_attr, a.role_ce, a.role_focus, a.vocal_invariance, a.vocal_entry_target) < 0 or sum(v > 0 for v in (a.attr, a.source_attr, a.role_ce)) > 1:
             ap.error("--attr, --source-attr and --role-ce must be nonnegative and at most one can be active")
         if a.vocal_invariance > 0 and (a.mask != "matrix2" or a.source_attr <= 0):
             ap.error("--vocal-invariance requires --mask matrix2 and --source-attr")
+        if a.vocal_entry_target > 0 and (a.mask != "matrix2" or a.source_attr <= 0 or a.vocal_invariance > 0):
+            ap.error("--vocal-entry-target requires --mask matrix2 and --source-attr, without --vocal-invariance")
         if (a.mask in ("role_softmax", "complex_role")) != (a.role_ce > 0 or a.role_focus > 0):
             ap.error("--mask role_softmax/complex_role requires --role-ce or --role-focus, and these require a role head")
         if a.mask == "deep2" and (a.attr > 0 or a.source_attr > 0):
