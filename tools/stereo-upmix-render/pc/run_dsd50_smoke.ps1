@@ -1,9 +1,9 @@
-# Twenty-step real-cache/GPU smoke for the frozen DSD100 50-song data pair.
+# Twenty-step real-cache/GPU smoke for the revised causal DSD100 data pair.
+# Audit 2026-09-29: use same-song windows; the rejected remix is not the anchor.
 $ErrorActionPreference = 'Stop'
 $tools = 'D:\upmix\tools'
 $runs = 'D:\upmix\runs'
-$base = "$runs\dsd50_smoke"
-$control = 'D:\upmix\datasets\dsd100_moises_control50'
+$base = "$runs\dsd50_stream_smoke"
 $candidate = 'D:\upmix\datasets\dsd100_dev_cache7'
 $cacheDone = "$runs\dsd100_integrity\cache_complete.json"
 $lease = "$runs\GPU_LEASE"
@@ -12,10 +12,6 @@ $cache = Get-Content $cacheDone -Raw | ConvertFrom-Json
 if ($cache.tracks -ne 50 -or $cache.archive_sha256 -notmatch '^[0-9A-Fa-f]{64}$' -or
     (Get-FileHash "$candidate\split.json" -Algorithm SHA256).Hash -ne $cache.split_sha256) {
     throw 'DSD100 Dev cache completion marker/hash invalid'
-}
-if ((Get-FileHash "$control\split.json" -Algorithm SHA256).Hash -ne
-    'E84A9BE9E4DD7250031F8B47D3D65F1C0E9CF798DA35E465D04193747A2C67EA') {
-    throw 'MoisesDB 50-song control split hash changed'
 }
 if ((Get-FileHash "$tools\sep_net.py" -Algorithm SHA256).Hash -ne
     '11E0C4FE89C82D3BE3814E5D2A421C5FD73C40D4E3FA505904C57AE1D7DBA905') {
@@ -49,9 +45,13 @@ try {
         '--teacher-cache', 'D:\upmix\datasets\teacher_cache4', '--half-half',
         '--steps', '20', '--batch', '12', '--seconds', '8', '--eval-every', '20',
         '--save-at', '20', '--lr', '0.0003', '--warmup', '2000', '--sisdr-after', '20000',
-        '--remix', '0.5')
+        '--norm', 'stream', '--remix', '0')
     foreach ($tag in @('control', 'candidate')) {
-        $pool = if ($tag -eq 'control') { $control } else { $candidate }
+        # Baseline samples the whole original Moises TRAIN pool uniformly.
+        # Repeating a selected 50-song subset would change the baseline too.
+        $extra = if ($tag -eq 'candidate') {
+            @('--extra-truth', $candidate, '--extra-truth-frac', '0.5')
+        } else { @() }
         $out = "$base\$tag"
         New-Item -ItemType Directory -Force $out | Out-Null
         if ((Test-Path "$out\train_done.txt") -and (Test-Path "$out\step20.pt")) {
@@ -61,8 +61,7 @@ try {
         $previousPreference = $ErrorActionPreference
         try {
             $ErrorActionPreference = 'Continue'
-            & python "$tools\sep_net.py" @shared --extra-truth $pool `
-                --extra-truth-frac '0.5' --out $out 2>&1 |
+            & python "$tools\sep_net.py" @shared @extra --out $out 2>&1 |
                 Tee-Object -FilePath "$out\train.log"
             $exit = $LASTEXITCODE
         } finally { $ErrorActionPreference = $previousPreference }

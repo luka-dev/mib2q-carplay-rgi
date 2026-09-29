@@ -3,7 +3,7 @@
 train.log (SI-SDR / vocal leak at 4k), gap.txt (attribution: eligible / vocal transmission, air), transitions.txt
 (entry ducking med / p10, 0-2 s vocal peak, exit release) and screen.log (the frozen 20-song screen at G 1.0).
 Context rows (ctx_*) have the screen only.  Writes LEADERBOARD.md.      rapid_board.py RAPID_DIR"""
-import os, re, sys
+import csv, math, os, re, sys
 
 
 def grab(text, pat, g=1, cast=float):
@@ -13,6 +13,18 @@ def grab(text, pat, g=1, cast=float):
 
 def fmt(v, f="{:.2f}"):
     return "—" if v is None else f.format(v)
+
+
+def swinging_songs(csv_path, limit=0.30):
+    """Count songs where any stem exceeds the full-harness 1 s range limit."""
+    if not os.path.isfile(csv_path):
+        return None
+    with open(csv_path, newline="", encoding="utf-8-sig") as f:
+        rows = csv.DictReader(f)
+        if not {"song", "range_1s"}.issubset(rows.fieldnames or ()):
+            raise ValueError(f"missing swing columns: {csv_path}")
+        return len({r["song"] for r in rows
+                    if math.isfinite(float(r["range_1s"])) and float(r["range_1s"]) > limit})
 
 
 def row(d):
@@ -36,7 +48,7 @@ def row(d):
     r["level"] = grab(sc, r"median (-?[\d.]+) dBFS"); r["err"] = grab(sc, r"broadband ([\d.]+)")
     for k, name in (("voice", "vocals"), ("guitar", "guitar"), ("keys", "other_keys")):
         r[k] = grab(sc, r"^%s\s+\d+\s+([\d.]+)" % name)
-    r["swing"] = grab(sc, r"^guitar .*?(\d+)/\d+ songs swing", cast=int)
+    r["swing"] = swinging_songs(os.path.join(d, "screen", "stems.csv"))
     r["done"] = "done" in job
     r["_screen"] = sc
     return r
@@ -49,7 +61,7 @@ def main():
     order = lambda r: (0 if r["tag"].startswith("ctx_") else 1 if r["tag"].startswith("anchor") else 2, r["tag"])
     rows.sort(key=order)
     head = ("| tag | args | SI-SDR (last) | elig tx (all/edom) | vocal tx | prot tx | air 8-14k / >14k dB | entry duck med/p10 | 0-2 s peak | exit release "
-            "| voice | guitars | keys | swing/20 | level | err |")
+            "| voice | guitars | keys | any-stem swing/20 | level | err |")
     out = ["# Rapid board (4k-step mechanism screen; the 20-song CPU screen at G 1.0)", "", head, "|" + "---|" * 16]
     for r in rows:
         out.append("| %s%s | `%s` | %s | %s / %s | %s | %s | %s / %s | %s / %s | %s | %s | %s | %s | %s | %s | %s | %s |" % (
@@ -58,14 +70,13 @@ def main():
             fmt(r["voice"]), fmt(r["guitar"]), fmt(r["keys"]), fmt(r["swing"], "{}"), fmt(r["level"], "{:.1f}"), fmt(r["err"])))
     # every stem (28.09: "not only the voice"): rear share, and how much depth follows level (last column of the screen)
     stems = ("vocals", "guitar", "piano", "other_keys", "bowed_strings", "wind", "other", "bass", "drums", "percussion")
-    out += ["", "## Every stem: rear share / depth-follows-level", "", "| tag | " + " | ".join(stems) + " | swinging (all stems) |", "|" + "---|" * (len(stems) + 2)]
+    out += ["", "## Every stem: rear share / depth-follows-level", "", "| tag | " + " | ".join(stems) + " | songs swinging (any stem) |", "|" + "---|" * (len(stems) + 2)]
     for r in rows:
-        sc = r["_screen"]; cells = []; swing = 0
+        sc = r["_screen"]; cells = []
         for st in stems:
             m = re.search(r"^%s\s+\d+\s+([\d.]+)\s.*?([-+][\d.]+)\s+([-+][\d.]+)" % st, sc, re.M)
             cells.append("—" if not m else f"{float(m.group(1)):.2f} / {float(m.group(3)):+.2f}")
-        swing = sum(int(x) for x in re.findall(r"(\d+)/\d+ songs swing", sc))
-        out.append(f"| {r['tag']} | " + " | ".join(cells) + f" | {swing if sc else '—'} |")
+        out.append(f"| {r['tag']} | " + " | ".join(cells) + f" | {fmt(r['swing'], '{}')} |")
     open(os.path.join(rd, "LEADERBOARD.md"), "w", encoding="utf-8").write("\n".join(out) + "\n")
     print("\n".join(out))
 

@@ -1322,3 +1322,10 @@ new separation method or a general impossibility result.**
 
 MoisesDB is CC BY-NC-SA 4.0, teacher checkpoints unverified: weights stay
 development-only, as the two shipped blobs already are.
+
+
+### Experiment effectiveness audit (2026-09-29)
+
+The owner requested a check that the work is directed toward results. The [audit and revised decision path](UPMIX_EXPERIMENT_EFFECTIVENESS_AUDIT_2026-09-29.md) records the completed Cambridge negative C screen and corrects three weaknesses in the next experiment: an unvalidated 4k rejection proxy, a rejected remix inherited as baseline, and a repeated Moises subset standing in for the original TRAIN distribution. It also identifies the historical `diag_gap.py` vocal-owned interference error, verifies full-filter source closure with a separate read-only script, and synchronizes the stale root board to the PC's already-correct unique-song counter. It does not reinterpret all-cell source/C results as invalid or declare data/architecture impossible.
+
+The prepared DSD 4k remix pair is superseded. Keep its download/integrity/Dev-cache work; first verify learnability on four fixed TRAIN windows, then prepare one causal same-song baseline versus DSD Dev addition with the same full training horizon and snapshots through the SI-SDR switch. Use the original uniform Moises TRAIN distribution as the efficacy control. Repeat borderline comparisons by seed; reserve independently labelled instrument songs and DSD Test before final promotion. This audit started no training or Track A work; the Cambridge queue/lease are clear and its idle daemon was stopped.
