@@ -12,4 +12,13 @@ Primary metric: songwise normalized complex-STFT error `10log10(sum|estimate−e
 
 ## Results
 
-Pending.
+The CPU run completed on the six frozen inspected DEV songs. The same 60 s mixture STFT fed both inference paths; each song/checkpoint pair compared about 38 s of tail audio after reset warm-up exclusions. The full output and its source operator were evaluated before each deliberate 8 s reset. Results are paired at the song level:
+
+| Frozen checkpoint | Median continuous-minus-reset normalized complex error | Songs with continuous path worse | Median eligible-transmission difference | Median vocal/eligible difference | +.5 dB / 4-of-6 gate |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Causal complex control, 4k | **−.001 dB** | 3/6 | **+.004** | **−.0003** | **No** |
+| Causal two-tap filter, 4k | **−.004 dB** | 2/6 | **+.006** | **−.0011** | **No** |
+
+The individual error differences ranged from **−.047 to +.048 dB** for control and **−.050 to +.044 dB** for the two-tap filter. These are small relative to the precommitted +.5 dB criterion; neither model shows the large continuous-context degradation hypothesized from the external paper. This paired result weakens 8 s state resets as the cause of the existing source/entry failures for these checkpoints. It does **not** verify a physical streaming implementation: the comparison uses whole-STFT Python inference and manually reset spectral chunks, omits one second after each boundary, and covers only six already-inspected DEV songs. No C renderer, device, or listening claim follows.
+
+PC artifact: `D:\upmix\runs\continuous_context_audit\result.json` with every song and both paths; `run.txt` contains the concise readout. The code and frozen PC runner are [`diag_long_context.py`](../../tools/stereo-upmix-render/diag_long_context.py) and [`run_long_context_audit.ps1`](../../tools/stereo-upmix-render/pc/run_long_context_audit.ps1). The observed next bottleneck remains source discrimination and retention on mixed/incoming-vocal audio, not a demonstrated long-state collapse.

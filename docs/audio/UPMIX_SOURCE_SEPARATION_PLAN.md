@@ -1144,6 +1144,10 @@ The [dual-head report](UPMIX_DUAL_HEAD_CAUSAL_PROBE_2026-09-28.md) froze a match
 
 The [deep-filter report](UPMIX_CAUSAL_DEEP_FILTER_PROBE_2026-09-28.md) tests the fixed current-plus-previous-frame complex FIR head against the same causal complex control, 4k steps and identical data/seed/trunk. The candidate's temporary 2k scalar gain vanished by 4k: SI-SDR/vocal leak **−1.23/.158** against control **−1.21/.161**. It modestly improved fixed DEV12 eligible transmission **.385→.398**, vocal/eligible **.504→.476**, and 43-entry retention **.703/.418→.786/.447**, but failed every preselected source ratio/recall gate and both entry targets. No C/full40/TEST20/device promotion follows. This bounds one two-tap mechanism at this age; it does not show the input lacks extractable information. Next investigate whether the 8 s reset-crop training differs materially from continuous 60 s inference before choosing another model or longer train.
 
+### Review 25: continuous-context audit (2026-09-28)
+
+The [long-context audit](UPMIX_CONTINUOUS_CONTEXT_AUDIT_2026-09-28.md) compared each frozen 4k complex checkpoint on six identical DEV 60 s mixtures, with the recurrent and running-level state either held or reset every 8 s. Only tail frames after 16 s and 1 s after each reset counted. Median continuous-minus-reset normalized complex error was **−.001 dB** for control and **−.004 dB** for two-tap; only **3/6** and **2/6** songs were worse continuously, all individual differences within **±.05 dB**. The precommitted +.5 dB / ≥4-song mismatch gate did not fire. Source-transmission differences were similarly small. Training on 8 s reset crops remains a theoretical risk for other architectures, but is not a measured cause of these two failures. The next discriminating question is whether vocal/instrument stereo geometry supplies useful spatial cues beyond the present diagonal per-channel masks; test an oracle spatial upper bound before another costly train.
+
 ## 📝 Publication (astra review 5, 2026-09-26)
 
 Asked whether there is a paper in this work.  Verdict: **a credible systems +

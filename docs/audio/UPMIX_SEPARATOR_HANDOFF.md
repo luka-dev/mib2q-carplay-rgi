@@ -33,6 +33,8 @@ _Read this first, then [the night report](UPMIX_SEPARATOR_NIGHT_REPORT_2026-09-2
 
 **Review-24 update (later 2026-09-28).** A causal two-tap complex FIR output (current and previous STFT frame, **126 M estimated neural MAC/s**) was trained for 4k against the same **94 M** complex control. Its early step-2000 scalar advantage disappeared by step 4000 (**−1.23 dB SI-SDR/.158 vocal leak** versus control **−1.21/.161**). On fixed DEV12 it improved eligible transmission **.385→.398** and vocal/eligible **.504→.476**, yet failed all four source gates; 43-entry retention improved **.703/.418→.786/.447**, below ≥.85/.60. It was rejected before C or longer training. The [deep-filter report](UPMIX_CAUSAL_DEEP_FILTER_PROBE_2026-09-28.md) records the frozen recipe, source attribution, transitions and checkpoint. Next: check continuous 60 s inference versus 8 s reset segments to test training-context mismatch, not another blind width/epoch increase. No device/Track A/listening result was added.
 
+**Review-25 update (later 2026-09-28).** A paired CPU audit on six fixed DEV songs compared 60 s uninterrupted inference to resets every 8 s on identical spectral frames, using both 4k complex checkpoints and excluding 1 s after each boundary. Continuous-minus-reset normalized complex error was median **−.001 dB** for control and **−.004 dB** for two-tap, with maxima **+.048/+.044 dB**; neither met the preselected +.5 dB in ≥4/6-songs context-mismatch gate. Eligible transmission differences were only **+.004/+.006**. Thus the 8 s reset training context is **not an observed explanation** for these checkpoints' source/entry failure. See the [long-context audit](UPMIX_CONTINUOUS_CONTEXT_AUDIT_2026-09-28.md). Future work should test whether stereo spatial cues add usable discrimination at vocal overlap before another model train, rather than treating reset-state drift as established. No device/Track A/listening result was added.
+
 ---
 
 ## 🚦 Rules you must follow
@@ -359,6 +361,7 @@ docs/audio/UPMIX_SEPARATOR_HANDOFF.md, then the night report and the plan.
 - [Upmix Causal Confidence Map 2026-09-28](UPMIX_CAUSAL_CONFIDENCE_MAP_2026-09-28.md) — review-22 frozen smooth mappings, source/entry results and failed promotion
 - [Upmix Dual-Head Causal Probe 2026-09-28](UPMIX_DUAL_HEAD_CAUSAL_PROBE_2026-09-28.md) — review-23 matched complex-audio/role-head pair and failed source/entry promotion
 - [Upmix Causal Deep-Filter Probe 2026-09-28](UPMIX_CAUSAL_DEEP_FILTER_PROBE_2026-09-28.md) — review-24 causal past-frame filter, matched source/entry results and failed promotion
+- [Upmix Continuous-Context Audit 2026-09-28](UPMIX_CONTINUOUS_CONTEXT_AUDIT_2026-09-28.md) — review-25 paired long-run versus reset inference, no observed state-context collapse
 - [Upmix Source Separation Plan](UPMIX_SOURCE_SEPARATION_PLAN.md) — the running log, reviews 1–16, run rows
 - [Upmix Mask Net Phase 1 Report 2026-09-27](UPMIX_MASK_PHASE1_REPORT_2026-09-27.md) — Track A in the car
 - [Upmix Stability 2026-09-25](UPMIX_STABILITY_2026-09-25.md) — the original "back and forth" measurement
