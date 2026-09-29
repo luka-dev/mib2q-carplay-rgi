@@ -100,6 +100,7 @@ def main():
     ap.add_argument("--cache", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--one", help="audit and write exactly one cached TRAIN song")
+    ap.add_argument("--force", action="store_true", help="rebuild existing complete sidecars")
     a = ap.parse_args()
     raw_root, cache, out = Path(a.moisesdb), Path(a.cache), Path(a.out)
     split = MN.load_split(str(cache))
@@ -110,6 +111,14 @@ def main():
         train = [a.one]
     out.mkdir(parents=True, exist_ok=True)
     for idx, uid in enumerate(train, 1):
+        existing = out / (uid + ".npy")
+        if existing.exists() and (out / (uid + ".json")).exists() and not a.force:
+            shape, dtype, _ = MN.npy_header(str(existing))
+            base_n = MN.npy_header(str(cache / (uid + ".npy")))[0][2]
+            if shape != (len(GROUPS), 2, base_n) or dtype != np.dtype("int16"):
+                raise ValueError(f"incompatible existing sidecar: {uid}")
+            print(f"[{idx}/{len(train)}] SKIP complete {uid}", flush=True)
+            continue
         print(f"[{idx}/{len(train)}] {_one(uid, raw_root, cache, out)}", flush=True)
     if not a.one:
         with open(out / "split.json", "w", encoding="utf-8") as f:
