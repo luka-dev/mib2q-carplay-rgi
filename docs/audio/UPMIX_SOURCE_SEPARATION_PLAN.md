@@ -1140,6 +1140,10 @@ The [confidence-map report](UPMIX_CAUSAL_CONFIDENCE_MAP_2026-09-28.md) tests two
 
 The [dual-head report](UPMIX_DUAL_HEAD_CAUSAL_PROBE_2026-09-28.md) froze a matched 4k pair with causal complex eligible-audio output and, in the candidate, a separate four-role auxiliary head (estimated neural cost **94/126 M MAC/s**). The candidate lowered scalar vocal leak **.161→.091** and improved 43-entry eligible retention **.703/.418→.837/.542** median/p10, yet still missed **.85/.60**. It transmitted less eligible energy on fixed DEV12 (**.385→.362**) and its vocal/eligible ratio, though improved against its complex control (**.504→.450**), remained worse than the shared-mask anchor **.405** and far above **.324**. Both arms failed all four preselected source gates and were rejected before C or longer training. Independent heads alone do not provide the missing instrument preservation at this age; the result does not prove a general architecture limit. One bounded next mechanism to test is a causal short complex FIR filter over past STFT frames, with the same matched control and source/entry gate before C.
 
+### Review 24: causal two-tap complex filtering (2026-09-28)
+
+The [deep-filter report](UPMIX_CAUSAL_DEEP_FILTER_PROBE_2026-09-28.md) tests the fixed current-plus-previous-frame complex FIR head against the same causal complex control, 4k steps and identical data/seed/trunk. The candidate's temporary 2k scalar gain vanished by 4k: SI-SDR/vocal leak **−1.23/.158** against control **−1.21/.161**. It modestly improved fixed DEV12 eligible transmission **.385→.398**, vocal/eligible **.504→.476**, and 43-entry retention **.703/.418→.786/.447**, but failed every preselected source ratio/recall gate and both entry targets. No C/full40/TEST20/device promotion follows. This bounds one two-tap mechanism at this age; it does not show the input lacks extractable information. Next investigate whether the 8 s reset-crop training differs materially from continuous 60 s inference before choosing another model or longer train.
+
 ## 📝 Publication (astra review 5, 2026-09-26)
 
 Asked whether there is a paper in this work.  Verdict: **a credible systems +

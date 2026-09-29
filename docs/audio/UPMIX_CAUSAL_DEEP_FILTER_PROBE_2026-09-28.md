@@ -18,4 +18,20 @@ Only a passing candidate gets the enriched DEV20 real C renderer with a single g
 
 ## Results
 
-Pending.
+The single-tenant PC run completed step 4000 in **753 s** with DEV 20 s SI-SDR **−1.23 dB** and scalar vocal leak **.158**. The matched complex control at the same age had **−1.21 dB/.161**; the deep filter's early step-2000 advantage (**−1.24/.100** versus **−1.43/.132**) disappeared by 3000–4000. The trained checkpoint SHA-256 is `31E4F9F1344EEB2FCEAED63DA324E0B82D6FC687D9054F97DABF148B1EEB8745`. Training ended cleanly with an empty GPU lease and rapid queue.
+
+The frozen CPU diagnostic reproduced the saved complex control's DEV12 source numbers exactly under the new `apply_last_filter` path, then applied the mixture-inferred two-tap filter separately to aligned true stems:
+
+| Fixed DEV12 reanalyzed source metric | Shared-mask anchor | Complex control | Two-tap filter |
+| --- | ---: | ---: | ---: |
+| Eligible energy transmitted | .4624 | .3851 | **.3984** |
+| Vocal / eligible, per-song median | .4050 | .5036 | **.4755** |
+| Drums / eligible | .0710 | .0830 | **.0768** |
+| Bass / eligible | .0424 | .0484 | **.0459** |
+| Frozen source gates passed | — | **0/4** | **0/4** |
+
+The extra past-frame tap improves every listed source metric against the matched complex control, but does not reach the eligible floor .432 or any protected/eligible limit. The fixed 43 vocal entries show post/pre eligible retention **.703/.418 → .786/.447** (median/p10); both remain below **.85/.60**, and p10 gain **+.029** misses the precommitted ≥+.05 mechanism rule. Pre-entry eligible transmission remains similar (.503/.505 median), so this is a modest continuity gain rather than a simple lower starting level.
+
+**Reject before C, full40/TEST20, longer training or device work under the frozen rule.** This one-tap temporal extension moves several measures in the right direction but does not cross the source/entry frontier at 4k. It does not prove longer temporal filters or all causal source estimators futile. The remaining next diagnostic is whether 8 s reset-crop training causes a measurable long-context mismatch: compare uninterrupted 60 s inference with deliberately reset 8 s inference on the same held-out DEV mixtures, inspect per-time source error, and precommit what difference would justify changing the training schedule. This is a host training-mechanism test, not an override of the failed C gate.
+
+PC artifacts: `D:\upmix\runs\causal_deep2_4k\step4000.pt`, `{complex_control,deep2}.selectivity.json`, matching `.txt` files, and `transitions.txt`. No Track A, head-unit or listening change occurred.

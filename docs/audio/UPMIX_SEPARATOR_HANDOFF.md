@@ -31,6 +31,8 @@ _Read this first, then [the night report](UPMIX_SEPARATOR_NIGHT_REPORT_2026-09-2
 
 **Review-23 update (later 2026-09-28).** A matched 4k causal complex-output pair tested a separate auxiliary four-role head within an estimated **126 M neural MAC/s** candidate, against a **94 M** complex control. The role head lowered scalar vocal leak **.161→.091** and improved 43-entry eligible retention **.703/.418→.837/.542**, but failed the frozen ≥.85/.60 entry limits. On DEV12 it also lowered eligible transmission **.385→.362**; vocal/eligible improved **.504→.450** but both models failed all four source gates versus the shared-mask anchor. Both were rejected before C, full40 or longer training. The [dual-head report](UPMIX_DUAL_HEAD_CAUSAL_PROBE_2026-09-28.md) records the matched pair and PC checkpoints. The brief Tailscale outage at training completion resolved without restarting jobs. No deployable/device/listening claim follows; next host architecture probe can test a causal temporal deep filter while keeping the same source/entry gate.
 
+**Review-24 update (later 2026-09-28).** A causal two-tap complex FIR output (current and previous STFT frame, **126 M estimated neural MAC/s**) was trained for 4k against the same **94 M** complex control. Its early step-2000 scalar advantage disappeared by step 4000 (**−1.23 dB SI-SDR/.158 vocal leak** versus control **−1.21/.161**). On fixed DEV12 it improved eligible transmission **.385→.398** and vocal/eligible **.504→.476**, yet failed all four source gates; 43-entry retention improved **.703/.418→.786/.447**, below ≥.85/.60. It was rejected before C or longer training. The [deep-filter report](UPMIX_CAUSAL_DEEP_FILTER_PROBE_2026-09-28.md) records the frozen recipe, source attribution, transitions and checkpoint. Next: check continuous 60 s inference versus 8 s reset segments to test training-context mismatch, not another blind width/epoch increase. No device/Track A/listening result was added.
+
 ---
 
 ## 🚦 Rules you must follow
@@ -356,6 +358,7 @@ docs/audio/UPMIX_SEPARATOR_HANDOFF.md, then the night report and the plan.
 - [Upmix Causal Role-Focus Probe 2026-09-28](UPMIX_CAUSAL_ROLE_FOCUS_2026-09-28.md) — review-21 rare-cell supervision failure and hard-threshold ranking bound
 - [Upmix Causal Confidence Map 2026-09-28](UPMIX_CAUSAL_CONFIDENCE_MAP_2026-09-28.md) — review-22 frozen smooth mappings, source/entry results and failed promotion
 - [Upmix Dual-Head Causal Probe 2026-09-28](UPMIX_DUAL_HEAD_CAUSAL_PROBE_2026-09-28.md) — review-23 matched complex-audio/role-head pair and failed source/entry promotion
+- [Upmix Causal Deep-Filter Probe 2026-09-28](UPMIX_CAUSAL_DEEP_FILTER_PROBE_2026-09-28.md) — review-24 causal past-frame filter, matched source/entry results and failed promotion
 - [Upmix Source Separation Plan](UPMIX_SOURCE_SEPARATION_PLAN.md) — the running log, reviews 1–16, run rows
 - [Upmix Mask Net Phase 1 Report 2026-09-27](UPMIX_MASK_PHASE1_REPORT_2026-09-27.md) — Track A in the car
 - [Upmix Stability 2026-09-25](UPMIX_STABILITY_2026-09-25.md) — the original "back and forth" measurement
