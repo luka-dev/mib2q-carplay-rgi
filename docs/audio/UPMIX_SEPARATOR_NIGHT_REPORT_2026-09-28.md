@@ -1,5 +1,7 @@
 # Upmix Separator Track — Night Report 2026-09-27/28
 
+**Interpretation correction, 2026-09-29:** The [later research review](UPMIX_RESEARCH_REVIEW_2026-09-29.md#what-is-actually-known-about-our-plateau) preserves this report's numerical history but narrows “capacity ruled out” / “spectral structure ruled out” to the specific sep5 width and sep7 band-GRU interventions. They do not exclude normalized residual encoding, optimization improvements or a stronger causal reference. The decoder-matched sep9c and bidirectional-time sep10 remained paused; they are not completed negative future-context evidence. Next proposed encoder/control fitting diagnostic and subsequent compression gates are in the review; no new run was started by the correction.
+
 _Status report of the rear-eligible separator track (branch `feature/upmix-source-separation`): decisions, actions, code changes, results and the running queue, from the sep5 capacity test (27.09 17:00) through the rapid-loop screens to review 16's pause of broad separator training (28.09 05:00)._
 _Written for the owner and for whoever picks the track up in the morning. Companion to the running log in [Upmix Source Separation Plan](UPMIX_SOURCE_SEPARATION_PLAN.md)._
 

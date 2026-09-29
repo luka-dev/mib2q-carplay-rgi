@@ -69,6 +69,7 @@ flowchart TB
 | [Upmix Datasets and Teachers](UPMIX_DATASETS_AND_TEACHERS.md) | MoisesDB, MUSDB18, FLOAT, AlbumDB, teacher networks, their defects and licences, the role-label contract. |
 | [Upmix Compute Budget](UPMIX_COMPUTE_BUDGET.md) | Krait cost units and measurements, the arithmetic that admitted HSSR and blocked CUpGAN/H1/Q2, training machines. |
 | [Upmix Literature](UPMIX_LITERATURE.md) | The papers and systems the work drew on, what each changed, and which paper files are failed downloads. |
+| [Upmix Separator Research Review 2026-09-29](UPMIX_RESEARCH_REVIEW_2026-09-29.md) | 22 research lines and implementation checks against the plateau; proposed causal reference fitting, generalization and compression sequence. |
 
 ### Upmix runtime and release
 
