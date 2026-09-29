@@ -51,7 +51,7 @@ def mechanism_check(cache, checkpoints):
         info[mode] = {
             "parameters": sum(p.numel() for p in net.parameters()),
             "estimated_neural_macs_per_second": net.macs * SN.FPS,
-            "slow_decoder_weight_rms": float(state_weights.square().mean().sqrt()),
+            "slow_decoder_weight_rms": float(state_weights.detach().square().mean().sqrt()),
         }
     if (info["reset2"]["parameters"] != info["persistent"]["parameters"] or
             info["reset2"]["estimated_neural_macs_per_second"] !=

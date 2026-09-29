@@ -14,7 +14,7 @@ $busy = @(Get-CimInstance Win32_Process -Filter "name='python.exe'" | Where-Obje
 if ($busy.Count -ne 0) { throw 'Training or renderer harness is active' }
 $hashes = @{
     'sep_net_state.py' = '16B5029B2B24D88E0267D25D0B4E956765C5C731C91846BC2124839E190E3EEC'
-    'diag_dual_state.py' = 'CD769F676F9B2FC7AA89C5148EA181094660BA3B8434C7888FB90016F3AA33B1'
+    'diag_dual_state.py' = 'BAA6788BCDC3D44112AF4D0AA93923409D11E999B1C3B6AC7307DB76D992847F'
     'diag_role_selectivity.py' = '7606F3E655558376C2334737100C6FA090085D34175A759759001BCAE0A689FB'
     'diag_transitions.py' = 'B2626F320F2E77FDC71E32F547FDD894F7E9E3F1A689F52F8CD714AFF65B62C7'
 }
@@ -36,6 +36,11 @@ if (Test-Path "$D\transitions.json") { throw 'Dual-state diagnostic already fini
 $env:CUDA_VISIBLE_DEVICES = '-1'
 $env:PYTHONWARNINGS = 'ignore:Mean of empty slice:RuntimeWarning'
 Set-Location $T
-python "$T\diag_dual_state.py" $C $reset $persistent --out $D > "$D\run.txt" 2>&1
-if ($LASTEXITCODE -ne 0) { Get-Content "$D\run.txt" -Tail 60; throw 'Dual-state diagnostic failed' }
+$previousPreference = $ErrorActionPreference
+try {
+    $ErrorActionPreference = 'Continue'
+    python "$T\diag_dual_state.py" $C $reset $persistent --out $D > "$D\run.txt" 2>&1
+    $exit = $LASTEXITCODE
+} finally { $ErrorActionPreference = $previousPreference }
+if ($exit -ne 0) { Get-Content "$D\run.txt" -Tail 60; throw 'Dual-state diagnostic failed' }
 Get-Content "$D\run.txt" -Tail 30
