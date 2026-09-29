@@ -11,6 +11,8 @@ _Read this first, then [the night report](UPMIX_SEPARATOR_NIGHT_REPORT_2026-09-2
 
 **First data result, 2026-09-29 02:50 PC local time:** `remix_moises_s1` completed 4k, attribution, transitions and the real-C DEV20 screen. The [result table and TRAIN/DEV diagnostic](UPMIX_MOISES_REMIX_PROBE_2026-09-29.md#completed-4k-result-and-decision) show no useful instrument gain at matched rear level and worse median vocal-entry retention, so the precommitted joint gate rejects 10k. The GPU lease and queue are empty, and the rapid daemon was stopped. Next compare curated OnAir with the better same-song data recipe; no Track A port or car result follows.
 
+**Second data result, 2026-09-29 03:41 PC local time:** The [curated OnAir matched pair](UPMIX_ONAIR_DATA_PROBE_2026-09-29.md#completed-4k-result-and-decision) completed 4k and its real-C DEV20 screen. At nearly identical rear RMS, 25% OnAir among true-stem windows lowered eligible transmission **.43→.39**, guitar **.11→.09** and strings **.13→.11**; voice rose **.04→.05**. Entry retention did not improve and any-stem swings remained **3/20**. The joint gate rejects 10k. The PC rapid queue and GPU lease are clear and the daemon is stopped. The next Track B data check is one real TRAIN song through the staged [MoisesDB instrument sidecar](UPMIX_MOISES_INSTRUMENT_SIDECAR_2026-09-29.md), followed by an audited instrument-family remix comparison if closure passes. No Track A, device or car result follows from these data screens.
+
 ---
 
 ## 📋 The job in one page

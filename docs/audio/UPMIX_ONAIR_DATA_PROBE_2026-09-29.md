@@ -31,3 +31,22 @@ The same DEV12 attribution, 43 vocal entries and 20-song fixed-gain real-C scree
 **Preflight and short smoke, 03:05 PC local time.** The repository code/map/cache script are committed at `3991e21`. The PC `sep_net.py` SHA-256 is `05a9f71e6bafef69d00393a836cff412bbf418cae9f83108441a03408393bd10`; rapid daemon `be2094dd0c2bc43b3ffaab88b71b6f432438775f35f90b5569929f685a884fb3`; real-C executable `730a2ca9af8bf84db8b8ac9b4abacadeff70190abb1fc7b78f0536012bb74520`; OnAir split `4b3955d211eeaed745eb5ef4de461cd02b173489e719d742f4737b706d42cc18`. The five `.npy` cache SHA-256 prefixes, in the table's order, are `9ca7b059`, `7a48b875`, `1d3d39a1`, `697288ef`, `4282a9d4` (full hashes were read from the PC before the pair). A 20-step GPU smoke completed for both default and extra-truth paths, saving step-20 checkpoints; a separate 1000-window synthetic sampler test confirmed the selected pool share and target closure. These checks establish the data path runs, not any separation improvement. The smoke lease was released and no Python/GPU job remained at preflight.
 
 **Pair launched, 03:06 PC local time.** The owner had authorized data experiments. The rapid queue received `onair_ctrl_s1|` followed by `onair25_s1|--extra-truth D:\upmix\datasets\onair_cache7 --extra-truth-frac 0.25`, and the detached daemon started as PID 29096. A read-back showed one `sep_net.py train` process, rapid's GPU lease, `onair_ctrl_s1` start record and the expected 176-truth/774-pseudo header with the control's log-magnitude statistics matching the original anchor (−2.82/2.81). The OnAir arm remains queued behind the control and its C screen. The ad hoc launch command printed a PowerShell syntax error in a duplicate-folder preflight expression (`Test-Path` with `-or`); the tag folders did not previously exist, and the subsequent lease/process/job read-back confirmed exactly one control run. No result is inferred from launch.
+
+## Completed 4k result and decision
+
+Both arms finished 4k and the full rapid screen on 2026-09-29 PC local time (`onair25_s1` at 03:41:13). The new-code control reproduced the saved `anchor_s1` within run variation. The table uses the same fixed DEV12 attribution, 43 entry events, 20 DEV songs × 60 s and real C renderer with `--mask-drive 1.0`; rear level is the actual Ls/Rs RMS, not a post-hoc gain match.
+
+| Measure | `onair_ctrl_s1` | `onair25_s1` |
+| --- | ---: | ---: |
+| Last DEV SI-SDR, dB | −1.15 | −1.44 |
+| Eligible transmission, all / eligible-dominant | .43 / .47 | .39 / .43 |
+| Vocal / protected transmission | .195 / .086 | .200 / .091 |
+| 8–14 kHz eligible transmission, dB | −23.1 | −23.5 |
+| Vocal-entry retention median / p10 | .756 / .392 | .752 / .387 |
+| Entry 0–2 s vocal-leak peak | .29 | .35 |
+| Rear level, dBFS | −37.6 | −37.5 |
+| Guitar / keys / piano / strings rear share | .11 / .09 / .06 / .13 | .09 / .09 / .06 / .11 |
+| Voice / bass / drums rear share | .04 / .07 / .10 | .05 / .06 / .09 |
+| Any-stem swing songs | 3/20 | 3/20 |
+
+The fixed OnAir share made the data intervention visible, but it **reduced eligible recall and guitar/strings rear share** at essentially the same rear level. Vocal transmission and entry leakage increased. The predeclared joint gate rejects this candidate; no second seed or 10k continuation is warranted for this recipe. This result tests five curated OnAir songs at 12.5% of *all* windows and the unchanged same-song model recipe; it does not rule out a larger, better audited corpus or instrument-family remix. After completion the queue was empty, the GPU lease absent and no Python job remained; the rapid daemon was stopped with a process-ID check. No head-unit or Track A file changed.
