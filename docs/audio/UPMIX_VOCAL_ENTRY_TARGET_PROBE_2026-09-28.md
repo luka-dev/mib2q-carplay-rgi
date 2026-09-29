@@ -1,6 +1,6 @@
 # Anchored Vocal-Entry Matrix Probe
 
-_2026-09-28. Review 33, one-change causal training test; gradient weight frozen, DEV results pending._
+_2026-09-28. Review 33, one-change causal training test; completed and rejected at the frozen source/entry gate._
 
 ## Fixed experiment
 
@@ -16,4 +16,20 @@ At step 4000, run the unchanged fixed DEV12 reanalyzed source-attribution and DE
 
 ## Results
 
-Pending.
+The one-GPU run completed 4000 steps in **1278 s** without a training error. Candidate checkpoint: `D:\upmix\runs\vocal_entry_target4k\focused\step4000.pt`, SHA-256 `0A364F10EE346FA537DF74321F3383AEEF647D80F88AD11C4F8D9FFE6D88F0BE`. Scalar DEV SI-SDR/vocal-leak was **−.52 dB/.167**, nearly the saved source-loss control's **−.54 dB/.165**. The anchored objective avoided review 32's nearly silent solution, but the scalar metric does not decide source routing.
+
+The frozen DEV12 reanalyzed source diagnostic gave song medians:
+
+| Checkpoint | Eligible transmission | Vocal | Drums | Bass | Vocal/eligible | Drums/eligible | Bass/eligible |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Saved source-loss matrix control | .4620 | .1811 | .0319 | .0176 | .5061 | .0662 | .0415 |
+| Anchored vocal-entry candidate | **.4569** | .1825 | .0291 | .0164 | **.5422** | **.0636** | **.0413** |
+| Frozen limits | ≥.432 | — | — | — | ≤.324 | ≤.0568 | ≤.0339 |
+
+The candidate preserves useful eligible energy, passing the recall floor, but vocal/eligible worsens against control **.5061→.5422** and all three protected ratios remain beyond their predeclared limits. Its absolute drum and bass transmission decreases slightly without enough source selectivity to pass their ratios.
+
+The unchanged DEV20 diagnostic found the same 43 vocal entries. Candidate eligible post/pre retention was **median/p10 .833/.526**, versus control **.841/.535** and limits **.85/.60**. Absolute median eligible transmission pre/post stayed **.583/.454**, passing the new anti-silence floors **.45/.40** and close to control **.576/.457**. The first 0–2 s vocal leak median changed **.206→.202**, while 4–8 s steady vocal leak increased **.197→.217** and settling-time p90 **1.4→3.5 s**. Thus the added onset-focused target neither fixed the retention tail nor protected a sustained vocal.
+
+PC outputs: `D:\upmix\runs\vocal_entry_target4k\focused_vs_matrix.{json,txt}`, `focused_vs_shared.{json,txt}`, `transitions.txt` and `focused\train.log`. [`run_vocal_entry_target_diag.ps1`](../../tools/stereo-upmix-render/pc/run_vocal_entry_target_diag.ps1) guards the source/checkpoint hashes and empty GPU queue, then runs the fixed CPU screens. The candidate failed all protected-ratio gates and both entry-ratio gates, so the precommitted rule stops it before real C, full40, longer training, device port or car listening.
+
+Together with reviews 29–32, this isolates the tested *loss and training-data interventions* at 4k: source attribution opens pure-vocal cells, an ideal hard veto protects them but loses eligible continuity, output invariance collapses toward silence, and an anchored synthetic onset preserves eligible level but not source selection or transition stability. These experiments do **not** prove a universal causal-compute limit. Another scalar penalty or longer continuation of these rejected checkpoints has no measured support. The next discriminating architecture test should explicitly separate a persistent eligible-audio state from a fast protected-source state, then pass the same source and real-entry gates before C promotion.
