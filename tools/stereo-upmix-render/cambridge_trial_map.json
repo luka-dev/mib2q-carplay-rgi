@@ -1,0 +1,50 @@
+{
+  "purpose": "Small owner-authorized training trial; license record to follow",
+  "tracks": {
+    "ajay_ae_mere_humsafar": {
+      "artist": "Ajay Nagarkoti & Vibhu Dixit",
+      "title": "Ae Mere Humsafar",
+      "zip_bytes": 398950192,
+      "groups": {
+        "lead_vocal": [20],
+        "other_vocal": [21, 22],
+        "drum_core": [1, 2, 3],
+        "cymbals": [4, 6],
+        "percussion": [5],
+        "bass": [8],
+        "other": [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+      },
+      "exclude": [7]
+    },
+    "finlay_same_kind_of_life": {
+      "artist": "Finlay",
+      "title": "Same Kind Of Life",
+      "zip_bytes": 347121142,
+      "groups": {
+        "lead_vocal": [17],
+        "other_vocal": [15, 18, 19, 20],
+        "drum_core": [1, 2, 3, 4, 5, 6],
+        "cymbals": [7],
+        "percussion": [],
+        "bass": [8],
+        "other": [9, 10, 11, 12, 13, 14, 16]
+      },
+      "exclude": []
+    },
+    "killa_l_window": {
+      "artist": "Killa-L",
+      "title": "Window",
+      "zip_bytes": 404201579,
+      "groups": {
+        "lead_vocal": [32, 33, 34, 35],
+        "other_vocal": [17, 36],
+        "drum_core": [1, 2, 3, 4, 5, 6, 7, 8, 9],
+        "cymbals": [10, 11, 12, 13, 14, 15, 16],
+        "percussion": [],
+        "bass": [],
+        "other": [18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31]
+      },
+      "exclude": []
+    }
+  }
+}
