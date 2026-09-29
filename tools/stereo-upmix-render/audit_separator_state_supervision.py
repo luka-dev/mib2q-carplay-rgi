@@ -22,6 +22,29 @@ def load_cpu(torch, path):
     return net
 
 
+def coordinate_errors(torch, net, h, g, ht, gt):
+    """Descriptive per-band null-space fraction, not a replacement loss/gate.
+
+    Global g is counted once per band here; this is not the null space of the
+    complete joint shared-global operator or the pure-state training weighting.
+    """
+    total, invisible = 0., 0.
+    ranks = []
+    for i, decoder in enumerate(net.dec):
+        error = torch.cat((h[:, :, i]-ht[:, :, i], g-gt), -1)
+        _, singular, vh = torch.linalg.svd(decoder.weight.detach(), full_matrices=False)
+        rank = int((singular > singular.max()*1e-6).sum())
+        basis = vh[:rank]
+        projected = (error @ basis.T) @ basis
+        total += float(error.square().sum())
+        invisible += float((error-projected).square().sum())
+        ranks.append(rank)
+    return dict(local_h_mse=float((h-ht).square().mean()),
+                shared_g_mse=float((g-gt).square().mean()),
+                per_band_concat_null_error_fraction=invisible/max(total, 1e-12),
+                decoder_band_ranks=ranks)
+
+
 def run(a):
     if a.out.exists():
         raise FileExistsError("preserve earlier audit")
@@ -54,6 +77,8 @@ def run(a):
     with torch.no_grad():
         teacher = decode(torch, anchor, X, ht, gt)
         teacher_loss = float(objective(torch, teacher, E, eligible, n))
+        initial_coordinates = coordinate_errors(torch, anchor,
+            targets["initial_h"], targets["initial_g"], ht, gt)
     reference = json.loads((a.run / "teacher.json").read_text())["rows"][-1]
     if abs(teacher_loss-reference["loss"]) > 1e-4:
         raise ValueError("target/decoder replay mismatch")
@@ -72,6 +97,9 @@ def run(a):
             audio = float(objective(torch, estimate, E, eligible, n))
             state = float(state_loss(sh, sg, ht, gt))
             sdr = SN.si_sdr(torch, SN.istft(torch, estimate, n), eligible).mean(-1).numpy()
+            coordinates = coordinate_errors(torch, net, sh, sg, ht, gt)
+            teacher_output_gap_nse = float((estimate-teacher).abs().square().sum()/
+                                          teacher.abs().square().sum())
         for h in handles:
             h.remove()
         reference = arm["final"]
@@ -80,7 +108,8 @@ def run(a):
         if np.max(np.abs(sdr-np.array(reference["sdr_db"]))) > .01:
             raise ValueError("CPU waveform parity failed")
         results.append(dict(mode=arm["mode"], decoder_unchanged=unchanged, cpu_audio_loss=audio,
-            cpu_state_loss=state, cpu_sdr_db=sdr.tolist(), checkpoint_sha256=sha(path)))
+            cpu_state_loss=state, cpu_sdr_db=sdr.tolist(), coordinates=coordinates,
+            teacher_output_gap_nse=teacher_output_gap_nse, checkpoint_sha256=sha(path)))
     base, new = terminal["arms"][0]["final"], terminal["arms"][1]["final"]
     delta = np.array(new["sdr_db"])-np.array(base["sdr_db"])
     gates = dict(audio_loss=new["audio_loss"] <= .9*base["audio_loss"],
@@ -90,7 +119,7 @@ def run(a):
     if gates != terminal["gates"] or all(gates.values()) != terminal["diagnostic_success"]:
         raise ValueError("stored gate verdict does not match frozen rules")
     result = dict(scope="four fixed TRAIN windows; CPU target/decoder/checkpoint audit",
-        teacher_cpu_loss=teacher_loss, arms=results, gates=gates,
+        teacher_cpu_loss=teacher_loss, initial_coordinates=initial_coordinates, arms=results, gates=gates,
         diagnostic_success=all(gates.values()), state_error_ratio=new["state_loss"] /
             terminal["arms"][1]["initial"]["state_loss"], audio_loss_ratio=new["audio_loss"]/base["audio_loss"],
         control_median_sdr=float(np.median(base["sdr_db"])), state_median_sdr=float(np.median(new["sdr_db"])),
