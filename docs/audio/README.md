@@ -102,7 +102,7 @@ flowchart TB
 | [Upmix Frozen Student Cue for the Spatial Operator 2026-09-29](UPMIX_STUDENT_SPATIAL_CUE_2026-09-29.md) | Causal fine-role cue improves the spatial fit's bass ratio but fails vocal and drum source gates. |
 | [Upmix Protected Contribution to the Spatial Cue 2026-09-29](UPMIX_CUE_ATTRIBUTION_BOUND_2026-09-29.md) | True-stem attribution shows protected subtraction fixes source ratios at the cost of eligible transmission. |
 | [Upmix Causal Slow-Operator Anchor Probe 2026-09-29](UPMIX_OPERATOR_ANCHOR_PROBE_2026-09-29.md) | Matched causal 4k pair: slightly better operator fit but worse eligible transmission and entry tail; rejected before C. |
-| [Upmix Cross-Song True-Stem Augmentation Probe 2026-09-29](UPMIX_CROSSSONG_AUGMENT_PROBE_2026-09-29.md) | Controlled causal fine-role TRAIN-only MoisesDB source remix against the prior baseline. |
+| [Upmix Cross-Song True-Stem Augmentation Probe 2026-09-29](UPMIX_CROSSSONG_AUGMENT_PROBE_2026-09-29.md) | Causal fine-role four-song remix left source separation nearly unchanged and failed protected/entry gates. |
 | [Upmix Cross-Corpus True-Stem Remix Probe 2026-09-29](UPMIX_CROSS_CORPUS_REMIX_PROBE_2026-09-29.md) | Staged MoisesDB–OnAir source-family remix with a matched corpus-exposure control. |
 | [CarPlay Upmix Listening Protocol](UPMIX_CARPLAY_LISTENING_PROTOCOL.md) | Live CarPlay front-only vs Track A score sheet, level matching, and the boundary between in-car evidence and headphone previews. |
 | [Persistent Rear Membership Screen](UPMIX_PERSISTENT_MEMBERSHIP_SCREEN_2026-09-28.md) | First offline global-membership test through the C renderer; paired result and the reason it was not promoted. |
