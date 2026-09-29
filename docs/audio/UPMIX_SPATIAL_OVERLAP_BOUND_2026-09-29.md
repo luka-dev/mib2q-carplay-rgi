@@ -13,3 +13,29 @@ The [review-38 bounded real IRM](UPMIX_OVERLAP_ORACLE_BOUND_2026-09-29.md) passe
 The isolated [`diag_spatial_overlap_bound.py`](../../tools/stereo-upmix-render/diag_spatial_overlap_bound.py) is SHA-256 `14308acf2270c559d804c41b74bd097208d89e6904c12ff70b2284a994090fdd`; guarded CPU runner [`run_spatial_overlap_bound.ps1`](../../tools/stereo-upmix-render/pc/run_spatial_overlap_bound.ps1) checks source hashes, PC queue/GPU lease and active jobs. Python syntax passed locally. The source code reuses the fixed review-26 fitter and review-38 masks/metric helpers. No GPU or package change is needed.
 
 **Frozen joint gate for the raw full matrix:** 12 valid eligible source songs and ≥8 valid protected songs per role; ≥25 valid entries; source medians eligible **≥.432**, vocal/eligible **≤.324**, drums/eligible **≤.0568**, bass/eligible **≤.0339**; median paired full-minus-diagonal bass/eligible **<0**; entry eligible post/pre median **≥.85**, p10 **≥.60**; absolute entry eligible pre/post medians both **≥.25**. The first four limits are the same inspected-DEV source screen as review 38. A pass would show the privileged spatial representation can meet this narrow source/entry screen; it would **not** show a causal learner, C/full40, independent-set, device or ear fit. A fail on bass would weaken the spatial explanation of the review-38 shortfall. A fail on entry despite source success would point to a changing song-specific operator at vocal onset. In either case, inspect individual songs and do not continue the rejected review-37 checkpoint. Track A owns any eventual head-unit port.
+
+## Completed result
+
+The guarded CPU run completed without using the GPU. PC result: `D:\upmix\runs\spatial_overlap_bound\result.json`, SHA-256 `8a674aadfaa0fa83f73e4183819c29a8648aa877384843286b12741c0dbb9141`; `run.txt` and partial source/event rows are beside it. The fixed source screen covered all 12 songs (11 valid vocal ratios); the vocal-entry screen covered **30 entries from 16 songs**.
+
+| Same 30.1–60 s source measure, song median | Diagonal fitted | Full 2×2 fitted | IRM on test truth | Full gate |
+| --- | ---: | ---: | ---: | --- |
+| Eligible transmission | .3109 | **.4491** | .7983 | ≥.432 pass |
+| Vocal/eligible | .5153 | **.2995** | .1321 | ≤.324 pass |
+| Drums/eligible | .0552 | **.0246** | .0209 | ≤.0568 pass |
+| Bass/eligible | .0383 | **.00944** | .0633 | ≤.0339 pass |
+
+The paired full-minus-diagonal bass/eligible median was **−.0240**, satisfying the additional spatial-effect gate. The positive scalar needed to match full eligible transmission to the IRM had median **1.337×**; the scalar is not a live calibration and did not enter the raw gate.
+
+| 30 source-attributed vocal entries | Diagonal fitted | Full 2×2 fitted | IRM on event truth | Full gate |
+| --- | ---: | ---: | ---: | --- |
+| Eligible post/pre median | 1.011 | **1.041** | .921 | ≥.85 pass |
+| Eligible post/pre p10 | .776 | **.783** | .788 | ≥.60 pass |
+| Absolute eligible pre/post medians | .309/.321 | **.407/.406** | .865/.792 | both ≥.25 pass |
+| First-2-s vocal leakage median | .121 | **.123** | .103 | diagnostic |
+
+**Predeclared joint gate: pass.** The 2×2 operator substantially reduces the specific bass leak that defeated the IRM while preserving the screen's median eligible level and vocal-entry continuity. This strengthens the spatial-representation hypothesis, not a claim that the trained review-27/35/37 students can infer the needed operator. All fitted operators used song-specific true stems unavailable from CarPlay, and the source and entry subsets are inspected DEV, with different windows from review 38.
+
+Individual failures matter. Only **7/12** full-matrix source windows clear the eligible threshold, **7/11** clear vocal/eligible, **7/12** clear drums/eligible and **9/12** clear bass/eligible. One song's first 30 s has almost no eligible evidence: its held-out eligible transmission is **0.00000623** and the hypothetical IRM-matching gain is **361×**. Another song has drums/eligible **.489** and bass/eligible **.096**. The worst covered entry's post/pre is **.703**, above the p10 limit but with absolute eligible transmission falling **.265→.186**. The median gate therefore does not certify each track or safe gain; the head-unit and ear gates remain open.
+
+The next discriminating test is whether a **stereo-only, causal cue already available within the budget** can estimate a useful slow spatial operator. A frozen 30 s fit to the current sep9 eligible estimate, compared with the privileged fit on the identical source/entry windows, can test this without another training run. Predeclare that comparison and check the sep9 checkpoint/runtime before running it. If the cue is too contaminated, a learned operator distillation or direct eligible-audio estimator is required; do not infer that more review-37 training will close the gap. Any prospective student still needs the real-C full40/independent harness, measured int8 MAC and latency on the unit, and blind live CarPlay listening.
