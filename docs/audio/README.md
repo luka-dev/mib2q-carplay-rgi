@@ -93,6 +93,7 @@ flowchart TB
 | [Upmix Protected-Cell Veto Upper Bound 2026-09-28](UPMIX_PROTECTED_VETO_UPPER_BOUND_2026-09-28.md) | True-stem gate fixes protected ratios but loses eligible recall and vocal-entry continuity. |
 | [Upmix Vocal-Invariance Matrix Probe 2026-09-28](UPMIX_VOCAL_INVARIANCE_PROBE_2026-09-28.md) | Controlled paired-mixture training test for eligible stability as vocal level changes. |
 | [Upmix Anchored Vocal-Entry Matrix Probe 2026-09-28](UPMIX_VOCAL_ENTRY_TARGET_PROBE_2026-09-28.md) | Paired vocal-onset reconstruction target to prevent the silent consistency solution. |
+| [Upmix Spatial-Memory Horizon 2026-09-28](UPMIX_SPATIAL_MEMORY_HORIZON_2026-09-28.md) | Privileged fixed-window and recency-weighted spatial fits; short decay passes after evidence accumulates. |
 | [CarPlay Upmix Listening Protocol](UPMIX_CARPLAY_LISTENING_PROTOCOL.md) | Live CarPlay front-only vs Track A score sheet, level matching, and the boundary between in-car evidence and headphone previews. |
 | [Persistent Rear Membership Screen](UPMIX_PERSISTENT_MEMBERSHIP_SCREEN_2026-09-28.md) | First offline global-membership test through the C renderer; paired result and the reason it was not promoted. |
 | [Upmix Separator Night Report 2026-09-28](UPMIX_SEPARATOR_NIGHT_REPORT_2026-09-28.md) | The separator track's night of 27→28.09: five controlled runs on one frontier (width, supervision, structure, loss ruled out), the gap decomposed by source attribution, the transition-driven "back and forth" measured, the rapid test loop, the queue and the open decisions. |
