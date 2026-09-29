@@ -76,6 +76,8 @@ def main():
     torch = SN._torch()
     split = MN.load_split(str(a.cache))
     rows = []
+    a.out.parent.mkdir(parents=True, exist_ok=True)
+    partial = a.out.with_suffix(".partial.json")
     with torch.no_grad():
         for song in split["dev"][:a.songs]:
             path = a.cache / (song + ".npy")
@@ -107,13 +109,18 @@ def main():
                 candidate["normalized_complex_error_db"] - control["normalized_complex_error_db"])
             row["full_minus_diag_eligible"] = (
                 candidate["transmission"]["eligible"] - control["transmission"]["eligible"])
+            candidate_vocal = candidate["protected_over_eligible"]["vocal"]
+            control_vocal = control["protected_over_eligible"]["vocal"]
             row["full_over_diag_vocal_ratio"] = (
-                candidate["protected_over_eligible"]["vocal"] /
-                max(control["protected_over_eligible"]["vocal"], 1e-20))
+                candidate_vocal / max(control_vocal, 1e-20)
+                if candidate_vocal is not None and control_vocal is not None else None)
             rows.append(row)
+            partial.write_text(json.dumps({"rows": rows}, indent=2) + "\n", encoding="utf-8")
+            vocal_ratio = (f"x{row['full_over_diag_vocal_ratio']:.3f}"
+                           if row["full_over_diag_vocal_ratio"] is not None else "n/a")
             print(f"{song[:8]} error {row['full_minus_diag_error_db']:+.3f} dB "
                   f"eligible {row['full_minus_diag_eligible']:+.3f} "
-                  f"vocal/E x{row['full_over_diag_vocal_ratio']:.3f}", flush=True)
+                  f"vocal/E {vocal_ratio}", flush=True)
     summary = {
         "full_minus_diag_error_db": median(rows, ("full_minus_diag_error_db",)),
         "full_minus_diag_eligible": median(rows, ("full_minus_diag_eligible",)),
@@ -128,8 +135,18 @@ def main():
         "full_eligible": median(rows, ("full", "transmission", "eligible")),
     }
     summary["full_lower_error_songs"] = sum(row["full_minus_diag_error_db"] < 0 for row in rows)
+    coverage = all(summary[key]["n"] >= 8 for key in (
+        "full_over_diag_vocal_ratio", "diag_drums_ratio", "full_drums_ratio",
+        "diag_bass_ratio", "full_bass_ratio"))
+    summary["adequate_protected_coverage"] = coverage
     summary["spatial_promotion_gate"] = (
-        summary["full_over_diag_vocal_ratio"]["value"] <= 0.8
+        coverage
+        and summary["full_over_diag_vocal_ratio"]["value"] is not None
+        and summary["full_drums_ratio"]["value"] is not None
+        and summary["diag_drums_ratio"]["value"] is not None
+        and summary["full_bass_ratio"]["value"] is not None
+        and summary["diag_bass_ratio"]["value"] is not None
+        and summary["full_over_diag_vocal_ratio"]["value"] <= 0.8
         and summary["full_minus_diag_error_db"]["value"] <= -0.3
         and summary["full_lower_error_songs"] >= 8
         and summary["full_minus_diag_eligible"]["value"] >= -0.03

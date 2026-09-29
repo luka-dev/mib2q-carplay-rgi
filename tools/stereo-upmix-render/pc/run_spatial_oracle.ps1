@@ -13,7 +13,7 @@ $busy = @(Get-CimInstance Win32_Process -Filter "name='python.exe'" | Where-Obje
 })
 if ($busy.Count -ne 0) { throw 'Training or another harness is active' }
 if ((Get-FileHash "$T\diag_spatial_oracle.py" -Algorithm SHA256).Hash -ne
-    '20BE50D0841234612B6A1A833AA8855D9DCB22486DE219258D22199D280BEE09') { throw 'Spatial oracle source hash changed' }
+    'AB9F6B6B5FA5BF00FF96758C3CF4DDBA99DEE5A38E764A2A106A183547546DB3') { throw 'Spatial oracle source hash changed' }
 New-Item -ItemType Directory -Force $O | Out-Null
 $env:CUDA_VISIBLE_DEVICES = '-1'
 Set-Location $T
