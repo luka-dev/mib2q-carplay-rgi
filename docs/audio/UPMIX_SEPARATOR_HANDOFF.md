@@ -3,6 +3,8 @@
 _Initial handoff of the rear-eligible separator track (Track B), written 2026-09-28 04:50 on `feature/upmix-source-separation` at `6eac814`. Later review sections below update that snapshot._
 _Read this first, then [the night report](UPMIX_SEPARATOR_NIGHT_REPORT_2026-09-28.md) for the initial numbers and [the plan](UPMIX_SOURCE_SEPARATION_PLAN.md) for the full history through review 43._
 
+**Stop snapshot 2026-09-29:** The owner's [one-page status](UPMIX_STATUS_AND_PROBLEMS_2026-09-29.md) covers both tracks; the [detailed Track B snapshot](UPMIX_SEPARATOR_STATUS_2026-09-29.md) records verified outcomes, failures, live PC state and the unrun cross-song probe. The owner stopped the investigation here. No new GPU job is queued; the already-running review-42 control was left running to preserve its uncheckpointed work. Its state must be checked afresh on resume.
+
 ---
 
 ## 📋 The job in one page
@@ -414,6 +416,7 @@ docs/audio/UPMIX_SEPARATOR_HANDOFF.md, then the night report and the plan.
 - [Upmix Protected Contribution to the Spatial Cue 2026-09-29](UPMIX_CUE_ATTRIBUTION_BOUND_2026-09-29.md) — review-41 privileged protected subtraction fixes selectivity but loses eligible recall
 - [Upmix Causal Slow-Operator Anchor Probe 2026-09-29](UPMIX_OPERATOR_ANCHOR_PROBE_2026-09-29.md) — review-42 frozen calibrated control/anchor pair and source, transition, mechanism gates
 - [Upmix Cross-Song True-Stem Augmentation Probe 2026-09-29](UPMIX_CROSSSONG_AUGMENT_PROBE_2026-09-29.md) — review-43 previously missing TRAIN-only source remix, matched 4k comparison and gates
+- [Separator Track Stop Snapshot 2026-09-29](UPMIX_SEPARATOR_STATUS_2026-09-29.md) — compact verified results, current PC state and unrun work at the owner's stop
 - [Upmix Source Separation Plan](UPMIX_SOURCE_SEPARATION_PLAN.md) — the running log through review 43 and run rows
 - [Upmix Mask Net Phase 1 Report 2026-09-27](UPMIX_MASK_PHASE1_REPORT_2026-09-27.md) — Track A in the car
 - [Upmix Stability 2026-09-25](UPMIX_STABILITY_2026-09-25.md) — the original "back and forth" measurement
