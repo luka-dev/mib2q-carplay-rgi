@@ -18,4 +18,21 @@ Only if all source and entry gates pass, run the frozen enriched DEV20 real-C di
 
 ## Results
 
-Pending.
+The single-tenant PC run reached step 4000 in **753 s**; the saved checkpoint SHA-256 is `849C80EDBC6AF2B1D02D647A9EDC956B6787EE53558F8CBA36F2651A0A0F0604`. DEV 20 s SI-SDR improved **−1.21→−.68 dB** and the scalar vocal-leak diagnostic **.161→.139** versus the matched diagonal control. These scalars justified completing the frozen source/entry diagnostics, not C promotion. The training process ended cleanly and released the GPU lease.
+
+The unchanged source script reproduced the complex control's prior numbers exactly. The full mixture-inferred matrix, including cross terms, was then applied separately to aligned true sources and reanalyzed:
+
+| Fixed DEV12 source metric | Shared-mask anchor | Diagonal complex control | Causal `matrix2` student |
+| --- | ---: | ---: | ---: |
+| Eligible energy transmitted | .4624 | .3851 | **.4043** |
+| Vocal energy transmitted | .1563 | .1790 | **.1548** |
+| Vocal / eligible, per-song median | .4050 | .5036 | **.5381** |
+| Drums / eligible | .0710 | .0830 | **.0605** |
+| Bass / eligible | .0424 | .0484 | **.0406** |
+| Frozen source gates passed | — | **0/4** | **0/4** |
+
+The candidate's median absolute eligible and vocal transmissions both move in the desired directions versus its diagonal control. Its **median per-song vocal/eligible ratio worsens**, because the ratio of two separate medians is not the median of per-song ratios; the gate uses the latter. Drum and bass ratios improve, but remain above .0568/.0339, and eligible transmission remains below .432. On the same 43 vocal entries, post/pre eligible retention median/p10 improves **.703/.418→.776/.466**, missing ≥.85/.60; p10 gain **+.048** also narrowly misses the preselected ≥+.05 relative mechanism check. This model is **rejected before C, full40/TEST20, longer training, port or car test**.
+
+The oracle spatial advantage is real for the privileged per-song matrix on second-half audio, but this 4k student did not infer an operator selective enough from ordinary stereo. The data do not yet distinguish between negligible learned cross-channel use and substantial but poorly selective use. A frozen-checkpoint ablation that zeros only the cross terms can answer that without another GPU run or changing any promotion threshold. No general architectural impossibility or device budget result follows from this one student.
+
+PC artifacts: `D:\upmix\runs\causal_matrix2_4k\step4000.pt`, `complex_control.selectivity.json`, `matrix2.selectivity.json`, their text companions and `transitions.txt`. No Track A or head-unit file changed.
