@@ -314,17 +314,22 @@ def multires_loss(torch, est_wav, tgt_wav, mix_wav=None, floor_rel=None, scale=1
 REMIX_GROUPS = ((0, 1), (2, 3, 4), (5,), (6,))   # vocal / drums / bass / other: each group from its own song with --remix
 
 
-def windows(torch, tracks, seconds, batch, rng, merge_none=None, with_vocal=False, with_sources=False, remix=0.0):
+def windows(torch, tracks, seconds, batch, rng, merge_none=None, with_vocal=False, with_sources=False,
+            remix=0.0, extra_truth_frac=0.0):
     """[B, 2, n] mixture and [B, 2, n] eligible target from seven-slot (or expanded) caches (+ the vocal stem with
     `with_vocal`, or the separate vocal / drum / bass stems with `with_sources`,
     for attribution losses).  `remix` = probability that a truth-pool window takes each REMIX_GROUPS group from an
     independent random song and offset (the standard cross-song stem remix; teacher windows are never remixed).  `tracks` may be a pair (truth_list, pseudo_list):
-    then half of every batch comes from each."""
+    then half of every batch comes from each. A three-pool tuple adds a separate true-stem corpus at
+    `extra_truth_frac` of truth windows while preserving the truth/pseudo ratio."""
     n = int(seconds * SR)
     mixes, eligs, vocs, drums, basses = [], [], [], [], []
     pools = tracks if isinstance(tracks, tuple) else (tracks,)
     while len(mixes) < batch:
-        pool = pools[0] if (len(pools) == 1 or rng.random() < TRUTH_FRAC) else pools[1]
+        if len(pools) == 3:
+            pool = (pools[2] if rng.random() < extra_truth_frac else pools[0]) if rng.random() < TRUTH_FRAC else pools[1]
+        else:
+            pool = pools[0] if (len(pools) == 1 or rng.random() < TRUTH_FRAC) else pools[1]
         path = pool[rng.integers(len(pool))]
         N = MN.npy_header(path)[0][2]
         if N <= n:
@@ -537,15 +542,27 @@ def train(a):
     dev = "cuda" if torch.cuda.is_available() else "cpu"
     torch.manual_seed(a.seed); rng = np.random.default_rng(a.seed)
     split = MN.load_split(a.cache)
-    tracks = [os.path.join(a.cache, t + ".npy") for t in split["train"]]
+    truth_tracks = [os.path.join(a.cache, t + ".npy") for t in split["train"]]
+    tracks = list(truth_tracks)
     if a.teacher_cache:
         tracks += [os.path.join(a.teacher_cache, f) for f in sorted(os.listdir(a.teacher_cache))
                    if f.endswith(".npy") and os.path.exists(os.path.join(a.teacher_cache, f[:-4] + ".json"))]
     dev_tracks = [os.path.join(a.cache, t + ".npy") for t in split["dev"]]
     net = (BandSepNet(torch, feat=a.feat, h1=a.h1, h2=a.h2, hg=a.bhg, brnn=a.band_rnn, lookahead=a.lookahead, bidir=a.bidir, dec_skip=a.dec_skip, norm=a.norm, mask=a.mask) if a.arch == "band" else SepNet(torch, ht=a.ht, hg=a.hg, dec=a.dec)).to(dev)
     if a.teacher_cache and a.half_half:
-        tracks = (tracks[:len(split["train"])], tracks[len(split["train"]):])      # (truth, pseudo-labels)
+        tracks = (truth_tracks, tracks[len(truth_tracks):])      # (truth, pseudo-labels)
         print(f"half/half batches: {len(tracks[0])} truth songs, {len(tracks[1])} pseudo-labelled", flush=True)
+    extra_dir = getattr(a, "extra_truth", None)
+    if extra_dir:
+        extra_meta = json.load(open(os.path.join(extra_dir, "split.json")))
+        if tuple(extra_meta.get("groups", ())) != MN.GROUPS or extra_meta.get("sr") != SR:
+            raise ValueError("extra truth cache needs the seven MoisesDB slots at 48 kHz")
+        extra_split = MN.load_split(extra_dir)
+        extra_tracks = [os.path.join(extra_dir, t + ".npy") for t in extra_split["train"]]
+        if not extra_tracks:
+            raise ValueError("extra truth cache has no present TRAIN tracks")
+        tracks = tracks + (extra_tracks,)
+        print(f"extra truth: {len(extra_tracks)} songs at {a.extra_truth_frac:.1%} of truth windows", flush=True)
     n_songs = sum(len(t) for t in tracks) if isinstance(tracks, tuple) else len(tracks)
     print(f"device {dev}; {n_songs} training songs; params {sum(p.numel() for p in net.parameters())}, "
           f"~{net.macs} MAC per frame = {net.macs * FPS / 1e6:.0f} M MAC/s (+ one 2048-point FFT/iFFT pair per hop)", flush=True)
@@ -570,7 +587,8 @@ def train(a):
     import itertools
     counter = itertools.count(start)                            # astra 13: one RNG shared by the prefetch threads was not reproducible
     batches = MN.prefetch(lambda: windows(torch, tracks, a.seconds, a.batch, np.random.default_rng([a.seed, next(counter)]),
-                                        remix=a.remix, with_vocal=a.attr > 0, with_sources=a.source_attr > 0 or a.role_ce > 0 or a.role_focus > 0 or a.vocal_invariance > 0 or a.vocal_entry_target > 0))
+                                        remix=a.remix, extra_truth_frac=getattr(a, "extra_truth_frac", 0.0),
+                                        with_vocal=a.attr > 0, with_sources=a.source_attr > 0 or a.role_ce > 0 or a.role_focus > 0 or a.vocal_invariance > 0 or a.vocal_entry_target > 0))
     if STATS["mean"] is None:
         with torch.no_grad():
             lm = torch.cat([torch.log(stft(torch, next(batches)[0].to(dev)).abs() + 1e-5).flatten() for _ in range(4)])
@@ -703,6 +721,9 @@ def main():
     t.add_argument("--loss-floor", type=float, default=3e-3, help="--loss log: floor relative to the mixture's mean |X| per window and channel (3e-3 = -50 dB)")
     t.add_argument("--loss-scale", type=float, default=1.0, help="--loss log: fixed factor on the magnitude bundle (calibrate with diag_lossfloor.py)")
     t.add_argument("--remix", type=float, default=0.0, help="probability of a cross-song stem remix per truth window (0 = off)")
+    t.add_argument("--extra-truth", help="additional seven-slot true-stem cache (TRAIN songs only; requires --half-half)")
+    t.add_argument("--extra-truth-frac", type=float, default=0.0,
+                   help="probability of drawing the extra corpus conditional on a truth window")
     t.add_argument("--accum", type=int, default=1, help="gradient accumulation steps (effective batch = batch x accum)")
     s = sub.add_parser("separate"); s.add_argument("--model", required=True); s.add_argument("--wav", required=True); s.add_argument("--out", required=True)
     a = ap.parse_args()
@@ -719,6 +740,10 @@ def main():
             ap.error("--mask deep2 requires source losses to apply both FIR taps; use audio losses for this probe")
         if a.mask == "matrix2" and a.attr > 0:
             ap.error("--mask matrix2 does not support --attr; use --source-attr on the full operator")
+        if (a.extra_truth is None) != (a.extra_truth_frac == 0.0) or not 0.0 <= a.extra_truth_frac <= 1.0:
+            ap.error("--extra-truth requires --extra-truth-frac in (0, 1]")
+        if a.extra_truth and not (a.teacher_cache and a.half_half):
+            ap.error("--extra-truth requires --teacher-cache and --half-half")
         global TRUTH_FRAC
         TRUTH_FRAC = a.truth_frac
         a.save_at = {int(x) for x in a.save_at.split(",") if x.strip()}
