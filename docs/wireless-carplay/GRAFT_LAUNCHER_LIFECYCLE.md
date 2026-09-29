@@ -1,5 +1,33 @@
 # MU1316 btstack launcher path (offline, 2026-09-28)
 
+_MHI2Q wireless CarPlay — technical reference, integrated 2026-09-29._
+
+---
+
+[Wireless overview](README.md) · [Current stock210 lifecycle](STOCK210_RECEIVER_LIFECYCLE.md)
+
+Maintained technical reference. The evidence below distinguishes static analysis, local QNX tests and observations from the unit.
+
+Implementation and local diagnostic paths in this record refer to the [original source directory](../../wireless/graft/). Run `wireless/...` commands from the repository root; moving this note does not move binaries or logs.
+
+## 📊 Component flow
+
+```mermaid
+flowchart LR
+    accTitle: Factory launcher in QEMU
+    accDescr: The factory launcher and Bluetooth client reach the stack registration path in a reduced emulator; a diagnostic persistence bypass is not vehicle validation.
+    services["Factory service manager"]
+    launcher["Connectivity launcher"]
+    btstack["Spawn exact btstack image"]
+    client["Bluetooth client readiness"]
+    gate["Persistence gate in QEMU"]
+    graft["Observe graft registration"]
+    services --> launcher --> btstack
+    services --> client --> gate
+    gate -->|Diagnostic bypass| graft
+    btstack --> graft
+```
+
 In the initial loader-only QEMU mesh, the grafted ELF loaded but its state
 remained `once=0`; that test alone did not exercise SDP/RFCOMM registration.
 The factory-client run documented below subsequently reached the hook and
@@ -76,7 +104,9 @@ image now sets that bit only on its temporary copy. A first immediate
 `graft_state_probe` may fail with `errno 2` in this large QEMU IFS; the
 prestarted late probe provides the post-client sample.
 
-## Factory startup in the disposable QEMU mesh
+<a id="factory-startup-in-the-disposable-qemu-mesh"></a>
+
+## 🧪 Factory startup in the disposable QEMU mesh
 
 The MU1316 `servicemgrmibhigh` image contains the `default_startup_mode`
 configuration key. Its startup branch at `0x1192E4..0x119314` compares that

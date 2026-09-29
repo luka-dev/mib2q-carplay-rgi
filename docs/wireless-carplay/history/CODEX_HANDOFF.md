@@ -1,12 +1,22 @@
 # Handoff: graft an iAP2-over-Bluetooth service into MHI2Q btstack
 
-Current entry point: [wireless implementation status](README.md), including
+_MHI2Q wireless CarPlay — historical investigation, integrated 2026-09-29._
+
+---
+
+[Wireless overview](../README.md) · [Current stock210 lifecycle](../STOCK210_RECEIVER_LIFECYCLE.md)
+
+Historical investigation; earlier limitations and commands describe that experiment. The current implementation and validation boundary are in the section overview.
+
+Implementation and local diagnostic paths in this record refer to the [original source directory](../../../wireless/). Run `wireless/...` commands from the repository root; moving this note does not move binaries or logs.
+
+Current entry point: [wireless implementation status](../README.md), including
 components, reproducible checks, review artifact and remaining hardware work.
 
 **2026-09-29 continuation:** the opening scope below is historical. Static iOS
 analysis disproved the assumption that everything above Bluetooth was ready:
 stock 210 also needs CU pairing and modern control/event/media security.
-The requested RFCOMM layout is in `rfcomm_channel_layout.md`. Pairing now lives
+The requested RFCOMM layout is in [Rfcomm Channel Layout](../RFCOMM_CHANNEL_LAYOUT.md). Pairing now lives
 inside `hook/wireless`, embedded in `libcarplay_hook.so`, with a private SDK
 backend and pinned stock-210 HTTP adapter. Offline QEMU passed Setup, Verify,
 encrypted `/info`, fragmentation, reconnect, invalid signature/tag rejection,
@@ -18,9 +28,9 @@ stable `pi`, capabilities and readiness. Combined QEMU passes three DIO owner
 generations: media teardown/restart, a second media session drained for wired
 priority, and wireless resume with stored-peer Verify. It uses the real native
 supervisor/owner helper and Rust daemon, with synthetic MFi/Wi-Fi and wired child.
-See [receiver lifecycle](stock210_receiver_lifecycle.md),
-`stock210_media_crypto_abi.md`, [hook/wireless](../hook/wireless/README.md) and
-`stock210_http_pairing_abi.md`. Do not install the old 280 replacement bundle.
+See [receiver lifecycle](../STOCK210_RECEIVER_LIFECYCLE.md),
+[Stock210 Media Crypto Abi](../STOCK210_MEDIA_CRYPTO_ABI.md), [hook/wireless](../../../hook/wireless/README.md) and
+[Stock210 Http Pairing Abi](../STOCK210_HTTP_PAIRING_ABI.md). Do not install the old 280 replacement bundle.
 All work remains offline; no head-unit writes/restarts/reboots.
 Review bundle: `wireless/out/mhi2q-stock210-hook-review.tar`, built by
 `integration/build_stock210_review.py`. No replacement libairplay or installer.
@@ -39,7 +49,9 @@ crash there means no Bluetooth in the whole car until reboot. Never restart or r
 
 ---
 
-## The binaries
+<a id="the-binaries"></a>
+
+## 🔍 The binaries
 
 | Role | Path | Notes |
 |---|---|---|
@@ -55,7 +67,9 @@ at the same call position is the same Blue SDK function. Anchors used: the DID r
 
 ---
 
-## Blue SDK entry points, already mapped and verified line-for-line
+<a id="blue-sdk-entry-points-already-mapped-and-verified-line-for-line"></a>
+
+## 📋 Blue SDK entry points, already mapped and verified line-for-line
 
 | Blue SDK operation | Donor MU1439 | **Target MU1316** | Signature |
 |---|---|---|---|
@@ -73,12 +87,14 @@ assigned handle, `+24` from an internal call.
 
 ---
 
-## The iAP SDP record bytes (verified in the donor image at file offset 0x1d1634)
+<a id="the-iap-sdp-record-bytes-verified-in-the-donor-image-at-file-offset-0x1d1634"></a>
+
+## 🔍 The iAP SDP record bytes (verified in the donor image at file offset 0x1d1634)
 
 Two attributes; the trailing RFCOMM channel byte is 0 in the image and is written at runtime once
 RFCOMM grants a channel — do NOT hardcode it.
 
-```
+```text
 attr 0x0001 ServiceClassIDList     len 19  35 11 1C 00000000 decafade decadeaf decacaff
 attr 0x0004 ProtocolDescriptorList len 14  35 0C 35 03 19 01 00 35 05 19 00 03 08 <channel>
 ```
@@ -90,7 +106,9 @@ currently passes 8/8. Run it after any firmware re-extraction.
 
 ---
 
-## Caller to imitate (all in the donor)
+<a id="caller-to-imitate-all-in-the-donor"></a>
+
+## 📋 Caller to imitate (all in the donor)
 
 - `IapServices::registerService` @ 0x2379A4 — registers the RFCOMM channel first (0x24257C),
   patches the granted channel into the record's protocol descriptor, then adds the record
@@ -108,7 +126,9 @@ currently passes 8/8. Run it after any firmware re-extraction.
 
 ---
 
-## THE TASK FOR YOU
+<a id="the-task-for-you"></a>
+
+## 🎯 THE TASK FOR YOU
 
 **Recover the RFCOMM server-channel object layout from the donor**, so a graft can allocate and
 initialise one, register it via 0x277B98 (target address), and receive inbound iAP2 bytes.
@@ -129,24 +149,26 @@ Specifically, from the donor `btstack` (open in IDA/Ghidra/radare2, your choice)
    `IapServices` instance, so it must allocate the channel itself.
 
 Deliver: an offset-annotated struct + the init recipe, written to
-`wireless/rfcomm_channel_layout.md`, plus the target-binary addresses for any additional Blue SDK
+[Rfcomm Channel Layout](../RFCOMM_CHANNEL_LAYOUT.md), plus the target-binary addresses for any additional Blue SDK
 callees you touch (matched by the anchor method above, then verified by line-for-line decompile).
 
 Do NOT write to the head unit. Do NOT modify either binary yet. This step is pure static RE.
 
 ---
 
-## After you (context, not your task)
+<a id="after-you-context-not-your-task"></a>
 
-Update after the channel analysis: `wireless/rfcomm_channel_layout.md` contains the
+## 🎯 After you (context, not your task)
+
+Update after the channel analysis: [Rfcomm Channel Layout](../RFCOMM_CHANNEL_LAYOUT.md) contains the
 verified layout and inbound-data callback. The channel is embedded in the 0x190-byte
 `IapServices` object; `operator new(0x6C)` in `init` allocates an ASI registration
 object, not the channel. The earlier 5043 MTU limit was a transcription error:
 `23 + 0x1394 = 5035`.
-`wireless/graft_insertion_plan.md` proves SDP and RFCOMM core init precede the
+[Graft Insertion Plan](../GRAFT_INSERTION_PLAN.md) proves SDP and RFCOMM core init precede the
 candidate startup hook `0x11ECD0`, including when DID is disabled. The SDP
 add-record status 18 is a record-validation failure, not an SDP-ready flag.
-`wireless/rfcomm_duplex.md` maps the incoming-connection accept API, transmit
+[Rfcomm Duplex](../RFCOMM_DUPLEX.md) maps the incoming-connection accept API, transmit
 packet ABI, completion event, and receive-credit API into the target binary.
 Unlike a receiving graft, donor `IapServices` rejects event-1 inbound requests.
 
@@ -156,7 +178,7 @@ profiles block inbound CarPlay traffic to `uap0`; separate offline copies are
 under `wireless/firewall/`. More significantly, the wireless daemon does not
 trigger dio's `CAirPlayMainThread::run`, which creates the AirPlay TCP 7000
 listener. The stock path is tied to Cinemo's wired iAP2 lifecycle. See
-`wireless/receiver_start.md` before treating the graft as a complete mod.
+[Receiver Start](../RECEIVER_START.md) before treating the graft as a complete mod.
 
 Graft plan once the channel layout is known: find a code cave or append a PT_LOAD in the target
 btstack; hook the epilogue of the DID-record registration (`sub_26C070` in target, runs after SDP
@@ -168,11 +190,13 @@ at `uap0`, open PF, and write the CarPlay Control client (browse `_carplay-ctrl.
 `/ctrl-int/1/connect`). iAP2 wire format + the Wi-Fi handover messages 0x5700-0x5703 are in
 `Refferences/LIVI/native/livi-helperd/crates/iap2-csm` and the MFi spec r29 §30.2.5.
 
-## Unit facts (car-verified, read-only over SSH 2026-09-27)
+<a id="unit-facts-car-verified-read-only-over-ssh-2026-09-27"></a>
+
+## 📋 Unit facts (car-verified, read-only over SSH 2026-09-27)
 
 QNX 6.5.0 APQ8064 armle; one running btstack = the target bytes; no `/dev/iap*`; only
 `libicuuc.so.58`; `/dev/i2c8` = MFi bus (dio uses `i2c:///dev/i2c8:17`). AP `uap0` hostap active,
 channel 11, Band 2.4GHz, HT20, 8 empty custom-IE slots. Radio sees only 2.4 GHz (three scans; a
 dual-band AP nearby showed only its 2.4 GHz BSS). 2.4 GHz is spec-legal for CarPlay; once the
 CarPlay session starts the phone tells the accessory to drop HFP/A2DP/AVRCP, so 2.4 GHz coexistence
-is a non-issue. Full write-up: `docs/connect-and-usb/WIRELESS_CARPLAY_HU_FEASIBILITY.md`.
+is a non-issue. Full write-up: [Hardware And Donors](../HARDWARE_AND_DONORS.md).

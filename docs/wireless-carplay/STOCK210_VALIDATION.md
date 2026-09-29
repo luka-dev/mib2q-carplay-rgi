@@ -1,16 +1,43 @@
 # Stock 210 + hook/wireless: offline validation, 2026-09-29
 
+_MHI2Q wireless CarPlay — technical reference, integrated 2026-09-29._
+
+---
+
+[Wireless overview](README.md) · [Current stock210 lifecycle](STOCK210_RECEIVER_LIFECYCLE.md)
+
+Maintained technical reference. The evidence below distinguishes static analysis, local QNX tests and observations from the unit.
+
+Implementation and local diagnostic paths in this record refer to the [original source directory](../../wireless/). Run `wireless/...` commands from the repository root; moving this note does not move binaries or logs.
+
+## 📊 Component flow
+
+```mermaid
+flowchart LR
+    accTitle: Offline validation evidence boundaries
+    accDescr: Host tests and QNX fixtures support the offline implementation, while real radio, MFi, media rendering and USB remain a separate validation stage.
+    host["Host protocol and ownership tests"]
+    qnx["QNX builds and ABI guards"]
+    pairing["Independent pairing and crypto"]
+    lifecycle["Three owner generations"]
+    hardware["Real hardware checks pending"]
+    host --> qnx --> pairing --> lifecycle
+    lifecycle -.-> hardware
+```
+
 The pairing implementation is part of `libcarplay_hook.so`. The tested
 `dio_manager` process loads the original MU1316 210.81 `libairplay.so`, not a
 280 receiver. Firmware images were read only; no HU connection or deployment.
 
-Current milestone: [receiver lifecycle](stock210_receiver_lifecycle.md) adds
+Current milestone: [receiver lifecycle](STOCK210_RECEIVER_LIFECYCLE.md) adds
 stable advertised identity, supported capabilities, production stock210 bridge,
 supervisor restart and wired priority. Its combined QEMU test uses three DIO
 processes and two media sessions. Current hashes are in that report/package;
 the milestone tables below record earlier builds, not the current artifact.
 
-## Initial pairing milestone
+<a id="initial-pairing-milestone"></a>
+
+## 🔐 Initial pairing milestone
 
 - Independent client SRP proof (Setup M1–M4), mutual Ed25519 identities
   (Setup M1–M6), Verify M1–M4, then encrypted stock `/info` HTTP 200.
@@ -40,10 +67,12 @@ the milestone tables below record earlier builds, not the current artifact.
   parser rejects duplicate `pi` keys (including case variants), malformed
   lengths/control bytes and clears stale identity after an invalid update.
 
-## Evidence
+<a id="evidence"></a>
 
-Reproduction commands are in [hook/wireless/README.md](../hook/wireless/README.md).
-The log is [qemu_stock210_hook_pairing.log](receiver_bridge/out/qemu_stock210_hook_pairing.log).
+## 🧪 Evidence
+
+Reproduction commands are in [hook/wireless/README.md](../../hook/wireless/README.md).
+The log is [qemu_stock210_hook_pairing.log](../../wireless/receiver_bridge/out/qemu_stock210_hook_pairing.log).
 The fixture uses a disposable QNX4 RAM disk, synthetic random/peripheral
 devices and a loopback network. The independent client implements the SRP,
 HKDF, TLV and HTTP protocol; raw Ed/Curve/ChaCha primitives are shared SDK code
@@ -68,11 +97,13 @@ QNX4's 48-byte limit; ELF assets appended after the large plugin tail of this
 QEMU IFS failed to load. The fixture now puts executable assets near the boot
 programs. Neither fix modifies the original receiver.
 
-## Events and media milestone
+<a id="events-and-media-milestone"></a>
+
+## 📋 Events and media milestone
 
 The full hook now includes private events, screen, PCM and microphone adapters
 around stock 210, gated by `MHI2Q_CP_WIRELESS_MEDIA=1`. Verified offsets and
-lifetime rules are in [stock210_media_crypto_abi.md](stock210_media_crypto_abi.md).
+lifetime rules are in [stock210_media_crypto_abi.md](STOCK210_MEDIA_CRYPTO_ABI.md).
 The media fixture passed with the full audio-enabled hook:
 
 - Pair Setup/Verify, bad-signature rejection, and reconnect using the stored peer.
@@ -97,7 +128,7 @@ full media teardown. The later combined lifecycle fixture covers supervisor
 restart/readiness and the next media session; see the current report above.
 
 Reproduce by adding `--wireless-media-qemu` to the control QEMU command above.
-Log: [qemu_stock210_hook_media.log](receiver_bridge/out/qemu_stock210_hook_media.log).
+Log: [qemu_stock210_hook_media.log](../../wireless/receiver_bridge/out/qemu_stock210_hook_media.log).
 That media milestone build had 36 dynamic exports, no private undefined symbols/emutls,
 and passes the build ABI checks. New C adapters also pass `-Wall -Wextra -Werror`.
 
@@ -117,7 +148,9 @@ physical wired-session or USB handoff test.
 Build log: `build/wireless-media-build.log`. Media fixture code is not linked
 into the hook; original firmware binaries remain unchanged.
 
-## Remaining work
+<a id="remaining-work"></a>
+
+## 🎯 Remaining work
 
 Media stays disabled by default (encrypted SETUP returns 461 without its flag).
 No wireless feature bits or Bonjour `pi` are added. The bridge still requires

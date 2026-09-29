@@ -1,5 +1,30 @@
 # Intermittent AirPlay `/info` serialization failure (offline)
 
+_MHI2Q wireless CarPlay — historical investigation, integrated 2026-09-29._
+
+---
+
+[Wireless overview](../README.md) · [Current stock210 lifecycle](../STOCK210_RECEIVER_LIFECYCLE.md)
+
+Historical investigation; earlier limitations and commands describe that experiment. The current implementation and validation boundary are in the section overview.
+
+Implementation and local diagnostic paths in this record refer to the [original source directory](../../../wireless/receiver_bridge/). Run `wireless/...` commands from the repository root; moving this note does not move binaries or logs.
+
+## 📊 Experiment overview
+
+```mermaid
+flowchart LR
+    accTitle: Historical callback lifetime failure
+    accDescr: The investigation traced info serialization through the manager delegate and found a need to drain callbacks before releasing their owner.
+    request["Concurrent info request"]
+    delegate["Manager property callback"]
+    serialize["Serialize stock CF values"]
+    quiesce["Close admission and drain"]
+    release["Release manager owner"]
+    request --> delegate --> serialize
+    serialize --> quiesce --> release
+```
+
 One strict QNX/QEMU media run returned HTTP 500 to the SDK pairing client's
 encrypted `/info` request. The receiver logged `CFLValidObject` assertions,
 `Unsupported object type: 0`, and failure in `CFPropertyListCreateData` while
@@ -83,7 +108,9 @@ object is safe to walk. Restaging rebuilt the ordinary QEMU image with SHA
 the forced source and both diagnostic markers are absent from it. The
 on-unit receiver and review archive hashes stayed unchanged.
 
-## Source of the non-NULL `bluetoothIDs` branch
+<a id="source-of-the-non-null-bluetoothids-branch"></a>
+
+## 🔗 Source of the non-NULL `bluetoothIDs` branch
 
 The pinned stock `dio_manager` implementation at `0x160028` reads the
 Bluetooth-ID count from `manager+0x288`. A zero count returns the not-found
@@ -132,7 +159,9 @@ and nine successful runs cannot exclude a rare lifetime error. The following
 callback-result trace instead investigates how the stock provider hands
 each property's value back to the AirPlay SDK.
 
-## Shared callback result mismatch in QEMU
+<a id="shared-callback-result-mismatch-in-qemu"></a>
+
+## 🧪 Shared callback result mismatch in QEMU
 
 The saved HTTP 500 trace was made **without** the deliberate Bluetooth-ID
 seed. Its first `/info` returned no `bluetoothIDs`; the failing encrypted
@@ -192,7 +221,9 @@ receiver SHA remains
 the offline review archive remains
 `9dd5324c93ed82b377dd1bfe038b9c4ed99d6c1bb39d48418fef9d5b749758a8`.
 
-## Worker-thread signal reset and CF ownership
+<a id="worker-thread-signal-reset-and-cf-ownership"></a>
+
+## 🔄 Worker-thread signal reset and CF ownership
 
 `--bt-property-reset-qemu` keeps the original callback and worker-side
 builder. Its delegate wrapper serializes copy-property calls, locks the
@@ -297,7 +328,9 @@ unreachable bridge causes the guarded takeover to fail closed. Hardware
 behavior and QNX6 persist-FS locks remain unverified, so this does not
 promote the archive to on-unit use.
 
-## Active media at QUIESCE: unresolved QEMU assertion
+<a id="active-media-at-quiesce-unresolved-qemu-assertion"></a>
+
+## 🧪 Active media at QUIESCE: unresolved QEMU assertion
 
 The earlier QUIESCE fixture drained an overlapping `/info` callback, but did
 not keep a media session active. A new QEMU-only independent client paired,
@@ -427,7 +460,9 @@ restarting `btstack`. The next integration fixture should test a *new*
 generation after real media TEARDOWN; retaining this stopped stock worker in
 one process is only an A/B experiment, not yet a production requirement.
 
-## Active-media wired takeover with the owner helper
+<a id="active-media-wired-takeover-with-the-owner-helper"></a>
+
+## 📋 Active-media wired takeover with the owner helper
 
 The guarded wired helper and QEMU receiver were run together with the exact
 generated wrapper and stock `dio_manager`. The independent client sent an

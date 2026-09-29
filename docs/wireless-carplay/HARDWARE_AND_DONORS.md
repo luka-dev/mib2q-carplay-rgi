@@ -1,12 +1,22 @@
 # Wireless CarPlay on the Head Unit
 
+_MHI2Q wireless CarPlay — technical reference, integrated 2026-09-29._
+
+---
+
+[Wireless overview](README.md) · [Current stock210 lifecycle](STOCK210_RECEIVER_LIFECYCLE.md)
+
+Maintained technical reference. The evidence below distinguishes static analysis, local QNX tests and observations from the unit.
+
+Implementation and local diagnostic paths in this record refer to the [original source directory](../connect-and-usb/). Run `wireless/...` commands from the repository root; moving this note does not move binaries or logs.
+
 *Factory Bluetooth donors and the missing wireless path on MHI2Q. The current mod preserves AirPlay210 and adds pairing/security in the hook.*
 
 ---
 
 ## 📋 Summary
 
-**Updated 2026-09-29:** the original "only btstack is missing" assessment was incomplete. In addition to Bluetooth/iAP2 discovery and transport, stock AirPlay210 needs CU pairing and modern encrypted control/events/media for the inspected iOS wireless path. Those adapters now live in `hook/wireless`; a Rust daemon and receiver bridge integrate startup and ownership. The combined QNX/QEMU lifecycle passes, while real iPhone/MFi/media/USB behavior remains unverified. See the [current implementation and next steps](../../wireless/README.md) and [receiver lifecycle evidence](../../wireless/stock210_receiver_lifecycle.md). The donor analysis below records the earlier static investigation; it is not a claim of an already working vehicle installation.
+**Updated 2026-09-29:** the original "only btstack is missing" assessment was incomplete. In addition to Bluetooth/iAP2 discovery and transport, stock AirPlay210 needs CU pairing and modern encrypted control/events/media for the inspected iOS wireless path. Those adapters now live in `hook/wireless`; a Rust daemon and receiver bridge integrate startup and ownership. The combined QNX/QEMU lifecycle passes, while real iPhone/MFi/media/USB behavior remains unverified. See the [current implementation and next steps](README.md) and [receiver lifecycle evidence](STOCK210_RECEIVER_LIFECYCLE.md). The donor analysis below records the earlier static investigation; it is not a claim of an already working vehicle installation.
 
 Three firmwares settle it. MH2p ships wireless CarPlay from the factory, MHI2 MU1439 ships the iAP half of it on **our exact Bluetooth chip and our exact build line**, and no MHI2Q build ships either. **[decompile]**
 
@@ -26,22 +36,22 @@ Read out of `Firmwares/HU/MH2p_US_AUG35_P2873`. MH2p is MIB2P on Tegra with a Ma
 ```mermaid
 sequenceDiagram
   accTitle: Factory wireless CarPlay bring-up on MH2p
-  accDescr: The phone opens an iAP2 Bluetooth link to btstack, which publishes the link as a device node; the iAP2 connection manager authenticates over the MFi chip and sends the Wi-Fi credentials; the phone joins the access point and libairplay's Control client requests the session.
-  participant P as iPhone
-  participant B as btstack
-  participant I as iap2connectionmanager
-  participant W as Access point
-  participant A as libairplay
-  B->>B: register iAP2 + CarPlay SDP records on RFCOMM channels
-  P->>B: connect to the iAP2 service
-  B->>B: validate handshake, publish /dev/iapDevice-…
-  B->>I: asi.connectivity.bluetooth.iap updateActiveDevices
-  I->>I: open the device node, run iAP2, MFi over /dev/i2cmfi
-  I->>P: AccessoryWiFiConfigurationInformation 0x5703
-  P->>W: associate, beacon carries the Apple vendor element
-  P->>P: advertise _carplay-ctrl._tcp
-  A->>P: GET /ctrl-int/1/connect
-  P->>A: AirPlay session over Wi-Fi
+  accDescr: The phone opens an iAP2 Bluetooth link to btstack, which publishes the link as a device node, the iAP2 connection manager authenticates over the MFi chip and sends the Wi-Fi credentials, the phone joins the access point and libairplay's Control client requests the session.
+  participant phone as iPhone
+  participant btstack as btstack
+  participant iap2_manager as iap2connectionmanager
+  participant access_point as Access point
+  participant airplay_receiver as libairplay
+  btstack->>btstack: register iAP2 + CarPlay SDP records on RFCOMM channels
+  phone->>btstack: connect to the iAP2 service
+  btstack->>btstack: validate handshake, publish /dev/iapDevice-…
+  btstack->>iap2_manager: asi.connectivity.bluetooth.iap updateActiveDevices
+  iap2_manager->>iap2_manager: open the device node, run iAP2, MFi over /dev/i2cmfi
+  iap2_manager->>phone: AccessoryWiFiConfigurationInformation 0x5703
+  phone->>access_point: associate, beacon carries the Apple vendor element
+  phone->>phone: advertise _carplay-ctrl._tcp
+  airplay_receiver->>phone: GET /ctrl-int/1/connect
+  phone->>airplay_receiver: AirPlay session over Wi-Fi
 ```
 
 The parts that make it work, with the strings that prove each one:
@@ -97,35 +107,35 @@ flowchart TB
   accTitle: Three firmwares by layer
   accDescr: Comparison of our MHI2Q build, the MU1439 donor and the MH2p factory build across the Bluetooth core, the iAP service layer, the CarPlay record, the iAP2 owner and the session trigger.
   subgraph ours ["🖥️ MHI2Q MU1316 — ours"]
-    o1["✅ Blue SDK core, 31 modules"]
-    o2["❌ no iAP service layer"]
-    o3["❌ no CarPlay record"]
-    o4["⚠️ iAP2 only inside Cinemo, USB"]
-    o5["❌ libairplay 210.81, no Control client"]
+    target_blue_sdk["✅ Blue SDK core, 31 modules"]
+    target_iap_service["❌ no iAP service layer"]
+    target_carplay_record["❌ no CarPlay record"]
+    target_usb_iap2["⚠️ iAP2 only inside Cinemo, USB"]
+    target_receiver["❌ libairplay 210.81, no Control client"]
   end
   subgraph donor ["📦 MHI2 MU1439 — donor"]
-    d1["✅ same Blue SDK core, same 31"]
-    d2["✅ IapServices + IapListener"]
-    d3["❌ no CarPlay record"]
-    d4["✅ iap app, CIapBTChannel"]
-    d5["❌ no Control client"]
+    donor_blue_sdk["✅ same Blue SDK core, same 31"]
+    donor_iap_service["✅ IapServices + IapListener"]
+    donor_carplay_record["❌ no CarPlay record"]
+    donor_iap_app["✅ iap app, CIapBTChannel"]
+    donor_receiver["❌ no Control client"]
   end
   subgraph factory ["🚀 MH2p — factory wireless"]
-    f1["✅ Blue SDK core, other build line"]
-    f2["✅ IapServices"]
-    f3["✅ WirelessCarPlayServices"]
-    f4["✅ iap2connectionmanager"]
-    f5["✅ libairplay 232, Control client"]
+    factory_blue_sdk["✅ Blue SDK core, other build line"]
+    factory_iap_service["✅ IapServices"]
+    factory_carplay_service["✅ WirelessCarPlayServices"]
+    factory_iap2_manager["✅ iap2connectionmanager"]
+    factory_receiver["✅ libairplay 232, Control client"]
   end
-  o1 -.->|"identical"| d1
-  d2 -.->|"what we need"| o2
-  f3 -.->|"reference only"| d3
+  target_blue_sdk -.->|"identical"| donor_blue_sdk
+  donor_iap_service -.->|"what we need"| target_iap_service
+  factory_carplay_service -.->|"reference only"| donor_carplay_record
   classDef primary fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
   classDef success fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
   classDef warning fill:#fef9c3,stroke:#ca8a04,stroke-width:2px,color:#713f12
-  class o1,d1,f1 primary
-  class d2,d4,f2,f3,f4,f5 success
-  class o2,o3,o4,o5,d3,d5 warning
+  class target_blue_sdk,donor_blue_sdk,factory_blue_sdk primary
+  class donor_iap_service,donor_iap_app,factory_iap_service,factory_carplay_service,factory_iap2_manager,factory_receiver success
+  class target_iap_service,target_carplay_record,target_usb_iap2,target_receiver,donor_carplay_record,donor_receiver warning
 ```
 
 | Property | MU1439 donor | MU1316 ours | MH2p factory |
@@ -148,7 +158,7 @@ The donor makes the patch route concrete, because the Blue SDK functions the iAP
 ```mermaid
 flowchart LR
   accTitle: Identifying Blue SDK entry points by anchor
-  accDescr: A string present in both binaries locates an identical wrapper function, whose call at the same position identifies the Blue SDK record and channel registration entry points in our stack.
+  accDescr: airplay_receiver string present in both binaries locates an identical wrapper function, whose call at the same position identifies the Blue SDK record and channel registration entry points in our stack.
   anchor["🔍 shared string anchor"]
   wrap["⚙️ identical wrapper function"]
   donor_fn["📦 donor callee address"]
@@ -195,7 +205,7 @@ Wireless iAP is symmetric, and both halves show up in the donor. **[decompile]**
 
 The probe is `IapServices::queryAttributes` at donor `0x237D90`, which runs an SDP search against the phone with this pattern and asks for attributes `0x0004` and `0x0009`:
 
-```
+```text
 35 17 1C 00000000 decafade decadeaf decacafe   sequence: UUID128 ending cafe
       19 01 00                                  L2CAP
       19 00 03                                  RFCOMM
@@ -209,7 +219,7 @@ That is what produces the donor's `Checking iAP2 capability for 0X%012llX` and `
 
 The donor's `IapServices::init` at `0x23B8A0` is not radio work at all: it publishes the `IapDeviceServices` ASI interface, service UUID `59B50458-C282-42BD-BB46-167700 19A762`, which is exactly the stub library already sitting unused on our unit. That exists so a separate consumer process can be handed the device path. We control both ends, so a graft can skip ASI entirely and hand the RFCOMM payload to our own daemon over a socket, which `btstack` can already open.
 
-The RFCOMM channel layout and receive callback are mapped in [rfcomm_channel_layout.md](../../wireless/rfcomm_channel_layout.md): `registerService` passes the embedded object at `instance+16`, the callback lives at channel offset 8, and the MTU at offset 12 must be 23 to 5035. **[verified, static RE]**
+The RFCOMM channel layout and receive callback are mapped in [rfcomm_channel_layout.md](RFCOMM_CHANNEL_LAYOUT.md): `registerService` passes the embedded object at `instance+16`, the callback lives at channel offset 8, and the MTU at offset 12 must be 23 to 5035. **[verified, static RE]**
 
 ### Confirmed on the unit
 
@@ -262,14 +272,14 @@ Whichever route, the layers above are already covered:
 | Apple vendor element | `uaputl sys_cfg_custom_ie`, with the flag bits for CarPlay over wireless plus the band claim |
 | WLAN firewall | Stock PF quickly blocks incoming traffic to `uap0`. [The offline PF builder](../../wireless/firewall/build_offline.py) prepares four separate profiles with factory-style mDNS and CarPlay port rules before that block; syntax and active-ruleset checks on the unit remain outstanding. |
 | MFi identity | The unit's own coprocessor, already configured for dio as `i2c:///dev/i2c8:17` |
-| The AirPlay session itself | Original MU1316 AirPlay210 uses TCP5000, not the experimental280 receiver's7000. The stock210 bridge now starts the receiver without the USB iAP2 path; the hook supplies pairing/security. See [receiver lifecycle](../../wireless/stock210_receiver_lifecycle.md) for the offline proof and remaining hardware checks. |
+| The AirPlay session itself | Original MU1316 AirPlay210 uses TCP5000, not the experimental280 receiver's7000. The stock210 bridge now starts the receiver without the USB iAP2 path; the hook supplies pairing/security. See [receiver lifecycle](STOCK210_RECEIVER_LIFECYCLE.md) for the offline proof and remaining hardware checks. |
 
 ## 🚧 Open questions before anyone starts
 
 - ~~Which Blue SDK functions register a record and open an RFCOMM server channel, and where they sit in our binary.~~ **Answered**, see [The graft points](#-the-graft-points). What remains is where to put the new code and how to reach an init path that runs after SDP and RFCOMM are up. **[open]**
 - Whether MU1439's ASI interface set is close enough to ours for the graft route to be worth testing at all. Also answerable offline. **[open]**
 - Whether the CarPlay UUID must appear in the extended inquiry response as well as in a record. The specification says the phone decides wireless support from the inquiry response, so probably yes, and MH2p is the only reference for that half. **[spec]**
-- The band is settled in practice: the radio sees no 5 GHz on the unit, so a native attempt would be a 2.4 GHz accessory, which is legal but may then negotiate no Bluetooth profile except iAP2 ([Wireless CarPlay and Wi-Fi](WIRELESS_CARPLAY_AND_WIFI.md)). Whether a region-code change would unlock the A band is **[open]**. **[car]**
+- The band is settled in practice: the radio sees no 5 GHz on the unit, so a native attempt would be a 2.4 GHz accessory, which is legal but may then negotiate no Bluetooth profile except iAP2 ([Wireless CarPlay and Wi-Fi](WIFI_AND_DISCOVERY.md)). Whether a region-code change would unlock the A band is **[open]**. **[car]**
 - How MFi arbitration behaves if an iAP2-over-Bluetooth owner and `dio_manager` both want the coprocessor. **[open]**
 
 ## 💡 Truth levels
@@ -282,4 +292,4 @@ Claims are tagged **[car]** confirmed on the unit, **[decompile]** from reverse 
 - The five rows under [Confirmed on the unit](#confirmed-on-the-unit) are **[car]**, read-only over SSH. Nothing was written, restarted or rebooted, and no wireless path was exercised, because there is none to exercise.
 - The routes and their verdicts are engineering judgement, not measurement. Treat the table as a starting position, not a plan of record.
 
-Related: [Wireless CarPlay and Wi-Fi](WIRELESS_CARPLAY_AND_WIFI.md) · [USB and NCM Connect](USB_AND_NCM_CONNECT.md) · [Session Lifecycle](SESSION_LIFECYCLE.md) · [MHI2 MU1439 Port](../reference/MHI2_MU1439_PORT.md) · sibling project `cp-wireless-to-usb-proxy`
+Related: [Wireless CarPlay and Wi-Fi](WIFI_AND_DISCOVERY.md) · [USB and NCM Connect](../connect-and-usb/USB_AND_NCM_CONNECT.md) · [Session Lifecycle](../connect-and-usb/SESSION_LIFECYCLE.md) · [MHI2 MU1439 Port](../reference/MHI2_MU1439_PORT.md) · sibling project `cp-wireless-to-usb-proxy`

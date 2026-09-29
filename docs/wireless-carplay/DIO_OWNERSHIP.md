@@ -1,9 +1,45 @@
 # Smartphone Integrator ownership for wireless startup
 
+_MHI2Q wireless CarPlay — technical reference, integrated 2026-09-29._
+
+---
+
+[Wireless overview](README.md) · [Current stock210 lifecycle](STOCK210_RECEIVER_LIFECYCLE.md)
+
+Maintained technical reference. The evidence below distinguishes static analysis, local QNX tests and observations from the unit.
+
+Implementation and local diagnostic paths in this record refer to the [original source directory](../../wireless/integration/). Run `wireless/...` commands from the repository root; moving this note does not move binaries or logs.
+
+## 📊 Component flow
+
+```mermaid
+stateDiagram-v2
+    accTitle: Wireless and wired DIO ownership
+    accDescr: The owner lock allows one DIO process. A wired priority holder drains wireless before takeover, and wireless resumes after the wired owner releases its locks.
+    state "Wireless owner ready" as wireless_ready
+    state "Wireless media active" as wireless_media
+    state "Close admission and drain" as drain_wireless
+    state "Release wireless owner" as release_wireless
+    state "Wired SI child owns DIO" as wired_owner
+    state "Start fresh wireless owner" as restart_wireless
+    [*] --> wireless_ready
+    wireless_ready --> wireless_media: Paired SETUP
+    wireless_media --> restart_wireless: Full teardown exits DIO
+    wireless_ready --> drain_wireless: Wired priority claimed
+    wireless_media --> drain_wireless: Wired priority claimed
+    drain_wireless --> release_wireless: QUIESCE acknowledged
+    release_wireless --> wired_owner: Owner lock acquired
+    wired_owner --> restart_wireless: Wired child exits
+    restart_wireless --> wireless_ready: Receiver ready
+    wireless_ready --> [*]: Supervisor shutdown
+```
+
 Offline/static assessment for the exact MU1316 P5087 image, 2026-09-28.
 No process on the head unit was started, stopped, or modified.
 
-## Verified process boundary
+<a id="verified-process-boundary"></a>
+
+## 📋 Verified process boundary
 
 The stock `MU1316-system/etc/eso/production/smartphone_integrator.json`
 declares `children.carplay.exec = dio_manager`. The repository's wired mod's
@@ -28,7 +64,9 @@ co-preload, iAP2, CarPlay Control, and STOP/START tests establish library and
 protocol compatibility only after a process exists. They do not establish
 any boot-to-wireless startup edge.
 
-## SI request paths traced so far
+<a id="si-request-paths-traced-so-far"></a>
+
+## 📋 SI request paths traced so far
 
 The factory `dsi.smartphoneintegration.ems_table.json` exposes
 `DSISmartphoneIntegration.connectDevice(deviceID, connectionMethod)` and
@@ -80,7 +118,9 @@ explicit single-owner handoff between
 an on-demand wireless dio and SI's wired child. Do not use the trace
 callback as the production trigger.
 
-## Offline owner handoff candidate
+<a id="offline-owner-handoff-candidate"></a>
+
+## 📋 Offline owner handoff candidate
 
 ### Expected in-car behavior and USB transition
 

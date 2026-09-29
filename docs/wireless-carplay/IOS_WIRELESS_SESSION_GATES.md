@@ -1,16 +1,42 @@
 # iOS wireless CarPlay gates: stock 210 requires a pairing/crypto extension
 
+_MHI2Q wireless CarPlay — technical reference, integrated 2026-09-29._
+
+---
+
+[Wireless overview](README.md) · [Current stock210 lifecycle](STOCK210_RECEIVER_LIFECYCLE.md)
+
+Maintained technical reference. The evidence below distinguishes static analysis, local QNX tests and observations from the unit.
+
+Implementation and local diagnostic paths in this record refer to the [original source directory](../../wireless/). Run `wireless/...` commands from the repository root; moving this note does not move binaries or logs.
+
+## 📊 Component flow
+
+```mermaid
+flowchart LR
+    accTitle: Inspected iOS wireless endpoint gates
+    accDescr: Static iOS analysis requires pairing on the non-USB endpoint before encrypted transport and media; a feature advertisement alone cannot implement that path.
+    discovery["Discover wireless endpoint"]
+    capability["Recognize pairing capability"]
+    pairing["Complete CU pairing"]
+    verify["Verify stored peer"]
+    transport["Enable authenticated transport"]
+    discovery --> capability --> pairing --> verify --> transport
+```
+
 Offline static audit, 2026-09-28. This supersedes the proposed **direct wireless
 stock-210 path with bit 37 enabled and bit 38 disabled** in the earlier notes.
 No HU connection, binary patch, restart, or deployment was performed.
 
-Follow-up: [airplay280_pairing_recipe.md](airplay280_pairing_recipe.md) maps
+Follow-up: [airplay280_pairing_recipe.md](AIRPLAY280_PAIRING_RECIPE.md) maps
 the 280.33.8 receiver source to Setup/Verify, MFi signing, the exact encrypted
 transport transition, and the separate event/media keys needed around 210.
 It also records the iOS distinction between StartSession's pairing identifier
 (`pi`) and the Ed25519 public key (`pk`).
 
-## Result
+<a id="result"></a>
+
+## 📋 Result
 
 For the inspected iOS 26.6 and 27 binaries, creation of a CarPlay endpoint
 requires **USB connectivity OR CoreUtils pairing/encryption support**.
@@ -28,7 +54,9 @@ Audi/MHI2Q or a blanket rejection of the version string `210.81`. Keeping
 the original library is still possible, but requires a real protocol extension
 in the hook/front end, including the resulting stream security.
 
-## Inputs and evidence quality
+<a id="inputs-and-evidence-quality"></a>
+
+## 🧪 Inputs and evidence quality
 
 All iOS 27 addresses below are unslid ARM64 virtual addresses from build
 `24A5418b`, iPhone18,1:
@@ -49,11 +77,13 @@ All iOS 27 addresses below are unslid ARM64 virtual addresses from build
   not a separately verified numeric argument.
 
 IDA decompilation was checked against ARM64 instructions for the decisive
-property names. Extracts are in [output/ios_static_audit](output/ios_static_audit/).
+property names. Extracts are in [output/ios_static_audit](../../wireless/output/ios_static_audit).
 Imported prototypes in these extracts are incomplete: `MEMORY[...]()` calls
 must not be treated as accurate C ABI declarations.
 
-## 1. Mandatory wireless pairing gate, independent of discovery method
+<a id="1-mandatory-wireless-pairing-gate-independent-of-discovery-method"></a>
+
+## 🔐 1. Mandatory wireless pairing gate, independent of discovery method
 
 `AirPlaySender::_APEndpointCarPlayCreateWithTransportDevice`
 at **`0x25107EA08`** first constructs an endpoint description from the
@@ -100,7 +130,9 @@ or choosing Bonjour discovery does not remove the requirement at CarPlay
 endpoint creation. This alone does not implement USB priority or seamless
 handover on the HU; our process/session ownership still has to do that.
 
-## 2. iAP2 StartSession synthesizes modern pairing support
+<a id="2-iap2-startsession-synthesizes-modern-pairing-support"></a>
+
+## 🔐 2. iAP2 StartSession synthesizes modern pairing support
 
 `APTransport::_carPlayHelperSession_updateNetworkAndSessionState`
 at **`0x24F3426A4`** processes the host supplied by CarKit and constructs
@@ -132,7 +164,9 @@ Our `wireless/daemon/src/control.rs` sends precisely this classic
 `CarPlayStartSession` flow. Thus the discovery-only assumption “our TXT has
 no bit 38, so the phone will not attempt pairing” is invalid for our design.
 
-## 3. `/info` does not rescue a legacy-only receiver before pairing
+<a id="3-info-does-not-rescue-a-legacy-only-receiver-before-pairing"></a>
+
+## 🔐 3. `/info` does not rescue a legacy-only receiver before pairing
 
 `AirPlaySender::_APEndpointDescriptionAirPlayCreateWithTransportDevice`
 at `0x250F45B9C` builds the initial description from transport advertiser
@@ -168,7 +202,9 @@ pairing state. This audit does not assume `/pair-setup` always precedes
 `/pair-verify`. A missing iAP2 publicKey is accepted by the earlier parser;
 it does not remove the later pairing requirement.
 
-## 4. Successful pairing changes transport security
+<a id="4-successful-pairing-changes-transport-security"></a>
+
+## 🔐 4. Successful pairing changes transport security
 
 The CU capability is read at `0x250FFA3B0..0x250FFA3C4` and retained by
 `ensureConnectedInternal`. After pairing it calls
@@ -199,7 +235,9 @@ media/event setup; a pairing-only server forwarding all other bytes directly
 to the stock 210 listener is incomplete. The full per-stream mapping to
 210's legacy receiver is still implementation work, not proven by this audit.
 
-## 5. Earlier CarKit gates still apply
+<a id="5-earlier-carkit-gates-still-apply"></a>
+
+## 📋 5. Earlier CarKit gates still apply
 
 In the 26.1 carkitd export, classic iAP2 StartSession handler
 `sub_100024B20` (`usr/libexec/carkitd/carkitd.mm:5050`) checks restrictions,
@@ -222,7 +260,9 @@ creation/StartSession/pairing selection path. This is a bounded finding,
 not a claim that every iOS component and every possible stream negotiation
 has been exhausted.
 
-## Engineering consequence for this repository
+<a id="engineering-consequence-for-this-repository"></a>
+
+## 📋 Engineering consequence for this repository
 
 Keep the stock 210 library and wired SI/dio_manager integration if desired.
 The required wireless addition is now explicit:

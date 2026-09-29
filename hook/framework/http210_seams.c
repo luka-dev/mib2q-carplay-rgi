@@ -1,5 +1,5 @@
 /* Stock MU1316 210.81 HTTP boundary. Layout and call sites are verified in
- * wireless/stock210_http_pairing_abi.md. No 280 HTTP structs are used here. */
+ * docs/wireless-carplay/STOCK210_HTTP_PAIRING_ABI.md. No 280 HTTP structs are used here. */
 #include "hook_framework.h"
 #include "../wireless/stock210_abi.h"
 #include "../wireless/wireless_hook.h"

@@ -1,10 +1,42 @@
 # RFCOMM connection, transmit, and credit ABI (static RE, 2026-09-27)
 
-This extends `rfcomm_channel_layout.md` for a *bidirectional* iAP2 bridge.
+_MHI2Q wireless CarPlay — technical reference, integrated 2026-09-29._
+
+---
+
+[Wireless overview](README.md) · [Current stock210 lifecycle](STOCK210_RECEIVER_LIFECYCLE.md)
+
+Maintained technical reference. The evidence below distinguishes static analysis, local QNX tests and observations from the unit.
+
+Implementation and local diagnostic paths in this record refer to the [original source directory](../../wireless/). Run `wireless/...` commands from the repository root; moving this note does not move binaries or logs.
+
+## 📊 Component flow
+
+```mermaid
+sequenceDiagram
+    accTitle: RFCOMM accept and transmit completion
+    accDescr: Incoming connections require an explicit accept branch, receive credits are replenished, and transmit buffers remain owned until completion.
+    participant sdk as Blue SDK
+    participant graft as Graft
+    participant daemon as Local daemon
+    sdk->>graft: Event 1 incoming request
+    graft->>sdk: Accept when daemon is connected
+    sdk-->>graft: Event 2 connected
+    sdk->>graft: Event 5 received bytes
+    graft->>daemon: Bounded worker queue
+    graft->>sdk: Replenish receive credits
+    daemon-->>graft: Outbound bytes
+    graft->>sdk: Queue packet within peer MTU
+    sdk-->>graft: Event 6 releases packet
+```
+
+This extends [Rfcomm Channel Layout](RFCOMM_CHANNEL_LAYOUT.md) for a *bidirectional* iAP2 bridge.
 Addresses are ARM virtual addresses, donor MU1439 / target MU1316. The target
 binary and the head unit were not changed.
 
-## Incoming connection must be accepted
+<a id="incoming-connection-must-be-accepted"></a>
+
+## 📋 Incoming connection must be accepted
 
 The SDK dispatches event code **1** to the channel callback for an incoming
 RFCOMM connection request. `IapServices::rfEvent` in the donor calls
@@ -24,7 +56,9 @@ and call position. The donor HFP failure path calls `0x241EA0(channel,0)`;
 the target calls `0x2774BC(channel,0)`. The two callees also decompile line
 for line, including the nonzero accept branch.
 
-## Sending bytes back to the phone
+<a id="sending-bytes-back-to-the-phone"></a>
+
+## 📋 Sending bytes back to the phone
 
 The donor's `/dev/iapDevice` write handler `0x23B290` queues an owned byte
 vector. Its send scheduler `0x237CF4` calls `sub_241D5C(channel, packet)`
@@ -74,7 +108,9 @@ Transmit mapping used the HFP send caller: donor `0x2549C0` and target
 `0x277378` at the same position. The send functions and payload-limit
 functions were then decompiled on both sides and match field for field.
 
-## Receive credits
+<a id="receive-credits"></a>
+
+## 📋 Receive credits
 
 For event **5**, RFCOMM's event builder decrements the channel's receive
 credit at `+0x8A` (`0x208B4C` donor / `0x2040C0` target) before invoking the
@@ -99,6 +135,6 @@ donor `HfRfCallback` calls `0x241CC0` at `0x258370`, and target calls
 | replenish receive credits | `0x241CC0` | `0x2772DC` |
 | queue transmit packet | `0x241D5C` | `0x277378` |
 
-The queue-to-daemon transport and its bounds are still an implementation
-decision. The Bluetooth callback must do bounded work; blocking socket I/O
+The [graft implementation](BTSTACK_GRAFT.md) now uses a bounded callback queue
+and a socket worker; this ABI record predates that integration. The Bluetooth callback must do bounded work; blocking socket I/O
 there would affect the car's other Bluetooth services.

@@ -1,4 +1,4 @@
-/* Stock210-only media adapters. See wireless/stock210_media_crypto_abi.md.
+/* Stock210-only media adapters. See docs/wireless-carplay/STOCK210_MEDIA_CRYPTO_ABI.md.
  * All SDK objects remain private to pairing_sdk.c. Here CF objects are stock's.
  * This module is opt-in until the complete offline/media validation passes. */
 #include "media.h"

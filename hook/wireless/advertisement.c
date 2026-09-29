@@ -1,6 +1,7 @@
 /* One capability source for stock210 /info and every Bonjour TXT rebuild.
  * Keep stock sourceVersion/deviceID/display identity. Private 280 CF objects
- * must never enter these dictionaries. See stock210_receiver_lifecycle.md. */
+ * must never enter these dictionaries.
+ * See docs/wireless-carplay/STOCK210_RECEIVER_LIFECYCLE.md. */
 #include "wireless_hook.h"
 #include "stock210_abi.h"
 #include "advertisement.h"

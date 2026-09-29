@@ -1,5 +1,32 @@
 # Stock AirPlay interface and Bonjour gate (MU1316, offline)
 
+_MHI2Q wireless CarPlay — historical investigation, integrated 2026-09-29._
+
+---
+
+[Wireless overview](../README.md) · [Current stock210 lifecycle](../STOCK210_RECEIVER_LIFECYCLE.md)
+
+Historical investigation; earlier limitations and commands describe that experiment. The current implementation and validation boundary are in the section overview.
+
+Implementation and local diagnostic paths in this record refer to the [original source directory](../../../wireless/receiver_bridge/). Run `wireless/...` commands from the repository root; moving this note does not move binaries or logs.
+
+## 📊 Experiment overview
+
+```mermaid
+flowchart LR
+    accTitle: Historical Bonjour readiness probe
+    accDescr: A valid interface name, successful DNS-SD registration and matching HTTP listener were checked separately; loopback registration does not prove multicast.
+    interface["Resolve configured interface"]
+    register["Register Bonjour service"]
+    port["Record advertised port"]
+    info["Probe matching HTTP listener"]
+    network["Multicast remains unverified"]
+    interface --> register --> port --> info
+    register -.-> network
+```
+
+## 📋 Implementation and evidence
+
 This is static analysis plus a QEMU A/B test of the exact MU1316
 `dio_manager` and `libairplay.so`. It does not establish a wireless phone
 session or authorize an on-unit change.

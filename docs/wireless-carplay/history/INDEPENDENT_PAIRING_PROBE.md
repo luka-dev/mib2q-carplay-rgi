@@ -1,5 +1,34 @@
 # Independent AirPlay pairing probe (offline QNX/QEMU)
 
+_MHI2Q wireless CarPlay — historical investigation, integrated 2026-09-29._
+
+---
+
+[Wireless overview](../README.md) · [Current stock210 lifecycle](../STOCK210_RECEIVER_LIFECYCLE.md)
+
+Historical investigation; earlier limitations and commands describe that experiment. The current implementation and validation boundary are in the section overview.
+
+Implementation and local diagnostic paths in this record refer to the [original source directory](../../../wireless/receiver_bridge/). Run `wireless/...` commands from the repository root; moving this note does not move binaries or logs.
+
+## 📊 Experiment overview
+
+```mermaid
+sequenceDiagram
+    accTitle: Independent pairing probe boundaries
+    accDescr: The client implements SRP and HTTP state machines independently while loading low-level primitives from a separate helper.
+    participant client as Independent QNX client
+    participant receiver as Test receiver
+    participant crypto as Raw crypto helper
+    client->>receiver: Pair Setup M1 through M6
+    client->>crypto: Verify identity signature
+    client->>receiver: Pair Verify M1 through M4
+    client->>crypto: Derive and use transport primitives
+    client->>receiver: Encrypted info request
+    receiver-->>client: Authenticated HTTP 200
+```
+
+## 📋 Implementation and evidence
+
 The QEMU-only `independent_srp_qemu.c` client implements SRP-6a and the
 HTTP/TLV8 pair-setup and pair-verify state machines without `PairingSession`. It uses QNX
 OpenSSL 0.9.8 for BIGNUM, SHA-512 and HKDF. For the M5/M6 identity exchange
@@ -41,7 +70,7 @@ keychain with mode `0600`.
 The independent client waits for the capture probe's completion marker so
 its HTTP traffic cannot race the existing `/info` diagnostic.
 
-Use the separate `--dump-txt-qemu` baseline in `identity_and_pairing.md` to
+Use the separate `--dump-txt-qemu` baseline in [Receiver Identity](RECEIVER_IDENTITY.md) to
 compare Bonjour and `/info` identity. Long serial hex dumps can interleave
 with other QNX process output in the combined image.
 
@@ -50,7 +79,7 @@ and encrypted `/info`**,
 while using the receiver library's low-level Curve25519, Ed25519 and ChaCha
 primitives. Further encrypted control commands, media and iPhone
 interoperability remain untested.
-The SDK client's complete flow is documented in `identity_and_pairing.md`.
+The SDK client's complete flow is documented in [Receiver Identity](RECEIVER_IDENTITY.md).
 
 An optional control-session diagnostic adds `--independent-setup-qemu` to the
 command above. It sends an authenticated `SETUP /stream` containing an empty
@@ -161,7 +190,7 @@ subsequently completed `/info` and the media session in that same image.
 The strict harness correctly rejected the run. The invalid object's origin
 is not yet identified; this prevents claiming stable pairing across repeats.
 Ten subsequent QEMU runs with an optional `/info` CF-type diagnostic passed,
-but its logging can change timing; see `info_cfdiag.md`.
+but its logging can change timing; see [Info Serialization](INFO_SERIALIZATION.md).
 
 The optional `--screen-linger-qemu` diagnostic keeps the verified client's
 TCP socket open for two seconds after the encrypted TEARDOWN response. The

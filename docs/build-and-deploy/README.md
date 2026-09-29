@@ -8,6 +8,8 @@
 
 There is **no packaging script** (`package_mib.py`, `package_protected.sh` and `deploy_over_ssh.sh` were deleted). The build scripts do one job: compile source into loose binaries under `build/`. A release is then assembled **by hand** from three source folders — `build/` (compiled outputs), `models/` (the AI upmix models), and `deploy/` (scripts, patched firmware, PF profiles) — following a fixed source→on-unit map. That staged tree goes into `mod/carplay/root/` on an M.I.B. SD card and is installed by `custom.sh`, or is pushed file by file over SSH by hand.
 
+The separate [wireless stock210 review builder](../wireless-carplay/README.md#build-and-reproduce) assembles an offline review archive, not a shipping installer; its source remains under `wireless/`.
+
 This page is the entry point for the domain. Start with [Build System](BUILD_SYSTEM.md) for how the Docker QNX toolchain produces the `.so` / renderers / jar, then [Deploy and Release](DEPLOY_AND_RELEASE.md) for hand-assembly and getting it onto the car, [VIN Protection](VIN_PROTECTION.md) for locking a build to one VIN, and [RE Artifacts](RE_ARTIFACTS.md) for where the reverse-engineering assets live. For the hub note and the trap list see [Home](../README.md) and [Landmines](../LANDMINES.md).
 
 ## 📊 Source to unit at a glance

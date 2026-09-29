@@ -14,6 +14,7 @@ import tarfile
 REPO=Path(__file__).resolve().parents[2]
 AUDI=REPO.parents[1]
 OUT=REPO/'wireless/out'
+DOCS=REPO/'docs/wireless-carplay'
 
 
 def run(*args):
@@ -39,13 +40,16 @@ def main():
         'hooks/mhi2q-wireless-daemon':'wireless/daemon/target/armv7-unknown-nto-qnx650/release/mhi2q-wireless-daemon',
         'config/wireless_carplay.env.example':'wireless/integration/out/wireless_carplay.stock210.env.example',
         'config/rc.local.review.sh':'wireless/integration/out/rc.local.stock210.offline.sh',
-        'reference/stock210_receiver_lifecycle.md':'wireless/stock210_receiver_lifecycle.md',
-        'reference/stock210_media_crypto_abi.md':'wireless/stock210_media_crypto_abi.md',
-        'reference/stock210_http_pairing_abi.md':'wireless/stock210_http_pairing_abi.md',
-        'reference/rfcomm_channel_layout.md':'wireless/rfcomm_channel_layout.md',
-        'reference/receiver_bridge/out/qemu_stock210_lifecycle.log':'wireless/receiver_bridge/out/qemu_stock210_lifecycle.log',
-        'reference/daemon/out/qemu_daemon_phone_control.log':'wireless/daemon/out/qemu_daemon_phone_control.log',
+        'wireless/receiver_bridge/out/qemu_stock210_lifecycle.log':'wireless/receiver_bridge/out/qemu_stock210_lifecycle.log',
+        'wireless/daemon/out/qemu_daemon_phone_control.log':'wireless/daemon/out/qemu_daemon_phone_control.log',
     }
+    # Preserve canonical relative paths so links between the migrated notes and
+    # the included logs also work inside the review archive.
+    if not (DOCS/'README.md').is_file():
+        raise RuntimeError('stock210 documentation index is missing')
+    for path in sorted(DOCS.rglob('*.md')):
+        relative=path.relative_to(REPO).as_posix()
+        files[relative]=relative
     manifest={'receiver':'stock210','sourceVersion':'210.81','port':5000,
               'stock_libairplay_sha256':'01c116b1674215daa0602d556a6d9b2eb48c2113ca294ea1f5d58787e3f656f2',
               'files':{}}
@@ -69,7 +73,9 @@ Use the per-unit configuration template; empty AP/device values intentionally
 prevent daemon startup. Pairing keys and owner locks belong on /mnt/persist.
 The generated wrapper gives SI's wired child priority and the supervisor owns
 wireless generations. Existing wired monitor/helper files remain dependencies.
-See reference/stock210_receiver_lifecycle.md for evidence and hardware limits.
+See docs/wireless-carplay/README.md and STOCK210_RECEIVER_LIFECYCLE.md in that
+directory for evidence and hardware limits. Links to other project domains
+and source files refer to the repository checkout, outside this review archive.
 ''')
     digest=hashlib.sha256(archive.read_bytes()).hexdigest()
     archive.with_suffix('.tar.sha256').write_text(f'{digest}  {archive.name}\n')

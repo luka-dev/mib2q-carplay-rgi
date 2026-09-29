@@ -1,12 +1,47 @@
 # Stock210 wireless readiness, restart and wired priority
 
+_MHI2Q wireless CarPlay — technical reference, integrated 2026-09-29._
+
+---
+
+[Wireless overview](README.md) · [Pairing and media validation](STOCK210_VALIDATION.md)
+
+Maintained technical reference. The evidence below distinguishes static analysis, local QNX tests and observations from the unit.
+
+Implementation and local diagnostic paths in this record refer to the [original source directory](../../wireless/). Run `wireless/...` commands from the repository root; moving this note does not move binaries or logs.
+
+## 📊 Component flow
+
+```mermaid
+sequenceDiagram
+    accTitle: Three generation lifecycle validation
+    accDescr: The combined QNX fixture tests normal media teardown, priority-owner drain and wireless recovery while preserving one pairing identifier.
+    participant supervisor as Native supervisor
+    participant dio as Stock DIO and hook
+    participant phone as Synthetic phone
+    participant wired as Synthetic wired child
+    supervisor->>dio: Start generation 1
+    phone->>dio: Pairing and media session
+    phone->>dio: TEARDOWN
+    dio-->>supervisor: Stock process exits
+    supervisor->>dio: Start generation 2 with saved pi
+    phone->>dio: Stored-peer Verify and media
+    wired->>dio: Claim priority, DRAIN, QUIESCE
+    dio-->>wired: Release owner after quiesce
+    wired->>wired: Hold then release owner
+    supervisor->>dio: Start generation 3
+    phone->>dio: Stored-peer Verify with same pi
+```
+
 2026-09-29, offline candidate. The receiver remains the original MU1316
 `libairplay.so` 210.81, SHA-256
 `01c116b1674215daa0602d556a6d9b2eb48c2113ca294ea1f5d58787e3f656f2`.
 No original firmware ELF was changed. No HU connection, installation, process
 restart or reboot was performed.
 
-## Production components
+<a id="production-components"></a>
+
+## 📋 Production components
 
 `hook/wireless/advertisement.c` adds the persisted pairing identifier `pi` to
 stock Bonjour TXT and `/info`. `AirPlayGetFeatures` is the shared stock call
@@ -36,7 +71,9 @@ Mismatching configured source versions or ports are rejected.
 Bonjour registration here means the DNS-SD API accepted the advertisement.
 Actual multicast discovery on uap0 remains a hardware validation item.
 
-## Verified stock seams
+<a id="verified-stock-seams"></a>
+
+## 📋 Verified stock seams
 
 Addresses below are in the target210 shared object unless marked dio_manager.
 
@@ -63,7 +100,9 @@ separately checks the complete 15-word copy sequence and existing DIO manager
 callsite/delegate/property synchronization guards. All 15 fields are copied;
 only existing property/session callback slots3/5/6 are wrapped.
 
-## Queue and owner lifecycle
+<a id="queue-and-owner-lifecycle"></a>
+
+## 🔄 Queue and owner lifecycle
 
 `carplay_wireless_receiver_control(server,operation)` accepts only the current
 stock gAirPlayReceiverServer and a captured/retained HTTP queue:
@@ -96,7 +135,9 @@ files. Both wireless and wired wrappers export that path to their monitors.
 The marker is advisory; the kernel locks determine ownership. Pairing private
 keys stay under `/mnt/persist/mhi2q-carplay/pairing`.
 
-## Reproduction and deliverables
+<a id="reproduction-and-deliverables"></a>
+
+## 📦 Reproduction and deliverables
 
 ```sh
 bash scripts/build_hook_wireless.sh
@@ -128,10 +169,12 @@ wrapper and launch/config templates. It contains no libairplay replacement and
 no installer. Existing btstack graft, AP/firewall configuration and wired mod
 files remain prerequisites; the historical280 installer must not install it.
 
-## Validation completed 2026-09-29
+<a id="validation-completed-2026-09-29"></a>
+
+## 🧪 Validation completed 2026-09-29
 
 The final combined run passed in
-[qemu_stock210_lifecycle.log](receiver_bridge/out/qemu_stock210_lifecycle.log).
+[qemu_stock210_lifecycle.log](../../wireless/receiver_bridge/out/qemu_stock210_lifecycle.log).
 Three distinct owner/daemon generations advertised one persisted pi. The
 independent peer compared iAP2 StartSession with signed PairSetup identity;
 four decrypted `/info` responses agreed on pi, 210.81, feature bits and PCM16
@@ -155,7 +198,7 @@ cross-linking still emits the existing EABI attribute34 warnings; the daemon
 runs in the QNX fixtures.
 
 The production daemon (compiled without the probe feature) also passes the
-separate [QNX synthetic phone/control regression](daemon/out/qemu_daemon_phone_control.log)
+separate [QNX synthetic phone/control regression](../../wireless/daemon/out/qemu_daemon_phone_control.log)
 with the stock210 profile. Static btstack graft checks still pass 8/8.
 
 | Current artifact | Bytes | SHA-256 |

@@ -1,5 +1,15 @@
 # Wireless CarPlay and Wi-Fi
 
+_MHI2Q wireless CarPlay — technical reference, integrated 2026-09-29._
+
+---
+
+[Wireless overview](README.md) · [Current stock210 lifecycle](STOCK210_RECEIVER_LIFECYCLE.md)
+
+Maintained technical reference. The evidence below distinguishes static analysis, local QNX tests and observations from the unit.
+
+Implementation and local diagnostic paths in this record refer to the [original source directory](../connect-and-usb/). Run `wireless/...` commands from the repository root; moving this note does not move binaries or logs.
+
 *What the iPhone actually requires to bring CarPlay up over Wi-Fi, why there is no 5 GHz check anywhere in iOS, and why this head unit is 2.4 GHz only and has no wireless CarPlay transport at all.*
 
 ---
@@ -29,20 +39,20 @@ A wireless session has four decision points between the Bluetooth handshake and 
 ```mermaid
 sequenceDiagram
   accTitle: Wireless CarPlay bring-up and its four checks
-  accDescr: The car sends Wi-Fi credentials over Bluetooth, carkitd stores a CarPlay-flagged profile, CoreWiFi joins the access point, and APTransport decides whether the session may run over Wi-Fi; the annotated checks are restrictions, the Apple vendor IE, a scan optimisation and transport eligibility.
-  participant Car as Head unit
-  participant CK as carkitd
-  participant CW as CoreWiFi / MobileWiFi
-  participant AP as APTransport
-  Car->>CK: BLE StartSession {SSID, passphrase, channel, securityType}
-  Note over CK: check 1 = _isRestricted: only<br/>channel stored verbatim
-  CK->>CW: Wi-Fi profile {CARPLAY_NETWORK, CARPLAY_UUID, AP_MODE 2, CHANNEL}
-  Note over CW: check 2 = Apple vendor IE<br/>SUPPORTS_CARPLAY feature bit
-  CW->>CW: auto-join scan and association
-  Note over CW: check 3 = band only to add<br/>the 40 MHz partner channel
-  CW->>AP: interface up with a local address
-  Note over AP: check 4 = transport eligibility<br/>no band term in it
-  AP->>Car: session over Wi-Fi
+  accDescr: The car sends Wi-Fi credentials over Bluetooth, carkitd stores a CarPlay-flagged profile, CoreWiFi joins the access point, and APTransport decides whether the session may run over Wi-Fi, the annotated checks are restrictions, the Apple vendor IE, a scan optimisation and transport eligibility.
+  participant head_unit as Head unit
+  participant carkitd as carkitd
+  participant wifi_stack as CoreWiFi / MobileWiFi
+  participant ap_transport as APTransport
+  head_unit->>carkitd: BLE StartSession {SSID, passphrase, channel, securityType}
+  Note over carkitd: check 1 = _isRestricted: only<br/>channel stored verbatim
+  carkitd->>wifi_stack: Wi-Fi profile {CARPLAY_NETWORK, CARPLAY_UUID, AP_MODE 2, CHANNEL}
+  Note over wifi_stack: check 2 = Apple vendor IE<br/>SUPPORTS_CARPLAY feature bit
+  wifi_stack->>wifi_stack: auto-join scan and association
+  Note over wifi_stack: check 3 = band only to add<br/>the 40 MHz partner channel
+  wifi_stack->>ap_transport: interface up with a local address
+  Note over ap_transport: check 4 = transport eligibility<br/>no band term in it
+  ap_transport->>head_unit: session over Wi-Fi
 ```
 
 ### Check 1 · carkitd takes the channel verbatim
@@ -111,9 +121,9 @@ Two other 5 GHz sightings are red herrings. `CoreUtils` `CUWiFiScanner` has the 
 
 ### Check 4 · transport eligibility, the gate that decides Wi-Fi versus USB
 
-`APTransport` decides whether a discovered car may be used over Wi-Fi, over USB, or not at all, in `carPlayHelperSession_updateNetworkAndSessionState` (`0x24f3426a4`). It is the source of the log line already quoted in [USB and NCM Connect](USB_AND_NCM_CONNECT.md):
+`APTransport` decides whether a discovered car may be used over Wi-Fi, over USB, or not at all, in `carPlayHelperSession_updateNetworkAndSessionState` (`0x24f3426a4`). It is the source of the log line already quoted in [USB and NCM Connect](../connect-and-usb/USB_AND_NCM_CONNECT.md):
 
-```
+```text
 airplayd [APBrowserCarSessionHelper] [Bonjour/USB] WiFi eligible: N (<disabled>), USB eligible: N (No Network Interface)
 ```
 
@@ -189,7 +199,7 @@ The unit does have Wi-Fi hardware, and it is configured for 2.4 GHz everywhere. 
 ```mermaid
 flowchart LR
   accTitle: Head unit WLAN bring-up and its band settings
-  accDescr: The boot script loads the Marvell firmware and driver and raises a host access point interface and a station interface, while the connection manager writes a channel-only access point config that the AP start script applies through uaputl.
+  accDescr: The boot script loads the Marvell firmware and driver and raises a host access point interface and a station interface, while the connection manager writes a channel-only access point config that the ap_transport start script applies through uaputl.
   boot["⚙️ startup.sh start_wlan"]
   fw["📦 mvload w8787_wlan_SDIO_bt_SDIO.bin"]
   drv["🔌 devnp-mrvl_wlan-sdiorm.so drv_mode=3"]
@@ -257,12 +267,12 @@ Against the specification the unit's access point is legal where it counts: chan
 
 The band is not the blocker. Even a spec-perfect 5 GHz access point would change nothing, because the CarPlay stack on this unit has no wireless transport to offer.
 
-- `dio_manager.json` marks `carplay0` as the Bonjour Direct Link interface through `MDNS_DIRECTLINK_IFACE=carplay0`. This does not exclude `uap0`: the stock `mdnsd` still calls `mDNS_RegisterInterface` for other interfaces. The actual WLAN barrier is PF's quick inbound block to `uap0`; see [Wireless firewall](../../wireless/firewall/README.md). **[decompile]**
+- `dio_manager.json` marks `carplay0` as the Bonjour Direct Link interface through `MDNS_DIRECTLINK_IFACE=carplay0`. This does not exclude `uap0`: the stock `mdnsd` still calls `mDNS_RegisterInterface` for other interfaces. The actual WLAN barrier is PF's quick inbound block to `uap0`; see [Wireless firewall](FIREWALL.md). **[decompile]**
 - `smartphone_integrator.json` carries no Wi-Fi or wireless key at all. **[code]**
 - Neither `dio_manager` nor `libairplay` has a wireless CarPlay path. The only related symbol in `libairplay` is the helper `IsWiFiNetworkInterface`, and the transport-type field it feeds (`platformData +0x288`: 1 Ethernet, 2 Wi-Fi, 8 USB, 16 Direct, 32 BTLE, 64 WFD) is set to USB on this unit ([AltScreen RE History](../altscreen-and-video/ALTSCREEN_RE_HISTORY.md)). **[decompile]**
 - The stock HMI Java has `ComaWlanListener` and `WLANSource` for tethering and media, and nothing for CarPlay over Wi-Fi. **[code]**
 
-Doing it inside the head unit means supplying that transport and the missing CU pairing/encrypted control/media around stock AirPlay210. The Bluetooth donor uses our chip and build line, but Bluetooth alone is insufficient. The donor analysis is in [Wireless CarPlay on the Head Unit](WIRELESS_CARPLAY_HU_FEASIBILITY.md); the [current implementation](../../wireless/README.md) records the hook/daemon/bridge integration, passing offline tests and remaining hardware validation.
+Doing it inside the head unit means supplying that transport and the missing CU pairing/encrypted control/media around stock AirPlay210. The Bluetooth donor uses our chip and build line, but Bluetooth alone is insufficient. The donor analysis is in [Wireless CarPlay on the Head Unit](HARDWARE_AND_DONORS.md); the [current implementation](README.md) records the hook/daemon/bridge integration, passing offline tests and remaining hardware validation.
 
 ## 🚀 The path that does exist
 
@@ -329,4 +339,4 @@ Claims are tagged **[car]** confirmed on the unit, **[decompile]** from reverse 
 - The external report of a working iPhone-facing bootstrap is **[open]** and unreproduced here.
 - Nothing in this note was tested on the car. There is no wireless path on the unit to test.
 
-Related: [USB and NCM Connect](USB_AND_NCM_CONNECT.md) · [Session Lifecycle](SESSION_LIFECYCLE.md) · [iOS Version Gate](IOS_VERSION_GATE.md) · [CarPlay Feature Survey](../altscreen-and-video/CARPLAY_FEATURE_SURVEY.md) · sibling project `cp-wireless-to-usb-proxy`
+Related: [USB and NCM Connect](../connect-and-usb/USB_AND_NCM_CONNECT.md) · [Session Lifecycle](../connect-and-usb/SESSION_LIFECYCLE.md) · [iOS Version Gate](../connect-and-usb/IOS_VERSION_GATE.md) · [CarPlay Feature Survey](../altscreen-and-video/CARPLAY_FEATURE_SURVEY.md) · sibling project `cp-wireless-to-usb-proxy`

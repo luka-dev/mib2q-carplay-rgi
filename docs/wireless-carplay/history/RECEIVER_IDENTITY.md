@@ -1,7 +1,32 @@
 # Wireless receiver identity and pairing gap (MU1316, offline)
 
+_MHI2Q wireless CarPlay — historical investigation, integrated 2026-09-29._
+
+---
+
+[Wireless overview](../README.md) · [Current stock210 lifecycle](../STOCK210_RECEIVER_LIFECYCLE.md)
+
+Historical investigation; earlier limitations and commands describe that experiment. The current implementation and validation boundary are in the section overview.
+
+Implementation and local diagnostic paths in this record refer to the [original source directory](../../../wireless/receiver_bridge/). Run `wireless/...` commands from the repository root; moving this note does not move binaries or logs.
+
+## 📊 Experiment overview
+
+```mermaid
+flowchart LR
+    accTitle: Receiver identity field separation
+    accDescr: Device identity identifies the receiver while pi identifies pairing trust; the public signing key is a separate value.
+    device["Device ID in discovery"]
+    pairing["Pairing identifier pi"]
+    public_key["Ed25519 public key pk"]
+    session["StartSession identity fields"]
+    device --> session
+    pairing --> session
+    public_key -.->|Signed pairing exchange| pairing
+```
+
 **Static follow-up, 2026-09-28:** the owner's `Refferences/Carplay` source is
-280.33.8. [The pairing recipe](../airplay280_pairing_recipe.md) now traces
+280.33.8. [The pairing recipe](../AIRPLAY280_PAIRING_RECIPE.md) now traces
 Setup/Verify, corroborates `3939` in the iOS no-PIN branch, and distinguishes
 StartSession field 4 / Bonjour `pi` (pairing identifier) from `pk` (public
 key). The daemon's current 64-hex validation conflates these values and still
@@ -69,7 +94,9 @@ null-audio/software-MFi variant. The crash establishes that this exact artifact
 cannot pass this QEMU startup probe. It does not establish a hardware failure
 or disprove the source receiver's pairing implementation.
 
-## AirPlay 280 pairing candidate, QEMU (2026-09-28)
+<a id="airplay-280-pairing-candidate-qemu-2026-09-28"></a>
+
+## 🧪 AirPlay 280 pairing candidate, QEMU (2026-09-28)
 
 `build_airplay280_qemu.sh` now stages a separate source tree from the local
 legacy receiver and builds it with null audio and software MFi; it never uses
@@ -131,7 +158,7 @@ interoperability, media, actual MFi-chip access, or hardware display/audio.
 An additional QNX client implements its own HTTP/TLV8/SRP pairing state
 machine and completed pair-setup, pair-verify and encrypted `/info` against
 the same receiver, using only the receiver's raw Curve25519, Ed25519 and
-ChaCha primitives (`independent_pairing_probe.md`).
+ChaCha primitives ([Independent Pairing Probe](INDEPENDENT_PAIRING_PROBE.md)).
 The staged build uses software MFi and QEMU substitutions. The 280 source
 currently uses a fixed pairing code `3939`; its suitability for the phone path
 must be verified before any hardware use. The review bundle now includes the
@@ -153,10 +180,12 @@ proof was accepted, its calculated server proof matched M4, and M5/M6
 completed with an independently constructed identity payload and verified
 accessory signature. It calls low-level Ed25519 and ChaCha primitives from
 `libairplay`, but never the SDK pairing state machine. See
-`independent_pairing_probe.md` and `out/qemu_independent_srp_airplay280.log`.
+[Independent Pairing Probe](INDEPENDENT_PAIRING_PROBE.md) and `out/qemu_independent_srp_airplay280.log`.
 Pair-verify remains a same-SDK test.
 
-## Uninstalled hardware candidate
+<a id="uninstalled-hardware-candidate"></a>
+
+## 📦 Uninstalled hardware candidate
 
 The same source overlay also builds without QEMU's null-audio, software-MFi,
 or RAM-keychain substitutions:
@@ -177,7 +206,7 @@ This build supplies QNX's missing `random()` through `RandomBytes` so the
 AirPlay timing thread can run. It also removes an out-of-bounds legacy
 `ScreenRegisterDelegates` write against the 280 SDK's smaller `ScreenPrivate`;
 the QEMU screen-110 probe now reaches SETUP 200 and clean TEARDOWN/shutdown
-in 25 repeat runs (`independent_pairing_probe.md`).
+in 25 repeat runs ([Independent Pairing Probe](INDEPENDENT_PAIRING_PROBE.md)).
 It is an ARM EABI5 QNX shared library with soname `libairplay.so`. Its imports
 include QNX `devctlv` and `snd_pcm_*`; its own exports include
 `MFiPlatform_Initialize`, `MFiPlatform_CopyCertificate`,

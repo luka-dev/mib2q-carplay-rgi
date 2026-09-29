@@ -72,15 +72,15 @@ tests cover reopen, process lock, permissions, corruption and directory symlink.
 The ordinary wired build passes its existing ABI/export checks. Daemon host
 tests (23), QNX daemon cross-build, bridge cross-build and identity protocol
 tests pass. Evidence and exact artifact hashes:
-[pairing validation](../../wireless/stock210_pairing_validation.md).
+[pairing validation](../../docs/wireless-carplay/STOCK210_VALIDATION.md).
 
 Verified structure offsets and commit timing:
-[stock210_http_pairing_abi.md](../../wireless/stock210_http_pairing_abi.md).
+[STOCK210_HTTP_PAIRING_ABI.md](../../docs/wireless-carplay/STOCK210_HTTP_PAIRING_ABI.md).
 Protocol recipe and remaining media keys:
-[airplay280_pairing_recipe.md](../../wireless/airplay280_pairing_recipe.md).
+[airplay280_pairing_recipe.md](../../docs/wireless-carplay/AIRPLAY280_PAIRING_RECIPE.md).
 
 Stock media offsets, key direction, lifecycle and supported-format limits:
-[stock210_media_crypto_abi.md](../../wireless/stock210_media_crypto_abi.md).
+[STOCK210_MEDIA_CRYPTO_ABI.md](../../docs/wireless-carplay/STOCK210_MEDIA_CRYPTO_ABI.md).
 The media fixture replaces HMI/audio hardware edges and fixes ownership in
 its fake OMX UseBuffer implementation; it retains stock crypto consumers,
 jitter buffer, microphone packetizer and screen processing. Fake OMX consumes
@@ -95,4 +95,4 @@ and wireless resume, retaining the same pairing identity in three DIO processes.
 The wired child and MFi/Wi-Fi hardware are synthetic in this test. Pairing-only
 regression and the ordinary wired build also pass. Current implementation,
 review package and remaining hardware checks:
-[receiver lifecycle](../../wireless/stock210_receiver_lifecycle.md).
+[receiver lifecycle](../../docs/wireless-carplay/STOCK210_RECEIVER_LIFECYCLE.md).

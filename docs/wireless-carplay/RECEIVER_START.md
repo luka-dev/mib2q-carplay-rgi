@@ -1,5 +1,31 @@
 # Receiver startup gap for wireless CarPlay
 
+_MHI2Q wireless CarPlay — technical reference, integrated 2026-09-29._
+
+---
+
+[Wireless overview](README.md) · [Current stock210 lifecycle](STOCK210_RECEIVER_LIFECYCLE.md)
+
+Maintained technical reference. The evidence below distinguishes static analysis, local QNX tests and observations from the unit.
+
+Implementation and local diagnostic paths in this record refer to the [original source directory](../../wireless/). Run `wireless/...` commands from the repository root; moving this note does not move binaries or logs.
+
+## 📊 Component flow
+
+```mermaid
+flowchart LR
+    accTitle: Stock receiver startup and restart
+    accDescr: The bridge reaches the existing DIO start event; a full media teardown can exit DIO, requiring a new supervisor generation.
+    capture["Capture real DIO manager"]
+    display["Read stock display table"]
+    start["Queue StartAirPlay event"]
+    receiver["Start original AirPlay210"]
+    teardown["Full media teardown"]
+    restart["Supervisor replaces DIO"]
+    capture --> display --> start --> receiver --> teardown --> restart
+    restart --> capture
+```
+
 Static/QEMU assessment, 2026-09-27. The current RFCOMM graft and Rust daemon
 can negotiate an iAP2 wireless control session, but they do not cause stock
 `dio_manager` to start its AirPlay receiver. The `libairplay` feature-bit patch
@@ -25,7 +51,9 @@ the current implementation has no causal edge from wireless iAP2
 authentication to `CAirPlayMainThread::run`. This is a required integration
 piece, separate from SDP/RFCOMM, Device IE, mDNS and PF.
 
-## Stock object and start path (MU1316 static disassembly)
+<a id="stock-object-and-start-path-mu1316-static-disassembly"></a>
+
+## 📋 Stock object and start path (MU1316 static disassembly)
 
 The ordinary `CDIOManager` constructor is `0x15A064`. Its sole direct caller,
 `0x171C50` inside `CDIOController` virtual init `0x171C10` (vtable
@@ -93,7 +121,9 @@ This removes the QEMU display seed from the integrated first-start test,
 although the correct mode for the physical display and the other DSI values
 still need validation.
 
-## Exact stock start dispatch
+<a id="exact-stock-start-dispatch"></a>
+
+## 📋 Exact stock start dispatch
 
 The start event closes the previously missing call edge. Once the DSI handler
 has populated the manager, it checks payload `+0x44` (a count) for nonzero,
@@ -140,7 +170,9 @@ There is a second direct call to `0x157460` at `0x15BF40`; it comes from a
 different manager path. Neither call proves a wireless session can skip the
 DSI event's configuration and ownership steps.
 
-## Stock stop path and restart constraint
+<a id="stock-stop-path-and-restart-constraint"></a>
+
+## 🔄 Stock stop path and restart constraint
 
 The routine whose log name is `signalStopAirPlayMainThread` is `0x154AD8`.
 It checks `manager+0x168` and, when a thread object exists, calls `0x154188`
@@ -173,7 +205,9 @@ STOP. The destructor walks other members and does not visibly own this
 pointer. Do not infer that the 0x18-byte allocation may be manually freed;
 the complete ownership contract is still unresolved.
 
-## QEMU stop/restart A/B result
+<a id="qemu-stoprestart-ab-result"></a>
+
+## 🧪 QEMU stop/restart A/B result
 
 The stock thread-stop method `0x154AD8` is unsuitable for a wireless-session
 STOP. In the real stock `dio_manager` under the QEMU broker/servicemgr mesh,
@@ -222,7 +256,7 @@ map the remaining `0x15A758` helper effects and restart/teardown ownership,
 then make a QNX bridge that validates the complete path under QEMU before any
 on-unit test.
 
-The discovery failure was narrowed further in `receiver_bridge/bonjour_gate.md`.
+The discovery failure was narrowed further in [Bonjour Readiness](history/BONJOUR_READINESS.md).
 Stock dio sets `interfaceName=carplay0` at `0x15C57C`; stock libairplay
 returns `-6727` when `if_nametoindex("carplay0")` is zero, before calling
 `DNSServiceRegister`. The observed HU AP is `uap0`. In a QEMU-only A/B run,

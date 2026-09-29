@@ -1,10 +1,40 @@
 # Stock 210.81 HTTP boundary for hook/wireless
 
+_MHI2Q wireless CarPlay — technical reference, integrated 2026-09-29._
+
+---
+
+[Wireless overview](README.md) · [Current stock210 lifecycle](STOCK210_RECEIVER_LIFECYCLE.md)
+
+Maintained technical reference. The evidence below distinguishes static analysis, local QNX tests and observations from the unit.
+
+Implementation and local diagnostic paths in this record refer to the [original source directory](../../wireless/). Run `wireless/...` commands from the repository root; moving this note does not move binaries or logs.
+
+## 📊 Component flow
+
+```mermaid
+sequenceDiagram
+    accTitle: Verify M4 encryption transition
+    accDescr: The hook enables record encryption only after the original plaintext Verify M4 response has completely drained from the stock writer.
+    participant phone as Phone
+    participant hook as Pairing hook
+    participant writer as Stock socket writer
+    phone->>hook: Pair Verify M3
+    hook->>writer: Queue plaintext M4 response
+    writer-->>hook: Partial write returns 11
+    hook->>writer: Continue remaining M4 bytes
+    writer-->>hook: Fully drained returns 0
+    hook->>hook: Commit encrypted record state
+    phone->>hook: Encrypted next request
+```
+
 Offline IDA analysis, 2026-09-28/29. Target MU1316 P5087 `eso/lib/libairplay.so`,
 SHA-256 `01c116b1674215daa0602d556a6d9b2eb48c2113ca294ea1f5d58787e3f656f2`.
 Addresses below are ELF-relative ARM addresses. The original library is unchanged.
 
-## Delegates and connection lifetime
+<a id="delegates-and-connection-lifetime"></a>
+
+## 🔄 Delegates and connection lifetime
 
 `HTTPServerCreate` at `0x6c324` copies 11 ARM32 delegate words to server+64.
 AirTunes installs connection-initialize in slot 6 (`0x31620`), finalize in slot 7
@@ -27,7 +57,9 @@ It invokes original initialize first; its per-connection state is external to
 the stock object. Finalize releases that state and invokes original finalize.
 This preserves stock MFiSAP/receiver session ownership.
 
-## Stock HTTPMessage, not a 280 structure
+<a id="stock-httpmessage-not-a-280-structure"></a>
+
+## 📋 Stock HTTPMessage, not a 280 structure
 
 Offsets verified by `HTTPMessageReadMessage` (`0x6a3cc`), Create (`0x6a534`),
 Reset (`0x6a230`) and the HTTP state machine (`0x6b9a4`).
@@ -50,7 +82,9 @@ The encrypted reader invokes the **stock** `HTTPHeader_Parse` and
 `HTTPMessageSetBodyLength`. It preserves partial headers, body offsets and
 extra bytes. Private 280 CF objects never cross into stock 210.
 
-## Exact plaintext-to-encrypted transition
+<a id="exact-plaintext-to-encrypted-transition"></a>
+
+## 📋 Exact plaintext-to-encrypted transition
 
 `HTTPConnectionSendResponse` only prepares the response iovecs and sets state=1.
 The state machine calls `SocketWriteData` (`0x7d208`) at `0x6b9e4`.
@@ -68,7 +102,9 @@ write=`Control-Read-Encryption-Key`, both with `Control-Salt`, from the complete
 Verify context. The SDK's 64x64 ChaCha/Poly1305 transport owns record framing and
 nonces. Global libc read/write are not interposed.
 
-## Stock MFi seam
+<a id="stock-mfi-seam"></a>
+
+## 🔐 Stock MFi seam
 
 `APSMFiPlatform_CreateSignature` (`0x730b4`) accepts a 20-byte SHA-1 digest,
 opens `/dev/i2c8`, locks the device, writes/signs/reads, then unlocks/closes.
@@ -77,14 +113,20 @@ opens/locks/reads it when the cache is absent. Its output and signature output
 use malloc ownership. Neither adapter needs to replace the stock chip driver.
 These paths have not been exercised on the head unit by this change.
 
-## Guards and limits
+<a id="guards-and-limits"></a>
 
-`stock210_fingerprint.h` pins six 16-byte instruction prefixes: Create, request
+## 📋 Guards and limits
+
+The first adapter pinned six 16-byte instruction prefixes: Create, request
 dispatch, message read, socket write, state machine and original finalizer.
+The current [fingerprint table](../../hook/wireless/stock210_fingerprint.h)
+contains 23 prefixes after the media/readiness extensions.
 `cp210_matches` also checks ARM32 and the Create/request relative addresses.
 This is an ABI guard for the pinned image, not a whole-file integrity check.
 
 Pairing is enabled only in wireless owner mode with an explicit module flag.
-The first implementation supports Setup/Verify and encrypted control HTTP.
-Encrypted SETUP returns 461 until a verified modern media/event adapter exists;
-the module does not advertise complete wireless readiness or feature bit 38.
+The first implementation covered Setup/Verify and encrypted control only.
+Current [media adapters](STOCK210_MEDIA_CRYPTO_ABI.md) also require
+`MHI2Q_CP_WIRELESS_MEDIA=1`; without that flag encrypted SETUP returns461.
+Feature bits37/38 and pi are now published only after the guarded
+[readiness contract](STOCK210_RECEIVER_LIFECYCLE.md) succeeds.

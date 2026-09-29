@@ -1,5 +1,34 @@
 # Wireless CarPlay with MU1316 stock AirPlay 210.81
 
+_MHI2Q wireless CarPlay — technical reference, integrated 2026-09-29._
+
+---
+
+[Wireless overview](README.md) · [Current stock210 lifecycle](STOCK210_RECEIVER_LIFECYCLE.md)
+
+Maintained technical reference. The evidence below distinguishes static analysis, local QNX tests and observations from the unit.
+
+Implementation and local diagnostic paths in this record refer to the [original source directory](../../wireless/). Run `wireless/...` commands from the repository root; moving this note does not move binaries or logs.
+
+## 📊 Component flow
+
+```mermaid
+flowchart LR
+    accTitle: Stock210 wireless component boundaries
+    accDescr: The Rust daemon handles Bluetooth bootstrap while the C hook extends the original receiver; the owner supervisor coordinates its lifetime.
+    phone["Phone Bluetooth and Wi-Fi"]
+    graft["btstack RFCOMM graft"]
+    daemon["Rust iAP2 bootstrap daemon"]
+    bridge["DIO receiver bridge"]
+    hook["C pairing and media hook"]
+    stock["Factory AirPlay 210.81"]
+    owner["Native owner supervisor"]
+    phone -->|Bluetooth| graft --> daemon -->|START and IDENTITY| bridge
+    phone -->|Wi-Fi| hook --> stock
+    bridge --> stock
+    owner --> bridge
+```
+
 This is the stock-library, hook-based track requested for MHI2Q. It is an
 offline design and evidence ledger, **not** a claim of iPhone interoperability.
 The separate 280.33.8 replacement archive is an experimental alternative;
@@ -11,27 +40,29 @@ only feature bit 37 is insufficient. iOS 26.6/27 requires CU pairing and
 encryption for non-USB CarPlay endpoints; iOS 27 StartSession also synthesizes
 bit 38 locally. The original library can remain, but the wireless hook/front
 end must supply the missing pairing and transport/stream security. Evidence:
-[ios_wireless_session_gates.md](ios_wireless_session_gates.md).
+[ios_wireless_session_gates.md](IOS_WIRELESS_SESSION_GATES.md).
 
 The source-level implementation recipe is now in
-[airplay280_pairing_recipe.md](airplay280_pairing_recipe.md), based on the
+[airplay280_pairing_recipe.md](AIRPLAY280_PAIRING_RECIPE.md), based on the
 owner's `Refferences/Carplay` 280.33.8 source and checked receiver handlers.
 The daemon contract now binds StartSession field 4 (named `public_key` in the
 vendor codec) to the active receiver's CU pairing identifier (`pi`), obtained
 with receiver-bridge operation 5. `MHI2Q_CP_PAIRING_ID` optionally pins it;
 the old Ed25519 interpretation and `MHI2Q_CP_PUBLIC_KEY` setting are rejected.
 
-Implementation is in [`hook/wireless`](../hook/wireless/README.md), inside
+Implementation is in [`hook/wireless`](../../hook/wireless/README.md), inside
 `libcarplay_hook.so`, as requested. It uses private namespaced 280 pairing
 primitives with the original 210 HTTP structures. See
-[stock210_http_pairing_abi.md](stock210_http_pairing_abi.md) for verified
+[stock210_http_pairing_abi.md](STOCK210_HTTP_PAIRING_ABI.md) for verified
 offsets and the plaintext Verify-M4 completion seam. Events and media adapters
 now live in the same module; their stock offsets and protocol limits are in
-[stock210_media_crypto_abi.md](stock210_media_crypto_abi.md). Media remains opt-in.
+[stock210_media_crypto_abi.md](STOCK210_MEDIA_CRYPTO_ABI.md). Media remains opt-in.
 Capability/Bonjour publication and production stock210 startup now pass the
-combined [receiver lifecycle fixture](stock210_receiver_lifecycle.md).
+combined [receiver lifecycle fixture](STOCK210_RECEIVER_LIFECYCLE.md).
 
-## Pinned 210.81 facts
+<a id="pinned-21081-facts"></a>
+
+## 📋 Pinned 210.81 facts
 
 The original `advanced/MU1316-appimg/eso/lib/libairplay.so` is an ARM32 EABI5
 QNX shared object, SHA-256
@@ -86,7 +117,9 @@ and final info callback without changing stock `libairplay.so`. `dio_manager` ha
 `uap0` for wireless receiver startup. The actual `uap0` listener and Bonjour
 registration still need on-unit confirmation.
 
-## Required stock-210 integration
+<a id="required-stock-210-integration"></a>
+
+## 📋 Required stock-210 integration
 
 1. Keep original `libairplay.so` and the existing wired
    `libcarplay_hook.so`/SI path. Add a wireless module to the hook or preload
@@ -132,7 +165,9 @@ The daemon, hook and graft are separate failure domains;
 Owner locks, the advisory generation marker and long-term pairing keys use
 `/mnt/persist`; the QNX fixture lacks the required rename semantics in `/tmp`.
 
-## P5092 bootstrap reference and current iPhone clients
+<a id="p5092-bootstrap-reference-and-current-iphone-clients"></a>
+
+## 🔗 P5092 bootstrap reference and current iPhone clients
 
 `/Users/luka/Desktop/AUDI_2/Refferences/btstack-bootstrap-2026-09-28` is a
 P5092 bootstrap source snapshot, not a working full CarPlay build. Its own
@@ -165,9 +200,11 @@ audit found the earlier non-USB CarPlay CU pairing/encryption requirement.
 The old selector therefore does not establish a legacy-only wireless path.
 The separate BLE StartSession parser's mandatory `publicKey` check is not
 the classic iAP2 parser. Full evidence and the correction are in
-`ios_auth_selection_audit.md` and `ios_wireless_session_gates.md`.
+[Ios Auth Selection](IOS_AUTH_SELECTION.md) and [Ios Wireless Session Gates](IOS_WIRELESS_SESSION_GATES.md).
 
-## Pairing and crypto required by the inspected wireless path
+<a id="pairing-and-crypto-required-by-the-inspected-wireless-path"></a>
+
+## 🔐 Pairing and crypto required by the inspected wireless path
 
 A feature-bit or TXT edit is insufficient. The 280 source's `/pair-verify`
 handler derives read/write keys, installs ChaCha20-Poly1305 on the **HTTP
@@ -185,11 +222,11 @@ control, event and media integration/translation around stock 210. The
 inspected iOS wireless endpoint gate rules out the earlier legacy-only plan.
 Any 280 SDK code used as a pairing/crypto helper can remain a separate
 component; replacing the original `libairplay.so` is not implied. The
-[280 recipe](airplay280_pairing_recipe.md) now maps connection/key ownership,
+[280 recipe](AIRPLAY280_PAIRING_RECIPE.md) now maps connection/key ownership,
 the post-M4 transition, and required event/stream derivation. The private module
 now has independent protocol tests for pairing, encrypted control, events and
-basic screen/PCM media; see [validation](stock210_pairing_validation.md).
+basic screen/PCM media; see [validation](STOCK210_VALIDATION.md).
 Capability/`pi` publication, stock210 readiness and supervisor integration now
 pass combined offline QEMU, including media reconnect and wired-priority drain.
-See [receiver lifecycle](stock210_receiver_lifecycle.md) for current artifacts
+See [receiver lifecycle](STOCK210_RECEIVER_LIFECYCLE.md) for current artifacts
 and the remaining real hardware validation boundary.

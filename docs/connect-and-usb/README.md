@@ -8,7 +8,7 @@
 
 CarPlay on this head unit rides a soldered `0x0424:0x2530` USB hub. The phone plugs in as a host-mode Apple device, the head unit performs a USB role swap so the phone enumerates *us*, then a gadget descriptor brings up an NCM network interface (`carplay0`) over which iAP2 and the CarPlay session run. Every note below covers one segment of that chain or one failure mode of it.
 
-Start with [USB and NCM Connect](USB_AND_NCM_CONNECT.md) for the healthy path and its timing. [USB Replug Recovery](USB_REPLUG_RECOVERY.md) is the big one — how a single fast replug wedged the whole stack until reboot, and what the shipping build does about it. [PF Firewall](PF_FIREWALL.md) and [iOS Version Gate](IOS_VERSION_GATE.md) cover two traps that block a connect for reasons that look nothing like USB. [Wireless CarPlay and Wi-Fi](WIRELESS_CARPLAY_AND_WIFI.md) answers the recurring "why not wireless" question and retires the 5 GHz myth; [Wireless CarPlay on the Head Unit](WIRELESS_CARPLAY_HU_FEASIBILITY.md) then prices a native port against the factory implementation in a sibling firmware. For the hub note and the full trap list see [Home](../README.md) and [Landmines](../LANDMINES.md).
+Start with [USB and NCM Connect](USB_AND_NCM_CONNECT.md) for the healthy path and its timing. [USB Replug Recovery](USB_REPLUG_RECOVERY.md) is the big one — how a single fast replug wedged the whole stack until reboot, and what the shipping build does about it. [PF Firewall](PF_FIREWALL.md) and [iOS Version Gate](IOS_VERSION_GATE.md) cover two traps that block a connect for reasons that look nothing like USB. [Wireless CarPlay and Wi-Fi](../wireless-carplay/WIFI_AND_DISCOVERY.md) answers the recurring "why not wireless" question and retires the 5 GHz myth; [Wireless CarPlay on the Head Unit](../wireless-carplay/HARDWARE_AND_DONORS.md) then prices a native port against the factory implementation in a sibling firmware. The complete mod, ABI notes and validation now live in [Wireless CarPlay](../wireless-carplay/README.md). For the hub note and the full trap list see [Home](../README.md) and [Landmines](../LANDMINES.md).
 
 ## 📊 The connect path
 
@@ -48,8 +48,8 @@ flowchart TB
 | [Session Lifecycle](SESSION_LIFECYCLE.md) | One session from control SETUP to teardown: healthy timeline, the −6030 port collision, generation rules. |
 | [HMI Startup and Identity](HMI_STARTUP_AND_IDENTITY.md) | Context 78 / displayable 59 start chains and the "Apple CarPlay" main-menu identity. |
 | [Now Playing Cold Start](NOW_PLAYING_COLD_START.md) | The three start-up rails and the bounded cold-connect path for silent-and-blank connects. |
-| [Wireless CarPlay and Wi-Fi](WIRELESS_CARPLAY_AND_WIFI.md) | Why iOS has no 5 GHz gate, what the Apple vendor IE actually requires, the phone-side eligibility reason strings, and why this unit is 2.4 GHz only with no wireless transport. |
-| [Wireless CarPlay on the Head Unit](WIRELESS_CARPLAY_HU_FEASIBILITY.md) | The factory implementation read out of MH2p, the exhaustive UUID scans, the MU1439 donor on our own Bluetooth chip, and the one `btstack` module that blocks a native port. |
+| [Wireless CarPlay and Wi-Fi](../wireless-carplay/WIFI_AND_DISCOVERY.md) | Why iOS has no 5 GHz gate, what the Apple vendor IE actually requires, the phone-side eligibility reason strings, and why this unit is 2.4 GHz only with no wireless transport. |
+| [Wireless CarPlay on the Head Unit](../wireless-carplay/HARDWARE_AND_DONORS.md) | Factory MH2p behavior, same-chip MU1439 donor, and the Bluetooth plus pairing/media gaps filled by the offline mod. |
 
 ## 💡 Truth levels
 

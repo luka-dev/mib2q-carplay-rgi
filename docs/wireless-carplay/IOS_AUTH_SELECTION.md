@@ -1,12 +1,36 @@
 # iOS 26/27 selection of stock AirPlay 210 MFi-SAP
 
+_MHI2Q wireless CarPlay — technical reference, integrated 2026-09-29._
+
+---
+
+[Wireless overview](README.md) · [Current stock210 lifecycle](STOCK210_RECEIVER_LIFECYCLE.md)
+
+Maintained technical reference. The evidence below distinguishes static analysis, local QNX tests and observations from the unit.
+
+Implementation and local diagnostic paths in this record refer to the [original source directory](../../wireless/). Run `wireless/...` commands from the repository root; moving this note does not move binaries or logs.
+
+## 📊 Component flow
+
+```mermaid
+flowchart LR
+    accTitle: Two distinct authentication stages
+    accDescr: The Bluetooth iAP2 bootstrap and the later AirPlay wireless pairing path are separate checks; MFi-SAP alone does not satisfy the inspected wireless gate.
+    iap2["Bluetooth iAP2 authentication"]
+    wifi["Wi-Fi handover"]
+    gate["Wireless endpoint pairing gate"]
+    pairing["CU Pair Setup and Verify"]
+    media["Encrypted control and media"]
+    iap2 --> wifi --> gate --> pairing --> media
+```
+
 **Correction after tracing the enclosing CarPlay path (2026-09-28):**
 the selector below survives, but does not establish a usable legacy-only
 wireless path. iOS 26.6/27 CarPlay endpoint creation requires USB **or**
 CoreUtils pairing/encryption; iOS 27 iAP2 StartSession synthesizes bit 38
 before pairing and skips the preliminary public `/info` fetch. The earlier
 proposal to enable only bit 37 is insufficient. See
-[ios_wireless_session_gates.md](ios_wireless_session_gates.md) for the
+[ios_wireless_session_gates.md](IOS_WIRELESS_SESSION_GATES.md) for the
 verified branches, addresses, and required hook/crypto work.
 
 Static, offline audit of the owner's iPhone 18,3 iOS 26.1 decompilation,
@@ -15,7 +39,9 @@ Static, offline audit of the owner's iPhone 18,3 iOS 26.1 decompilation,
 client code categorically rejects the MU1316 stock 210.81 authentication
 path. It is not an iPhone interoperability result.
 
-## AirPlay authentication choice
+<a id="airplay-authentication-choice"></a>
+
+## 🔐 AirPlay authentication choice
 
 The pinned MU1316 `/info` mask, with only CarPlay Control bit 37 added, is
 `0x0000002144440B80`. It retains **bit 26** and omits **bit 38**. Bit 26 is
@@ -36,7 +62,9 @@ This proves preservation of the legacy authentication selector. It does
 **not** justify advertising bit 37 alone for wireless CarPlay: the subsequently
 traced endpoint-creation gate requires CU support for a non-USB endpoint.
 
-## Do not confuse Bluetooth/iAP2 with BLE StartSession
+<a id="do-not-confuse-bluetoothiap2-with-ble-startsession"></a>
+
+## 📋 Do not confuse Bluetooth/iAP2 with BLE StartSession
 
 The iOS 26.1 `CoreAccessories_15.mm:5269` handler
 `iap2_CarPlayStartSession` parses iAP2 message `0x4301`; param 4 is an
@@ -57,7 +85,9 @@ proven iAP2 parser blocker from these call paths. A real pairing identity is
 nevertheless needed for the required wireless pairing implementation; iOS 27
 sets bit 38 itself in the direct StartSession host description.
 
-## Current conclusion and remaining gates
+<a id="current-conclusion-and-remaining-gates"></a>
+
+## 🎯 Current conclusion and remaining gates
 
 The exact stock feature mask routes to type-8 MFi in the 26.1/26.6/27.0
 authentication selector. The inspected feature flag plists have no explicit
@@ -66,9 +96,11 @@ has an earlier, mandatory CU pairing/encryption gate, now verified statically.
 The direct stock-210-plus-bit37 proposal fails that gate; the presence of
 legacy MFi-SAP is consistent with continued wired support. The next work is
 pairing/crypto integration around stock 210, including encrypted control and
-stream key handling, as detailed in `ios_wireless_session_gates.md`.
+stream key handling, as detailed in [Ios Wireless Session Gates](IOS_WIRELESS_SESSION_GATES.md).
 
-## Independent dongle references (28 September 2026)
+<a id="independent-dongle-references-28-september-2026"></a>
+
+## 🔗 Independent dongle references (28 September 2026)
 
 `/Users/luka/Desktop/AUDI_2/Refferences/catplay` at commit `13d174e`
 provides useful independent implementations of the Bluetooth/iAP2 and

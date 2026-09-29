@@ -1,6 +1,32 @@
 # RFCOMM server channel for iAP2 (static RE, 2026-09-27)
 
-## Scope and binary identity
+_MHI2Q wireless CarPlay — technical reference, integrated 2026-09-29._
+
+---
+
+[Wireless overview](README.md) · [Current stock210 lifecycle](STOCK210_RECEIVER_LIFECYCLE.md)
+
+Maintained technical reference. The evidence below distinguishes static analysis, local QNX tests and observations from the unit.
+
+Implementation and local diagnostic paths in this record refer to the [original source directory](../../wireless/). Run `wireless/...` commands from the repository root; moving this note does not move binaries or logs.
+
+## 📊 Component flow
+
+```mermaid
+flowchart LR
+    accTitle: RFCOMM server registration sequence
+    accDescr: The channel and callback are initialized before server registration; the granted channel is written into SDP before publication.
+    storage["Allocate stable channel storage"]
+    initialize["Set callback and MTU"]
+    register["Register RFCOMM server"]
+    channel["Copy granted channel byte"]
+    sdp["Publish iAP2 SDP record"]
+    storage --> initialize --> register --> channel --> sdp
+```
+
+<a id="scope-and-binary-identity"></a>
+
+## 🔍 Scope and binary identity
 
 Addresses below are ARM virtual addresses (image base `0x100000`). The donor is
 `Firmwares/HU/MHI2_US_AUG22_K3347_MU1439/extracted/app50/eso/bin/apps/btstack`
@@ -11,7 +37,9 @@ the target is
 Those paths are relative to `/Users/luka/Desktop/AUDI_2/`. The `wireless/verify_graft_points.py`
 checks passed against both binaries (8/8). Neither binary nor the head unit was modified.
 
-## Ownership and initialization in the donor
+<a id="ownership-and-initialization-in-the-donor"></a>
+
+## 🔄 Ownership and initialization in the donor
 
 `BluetoothServices` allocates **`IapServices` itself with `operator new(0x190)`** at
 `0x1274E8` and calls its constructor `0x2392F8` at `0x1274EC`. The RFCOMM channel is
@@ -79,7 +107,9 @@ not need an `IapServices` object if its own callback does not dereference the
 donor's `user_context`. Do not reuse `cbRf` unchanged: it expects an actual
 `IapServices *` at `+0x14` and calls `IapServices::rfEvent`.
 
-## Minimal registration sequence
+<a id="minimal-registration-sequence"></a>
+
+## 📋 Minimal registration sequence
 
 The donor performs the first four actions in the **constructor**, before
 `IapServices::registerService` (`0x2379A4`) is called. `registerService` itself
@@ -107,7 +137,9 @@ server channel in `1..6`, rejects duplicates, links the channel into the service
 list, and stores the out-byte pointer. The SDP descriptor's final byte is patched
 from this granted value, not a fixed channel number.
 
-## Inbound delivery and event ABI
+<a id="inbound-delivery-and-event-abi"></a>
+
+## 📦 Inbound delivery and event ABI
 
 The channel has one callback for both events and data. In donor `rfcomm/rfc_sm.c`,
 `RfDlcStateConnected` (`0x212C70`) receives a data frame event (`239` or `255`),
@@ -142,10 +174,12 @@ Its case 5 checks `event+2` for 17, then copies `*(u16 *)(event+8)` bytes from
 it to the iAP receive queue (`0x23C52C`). A graft callback should copy or consume
 the payload during the call; the event itself is built on the RFCOMM stack.
 For accepting an inbound connection, sending data back, and replenishing
-receive credits, see `rfcomm_duplex.md`. The donor's event-1 handler takes
+receive credits, see [Rfcomm Duplex](RFCOMM_DUPLEX.md). The donor's event-1 handler takes
 the reject branch; a receiving graft must take the accept branch explicitly.
 
-## Donor → target Blue SDK address checks
+<a id="donor--target-blue-sdk-address-checks"></a>
+
+## 🔍 Donor → target Blue SDK address checks
 
 The wrapper is already anchored through the identical server-bind path; its
 decompilation in both binaries has the same tests, field offsets, stores, lock,

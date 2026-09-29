@@ -2,7 +2,7 @@
 """Re-derive and check the facts the btstack iAP graft plan rests on.
 
 Everything here is read straight out of two firmware binaries, so the plan in
-docs/connect-and-usb/WIRELESS_CARPLAY_HU_FEASIBILITY.md can be re-checked after any
+docs/wireless-carplay/HARDWARE_AND_DONORS.md can be re-checked after any
 firmware is re-extracted, without IDA.
 
   python3 wireless/verify_graft_points.py            # check, print a summary

@@ -1,5 +1,34 @@
 # Stock 210.81 paired media adapters
 
+_MHI2Q wireless CarPlay — technical reference, integrated 2026-09-29._
+
+---
+
+[Wireless overview](README.md) · [Current stock210 lifecycle](STOCK210_RECEIVER_LIFECYCLE.md)
+
+Maintained technical reference. The evidence below distinguishes static analysis, local QNX tests and observations from the unit.
+
+Implementation and local diagnostic paths in this record refer to the [original source directory](../../wireless/). Run `wireless/...` commands from the repository root; moving this note does not move binaries or logs.
+
+## 📊 Component flow
+
+```mermaid
+flowchart LR
+    accTitle: Paired media adapter boundaries
+    accDescr: The hook authenticates incoming data before stock processing and encrypts outgoing microphone data; stock retains stream and worker ownership.
+    keys["Verified connection key derivation"]
+    events["Events HTTP record adapter"]
+    screen["Authenticate screen payload"]
+    audio["Authenticate PCM payload"]
+    mic["Encrypt microphone fragments"]
+    stock["Stock workers and buffers"]
+    keys --> events
+    keys --> screen --> stock
+    keys --> audio --> stock
+    stock --> mic
+    keys --> mic
+```
+
 Offline analysis and implementation, 2026-09-29. No head-unit access or firmware edits.
 Target: MU1316 P5087 `eso/lib/libairplay.so`, SHA-256
 `01c116b1674215daa0602d556a6d9b2eb48c2113ca294ea1f5d58787e3f656f2`.
@@ -7,7 +36,9 @@ Offsets below are **bytes**, ARM32 little endian; function addresses are ELF vir
 Evidence: fresh IDA decompilation in session `6817b577`; SDK 280 source is the protocol reference,
 not a binary-layout reference. The hook uses stock CF objects and a private, namespaced crypto backend.
 
-## Verified seams
+<a id="verified-seams"></a>
+
+## 📋 Verified seams
 
 | Stock function | Address | Relevant behavior |
 |---|---:|---|
@@ -29,7 +60,9 @@ not a binary-layout reference. The hook uses stock CF objects and a private, nam
 `stock210_fingerprint.h` includes 16-byte prologues for the HTTP and new media seams. Hook activation
 still requires the stock HTTP delegate address and all pinned fingerprints. The original ELF is unchanged.
 
-## Stock layout used
+<a id="stock-layout-used"></a>
+
+## 🔍 Stock layout used
 
 | Object | Offset | Width | Meaning |
 |---|---:|---:|---|
@@ -54,7 +87,9 @@ still requires the stock HTTP delegate address and all pinned fingerprints. The 
 
 No 280 receiver, screen, HTTP, or CF structure is grafted over these objects.
 
-## Key direction and packet formats
+<a id="key-direction-and-packet-formats"></a>
+
+## 🔐 Key direction and packet formats
 
 Source reference: `Refferences/Carplay/Sources/AirPlayReceiverSession.c`, `_GetStreamSecurityKeys`,
 `_ControlStart`, `_MainAltAudioProcessPacket`, `AirPlayReceiverSessionWriteAudio`;
@@ -79,12 +114,16 @@ Source reference: `Refferences/Carplay/Sources/AirPlayReceiverSession.c`, `_GetS
   on every encryption attempt, including a failed send. It reports original plaintext length only
   when all fragments were sent.
 
-## Lifetime and enablement
+<a id="lifetime-and-enablement"></a>
+
+## 🔄 Lifetime and enablement
 
 `MHI2Q_DIO_OWNER_MODE=wireless`, `MHI2Q_CP_WIRELESS_PAIRING=1`, and
 `MHI2Q_CP_WIRELESS_MEDIA=1` are all required. Pair-Verify must have completed and its plaintext M4
 must have drained before a SETUP can reach this adapter. Without the media flag, encrypted SETUP
-still gets461. No feature/TXT/receiver-ready advertisement is enabled by this work.
+still gets461. The later [readiness integration](STOCK210_RECEIVER_LIFECYCLE.md)
+now publishes pi and supported features only when pairing, media and the
+stock HTTP adapter are ready.
 
 Before stock dispatch, a mutable stock plist copy removes obsolete `et`, `ekey`, and `eiv`.
 Only the in-memory body is replaced; raw header/URL pointers and pipelined extra bytes are preserved.
@@ -104,7 +143,9 @@ Events copy their own keys and outlive control/session sidecars when necessary: 
 interposition removes the transport only when its actual fd is relinquished. Matching event I/O
 and close share a mutex. There is no global read/write replacement.
 
-## Offline fixture
+<a id="offline-fixture"></a>
+
+## 📋 Offline fixture
 
 `stock210_media_qemu.c` (capture fixture only) supplies fake AudioStreamPrepare/Start, because the
 QEMU image has no HMI audio acknowledgement/hardware. Stock Setup, Start, RTP worker, jitter buffer,
@@ -119,14 +160,19 @@ pending rendered output**, not the real decoder's drain/display behavior.
 No fixture code is built into the hook.
 
 `stock210_media_phone_qemu.c` implements the independent phone-side events/microphone assertions.
-The phone and hook do not share PairingSession/HTTP structures. Test status and exact evidence will
-be recorded in `stock210_pairing_validation.md` after successful execution.
+The phone and hook do not share PairingSession/HTTP structures. Passing results
+and exact evidence are recorded in [validation](STOCK210_VALIDATION.md) and the
+[later combined lifecycle](STOCK210_RECEIVER_LIFECYCLE.md).
 
-## Lifecycle boundary observed in QEMU
+<a id="lifecycle-boundary-observed-in-qemu"></a>
+
+## 🧪 Lifecycle boundary observed in QEMU
 
 The unmodified stock receiver/DIO lifecycle stops the server and releases
 `dio_manager` after a full media TEARDOWN. The media test therefore performs
 stored-peer Pair-Verify reconnect **before** its one media session. A successful
 TEARDOWN is not evidence that a second media session can start in the same DIO
-process. Production readiness must integrate receiver exit/restart with the
-existing wireless owner supervisor, its generations, and wired SI priority.
+process. The later [combined fixture](STOCK210_RECEIVER_LIFECYCLE.md) integrates
+the supervisor: it tests a second media session in a fresh DIO process, wired
+priority, and a third wireless generation. The original one-session result
+above remains a separate milestone.

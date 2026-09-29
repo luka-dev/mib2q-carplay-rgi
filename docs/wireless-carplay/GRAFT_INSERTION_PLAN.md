@@ -1,11 +1,38 @@
 # Offline insertion survey for the MHI2Q btstack (2026-09-27)
 
-This is a static survey of the target binary identified in
-`rfcomm_channel_layout.md`. No executable was patched and the head unit was not
-accessed. The channel and SDP layouts are already documented there and in
-`CODEX_HANDOFF.md`.
+_MHI2Q wireless CarPlay — technical reference, integrated 2026-09-29._
 
-## Startup trigger
+---
+
+[Wireless overview](README.md) · [Current stock210 lifecycle](STOCK210_RECEIVER_LIFECYCLE.md)
+
+Maintained technical reference. The evidence below distinguishes static analysis, local QNX tests and observations from the unit.
+
+Implementation and local diagnostic paths in this record refer to the [original source directory](../../wireless/). Run `wireless/...` commands from the repository root; moving this note does not move binaries or logs.
+
+## 📊 Component flow
+
+```mermaid
+flowchart LR
+    accTitle: Offline graft image construction
+    accDescr: The builder works on a copy, preserves displaced ARM instructions, and verifies the resulting load segments before QEMU.
+    stock["Pinned stock btstack input"]
+    copy["Build separate ELF copy"]
+    segments["Add code and state segments"]
+    hooks["Insert guarded ARM hooks"]
+    verify["Verify bytes and load layout"]
+    qemu["Test disposable QNX loader"]
+    stock --> copy --> segments --> hooks --> verify --> qemu
+```
+
+This is a static survey of the target binary identified in
+[Rfcomm Channel Layout](RFCOMM_CHANNEL_LAYOUT.md). No executable was patched and the head unit was not
+accessed. The channel and SDP layouts are already documented there and in
+[Codex Handoff](history/CODEX_HANDOFF.md).
+
+<a id="startup-trigger"></a>
+
+## 📋 Startup trigger
 
 The originally proposed DID inner function `0x26C070` is not a universal startup
 hook. Its sole caller is the DID wrapper `0x26C628`, which acquires the stack mutex
@@ -49,7 +76,9 @@ null or the record validator `0x204C38` rejects its attribute layout. That
 check does not test an SDP-ready flag. The earlier handoff's description of
 18 as “SDP not ready” was incorrect.
 
-## Placement constraints
+<a id="placement-constraints"></a>
+
+## 🎯 Placement constraints
 
 The ELF is ARM ET_EXEC with five program headers. The executable `PT_LOAD`
 starts at file offset 0 / VA `0x100000` and has file and memory size `0x1B9978`.
@@ -75,7 +104,9 @@ idempotence flag, and transport state. The current RW load ends in BSS at
 `0x507FB0`; extending its `p_memsz` is a possible allocation method, pending
 loader and overlap checks. These are placement options, not edits made now.
 
-## Required runtime behavior and failure boundaries
+<a id="required-runtime-behavior-and-failure-boundaries"></a>
+
+## 📋 Required runtime behavior and failure boundaries
 
 1. Initialize a persistent channel and a persistent granted-channel byte, then
    call target RFCOMM registration `0x277B98` (MTU 5035, priority 0).
@@ -83,12 +114,12 @@ loader and overlap checks. These are placement options, not edits made now.
    call target SDP add-record `0x2073C4`. On add failure, deregister the channel
    via `0x277B34`; do not leave an advertised or half-registered service.
 3. Install a local callback with the two-pointer ABI and event layout in
-   `rfcomm_channel_layout.md`. On event 1 call the target accept API
+   [Rfcomm Channel Layout](RFCOMM_CHANNEL_LAYOUT.md). On event 1 call the target accept API
    `0x2774BC(channel,1)`; on event 5 copy the payload before returning and
-   replenish receive credits through `0x2772DC`. See `rfcomm_duplex.md`.
+   replenish receive credits through `0x2772DC`. See [Rfcomm Duplex](RFCOMM_DUPLEX.md).
 4. Send daemon-to-phone bytes through `0x277378` using an owned, zeroed
    `0x64`-byte packet and the payload limit from `0x2771F4`. Retain each
-   packet and buffer until event 6 or disconnect. See `rfcomm_duplex.md`.
+   packet and buffer until event 6 or disconnect. See [Rfcomm Duplex](RFCOMM_DUPLEX.md).
 5. Keep any blocking socket operation outside the RFCOMM callback. The target
    imports `socket` (`0x117618`), `connect` (`0x117660`), `send` (`0x117318`),
    `recv` (`0x117BE8`), and `pthread_create` (`0x1173FC`), so a worker is
@@ -98,7 +129,7 @@ loader and overlap checks. These are placement options, not edits made now.
 
 The placement and bounded callback-to-daemon framing above are now implemented
 in `graft/` as an **offline copy**, with an additional EIR hook and CarPlay SDP
-record. See `graft/README.md` and `carplay_discovery.md`. The original binary
+record. See [Btstack Graft](BTSTACK_GRAFT.md) and [Bluetooth Discovery](BLUETOOTH_DISCOVERY.md). The original binary
 and the unit remain untouched. The generated copy has since passed offline
 QNX loader and synthetic registration/bridge probes; live-stack validation
 remains. An iAP2/MFi consumer daemon now exists under `daemon/`, with a QEMU

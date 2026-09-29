@@ -1,7 +1,34 @@
 # MU1316 wireless CarPlay offline bundle
 
+_MHI2Q wireless CarPlay — historical investigation, integrated 2026-09-29._
+
+---
+
+[Wireless overview](../README.md) · [Current stock210 lifecycle](../STOCK210_RECEIVER_LIFECYCLE.md)
+
+Historical investigation; earlier limitations and commands describe that experiment. The current implementation and validation boundary are in the section overview.
+
+Implementation and local diagnostic paths in this record refer to the [original source directory](../../../wireless/). Run `wireless/...` commands from the repository root; moving this note does not move binaries or logs.
+
+## 📊 Experiment overview
+
+```mermaid
+flowchart LR
+    accTitle: Historical experimental280 bundle contents
+    accDescr: The legacy bundle combines a replacement receiver with the Bluetooth and owner components; it is separate from the stock210 hook review.
+    graft["Build btstack graft copy"]
+    receiver["Build replacement AirPlay280"]
+    integration["Build daemon and ownership"]
+    bundle["Assemble legacy review archive"]
+    graft --> bundle
+    receiver --> bundle
+    integration --> bundle
+```
+
+## 📋 Implementation and evidence
+
 **Historical experimental280 replacement bundle.** Current work preserves
-stock210 and uses the separate [stock210 review builder](README.md#build-and-reproduce).
+stock210 and uses the separate [stock210 review builder](../README.md#build-and-reproduce).
 The replacement installer described here does not apply to that candidate.
 
 Run `python3 wireless/build_offline_bundle.py` from the repository root. It
@@ -37,14 +64,14 @@ the wrapper and environment template also set it. Host tests confirmed that
 `BUSY` leaves the owner running and `OK` precedes SIGTERM. A QNX/QEMU fixture
 verified BUSY/OK retry and signal ordering for both wired takeover and
 supervisor shutdown without the runtime flag. See
-`receiver_bridge/info_cfdiag.md`. Real hardware and QNX6 persist-FS behavior
+[Info Serialization](INFO_SERIALIZATION.md). Real hardware and QNX6 persist-FS behavior
 remain unverified.
 
 A later QEMU fixture forced `QUIESCE` while an independently paired client
 was sending encrypted screen and audio. Two of three ordinary receiver runs
 reported two `CFLRelease`/`CFLValidObject` assertions during active session
 teardown even though `QUIESCE` returned OK and the manager released. See
-`receiver_bridge/info_cfdiag.md` and `reference_bootstrap_comparison.md`.
+[Info Serialization](INFO_SERIALIZATION.md) and [Bootstrap Comparison](../BOOTSTRAP_COMPARISON.md).
 The current source now makes idle-only stop and new-SETUP admission atomic on
 the AirPlay receiver's HTTP queue. Three QEMU runs confirmed BUSY while media
 was active, client TEARDOWN 200, then QUIESCE OK without the earlier CF
@@ -71,7 +98,7 @@ gate was added; all four printed a DispatchLite `EINTR` assertion during
 manager exit, without a captured manager crash or `CFLRelease` invalidation.
 The AirPlay 280 staging now retries the interrupted `select()` without an
 assertion; the integrated active-media takeover and restart passed with this
-change. See `receiver_bridge/info_cfdiag.md`.
+change. See [Info Serialization](INFO_SERIALIZATION.md).
 This does not yet prove a real iPhone/USB transition. The guarded
 review archive was rebuilt from this source (SHA-256
 `9949ce9a78329c4e636c53ac26cbe1edfe62d1de8897c16ecd2fd32aef9c24ce`).
@@ -85,7 +112,7 @@ the head unit. Its grafted
 `81484f286ae6b61a54b621c974177ccca59536162defb161e1b99360af184916`.
 This graft also queues a Blue SDK EIR refresh after it publishes
 `discovery_ready`, using the same target function that successful SDP insertion
-calls. The donor/target match is recorded in `carplay_discovery.md`.
+calls. The donor/target match is recorded in [Bluetooth Discovery](../BLUETOOTH_DISCOVERY.md).
 The installer now probes process-lock exclusion on temporary files beside both
 `/mnt/persist` owner locks before any backup or replacement. It rejects install
 if the directory is absent or either probe fails. This protects the wired
@@ -113,7 +140,7 @@ transaction.
 
 The archive is a review input. It includes a guarded wireless-only installer
 candidate, exact baselines and rollback procedure; see
-[`integration/install_review.md`](integration/install_review.md). The QEMU runs separately
+[[Experimental280 Installer](EXPERIMENTAL280_INSTALLER.md)](EXPERIMENTAL280_INSTALLER.md). The QEMU runs separately
 prove the btstack-to-daemon iAP2 marker/SYN exchange, the historical
 daemon-to-stock-receiver CarPlay Control path, and an AirPlay 280 receiver
 START/STOP and same-SDK pairing path. They do not yet prove a
@@ -124,7 +151,7 @@ availability and `CarPlayStartSession` path on port 7000
 An additional QEMU-only client independently verified the receiver's
 SRP proofs, identity exchange through M6, pair-verify through M4 and
 encrypted `/info`
-(`receiver_bridge/independent_pairing_probe.md`).
+([Independent Pairing Probe](INDEPENDENT_PAIRING_PROBE.md)).
 An optional follow-up QEMU probe sent an authenticated control-only
 `SETUP /stream`; the receiver returned RTSP 200 and `dio_manager` created a
 session. Closing that test connection then shut down the stock manager. Later
@@ -137,7 +164,7 @@ manager shutdown without the former SIGSEGV. An independent QEMU client then
 completed RECORD, sent an authenticated AVCC frame, and the fake OMX accepted
 codec config and frame data in three repeat runs. The fake OMX does not decode; real display,
 phone interoperability and on-unit behavior remain untested. See
-`receiver_bridge/independent_pairing_probe.md`.
+[Independent Pairing Probe](INDEPENDENT_PAIRING_PROBE.md).
 The independent QEMU client also negotiated a simultaneous MainAudio PCM
 stream. It sent 80 authenticated RTP packets to the returned UDP port; all
 passed into the receiver's jitter buffer and the QEMU null backend's output
@@ -148,7 +175,7 @@ encrypted `/info` before media setup, traced to an invalid CFLite object
 in response serialization. The independent client's `/info` succeeded in
 that same run; the cause is still open. An optional QEMU-only CF-type walk
 passed six pairing-only and four media repeat runs without reproducing it;
-see `receiver_bridge/info_cfdiag.md`. A second QEMU-only image checks the
+see [Info Serialization](INFO_SERIALIZATION.md). A second QEMU-only image checks the
 plist **only if** `/info` serialization fails; four strict media runs with
 that verified image also passed without reproducing the failure. The normal
 QEMU and on-unit builds exclude both diagnostics.
@@ -164,7 +191,7 @@ receiver fixtures start stock dio explicitly. SI's `connectDevice` and
 `FakeConnectDevice` paths were traced to an existing-device gate and USB
 MediaConnector, so they cannot bootstrap an unknown wireless phone. The
 exact owner boundary and request paths are mapped in
-[`integration/si_ownership.md`](integration/si_ownership.md).
+[[Dio Ownership](../DIO_OWNERSHIP.md)](../DIO_OWNERSHIP.md).
 
 The offline handoff candidate adds `bin/dio_owner_exec`, a replacement
 `integration/carplay_startup.sh`, `bin/wireless_dio_supervisor_bin`, and
@@ -200,7 +227,7 @@ receiver does not advertise one. `MHI2Q_CP_DEVICE_ID` must match the receiver's 
 and `/info` identity; it is used in the Device IE, iAP2, and CarPlay Control.
 The candidate's pairing and encrypted `/info` path also passed an independent
 QNX client in QEMU; iPhone interoperability remains unverified
-(`receiver_bridge/identity_and_pairing.md`).
+([Receiver Identity](RECEIVER_IDENTITY.md)).
 `integration/test_launch_candidate.py`
 checks the exact insertion, missing-file failure, and environment handoff.
 
@@ -282,7 +309,7 @@ the QEMU values must not be copied to a head unit. The factory MU1316
 `pfctl -n -f` in QNX/QEMU parsed the exact candidate `pf.conf`; the other
 three candidate profiles produced exactly the same parser diagnostics as
 their wired baselines when the VM's single `lo0` stood in for the car's
-multiple interfaces. See `firewall/README.md` and
+multiple interfaces. See [Firewall](../FIREWALL.md) and
 `firewall/out/qemu_pfctl.log`. Actual interface handling and the active
 ruleset remain unverified. The included rollback candidate restores
 the original `btstack`, `libairplay.so`, wired wrapper, `rc.local`, and PF

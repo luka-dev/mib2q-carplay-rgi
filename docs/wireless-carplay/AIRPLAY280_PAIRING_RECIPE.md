@@ -1,5 +1,15 @@
 # AirPlay 280.33.8 pairing: source recipe for the stock-210 extension
 
+_MHI2Q wireless CarPlay — technical reference, integrated 2026-09-29._
+
+---
+
+[Wireless overview](README.md) · [Current stock210 lifecycle](STOCK210_RECEIVER_LIFECYCLE.md)
+
+Maintained technical reference. The evidence below distinguishes static analysis, local QNX tests and observations from the unit.
+
+Implementation and local diagnostic paths in this record refer to the [original source directory](../../wireless/). Run `wireless/...` commands from the repository root; moving this note does not move binaries or logs.
+
 Offline static analysis, 2026-09-28. The source supplied by the owner is
 `/Users/luka/Desktop/AUDI_2/Refferences/Carplay`; its
 `Sources/AirPlayVersion.h:60` declares **280.33.8**. This document explains
@@ -13,12 +23,14 @@ must implement pairing, encrypted control, and event/media security. Merely
 adding two HTTP routes cannot supply the latter.
 
 Implementation follow-up (2026-09-29): Setup/Verify and encrypted control
-are implemented inside [`hook/wireless`](../hook/wireless/README.md),
+are implemented inside [`hook/wireless`](../../hook/wireless/README.md),
 with private SDK symbols and stock-210 HTTP adapters. The daemon `pi` contract
 is corrected. Event/media integration remains a separate outstanding step;
 the source recipe below should not be read as a runtime validation report.
 
-## Evidence and version boundaries
+<a id="evidence-and-version-boundaries"></a>
+
+## 🧪 Evidence and version boundaries
 
 Source paths below are relative to the owner's `Refferences/Carplay`:
 
@@ -56,11 +68,13 @@ in this workspace reports **320.17.1**, so its addresses are not 280 addresses.
 
 The decisive receiver handlers and HTTP completion ordering were also
 decompiled from this exact local 280 build. Excerpts:
-[output/airplay280_pairing](output/airplay280_pairing/).
+[output/airplay280_pairing](../../wireless/output/airplay280_pairing).
 For the iOS endpoint requirement, see
-[ios_wireless_session_gates.md](ios_wireless_session_gates.md).
+[ios_wireless_session_gates.md](IOS_WIRELESS_SESSION_GATES.md).
 
-## Connection sequence
+<a id="connection-sequence"></a>
+
+## 📋 Connection sequence
 
 Bluetooth pairing, iAP2 MFi authentication, and AirPlay pairing are distinct
 exchanges. The first two establish the bootstrap transport and allow Wi-Fi /
@@ -69,38 +83,42 @@ control connection.
 
 ```mermaid
 sequenceDiagram
-    participant P as iPhone
-    participant R as Pairing-capable receiver
-    participant S as Persistent identity and peer store
-    participant M as MFi signer
-    R->>S: Load/create receiver ID and Ed25519 identity
-    R-->>P: Publish same pairing ID in pi and StartSession
+    accTitle: Pairing and authenticated transport sequence
+    accDescr: Pair Setup establishes persistent identities, Pair Verify authenticates the connection before control record encryption is enabled.
+    participant phone as iPhone
+    participant receiver as Pairing-capable receiver
+    participant peer_store as Persistent identity and peer store
+    participant mfi_signer as MFi signer
+    receiver->>peer_store: Load/create receiver ID and Ed25519 identity
+    receiver-->>phone: Publish same pairing ID in pi and StartSession
     opt First pairing or peer re-enrolment
-        P->>R: Pair-Setup M1 / M3 (SRP)
+        phone->>receiver: Pair-Setup M1 / M3 (SRP)
         opt Setup method 1: MFiPairSetup
-            R->>M: Sign derived challenge; copy certificate
-            M-->>R: Signature and certificate
+            receiver->>mfi_signer: Sign derived challenge, copy certificate
+            mfi_signer-->>receiver: Signature and certificate
         end
-        R-->>P: Pair-Setup M2 / M4
-        P->>R: M5: encrypted controller identity and signature
-        R->>S: Save verified controller ID and public key
-        R-->>P: M6: encrypted receiver identity and signature
+        receiver-->>phone: Pair-Setup M2 / M4
+        phone->>receiver: M5: encrypted controller identity and signature
+        receiver->>peer_store: Save verified controller ID and public key
+        receiver-->>phone: M6: encrypted receiver identity and signature
     end
-    P->>R: Pair-Verify M1: ephemeral Curve25519 key
-    R-->>P: M2: ephemeral key and signed receiver identity
-    P->>R: M3: signed controller identity
-    R->>S: Find stored controller public key
-    R-->>P: M4: success, sent on plaintext transport
-    Note over P,R: After M4 is fully written: install encrypted transport
-    P->>R: Encrypted control records / SETUP
-    Note over P,R: Event and media streams use their own derived keys
+    phone->>receiver: Pair-Verify M1: ephemeral Curve25519 key
+    receiver-->>phone: M2: ephemeral key and signed receiver identity
+    phone->>receiver: M3: signed controller identity
+    receiver->>peer_store: Find stored controller public key
+    receiver-->>phone: M4: success, sent on plaintext transport
+    Note over phone,receiver: After M4 is fully written: install encrypted transport
+    phone->>receiver: Encrypted control records / SETUP
+    Note over phone,receiver: Event and media streams use their own derived keys
 ```
 
 An already paired peer can use Verify without repeating Setup. A failed
 verification must not silently become an authenticated connection. Peer-store
 loss requires pairing recovery; it is not fixed by accepting an unknown key.
 
-## Pair-Setup: establish persistent trust
+<a id="pair-setup-establish-persistent-trust"></a>
+
+## 🔐 Pair-Setup: establish persistent trust
 
 Both 280 route wrappers require a successfully parsed integer
 `X-Apple-HKP` header. **`X-Apple-HKP: 0` selects the supported path too**:
@@ -117,7 +135,7 @@ configured code is **`3939`**. This is corroborated on the phone side:
 - iOS 27 `_coreUtilsPairing_PerformSetup`, VA `0x25104E40C`, passes the same
   string at `0x25104E4D8` when `requirePIN` is false. CFString
   `0x275B009A0` resolves to `"3939"` at `0x2511BAE5D` in the extracted cache.
-  See [ios27_pair_setup.c](output/airplay280_pairing/ios27_pair_setup.c).
+  See [ios27_pair_setup.c](../../wireless/output/airplay280_pairing/ios27_pair_setup.c).
 
 This identifies the no-PIN protocol mode, not a Bluetooth PIN, a chip secret,
 or evidence that every AirPlay pairing mode uses that code.
@@ -174,7 +192,9 @@ both to `application/pairing+tlv8`; preserve that correction in the extension.
 HTTP 200 alone is not a success predicate: Exchange can return a TLV Error
 inside a successful HTTP response. Check TLV state/error and `done`.
 
-## Identity contract: pi is not pk
+<a id="identity-contract-pi-is-not-pk"></a>
+
+## 📋 Identity contract: pi is not pk
 
 `AirPlayCopyHomeKitPairingIdentity` creates a type-0 temporary pairing object,
 sets the AirPlay store namespace, then obtains identifier and Ed25519 public
@@ -201,7 +221,7 @@ The iOS 27 direct StartSession path corroborates the host-property assignment
 at `0x24F343A84`; its pairing-peer CU identifier getter is `0x25109C0F4`.
 
 **Integration defect corrected 2026-09-29:** the vendored codec still calls
-StartSession field 4 `public_key`, but [daemon/src/control.rs](daemon/src/control.rs)
+StartSession field 4 `public_key`, but [daemon/src/control.rs](../../wireless/daemon/src/control.rs)
 now binds it to the active receiver's pairing identifier over IPC operation 5.
 The obsolete `MHI2Q_CP_PUBLIC_KEY` setting is rejected; optional
 `MHI2Q_CP_PAIRING_ID` pins the expected identifier. The old requirement for
@@ -216,7 +236,9 @@ validation before deployment. Load/create the identity **before** publishing
 Bonjour and acknowledging wireless readiness, so the daemon can obtain the
 same ID via IPC. Do not regenerate it for each process/connection.
 
-## Pair-Verify: authenticate this connection
+<a id="pair-verify-authenticate-this-connection"></a>
+
+## 🔐 Pair-Verify: authenticate this connection
 
 The server creates a separate `kPairingSessionType_VerifyServer` (type 4).
 `CopyIdentity(allowCreate=false)` must find the existing receiver identity.
@@ -239,7 +261,9 @@ secret**, not the Setup SRP secret or legacy MFi-SAP AES key. Keep the verified
 context alive for control and media derivation. `X-Apple-PD` is recorded by the
 handler; its presence does not bypass Verify.
 
-## Exact transition to encrypted control
+<a id="exact-transition-to-encrypted-control"></a>
+
+## 📋 Exact transition to encrypted control
 
 The Verify handler retains the HTTP connection and registers
 `_HandlePairVerifyHomeKitCompletion` on the response. `HTTPServer.c:961–967`
@@ -268,7 +292,9 @@ pending encrypted output, and counters across EAGAIN; do not reseal a pending
 record with a new nonce. HTTP messages and crypto records have different
 boundaries.
 
-## Why control pairing alone does not complete the 210 hook
+<a id="why-control-pairing-alone-does-not-complete-the-210-hook"></a>
+
+## 🔐 Why control pairing alone does not complete the 210 hook
 
 In 280, SETUP retains the verified context with
 `AirPlayReceiverSessionSetHomeKitSecurityContext`. The legacy `et/ekey/eiv`
@@ -290,7 +316,9 @@ These source branches establish integration obligations. They do not yet
 provide a complete packet-format/ABI map for translating every modern stream
 into stock 210. That remains implementation and validation work.
 
-## Implementation boundary and minimal recipe
+<a id="implementation-boundary-and-minimal-recipe"></a>
+
+## 📋 Implementation boundary and minimal recipe
 
 Use a **private C pairing/crypto module** derived from the 280 sources, with
 an opaque C ABI. The existing Rust daemon can continue handling iAP2, Wi-Fi,
@@ -325,7 +353,9 @@ CF objects, server delegates, or connection structures. The observed 210
 The validated 210 delegate hook reaches request dispatch; a safe transport
 installation/teardown seam on 210 still needs mapping.
 
-## Address ledger: exact local 280 build only
+<a id="address-ledger-exact-local-280-build-only"></a>
+
+## 📦 Address ledger: exact local 280 build only
 
 These are ELF-relative ARM VAs in the fingerprinted QEMU build above, not
 MU1316 hook addresses. Handler bodies/completion ordering were decompiled;
@@ -372,7 +402,9 @@ Their exact signatures, buffer ownership, and chip-access serialization need
 validation before wrapping them. They are not proven drop-in 280 APIs. No
 additional Blue SDK / btstack call is introduced by this pairing analysis.
 
-## Validation limits and next implementation work
+<a id="validation-limits-and-next-implementation-work"></a>
+
+## 🧪 Validation limits and next implementation work
 
 This step verified source control flow, the local build's receiver handlers,
 and selected iOS call sites. It did not test a real iPhone, MFi chip, HU
@@ -388,4 +420,4 @@ extract the private C pairing module, and independently exercise Setup,
 reconnect Verify, post-M4 encryption, bad signatures/tags, persistent restart,
 and fragmented I/O. Mapping 210 transport and stream hooks follows before
 claiming wireless CarPlay. The stock210 architecture and USB ownership remain
-as documented in [stock210_hook_architecture.md](stock210_hook_architecture.md).
+as documented in [stock210_hook_architecture.md](STOCK210_ARCHITECTURE.md).

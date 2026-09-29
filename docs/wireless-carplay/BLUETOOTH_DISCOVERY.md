@@ -1,17 +1,43 @@
 # CarPlay Bluetooth discovery: factory path and MHI2Q graft
 
+_MHI2Q wireless CarPlay — technical reference, integrated 2026-09-29._
+
+---
+
+[Wireless overview](README.md) · [Current stock210 lifecycle](STOCK210_RECEIVER_LIFECYCLE.md)
+
+Maintained technical reference. The evidence below distinguishes static analysis, local QNX tests and observations from the unit.
+
+Implementation and local diagnostic paths in this record refer to the [original source directory](../../wireless/). Run `wireless/...` commands from the repository root; moving this note does not move binaries or logs.
+
+## 📊 Component flow
+
+```mermaid
+flowchart LR
+    accTitle: Bluetooth discovery publication order
+    accDescr: The graft publishes discovery only after RFCOMM, both SDP records and the worker are ready, then requests a fresh EIR build.
+    rfcomm["Register RFCOMM channel"]
+    sdp["Add iAP2 and CarPlay SDP"]
+    worker["Start bridge worker"]
+    ready["Publish discovery readiness"]
+    eir["Refresh CarPlay UUID EIR"]
+    rfcomm --> sdp --> worker --> ready --> eir
+```
+
 Static RE, 2026-09-27. All addresses below are ELF virtual addresses. Factory
 reference: `MH2p_US_AUG35_P2873/extracted/app/eso/bin/apps/btstack` (ARM Thumb,
 base zero). Target: MU1316 MHI2Q `btstack` identified in
-`rfcomm_channel_layout.md` (ARM, base `0x100000`). No unit access was used.
+[Rfcomm Channel Layout](RFCOMM_CHANNEL_LAYOUT.md) (ARM, base `0x100000`). No unit access was used.
 
-## Factory behaviour
+<a id="factory-behaviour"></a>
+
+## 📋 Factory behaviour
 
 The exported `btstack::CarPlaySdpAttributes` at factory `0x1FA02C` is a single
 12-byte attribute: ID `0x0001`, value length 19, value pointer `0x1FA018`.
 Its value bytes are:
 
-```
+```text
 35 11 1c ec 88 43 48 cd 41 40 a2 97 27 57 5d 50 bf 1f d3
 ```
 
@@ -30,7 +56,7 @@ type `0x07` (complete 128-bit service UUID list) when the CarPlay connectable
 flag is set. The bytes copied at `0x45754..0x4575C` are the UUID in Bluetooth
 least-significant-byte-first order:
 
-```
+```text
 d3 1f bf 50 5d 57 27 97 a2 40 41 cd 48 43 88 ec
 ```
 
@@ -50,7 +76,9 @@ CarPlay capability bit `0x1000` at `0x61FE4`. Its separate iAP2 UUID check
 sets bit `0x800`. This is a discovery observation, not proof that a phone will
 accept a particular advertisement.
 
-## Offline graft now built
+<a id="offline-graft-now-built"></a>
+
+## 📋 Offline graft now built
 
 `wireless/graft/graft.c` registers a second SDP record containing that one
 factory CarPlay attribute after registering the iAP2 RFCOMM service. Failure
@@ -66,7 +94,9 @@ The production hook gates insertion on `discovery_ready`, which is published
 only after RFCOMM, both SDP records and the worker have initialized. An EIR
 event before readiness is deliberately left unchanged.
 
-## Refresh after registration
+<a id="refresh-after-registration"></a>
+
+## 📋 Refresh after registration
 
 Successful SDP insertion itself queues a Blue SDK EIR refresh: donor
 `SDP_ADD 0x20BE50` calls `0x1E00D4` at `0x20BF4C`; the identical target

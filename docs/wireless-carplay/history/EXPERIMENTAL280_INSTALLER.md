@@ -1,7 +1,34 @@
 # Wireless-only installation candidate
 
+_MHI2Q wireless CarPlay — historical investigation, integrated 2026-09-29._
+
+---
+
+[Wireless overview](../README.md) · [Current stock210 lifecycle](../STOCK210_RECEIVER_LIFECYCLE.md)
+
+Historical investigation; earlier limitations and commands describe that experiment. The current implementation and validation boundary are in the section overview.
+
+Implementation and local diagnostic paths in this record refer to the [original source directory](../../../wireless/integration/). Run `wireless/...` commands from the repository root; moving this note does not move binaries or logs.
+
+## 📊 Experiment overview
+
+```mermaid
+flowchart LR
+    accTitle: Historical replacement installer stages
+    accDescr: These stages belong only to the experimental280 replacement; the current stock210 review archive has no installer.
+    preflight["Validate pinned inputs"]
+    backup["Back up replacement targets"]
+    stage["Stage experimental280 files"]
+    replace["Replace reviewed target files"]
+    rollback["Restore owned backups"]
+    preflight --> backup --> stage --> replace
+    replace -->|Failure or rollback| rollback
+```
+
+## 📋 Implementation and evidence
+
 **Historical experimental280 installer. Do not use it for the stock210 hook
-candidate.** The current [stock210 review package](../stock210_receiver_lifecycle.md)
+candidate.** The current [stock210 review package](../STOCK210_RECEIVER_LIFECYCLE.md)
 preserves factory libairplay and has no installer. The procedure below replaces
 libairplay and belongs only to the separate older experiment.
 

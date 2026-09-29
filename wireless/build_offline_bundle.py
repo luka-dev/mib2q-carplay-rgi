@@ -185,9 +185,9 @@ def main() -> None:
             ("integration/install_wireless_candidate.sh",
              WIRELESS / "integration/install_wireless_candidate.sh", True),
             ("integration/install_review.md",
-             WIRELESS / "integration/install_review.md", False),
+             REPO / "docs/wireless-carplay/history/EXPERIMENTAL280_INSTALLER.md", False),
             ("reference/identity_and_pairing.md",
-             WIRELESS / "receiver_bridge/identity_and_pairing.md", False),
+             REPO / "docs/wireless-carplay/history/RECEIVER_IDENTITY.md", False),
             ("reference/btstack.stock", stock_btstack, False),
             ("reference/libairplay.stock.so", stock_airplay, False),
             ("reference/carplay_startup.wired.sh", wired_startup, False),
@@ -196,7 +196,7 @@ def main() -> None:
             add_file(archive, name, path, entries, executable)
         if args.property_handoff_review:
             add_file(archive, "reference/info_cfdiag.md",
-                     WIRELESS / "receiver_bridge/info_cfdiag.md", entries)
+                     REPO / "docs/wireless-carplay/history/INFO_SERIALIZATION.md", entries)
         for name in ("pf.conf", "pf.ecm0.conf", "pf.mlan0.conf", "pf.ppp0.conf"):
             add_file(archive, f"pf/{name}", WIRELESS / "firewall/out" / name, entries)
             add_file(archive, f"reference/{name}.wired",

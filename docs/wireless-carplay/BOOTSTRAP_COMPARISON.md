@@ -1,5 +1,32 @@
 # P5092 bootstrap reference versus the MU1316/P5087 wireless mod
 
+_MHI2Q wireless CarPlay — technical reference, integrated 2026-09-29._
+
+---
+
+[Wireless overview](README.md) · [Current stock210 lifecycle](STOCK210_RECEIVER_LIFECYCLE.md)
+
+Maintained technical reference. The evidence below distinguishes static analysis, local QNX tests and observations from the unit.
+
+Implementation and local diagnostic paths in this record refer to the [original source directory](../../wireless/). Run `wireless/...` commands from the repository root; moving this note does not move binaries or logs.
+
+## 📊 Component flow
+
+```mermaid
+flowchart LR
+    accTitle: Reference and target evidence separation
+    accDescr: Reference bootstrap success does not replace validation of this target; local ABI guards and offline tests precede vehicle checks.
+    reference["P5092 bootstrap reference"]
+    target["MU1316 target ABI"]
+    adapt["Adapt bounded integration seams"]
+    qemu["Validate target in QNX"]
+    vehicle["Vehicle interoperability pending"]
+    reference --> adapt
+    target --> adapt --> qemu -.-> vehicle
+```
+
+## 📋 Implementation and evidence
+
 Compared offline on 2026-09-28 with
 `/Users/luka/Desktop/AUDI_2/Refferences/btstack-bootstrap-2026-09-28`.
 `scripts/verify_package.py` in that export passed: 139 files, hashes and the
