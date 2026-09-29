@@ -14,6 +14,8 @@ The measured base/paired gradient ratios were **.239875/.252665/2.61366/.147773*
 
 At step 4000, use the unchanged DEV12 reanalyzed source-attribution screen and DEV20 43-entry screen against the saved review-29 control. Require eligible transmission ≥.432, song-median vocal/eligible ≤.324, drums/eligible ≤.0568, bass/eligible ≤.0339, and entry eligible post/pre median ≥.85, p10 ≥.60. Only if every source and entry gate passes, run enriched DEV20 through the frozen direct/no-bed/body0 real C renderer with one global gain chosen from paired rear-RMS delta and verified within ±.1 dB; require guitar ≥.15, keys ≥.15, piano ≥.10, strings ≥.14, voice ≤.02, bass ≤.06, drums ≤.08 and no new any-stem swing song. Then consider full DEV40 plus separately covered real-stem validation and actual head-unit int8/latency measurement with Track A's port before the owner's deferred blind CarPlay verdict. A 4k source or entry failure stops this arm before C or longer training.
 
+Also run a diagnostic paired vocal-removal check on the same DEV12 excerpts: normalized complex energy of the eligible-output difference between ordinary mixture and mixture minus true vocal, for candidate versus control. A median candidate/control ratio ≤.8 and lower sensitivity in ≥8/12 songs would show the consistency objective actually changed the intended behavior. This is a mechanism check, **not** a substitute for source/entry promotion. The true vocal is used only to construct the offline counterfactual.
+
 ## Results
 
 Pending.
