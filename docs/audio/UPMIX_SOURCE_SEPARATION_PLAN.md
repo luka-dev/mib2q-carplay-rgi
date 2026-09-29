@@ -1260,6 +1260,8 @@ The owner found a previously untested data change: [`sep_net.py`](../../tools/st
 
 **Cross-corpus run started, 2026-09-29 13:40 PC local time.** The [frozen MoisesDB–OnAir pair](UPMIX_CROSS_CORPUS_REMIX_PROBE_2026-09-29.md) now compares the same BandSepNet rapid recipe with 25% OnAir among true windows and `--remix 0.5` in both arms; only the candidate draws remixed source families across both TRAIN corpora. Synthetic exposure was **17.53% of all windows**, and both real-cache 20-step smokes passed. The PC rapid queue contains the two exact tags, control first; daemon PID **10088**, trainer PID **17096**, one GPU lease active. This rapid network uses noncausal window normalization, so a 4k win would need 10k and causal confirmation before any product claim. The queue's later source/entry/real-C outputs are pending. Preserve the matched controls and do not run another GPU tenant.
 
+**Independent-data progress, 2026-09-29 13:48 PC local time.** [DSD100](UPMIX_DSD100_INDEPENDENT_CORPUS_2026-09-29.md) has an official 50-train/50-test natural-song release with real four-source stems. The PC began a throttled resumable download of its 15,989,815,305-byte archive while the rapid GPU pair continued; no package was installed or audio inspected. Completion requires archive size/CRC and song-overlap checks. Reserve TEST for a locked external source/protection/stability check; its combined `other` cannot supply separate instrument-family truth, so full product validation still needs an adequately covered instrument-labelled set.
+
 ## 📝 Publication (astra review 5, 2026-09-26)
 
 Asked whether there is a paper in this work.  Verdict: **a credible systems +

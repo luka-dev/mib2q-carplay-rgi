@@ -1,0 +1,17 @@
+# DSD100 Independent-Corpus Acquisition
+
+_Track B, 2026-09-29. Acquisition and validation boundary; no model or audio result yet._
+
+## Why this corpus
+
+All 40 MoisesDB DEV songs and 20 of the former TEST songs have been inspected during model and renderer selection. The owner-library teacher stems are estimates, so they cannot provide an independent real-stem product check. The [SigSep DSD100 release](https://sigsep.github.io/datasets/dsd100.html) lists **100 full-length stereo songs**, split into **50 train and 50 test**, with isolated vocals, drums, bass and `other`; its mixture is the sum of the sources at **44.1 kHz**. Its official direct archive reports **15,989,815,305 bytes** and supports byte-range resume. This is a useful new natural-song source/protection/stability set, provided song identities are checked for overlap before use.
+
+Reserve all **50 DSD100 TEST** songs for an evaluation locked before any result inspection. The DSD100 TRAIN half can later be considered as another real-stem training pool only in a separate matched intervention. DSD100's `other` is a combined source: it does **not** supply separate guitar, keys, piano or strings truth and cannot alone certify those family thresholds. The test half's artist and song overlap with MoisesDB, the owner's library, AlbumDB and any earlier MUSDB18-derived training must be audited from metadata before calling it independent. Older Track A models used MUSDB18, which includes DSD100 material, so independence is **model-specific**, not automatic.
+
+## Low-impact download and integrity gate
+
+The official SigSep page links the full archive at `http://liutkus.net/DSD100.zip`. At the 2026-09-29 check, the HTTPS variant returned 404 but the linked HTTP endpoint returned 200, `application/zip`, `Content-Length: 15989815305` and `Accept-Ranges: bytes`. The PC's D: drive had over **1.17 TB free**. The guarded [`download_dsd100.ps1`](../../tools/stereo-upmix-render/pc/download_dsd100.ps1) writes only `D:\upmix\datasets\_downloads\DSD100.zip.part`, resumes by range and limits transfer to **5 MB/s** while the cross-corpus GPU pair reads D:. It does not install packages, alter caches, extract audio or touch TEST songs. It refuses a too-large partial file and leaves `.part` in place even after all bytes arrive.
+
+Detached download wrapper PID **48584** and `curl.exe` PID **20888** were confirmed alive after SSH disconnected at **13:48 PC local time**; the partial file was **818,380 bytes** then. The parallel GPU control trainer was still alive and had reached step 2000. A live process and growing partial prove transfer activity, not archive correctness.
+
+After transfer, require the exact length, ZIP central-directory inspection and full CRC validation before renaming/extracting. Record the archive SHA-256. Inspect only filenames and release metadata to check song overlap and train/test coverage; preserve DSD100 TEST audio untouched until the candidate, gain, renderer and acceptance script are frozen. If overlap leaves too few independent songs or weak instrument coverage, use this as a secondary diagnostic set and obtain a different instrument-labelled real-stem set for the full product gate. No listening or device claim follows from downloading it.
