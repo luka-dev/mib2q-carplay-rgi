@@ -38,3 +38,31 @@ crosscorp_mix_s1|--remix 0.5 --extra-truth D:\upmix\datasets\onair_cache7 --extr
 The control and candidate will use the same committed code, seed and rapid daemon. Check an empty queue, no running trainer, a free lease and absent tag folders immediately before enqueueing; then hold one GPU tenant through both 4k trainings and diagnostics. A C screen may run on CPU after a checkpoint, but its numbers do not override the joint promotion rule above.
 
 **Matched pair launched, 13:39 PC local time.** The preflight found an empty queue, no rapid daemon/trainer, no GPU lease and no existing `crosscorp_ctrl_s1`/`crosscorp_mix_s1` folders. PC SHA-256 values matched source `11E0C4FE…`, rapid daemon `BE2094DD…`, OnAir split `4B3955D2…` and real-C executable `730A2CA9…`. The two exact queue lines above were written, and detached daemon PID **10088** was launched. Read-back after SSH disconnected found that daemon, one control `sep_net.py train` process **17096**, the `rapid` GPU lease and the expected 176/774/five-song header. The candidate remains queued behind the control. No checkpoint or source/entry/C result existed at this read-back; process launch alone proves none. Do not start another GPU task or modify the PC Python environment until this pair is terminal.
+
+## Completed 4k pair and decision
+
+Both arms finished on 2026-09-29 PC local time: control at **14:02:36**, cross-corpus candidate at **14:27:06**. Both have `train_done.txt`, `step4000.pt`, `gap.txt`, `transitions.txt`, and a 20-song `screen/stems.csv` under `D:\upmix\runs\rapid\<tag>`. The matched comparison is `D:\upmix\runs\rapid\crosscorp_pair_s1.json`, produced by the hash-matched `compare_rapid_pair.py` with `--expected-songs 20`. The queue and GPU lease are empty, no training or stem-screen process remains, and rapid daemon PID 10088 was stopped only after both jobs were terminal.
+
+| Fixed DEV diagnostic | Control | Cross-corpus candidate |
+| --- | ---: | ---: |
+| DEV12 eligible transmission, source attribution | .38 | .36 |
+| DEV12 vocal transmission | .201 | .174 |
+| DEV12 protected transmission | .087 | .092 |
+| Eligible 8–14 kHz transmission | −22.3 dB | −22.2 dB |
+| 43 vocal entries, retention post/pre median | .717 | .720 |
+| 43 vocal entries, retention post/pre p10 | .412 | .384 |
+| 43 vocal entries, absolute pre/post median | .546 / .386 | .487 / .345 |
+| Real-C rear RMS, 20 songs, fixed G 1.0 | −37.5 dBFS | −37.2 dBFS |
+| Any-stem swing songs, 20-song paired screen | 4 | 4, no new or resolved |
+
+| Real-C rear share, fixed-gain paired screen | Control median | Candidate median | Paired median delta (90% song-bootstrap CI) |
+| --- | ---: | ---: | ---: |
+| Vocal, 20 finite songs | .049 | .048 | −.003 (−.004, +.004) |
+| Guitar, 20 | .095 | .102 | −.005 (−.011, +.008) |
+| Other keys, 15 | .094 | .088 | −.004 (−.008, +.007) |
+| Piano, 8 | .060 | .061 | +.002 (−.004, +.009) |
+| Bowed strings, 5 | .092 | .151 | +.016 (−.004, +.059) |
+| Bass, 11 finite paired songs | .057 | .053 | −.004 (−.011, +.002) |
+| Drums, 20 | .083 | .087 | +.000 (−.002, +.007) |
+
+The strings difference is based on only five songs; its paired interval includes zero. Their difference of medians (+.059) is larger than the paired median gain (+.016), so it is not evidence of a repeatable family improvement. The screen's `n=20` bass line includes songs whose per-song `median_rear` is `nan`; the paired finite bass count is 11. Neither arm meets the product's guitar/keys/piano, voice or drum thresholds. The candidate's lower vocal transmission came with lower eligible transmission, a worse entry p10 and nearly unchanged C protection at a **+.3 dB** rear level. The precommitted **joint** gate therefore rejects the cross-corpus five-song OnAir recipe. Do not promote it to 10k, causal `norm=stream`, full40, device or car testing. This result tests one sampler and one small corpus, not all cross-dataset mixing. Preserve the checkpoints and song-level CSVs; pursue a larger, verified real-stem pool or one measured causal architecture mechanism with a fresh matched control.
