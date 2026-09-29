@@ -23,7 +23,7 @@ try {
     })
     if ($busy.Count -ne 0) { throw 'Training or renderer harness is active' }
     $hashes = @{
-        'sep_net_state.py' = '16B5029B2B24D88E0267D25D0B4E956765C5C731C91846BC2124839E190E3EC'
+        'sep_net_state.py' = '16B5029B2B24D88E0267D25D0B4E956765C5C731C91846BC2124839E190E3EEC'
         'sep_net.py' = '31D249884042AD640514D5A2925AA1AC2BF0E2C380CA9359B6BEEA8A896450B7'
     }
     foreach ($name in $hashes.Keys) {
