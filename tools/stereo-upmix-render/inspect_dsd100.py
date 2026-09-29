@@ -98,7 +98,8 @@ def inspect(archive, known, cutoff, crc):
         details.append(dict(split=split, title=title,
                             roles=sorted(roles), missing_roles=sorted(ROLES - roles),
                             mixture=bool(files["mixture"]),
-                            possible_overlap=matches(title, known, cutoff)))
+                            possible_overlap=matches(re.sub(r"^\d{3}\s*-\s*", "", title),
+                                                     known, cutoff)))
     counts = {split: sum(item["split"] == split for item in details)
               for split in sorted({item["split"] for item in details})}
     return dict(archive=str(archive), bytes=archive.stat().st_size,
