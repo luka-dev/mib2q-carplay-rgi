@@ -1,6 +1,6 @@
 # Dual-Timescale Spatial-State Probe
 
-_2026-09-28. Review 35, precommitted before training or DEV inspection._
+_2026-09-28. Review 35, precommitted before training or DEV inspection; completed and rejected at the frozen gate._
 
 ## Question and architecture
 
@@ -10,7 +10,7 @@ Use the review-29 causal 2×2 matrix trunk and source loss, with 36/24/24/24 cha
 
 The isolated implementation is [`sep_net_state.py`](../../tools/stereo-upmix-render/sep_net_state.py), SHA-256 `16b5029b2b24d88e0267d25d0b4e956765c5c731c91846bc2124839e190e3eec`; the historical `sep_net.py` remains byte-identical. Local forward, causal-prefix, state-reset and loss-gradient smoke checks passed. Both modes have the same **137.22 M estimated neural MAC/s** before FFT, EMA arithmetic, memory traffic and device int8 kernels. The guarded PC training entry point is [`run_dual_state4k.ps1`](../../tools/stereo-upmix-render/pc/run_dual_state4k.ps1), SHA-256 `511b419e68e48bfbb1b10b3b4f3295dda66b18b0cd67bfc9167336f687aff2ee`. Its first invocation correctly stopped at the source-hash guard because the literal expected digest omitted one character; no training began. The runner digest was corrected without changing the model, data or thresholds.
 
-Train two **matched** 4k arms on 16 s batch-6 crops (same 96 s of audio per step as the earlier 8 s batch-12 runs), same sample order, losses, initialization, optimizer and schedule. The persistent arm carries the 8 s state across the crop. The reset control clears only that state every 2 s, keeping fast features, role supervision, parameters and compute otherwise equal. Both arms get the same source-attr coefficient **.0734755788** and role-CE coefficient **.279254** from earlier training-only calibrations; these are fixed before this pair and may not be optimal for the new head. The source loss applies the full mixture-inferred 2×2 matrix to aligned true sources. Do not use review-32/33 vocal counterfactual losses. Inference for the diagnostic runs each complete 60 s song causally in time, with the arm's specified state behavior; reset controls only the new slow state. A separate carry-across-chunk implementation and int8/device profile are later gates.
+Train two **matched** 4k arms on 16 s batch-6 crops (same 96 s of audio per step as the earlier 8 s batch-12 runs), same sample order, losses, initialization, optimizer and schedule. The persistent arm carries the 8 s state across the crop. The reset control clears only that state every 2 s, keeping fast features, role supervision, parameters and compute otherwise equal. Both arms get the same source-attr coefficient **.0734755788** and role-CE coefficient **.279254** from earlier training-only calibrations; these are fixed before this pair and may not be optimal for the new head. The source loss applies the full mixture-inferred 2×2 matrix to aligned true sources. Do not use review-32/33 vocal counterfactual losses. Inference for the transition diagnostic runs each **complete cached song** causally in time, with the arm's specified state behavior; reset controls only the new slow state. These cached songs may exceed the goal harness's 60 s excerpt (events were found after 323 s). This clarifies the implementation's scope; it is not a post-result window selection. A separate carry-across-chunk implementation and int8/device profile are later gates.
 
 ## Frozen measurement and promotion
 
@@ -22,3 +22,31 @@ The diagnostic and runner SHA-256 values are `baa6788bcdc3d44112af4d0aa93923409d
 Require eligible transmission **≥.432**, vocal/eligible **≤.324**, drums/eligible **≤.0568**, bass/eligible **≤.0339**, and 43-entry post/pre eligible retention median **≥.85**, p10 **≥.60**. Require absolute median eligible transmission before and after entry **≥.25** each to exclude the review-32 silent solution. The persistent arm must also improve entry p10 by **≥.04** over reset without lowering eligible transmission by >.03 or worsening any protected/eligible ratio by >.01. A failed arm stops before C, full40, TEST, device or car promotion. Passing this screen only authorizes a fixed-gain enriched DEV20 real-C run with the review-29 C gates (guitar/keys/piano/strings ≥.15/.15/.10/.14; voice/bass/drums ≤.02/.06/.08; no new swing; paired rear RMS within ±.1 dB), followed by full40 and separate reused TEST20 if that passes. The TEST20 is already inspected and lacks wind/strings coverage, so it cannot be described as untouched or independent.
 
 Do not change Track A's hook or the head unit during this offline probe. The final goal still needs a verified streaming/int8 port on device and the owner's blind live-CarPlay verdict.
+
+## Matched training and frozen-screen results
+
+Both guarded GPU runs reached step **4000** with the same **1,031,932 parameters** and **137.216 M estimated neural MAC/s**. The reset control took **977 s**, the persistent arm **966 s**. Step-4000 scalar DEV SI-SDR/vocal-cell leak was **−.51 dB/.135** versus **−.45 dB/.136**; scalar rank was not the promotion criterion. PC checkpoints: `D:\upmix\runs\dual_state4k\reset2\step4000.pt` (SHA-256 `e84619273b08beda10ab8ffc743c5ab62a6e0be4f1ee1dca92370e9563fef68c`) and `D:\upmix\runs\dual_state4k\persistent\step4000.pt` (`eb43dc0e2a058957176672fa16bcd2afec54ab6c30ef2fda4c5ee1560787e3ef`). The first train-run attempt was stopped by a one-character typo in the runner's source-hash literal before any training; the guard was fixed and both arms then ran once to completion.
+
+The fixed DEV12 source-attribution output is `D:\upmix\runs\dual_state4k\diag\source.json`. Each row applies the operator inferred from the **mixture** to aligned true stems and reanalyses audio. Ratios are medians of per-song protected/eligible transmission.
+
+| Arm | Eligible | Vocal | Drums | Bass | Vocal/eligible | Drums/eligible | Bass/eligible |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Reset 2 s | .4648 | .1570 | .0317 | .0161 | .4367 | .0672 | .0375 |
+| Persistent 8 s | .4673 | .1578 | .0310 | .0162 | .4455 | .0684 | .0372 |
+| Frozen gate | ≥.432 | — | — | — | ≤.324 | ≤.0568 | ≤.0339 |
+
+Eligible transmission passed, but all three protected ratios failed. Song-paired eligible transmission improved only **+.0046** median; paired vocal/eligible changed **+.0027** median (worse), drums/eligible **−.0010**, bass/eligible **−.0004**. The worst individual vocal/eligible regression was **+.0201**. These are small changes despite the new state and role head; they do not close the gap to the privileged oracle or to Track A's real-C gate.
+
+The full-song transition diagnostic used the unchanged event detector on the first 20 inspected DEV songs: **43 entries, 40 exits, 54 sustained-vocal controls**. Some events are later than 60 s because this diagnostic follows the prior `diag_transitions.py` full cached songs; the latest measured event was at **323.25 s**. Output: `D:\upmix\runs\dual_state4k\diag\transitions.json`. The predeclared 43-entry summaries are:
+
+| Arm | Eligible post/pre median | p10 | Absolute pre | Absolute post | Vocal leak 0–2 s |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Reset 2 s | .8992 | .5452 | .5304 | .4620 | .2240 |
+| Persistent 8 s | .9178 | .5654 | .5239 | .4647 | .2132 |
+| Frozen gate | ≥.85 | ≥.60 | ≥.25 | ≥.25 | — |
+
+The persistent arm improved entry median **+.0187** and p10 **+.0202**, short of the required **+.04** improvement over reset, and p10 remained below **.60**. Its 43-event paired median post/pre change was **+.0135**, with the worst paired change **−.0850**; the worst absolute entry still retained only **.3418** of its eligible output. Early vocal leak improved slightly, but not enough to cure steady source leakage. The mechanism is real: on the **same** persistent checkpoint and mixture, toggling only the 8 s state to 2 s resets changed state RMS by **.1094** and complex output RMS by **.0292** after 2 s; learned slow-state decoder weights had RMS **.0330**. These are signal-domain checks, not an audible or device result.
+
+A post-gate protocol-comparability audit ran both frozen checkpoints through the **original 22 s excerpt/10 s warm-up** `diag_transitions.py` using [`diag_dual_state_legacy_entry.py`](../../tools/stereo-upmix-render/diag_dual_state_legacy_entry.py), without changing any checkpoint. It found the same **43/40/54** entry/exit/sustained events. Reset versus persistent entry retention was **.899/.548 → .918/.571** median/p10; early vocal leak **.225→.227** and steady leak **.206→.207**. The full-song and old excerpt protocols therefore agree on the decisive p10 failure and small memory effect, although their early-leak estimates move in opposite directions by roughly .01. This audit does not revise the precommitted full-song gate or promote the candidate.
+
+**Frozen gate: NO.** Eligible level, entry median, absolute anti-silence floors, parameter/MAC equality and the state-use check passed. Vocal, drum, bass, entry p10 and p10 gain over reset failed. No C renderer, full40, reused TEST20, head-unit port or car listening promotion follows from this checkpoint. The result rejects this specific 16 s-crop, band-role/8 s EMA architecture at 4k, not persistent identity in general. Its learned memory changed the output, but the content estimator still passed almost the same protected audio as the reset control; the lowest vocal-entry tail also remains unstable. A next discriminating test must change how protected and eligible content are estimated or represented on mixed cells, not just prolong this state or tune its decay against inspected DEV.
