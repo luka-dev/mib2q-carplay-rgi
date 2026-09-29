@@ -39,6 +39,8 @@ _Read this first, then [the night report](UPMIX_SEPARATOR_NIGHT_REPORT_2026-09-2
 
 **Review-27 update (later 2026-09-28).** A 4k causal 2×2 complex stereo matrix student (**126 M estimated neural MAC/s**) was trained against the saved diagonal complex control (**94 M**). DEV scalar SI-SDR/leak improved **−1.21/.161→−.68/.139**, but fixed DEV12 source attribution failed all four gates: eligible **.404<.432**, song-median vocal/eligible **.538>.324**, drums/eligible **.0605>.0568**, bass/eligible **.0406>.0339**. Eligible and absolute vocal transmission moved favorably, but per-song vocal/eligible worsened from the control's .504. Entry retention improved **.703/.418→.776/.466**, still below ≥.85/.60. Rejected before C/longer training; the [matrix report](UPMIX_CAUSAL_MATRIX_PROBE_2026-09-28.md) records details. Next: frozen-checkpoint cross-term ablation to distinguish unused spatial capacity from learned but unselective cross-channel routing. No device/Track A/car result was added.
 
+**Review-28 update (later 2026-09-28).** On fixed DEV12, the frozen matrix student's cross-channel contribution was **30.8%** of output energy and cut eligible complex error by **1.541 dB** versus the same checkpoint with cross terms zero (11/12 songs). It improved eligible transmission **.391→.404** and protected/eligible ratios vocal **.637→.538**, drums **.271→.0605**, bass **.219→.0406**. Yet it worsened 43-entry retention p10 **.516→.466**, despite lower median vocal leak during entries. Both full and ablated models still fail all source gates. The [cross-ablation report](UPMIX_MATRIX_CROSS_ABLATION_2026-09-28.md) shows the spatial pathway is actively used but not selective/stable enough. Next targeted train test: a balanced source-attribution term applied to the full matrix, with gradient-calibrated weight, before any C promotion. No device/Track A/listening result was added.
+
 ---
 
 ## 🚦 Rules you must follow
@@ -368,6 +370,7 @@ docs/audio/UPMIX_SEPARATOR_HANDOFF.md, then the night report and the plan.
 - [Upmix Continuous-Context Audit 2026-09-28](UPMIX_CONTINUOUS_CONTEXT_AUDIT_2026-09-28.md) — review-25 paired long-run versus reset inference, no observed state-context collapse
 - [Upmix Spatial-Cue Upper Bound 2026-09-28](UPMIX_SPATIAL_CUE_UPPER_BOUND_2026-09-28.md) — review-26 true-stem first-half-fit/second-half-test L/R matrix bound and positive architecture-selection gate
 - [Upmix Causal Matrix Probe 2026-09-28](UPMIX_CAUSAL_MATRIX_PROBE_2026-09-28.md) — review-27 causal L/R cross-channel student, failed source/entry gates and oracle-to-student gap
+- [Upmix Matrix Cross Ablation 2026-09-28](UPMIX_MATRIX_CROSS_ABLATION_2026-09-28.md) — review-28 cross terms materially improve source rejection/error but worsen vocal-entry retention tail
 - [Upmix Source Separation Plan](UPMIX_SOURCE_SEPARATION_PLAN.md) — the running log, reviews 1–16, run rows
 - [Upmix Mask Net Phase 1 Report 2026-09-27](UPMIX_MASK_PHASE1_REPORT_2026-09-27.md) — Track A in the car
 - [Upmix Stability 2026-09-25](UPMIX_STABILITY_2026-09-25.md) — the original "back and forth" measurement
