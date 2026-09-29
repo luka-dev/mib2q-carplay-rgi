@@ -1,6 +1,6 @@
 # Full-Matrix Source-Loss Probe
 
-_2026-09-28. Track B controlled training experiment; gradient weight and DEV results pending._
+_2026-09-28. Track B controlled training experiment; completed and rejected at the frozen source/entry gate._
 
 ## Hypothesis and fixed comparison
 
@@ -18,4 +18,21 @@ Only if these pass, run the frozen enriched DEV20 direct/no-bed/body0 real-C scr
 
 ## Results
 
-Pending.
+The one-GPU training run completed 4000 steps in 905 s. The candidate checkpoint is `D:\upmix\runs\matrix_source_loss4k\focused\step4000.pt`, SHA-256 `35B042EBBD44B03697F01444E03861C4D4A185C13F46B23376DD121B1B67FA4A`. Scalar DEV SI-SDR/vocal-leak changed from **−.68 dB/.139** for the saved matrix control to **−.54 dB/.165** for the candidate. These scalar measures were not the promotion rule.
+
+The frozen CPU source diagnostic on the same 12 already-inspected DEV songs gave the following song medians. Ratios are medians of per-song protected/eligible transmission, not ratios of the displayed transmission medians.
+
+| Checkpoint | Eligible | Vocal | Drums | Bass | Vocal/eligible | Drums/eligible | Bass/eligible |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Shared-mask anchor | .4624 | .1563 | .0270 | .0154 | .4050 | .0710 | .0424 |
+| Matrix control | .4043 | .1548 | .0231 | .0110 | .5381 | .0605 | .0406 |
+| Full-matrix source-loss candidate | .4620 | .1811 | .0319 | .0176 | .5061 | .0662 | .0415 |
+| Frozen candidate gate | ≥.432 | — | — | — | ≤.324 | ≤.0568 | ≤.0339 |
+
+The candidate restored eligible transmission by **+.0577** against its matched matrix control, but also raised absolute vocal, drum and bass transmission. Vocal/eligible improved **.5381→.5061** versus control yet remained worse than the shared-mask anchor's .4050. Drum and bass ratios worsened against control. Only the eligible-transmission gate passed; all three protection gates failed.
+
+The unchanged 20-song transition diagnostic detected 43 vocal entries. Eligible post/pre retention improved from control **median/p10 .776/.466** to **.841/.535**, still below the frozen **.85/.60** targets. Median vocal transmission in the first 0–2 s after entry rose **.185→.206**; the median peak over that interval rose **.243→.291**. This is more instrument continuity accompanied by more vocal leakage, rather than the missing selective persistence.
+
+Diagnostic outputs are `D:\upmix\runs\matrix_source_loss4k\focused_vs_shared.{json,txt}`, `focused_vs_matrix.{json,txt}` and `transitions.txt`; the guarded runner is [`run_matrix_source_loss_diag.ps1`](../../tools/stereo-upmix-render/pc/run_matrix_source_loss_diag.ps1). The PC GPU lease was free and the rapid queue empty after training. No C renderer, full40, longer training, device port or listening test was run for this failed checkpoint, as specified before training.
+
+This result rejects this **loss recipe at 4k**. It does not show that spatial matrix routing is intrinsically inadequate: the privileged spatial oracle improved both eligible transmission and rejection, and the trained cross terms materially affect output. The measured gap is in learned source ownership at vocal overlap. A next experiment must make source persistence and fast vocal protection distinguishable on mixed cells and vocal entries; increasing training duration or changing a scalar output threshold has no measured basis for promotion here.

@@ -1,7 +1,7 @@
 # Upmix Separator Track — Handoff
 
 _Initial handoff of the rear-eligible separator track (Track B), written 2026-09-28 04:50 on `feature/upmix-source-separation` at `6eac814`. Later review sections below update that snapshot._
-_Read this first, then [the night report](UPMIX_SEPARATOR_NIGHT_REPORT_2026-09-28.md) for the numbers and [the plan](UPMIX_SOURCE_SEPARATION_PLAN.md) for the full history (reviews 1–16)._
+_Read this first, then [the night report](UPMIX_SEPARATOR_NIGHT_REPORT_2026-09-28.md) for the initial numbers and [the plan](UPMIX_SOURCE_SEPARATION_PLAN.md) for the full history through review 29._
 
 ---
 
@@ -40,6 +40,8 @@ _Read this first, then [the night report](UPMIX_SEPARATOR_NIGHT_REPORT_2026-09-2
 **Review-27 update (later 2026-09-28).** A 4k causal 2×2 complex stereo matrix student (**126 M estimated neural MAC/s**) was trained against the saved diagonal complex control (**94 M**). DEV scalar SI-SDR/leak improved **−1.21/.161→−.68/.139**, but fixed DEV12 source attribution failed all four gates: eligible **.404<.432**, song-median vocal/eligible **.538>.324**, drums/eligible **.0605>.0568**, bass/eligible **.0406>.0339**. Eligible and absolute vocal transmission moved favorably, but per-song vocal/eligible worsened from the control's .504. Entry retention improved **.703/.418→.776/.466**, still below ≥.85/.60. Rejected before C/longer training; the [matrix report](UPMIX_CAUSAL_MATRIX_PROBE_2026-09-28.md) records details. Next: frozen-checkpoint cross-term ablation to distinguish unused spatial capacity from learned but unselective cross-channel routing. No device/Track A/car result was added.
 
 **Review-28 update (later 2026-09-28).** On fixed DEV12, the frozen matrix student's cross-channel contribution was **30.8%** of output energy and cut eligible complex error by **1.541 dB** versus the same checkpoint with cross terms zero (11/12 songs). It improved eligible transmission **.391→.404** and protected/eligible ratios vocal **.637→.538**, drums **.271→.0605**, bass **.219→.0406**. Yet it worsened 43-entry retention p10 **.516→.466**, despite lower median vocal leak during entries. Both full and ablated models still fail all source gates. The [cross-ablation report](UPMIX_MATRIX_CROSS_ABLATION_2026-09-28.md) shows the spatial pathway is actively used but not selective/stable enough. Next targeted train test: a balanced source-attribution term applied to the full matrix, with gradient-calibrated weight, before any C promotion. No device/Track A/listening result was added.
+
+**Review-29 update (later 2026-09-28).** That full-matrix source-attribution run finished at 4k. It lifted fixed DEV12 eligible transmission **.4043→.4620** over the matrix control, but vocal transmission also rose **.1548→.1811**. The candidate's per-song protected/eligible ratios were vocal/drums/bass **.5061/.0662/.0415**, all above frozen limits **.324/.0568/.0339**. On 43 vocal entries, eligible retention improved **.776/.466→.841/.535** median/p10 but still missed **.85/.60**, and first-2-s vocal leak increased. The precommitted rule rejected it before C/full40/longer training. The [full-matrix source-loss report](UPMIX_MATRIX_SOURCE_LOSS_PROBE_2026-09-28.md) records the gradient calibration, checkpoint, source ratios and transition results. The PC GPU lease is free and rapid queue empty. **Track B still has no deployable candidate or measured device fit, and the owner has deferred listening.** The positive true-stem spatial oracle and active cross terms indicate a learned source-ownership gap at overlap, not proof that the matrix architecture is impossible. Next: one bounded mixed-cell/entry diagnostic or mechanism that carries persistent eligible identity separately from fast vocal protection; freeze the source/entry gates before any new training. No unit, Track A or unrelated files were changed.
 
 ---
 
@@ -294,7 +296,7 @@ The currently defensible result is a **measured renderer upper bound plus a meas
 
 ---
 
-## 📍 What to do next (review 18: offline work now, listening later)
+## 📍 What to do next (updated after review 29; offline work now, listening later)
 
 1. **Preserve the selected host bound and its limits.** The [direct-object report](UPMIX_DIRECT_OBJECT_RENDERER_PROBE_2026-09-28.md) has the exact 20/40/TEST outcomes, renderer and sep9 hashes, and failed iterations. Do not change surround .3235 based on the already-inspected TEST20. The selected path is a combined object/bed/body change, not a port or an identified single C coefficient.
 2. **Build a causal eligible-audio estimator toward the ideal-mask/audio bound.** Use streaming normalization and an explicit object-audio output; keep extra latency ≤85 ms and an int8-computable architecture near the 150 M MAC/s device budget. Before another long run, define a short matched-age screen with hard guitar/keys/piano/strings, voice/bass/drums, swing, RMS and source-attributed vocal-entry gates through the fixed C renderer. Sep9 through that path failed guitar/keys/piano and bass, so simply continuing its checkpoint is not a complete fix. Use an identity controller only if attribution shows a specific continuity failure.
@@ -302,7 +304,7 @@ The currently defensible result is a **measured renderer upper bound plus a meas
 4. **Port only after a causal host candidate passes.** Track A owns `hook/audio` and the int8 port. Coordinate the interface and then measure actual ≤150 M int8 MAC/s, deadline misses and ≤85 ms added latency on the head unit, without rebooting it.
 5. **Finish with live CarPlay owner listening.** The current offline bound cannot answer timbre or cabin depth after removing rear body/bed. Only front-only and Track A run live today; the new path needs Track A's port before the requested blind in-car comparison. The owner chose to defer listening while these offline architecture tests ran.
 
-**Review-22 next action:** the confidence-map screen isolates vocal-entry persistence and mixed-source protection as the paired failure. Define a causal estimator with a persistent eligible-source state and an independently fast protected-source estimate, then precommit a short source/entry screen before training. Do not extend the rejected 4k checkpoint merely because its static remapping passed DEV12 source ratios; that map missed both entry gates. Resume longer separator training only when the short test identifies and demonstrates the missing capability.
+**Review-29 next action:** the full-matrix source loss restored eligible transmission but increased protected transmission and missed both vocal-entry gates. Diagnose mixed-cell attribution and onset timing with the frozen matrix checkpoint, then precommit one causal mechanism that retains instrument identity while reacting quickly to a new voice. Do not extend this rejected 4k run merely because its eligible recall improved. Promote through the same source/entry gate before C, full40, device work or a Track A port.
 
 ---
 
@@ -322,7 +324,7 @@ The currently defensible result is a **measured renderer upper bound plus a meas
 | What does Track A have in the car? | [Upmix Mask Net Phase 1 Report 2026-09-27](UPMIX_MASK_PHASE1_REPORT_2026-09-27.md) (mask net, drive curve, health line, Krait bench) |
 | The original "back and forth" analysis | [Upmix Stability 2026-09-25](UPMIX_STABILITY_2026-09-25.md) |
 | Data, caches, teachers | [Upmix Datasets and Teachers](UPMIX_DATASETS_AND_TEACHERS.md); training history [Upmix Training History](UPMIX_TRAINING_HISTORY.md) |
-| Every number and review of this track | [Night report](UPMIX_SEPARATOR_NIGHT_REPORT_2026-09-28.md), [the plan](UPMIX_SOURCE_SEPARATION_PLAN.md) (reviews 1–16) |
+| Every number and review of this track | [Night report](UPMIX_SEPARATOR_NIGHT_REPORT_2026-09-28.md), [the plan](UPMIX_SOURCE_SEPARATION_PLAN.md) (through review 29) |
 | All platform traps | [Landmines](../LANDMINES.md) — read it once, fully |
 
 **What the listening test is, concretely:** the owner in the car, the same 8–10 songs from the phone (vocal entries and exits, sustained instrumentals, dense choruses, exposed vocals), each played with (a) front-only and (b) Track A's deployable, live through CarPlay, level-matched by ear or by the phone-mic check in the deploy log; the owner answers the four questions per song. The shared-mask student and the teacher join only as a headphone preview until the student is ported. Porting a student into the hook is a Track A decision — ask, do not do it.
@@ -371,7 +373,8 @@ docs/audio/UPMIX_SEPARATOR_HANDOFF.md, then the night report and the plan.
 - [Upmix Spatial-Cue Upper Bound 2026-09-28](UPMIX_SPATIAL_CUE_UPPER_BOUND_2026-09-28.md) — review-26 true-stem first-half-fit/second-half-test L/R matrix bound and positive architecture-selection gate
 - [Upmix Causal Matrix Probe 2026-09-28](UPMIX_CAUSAL_MATRIX_PROBE_2026-09-28.md) — review-27 causal L/R cross-channel student, failed source/entry gates and oracle-to-student gap
 - [Upmix Matrix Cross Ablation 2026-09-28](UPMIX_MATRIX_CROSS_ABLATION_2026-09-28.md) — review-28 cross terms materially improve source rejection/error but worsen vocal-entry retention tail
-- [Upmix Source Separation Plan](UPMIX_SOURCE_SEPARATION_PLAN.md) — the running log, reviews 1–16, run rows
+- [Upmix Matrix Source-Loss Probe 2026-09-28](UPMIX_MATRIX_SOURCE_LOSS_PROBE_2026-09-28.md) — review-29 gradient-calibrated full-operator source loss improves eligible transmission but fails protection and entry gates
+- [Upmix Source Separation Plan](UPMIX_SOURCE_SEPARATION_PLAN.md) — the running log through review 29 and run rows
 - [Upmix Mask Net Phase 1 Report 2026-09-27](UPMIX_MASK_PHASE1_REPORT_2026-09-27.md) — Track A in the car
 - [Upmix Stability 2026-09-25](UPMIX_STABILITY_2026-09-25.md) — the original "back and forth" measurement
 - [Upmix Calibration and Tuning](UPMIX_CALIBRATION_AND_TUNING.md) — the shipped renderer configuration
