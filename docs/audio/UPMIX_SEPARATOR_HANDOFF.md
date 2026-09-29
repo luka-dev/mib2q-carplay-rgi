@@ -5,6 +5,8 @@ _Read this first, then [the night report](UPMIX_SEPARATOR_NIGHT_REPORT_2026-09-2
 
 **Stop snapshot 2026-09-29:** The owner's [one-page status](UPMIX_STATUS_AND_PROBLEMS_2026-09-29.md) covers both tracks; the [detailed Track B snapshot](UPMIX_SEPARATOR_STATUS_2026-09-29.md) records verified outcomes, failures, live PC state and the unrun cross-song probe. The owner stopped the investigation here. No new GPU job is queued; the already-running review-42 control was left running to preserve its uncheckpointed work. Its state must be checked afresh on resume.
 
+**Later planning update, 2026-09-29:** The earlier execution snapshot above is historical. Claude subsequently reported stopping the uncheckpointed review-42 job and cleaning an accidentally queued `remix` rapid job. A read-only check then found no PC GPU lease or Python training process, an empty rapid queue, and only a short log in `remix_aborted`; no remix result exists. The owner is **planning only**. The [data-first, architecture-second decision plan](UPMIX_SOURCE_SEPARATION_PLAN.md#next-decision-data-first-architecture-second-owner-planning-update-2026-09-29) specifies matched MoisesDB remix, curated OnAir, detailed raw MoisesDB instruments, optional audited teacher remix, causal confirmation, joint promotion gates and device/ear requirements. It separates the rapid BandSepNet comparison from review 43's causal fine-role probe. No run or hook port is authorized by this note.
+
 ---
 
 ## 📋 The job in one page
