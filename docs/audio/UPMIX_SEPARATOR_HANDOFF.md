@@ -1,7 +1,7 @@
 # Upmix Separator Track — Handoff
 
 _Initial handoff of the rear-eligible separator track (Track B), written 2026-09-28 04:50 on `feature/upmix-source-separation` at `6eac814`. Later review sections below update that snapshot._
-_Read this first, then [the night report](UPMIX_SEPARATOR_NIGHT_REPORT_2026-09-28.md) for the initial numbers and [the plan](UPMIX_SOURCE_SEPARATION_PLAN.md) for the full history through review 36._
+_Read this first, then [the night report](UPMIX_SEPARATOR_NIGHT_REPORT_2026-09-28.md) for the initial numbers and [the plan](UPMIX_SOURCE_SEPARATION_PLAN.md) for the full history through review 37._
 
 ---
 
@@ -56,6 +56,8 @@ _Read this first, then [the night report](UPMIX_SEPARATOR_NIGHT_REPORT_2026-09-2
 **Review-35 update (later 2026-09-28).** A matched 4k pair tested that causal architecture at **137.216 M estimated neural MAC/s**: an 8 s eligible-evidence EMA with fast band-role head versus a 2 s state-reset control. The state is used (same-checkpoint state/output RMS differences **.1094/.0292**), but DEV12 eligible transmission changed only **.4648→.4673** and protected/eligible ratios vocal **.4367→.4455**, drums **.0672→.0684**, bass **.0375→.0372**, missing limits **.324/.0568/.0339**. On 43 entries, full-song retention median/p10 **.899/.545→.918/.565**: median passes, p10 still fails .60 and improvement misses the frozen +.04 target. An audit using the original 22 s protocol confirmed **.899/.548→.918/.571**. The [dual-state report](UPMIX_DUAL_STATE_PROBE_2026-09-28.md) has hashes, runs, instrumentation recovery, full gates and worst cases. Rejected before C/full40/device/car. No deployable Track B candidate or listening verdict. Next discriminate a weak fast role cue from decoder failure before another trained architecture; do not extend these checkpoints or tune EMA on inspected DEV. No Track A/head-unit or unrelated file changed.
 
 **Review-36 update (later 2026-09-28).** The frozen review-35 role head distinguished pure eligible/protected cells (median AUC **.941**) but poorly estimated eligible fraction on mixed vocal+eligible cells (median correlation **.192<.30**, coverage .0825); its predicted eligible probability on pure eligible cells was only **.416**. Removing only the immediate role input while keeping the role-dependent slow state changed output RMS by **2.53%<5%** and vocal/E **.4455→.4452**. The [role-cue audit](UPMIX_ROLE_CUE_AUDIT_2026-09-28.md) records all 12 rows, algebra check and frozen interpretation: this trained coarse role cue is weak at overlap and its direct decoder path is also small. Next test fine-grained current-frame ownership evidence and an explicit operator route against a matched coarse-cue control. No threshold/temperature tuning, new C, device, car or Track A change followed.
+
+**Review-37 update (2026-09-28/29).** The [fine-role report](UPMIX_FINE_ROLE_PROBE_2026-09-28.md) precommitted and completed matched 4k coarse/fine per-bin role models (**146.321 M estimated neural MAC/s**, same parameters/data/seed). Fine raised direct role-to-matrix output contribution **3.12→6.96% RMS**, yet mixed vocal+eligible correlation **.1978→.1941** missed the +.10 mechanism target. DEV12 eligible transmission **.4948→.4920** passed its floor, but vocal/E **.4832→.4775**, drums/E **.0678→.0668**, bass/E **.0368→.0376** all failed absolute source gates. On 43 full-song entries, median/p10 **.928/.606→.904/.581**: fine worsened the tail and missed ≥.60. The original 22 s protocol confirmed **.913/.600→.904/.581**. Frozen promotion **NO**; no C/full40/TEST/device/car or Track A port. The tested local stereo features and stronger role route did not resolve overlap ownership. Next design must address eligible-audio reconstruction on vocal overlap directly, with a matched causal budgeted control and the same source/entry gates. No other dirty files changed.
 
 ---
 
@@ -310,7 +312,7 @@ The currently defensible result is a **measured renderer upper bound plus a meas
 
 ---
 
-## 📍 What to do next (updated after review 36; offline work now, listening later)
+## 📍 What to do next (updated after review 37; offline work now, listening later)
 
 1. **Preserve the selected host bound and its limits.** The [direct-object report](UPMIX_DIRECT_OBJECT_RENDERER_PROBE_2026-09-28.md) has the exact 20/40/TEST outcomes, renderer and sep9 hashes, and failed iterations. Do not change surround .3235 based on the already-inspected TEST20. The selected path is a combined object/bed/body change, not a port or an identified single C coefficient.
 2. **Build a causal eligible-audio estimator toward the ideal-mask/audio bound.** Use streaming normalization and an explicit object-audio output; keep extra latency ≤85 ms and an int8-computable architecture near the 150 M MAC/s device budget. Before another long run, define a short matched-age screen with hard guitar/keys/piano/strings, voice/bass/drums, swing, RMS and source-attributed vocal-entry gates through the fixed C renderer. Sep9 through that path failed guitar/keys/piano and bass, so simply continuing its checkpoint is not a complete fix. Use an identity controller only if attribution shows a specific continuity failure.
@@ -318,7 +320,7 @@ The currently defensible result is a **measured renderer upper bound plus a meas
 4. **Port only after a causal host candidate passes.** Track A owns `hook/audio` and the int8 port. Coordinate the interface and then measure actual ≤150 M int8 MAC/s, deadline misses and ≤85 ms added latency on the head unit, without rebooting it.
 5. **Finish with live CarPlay owner listening.** The current offline bound cannot answer timbre or cabin depth after removing rear body/bed. Only front-only and Track A run live today; the new path needs Track A's port before the requested blind in-car comparison. The owner chose to defer listening while these offline architecture tests ran.
 
-**Review-36 next action:** the frozen role-cue audit found strong pure-cell ranking but poor mixed-cell eligible fraction and weak immediate decoder use. Precommit one fine-grained current-frame role/cue path into the causal eligible matrix, preserving the 8 s state, with a matched coarse-cue control at the same parameter/compute budget, 4k age, source/entry gates and fixed C promotion. Do not alter Track A or call either inspected DEV/TEST set independent. If the next trained candidate still fails protection despite demonstrably better mixed-cell cue quality, investigate operator fusion or target ambiguity before another width/epoch sweep.
+**Review-37 next action:** per-bin local features made the direct role route stronger but did not improve mixed-cell ownership, protected leakage or the vocal-entry tail. Stop role temperature, gain, state-decay and checkpoint-extension variants of this family. Before another 4k train, test a privileged **vocal-overlap eligible-audio upper bound** at the same source/entry measurement points to separate target ambiguity from student failure; then choose one on-budget causal reconstruction mechanism with a matched control. Keep renderer, device, independent validation and owner ear as later gates. Do not alter Track A or call inspected DEV/TEST independent.
 
 ---
 
@@ -338,7 +340,7 @@ The currently defensible result is a **measured renderer upper bound plus a meas
 | What does Track A have in the car? | [Upmix Mask Net Phase 1 Report 2026-09-27](UPMIX_MASK_PHASE1_REPORT_2026-09-27.md) (mask net, drive curve, health line, Krait bench) |
 | The original "back and forth" analysis | [Upmix Stability 2026-09-25](UPMIX_STABILITY_2026-09-25.md) |
 | Data, caches, teachers | [Upmix Datasets and Teachers](UPMIX_DATASETS_AND_TEACHERS.md); training history [Upmix Training History](UPMIX_TRAINING_HISTORY.md) |
-| Every number and review of this track | [Night report](UPMIX_SEPARATOR_NIGHT_REPORT_2026-09-28.md), [the plan](UPMIX_SOURCE_SEPARATION_PLAN.md) (through review 36) |
+| Every number and review of this track | [Night report](UPMIX_SEPARATOR_NIGHT_REPORT_2026-09-28.md), [the plan](UPMIX_SOURCE_SEPARATION_PLAN.md) (through review 37) |
 | All platform traps | [Landmines](../LANDMINES.md) — read it once, fully |
 
 **What the listening test is, concretely:** the owner in the car, the same 8–10 songs from the phone (vocal entries and exits, sustained instrumentals, dense choruses, exposed vocals), each played with (a) front-only and (b) Track A's deployable, live through CarPlay, level-matched by ear or by the phone-mic check in the deploy log; the owner answers the four questions per song. The shared-mask student and the teacher join only as a headphone preview until the student is ported. Porting a student into the hook is a Track A decision — ask, do not do it.
@@ -395,7 +397,8 @@ docs/audio/UPMIX_SEPARATOR_HANDOFF.md, then the night report and the plan.
 - [Upmix Spatial-Memory Horizon 2026-09-28](UPMIX_SPATIAL_MEMORY_HORIZON_2026-09-28.md) — review-34 fixed-window and recency-weighted privileged spatial fits, with median gates and outliers
 - [Upmix Dual-State Spatial Probe 2026-09-28](UPMIX_DUAL_STATE_PROBE_2026-09-28.md) — review-35 matched learned slow-state/reset pair, source and entry gate failure
 - [Upmix Frozen Dual-State Role-Cue Audit 2026-09-28](UPMIX_ROLE_CUE_AUDIT_2026-09-28.md) — review-36 pure/mixed-cell cue quality and direct decoder-use intervention
-- [Upmix Source Separation Plan](UPMIX_SOURCE_SEPARATION_PLAN.md) — the running log through review 36 and run rows
+- [Upmix Fine-Cell Role and Direct Matrix Route Probe 2026-09-28](UPMIX_FINE_ROLE_PROBE_2026-09-28.md) — review-37 matched coarse/fine model, stronger direct route but failed overlap, source and entry gates
+- [Upmix Source Separation Plan](UPMIX_SOURCE_SEPARATION_PLAN.md) — the running log through review 37 and run rows
 - [Upmix Mask Net Phase 1 Report 2026-09-27](UPMIX_MASK_PHASE1_REPORT_2026-09-27.md) — Track A in the car
 - [Upmix Stability 2026-09-25](UPMIX_STABILITY_2026-09-25.md) — the original "back and forth" measurement
 - [Upmix Calibration and Tuning](UPMIX_CALIBRATION_AND_TUNING.md) — the shipped renderer configuration
