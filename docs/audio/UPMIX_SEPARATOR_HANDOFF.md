@@ -35,6 +35,8 @@ _Read this first, then [the night report](UPMIX_SEPARATOR_NIGHT_REPORT_2026-09-2
 
 **Review-25 update (later 2026-09-28).** A paired CPU audit on six fixed DEV songs compared 60 s uninterrupted inference to resets every 8 s on identical spectral frames, using both 4k complex checkpoints and excluding 1 s after each boundary. Continuous-minus-reset normalized complex error was median **−.001 dB** for control and **−.004 dB** for two-tap, with maxima **+.048/+.044 dB**; neither met the preselected +.5 dB in ≥4/6-songs context-mismatch gate. Eligible transmission differences were only **+.004/+.006**. Thus the 8 s reset training context is **not an observed explanation** for these checkpoints' source/entry failure. See the [long-context audit](UPMIX_CONTINUOUS_CONTEXT_AUDIT_2026-09-28.md). Future work should test whether stereo spatial cues add usable discrimination at vocal overlap before another model train, rather than treating reset-state drift as established. No device/Track A/listening result was added.
 
+**Review-26 update (later 2026-09-28).** A true-stem-fitted spatial upper bound compared a frequency-wise diagonal stereo matrix with a full 2×2 L/R matrix, fit per song on 0–29.9 s and evaluated unchanged on 30.1–60 s of 12 already-inspected DEV songs. The full matrix passed the frozen architecture-selection gate: median paired eligible transmission **+.0718**, vocal/eligible factor **.647** of diagonal (11 vocal-bearing songs), normalized complex error **−.633 dB** in **11/12** songs, and lower drum/bass ratios. Matched-eligible error improved **−.667 dB**. A silent-vocal missing-value bug stopped the first attempt after five songs; the corrected full run handled missing source coverage without changing performance thresholds. This privileged oracle is **not** a deployable separator or independent validation. The [spatial-cue report](UPMIX_SPATIAL_CUE_UPPER_BOUND_2026-09-28.md) records both iterations. It justifies one causal cross-channel `matrix2` student probe against the saved complex control; source/entry/C/device/car gates remain unpassed.
+
 ---
 
 ## 🚦 Rules you must follow
@@ -362,6 +364,7 @@ docs/audio/UPMIX_SEPARATOR_HANDOFF.md, then the night report and the plan.
 - [Upmix Dual-Head Causal Probe 2026-09-28](UPMIX_DUAL_HEAD_CAUSAL_PROBE_2026-09-28.md) — review-23 matched complex-audio/role-head pair and failed source/entry promotion
 - [Upmix Causal Deep-Filter Probe 2026-09-28](UPMIX_CAUSAL_DEEP_FILTER_PROBE_2026-09-28.md) — review-24 causal past-frame filter, matched source/entry results and failed promotion
 - [Upmix Continuous-Context Audit 2026-09-28](UPMIX_CONTINUOUS_CONTEXT_AUDIT_2026-09-28.md) — review-25 paired long-run versus reset inference, no observed state-context collapse
+- [Upmix Spatial-Cue Upper Bound 2026-09-28](UPMIX_SPATIAL_CUE_UPPER_BOUND_2026-09-28.md) — review-26 true-stem first-half-fit/second-half-test L/R matrix bound and positive architecture-selection gate
 - [Upmix Source Separation Plan](UPMIX_SOURCE_SEPARATION_PLAN.md) — the running log, reviews 1–16, run rows
 - [Upmix Mask Net Phase 1 Report 2026-09-27](UPMIX_MASK_PHASE1_REPORT_2026-09-27.md) — Track A in the car
 - [Upmix Stability 2026-09-25](UPMIX_STABILITY_2026-09-25.md) — the original "back and forth" measurement

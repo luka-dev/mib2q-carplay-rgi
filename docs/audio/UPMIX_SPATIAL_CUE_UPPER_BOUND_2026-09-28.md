@@ -16,4 +16,19 @@ Consider a causal cross-channel model only if the held-out second-half full matr
 
 ## Results
 
-The first execution exposed a missing-value bug after five songs: the sixth song's second half has too little vocal energy for a valid vocal/eligible ratio, and the summary formatter assumed every song had one. The five rows printed before the exception are exploratory and **not a 12-song verdict**. The code now records `null` for a silent protected family, saves partial rows, and requires the protected-family coverage above. Performance thresholds were not changed. The full 12-song run is pending.
+The first execution exposed a missing-value bug after five songs: the sixth song's second half has too little vocal energy for a valid vocal/eligible ratio, and the summary formatter assumed every song had one. The five rows printed before the exception were exploratory and **not a 12-song verdict**. The code was changed to record `null` for a silent protected family, save partial rows, and require the protected-family coverage above. Performance thresholds did not change. The corrected full 12-song CPU run completed; 11 songs had valid vocal ratios and all 12 had valid drum and bass ratios.
+
+| Second-half metric | Diagonal oracle | Full L/R matrix oracle | Paired difference or factor |
+| --- | ---: | ---: | ---: |
+| Eligible transmission, songwise median | .3189 | **.4617** | median paired **+.0718** |
+| Vocal / eligible, songwise median | .5314 | **.3183** | median songwise full/diagonal **.6472×** (n=11) |
+| Drums / eligible | .0578 | **.0250** | improved (n=12) |
+| Bass / eligible | .0420 | **.0102** | improved (n=12) |
+| Normalized complex eligible error | — | — | median full-minus-diagonal **−.6329 dB**, better in **11/12** songs |
+| Error with full matrix gain-matched to diagonal eligible transmission | — | — | median paired **−.6668 dB** |
+
+Every preselected spatial-promotion condition passed: median vocal/eligible factor **.647≤.8**, error gain **.633≥.3 dB** in **11≥8** songs, raw eligible change **+.0718≥−.03**, and drum/bass ratios fell rather than exceeding their +.01 guardrails. The different median eligible totals (.3189 and .4617) do not subtract to the median paired change because medians of separate song distributions need not commute with subtraction.
+
+This is evidence that a **cross-channel linear operator can exploit spatial cues** in these 12 songs, even when learned only from a song's first 30 s and applied unchanged to its second 30 s. It is not a bound on the causal student's learnability: the oracle fit uses unavailable isolated eligible audio for every song, is song-specific, and evaluates an already-inspected DEV set. The precommitted next step is one budgeted causal `matrix2` student versus the saved diagonal complex control, using the same source/entry/C promotion gates. No C render, head-unit change, device MAC measurement or owner hearing verdict follows from this oracle alone.
+
+PC artifacts: `D:\upmix\runs\spatial_oracle12\result.json`, `run.txt`, and `result.partial.json`. The result JSON contains each song's raw and eligible-matched matrix metrics. The corrected source and runner are [`diag_spatial_oracle.py`](../../tools/stereo-upmix-render/diag_spatial_oracle.py) and [`run_spatial_oracle.ps1`](../../tools/stereo-upmix-render/pc/run_spatial_oracle.ps1).
