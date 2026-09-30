@@ -72,6 +72,7 @@ flowchart TB
 | [Upmix Separator Research Review 2026-09-29](UPMIX_RESEARCH_REVIEW_2026-09-29.md) | 22 research lines and implementation checks against the plateau; proposed causal reference fitting, generalization and compression sequence. |
 | [Upmix BSRNN Reference Intake 2026-09-29](UPMIX_BSRNN_REFERENCE_INTAKE_2026-09-29.md) | Full pinned BSRNN pipeline and verified large/SIMO weights on PC; runtime readiness, loader/gain traps and next reference check. |
 | [Upmix BSRNN Pretrained Inference 2026-09-29](UPMIX_BSRNN_PRETRAINED_INFERENCE_2026-09-29.md) | Strict five-checkpoint TRAIN inference, original-gain stems; optimized SIMO 11.013 dB versus large 7.463 dB, setup failures and reference-only limits. |
+| [Upmix BSRNN Real-C Check 2026-09-29](UPMIX_BSRNN_REAL_C_CHECK_2026-09-29.md) | Frozen 40-DEV fixed-gain protocol for actual-mask source attribution, vocal entries and two real C routes. |
 
 ### Upmix runtime and release
 
