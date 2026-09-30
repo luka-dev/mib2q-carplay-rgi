@@ -1,0 +1,49 @@
+{
+  "parent_sha256": "ea4133f8983898d0b728b7aa969875b0574092cdcbe0bce1fbf7df33f3092a48",
+  "parent_protocol_sha256": "63daea1cecbf94441024b3ceafd09294e73da5cd47d27eb99f068419c5578c67",
+  "script_sha256": "af56cd6d31d1b7875cece507a812f5c6aaa92c9ec111ecf6b961a3cf19ec514d",
+  "base_graph_source_sha256": "c7aa0abc74dda830a5c306a5f61c30ae95ece5f8bdf61cd693ee4db57ff3fc46",
+  "seed": 1,
+  "original_config": {
+    "width": 24,
+    "depth": 2,
+    "local": 16,
+    "global_width": 16,
+    "decoder": 16,
+    "log_mean": -3.6760525703430176,
+    "log_std": 2.43422794342041
+  },
+  "target_config": {
+    "width": 24,
+    "depth": 3,
+    "local": 24,
+    "global_width": 24,
+    "decoder": 24,
+    "log_mean": -3.6760525703430176,
+    "log_std": 2.43422794342041
+  },
+  "cost": {
+    "full_output": {
+      "parameters": 655478,
+      "fps": 93.75,
+      "dense_macs_per_frame": {
+        "input_projection": 147600,
+        "time_grus": 497664,
+        "frequency_grus": 373248,
+        "residual_projections": 165888,
+        "interface": 27648,
+        "global_gru": 3456,
+        "decoder_bottleneck": 55296,
+        "four_source_projection": 393600,
+        "scene_projection": 41472
+      },
+      "dense_macs_per_second": 159925500.0,
+      "excluded": "FFT/iFFT, norms, activations, level/features, complex products, pooling, scene state, renderer, int8 kernels and memory traffic"
+    },
+    "eligible_plus_all_scene_dense_macs_frame": 1410672,
+    "eligible_plus_all_scene_dense_macs_s": 132250500.0,
+    "limits": "Counted dense graph only; current default C blob/runtime does not accept this configuration. No measured device or full-chain fit."
+  },
+  "gates": "all initial output fields NSE<=1e-9; carried chunks<=1e-9; future/reset errors0; finite silence; added modules receive gradients after two synthetic steps",
+  "scope": "structural CPU preparation only. Same frontend/data semantics; no GPU training, renderer, budget waiver or scene-quality claim."
+}

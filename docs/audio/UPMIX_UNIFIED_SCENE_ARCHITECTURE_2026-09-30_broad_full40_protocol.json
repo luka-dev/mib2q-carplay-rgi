@@ -1,0 +1,36 @@
+{
+  "source_manifest_sha256": "63daea1cecbf94441024b3ceafd09294e73da5cd47d27eb99f068419c5578c67",
+  "audit_sha256": "1bd45c5bdfb53b9aeff9f3073487ed2b886a64a76e399a04770b116efa1b1d71",
+  "source_hashes": {
+    "mask_net.py": "5caae687105ae492f5bbb5de5843593882da43c73e6cf90878bf28af8f54be40",
+    "sep_net.py": "11e0c4fe89c82d3be3814e5d2a421c5fd73c40d4e3fa505904c57ae1d7dba905",
+    "separator_causal_reference_probe.py": "e514fff84f29b0cc52236b6f4a2095cccd79b5c1777a77eb5f29a60347f37ccc",
+    "separator_fit_probe.py": "ceb3c158d1955e3a384c1f21317d00282f50e1c52b3e56ecb698aa5c05fcea0d",
+    "unified_upmix_net.py": "c7aa0abc74dda830a5c306a5f61c30ae95ece5f8bdf61cd693ee4db57ff3fc46",
+    "train_unified_upmix_fit.py": "8b777f2ed4914b8184e94f728d47c98f08550f04e69e98d18dcc85746a86bb78",
+    "train_causal_reference_generalization.py": "43ca0739a3d110031d72648bdaf10e47cb83c1c1569026603a4b91a901a5dffb",
+    "unified_upmix_audio.py": "0692531b4290d12adb114648fbd072f1cc781a36ce03fe8510816e9f67a051b2",
+    "unified_upmix_stream.py": "590eee8e93dc0eb29b757f64490fd9854910076a3ae28a86dbe1285eb056e098",
+    "train_unified_upmix_generalization.py": "921dd4a3edae2e9d7ed612d69777f61fc4a9d01ec66d166ba9e3a6f144e26a2d"
+  },
+  "script_sha256": "09367324d9642466ab18305865ebdb140f6dd5d52dda2b89b0736b946d184b3c",
+  "helpers": {
+    "bsrnn_reference_eval.py": "e5ded4764041d9e5ee65ffcbf60b8fc47f2f782427a9121d8889f628ed409c51",
+    "bsrnn_reference_infer.py": "1fc41e4451e212fa0ff662d699b000ff8080e06dd9b7956926b2e130e4aaa30b",
+    "upmix_stem_tests.py": "184cc28b493dde68b0106410515ce578a2719cdeea4558d38976c625a02573fe",
+    "upmix_behavior_tests.py": "c28574a4642b59feb179f0bbd6adaaeda870d6ffb7f37223bf5726a40e30913d",
+    "diag_transitions.py": "b2626f320f2e77fdc71e32f547fdd894f7e9e3f1a689f52f8cd714aff65b62c7",
+    "evaluate_oracle_renderer_probe.py": "1da71a53dbb740e5ee8d032ba58c7cfe970d7a3019b59a8a7c5bc487a29bbbde"
+  },
+  "c_sha256": "6bc42871556e8bc1df94f13e1417d8f78c0c9be10d170e9044e73a8787184aa2",
+  "points": {
+    "reference_03235": 0.3235,
+    "nominal_040": 0.4,
+    "diagnostic_050": 0.5
+  },
+  "nominal": "nominal_040",
+  "input_gain": "0.7/dry mixture peak; injection unity; no front trim or per-song normalization",
+  "renderer": "copied direct no-bed/body0; frontretention.5, frontbass-3, air-9, attackoff, LFEnosemanticassist; oldNNcalls0",
+  "selection": "terminal40k; same predeclared operating points in both arms; nominal.40 fixed before DEV; no checkpoint/gain best-of search",
+  "limits": "inspected DEV40 only; native48-band scene head dormant; no semantic scene/C ABI port, holdout, device or ears"
+}

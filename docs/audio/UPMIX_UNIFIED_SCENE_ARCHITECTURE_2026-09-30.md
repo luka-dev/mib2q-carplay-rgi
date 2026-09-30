@@ -365,3 +365,61 @@ The difference of unpaired DEV medians is positive, but the **paired40-song medi
 Uniform projection gives paired median eligible SDR+.020265dB, eligibleTX−.012780 and vocalTX−.005902; no predeclared diagnostic improvement. Eligible residual gives−.357355dB, eligibleTX−.054089 and drumTX+.010372; no diagnostic improvement, with a protected-response regression. Neither restores upper-band eligible transmission. No projected candidate, new training recipe, DEV test or gate waiver follows. This rejects a cheap post-hoc missing-mixture repair on these TRAIN cuts; it does not prove projection-trained models cannot improve.
 
 Next explanatory probe is [fixed-terminal TRAIN source allocation](../../tools/stereo-upmix-render/audit_unified_source_allocation.py):4×4 frozen output/input operator responses by frequency band, actual source reconstruction errors and summed-spectrum closure. It uses only FFT windows entirely inside original20s scored cuts. Responses quantify sensitivity and can cancel in a sum, so are never labelled literal audible contents. CPU-only execution does not alter current full40GPU evaluation.
+
+
+## Full broad DEV40 real-C result: product gates fail
+
+[Complete paired result](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_broad_full40.json), [fixed C protocol](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_broad_full40_protocol.json), [control](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_broad_control_full40.json), [joint](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_broad_joint_full40.json). Each terminal arm completed the original 40 DEV songs × 60 s, 231 stem rows at each of three gains, and 265 attributed events. The copied C host runs no legacy q6d, guard or mask model. Scene outputs remain dormant.
+
+At the predeclared nominal surround gain .40:
+
+| Measure | Eligible-only control | Joint source supervision | Required |
+| --- | ---: | ---: | ---: |
+| Guitar rear share | .187881 | .176703 | ≥ .15 |
+| Keys | .217714 | .193417 | ≥ .15 |
+| Piano | .202491 | .193950 | ≥ .10 |
+| Strings | .191910 | .195094 | ≥ .14 |
+| Voice | .015098 | .010858 | ≤ .02 |
+| Bass | .115417 | .130215 | ≤ .06 |
+| Drums | .013713 | .010034 | ≤ .08 |
+| Any-stem swing songs | 30/40 | 27/40 | ≤ 5 |
+| Eligible vocal-entry median | .802444 | .765289 | ≥ .85 |
+| Eligible vocal-entry p10 | .408400 | .431209 | ≥ .60 |
+| Rear RMS versus current matched Track A | −3.101 dB | −3.130 dB | Report level explicitly |
+
+Both pass instrument floors, voice/drums and all three level slopes, but fail bass, swinging and both entry gates: 9/13 observed nominal gates. Relative joint comparison passes 7/8 and fails entry median. No product promotion follows. More protected-source supervision alone did not solve broad extraction, nor make the rear stable at this gain.
+
+The frozen alternate gains do not rescue the combined result. At .3235 control/joint swings fall to 1/0, but guitar falls to .109/.102 and bass remains .067/.076; rear is 4.945/4.974 dB below Track A. At .50 guitar rises to .324/.309, but bass .177/.178 and swings 38/37; all control slopes and joint guitar/keys slopes fail. No gain was selected after DEV inspection. Raw CSVs preserve every per-song/stem failure: [control .3235](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_broad_control_reference_03235.csv), [control .40](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_broad_control_nominal_040.csv), [control .50](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_broad_control_diagnostic_050.csv), [joint .3235](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_broad_joint_reference_03235.csv), [joint .40](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_broad_joint_nominal_040.csv), [joint .50](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_broad_joint_diagnostic_050.csv). [Control events](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_broad_control_transitions.json) and [joint events](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_broad_joint_transitions.json) are retained.
+
+Rear share is power in dry-source-dominated time-frequency cells; it is not an isolated routed-source waveform. Frozen-operator source transmission is a component sensitivity which can cancel, not literal audible content. The very high bass proxy despite low extracted-bass response needs a perfect-label renderer check before attributing all failures to the encoder.
+
+## TRAIN source allocation and decoder-gradient diagnoses
+
+[Source allocation protocol](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_source_allocation_train_protocol.json), [all 12 TRAIN rows](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_source_allocation_train.json). At 8–14 kHz the true eligible component responds in eligible/vocal/drum operators at .008078/.110870/.551275 median; above 14 kHz .010006/.104296/.618871. Actual eligible reconstruction NSE is .97594/1.00197 while summed-source NSE is .00317/.000833. Thus correct mixture closure can coexist with poor source assignment. Eligible high-band target power is rare: .00013868/.00000261 of all-source, all-band power versus drums .0016889/.0004021. These measurements motivate investigating source assignment; they do not prove capacity, class weighting or a split decoder is the cause.
+
+[Shared decoder gradient protocol](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_decoder_gradients_train_protocol.json), [result](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_decoder_gradients_train.json), [execution record](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_decoder_gradients_execution.json). First 8 s of each original TRAIN12 scored cut, same zero-start training transform and exact source objective/normalizers/coefficient. Only the first shared per-band 32→16 decoder affine is differentiated. **0/576 band cases** have combined descent opposing eligible, and every frequency group has 0/12 song reversals. Median cosine across all bands .095696; weighted protected/eligible gradient norm ratio .264765. This does not support auxiliary gradient domination at this bottleneck on these cuts. A source-specific decoder is not justified as a measured repair from this negative result.
+
+Execution failure is preserved in [v1 protocol](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_decoder_gradients_v1_failed_protocol.json). Direct PowerShell native redirection under ErrorActionPreference=Stop aborted before a row without a Python traceback. A fresh v2 used Start-Process with independent stdout/stderr/exit capture; it completed all 12 rows with exit 0 and exposed a nonfatal requires-grad tensor-to-float logging warning. No objective or gradient computation changed. The current tool detaches those two logging scalars; the saved v2 protocol identifies the exact original calculation source. The warning is a plausible explanation for the shell abort, not a reproduced universal PowerShell diagnosis.
+
+## Function-preserving capacity continuation: frozen and running
+
+[Expansion implementation](../../tools/stereo-upmix-render/expand_unified_upmix.py), [training](../../tools/stereo-upmix-render/train_unified_capacity.py), [evaluation](../../tools/stereo-upmix-render/eval_unified_capacity.py), [one-GPU runner](../../tools/stereo-upmix-render/pc/run_unified_capacity.ps1), [manifest](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_capacity_manifest.json), [expansion protocol](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_capacity_expansion_protocol.json).
+
+Both arms start from the fixed joint40k checkpoint `ea4133f8983898d0b728b7aa969875b0574092cdcbe0bce1fbf7df33f3092a48`, selected because all audio heads are trained, not as a promoted winner. Control retains width24/two blocks/local16/global16/decoder16. Expanded retains width24 but adds an identity residual block and widens local/global/decoder features to24. Old coordinates and GRU gate rows are copied; new outgoing links start at zero. This preserves the starting function, unlike a fresh wider model whose initial quality would confound the comparison.
+
+[CPU initial check](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_capacity_expansion_initial_check.json): all output fields are bit exact at initialization; carried chunk NSE ≤2.08e−14, future-prefix/reset error 0, finite silence. Added modules receive nonzero gradients on the second synthetic step in a separate disposable copy. [Real TRAIN CUDA initialization](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_capacity_initial_train_cuda.json) passes the ≤1e−9 all-field/waveform identity gate; [both actual 20-step smokes and numeric audit](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_capacity_smoke_audit.json) pass.
+
+| Graph | Parameters | All-source dense M MAC/s | Eligible-plus-scene dense M MAC/s |
+| --- | ---: | ---: | ---: |
+| Control | 483,086 | 110.0055 | 91.5555 |
+| Expanded | 655,478 | 159.9255 | 132.2505 |
+
+The deployed path needs only eligible plus scene. These are counted dense operations, **not measured device cost**. Existing C blob/runtime support only the default graph; the expanded graph is not yet a ported or int8-qualified candidate.
+
+Fixed sequential 20k continuation per arm; fresh AdamW, weight decay 1e−4, clip5, 2k warmup to 3e−4 then cosine to 3e−5. Identical 156 true TRAIN songs and deterministic draws indexed 40001–60000; no remix, new corpus, teacher, source weighting or lookahead change. Scene remains frozen/dormant and reserved20 audio unread. Intermediate snapshots are diagnostic only; no DEV early stopping or gain selection. Terminal strict CPU/CUDA/native PCM/chunk/causality audit precedes the same full40 C/265-events protocol at .3235/.40/.50. Relative eligible SDR ≥control−.3 dB, eligible response ≥.9control, each protected response ≤control+.01, swings and entry ratios nonworse are necessary alongside every absolute product gate. PC root `D:\upmix\runs\unified_capacity_continuation_v1`; source hashes are frozen while training runs.
+
+## Exact-labelled-audio renderer bound: CPU check running
+
+[Independent CPU evaluator](../../tools/stereo-upmix-render/eval_unified_renderer_oracle.py) feeds the exact sum of labelled raw eligible stems through the same NN-free C host, original40/231 cuts and frozen three gains. Mixture and eligible share .7/dry_peak normalization; eligible injection stays unity, without gain/clipping rescue. Per-song output waveform hashes and every failed row are retained. Root `D:\upmix\runs\unified_renderer_oracle_full40_v1`.
+
+Earlier SIMO/teacher direct-C references still ran legacy q6d/guard. Their passing results cannot establish the achievable bound for this NN-free renderer. If exact eligible still fails a rear proxy or swing gate, source capacity alone cannot fix that renderer/measurement result. This oracle bounds the harness with privileged labels; it does not establish causal extractability, clean labels by ear or an owner verdict. No thresholds have been adjusted and no oracle result is claimed yet.

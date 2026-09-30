@@ -25,3 +25,6 @@
 
 # Preserve unified ARM serial logs and their recorded raw SHA-256.
 /docs/audio/UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30*.log.txt -text whitespace=cr-at-eol
+
+# Preserve unified full-C stem rows and their recorded hashes.
+/docs/audio/UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30*.csv -text whitespace=cr-at-eol

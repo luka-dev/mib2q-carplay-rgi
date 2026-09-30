@@ -1,0 +1,20 @@
+{
+  "verified": true,
+  "all_field_nse": {
+    "source_stft": 1.885606763727934e-14,
+    "source_masks": 1.2264840559392562e-14,
+    "family_presence": 0.0,
+    "membership": 0.0,
+    "family_pan": 0.0,
+    "membership_update": 0.0
+  },
+  "source_waveform_nse": {
+    "eligible": 2.54658291518804e-14,
+    "vocal": 2.0349925540417292e-14,
+    "drums": 9.987449613401469e-15,
+    "bass": 9.583968480652221e-15
+  },
+  "crop_sha256": "8ba685dbd7777edb1485453f56cf0c702082866743e7f5728e1f0d428bb5d869",
+  "protocol_sha256": "8d00a39e4fdd71cb5225eeb8858b9e3b1d6d1110df85671f2083082f2d814afd",
+  "scope": "actual frozenTRAIN4s physical path and CUDA graph initialization equality; no DEV quality gain"
+}
