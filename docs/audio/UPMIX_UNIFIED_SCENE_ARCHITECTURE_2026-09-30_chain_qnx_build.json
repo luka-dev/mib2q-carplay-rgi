@@ -1,0 +1,62 @@
+{
+  "soundcheck.su": "soundcheck.c:29:6:spa_soundcheck_default_config\t8\tstatic\nsoundcheck.c:41:6:spa_soundcheck_init\t56\tstatic\nsoundcheck.c:65:5:spa_soundcheck_main_gain\t16\tstatic\nsoundcheck.c:112:5:spa_soundcheck_update_main\t48\tstatic\nsoundcheck.c:148:6:spa_soundcheck_note_legacy\t8\tstatic\nsoundcheck.c:154:6:spa_soundcheck_discontinuity\t8\tstatic\nsoundcheck.c:223:6:spa_soundcheck_observe_s16\t40\tstatic\nsoundcheck.c:232:6:spa_soundcheck_apply_s16\t24\tstatic\nsoundcheck.c:254:6:spa_soundcheck_process_s16\t24\tstatic\nsoundcheck.c:262:6:spa_soundcheck_limit_s16\t24\tstatic\n",
+  "source-sha256.txt": "03f8849d9f93f80345883587061d6d64d567d0c7a7be90504ae86f60fc79333d  /Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/tools/stereo-upmix-render/unified_chain/unified_chain_cli.c\n4fca2a5fa594132d2ec7c05c37de81b4db4d9cd4ea36b5e25ab2b07f26ce60c9  /tmp/upmix_chain_mac_build_v3/copies/stereo_upmix.c\n7b7f9710f18129a9a6af75a962dc2048304738c4d316c1a0ff71f03624e0ea18  /tmp/upmix_chain_mac_build_v3/copies/hssr_dsp.c\na9b9cd6910806594d07b8c456439da2484f6a5716ee8782363aff382888a82fa  /tmp/upmix_chain_mac_build_v3/copies/hssr_neon.c\n63bf34125859f0562f6c217fc94260dcb9da7147b1f8e7db53596ad94ba9f56c  /tmp/upmix_chain_mac_build_v3/copies/hssr_mask.c\n9769ee0251933dc731ee299956bb9cf8bc578958e4bda8ded8d406233d49b293  /Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/tools/stereo-upmix-render/unified_runtime_v2/unified_runtime.h\na8d1011bd8792332cf7c2bbba95f65c3d95759881ed9bbea81d50a7bf4d8dcd5  /Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/tools/stereo-upmix-render/unified_runtime_v2/unified_runtime.c\n8ef0a6f1101faebead744344c6535c94c74be1bf9830953dcb2d9b0d009c8c26  /Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/tools/stereo-upmix-render/unified_runtime_v2/unified_audio_stream.h\n829f9062d69f86e94424d8bec193835d5efccf61f8682f7e8932cbcab1f5f12e  /Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/tools/stereo-upmix-render/unified_runtime_v2/unified_audio_stream.c\n09590fe3f5bca59c9a6224b40e4bb6d9aea275c05d4b2c1da3959d339582fdc9  /Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/hook/audio/soundcheck.c\n",
+  "compiler-version.txt": "arm-unknown-nto-qnx6.5.0eabi-gcc (GCC) 8.5.0\nCopyright (C) 2018 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n",
+  "docker-image-id.txt": "sha256:59cf5a575d69869e3983f136bdcf9e7e7d997e1206dcfc912e0d1988c68ad213\n",
+  "flags.txt": "-O2 -g -std=gnu99 -Wall -Wextra -fdata-sections -ffunction-sections -O3 -fno-math-errno -Werror -mfpu=neon -mfloat-abi=softfp -fstack-usage -DSPA_HSSR_TEST_MASK -DSPA_HSSR_TEST_DIRECT_NO_BED -I/src/hook/audio -I/src/tools/stereo-upmix-render/unified_runtime_v2\n",
+  "hssr_mask.su": "hssr_mask.c:357:5:spa_mask_model_load_file\t8\tstatic\nhssr_mask.c:363:6:spa_mask_model_unload\t8\tstatic\nhssr_mask.c:374:5:spa_mask_model_ready\t0\tstatic\nhssr_mask.c:379:6:spa_mask_state_reset\t0\tstatic\nhssr_mask.c:574:5:spa_mask_infer\t8\tstatic\n",
+  "hssr_neon.su": "hssr_neon.c:212:5:spa_hssr_model_view_payload\t40\tstatic\nhssr_neon.c:231:5:spa_hssr_model_load_file\t8\tstatic\nhssr_neon.c:238:6:spa_hssr_model_unload\t8\tstatic\nhssr_neon.c:248:5:spa_hssr_model_ready\t0\tstatic\nhssr_neon.c:256:6:spa_hssr_state_reset\t0\tstatic\nhssr_neon.c:313:5:spa_hssr_infer\t8\tstatic\n",
+  "hssr_dsp.su": "hssr_dsp.c:1421:13:spa_hssr_pack_hermitian\t48\tstatic\nhssr_dsp.c:191:13:spa_hssr_fft\t352\tstatic\nhssr_dsp.c:123:13:spa_hssr_overlap_run\t36\tstatic\nhssr_dsp.c:1986:13:spa_hssr_run_hop.isra.2\t3104\tstatic\nhssr_dsp.c:324:6:spa_hssr_dsp_prepare\t56\tstatic\nhssr_dsp.c:436:6:spa_hssr_dsp_reset\t0\tstatic\nhssr_dsp.c:1193:6:spa_hssr_dsp_set_mask_drive\t40\tstatic\nhssr_dsp.c:2078:5:spa_hssr_dsp_process_sample\t64\tstatic\nhssr_dsp.c:2097:5:spa_hssr_dsp_process_block\t120\tstatic\nhssr_dsp.c:2107:5:spa_hssr_dsp_process_block_sources\t120\tstatic\n",
+  "chain.su": "unified_chain_cli.c:35:12:order\t0\tstatic\nunified_chain_cli.c:28:15:now\t16\tstatic\nunified_chain_cli.c:74:12:execute\t25032\tstatic\nunified_chain_cli.c:123:14:worker\t8\tstatic\nunified_chain_cli.c:124:5:main\t104\tstatic\n",
+  "elf.txt": "ELF Header:\n  Magic:   7f 45 4c 46 01 01 01 00 00 00 00 00 00 00 00 00 \n  Class:                             ELF32\n  Data:                              2's complement, little endian\n  Version:                           1 (current)\n  OS/ABI:                            UNIX - System V\n  ABI Version:                       0\n  Type:                              EXEC (Executable file)\n  Machine:                           ARM\n  Version:                           0x1\n  Entry point address:               0x100c40\n  Start of program headers:          52 (bytes into file)\n  Start of section headers:          326016 (bytes into file)\n  Flags:                             0x5000002, has entry point, Version5 EABI\n  Size of this header:               52 (bytes)\n  Size of program headers:           32 (bytes)\n  Number of program headers:         6\n  Size of section headers:           40 (bytes)\n  Number of section headers:         33\n  Section header string table index: 30\n\nDynamic section at offset 0xe600 contains 22 entries:\n  Tag        Type                         Name/Value\n 0x00000001 (NEEDED)                     Shared library: [libm.so.2]\n 0x00000001 (NEEDED)                     Shared library: [libc.so.3]\n 0x0000000c (INIT)                       0x100a1c\n 0x0000000d (FINI)                       0x10df04\n 0x00000019 (INIT_ARRAY)                 0x10f5f8\n 0x0000001b (INIT_ARRAYSZ)               4 (bytes)\n 0x0000001a (FINI_ARRAY)                 0x10f5fc\n 0x0000001c (FINI_ARRAYSZ)               4 (bytes)\n 0x00000004 (HASH)                       0x100120\n 0x00000005 (STRTAB)                     0x100680\n 0x00000006 (SYMTAB)                     0x1002b0\n 0x0000000a (STRSZ)                      561 (bytes)\n 0x0000000b (SYMENT)                     16 (bytes)\n 0x00000015 (DEBUG)                      0x0\n 0x00000003 (PLTGOT)                     0x10f6d8\n 0x00000002 (PLTRELSZ)                   344 (bytes)\n 0x00000014 (PLTREL)                     REL\n 0x00000017 (JMPREL)                     0x1008c4\n 0x00000011 (REL)                        0x1008b4\n 0x00000012 (RELSZ)                      16 (bytes)\n 0x00000013 (RELENT)                     8 (bytes)\n 0x00000000 (NULL)                       0x0\nAttribute Section: aeabi\nFile Attributes\n  Tag_CPU_name: \"7-A\"\n  Tag_CPU_arch: v7\n  Tag_CPU_arch_profile: Application\n  Tag_ARM_ISA_use: Yes\n  Tag_THUMB_ISA_use: Thumb-2\n  Tag_VFP_arch: VFPv3\n  Tag_NEON_arch: NEONv1\n  Tag_ABI_PCS_wchar_t: 4\n  Tag_ABI_FP_denormal: Needed\n  Tag_ABI_FP_exceptions: Needed\n  Tag_ABI_FP_number_model: IEEE 754\n  Tag_ABI_align8_needed: Yes\n  Tag_ABI_align8_preserved: Yes, except leaf SP\n  Tag_ABI_enum_size: int\n  Tag_ABI_HardFP_use: SP and DP\n",
+  "stereo_upmix.su": "stereo_upmix.c:503:12:spa_upmix_config_valid\t0\tstatic\nstereo_upmix.c:343:13:spa_upmix_low_shelf\t24\tstatic\nstereo_upmix.c:380:13:spa_upmix_front_bass_prepare\t16\tstatic\nstereo_upmix.c:74:14:spa_stereo_upmix_input_matrix\t0\tstatic\nstereo_upmix.c:581:6:spa_stereo_upmix_default_config\t8\tstatic\nstereo_upmix.c:610:6:spa_stereo_upmix_config_set_lfe\t0\tstatic\nstereo_upmix.c:620:6:spa_stereo_upmix_config_set_hssr_model\t0\tstatic\nstereo_upmix.c:627:6:spa_stereo_upmix_config_set_hssr_guard_model\t16\tstatic\nstereo_upmix.c:635:6:spa_stereo_upmix_config_set_hssr_mask_gamma\t0\tstatic\nstereo_upmix.c:644:6:spa_stereo_upmix_config_set_hssr_mask_treble\t0\tstatic\nstereo_upmix.c:653:6:spa_stereo_upmix_config_set_hssr_mask_model\t16\tstatic\nstereo_upmix.c:662:6:spa_stereo_upmix_config_set_hssr_control_provider\t0\tstatic\nstereo_upmix.c:669:5:spa_stereo_upmix_backend_supported\t0\tstatic\nstereo_upmix.c:675:5:spa_stereo_upmix_init\t192\tstatic\nstereo_upmix.c:711:5:spa_stereo_upmix_reset\t24\tstatic\nstereo_upmix.c:970:5:spa_stereo_upmix_process_s16\t448\tstatic\n",
+  "executable-sha256.txt": "21a32266401aef919daeccc83fcc841560e57cff0fd9b3aab927037c1b94130d  /tmp/upmix_causal_chain_qnx_v2/upmix_unified_chain\n",
+  "stream.su": "unified_audio_stream.c:21:13:fft\t64\tstatic\nunified_audio_stream.c:39:10:umx_audio_state_bytes\t0\tstatic\nunified_audio_stream.c:40:17:umx_audio_create\t64\tstatic\nunified_audio_stream.c:53:6:umx_audio_free\t0\tstatic\nunified_audio_stream.c:54:6:umx_audio_reset\t8\tstatic\nunified_audio_stream.c:59:18:umx_audio_prediction\t0\tstatic\nunified_audio_stream.c:60:5:umx_audio_process\t112\tstatic\n",
+  "runtime.su": "unified_runtime.c:52:17:read_u16\t16\tstatic\nunified_runtime.c:47:17:read_u32\t16\tstatic\nunified_runtime.c:219:13:norm\t8\tstatic\nunified_runtime.c:183:13:linear.isra.2\t608\tstatic\nunified_runtime.c:228:13:gru\t632\tstatic\nunified_runtime.c:238:12:predict_selected\t51904\tstatic\nunified_runtime.c:71:12:linear_bind.isra.0\t136\tstatic\nunified_runtime.c:77:12:norm_bind\t136\tstatic\nunified_runtime.c:83:12:gru_bind\t160\tstatic\nunified_runtime.c:57:14:read_float\t24\tstatic\nunified_runtime.c:92:6:umx_free\t16\tstatic\nunified_runtime.c:97:11:umx_load\t192\tstatic\nunified_runtime.c:237:6:umx_reset\t0\tstatic\nunified_runtime.c:296:5:umx_predict\t16\tstatic\nunified_runtime.c:299:5:umx_predict_eligible\t16\tstatic\n",
+  "copied_renderer_manifest": {
+    "scope": "isolated audio-only host, no scene/int8/unit port",
+    "builder_sha256": "470754a575cdbeaabe6ebd8d7c5c909e6838cb74cde874a844d792d5145756fb",
+    "helper_sha256": "92223b87e1ac73b0c501e58ec2963d50fad25c35e3331c19e77e261fcd25fb57",
+    "originals": {
+      "tools/stereo-upmix-render/stereo_upmix_render.c": "8b615d59dfe9101f101781c1769530ac4b3d41adefd7df17ba4f9c68a47d4d4a",
+      "hook/audio/stereo_upmix.c": "24866e80d4a74b6bdae4800ab496827a728bac3c4f8339f4921f3738066c458b",
+      "hook/audio/hssr_dsp.c": "d071d8c77c38b810c061ca4812ee6c289b00780ae5b76fcad95acd28e90610d8",
+      "hook/audio/hssr_neon.c": "09d6b2b09e484270e952e705684e48c1eff85d783a662fee9fbb5f66cbed1883",
+      "hook/audio/hssr_mask.c": "9aef01c0313b325f18ae5b0bcd3d77cde8eeb42a60408b415af5cdf68fc914af",
+      "hook/audio/soundcheck.c": "09590fe3f5bca59c9a6224b40e4bb6d9aea275c05d4b2c1da3959d339582fdc9"
+    },
+    "copied": {
+      "stereo_upmix_render.c": "ed58ab22807b0d585f45dd6f815aa4215a3833c054ede4c10d093120a9128952",
+      "stereo_upmix.c": "4fca2a5fa594132d2ec7c05c37de81b4db4d9cd4ea36b5e25ab2b07f26ce60c9",
+      "hssr_dsp.c": "7b7f9710f18129a9a6af75a962dc2048304738c4d316c1a0ff71f03624e0ea18",
+      "hssr_neon.c": "a9b9cd6910806594d07b8c456439da2484f6a5716ee8782363aff382888a82fa",
+      "hssr_mask.c": "63bf34125859f0562f6c217fc94260dcb9da7147b1f8e7db53596ad94ba9f56c"
+    },
+    "compiler": "/opt/homebrew/bin/x86_64-w64-mingw32-gcc",
+    "command": [
+      "/opt/homebrew/bin/x86_64-w64-mingw32-gcc",
+      "-std=c99",
+      "-O2",
+      "-ffp-contract=off",
+      "-DSPA_HSSR_TEST_MASK",
+      "-DSPA_HSSR_TEST_DIRECT_NO_BED",
+      "-I",
+      "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/hook/audio",
+      "-o",
+      "/tmp/upmix_chain_mac_build_v3/copies/upmix_unified_audio.exe",
+      "/tmp/upmix_chain_mac_build_v3/copies/stereo_upmix_render.c",
+      "/tmp/upmix_chain_mac_build_v3/copies/stereo_upmix.c",
+      "/tmp/upmix_chain_mac_build_v3/copies/hssr_dsp.c",
+      "/tmp/upmix_chain_mac_build_v3/copies/hssr_neon.c",
+      "/tmp/upmix_chain_mac_build_v3/copies/hssr_mask.c",
+      "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/hook/audio/soundcheck.c",
+      "-lm"
+    ],
+    "binary_sha256": "1295db1a0cb9808926e0bf18d7f3034e3c6f898da3cc28ef45d0948ad641314d",
+    "legacy_load_and_infer": "abort stubs",
+    "learned_controls": "none; reset controls remain zero; injected eligible spectra use direct/no-bed path",
+    "routing": "original deterministic front/LFE DSP; original rear body/gains supplied explicitly by caller",
+    "requirements": "HSSR backend; eligible stereo PCM16 WAV same length; all legacy model/mask arguments refused"
+  },
+  "scope": "ARM/QNX cross-build only, not physical-unit timing, loaded-chain or audio qualification"
+}

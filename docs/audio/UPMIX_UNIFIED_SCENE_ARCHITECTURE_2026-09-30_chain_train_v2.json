@@ -1,0 +1,201 @@
+{
+  "complete": true,
+  "passed": true,
+  "gates": {
+    "float_source_nse": true,
+    "float_source_max_lsb": true,
+    "pcm16_source_nse": true,
+    "pcm16_source_max_lsb": true,
+    "repeat_reset_exact": true,
+    "future_prefix_exact": true,
+    "float_all6_renderer_nse": true,
+    "float_all6_renderer_max_lsb": true,
+    "int8_all6_renderer_nse": true,
+    "int8_all6_renderer_max_lsb": true,
+    "identity_source_array_delay": true
+  },
+  "arms": {
+    "float": {
+      "performance": {
+        "frames": 3016,
+        "identity": false,
+        "streams": 4,
+        "causal_front_alignment_samples": 1536,
+        "hop_acquisition_samples": 512,
+        "neural_dense_macs_s": 132250500,
+        "chain_ms_mean": 0.585483421,
+        "chain_ms_p99": 0.662999984,
+        "chain_ms_max": 0.767999969,
+        "hops_over_10_667ms": 0,
+        "state_bytes": 576928,
+        "worker_stack_bytes": 262144,
+        "output_checksum": 3433656769836016260,
+        "old_neural_invocations": 0,
+        "old_blobs": 0,
+        "scope": "standalone causal FFT+one model+WOLA+copied NN-free real C renderer; IO excluded, no hook transport, loaded-worker or CarPlay proof"
+      },
+      "hashes": {
+        "input": "e194972a0ca62d3d033b4f19072223547a6cddafe643de5f1a06a6ba6c15dda7",
+        "output": "1e640a330043ca3cf111331aac8f706516fc0db56d824df61c9769b9509444e0",
+        "source": "c4ae16139b97bab8fd48378310ae1d2d8d16c8b7110f713bee9c31460d725e51"
+      },
+      "source_float_nse": 2.37292487234553e-12,
+      "source_float_max_lsb": 0.03253173828125,
+      "source_pcm16_nse": 9.849375344693115e-10,
+      "source_pcm16_max_lsb": 1,
+      "source_pcm16_vs_unrounded_nse": 1.624246212843427e-07,
+      "independent_renderer": [
+        {
+          "nse": 0.0,
+          "max_lsb": 0,
+          "by_channel_nse": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "reference_sha256": "d9157c4517517396735cb45a8cdacd4c0179f6b5bd0eb230ce4d8b926ca3a7eb"
+        },
+        {
+          "nse": 0.0,
+          "max_lsb": 0,
+          "by_channel_nse": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "reference_sha256": "1bf56b4109389292f01afb0bf91c7308de89d946e064cc3e1016806c5ba2b333"
+        },
+        {
+          "nse": 0.0,
+          "max_lsb": 0,
+          "by_channel_nse": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "reference_sha256": "30d6d746d5fa43d872950358fd9059198eb7b91a89c65e6f2e42b2fec6856ad0"
+        },
+        {
+          "nse": 0.0,
+          "max_lsb": 0,
+          "by_channel_nse": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "reference_sha256": "57a377ab71fbaa9c9d58ad898f2ebd606782c26e2e4afcd086c57b2b75eedc0e"
+        }
+      ]
+    },
+    "int8": {
+      "performance": {
+        "frames": 3016,
+        "identity": false,
+        "streams": 4,
+        "causal_front_alignment_samples": 1536,
+        "hop_acquisition_samples": 512,
+        "neural_dense_macs_s": 132250500,
+        "chain_ms_mean": 0.469008952,
+        "chain_ms_p99": 0.523999974,
+        "chain_ms_max": 0.702999998,
+        "hops_over_10_667ms": 0,
+        "state_bytes": 576928,
+        "worker_stack_bytes": 262144,
+        "output_checksum": 15055337262678922767,
+        "old_neural_invocations": 0,
+        "old_blobs": 0,
+        "scope": "standalone causal FFT+one model+WOLA+copied NN-free real C renderer; IO excluded, no hook transport, loaded-worker or CarPlay proof"
+      },
+      "hashes": {
+        "input": "e194972a0ca62d3d033b4f19072223547a6cddafe643de5f1a06a6ba6c15dda7",
+        "output": "84686b544e38f4a663cb554501582344df766b7fa35913dc502cac519e05f190",
+        "source": "d6f334cbfeaf6ede55d13ade30456597a47640748ca3d2ecd75c0815d16aa27b"
+      },
+      "independent_renderer": [
+        {
+          "nse": 0.0,
+          "max_lsb": 0,
+          "by_channel_nse": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "reference_sha256": "1d8ed6341ed7d6cd24d33437d55c72aa81936ad3170f9601b0b1c3a37c74f2da"
+        },
+        {
+          "nse": 0.0,
+          "max_lsb": 0,
+          "by_channel_nse": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "reference_sha256": "6d8c934c037d1dbbd08cdaf65d55ab8f395e445ca4b281a446b40115991154b3"
+        },
+        {
+          "nse": 0.0,
+          "max_lsb": 0,
+          "by_channel_nse": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "reference_sha256": "7cc37caa2f13f82e34437e7097a0c5ab9f30e5642436d2f3bc9804960c0eec18"
+        },
+        {
+          "nse": 0.0,
+          "max_lsb": 0,
+          "by_channel_nse": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "reference_sha256": "991d5239c3ec626539f7d2186ead424f53bbe5e23cc1337a2022552de9de297d"
+        }
+      ]
+    }
+  },
+  "identity_delays": {
+    "source": {
+      "first_nonzero_offset_samples": 1536,
+      "peak_offset_samples": 1536,
+      "peak_amplitude": 6554
+    },
+    "front": {
+      "first_nonzero_offset_samples": 2048,
+      "peak_offset_samples": 2048,
+      "peak_amplitude": 2991
+    },
+    "rear": {
+      "first_nonzero_offset_samples": 2624,
+      "peak_offset_samples": 2624,
+      "peak_amplitude": 3480
+    }
+  },
+  "protocol_sha256": "200109a17c5f4cadcf6a1a3eaf22b926416698d5807133de34502b5d38e3f851",
+  "limits": "pipeline execution/matching only, no old allsource reconstruction-screen waiver or terminal source quality/DEV/device/owner claim; identity pulse records sample-onset/peak delay including front alignment/renderer; acquisition and measured execution remain separate; no physical-unit/loaded-worker85ms proof"
+}

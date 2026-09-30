@@ -1,5 +1,8 @@
 # Upmix Status and Problems 2026-09-29
 
+**Latest Track B state, 2026-09-30:** Both matched capacity continuations completed20k and strict saved-checkpoint CPU/CUDA/native/chunk/causality audit passes. Expanded versus control paired DEV40 eligible SI-SDR gain is+.102677dB (25/40nonworse), with upper-band extraction still weak; full40 real-C/entry evaluation is running, not yet a promotion. A standalone causal one-model FFT/WOLA→NN-free real-C chain passes all11 TRAIN numeric checks, all6channels exactly match separate rendering, and QNX cross-build is ready. Identity delays front42.667/rear54.667ms exclude acquisition/execution/scheduling; Mac int8.469ms is not device proof. First quantization comparison and compiler failures are archived. Unit read-only SSH timed out. Exact-label nominal renderer can reach roughly39% instrument rear share with2/40swings, so current extraction remains a major limitation. [Complete results and limits](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30.md#both-capacity-continuations-complete-terminal-full40-evaluation-running). No Track A/unit/environment edit. Next finish frozen full40/events, then qualify eligible int8 and physical chain only if acoustic gates warrant it. Earlier snapshots below are historical.
+
+
 **Capacity live state:** Original-graph control completed20k continuation (3,340.869s,156TRAIN); expanded arm is now training under the same singleGPU supervisor. Control TRAIN12 eligible median−.935dB/DEV40−.588dB, upper DEV transmission .0067/.0057 remain weak. Final paired audit/full40 C/entries waits for expanded20k. [Terminal control evidence](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30.md#capacity-control-continuation-completed-expanded-arm-started).
 
 
