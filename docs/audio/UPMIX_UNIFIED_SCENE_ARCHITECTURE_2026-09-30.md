@@ -738,3 +738,39 @@ ARM float all6+eligible channel NSE≤2.480e−9, maximum2LSB, passes the predec
 ### Current completion boundary
 
 Broad156TRAIN supervisor45888/control26924/32840 remains **verified live**, latest27,250/40k/4,458.342s, all156songs exposed. Spectral40k follows sequentially, then saved terminal audit/original40×60s231stem rows265events at fixed nominal.40. DEV is still first evaluated at the fixed terminal, reserved20 audio unread; no early promotion/gain selection. This turn completes new graph's standalone native/ARM arithmetic integration, not the requested bright and stable rear. Original13 acoustic gates, adequate independent20, full int8 device chain≤150M/≤85ms and owner blind live CarPlay preference remain open. No goal-completion claim.
+
+
+## Saved real-C rear spectrum: previous capacity model loses instrument treble
+
+[Reproducible CSV reporter](../../tools/stereo-upmix-render/report_upmix_rear_spectrum.py), [full band/coverage/paired-delta artifact](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_rear_spectrum_audit.json). This is descriptive analysis of the **already evaluated original DEV40**: current Track A, old capacity control/expanded terminals and exact-labelled eligible renderer oracle. The fresh spectral40k candidate has no terminal result yet and is not included. No new audio, training, GPU job, gain choice or promotion gate is introduced.
+
+The existing harness already saves six band columns from the actual C output; its headline whole-stem medians did not show this spectral collapse. All four CSVs have identical40song/231song-stem identities and identical finite coverage per band. The reporter checks identities/counts, input hashes, fractions and the original helper's frequency boundaries without importing or changing live training/evaluation helpers. Independently recomputed medians/counts agree; incorrect counts and mismatched identities are rejected. NaN stays missing.
+
+| Stem | Old expanded 300–1000 Hz | Old expanded 6–10 kHz | Exact-labelled C 6–10 kHz | Track A 6–10 kHz | Finite 6–10 kHz rows |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Guitar | .1825 | .0381 | .4120 | .4407 | 39/39 |
+| Keys | .1785 | .0231 | .3669 | .4523 | 21/27 |
+| Piano | .1396 | .0714 | .4138 | .3672 | 12/15 |
+| Strings | .1730 | .0166 | .2515 | .3327 | 6/6 |
+| Winds | .1072 | .0252 | .4098 | .4032 | 5/5 |
+| Vocal | .0094 | .0003 | .0011 | .2620 | 40/40 |
+| Bass | .1360 | .0423 | .0569 | .5292 | 24/40 |
+| Drums | .0228 | .0030 | .0043 | .2918 | 40/40 |
+
+These values are medians across finite per-song **rear power/(front+rear power)** ratios, measured over the whole excerpt in cells where the dry stem exceeds the rest by10dB. They are not isolated source energy transmission, and ratios of these medians must not be called a percentage of an instrument retained. Per-band power aggregation differs from the time-median `median_rear`; do not substitute one for the other. Protected-band values are source-dominance proxies with the existing component/cancellation caveat, not direct proof of audible voice. Band coverage is sparse for strings/winds and several upper-band keys/piano/bass rows.
+
+At10–16kHz, expanded guitar/keys/string ratios are .0143/.0024/.0037 versus exact-labelled .3225/.2887/.2180, with35/39,20/27 and6/6 finite rows respectively. The same nominal NN-free renderer can support instrument body and treble with exact eligible audio. Old expanded whole-stem guitar/keys .165/.212 therefore does **not** establish a bright rear. Track A has stronger treble but much larger protected-source proxies; passing all high-frequency mixture content or raising global gain would risk restoring protected material too. This evidence locates an end-to-end spectral defect in the learned path; it does not uniquely distinguish upstream representation from decoder rank, objective or optimization.
+
+CSV labels truncate integer kHz boundaries: `rear_1_2k` actually means1000–2500Hz and `rear_2_4k` means2500–4000Hz. The artifact records all exact Hz edges. A band summary does not measure instrument attack versus sustain or perceived cabin brightness; those remain unproved. Reuse this standalone report on the fixed new spectral terminals after their scheduled full40 renders, retain original acoustic gates and coverage, and avoid interpreting scalar rear-share gains as spectral restoration. No live evaluator mutation or retrospective new pass threshold.
+
+```sh
+python3 tools/stereo-upmix-render/report_upmix_rear_spectrum.py \
+  --input track_a=docs/audio/UPMIX_TRACKA_MATCHED40_2026-09-30_stems.csv \
+  --input capacity_control=docs/audio/UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_capacity_control_nominal_040.csv \
+  --input capacity_expanded=docs/audio/UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_capacity_expanded_nominal_040.csv \
+  --input renderer_oracle=docs/audio/UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_renderer_oracle_nominal_040.csv \
+  --reference renderer_oracle \
+  --output docs/audio/UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_rear_spectrum_audit.json
+```
+
+Latest verified broad supervisor45888/control26924/32840 remains live at34,750/40k/5,682.127s; all156TRAIN songs exposed. Spectral40k follows sequentially, then terminal numerical/full40/event checks. A read-only unit SSH probe returned255/connection timeout: no unit command, copy, mount or restart occurred. Actual loaded-device budget remains unmeasured. This is new analysis of saved failed models, not a new candidate win or a completed product.
