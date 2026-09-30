@@ -30,6 +30,7 @@ CLASSPATH="$PATCH_JAR:$STOCK_JAR:$TOOLS_DIR/libs/org.osgi.framework-1.10.0.jar:$
     "$PROJECT_DIR/tests/ClusterKdkSyncTest.java" \
     "$PROJECT_DIR/tests/ClusterKdkBapChainTest.java" \
     "$PROJECT_DIR/tests/ClusterKdkRendererLifecycleTest.java" \
+    "$PROJECT_DIR/tests/BapShutdownFailureTest.java" \
     "$PROJECT_DIR/tests/LaneGuidanceTransportTest.java" \
     "$PROJECT_DIR/tests/LaneGuidanceLifecycleTest.java" \
     "$PROJECT_DIR/tests/RgiDeliveryRecoveryTest.java" \
@@ -55,6 +56,16 @@ CLASSPATH="$PATCH_JAR:$STOCK_JAR:$TOOLS_DIR/libs/org.osgi.framework-1.10.0.jar:$
 "$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" ClusterKdkSyncTest
 "$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" ClusterKdkBapChainTest
 "$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" ClusterKdkRendererLifecycleTest
+for variant in us eu cn; do
+    case "$variant" in
+        us) patch=carplay_hook.jar; stock=US_MU1316_lsd.jar ;;
+        eu) patch=carplay_hook.jar; stock=EU_MU1329_lsd.jar ;;
+        cn) patch=carplay_hook_cn.jar; stock=CN_MU1003_lsd.jar ;;
+    esac
+    echo "BAP shutdown regressions: $variant"
+    "$JDK_DIR/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/$patch:$PROJECT_DIR/java_stock/$stock" \
+        com.luka.carplay.rgd.BapShutdownFailureTest
+done
 
 "$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.LaneGuidanceTransportTest "$PROJECT_DIR/build/lane-guidance-wire.bin"
 "$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.LaneGuidanceLifecycleTest
