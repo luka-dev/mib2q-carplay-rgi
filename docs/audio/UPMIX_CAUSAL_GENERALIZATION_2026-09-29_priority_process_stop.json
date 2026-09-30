@@ -1,0 +1,11 @@
+﻿{
+    "lease":  "causal_generalization 0dfd44f6-b719-4466-80fa-ab5bde0cfc1d",
+    "utc":  "2026-09-30T05:07:21.8404723Z",
+    "stopped_tree":  [
+                         10456,
+                         34632,
+                         29684
+                     ],
+    "progress_step_before_stop":  28750,
+    "action":  "owner-requested priority reorder; resumable pause, no full40k result"
+}
