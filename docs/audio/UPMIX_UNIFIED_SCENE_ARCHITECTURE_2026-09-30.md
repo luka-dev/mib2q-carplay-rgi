@@ -1,6 +1,6 @@
 # One causal network for a stronger rear scene
 
-_2026-09-30. Track B. Owner direction: replace q6d + guard + v21a with one capable network and make the rear scene more expressive. CPU prototype implemented; no trained weights, GPU run, renderer adapter or hook integration._
+_2026-09-30. Track B. Owner direction: replace q6d + guard + v21a with one capable network and make the rear scene more expressive. CPU prototype implemented; first paired fitting protocol frozen below. No trained quality result or hook integration._
 
 ## 🎯 Decision and acceptance
 
@@ -90,7 +90,7 @@ Default prototype has **483,086 parameters and110.0055 M estimated dense MAC/s**
 4. **Complete broad training and matched full40.** Predeclare seed, full horizon, draw sequence and terminal selection before GPU work;4k is a diagnostic snapshot, not automatic convergence evidence. Compare Track A, unified audio-only/scene arms, and saved causal/SIMO references on identical songs/input and declared routes. Report paired song confidence intervals, all family shares/bands, absolute level, source leakage, entries/exits and any-stem motion. A single untrained architecture does not justify a new long training queue.
 5. **Teacher and quantization work after an acoustic recipe is established.** Optional SIMO training-only audio targets with true-stem authority and source/treble attribution audit; no q6d imitation as the sole target, no latent-state MSE shortcut. Use quantization-aware training and device parity/profile after the compact model passes offline joint quality. Do not enlarge the≤150M allowance or reinterpret1.33ms mask timing as unused full-chain capacity.
 
-The owner authorized the unified/expressive direction. This update implements the CPU architecture and preserves the necessary pre-GPU definition work; it does not ask for another permission, launch a job with missing targets/adapter, or declare a trained student.
+The owner authorized implementation, training and completion. The audio fitting pair uses complete true-stem targets and can run independently while the copied-host adapter is being built. Host comparison remains mandatory before a broad acoustic claim; dormant scene heads are not presented as trained routing.
 
 ## 🎚️ Expressiveness experiment
 
@@ -106,3 +106,27 @@ Explore predeclared instrument transfer settings aimed at approximate **20%,30%,
 ## 📍 Current handoff
 
 Implemented: isolated unified CPU prototype, full counted heads/state, meaningful structural smoke, architecture/expressiveness decision. No GPU use, queued job, package install, trained checkpoint, new C adapter, Track A edit or unit action. Next complete the copied-host contract/current Track A full40 baseline and real-TRAIN fitting/supervision protocol, then execute its frozen pair on the single PC GPU. Keep both completed reference checkpoints and all negative experiments available for comparison.
+
+## 🧪 Frozen first fitting pair
+
+Runner: `tools/stereo-upmix-render/pc/run_unified_upmix_fit.ps1`; trainer: `train_unified_upmix_fit.py`; fresh PC root: `D:\upmix\runs\unified_upmix_fit_v1`. This is a TRAIN-only mechanism check, not DEV selection or a production candidate. The copied-host adapter is independent work during fitting; no source changes are permitted after this protocol is prepared.
+
+| Frozen choice | Definition |
+| --- | --- |
+| Fixtures | Exact four natural 8s TRAIN crops from `separator_causal_reference_v1/manifest.json`; manifest SHA256 `95edc076b2bf10fb0019b440da147d64046dcea16128bb038f4022c6b72bbc99`; selected int16 and split hashes verified again |
+| Inputs/targets | Exact sum of eligible, voice, drums and bass; seven-slot truth only; no teacher, remix, extra corpus, fine-family labels or DEV |
+| Initialization | Identical seed1 checkpoint for both arms; all source decoders present in both; scene parameters frozen and not evaluated during fitting |
+| Control | Eligible full audio objective only |
+| Intervention | Same eligible objective plus normalized mean of vocal/drum/bass full audio objectives; shared encoder and joint decoders |
+| Source normalization | One scalar per source, eligible RMS/source RMS on the four fixed TRAIN crops, floor1e−5 |
+| Auxiliary weight | Before any update, `0.20 × eligible shared-trunk gradient norm / normalized protected mean shared-trunk gradient norm`; calibration and checkpoint recorded in `prepared.json` |
+| Schedule | Both10,000 terminal steps, AdamW lr3e−4, weight decay1e−4, global grad clip5; TF32 off; no early best-checkpoint selection |
+| Reporting | Every250steps: loss and SI-SDR per source, actual-mixture eligible operator attribution, source-presence mask and elapsed seconds |
+| Terminal audit | Independent CPU load/replay: loss difference≤1e−4 and SI-SDR difference≤.05dB; saved-weight real-spectrum causality/chunk test; frozen scene tensor hashes |
+| Fitting gate | Joint eligible loss≤1.05×control; median eligible SDR≥control−.3dB and≥7dB; no eligible crop worsens by>1dB; each present protected source median SDR≥0dB |
+
+Protected-source SI-SDR gates exclude absent crops (source energy≤1e−6 of summed source energy); those crops remain in the reconstruction loss and leakage report. A zero-power source does not establish successful protection. Scene audio/routing, natural generalization, streaming waveform delay, int8/device budget and owner listening remain outside this fitting gate.
+
+The running-level computation now uses bounded128-frame analytic EMA scans instead of one GPU operation per frame. It carries the previous level across arbitrary chunks. [Updated structural evidence](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_stage1_smoke.json) records the exact source SHA: future-prefix error0, chunk error≤7.153e−7, reset0, attribution closure3.808e−15; all source/scene gradients finite and nonzero. A separate synthetic four-audio-objective backward/replay succeeded with the scene parameters frozen. The original smoke file remains historical evidence for the prototype revision.
+
+A failed fitting gate is recorded and diagnosed. It must not be turned into a long broad run merely because a checkpoint exists. Passing this gate only authorizes the already requested next training/evaluation work; it does not meet the CarPlay goal.

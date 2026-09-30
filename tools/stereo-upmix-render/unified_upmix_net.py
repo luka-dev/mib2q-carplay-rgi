@@ -71,12 +71,19 @@ class UnifiedUpmixNet(nn.Module):
     def _running_level(self, q, state):
         level = q[:, 0] if state is None else state
         result = []
-        for current in q.unbind(1):
-            level = level + self.level_alpha * (current - level)
-            result.append(level)
-        return torch.stack(result, 1).clamp_min(1e-6), level
+        # Bounded scans avoid one GPU launch per frame without underflow on
+        # long songs. The same previous level initializes every chunk.
+        decay = 1 - self.level_alpha
+        for chunk in q.split(128, 1):
+            index = torch.arange(1, chunk.shape[1] + 1, device=q.device, dtype=q.dtype)
+            power = decay ** index
+            values = power * (level[:, None] + self.level_alpha *
+                              torch.cumsum(chunk / power, 1))
+            result.append(values)
+            level = values[:, -1]
+        return torch.cat(result, 1).clamp_min(1e-6), level
 
-    def forward_stft(self, mixture, state=None):
+    def forward_stft(self, mixture, state=None, with_scene=True):
         """Complex [B,T,1025,2] -> audio/scene predictions and reusable state.
 
         Caller owns/reset/detaches state. Training may backpropagate across chunks;
@@ -109,6 +116,9 @@ class UnifiedUpmixNet(nn.Module):
                        for i, (dec, (lo, hi)) in enumerate(zip(self.dec, self.bands))], 2)
         masks = torch.complex(m[..., 0], m[..., 1]).permute(0, 1, 3, 2, 4)
         source_stft = masks * mixture[:, :, None]
+        if not with_scene:
+            return dict(source_stft=source_stft, source_masks=masks), dict(
+                level=level, time=new_time, global_state=global_state)
         presence, pan, update = self.scene(z).chunk(3, -1)
         presence = torch.sigmoid(presence)
         pan = torch.tanh(pan)
