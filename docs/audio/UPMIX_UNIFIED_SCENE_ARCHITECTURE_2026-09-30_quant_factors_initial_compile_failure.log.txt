@@ -1,0 +1,9 @@
+/tmp/upmix_quant_probe_v1/weights_only/unified_runtime.c: In function 'linear':
+/tmp/upmix_quant_probe_v1/weights_only/unified_runtime.c:178:53: error: variable 'q' set but not used [-Werror=unused-but-set-variable=]
+  178 |     const Tensor *w=l->weight; unsigned i,j; int8_t q[MAX_INPUT]; float scale=1;
+      |                                                     ^
+/tmp/upmix_quant_probe_v1/weights_only/unified_runtime.c: At top level:
+/tmp/upmix_quant_probe_v1/weights_only/unified_runtime.c:163:16: error: 'dot_int8' defined but not used [-Werror=unused-function]
+  163 | static int32_t dot_int8(const int8_t *x,const int8_t *w,unsigned n) {
+      |                ^~~~~~~~
+cc1: all warnings being treated as errors

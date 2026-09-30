@@ -1,0 +1,40 @@
+{
+  "original_runtime_sha256": "a4653ca7a9facaf6dd64eb5f20aba94ee1ce23017281291c1a61de19c5446b98",
+  "builds": {
+    "weights_only": {
+      "source_sha256": "6c25bb06c159d212befe19496017f9500de842a06161f4509008d5bbd837ecd3",
+      "executable_sha256": "de29c94c4b05f5ee8b328907e5ae7f17583969ccb3c4cb85348529af47e52e2f",
+      "command": [
+        "/opt/homebrew/bin/x86_64-w64-mingw32-gcc",
+        "-O3",
+        "-std=c99",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "/tmp/upmix_quant_probe_v2/weights_only/unified_runtime.c",
+        "/tmp/upmix_quant_probe_v2/weights_only/unified_runtime_cli.c",
+        "-lm",
+        "-o",
+        "/tmp/upmix_quant_probe_v2/weights_only/upmix_quant_weights_only.exe"
+      ]
+    },
+    "activations_only": {
+      "source_sha256": "416764e7c9e64b0a0209fb0479c31fba28356a96506b943a8087e2c93846edda",
+      "executable_sha256": "59d7add6482f734c67e16deef0e8ee80a481c7717c68296e98dacf1bb7719fa5",
+      "command": [
+        "/opt/homebrew/bin/x86_64-w64-mingw32-gcc",
+        "-O3",
+        "-std=c99",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "/tmp/upmix_quant_probe_v2/activations_only/unified_runtime.c",
+        "/tmp/upmix_quant_probe_v2/activations_only/unified_runtime_cli.c",
+        "-lm",
+        "-o",
+        "/tmp/upmix_quant_probe_v2/activations_only/upmix_quant_activations_only.exe"
+      ]
+    }
+  },
+  "scope": "diagnostic C copies only: weights_only reads int8 blob but leaves vector inputs float; activations_only reads float blob but rounds every matrix input; no model/source mutation or deployment quality claim"
+}

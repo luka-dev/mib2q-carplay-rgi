@@ -47,3 +47,10 @@ The header is an isolated Track B API, not q6d's32-band ABI. The loaded full cha
 `unified_audio_cli.c` accepts `MODEL|identity INPUT_PCM OUTPUT_PCM`. Input is `UMXPC001` plus uint32 streams/samples/2 and interleaved float stereo; output is `UMXAU001` plus streams/samples+1536/2. It records standalone FFT+network+eligible synthesis timing, excluding the renderer and scheduler. `verify_unified_audio_stream.py` checks actual frozen TRAIN waveforms, physical signal parity, reset, future prefix and the original quantized-neural reference.
 
 The stream owns163760bytes on the checked x64 build, with no heap allocation during process/reset. The ARM compiler reports49712bytes for `umx_predict` alone, plus nested function/worker/caller stack; integration must reserve sufficient stack explicitly rather than assuming the existing worker's size is adequate. The QNX build emits stack-usage files and both neural/audio executables. Compilation does not establish NEON execution or Krait timing.
+
+
+## 🦾 Isolated ARM execution
+
+`make_unified_arm_fixture.py` packages fixed TRAIN prefix spectra plus the saved Windows float/int8 outputs. `qnx_qemu_check.sh ASSETS NEW_OUTPUT` builds a separate QNX guest and runs `unified_runtime_arm_check.c`. The checker includes the actual runtime translation unit to exercise the private NEON dot implementation, tests24 exact integer cases, and interleaves four stream states. Float/int8 source and scene numerical tolerances are stored in the fixture manifest before execution. Neither guest wall time nor QEMU virtual time qualifies Krait performance.
+
+Use explicit volatile stores for signed-byte kernel patterns: the observed guest libc mishandles negative `memset` values, and GCC can fold a constant signed-byte fill into that call. Both model checks run sequentially in one persistent process because the tested boot image failed its second spawn. All initial failed logs/protocols are preserved in the report. These are guest-specific observations, not device or audio quality fixes.

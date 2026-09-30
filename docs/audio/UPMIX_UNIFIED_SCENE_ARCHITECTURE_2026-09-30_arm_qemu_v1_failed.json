@@ -1,0 +1,33 @@
+{
+  "complete": true,
+  "passed": false,
+  "scope": "QEMU Cortex-A15/QNX/NEON numerical execution only; no Audi/Krait timing, int8 acoustic recovery or loaded deadline proof",
+  "arms": [],
+  "fixture": {
+    "scope": "first64 or fewer actual TRAIN frames per stream, saved Windows C float/int8 outputs; scalar/NEON/state numerical execution, not acoustic validation or device timing",
+    "frames": 64,
+    "streams": 4,
+    "fixture_sha256": "d6a387f8cf046dcb37d952c474f92c25e9cfff06247b82cf2ba74d2a39c392a6",
+    "fixture_bytes": 40144912,
+    "reference_sha256": "ffa82a43f50685042cb75f4e8e6c12efb6628e87c54be8e0481067f28405c6c6",
+    "inputs_sha256": "2ba8a3532b28e9eba6454a6bdc6b4b8515cbadedc4d2901228acc6a41eaf5e9e",
+    "source_estimate_nse_gates": {
+      "float": 1e-07,
+      "int8": 0.0001
+    },
+    "scene_max_abs_gates": {
+      "float": 0.0001,
+      "int8": 0.05
+    },
+    "dot_exact_cases": 24,
+    "stream_order": "ARM frame-first interleaving versus Windows stream-first; all state caller-owned",
+    "selection": "prefix length fixed before ARM execution; four already inspected fitting crops, no DEV or candidate selection"
+  },
+  "compiler": "arm-unknown-nto-qnx6.5.0eabi-gcc (GCC) 8.5.0\nCopyright (C) 2018 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n",
+  "flags": "-O2 -g -std=gnu99 -Wall -Wextra -fdata-sections -ffunction-sections -O3 -fno-math-errno -Werror -mfpu=neon -mfloat-abi=softfp\n",
+  "docker_image_id": "sha256:59cf5a575d69869e3983f136bdcf9e7e7d997e1206dcfc912e0d1988c68ad213",
+  "source_identity": "c4f3335797ffce4ed347c4345074222db604dd0710839ea23760474085ad58ca  /Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/tools/stereo-upmix-render/unified_runtime/unified_runtime_arm_check.c\na4653ca7a9facaf6dd64eb5f20aba94ee1ce23017281291c1a61de19c5446b98  /Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/tools/stereo-upmix-render/unified_runtime/unified_runtime.c\n7073ae4ddc29f9db7ae0e186e8aface91b1a58d28915748a27a040f3c1eba962  /Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/tools/stereo-upmix-render/unified_runtime/unified_runtime.h\n",
+  "executable_sha256": "98684fbce327eff3fd93f2c270ef3d8ae903b287e002025e25d6ee9c4085aa24",
+  "boot_image_sha256": "6b293ec742822bae576b9060e209b91dfc7a0ca7280c985d075d3333c408e350",
+  "log_sha256": "efdf3810f1c6577f34f0dc8dcdbbe2d1c06a595259694f495be4097c26d6e870"
+}
