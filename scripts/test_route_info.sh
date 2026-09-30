@@ -31,6 +31,7 @@ CLASSPATH="$PATCH_JAR:$STOCK_JAR:$TOOLS_DIR/libs/org.osgi.framework-1.10.0.jar:$
     "$PROJECT_DIR/tests/ClusterKdkBapChainTest.java" \
     "$PROJECT_DIR/tests/ClusterKdkRendererLifecycleTest.java" \
     "$PROJECT_DIR/tests/BapShutdownFailureTest.java" \
+    "$PROJECT_DIR/tests/ManeuverFieldArrivalTest.java" \
     "$PROJECT_DIR/tests/LaneGuidanceTransportTest.java" \
     "$PROJECT_DIR/tests/LaneGuidanceLifecycleTest.java" \
     "$PROJECT_DIR/tests/RgiDeliveryRecoveryTest.java" \
@@ -65,6 +66,9 @@ for variant in us eu cn; do
     echo "BAP shutdown regressions: $variant"
     "$JDK_DIR/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/$patch:$PROJECT_DIR/java_stock/$stock" \
         com.luka.carplay.rgd.BapShutdownFailureTest
+    echo "Maneuver field arrival permutations: $variant"
+    "$JDK_DIR/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/$patch:$PROJECT_DIR/java_stock/$stock" \
+        com.luka.carplay.rgd.ManeuverFieldArrivalTest
 done
 
 "$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.LaneGuidanceTransportTest "$PROJECT_DIR/build/lane-guidance-wire.bin"
