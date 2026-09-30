@@ -145,7 +145,7 @@ public final class CurrentPositionDeliveryTest {
             long end = System.nanoTime() + 1600000000L;
             while (f.out.textWrites == writes && System.nanoTime() < end) Thread.sleep(5);
             synchronized (f.rg) {
-                check(f.out.text.startsWith("‹International") && f.confirmed() && f.state.dirtyMask == 0,
+                check(f.out.text.startsWith("International") && f.confirmed() && f.state.dirtyMask == 0,
                     "failed initial publication did not recover cached text");
                 check(f.out.attempts - attempts == 3, "initial-publication retry spun");
                 check(f.deadline() > System.currentTimeMillis() + 1000, "initial recovery lost first hold");
@@ -174,7 +174,13 @@ public final class CurrentPositionDeliveryTest {
                     }
                 } finally { w.finish(); }
             } else {
-                f.feed("dist_maneuver_m:n:4999\n");
+                // -2 (was 4999 pre-fix): the fixture's baseline distance is now -1, not 5000
+                // (see Fixture's constructor comment); -2 is a genuine bus-level change from -1
+                // that still keeps the formatted distance text empty (both <=0, both take the
+                // "distance unusable" branch so approach-zone state is untouched either way), so
+                // this still exercises exactly what it always did -- a live distance-only delta
+                // must not disturb the held/unconfirmed first fragment or its hold deadline.
+                f.feed("dist_maneuver_m:n:-2\n");
                 check(f.confirmed() && first.equals(f.out.text)
                     && f.deadline() > System.currentTimeMillis() + 1000,
                     "live FRAME_READY update consumed the hidden first hold");
@@ -196,8 +202,25 @@ public final class CurrentPositionDeliveryTest {
         Fixture() throws Exception {
             set(bridge, "appConnectorNavi", Proxy.newProxyInstance(getClass().getClassLoader(),
                 new Class[] {CombiBAPServiceNavi.class}, out));
-            feed("m0_exit_info:s:" + ROAD + "\n");
-            check(out.text != null && out.text.startsWith("‹North"), "long-road fixture");
+            /* The base RgiDeliveryRecoveryTest.Fixture leaves dist_maneuver_m=5000 (from its own
+             * constructor feed). Under the exit-arrow/truncation fix (BAPBridge.updateLatchedRouteText),
+             * any POSITIVE distance alongside a signpost now adds a turn-arrow prefix and ellipsis-
+             * truncates the name to fit one page -- so a positive distance here would never reach what
+             * this fixture actually exists to exercise: the scrolling multi-page path for a long,
+             * untruncated road name. Set the distance to -1 (not 0) in the same feed that sets the
+             * signpost, so distStr stays "" (BAPBridge only adds the arrow/" | <dist>" suffix when
+             * distManeuverM > 0) and this fixture keeps hitting plain scrolling exactly like before the
+             * fix -- -1 specifically because distM=0 satisfies hasUsableDistance=(distM>=0) and would
+             * force BAPBridge.update()'s approach-zone entry (0 <= the 457 m display threshold), which
+             * the original 5000 m baseline never did; -1 takes the "distance unusable" branch instead,
+             * which falls back to the (still-false) previous approach-zone state, so this fixture enters
+             * approach zone exactly as often as the original one did: never.
+             * distM<=0 does not clear the maneuver here: shouldClearManeuver/explicitClear both require
+             * maneuverCount==0 (still 1 from the base fixture), so the maneuver and signpost stay latched
+             * -- only the *displayed distance text* becomes empty. See roadSignpostWithDistanceSinglePage()
+             * below for the companion case (signpost WITH a distance -> arrow + truncated single page). */
+            feed("dist_maneuver_m:n:-1\nm0_exit_info:s:" + ROAD + "\n");
+            check(out.text != null && out.text.startsWith("North"), "long-road fixture");
         }
         CurrentPositionScroll scroll() throws Exception { return (CurrentPositionScroll) get(bridge, "positionScroll"); }
         long deadline() throws Exception { return (Long) get(scroll(), "deadline"); }
@@ -217,7 +240,14 @@ public final class CurrentPositionDeliveryTest {
         check(f.out.otherWrites == other && f.renderer.writes == renderer, "text tick replayed unrelated output");
         String second = f.out.text;
         deadline = f.deadline();
-        f.feed("dist_maneuver_m:n:4999\n");
+        // -2 (was 4999 pre-fix, against a 5000 baseline in the same bucket): the fixture's
+        // baseline distance is now -1 so the signpost line has no arrow/suffix (see Fixture's
+        // constructor comment). -2 is a real value change (-1 -> -2) whose formatted distance
+        // text is still empty both before and after, so the scroll plan/deadline must stay
+        // byte-identical (same `starts` array instance) -- the same invariant the original
+        // 5000->4999 same-bucket delta was checking, just relocated to the non-positive range
+        // that now keeps this signpost's text free of a distance suffix.
+        f.feed("dist_maneuver_m:n:-2\n");
         check(f.deadline() == deadline && get(f.scroll(), "starts") == plan, "distance changed scroll plan/deadline");
         f.feed("m0_exit_info:s:" + ROAD + "\n");
         check(f.deadline() == deadline && f.out.text.equals(second), "duplicate source restarted scroll");
@@ -253,6 +283,55 @@ public final class CurrentPositionDeliveryTest {
         writes = f.out.textWrites;
         f.bridge.tickPositionScroll(System.currentTimeMillis() + 3000);
         check(f.out.textWrites == writes && f.bridge.positionScrollWait(System.currentTimeMillis()) < 0, "stale road after stop");
+    }
+    /**
+     * Companion to the Fixture's plain-scrolling ROAD case above: the SAME long signpost,
+     * but WITH a distance, must take the opposite path -- an exit-direction arrow prefix
+     * (BAPBridge.getTurnArrowPrefix), the name ellipsis-truncated to fit one page
+     * (CurrentPositionScroll.fitWithEllipsis), the pinned " | <dist>" suffix kept intact,
+     * and no scrolling at all (single page, tick() never advances).
+     */
+    private static void roadSignpostWithDistanceSinglePage() throws Exception {
+        Fixture f = new Fixture();
+        // Base fixture's maneuver is mType[0]=1 (MT_LEFT_TURN), m0_junction_type=0, no
+        // turn_angle present -> ManeuverMapper resolves DIR_LEFT -> BAPBridge.ARROW_LEFT.
+        f.feed("dist_maneuver_m:n:800\n");
+        String text = f.out.text;
+        check(text.startsWith(BAPBridge.ARROW_LEFT),
+            "signpost+distance line must carry the exit-direction arrow: " + text);
+        check(text.indexOf("…") >= 0 || text.indexOf("...") >= 0,
+            "signpost+distance line must be ellipsized: " + text);
+        check(text.endsWith(" mi") || text.endsWith(" km") || text.endsWith(" m")
+                || text.endsWith(" ft") || text.endsWith(" yd"),
+            "signpost+distance line must end with the pinned \" | <dist>\" suffix: " + text);
+        check(text.indexOf(" | ") > 0, "distance suffix separator present: " + text);
+        int writes = f.out.textWrites;
+        f.tick();
+        check(f.out.textWrites == writes,
+            "signpost+distance line must not advance on tick (single page, no scroll): " + text);
+
+        // A same-bucket distance delta (800 -> 810 m; both format to "800 m" metric and
+        // "0.5 mi" imperial) must not republish FctID 19 or disturb the single-page plan.
+        String textBefore = f.out.text;
+        int writesBefore = f.out.textWrites;
+        Object planBefore = get(f.scroll(), "starts");
+        long deadlineBefore = f.deadline();
+        f.feed("dist_maneuver_m:n:810\n");
+        check(f.out.text.equals(textBefore), "same-bucket distance delta changed the text: " + f.out.text);
+        check(f.out.textWrites == writesBefore, "same-bucket distance delta republished FctID 19");
+        check(get(f.scroll(), "starts") == planBefore, "same-bucket distance delta rebuilt the scroll plan");
+        check(f.deadline() == deadlineBefore, "same-bucket distance delta moved the deadline");
+
+        // A different-bucket distance (1500 m, still > 457 m so approach zone is unaffected;
+        // "1.5 km" metric / "0.9 mi" imperial) MUST republish with new text -- guards against
+        // the assertions above passing only because nothing is ever republished.
+        f.feed("dist_maneuver_m:n:1500\n");
+        String changed = f.out.text;
+        check(!changed.equals(textBefore), "different-bucket distance delta did not change the text");
+        check(changed.startsWith(BAPBridge.ARROW_LEFT), "different-bucket line lost the exit-direction arrow: " + changed);
+        check(changed.endsWith(" mi") || changed.endsWith(" km") || changed.endsWith(" m")
+                || changed.endsWith(" ft") || changed.endsWith(" yd"),
+            "different-bucket line must still end with a distance-unit suffix: " + changed);
     }
     private static void worker() throws Exception {
         final Fixture f = new Fixture();
@@ -295,7 +374,7 @@ public final class CurrentPositionDeliveryTest {
     }
     public static void main(String[] args) throws Exception {
         Log.setLevel(-1);
-        directDelivery(); worker(); integrationAudit();
+        directDelivery(); roadSignpostWithDistanceSinglePage(); worker(); integrationAudit();
         System.out.println("CurrentPositionDeliveryTest: Fct19-only ticks, initial/View/OK retries, cached deltas, maneuver identity, View-before-tick ordering, readiness, route end/disconnect and blocked-worker retirement PASS");
     }
 }

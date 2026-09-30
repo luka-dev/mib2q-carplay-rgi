@@ -14,6 +14,19 @@ trap 'rm -rf "$TEST_DIR"' EXIT
 "$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar" com.luka.carplay.bus.CarplayBusTransportTest
 "$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar" com.luka.carplay.rgd.RendererServerTransportTest
 
+# Reroute bug hunt (non-fatal): real RendererServer vs a fake renderer peer through
+# CLEAR/MANEUVER/PROGRESS bursts, late/out-of-order ACKs and a stalled writer.
+# Prints "REPRODUCED <case>" or "PASS" and never aborts the rest of this script.
+mkdir -p "$TEST_DIR/reroute-transport"
+if "$TEST_JDK/bin/javac" -encoding UTF-8 -cp "$PROJECT_DIR/build/carplay_hook.jar" \
+        -d "$TEST_DIR/reroute-transport" "$PROJECT_DIR/tests/RendererRerouteTransportTest.java"; then
+    "$TEST_JDK/bin/java" -cp "$TEST_DIR/reroute-transport:$PROJECT_DIR/build/carplay_hook.jar" \
+        com.luka.carplay.rgd.RendererRerouteTransportTest \
+        || echo "RendererRerouteTransportTest: FAILED (non-fatal)"
+else
+    echo "RendererRerouteTransportTest: BUILD FAILED (non-fatal)"
+fi
+
 # NAVSD INITIALIZING/READY must pass straight through the RGI gate
 # (the altscreen INITIALIZING takeover and AltScreenStartupTest do not apply here).
 STOCK_JAR="$PROJECT_DIR/../../Tools/jxe2jar/out/MU1316-final.jar"

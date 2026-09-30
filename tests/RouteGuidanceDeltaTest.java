@@ -76,6 +76,41 @@ public final class RouteGuidanceDeltaTest {
         check(state.maneuverState==-1 && state.mAfterRoad[0]==null && state.lgIndex[3]==-1 && state.laneGuidanceShowing==-1,
             "new route reused old slot version and inherited route/lane data");
         check(state.dirtyMask!=0 && state.mVer[0]==2 && state.routeGeneration==101,"new generation failed to publish");
+
+        // Test reroute freshness & routeStateGeneration lifecycle:
+        // 1. Establish route at generation 200 with state 1
+        feed(parse, rg, "route_generation:n:200\nroute_state:n:1\nmaneuver_count:n:1\nmaneuver_list:s:0\n");
+        check(state.routeState == 1 && state.routeGeneration == 200 && state.routeStateGeneration == 200, "reroute test baseline");
+
+        // 2. Rerouting begins: routeState becomes 5 for generation 200
+        feed(parse, rg, "route_state:n:5\n");
+        check(state.routeState == 5 && state.routeStateGeneration == 200, "rerouting state entered");
+        boolean isRerouting0 = (state.routeState == 5) && (state.routeStateGeneration == state.routeGeneration);
+        check(isRerouting0, "rerouting active for gen 200");
+
+        // 3. New route generation 201 arrives WITHOUT route_state:
+        // Numeric routeState stays 5 (not fabricated to 1), but routeStateGeneration is -1L,
+        // so BAPBridge isRerouting evaluates to false.
+        feed(parse, rg, "route_generation:n:201\nmaneuver_count:n:1\nmaneuver_list:s:0\n");
+        check(state.routeState == 5 && state.routeGeneration == 201 && state.routeStateGeneration == -1L,
+            "new generation without route_state retains numeric state 5 but invalidates routeStateGeneration");
+        boolean isRerouting1 = (state.routeState == 5) && (state.routeStateGeneration == state.routeGeneration);
+        check(!isRerouting1, "stale rerouting state must be inactive for new generation without route_state");
+
+        // 4. Explicit route_state:5 in generation 202: authoritative rerouting
+        feed(parse, rg, "route_generation:n:202\nroute_state:n:5\n");
+        check(state.routeState == 5 && state.routeGeneration == 202 && state.routeStateGeneration == 202,
+            "explicit route_state 5 authenticated for gen 202");
+        boolean isRerouting2 = (state.routeState == 5) && (state.routeStateGeneration == state.routeGeneration);
+        check(isRerouting2, "explicit route_state 5 must activate isRerouting for gen 202");
+
+        // 5. Generation 203 arrives WITHOUT route_state: must invalidate routeStateGeneration again
+        feed(parse, rg, "route_generation:n:203\nmaneuver_count:n:1\nmaneuver_list:s:0\n");
+        check(state.routeState == 5 && state.routeGeneration == 203 && state.routeStateGeneration == -1L,
+            "subsequent reroute invalidates routeStateGeneration");
+        boolean isRerouting3 = (state.routeState == 5) && (state.routeStateGeneration == state.routeGeneration);
+        check(!isRerouting3, "stale rerouting state must not poison generation 203");
+
         System.out.println("RouteGuidanceDeltaTest: delta retention, route lifecycle, slot reuse, generation reset, independent lanes and +/-1000 sentinels PASS");
     }
 }

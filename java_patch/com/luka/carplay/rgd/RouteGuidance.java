@@ -45,6 +45,7 @@ public class RouteGuidance implements CarplayBus.Listener {
     private boolean hasRouteUpdate = false;
     private boolean routeWantsActive = false;
 
+
     /* Renderer readiness is independent of iOS RGI deltas. A tiny dedicated worker advances
      * the cached presentation state on READY/FRAME_READY/death and on a bounded retry tick. */
     private final Object presentationLock = new Object();
@@ -130,6 +131,7 @@ public class RouteGuidance implements CarplayBus.Listener {
         /* Route */
         public int routeState = -1;
         public long routeGeneration = -1L;
+        public long routeStateGeneration = -1L;
         public int maneuverState = -1;
         public int maneuverCount = 0;
         public int[] maneuverOrder = null;
@@ -145,6 +147,11 @@ public class RouteGuidance implements CarplayBus.Listener {
 
         /* Distance to maneuver */
         public int distManeuverM = -1;
+        /* CarPlay's own already-localized distance-to-maneuver display value
+         * (bus keys dist_maneuver_str / dist_maneuver_units, hook/routeguidance/
+         * rgd_hook.c:1025-1031). Cleared on the same paths that clear distManeuverM. */
+        public String distManeuverCarPlayStr = null;
+        public int distManeuverCarPlayUnits = -1;
 
         /* Time */
         public int etaSeconds = -1;
@@ -215,11 +222,14 @@ public class RouteGuidance implements CarplayBus.Listener {
         public void reset() {
             routeState = -1;
             routeGeneration = -1L;
+            routeStateGeneration = -1L;
             maneuverState = -1;
             maneuverCount = 0;
             maneuverOrder = null;
             distDestM = -1;
             distManeuverM = -1;
+            distManeuverCarPlayStr = null;
+            distManeuverCarPlayUnits = -1;
             etaSeconds = -1;
             timeRemainingSeconds = -1;
             timeRemainingSampleSeconds = -1L;
@@ -366,7 +376,7 @@ public class RouteGuidance implements CarplayBus.Listener {
             presentationThread.setDaemon(true);
             presentationThread.start();
         }
-        com.luka.carplay.core.ScreenModule.setNavActive(false);
+        com.luka.carplay.core.ScreenModule.setRouteActive(false);
 
         CarplayBus bus = CarplayBus.getInstance();
         bus.on(CarplayBus.EVT_RGD_UPDATE, this);
@@ -408,7 +418,7 @@ public class RouteGuidance implements CarplayBus.Listener {
             presentationConfirmed = false;
             hasRouteUpdate = false;
             routeWantsActive = false;
-            com.luka.carplay.core.ScreenModule.setNavActive(false);
+            com.luka.carplay.core.ScreenModule.setRouteActive(false);
             if (bap != null) {
                 bap.onStop();
                 bap.onShutdown();
@@ -459,7 +469,7 @@ public class RouteGuidance implements CarplayBus.Listener {
             rgActive = false;
             presentationConfirmed = false;
             routeWantsActive = false;
-            com.luka.carplay.core.ScreenModule.setNavActive(false);  /* hide layers (stock ctx 74) */
+            com.luka.carplay.core.ScreenModule.rollbackRouteLifecycle();  /* clean drop to 74, no KDK hold */
             hasRouteUpdate = false;
             state.reset();
             return;
@@ -532,14 +542,26 @@ public class RouteGuidance implements CarplayBus.Listener {
                     + " maneuver_count=" + state.maneuverCount
                     + " visible_in_app=" + state.visibleInApp
                     + " source_supports_rg=" + state.sourceSupportsRg);
-                /* ctx 80 (black backing + maneuver plane) and the Maps /map URL follow the BAP
-                 * start itself: that is the edge on which the Kombi animates its KDK slot in, so
-                 * waiting for FRAME_READY only left the slot empty next to Maps' own turn card
-                 * (seen 2026-09-21).  presentationConfirmed still tracks renderer/BAP readiness
-                 * for the text hold and position scroll, but no longer gates the context. */
+                /* BAP session start: rgdActive=true enables status text, position scroll, and
+                 * steering-wheel roller click throughout the session.  Context 80 (dial cutout +
+                 * maneuver backing) is NOT opened here — BAPBridge.update() approach-zone ENTER
+                 * opens it only when the vehicle is within 1500 ft AND the renderer is frame-ready.
+                 * presentationConfirmed tracks renderer/BAP readiness for the text hold. */
                 presentationConfirmed = false;
                 rgActive = bap != null && bap.onStart();
-                com.luka.carplay.core.ScreenModule.setNavActive(rgActive);
+                if (rgActive) {
+                    com.luka.carplay.core.ScreenModule.setRouteActive(true);
+                } else {
+                    com.luka.carplay.core.ScreenModule.rollbackRouteLifecycle();
+                }
+                /* RC#4: do NOT call setPresentationActive(true) here. In the dynamic-context model,
+                 * presentationActive = "open context 80 + dial cutout immediately". That must
+                 * only happen inside BAPBridge.update() approach-zone ENTER, when the vehicle
+                 * is within 1500 ft AND the renderer has a confirmed frame ready.  Calling it
+                 * unconditionally from onStart() success was the root cause of the blank backing
+                 * box: context 80 opened at session start (any distance) before the renderer
+                 * had painted a real maneuver icon.  bap.onStart() already sets
+                 * presentationActive(false) internally, so the false case is already covered. */
                 if (!rgActive) {
                     if (!bapStartPendingLogged) {
                         Log.w(TAG, "RG activation pending: BAP start did not complete; keeping ctx 74");
@@ -561,7 +583,7 @@ public class RouteGuidance implements CarplayBus.Listener {
                 rgActive = false;
                 presentationConfirmed = false;
                 /* RGI off -> hide the CarPlay cluster layers (stock ctx 74). */
-                com.luka.carplay.core.ScreenModule.setNavActive(false);
+                com.luka.carplay.core.ScreenModule.setRouteActive(false);
             }
         }
 
@@ -787,7 +809,13 @@ public class RouteGuidance implements CarplayBus.Listener {
         if (!rgActive) {
             rgActive = bap.onStart();
             if (!rgActive) return true;
-            com.luka.carplay.core.ScreenModule.setNavActive(true);
+            /* RC#4: do NOT call setNavActive(true) here. The presentation worker has no
+             * knowledge of approach zone state.  After the dynamic context-switching refactor,
+             * opening context 80 from a bap.onStart() retry (when the vehicle is > 1500 ft from
+             * the next turn) results in an empty dial cutout: the renderer is in sendClear state
+             * because approach-zone EXIT already fired, and no subsequent distance update will
+             * re-trigger approach-zone ENTER since the update() path is driven by iOS RGI packets.
+             * Context 80 must only open via approach-zone ENTER inside BAPBridge.update(). */
         }
 
         // FRAME_READY can win the race with the worker's first wake. Rebase
@@ -822,18 +850,29 @@ public class RouteGuidance implements CarplayBus.Listener {
     private void parse(CarplayBus.Data d) {
         // Dirty means pending publication, not just changed in this frame.
         // Keep failed HUD/renderer updates across subsequent distance-only deltas.
+        boolean routeGenerationChanged = false;
+        long prevGeneration = state.routeGeneration;
         if (d.has("route_generation")) {
             long generation = d.num64("route_generation", -1L);
+            if (generation >= 0L && state.routeGeneration != -1L && generation < state.routeGeneration) {
+                // Stale / out-of-order delta from an older generation. Drop this frame completely
+                // so old maneuvers and distances do not corrupt or regress the active route.
+                return;
+            }
             if (generation >= 0L && generation != state.routeGeneration) {
+                routeGenerationChanged = true;
                 // Native resets can be hidden by debounce and reuse every slot
                 // version. Reset content before applying this generation's fields,
                 // retaining route authority until the source updates it below.
                 state.routeGeneration = generation;
+                state.routeStateGeneration = -1L;
                 state.clearAllManeuverSlots();
                 state.maneuverState = -1;
                 state.maneuverOrder = null;
                 state.maneuverCount = 0;
                 state.distManeuverM = -1;
+                state.distManeuverCarPlayStr = null;
+                state.distManeuverCarPlayUnits = -1;
                 state.distDestM = -1;
                 state.etaSeconds = -1;
                 state.timeRemainingSeconds = -1;
@@ -854,6 +893,8 @@ public class RouteGuidance implements CarplayBus.Listener {
             d.has("maneuver_list") ||
             d.has("dist_dest_m") ||
             d.has("dist_maneuver_m") ||
+            d.has("dist_maneuver_str") ||
+            d.has("dist_maneuver_units") ||
             d.has("eta_seconds") ||
             d.has("time_remaining_seconds") ||
             d.has("current_road") ||
@@ -942,6 +983,7 @@ public class RouteGuidance implements CarplayBus.Listener {
                 state.laneGuidanceIndex = -1;
                 state.laneGuidanceSlot = -1;
                 state.markDirty(State.DIRTY_MANEUVER_ICON | State.DIRTY_MANEUVER_TEXT | State.DIRTY_LANE_GUIDANCE);
+                state.routeStateGeneration = state.routeGeneration;
                 /* Per-slot data (mType, mTurnAngle, etc.) is NOT cleared here.
                  * It is preserved so that when count>0 returns, BAPBridge can
                  * immediately display the correct maneuver icons.
@@ -952,6 +994,7 @@ public class RouteGuidance implements CarplayBus.Listener {
                     state.routeState = v;
                     state.markDirty(State.DIRTY_ROUTE_STATE);
                 }
+                state.routeStateGeneration = state.routeGeneration;
             }
         }
         if (d.has("maneuver_state")) {
@@ -1064,6 +1107,20 @@ public class RouteGuidance implements CarplayBus.Listener {
             int v = d.num("dist_maneuver_m", -1);
             if (v != state.distManeuverM) {
                 state.distManeuverM = v;
+                state.markDirty(State.DIRTY_DIST_MAN);
+            }
+        }
+        if (d.has("dist_maneuver_str")) {
+            String v = d.str("dist_maneuver_str");
+            if (!strEq(state.distManeuverCarPlayStr, v)) {
+                state.distManeuverCarPlayStr = v;
+                state.markDirty(State.DIRTY_DIST_MAN);
+            }
+        }
+        if (d.has("dist_maneuver_units")) {
+            int v = d.num("dist_maneuver_units", -1);
+            if (v != state.distManeuverCarPlayUnits) {
+                state.distManeuverCarPlayUnits = v;
                 state.markDirty(State.DIRTY_DIST_MAN);
             }
         }

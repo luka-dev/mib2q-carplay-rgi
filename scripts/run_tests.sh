@@ -15,19 +15,31 @@ cc -std=gnu99 -O1 -Wall -Wextra -Werror -Wno-unused-function \
     tests/maneuver_surface_test.c "$DEAD_STRIP" -lpthread -lm -o "$OUT/maneuver_surface"
 "$OUT/maneuver_surface"
 
+# Reroute bug hunt: real renderer command loop (main.c) with scripted commands and
+# stubbed GL/platform.  Non-fatal: prints "REPRODUCED <case>" or "PASS" and never
+# aborts the rest of this script.
+printf '%-32s ' maneuver_reroute_clear
+if cc -std=gnu99 -O1 -Wall -Wno-unused-function -Wno-unused-variable \
+        -Imaneuver_render -Icommon \
+        tests/maneuver_reroute_clear_test.c -lpthread -lm -o "$OUT/maneuver_reroute_clear"; then
+    "$OUT/maneuver_reroute_clear" || echo "maneuver_reroute_clear: FAILED (non-fatal)"
+else
+    echo "maneuver_reroute_clear: BUILD FAILED (non-fatal)"
+fi
+
 printf '%-32s ' gl_program_cache_test
 cc -std=gnu99 -O1 -Wall -Wextra -Werror -Wno-unused-function \
     -Imaneuver_render/hostcheck -Icommon tests/gl_program_cache_test.c -o "$OUT/gl_program_cache"
 "$OUT/gl_program_cache"
 
 printf '%-32s ' coverart_safety_test
-cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
+cc -std=c99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -O2 -Wall -Wextra -Werror -pedantic -Ihook \
     tests/coverart_safety_test.c hook/coverart/jpeg_safety.c \
     -o "$OUT/coverart_safety"
 "$OUT/coverart_safety"
 
 printf '%-32s ' coverart_stream_test
-cc -std=c99 -O2 -Wall -Wextra -Werror -Ihook \
+cc -std=c99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -O2 -Wall -Wextra -Werror -Ihook \
     tests/coverart_stream_test.c hook/coverart/coverart_stream.c \
     hook/framework/iap2_protocol.c -o "$OUT/coverart_stream"
 "$OUT/coverart_stream"
@@ -41,25 +53,25 @@ cc -std=gnu99 -O1 -Wall -Wextra -Werror \
 "$OUT/coverart_pipeline"
 
 printf '%-32s ' rgd_tlv_test
-cc -std=c99 -O1 -Wall -Wextra -Werror -Wno-unused-variable -Wno-unused-function \
+cc -std=c99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -O1 -Wall -Wextra -Werror -Wno-unused-variable -Wno-unused-function \
     -DENABLE_LOGGING=0 -Ihook tests/rgd_tlv_test.c hook/routeguidance/rgd_tlv.c \
     -o "$OUT/rgd_tlv"
 "$OUT/rgd_tlv"
 
 printf '%-32s ' inject_generation_test
-cc -std=c99 -O1 -Wall -Wextra -Werror -Wno-unused-function \
+cc -std=c99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -O1 -Wall -Wextra -Werror -Wno-unused-function \
     -DENABLE_LOGGING=0 -Ihook -Ihook/framework tests/inject_generation_test.c -o "$OUT/inject_generation"
 "$OUT/inject_generation"
 
 printf '%-32s ' state_trace_test
-cc -std=c99 -O2 -Wall -Wextra -Werror -Ihook \
+cc -std=c99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -O2 -Wall -Wextra -Werror -Ihook \
     -DENABLE_LOGGING=0 -DENABLE_STATE_TRACE=1 \
     tests/state_trace_test.c hook/framework/state_trace.c \
     hook/framework/iap2_protocol.c -o "$OUT/state_trace"
 "$OUT/state_trace" && echo OK
 
 printf '%-32s ' signal_guard_test
-cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
+cc -std=c99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -O2 -Wall -Wextra -Werror -pedantic -Ihook \
     tests/signal_guard_test.c hook/framework/signal_guard.c \
     -o "$OUT/signal_guard"
 "$OUT/signal_guard"
@@ -72,7 +84,7 @@ cc -std=gnu99 -O2 -Wall -Wextra -Werror \
 "$OUT/bus_transport"
 
 printf '%-32s ' state_trace_logger_test
-cc -std=c99 -O2 -Wall -Wextra -Werror -Ihook \
+cc -std=c99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -O2 -Wall -Wextra -Werror -Ihook \
     -DENABLE_LOGGING=0 -DENABLE_STATE_TRACE=1 \
     tests/state_trace_logger_test.c hook/framework/logging.c \
     -lpthread -ldl -o "$OUT/state_trace_logger"

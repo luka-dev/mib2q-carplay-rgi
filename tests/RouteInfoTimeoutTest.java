@@ -57,7 +57,7 @@ public final class RouteInfoTimeoutTest {
             shortenDeadline(f);
             waitFor(f, false);
             synchronized (f.rg) {
-                check(f.out.text.startsWith("‹International"), "timeout restored obsolete route text");
+                check(f.out.text.startsWith("International"), "timeout restored obsolete route text");
                 check(deadline(f) == 0L && ((Integer) get(f.rg, "desiredInfoPhase")) == 0,
                     "timeout left Time selected/armed");
                 check(f.deadline() >= System.currentTimeMillis() + 1000,

@@ -92,12 +92,12 @@ public final class RgiDeliveryRecoveryTest {
         check(f.renderer.writes==writes,"retry replayed an already accepted transition");
     }
     static void failedManeuverAndSupersession()throws Exception {
-        Fixture f=new Fixture();f.renderer.failManeuvers=1;int progressWrites=f.renderer.progressWrites;
+        Fixture f=new Fixture();f.feed("dist_maneuver_m:n:200\n");f.renderer.failManeuvers=1;int progressWrites=f.renderer.progressWrites;
         f.feed("m0_ver:n:3\nm0_type:n:2\nm0_exit_angle:n:90\nm0_junction_type:n:0\n");
         check(f.hud.direction==ManeuverMapper.DIR_RIGHT && f.renderer.angle==-180,"failure fixture");
         check(f.state.dirtyMask!=0 && f.pending() && f.confirmed(),"renderer failure reported successful publication");
         check(f.renderer.progressWrites==progressWrites,"next maneuver progress painted previous arrow before enqueue");
-        f.feed("dist_maneuver_m:n:4900\n");
+        f.feed("dist_maneuver_m:n:190\n");
         check(f.renderer.angle==180 && f.state.dirtyMask==0,"distance-only update lost pending maneuver");
         f.renderer.failManeuvers=1;
         f.feed("m0_ver:n:4\nm0_type:n:1\nm0_exit_angle:n:-90\nm0_junction_type:n:0\n");
@@ -107,26 +107,27 @@ public final class RgiDeliveryRecoveryTest {
         // Fail a send outside update (the blink/output path) and require a wakeup.
         set(f.rg,"presentationDrivePending",false);f.renderer.failProgress=4;
         Method progress=method(BAPBridge.class,"sendDistanceToManeuverRaw",int.class,boolean.class,int.class);
-        for(int i=0;i<4;i++)progress.invoke(f.bridge,5000,false,0);
+        for(int i=0;i<4;i++)progress.invoke(f.bridge,200,false,0);
         check(f.pending() && f.renderer.disconnects==0,"backpressure lost retry or disconnected healthy renderer");
     }
     static void blinkPhase()throws Exception {
         Fixture f=new Fixture();
         Method context=method(BAPBridge.class,"updateActionBlinkContext",boolean.class,int.class,int.class);
         Method tick=method(BAPBridge.class,"sendActionBlinkTick",int.class);
+        int gen=((Integer)get(f.bridge,"actionBlinkGeneration")).intValue();
         context.invoke(f.bridge,true,30,225);
-        tick.invoke(f.bridge,0);
+        tick.invoke(f.bridge,gen);
         check(f.hud.bar==100 && f.renderer.lastLevel==16 && f.renderer.lastMode==1
             && f.renderer.lastProgress==RendererServer.PROGRESS_BLINK_HIGH,"HUD/renderer high phase diverged");
-        tick.invoke(f.bridge,0);
+        tick.invoke(f.bridge,gen);
         check(f.hud.bar==0 && f.renderer.lastLevel==0 && f.renderer.lastMode==1
             && f.renderer.lastProgress==RendererServer.PROGRESS_BLINK_LOW,"HUD/renderer low phase diverged");
         set(f.bridge,"rendererManeuverPending",true);int writes=f.renderer.progressWrites;
-        tick.invoke(f.bridge,0);
+        tick.invoke(f.bridge,gen);
         check(f.hud.bar==100 && f.renderer.progressWrites==writes,"blink crossed an unaccepted maneuver");
     }
     static void workerRetry()throws Exception {
-        final Fixture f=new Fixture();set(f.rg,"presentationConfirmed",false);
+        final Fixture f=new Fixture();f.feed("dist_maneuver_m:n:200\n");set(f.rg,"presentationConfirmed",false);
         f.renderer.failManeuvers=100;
         f.feed("m0_ver:n:3\nm0_type:n:2\nm0_exit_angle:n:90\nm0_junction_type:n:0\n");
         check(!f.confirmed(),"cold presentation confirmed before maneuver delivery");
@@ -153,9 +154,9 @@ public final class RgiDeliveryRecoveryTest {
         check(!worker.isAlive() && failure[0]==null,"recovery worker leaked or failed");
     }
     static void generationTransition()throws Exception {
-        Fixture f=new Fixture();int writes=f.renderer.writes;
+        Fixture f=new Fixture();f.feed("dist_maneuver_m:n:200\n");int writes=f.renderer.writes;
         f.feed("route_generation:n:101\nroute_state:n:1\nmaneuver_count:n:1\nmaneuver_list:s:0\n"
-            +"m0_ver:n:2\nm0_type:n:1\nm0_exit_angle:n:-90\nm0_junction_type:n:0\ndist_maneuver_m:n:5000\n");
+            +"m0_ver:n:2\nm0_type:n:1\nm0_exit_angle:n:-90\nm0_junction_type:n:0\ndist_maneuver_m:n:200\n");
         check(f.renderer.writes==writes+1,"same slot/version in new route suppressed transition");
         check(!f.hud.lanes && !f.renderer.lanes,"new route inherited old lane event");
     }

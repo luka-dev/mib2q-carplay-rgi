@@ -782,7 +782,7 @@ static void bus_crash_handler(int sig) {
     }
     size_t n = 0;                       /* inline (strlen is not async-signal-safe) */
     while (msg[n]) n++;
-    (void)write(STDERR_FILENO, msg, n);
+    (void)!write(STDERR_FILENO, msg, n);
     spa_signal_guard_chain(&g_signal_guard, sig);
 }
 

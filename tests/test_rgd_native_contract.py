@@ -112,7 +112,11 @@ public class NativeInputProbe {
 '''
 (BUILD/'NativeInputProbe.java').write_text(java)
 tools = ROOT.parent.parent/'Tools/jxe2jar'
-jdk=tools/'jvms/zulu8.78.0.19-ca-jdk8.0.412-macosx_aarch64/zulu-8.jdk/Contents/Home'
+import platform
+if platform.system() == 'Darwin':
+    jdk = tools/'jvms/zulu8.78.0.19-ca-jdk8.0.412-macosx_aarch64/zulu-8.jdk/Contents/Home'
+else:
+    jdk = tools/'jvms/zulu8.78.0.19-ca-jdk8.0.412-linux_x64'
 cp=':'.join(map(str,[ROOT/'build/carplay_hook.jar',tools/'out/MU1316-final.jar',tools/'libs/org.osgi.framework-1.10.0.jar',tools/'libs/org.osgi.util.tracker-1.5.4.jar']))
 subprocess.run([str(jdk/'bin/javac'),'-encoding','UTF-8','-cp',cp,'-d',str(BUILD),str(ROOT/'tests/ManeuverChainAudit.java'),str(BUILD/'NativeInputProbe.java')],check=True)
 result=subprocess.run([str(jdk/'bin/java'),'-Xverify:none','-cp',str(BUILD)+':'+cp,'NativeInputProbe',*map(str,frames)],check=True,text=True,capture_output=True)

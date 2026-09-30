@@ -222,10 +222,10 @@ static void signal_handler(int sig) {
     static const char msg_term[] = "platform_qnx: caught SIGTERM\n";
     static const char msg_unk[]  = "platform_qnx: caught signal\n";
 
-    if (sig == SIGSEGV)      write(STDERR_FILENO, msg_segv, sizeof(msg_segv) - 1);
-    else if (sig == SIGABRT) write(STDERR_FILENO, msg_abrt, sizeof(msg_abrt) - 1);
-    else if (sig == SIGTERM) write(STDERR_FILENO, msg_term, sizeof(msg_term) - 1);
-    else                     write(STDERR_FILENO, msg_unk,  sizeof(msg_unk)  - 1);
+    if (sig == SIGSEGV)      (void)!write(STDERR_FILENO, msg_segv, sizeof(msg_segv) - 1);
+    else if (sig == SIGABRT) (void)!write(STDERR_FILENO, msg_abrt, sizeof(msg_abrt) - 1);
+    else if (sig == SIGTERM) (void)!write(STDERR_FILENO, msg_term, sizeof(msg_term) - 1);
+    else                     (void)!write(STDERR_FILENO, msg_unk,  sizeof(msg_unk)  - 1);
 
     g_should_close = 1;
     if (sig == SIGTERM) {

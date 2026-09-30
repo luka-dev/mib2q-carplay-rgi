@@ -33,7 +33,7 @@ __eglMustCastToProperFunctionPointerType eglGetProcAddress(const char *n) {
 int main(void) {
     char path[160];
     FILE *f;
-    system("rm -rf " GLPC_DIR);
+    (void)!system("rm -rf " GLPC_DIR);
     assert(!glpc_load(1, "t", "vs", "fs"));            /* empty cache: compile */
     link_ok = 1;
     glpc_store(1, "t", "vs", "fs");
@@ -51,7 +51,7 @@ int main(void) {
     link_ok = 0;
     glpc_store(1, "t", "vs", "fs");                    /* failed link is never saved */
     assert(access(path, F_OK) != 0);
-    system("rm -rf " GLPC_DIR);
+    (void)!system("rm -rf " GLPC_DIR);
     puts("gl_program_cache: store/hit/miss on source+bindings/driver reject/corrupt/no-save-on-fail PASS");
     return 0;
 }

@@ -6,6 +6,7 @@
 # build/ ships empty (just .gitkeep); artifacts are generated, never committed
 /build/*
 !/build/.gitkeep
+build_stubs/
 /local_logs/
 /log/
 tools/loader_preview/loader_preview

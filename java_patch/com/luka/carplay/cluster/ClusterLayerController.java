@@ -235,6 +235,12 @@ public final class ClusterLayerController {
         }
     }
 
+    /** Backward compatibility overload for precompiled CombiMapController calling (ZZI)V */
+    public static void apply(IDisplayManagerKombiControl dm, int terminal, Layout layout,
+                             boolean popup, boolean stockVisible, int stockOpacity) {
+        apply(dm, terminal, layout, stockVisible, stockOpacity, !popup);
+    }
+
     /** Cache stock hints for normal-navigation restoration. CarPlay uses the same VC
      * visibility/presentation inputs, captured before stock availability can mask them. */
     public static void apply(IDisplayManagerKombiControl dm, int terminal, Layout layout,
@@ -311,8 +317,6 @@ public final class ClusterLayerController {
             }
             if (!navActive) {
                 dm.setOpacity(MANEUVER, terminal, 0);
-                dm.setOpacity(BACKING_SPORT, terminal, 0);
-                dm.setOpacity(BACKING_POPUP, terminal, 0);
                 return;
             }
             // One composition path for both stock stages; visibility is independent.

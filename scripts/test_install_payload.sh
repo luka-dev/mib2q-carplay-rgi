@@ -9,7 +9,11 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 fail() { echo "FAIL ($1): $2"; exit 1; }
 
-mode() { stat -f %Lp "$1" 2>/dev/null || stat -c %a "$1"; }
+if [ "$(uname)" = Darwin ]; then
+    mode() { stat -f %Lp "$1"; }
+else
+    mode() { stat -c %a "$1"; }
+fi
 
 stock_si='{
     "children": {

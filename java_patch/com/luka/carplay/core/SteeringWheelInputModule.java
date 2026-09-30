@@ -192,7 +192,7 @@ public final class SteeringWheelInputModule implements Module {
         IMMICombiScreenChangeManager manager = combiManager;
         /* No combi manager on this variant: CarPlay owning the cluster with RGI up IS the
          * "map tab" here, and that is exactly what the handler below verifies. */
-        if (manager == null) return ScreenModule.isConnected() && ScreenModule.isNavActive();
+        if (manager == null) return ScreenModule.isConnected() && ScreenModule.isRgdActive();
         try {
             MMICombiDisplayStatus status = manager.getLastConfirmedDisplayStatus();
             return status != null

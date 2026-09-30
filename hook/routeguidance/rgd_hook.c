@@ -1424,6 +1424,9 @@ static bool rgd_message_handler(hook_context_t* ctx, const iap2_frame_t* frame) 
                 if (g_rgd.state_zero_started_ms != 0) {
                     rgd_cancel_pending_zero_locked("route_state>0", upd.route_state);
                 }
+                if (upd.route_state == RGD_STATE_REROUTING && prev_state != RGD_STATE_REROUTING) {
+                    LOG_INFO(LOG_MODULE, "Reroute state entered (%u->5)", prev_state);
+                }
                 g_rgd.emitted_route_state = upd.route_state;
             }
             pthread_mutex_unlock(&g_rgd_debounce_lock);

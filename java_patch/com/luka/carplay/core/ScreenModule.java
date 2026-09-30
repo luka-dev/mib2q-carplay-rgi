@@ -73,56 +73,204 @@ public final class ScreenModule implements Module {
         catch (Throwable t) { return true; }  /* only an explicit G24 value disables the feature */
     }
 
-    /* desiredCtx = target published by start()/stop()/setNavActive(); currentCtx = what the worker last
-     * applied.  Both guarded by LOCK; the single worker switches whenever they differ.
-     * desiredCtx is a pure function of these two (guarded by LOCK):
-     *   !connected         -> 74 (stock)
-     *   connected, no nav  -> 74 (stock native map, no maneuver overlay)
-     *   connected, nav     -> 80 (stock native map + backing + maneuver) */
+    /* desiredCtx = target published by setRouteActive()/setPresentationActive()/stop();
+     * currentCtx = what the worker last applied. Both guarded by LOCK; the worker switches whenever they differ.
+     * desiredCtx truth table:
+     *   !connected                                                          -> 74 (stock)
+     *   connected, routeActive=1, presentationActive=0 (cruising)           -> 74 (stock cluster: speedometer opening closed)
+     *   connected, routeActive=1, presentationActive=1 (approaching turn)   -> 80 (CarPlay cluster composition)
+     *   connected, routeActive=1, presentationActive=0 (approach exit)      -> 74 (immediate drop to stock cluster)
+     *   connected, routeActive=0, navHidePending=1 (route end, KDK visible) -> 80 (hold until Fct44 withdrawal)
+     *   connected, routeActive=0, navHidePending=0 (route end, KDK hidden)  -> 74 (stock cluster) */
     private static int desiredCtx = CTX_STOCK_CLUSTER;
     private static int currentCtx = -1;
     private static volatile boolean connected = false;
+    private static volatile boolean routeActive = false;
+    private static volatile boolean presentationActive = false;
     private static volatile boolean navActive = false;
-    private static boolean navHidePending;
+    private static volatile boolean rgdActive = false;
+    private static boolean navHidePending = false;
+    private static boolean rebindPending = false;
+    private static String rebindReason = "";
 
-    /** Recompute desiredCtx from connected/navActive and wake the worker. Caller must NOT hold LOCK. */
+    public interface RebindListener {
+        void onClusterContextRebindRequested(String reason);
+    }
+    private static RebindListener rebindListener = null;
+
+    public static void setRebindListener(RebindListener listener) {
+        synchronized (LOCK) {
+            rebindListener = listener;
+        }
+    }
+
+    /** Request a physical 72->80 context acquisition even when desiredCtx == currentCtx == 80.
+     *  Does not alter navActive or desiredCtx. Wakes the worker to re-run applySwitch(). */
+    public static void requestClusterContextRebind(String reason) {
+        RebindListener listener = null;
+        synchronized (LOCK) {
+            rebindPending = true;
+            rebindReason = reason != null ? reason : "";
+            listener = rebindListener;
+            LOCK.notifyAll();
+        }
+        if (listener != null) {
+            listener.onClusterContextRebindRequested(reason);
+        }
+    }
+
+    private static void recomputeDesiredCtxLocked() {
+        navActive = (routeActive && presentationActive) || navHidePending;
+        desiredCtx = (connected && navActive) ? CTX_CLUSTER : CTX_STOCK_CLUSTER;
+    }
+
+    /** Recompute desiredCtx from connected/routeActive/presentationActive and wake the worker. Caller must NOT hold LOCK. */
     private static void republish() {
         synchronized (LOCK) {
-            desiredCtx = (connected && navActive) ? CTX_CLUSTER : CTX_STOCK_CLUSTER;
+            recomputeDesiredCtxLocked();
             LOCK.notifyAll();
         }
     }
 
-    /** Presentation latch, not merely route intent.  RouteGuidance may set true only after the
-     *  BAP presentation has started (bap.onStart()); the renderer's FRAME_READY is not waited for.
-     *  Navigation owns the context; VC alone controls KDK opacity.  On route end, retain the
-     *  composition until VC withdraws visibility (Fct44), without a guessed timer. */
-    public static void setNavActive(boolean active) {
+    /** Route lifecycle gate owned by RouteGuidance / BAP session.
+     *  On route end, retains the composition only if VC KDK is visible (Fct44) until withdrawal. */
+    public static void setRouteActive(boolean active) {
+        boolean switchPending;
         synchronized (LOCK) {
-            navHidePending = !active && navActive
-                && com.luka.carplay.cluster.ClusterLayerController.isKdkVisible();
-            navActive = active || navHidePending;
+            if (!active) {
+                boolean wasActive = navActive || (desiredCtx == CTX_CLUSTER);
+                navHidePending = wasActive
+                    && com.luka.carplay.cluster.ClusterLayerController.isKdkVisible();
+                routeActive = false;
+                presentationActive = false;
+                rebindPending = false;
+                rebindReason = "";
+            } else {
+                routeActive = true;
+                navHidePending = false;
+            }
+            recomputeDesiredCtxLocked();
+            switchPending = (desiredCtx != currentCtx);
+            LOCK.notifyAll();
         }
-        republish();
+        if (!switchPending) {
+            com.luka.carplay.cluster.ClusterLayerController.reapply();
+        }
+    }
+
+    /** Unconditional lifecycle rollback: immediately clears routeActive, presentationActive,
+     *  navHidePending, and rebindPending, forcing desiredCtx back to stock (74).
+     *  Unlike setRouteActive(false), this NEVER triggers route-end KDK-hold semantics
+     *  (navHidePending remains false even if KDK is visible). */
+    public static void rollbackRouteLifecycle() {
+        boolean switchPending;
+        synchronized (LOCK) {
+            routeActive = false;
+            presentationActive = false;
+            navHidePending = false;
+            rebindPending = false;
+            rebindReason = "";
+            recomputeDesiredCtxLocked();
+            switchPending = (desiredCtx != currentCtx);
+            LOCK.notifyAll();
+        }
+        if (!switchPending) {
+            com.luka.carplay.cluster.ClusterLayerController.reapply();
+        }
+    }
+
+    /** Dynamic maneuver presentation gate owned by BAPBridge approach monitoring.
+     *  Active only within approach threshold (<= 305m / <= 1600m) with confirmed frame-ready renderer.
+     *  Cruising / approach exit immediately returns desiredCtx to 74 and NEVER latches navHidePending.
+     *  Presentation strictly depends on route activity; activation when route is inactive is rejected. */
+    public static void setPresentationActive(boolean active) {
+        boolean switchPending;
+        synchronized (LOCK) {
+            if (active && !routeActive) {
+                return;
+            }
+            presentationActive = active;
+            if (!active) {
+                rebindPending = false;
+                rebindReason = "";
+            }
+            recomputeDesiredCtxLocked();
+            switchPending = (desiredCtx != currentCtx);
+            LOCK.notifyAll();
+        }
+        if (!switchPending) {
+            com.luka.carplay.cluster.ClusterLayerController.reapply();
+        }
+    }
+
+    /** Combined route/presentation setter for legacy callers. */
+    public static void setNavActive(boolean active) {
+        if (active) {
+            setRouteActive(true);
+            setPresentationActive(true);
+        } else {
+            setRouteActive(false);
+        }
     }
 
     /** Called after the layer controller has applied the received Fct44 visibility.
      *  A View fade-out must not release context while the route remains active. */
     public static void onVcKdkVisibility(boolean visible) {
         boolean release = false;
+        boolean switchPending = false;
         synchronized (LOCK) {
             if (!visible && navHidePending) {
                 navHidePending = false;
-                navActive = false;
+                rebindPending = false;
+                rebindReason = "";
                 release = true;
+                recomputeDesiredCtxLocked();
+                switchPending = (desiredCtx != currentCtx);
+                LOCK.notifyAll();
             }
         }
-        if (release) republish();
+        if (release && !switchPending) {
+            com.luka.carplay.cluster.ClusterLayerController.reapply();
+        }
     }
 
-    /** The cluster-layer visibility gate read by CombiMapController.  It follows the confirmed BAP
-     *  presentation and, after route end, VC's own KDK withdrawal; never a stray stock KDK bit. */
-    public static boolean isNavActive() { return navActive; }
+    /** The cluster-layer visibility gate read by CombiMapController and ClusterLayerController.
+     *  True whenever CarPlay layers are permitted to be visible on terminal 1. */
+    public static boolean isNavActive() {
+        return navActive;
+    }
+
+    public static boolean isPresentationActive() {
+        return presentationActive;
+    }
+
+    public static boolean isNavHidePending() {
+        return navHidePending;
+    }
+
+    public static boolean isClusterActive() {
+        return clusterActive;
+    }
+
+    public static int getDesiredCtx() {
+        synchronized (LOCK) {
+            return desiredCtx;
+        }
+    }
+
+    public static int getCurrentCtx() {
+        synchronized (LOCK) {
+            return currentCtx;
+        }
+    }
+
+    public static boolean isRouteActive() {
+        return routeActive;
+    }
+
+    public static boolean isRgdActive() { return rgdActive; }
+
+    public static void setRgdActive(boolean active) { rgdActive = active; }
 
     /* ------------------------------------------------------------
      * Cluster map view size (Audi View button / NAV_VIEW_SIZE_CHOICE).
@@ -185,7 +333,7 @@ public final class ScreenModule implements Module {
     /** Raw DSI key 40 (left steering-wheel roller press).  SteeringWheelInputModule already gates
      *  this callback to the confirmed VC map tab; the toggle is meaningful only with active RGI. */
     public static void onSteeringWheelOkPressed() {
-        if (!isConnected() || !isNavActive()) return;
+        if (!isConnected() || !isRgdActive()) return;
         InfoModeListener listener = infoModeListener;
         if (listener == null) return;
         listener.onInfoModeToggle();
@@ -223,9 +371,12 @@ public final class ScreenModule implements Module {
              * re-applies the desired ctx to the new one.  (In practice the same object each session.) */
             if (dm != d) { dm = d; currentCtx = -1; }
             connected = true;
-            navActive = false;
+            routeActive = false;
+            presentationActive = false;
             navHidePending = false;
-            desiredCtx = CTX_STOCK_CLUSTER;
+            rgdActive = false;
+            clusterActive = false;
+            recomputeDesiredCtxLocked();
         }
         synchronized (LOCK) {
             /* Create the single persistent worker once; recreate only if it never started or died.
@@ -250,8 +401,13 @@ public final class ScreenModule implements Module {
          * makes stale-worker races impossible (no per-session worker to outlive its session). */
         synchronized (LOCK) {
             connected = false;
-            navActive = false;
+            routeActive = false;
+            presentationActive = false;
             navHidePending = false;
+            rgdActive = false;
+            rebindPending = false;
+            rebindReason = "";
+            clusterActive = false;
         }
         republish();
     }
@@ -268,7 +424,10 @@ public final class ScreenModule implements Module {
                 while (dm == null) {
                     try { LOCK.wait(); } catch (InterruptedException e) { /* persistent worker */ }
                 }
-                if (desiredCtx == currentCtx) {
+                if (desiredCtx == CTX_CLUSTER && rebindPending) {
+                    rebindPending = false;
+                    Log.i(TAG, "forcing cluster context 72->80 rebind (reason=" + rebindReason + ")");
+                } else if (desiredCtx == currentCtx) {
                     try {
                         if (desiredCtx == CTX_CLUSTER)
                             LOCK.wait(CONTEXT_RECONCILE_MS);
@@ -276,8 +435,13 @@ public final class ScreenModule implements Module {
                             LOCK.wait();
                     } catch (InterruptedException e) { /* persistent worker */ }
                     if (dm == null || desiredCtx != currentCtx) continue;
-                    if (desiredCtx != CTX_CLUSTER) continue;
-                    reconcileOnly = true;
+                    if (desiredCtx == CTX_CLUSTER && rebindPending) {
+                        rebindPending = false;
+                        Log.i(TAG, "forcing cluster context 72->80 rebind (reason=" + rebindReason + ")");
+                    } else {
+                        if (desiredCtx != CTX_CLUSTER) continue;
+                        reconcileOnly = true;
+                    }
                 }
                 target = desiredCtx; d = dm;
             }
@@ -293,6 +457,7 @@ public final class ScreenModule implements Module {
                     synchronized (LOCK) {
                         if (dm == d && desiredCtx == target && currentCtx == target) {
                             currentCtx = -1;
+                            clusterActive = false;
                             retry = true;
                             LOCK.notifyAll();
                         }
@@ -328,13 +493,28 @@ public final class ScreenModule implements Module {
                 synchronized (LOCK) {
                     if (dm != d || desiredCtx != ctx) {
                         currentCtx = -1;
+                        clusterActive = false;
                         Log.i(TAG, "switch(" + ctx + ") superseded during bounce → " + desiredCtx);
                         return;
                     }
                 }
                 d.switchContext(ctx, TERMINAL_CLUSTER, null);
-                d.setUpdateRate(TERMINAL_CLUSTER, CLUSTER_FPS);   /* (idempotent when already running) */
-                clusterActive = true;
+                boolean stillValid;
+                synchronized (LOCK) {
+                    stillValid = (dm == d && desiredCtx == ctx);
+                    if (stillValid) {
+                        currentCtx = ctx;
+                        clusterActive = true;
+                    } else {
+                        currentCtx = -1;
+                        clusterActive = false;
+                        Log.i(TAG, "switch(" + ctx + ") superseded at write → " + desiredCtx);
+                    }
+                }
+                if (stillValid) {
+                    d.setUpdateRate(TERMINAL_CLUSTER, CLUSTER_FPS);   /* (idempotent when already running) */
+                    com.luka.carplay.cluster.ClusterLayerController.reapply();
+                }
             } else {
                 /* Preserve the stop-before-switch ordering, but never leave terminal 1
                  * parked at 0 FPS. On this A5/MHI2Q the stock
@@ -343,22 +523,31 @@ public final class ScreenModule implements Module {
                  * restore value here. Return the terminal to the same full 30 Hz rate
                  * used by the live cluster encoder; stock may change it later if it has
                  * an applicable producer. */
-                d.setUpdateRate(TERMINAL_CLUSTER, 0);
-                try {
+                if (!connected) {
+                    d.setUpdateRate(TERMINAL_CLUSTER, 0);
+                    try {
+                        d.switchContext(CTX_STOCK_CLUSTER, TERMINAL_CLUSTER, null);
+                    } finally {
+                        d.setUpdateRate(TERMINAL_CLUSTER, CLUSTER_FPS);
+                    }
+                } else {
                     d.switchContext(CTX_STOCK_CLUSTER, TERMINAL_CLUSTER, null);
-                } finally {
-                    d.setUpdateRate(TERMINAL_CLUSTER, CLUSTER_FPS);
                 }
-                clusterActive = false;
+                synchronized (LOCK) {
+                    if (dm == d) {
+                        currentCtx = (desiredCtx == ctx) ? ctx : -1;
+                    }
+                    clusterActive = false;
+                }
+                com.luka.carplay.cluster.ClusterLayerController.reapply();
             }
-            synchronized (LOCK) { if (dm == d) currentCtx = ctx; }
-            /* Context composition is now final: replay the last KDK popup geometry so a
-             * navActive edge cannot leave planes 98/101/102 at their previous opacity. */
-            com.luka.carplay.cluster.ClusterLayerController.reapply();
             Log.i(TAG, "cluster -> ctx " + ctx + " (active=" + clusterActive + ")");
         } catch (Throwable t) {
             Log.w(TAG, "switch(" + ctx + ") failed: " + t);
-            synchronized (LOCK) { currentCtx = -1; }
+            synchronized (LOCK) {
+                currentCtx = -1;
+                clusterActive = false;
+            }
             /* Throttle the retry: the bounce write and the stock path have no settle sleep, so a
              * persistently-throwing switchContext would otherwise hot-spin (busy loop + log flood). */
             try { Thread.sleep(BOUNCE_SLEEP_MS); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
