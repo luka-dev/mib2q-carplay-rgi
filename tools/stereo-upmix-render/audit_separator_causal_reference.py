@@ -10,6 +10,12 @@ import separator_causal_reference as CR
 import separator_causal_reference_probe as P
 
 
+def source_error(measured, saved):
+    if len(measured) != len(saved) or any((x is None) != (y is None) for x,y in zip(measured,saved)):
+        raise ValueError('Undefined source-transmission coverage differs')
+    return max((abs(x-y) for x,y in zip(measured,saved) if x is not None),default=0.)
+
+
 def audit(a):
     torch.set_num_threads(4)
     result = json.loads((a.out/'complete.json').read_text())
@@ -42,14 +48,14 @@ def audit(a):
         saved = result['arms'][mode]['final']
         loss_error = abs(measured['loss']-saved['loss'])
         sdr_error = float(np.max(np.abs(np.asarray(measured['sdr_db'])-saved['sdr_db'])))
-        source_error = max(float(np.max(np.abs(np.asarray(measured['source_tx'][s])-saved['source_tx'][s]))) for s in sources)
-        if loss_error > 1e-4 or sdr_error > .05 or source_error > .005:
+        tx_error = max(source_error(measured['source_tx'][s],saved['source_tx'][s]) for s in sources)
+        if loss_error > 1e-4 or sdr_error > .05 or tx_error > .005:
             raise ValueError('CPU acoustic replay outside declared numerical tolerance')
         architecture = result['arms'][mode]['architecture']
         if sum(p.numel() for p in net.parameters()) != architecture['parameters'] or net.macs*SN.FPS != architecture['estimated_neural_macs_s']:
             raise ValueError('Parameter/nominal MAC audit differs')
         verified[mode] = dict(acoustic=measured,causality=P.causality(torch,net,x),
-                             loss_error=loss_error,max_sdr_error_db=sdr_error,max_source_tx_error=source_error,
+                             loss_error=loss_error,max_sdr_error_db=sdr_error,max_source_tx_error=tx_error,
                              decoder_sha256=P.tensors_sha(net.dec))
     gates = P.promotion(verified[P.MODES[1]]['acoustic'],verified[P.MODES[0]]['acoustic'],manifest['historical'])
     if gates != result['gates']:

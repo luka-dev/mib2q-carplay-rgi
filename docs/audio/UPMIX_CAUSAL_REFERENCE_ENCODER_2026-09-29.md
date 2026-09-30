@@ -88,6 +88,12 @@ The CPU auditor verifies checkpoint/head/source/window hashes and semantics, par
 
 Source SHA-256: model `764a594242d26e7f75884d122b91656adc3037b53a7c54f602b74678f58a07d0`; probe `e514fff84f29b0cc52236b6f4a2095cccd79b5c1777a77eb5f29a60347f37ccc`; auditor `2f21ef3c14a09acc6e643c784a64fe384917c37801101dacca08f26fce7cf2e7`; runner `ec5296aa0741eafdbd4451b39e25c02fe5d01b0831ca6cf5a56e0c7443ea3928`. Sources, crop hashes and all measured architecture details are saved again in the run manifest.
 
+### Undefined-source audit correction
+
+During training, a read-only progress summary encountered an undefined transmission for an absent bass source. The training metric correctly returns `null` below its fixed energy floor. This exposed that the not-yet-executed CPU auditor would attempt subtraction on an array containing `None`. Before final auditing, its comparison was corrected to require **identical undefined positions** and compare only valid numeric pairs. No missing source is assigned zero, and no training model, loss, target, checkpoint or gate changed. Both training arms continue in the original process; this is not a failed acoustic run.
+
+Corrected auditor SHA-256 `1765c9407c850ef640707f54bf1327c0ef1aa2cb71d9a691d0dde0ac703add3f`; runner hash table updated for future launches, SHA-256 `2825c628d4c74ae5c66e86268d0c915d86eee29ffcfc96115f48e1bc2905e267`. The already active PowerShell run had passed the original preflight; it invokes the corrected auditor after training. The final audit records its own executed source hash. The model/probe fingerprints above remain unchanged.
+
 ## 📊 Results and next gate
 
 Protocol/source commit **`de861b23`**. Both 20-step GPU smoke arms completed with finite losses/gradients and trained-decoder hash `d04d9fd5a73ebb3788240772b3be0fb1ecf420e059ddfc2a0bf5aeff1f4fec05`; global initialization matched and future-prefix NSE was 0. Historical checkpoint replay passed. Smoke does not satisfy the 10k acoustic gate. The guarded runner started the full pair; fresh original first, residual second, then CPU audit. Live log `C:\Users\LuKa\AppData\Local\Temp\upmix_causal_reference_live_v1.log`. No completed 10k result yet.
