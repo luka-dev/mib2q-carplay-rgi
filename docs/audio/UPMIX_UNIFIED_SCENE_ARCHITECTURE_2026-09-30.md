@@ -326,3 +326,12 @@ Counted dense operations drop1173392→976592/frame, or110.0055→91.5555M MAC/s
 |32|165.5940|147.1440|Untrained option with little dense margin|
 
 This creates a concrete budget lever for a wider encoder without increasing the150M ceiling. It is not a width selection, a generalization result or measured head-unit compute. Current blob format/state/export support24 only; wider options need explicit implementation and verification. Choose any new source experiment after the fixed broad40k C/events result, rather than changing the live matched study.
+
+
+## 🔬 Fixed-terminal TRAIN mixture-consistency diagnostic scheduled
+
+[Diagnostic](../../tools/stereo-upmix-render/audit_unified_mixture_consistency.py). Independent CPU supervisor waits for the current joint40k terminal marker, then reads that fixed checkpoint and the original TRAIN12 monitor only. It does not touch DEV, sealed20, weights, running modules or GPU ownership. Three predeclared cases: raw operators, uniform correction `m_i + (1 - sum(m))/4`, and eligible-only residual `1 - sum(protected)` with protected outputs unchanged. Targets score SDR/attributed retention only; projection consumes inferred masks and actual mixture.
+
+This tests missing mixture completeness, a constraint described in [Wisdom et al., ICASSP2019](https://research.google/pubs/differentiable-consistency-constraints-for-improved-deep-speech-enhancement/). Their reported speech enhancement improvement does not establish success for music or this renderer. Our risk is explicit: residual correction can restore instrument energy while sending protected reconstruction error to the rear. The diagnostic requires each protected attributed-transmission delta≤.01 alongside a≥.5dB paired median eligible SDR or≥.03 eligible-transmission improvement. This is an explanatory signal, not a product promotion gate. A failed post-hoc projection does not disprove learning with a projection during training.
+
+Both corrections can be folded into each existing terminal affine decoder because all source outputs share its16 tanh features. No extra shared network, recurrent state or inference rows are needed. Random-graph CPU fold parity passes below1.2e−14 spectral NSE; the saved-checkpoint diagnostic must independently pass≤1e−9 fold parity and≤1e−10 summed waveform closure. No acoustic result exists yet. All current broad40k and real-C gates remain unchanged.
