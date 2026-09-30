@@ -1,0 +1,21 @@
+{
+  "original_ssh_pid": 99163,
+  "original_local_supervisor": 99160,
+  "original_pc_shell_pids": [
+    52112,
+    19564
+  ],
+  "reason": "Original PowerShell Console.In large-base64 copy stayed live with unchanged read byte count, no zip/destination created; SFTP uploaded the same isolated bundle successfully. Only own redundant SSH copy cancelled, no training process touched.",
+  "replacement": "D:/upmix/tools/upmix_spectral_cpu_bundle_v2.zip",
+  "training_restarted": false,
+  "sftp_bundle_sha256": "dc76cb4a60a04dadc4e9c1435f20052ea8a9aa9499f767120d2ee2baa3df9c30",
+  "sftp_hash_verified": true,
+  "old_pc_copy_pid_terminated": 19564,
+  "old_pc_copy_payload_verified": true,
+  "old_pc_copy_return_value": 0,
+  "old_pc_copy_handles_missing_before_extraction": true,
+  "cpu_supervisor_pid": 46360,
+  "cpu_launch_return_value": 0,
+  "cpu_only": true,
+  "full_train_test_already_running": true
+}
