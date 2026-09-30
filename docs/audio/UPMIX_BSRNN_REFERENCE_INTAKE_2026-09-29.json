@@ -1,0 +1,98 @@
+{
+  "source": {
+    "repository": "https://github.com/magronp/bsrnn.git",
+    "commit": "94adc8c184ac9b1d2e496fcb6e78cfe3fb78fc9c",
+    "code_license": "MIT"
+  },
+  "record": "https://zenodo.org/records/17516442",
+  "weights_license": "CC-BY-4.0",
+  "training_corpus_as_published": "MUSDB18-HQ",
+  "purpose": "Unmodified noncausal PC reference; not an Audi candidate",
+  "training_or_inference_started": false,
+  "bundles": [
+    {
+      "name": "simo-bsrnn-opt",
+      "url": "https://zenodo.org/api/records/17516442/files/simo-bsrnn-opt.zip/content",
+      "archive": {
+        "bytes": 1213413202,
+        "md5": "817e8ce4bcd17c38bd3812167e97db58",
+        "sha256": "8699cf8834aab285edb9a303699b0d1727fe5e594a8c1d7c6dbdb45b6e42e012"
+      },
+      "extracted": {
+        "zip_crc": "all_members_passed",
+        "checkpoints": [
+          {
+            "path": "simo-bsrnn-opt/separator.ckpt",
+            "hashes": {
+              "bytes": 1308170426,
+              "md5": "0bca1b7e1f2ed69fb49901fcf692a15d",
+              "sha256": "fd23279e43ade16b9c30b466c978d73f879c2cfb8d79917e6d880d8ed8df51e8"
+            }
+          }
+        ],
+        "checkpoint_deserialization": "not_performed"
+      }
+    },
+    {
+      "name": "bsrnn-large",
+      "url": "https://zenodo.org/api/records/17516442/files/bsrnn-large.zip/content",
+      "archive": {
+        "bytes": 1627580581,
+        "md5": "0d1e298e725bf45577a4f61e0a30c2b1",
+        "sha256": "d091c2b31acb5cf456ddf8d04ec4e7cec9df78217a1462582847de96983b3656"
+      },
+      "extracted": {
+        "zip_crc": "all_members_passed",
+        "checkpoints": [
+          {
+            "path": "bsrnn-large/bass.ckpt",
+            "hashes": {
+              "bytes": 394200330,
+              "md5": "866833a40c2087f379c2ff3a0caf8034",
+              "sha256": "3c6ee0232da289c16f57f7a336505a691b6aa6f6da35e5e52174ca5b098927bd"
+            }
+          },
+          {
+            "path": "bsrnn-large/drums.ckpt",
+            "hashes": {
+              "bytes": 493319099,
+              "md5": "efbb076b5c0e6ee68195bbf8a12d7303",
+              "sha256": "544c752606640ca073377771d12eae6748050ecadee2846f79d610c8dd43b363"
+            }
+          },
+          {
+            "path": "bsrnn-large/other.ckpt",
+            "hashes": {
+              "bytes": 437848283,
+              "md5": "0f729349419969a7002cc7a6be6e261f",
+              "sha256": "6c48c704104e2007863e003dae685c800682e99f2ecc5e547b4cdc3778522887"
+            }
+          },
+          {
+            "path": "bsrnn-large/vocals.ckpt",
+            "hashes": {
+              "bytes": 437885164,
+              "md5": "fbf2ed8e136bfe9f473b020ec972a8e3",
+              "sha256": "4172d354649318dcfcdd45d71adc13ee1f6783a69e8b728b7a7e36ab01088449"
+            }
+          }
+        ],
+        "checkpoint_deserialization": "not_performed"
+      }
+    }
+  ],
+  "locations": {
+    "pc_root": "D:\\upmix\\third_party\\bsrnn_reference",
+    "mac_source": "/Users/luka/Desktop/AUDI_2/Research/bsrnn-reference"
+  },
+  "verification_date": "2026-09-29",
+  "pc_dependency_inventory": {
+    "torch": "2.11.0+cu128",
+    "torchaudio": "2.11.0+cu128",
+    "lightning": null,
+    "hydra-core": null,
+    "museval": null,
+    "musdb": null,
+    "codecarbon": null
+  }
+}
