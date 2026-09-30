@@ -1,0 +1,22 @@
+{
+  "verified": true,
+  "scope": "synthetic C audio-only route; no music/network/scene/device result",
+  "executable_sha256": "d3831ae407ea34a4ebd7020bb112d3f15a8c7749dbc34d8a77a9c1a40401fd82",
+  "entry_rear_energy_ratios": [
+    1.0,
+    1.0
+  ],
+  "distinct_rear_correlation": -2.7082606396914724e-08,
+  "voice_only_rear_max": 0,
+  "legacy_neural_calls": 0,
+  "legacy_blobs": 0,
+  "rejected": {
+    "q6d": 2,
+    "guard": 2,
+    "mask": 2,
+    "missing_audio": 2,
+    "wrong_length": 1
+  },
+  "stdout": "",
+  "stderr": "unified host: audio-only, no scene; legacy neural calls trapped\nunified host: old_neural_invocations=0, old_blobs=0, frames=288000\nfront-retention=0.50000 (q15=16384; independent of rear gain)\nbed-delays=1 bed-attack=0 attack-collapse=1.00000 retention-hf=1000:2500 Hz\nrendered 288000 frames (6.000 s): PCM2 -> PCM6 L,R,C,LFE,Ls,Rs\nmode=hssr-universal surround=0.32349 (q15=10600) front=0.95801 (q15=31392) lfe=assist gain=0.12500 (q15=4096)\n/tmp/upmix_unified_audio_native_verify_v2/output.wav\n"
+}
