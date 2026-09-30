@@ -8,7 +8,7 @@ $py = 'D:\upmix\venvs\bsrnn_reference\Scripts\python.exe'
 $lease = "$runs\GPU_LEASE"
 if ((Test-Path $out) -or (Test-Path $smoke)) { throw 'Output exists; preserve previous attempt' }
 $expected = @{
-    'bsrnn_reference_eval.py' = 'D2F4EAF57035931AF2DD03E4689DCEA7423F6FC394C1BF661F7721989CB745A6'
+    'bsrnn_reference_eval.py' = '468BC58CBCE8C16F80BFCC9FE51C1A8A2B8CF593F16BF1F6C90E5D7FC440EC68'
     'bsrnn_reference_infer.py' = '1FC41E4451E212FA0FF662D699B000FF8080E06DD9B7956926B2E130E4AAA30B'
     'upmix_stem_tests.py' = '184CC28B493DDE68B0106410515CE578A2719CDEEA4558D38976C625A02573FE'
     'diag_transitions.py' = 'B2626F320F2E77FDC71E32F547FDD894F7E9E3F1A689F52F8CD714AFF65B62C7'

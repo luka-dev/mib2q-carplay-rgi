@@ -48,8 +48,8 @@ def write(path, value):
 
 
 def fraction(a, b):
-    den = float(b.double().square().sum())
-    return float(a.double().square().sum()) / den if den > 1e-9 else None
+    den = float(b.abs().double().square().sum())
+    return float(a.abs().double().square().sum()) / den if den > 1e-9 else None
 
 
 def med(values):
@@ -280,6 +280,8 @@ def main():
     frozen=FrozenMask(model)
     a.out.mkdir(parents=True,exist_ok=False)
     if a.smoke:
+        if fraction(torch.tensor([2j]),torch.tensor([1j])) != 4.0:
+            raise RuntimeError('Complex energy discarded imaginary part')
         train_manifest=json.loads((a.runs/'separator_fit_probe_v1/manifest.json').read_text())
         w=train_manifest['windows'][0]
         raw=ref.read_crop(a.cache/(w['song']+'.npy'),w['start_sample'],w['samples'])

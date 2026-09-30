@@ -29,6 +29,10 @@ flowchart LR
     c2 --> gates
 ```
 
+## Preflight correction
+
+The first TRAIN smoke emitted a complex-to-real warning: the generic energy helper used `.double()` on complex STFT tensors, dropping imaginary energy. Only the owned evaluator was stopped before a C result was obtained, and the smoke/partial run and logs were preserved with `_aborted_complex_power`. Corrected to `abs().double().square()` and added a pure-imaginary energy assertion to the TRAIN smoke. No data, weights, gain or gate was changed. The corrected smoke and complete run, not the initial smoke marker, are required evidence.
+
 ## Execution and results
 
 _Pending execution. This protocol is not a numerical result or product promotion._
