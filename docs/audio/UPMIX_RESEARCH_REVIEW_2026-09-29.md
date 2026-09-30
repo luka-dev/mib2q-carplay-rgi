@@ -2,6 +2,8 @@
 
 _2026-09-29. Track B. Literature and source-code review requested by the owner after repeated failed separator probes. This review launches no training and changes no renderer, Track A or head-unit file._
 
+**Later owner-directed prerequisite completed:** the [full pretrained BSRNN run](UPMIX_BSRNN_PRETRAINED_INFERENCE_2026-09-29.md) establishes an executable optimized SIMO reference, 11.013 dB median `other` SI-SDR on the same four TRAIN crops. The custom causal experiment recommended below remains proposed. Pretraining/future context/capacity differ; this result does not isolate an encoder mechanism.
+
 ## Recommendation
 
 **Build a stronger causal reference encoder, demonstrate an acoustic improvement, then compress the successful mechanism into the car budget.** The reference should use frame-local normalization and repeated residual temporal/frequency blocks while initially retaining the original trained decoder. This is a proposed experiment, not a verified fix.

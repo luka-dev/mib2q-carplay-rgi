@@ -1,0 +1,1218 @@
+{
+  "scope": "pretrained fixed TRAIN inference only; no fine-tuning",
+  "source_revision": "94adc8c184ac9b1d2e496fcb6e78cfe3fb78fc9c",
+  "script_sha256": "1fc41e4451e212fa0ff662d699b000ff8080e06dd9b7956926b2e130e4aaa30b",
+  "crop_manifest_sha256": "b61821e149ead2663a0db2ab21037e3a467346b56930546dd7f4ba433fa3ab06",
+  "runtime": {
+    "torch": "2.11.0+cu128",
+    "torchaudio": "2.11.0+cu128",
+    "lightning": "2.5.5",
+    "pytorch-lightning": "2.5.5",
+    "omegaconf": "2.3.0",
+    "numpy": "2.5.3",
+    "soundfile": "0.14.0",
+    "pandas": "3.0.6",
+    "museval": "0.4.1",
+    "musdb": "0.4.3"
+  },
+  "python": "D:\\upmix\\venvs\\bsrnn_reference\\Scripts\\python.exe",
+  "torch_location": "C:\\Users\\LuKa\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\torch\\__init__.py",
+  "device": "NVIDIA GeForce RTX 5080",
+  "sample_rate": 48000,
+  "gain": "peak normalize 44.1k input once; restore same scalar to outputs; no fitted gain",
+  "target_mapping": {
+    "vocals": [
+      0,
+      1
+    ],
+    "bass": [
+      5
+    ],
+    "drums": [
+      2,
+      3,
+      4
+    ],
+    "other": [
+      6
+    ]
+  },
+  "normalization_causality": "noncausal upstream, not an Audi candidate",
+  "windows": [
+    {
+      "song": "f4b735de-14b1-4091-a9ba-c8b30c0740a7",
+      "artist": "Drawing Hands",
+      "start_sample": 1226181,
+      "samples": 384000,
+      "selected_int16_sha256": "d2808c195d5176bc2be5aae5107ce6fada6f85f78024e08e6dc2e6c564a9a172",
+      "source_energy_fraction": [
+        0.15140154418151644,
+        2.638360612862907e-08,
+        0.3843919437754533,
+        0.000894400338101266,
+        0.0,
+        0.22326116612622468,
+        0.2400509191950982
+      ],
+      "int16_boundary_samples": 0,
+      "start_seconds": 25.5454375,
+      "input44_peak": 0.4413548707962036,
+      "input44_samples": 352800,
+      "mixture": {
+        "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\f4b735de-14b1-4091-a9ba-c8b30c0740a7\\mixture.wav",
+        "sha256": "050f83ed6ae4af9499ae77da86bc31c3aac3156d0412d840fa791a8f8a7b5413",
+        "samples": 384000,
+        "peak": 0.441192626953125,
+        "samples_over_unit_peak": 0,
+        "rms": 0.06494381894503365,
+        "float32_readback_exact": true
+      },
+      "truth": {
+        "vocals": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\f4b735de-14b1-4091-a9ba-c8b30c0740a7\\truth_vocals.wav",
+          "sha256": "b14220a09d4c61b3ab32587408d32b7bc70c98304d2dbd7678358c89213703ba",
+          "samples": 384000,
+          "peak": 0.199432373046875,
+          "samples_over_unit_peak": 0,
+          "rms": 0.025168363827313467,
+          "float32_readback_exact": true
+        },
+        "bass": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\f4b735de-14b1-4091-a9ba-c8b30c0740a7\\truth_bass.wav",
+          "sha256": "dc3cddeafebebd56c7b71b6fbd3391ac1d6c6cf39a4b1df28506e6246f388853",
+          "samples": 384000,
+          "peak": 0.109344482421875,
+          "samples_over_unit_peak": 0,
+          "rms": 0.030563034549979683,
+          "float32_readback_exact": true
+        },
+        "drums": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\f4b735de-14b1-4091-a9ba-c8b30c0740a7\\truth_drums.wav",
+          "sha256": "76a8ba90a85e0c0941ccf09d18dbfe3e3db350faa7a386f33f142bfbe3618eef",
+          "samples": 384000,
+          "peak": 0.33404541015625,
+          "samples_over_unit_peak": 0,
+          "rms": 0.040145087202246243,
+          "float32_readback_exact": true
+        },
+        "other": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\f4b735de-14b1-4091-a9ba-c8b30c0740a7\\truth_other.wav",
+          "sha256": "91bd3001b5c735a5892a58d1abae30f5d1ca12d3289dc610a59a941b92193e83",
+          "samples": 384000,
+          "peak": 0.1192626953125,
+          "samples_over_unit_peak": 0,
+          "rms": 0.03169141018784374,
+          "float32_readback_exact": true
+        }
+      }
+    },
+    {
+      "song": "1fc37390-1769-452d-9bea-19025be4c467",
+      "artist": "Firefly",
+      "start_sample": 883636,
+      "samples": 384000,
+      "selected_int16_sha256": "f194b7c6fc480fcb5afc9e8d88d0c9470ce9f7b40d86b27829482dacb5cd28fe",
+      "source_energy_fraction": [
+        0.43410116785072367,
+        1.2880572289834024e-10,
+        0.0,
+        0.0,
+        0.15953061727080534,
+        0.0,
+        0.4063682147496652
+      ],
+      "int16_boundary_samples": 0,
+      "start_seconds": 18.409083333333335,
+      "input44_peak": 0.1529136598110199,
+      "input44_samples": 352800,
+      "mixture": {
+        "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\1fc37390-1769-452d-9bea-19025be4c467\\mixture.wav",
+        "sha256": "f805248a419329e10ad53180f84a77e4910ae363296d8c7c05dd5a22954a21cc",
+        "samples": 384000,
+        "peak": 0.152862548828125,
+        "samples_over_unit_peak": 0,
+        "rms": 0.01762550148560114,
+        "float32_readback_exact": true
+      },
+      "truth": {
+        "vocals": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\1fc37390-1769-452d-9bea-19025be4c467\\truth_vocals.wav",
+          "sha256": "f849e44acabd4d0031aeddc6cf0a5e4a727b251864484968adaefd72b7a9e72a",
+          "samples": 384000,
+          "peak": 0.131622314453125,
+          "samples_over_unit_peak": 0,
+          "rms": 0.011613264936345043,
+          "float32_readback_exact": true
+        },
+        "bass": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\1fc37390-1769-452d-9bea-19025be4c467\\truth_bass.wav",
+          "sha256": "937652168790d6d7eca1cbd7bff258015e9e3b36352bb6c6353ef62c0e5d8c36",
+          "samples": 384000,
+          "peak": 0.0,
+          "samples_over_unit_peak": 0,
+          "rms": 0.0,
+          "float32_readback_exact": true
+        },
+        "drums": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\1fc37390-1769-452d-9bea-19025be4c467\\truth_drums.wav",
+          "sha256": "8eb07afb6e33589c354694c0bad49d9408e36b2756aa18ed9dc061ffbe84ee10",
+          "samples": 384000,
+          "peak": 0.055328369140625,
+          "samples_over_unit_peak": 0,
+          "rms": 0.007040133069927695,
+          "float32_readback_exact": true
+        },
+        "other": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\1fc37390-1769-452d-9bea-19025be4c467\\truth_other.wav",
+          "sha256": "0bb682df79550227a70147ab67a7e1b64e64ed6dbb8f795dc3666f6a975c1e9b",
+          "samples": 384000,
+          "peak": 0.076690673828125,
+          "samples_over_unit_peak": 0,
+          "rms": 0.011236180593796467,
+          "float32_readback_exact": true
+        }
+      }
+    },
+    {
+      "song": "ad6c3742-e517-42eb-9dec-e74ed05387cc",
+      "artist": "Firefly",
+      "start_sample": 929057,
+      "samples": 384000,
+      "selected_int16_sha256": "6d867332f65c5bdb3f2df1cd4984c3e89bf04ce45ec7458aec2e315c53ba9b09",
+      "source_energy_fraction": [
+        0.26909944843133937,
+        0.0,
+        0.4819383016808926,
+        0.010876287553371233,
+        0.0,
+        0.16574410459749128,
+        0.07234185773690555
+      ],
+      "int16_boundary_samples": 0,
+      "start_seconds": 19.355354166666668,
+      "input44_peak": 0.437661737203598,
+      "input44_samples": 352800,
+      "mixture": {
+        "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\ad6c3742-e517-42eb-9dec-e74ed05387cc\\mixture.wav",
+        "sha256": "0d2ba1bbe1d79fbe64420624a7d2444076dbcb01d7aa45b8e94bdc39bd5cca11",
+        "samples": 384000,
+        "peak": 0.4578857421875,
+        "samples_over_unit_peak": 0,
+        "rms": 0.04991635739400653,
+        "float32_readback_exact": true
+      },
+      "truth": {
+        "vocals": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\ad6c3742-e517-42eb-9dec-e74ed05387cc\\truth_vocals.wav",
+          "sha256": "730248a98f9c3a3b1844bab6403cdd2615389773a9248825e26161c705b82b36",
+          "samples": 384000,
+          "peak": 0.2508544921875,
+          "samples_over_unit_peak": 0,
+          "rms": 0.02583433004232559,
+          "float32_readback_exact": true
+        },
+        "bass": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\ad6c3742-e517-42eb-9dec-e74ed05387cc\\truth_bass.wav",
+          "sha256": "b6baf0007be154029521bb90697d15e0522a8cb6e4292fc71173ba6b77912e89",
+          "samples": 384000,
+          "peak": 0.07666015625,
+          "samples_over_unit_peak": 0,
+          "rms": 0.020274952463296404,
+          "float32_readback_exact": true
+        },
+        "drums": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\ad6c3742-e517-42eb-9dec-e74ed05387cc\\truth_drums.wav",
+          "sha256": "e20147f77e4f383484e4a5e72f0ac529695e0367edadbe06a35feb5f19c9f3c6",
+          "samples": 384000,
+          "peak": 0.41241455078125,
+          "samples_over_unit_peak": 0,
+          "rms": 0.03529124973571688,
+          "float32_readback_exact": true
+        },
+        "other": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\ad6c3742-e517-42eb-9dec-e74ed05387cc\\truth_other.wav",
+          "sha256": "15cc364cccfde3fbf751dec5580dbf983bf605c3b1149280f1acc3e31be794a2",
+          "samples": 384000,
+          "peak": 0.098602294921875,
+          "samples_over_unit_peak": 0,
+          "rms": 0.013394781336729738,
+          "float32_readback_exact": true
+        }
+      }
+    },
+    {
+      "song": "fd6e4b4a-f33a-4f3c-aa6e-7c65fd5dc0bc",
+      "artist": "Firefly",
+      "start_sample": 920727,
+      "samples": 384000,
+      "selected_int16_sha256": "36dfe87d93c9e4c0e434d05d06c9ecfc1caac1b078e90ebe7203ce6a08bf7ca3",
+      "source_energy_fraction": [
+        0.11493588413020632,
+        0.0,
+        0.4238601030295351,
+        0.021467519674390128,
+        2.9078182118801493e-05,
+        0.27851577936269445,
+        0.1611916356210552
+      ],
+      "int16_boundary_samples": 0,
+      "start_seconds": 19.1818125,
+      "input44_peak": 0.5439804196357727,
+      "input44_samples": 352800,
+      "mixture": {
+        "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\fd6e4b4a-f33a-4f3c-aa6e-7c65fd5dc0bc\\mixture.wav",
+        "sha256": "8b3ddcce87ffcd5967adb7244954ff52d014f611e455412dac4f2b2fd0fb2b0c",
+        "samples": 384000,
+        "peak": 0.532318115234375,
+        "samples_over_unit_peak": 0,
+        "rms": 0.06817782721872472,
+        "float32_readback_exact": true
+      },
+      "truth": {
+        "vocals": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\fd6e4b4a-f33a-4f3c-aa6e-7c65fd5dc0bc\\truth_vocals.wav",
+          "sha256": "74c130591e28e1d8a0ec091b7f430f3a861bb9b08e256f3d9b496a60605b14a0",
+          "samples": 384000,
+          "peak": 0.18646240234375,
+          "samples_over_unit_peak": 0,
+          "rms": 0.02364660871625306,
+          "float32_readback_exact": true
+        },
+        "bass": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\fd6e4b4a-f33a-4f3c-aa6e-7c65fd5dc0bc\\truth_bass.wav",
+          "sha256": "9cafa5af3694e08095bf72fb44473434b15008a361326684628ae051bdc856e2",
+          "samples": 384000,
+          "peak": 0.1578369140625,
+          "samples_over_unit_peak": 0,
+          "rms": 0.03681001100213456,
+          "float32_readback_exact": true
+        },
+        "drums": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\fd6e4b4a-f33a-4f3c-aa6e-7c65fd5dc0bc\\truth_drums.wav",
+          "sha256": "4a5b19d39ecab1cd6f586f0ac958a2921678e2fe794123009e34111baa523238",
+          "samples": 384000,
+          "peak": 0.463592529296875,
+          "samples_over_unit_peak": 0,
+          "rms": 0.04586670870551495,
+          "float32_readback_exact": true
+        },
+        "other": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\fd6e4b4a-f33a-4f3c-aa6e-7c65fd5dc0bc\\truth_other.wav",
+          "sha256": "919879f3d84d688d45e5c2892909d572166162ea1c6a9630e952f7ee9a4042bc",
+          "samples": 384000,
+          "peak": 0.1995849609375,
+          "samples_over_unit_peak": 0,
+          "rms": 0.028003498770617846,
+          "float32_readback_exact": true
+        }
+      }
+    }
+  ],
+  "models": [
+    {
+      "path": "D:\\upmix\\third_party\\bsrnn_reference\\weights\\simo-bsrnn-opt\\simo-bsrnn-opt\\separator.ckpt",
+      "sha256": "fd23279e43ade16b9c30b466c978d73f879c2cfb8d79917e6d880d8ed8df51e8",
+      "strict": true,
+      "missing_keys": [],
+      "unexpected_keys": [],
+      "state_tensors": 2870,
+      "all_loaded_tensors_exact": true,
+      "parameters": 108727540,
+      "targets": [
+        "vocals",
+        "bass",
+        "drums",
+        "other"
+      ],
+      "saved_hyperparameters": {
+        "cfg_optim": {
+          "max_epochs": 200,
+          "deterministic": false,
+          "algo": "adam",
+          "lr": 0.00025,
+          "grad_clip_norm": 5,
+          "loss_type": "L1",
+          "loss_domain": "t+tf",
+          "monitor_val": "sdr",
+          "patience": 30,
+          "ngpus": null,
+          "sync_bn": true,
+          "acc_grad": 1
+        },
+        "cfg_scheduler": {
+          "name": "step",
+          "gamma": 0.98,
+          "step_size": 2
+        },
+        "cfg_eval": {
+          "device": "cuda",
+          "segment_len": 10.0,
+          "overlap": 0.1,
+          "hop_size": null,
+          "verbose_per_track": true,
+          "sdr_type": "usdr",
+          "win_dur": 1.0,
+          "rec_dir": null
+        },
+        "targets": [
+          "vocals",
+          "bass",
+          "drums",
+          "other"
+        ],
+        "sample_rate": 44100,
+        "n_fft": 2048,
+        "n_hop": 512,
+        "eps": 1e-07,
+        "nb_channels": 2,
+        "feature_dim": 128,
+        "joint_bandsplit": true,
+        "num_repeat": 12,
+        "fac_sep": 2,
+        "time_layer": "lstm",
+        "band_layer": "lstm",
+        "bidirectional": true,
+        "fac_mask": 4,
+        "mask_ctxt": 0,
+        "subtract_last_trgt": false,
+        "n_heads": 1,
+        "group_num": 1,
+        "n_att_head": 2,
+        "attn_enc_dim": 16,
+        "stereo": "tac",
+        "fac_tac": 3,
+        "act_tac": "prelu",
+        "name": "simo-bsrnn-opt",
+        "name_out_dir": "simo-bsrnn-opt",
+        "name_tblog_dir": "simo-bsrnn"
+      },
+      "eval_metadata_patch": "defaults supply sdr_win/sdr_hop",
+      "pickle_mode": "trusted publisher SHA-256 + screened globals; weights_only=False",
+      "origin": {
+        "epoch": 199,
+        "global_step": 1000000,
+        "lightning_version": "2.4.0"
+      }
+    },
+    {
+      "path": "D:\\upmix\\third_party\\bsrnn_reference\\weights\\bsrnn-large\\bsrnn-large\\bass.ckpt",
+      "sha256": "3c6ee0232da289c16f57f7a336505a691b6aa6f6da35e5e52174ca5b098927bd",
+      "strict": true,
+      "missing_keys": [],
+      "unexpected_keys": [],
+      "state_tensors": 650,
+      "all_loaded_tensors_exact": true,
+      "parameters": 32797192,
+      "targets": [
+        "bass"
+      ],
+      "saved_hyperparameters": {
+        "cfg_optim": {
+          "max_epochs": 200,
+          "patience": 30,
+          "monitor_val": "sdr",
+          "deterministic": false,
+          "algo": "adam",
+          "lr": 0.00025,
+          "grad_clip_norm": 5,
+          "loss_type": "L1",
+          "loss_domain": "t+tf",
+          "ngpus": null,
+          "sync_bn": true,
+          "accumulate_grad_batches": 1
+        },
+        "cfg_scheduler": {
+          "name": "step",
+          "gamma": 0.98,
+          "step_size": 2
+        },
+        "cfg_eval": {
+          "device": "cuda",
+          "segment_len": 10.0,
+          "overlap": 0.1,
+          "hop_size": null,
+          "verbose_per_track": true,
+          "sdr_type": "global",
+          "win_dur": 1.0,
+          "rec_dir": null
+        },
+        "targets": "bass",
+        "sample_rate": 44100,
+        "n_fft": 2048,
+        "n_hop": 512,
+        "eps": 1e-07,
+        "target": "bass",
+        "time_layer": "lstm",
+        "band_layer": "lstm",
+        "bidirectional": true,
+        "n_heads": 1,
+        "group_num": 1,
+        "feature_dim": 128,
+        "num_repeat": 12,
+        "fac_mask": 4,
+        "n_att_head": 0,
+        "attn_enc_dim": 0,
+        "name": "bsrnn",
+        "name_out_dir": "bsrnn-large",
+        "name_tblog_dir": "bsrnn"
+      },
+      "eval_metadata_patch": "defaults supply sdr_win/sdr_hop",
+      "pickle_mode": "trusted publisher SHA-256 + screened globals; weights_only=False",
+      "origin": {
+        "epoch": 113,
+        "global_step": 570000,
+        "lightning_version": "2.4.0"
+      }
+    },
+    {
+      "path": "D:\\upmix\\third_party\\bsrnn_reference\\weights\\bsrnn-large\\bsrnn-large\\drums.ckpt",
+      "sha256": "544c752606640ca073377771d12eae6748050ecadee2846f79d610c8dd43b363",
+      "strict": true,
+      "missing_keys": [],
+      "unexpected_keys": [],
+      "state_tensors": 950,
+      "all_loaded_tensors_exact": true,
+      "parameters": 41024392,
+      "targets": [
+        "drums"
+      ],
+      "saved_hyperparameters": {
+        "cfg_optim": {
+          "max_epochs": 200,
+          "patience": 10,
+          "monitor_val": "sdr",
+          "deterministic": false,
+          "algo": "adam",
+          "lr": 0.00025,
+          "grad_clip_norm": 5,
+          "loss_type": "L1",
+          "loss_domain": "t+tf",
+          "ngpus": null,
+          "sync_bn": true,
+          "accumulate_grad_batches": 1
+        },
+        "cfg_scheduler": {
+          "name": "step",
+          "gamma": 0.98,
+          "step_size": 2
+        },
+        "cfg_eval": {
+          "device": "cuda",
+          "segment_len": 10.0,
+          "overlap": 0.1,
+          "hop_size": null,
+          "verbose_per_track": true,
+          "sdr_type": "global",
+          "win_dur": 1.0,
+          "rec_dir": null
+        },
+        "targets": "drums",
+        "sample_rate": 44100,
+        "n_fft": 2048,
+        "n_hop": 512,
+        "eps": 1e-07,
+        "target": "drums",
+        "time_layer": "lstm",
+        "band_layer": "lstm",
+        "bidirectional": true,
+        "n_heads": 1,
+        "group_num": 1,
+        "feature_dim": 128,
+        "num_repeat": 12,
+        "fac_mask": 4,
+        "n_att_head": 0,
+        "attn_enc_dim": 0,
+        "name": "bsrnn",
+        "name_out_dir": "bsrnn-large",
+        "name_tblog_dir": "bsrnn"
+      },
+      "eval_metadata_patch": "defaults supply sdr_win/sdr_hop",
+      "pickle_mode": "trusted publisher SHA-256 + screened globals; weights_only=False",
+      "origin": {
+        "epoch": 76,
+        "global_step": 385000,
+        "lightning_version": "2.4.0"
+      }
+    },
+    {
+      "path": "D:\\upmix\\third_party\\bsrnn_reference\\weights\\bsrnn-large\\bsrnn-large\\other.ckpt",
+      "sha256": "6c48c704104e2007863e003dae685c800682e99f2ecc5e547b4cdc3778522887",
+      "strict": true,
+      "missing_keys": [],
+      "unexpected_keys": [],
+      "state_tensors": 782,
+      "all_loaded_tensors_exact": true,
+      "parameters": 36417160,
+      "targets": [
+        "other"
+      ],
+      "saved_hyperparameters": {
+        "cfg_optim": {
+          "max_epochs": 200,
+          "patience": 30,
+          "monitor_val": "sdr",
+          "deterministic": false,
+          "algo": "adam",
+          "lr": 0.00025,
+          "grad_clip_norm": 5,
+          "loss_type": "L1",
+          "loss_domain": "t+tf",
+          "ngpus": null,
+          "sync_bn": true,
+          "accumulate_grad_batches": 1
+        },
+        "cfg_scheduler": {
+          "name": "step",
+          "gamma": 0.98,
+          "step_size": 2
+        },
+        "cfg_eval": {
+          "device": "cuda",
+          "segment_len": 10.0,
+          "overlap": 0.1,
+          "hop_size": null,
+          "verbose_per_track": true,
+          "sdr_type": "global",
+          "win_dur": 1.0,
+          "rec_dir": null
+        },
+        "targets": "other",
+        "sample_rate": 44100,
+        "n_fft": 2048,
+        "n_hop": 512,
+        "eps": 1e-07,
+        "target": "other",
+        "time_layer": "lstm",
+        "band_layer": "lstm",
+        "bidirectional": true,
+        "n_heads": 1,
+        "group_num": 1,
+        "feature_dim": 128,
+        "num_repeat": 12,
+        "fac_mask": 4,
+        "n_att_head": 0,
+        "attn_enc_dim": 0,
+        "name": "bsrnn",
+        "name_out_dir": "bsrnn-large",
+        "name_tblog_dir": "bsrnn"
+      },
+      "eval_metadata_patch": "defaults supply sdr_win/sdr_hop",
+      "pickle_mode": "trusted publisher SHA-256 + screened globals; weights_only=False",
+      "origin": {
+        "epoch": 174,
+        "global_step": 875000,
+        "lightning_version": "2.4.0"
+      }
+    },
+    {
+      "path": "D:\\upmix\\third_party\\bsrnn_reference\\weights\\bsrnn-large\\bsrnn-large\\vocals.ckpt",
+      "sha256": "4172d354649318dcfcdd45d71adc13ee1f6783a69e8b728b7a7e36ab01088449",
+      "strict": true,
+      "missing_keys": [],
+      "unexpected_keys": [],
+      "state_tensors": 782,
+      "all_loaded_tensors_exact": true,
+      "parameters": 36417160,
+      "targets": [
+        "vocals"
+      ],
+      "saved_hyperparameters": {
+        "cfg_optim": {
+          "max_epochs": 200,
+          "patience": 30,
+          "monitor_val": "sdr",
+          "deterministic": false,
+          "algo": "adam",
+          "lr": 0.00025,
+          "grad_clip_norm": 5,
+          "loss_type": "L1",
+          "loss_domain": "t+tf",
+          "ngpus": null,
+          "sync_bn": true,
+          "accumulate_grad_batches": 1
+        },
+        "cfg_scheduler": {
+          "name": "step",
+          "gamma": 0.98,
+          "step_size": 2
+        },
+        "cfg_eval": {
+          "device": "cuda",
+          "segment_len": 10.0,
+          "overlap": 0.1,
+          "hop_size": null,
+          "verbose_per_track": true,
+          "sdr_type": "global",
+          "win_dur": 1.0,
+          "rec_dir": null
+        },
+        "targets": "vocals",
+        "sample_rate": 44100,
+        "n_fft": 2048,
+        "n_hop": 512,
+        "eps": 1e-07,
+        "target": "vocals",
+        "time_layer": "lstm",
+        "band_layer": "lstm",
+        "bidirectional": true,
+        "n_heads": 1,
+        "group_num": 1,
+        "feature_dim": 128,
+        "num_repeat": 12,
+        "fac_mask": 4,
+        "n_att_head": 0,
+        "attn_enc_dim": 0,
+        "name": "bsrnn",
+        "name_out_dir": "bsrnn-large",
+        "name_tblog_dir": "bsrnn"
+      },
+      "eval_metadata_patch": "defaults supply sdr_win/sdr_hop",
+      "pickle_mode": "trusted publisher SHA-256 + screened globals; weights_only=False",
+      "origin": {
+        "epoch": 196,
+        "global_step": 985000,
+        "lightning_version": "2.4.0"
+      }
+    }
+  ],
+  "inference": [
+    {
+      "model": "simo-bsrnn-opt",
+      "targets": [
+        "vocals",
+        "bass",
+        "drums",
+        "other"
+      ],
+      "song": "f4b735de-14b1-4091-a9ba-c8b30c0740a7",
+      "gpu_forward_seconds": 1.0315866000019014,
+      "gpu_peak_allocated_bytes": 2079321088,
+      "outputs": {
+        "vocals": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\f4b735de-14b1-4091-a9ba-c8b30c0740a7\\simo-bsrnn-opt\\vocals.wav",
+          "sha256": "4b30a446eed0acb997ee42af431ec0bc3e70d79e00fa3926433d023d237cb6e2",
+          "samples": 384000,
+          "peak": 0.1804809272289276,
+          "samples_over_unit_peak": 0,
+          "rms": 0.024620825119633587,
+          "float32_readback_exact": true
+        },
+        "bass": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\f4b735de-14b1-4091-a9ba-c8b30c0740a7\\simo-bsrnn-opt\\bass.wav",
+          "sha256": "4c2445c621fc28cac3b1068fd0c685b965d8876601c7b7260820e7de6066a3ec",
+          "samples": 384000,
+          "peak": 0.09823065251111984,
+          "samples_over_unit_peak": 0,
+          "rms": 0.029000695651712923,
+          "float32_readback_exact": true
+        },
+        "drums": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\f4b735de-14b1-4091-a9ba-c8b30c0740a7\\simo-bsrnn-opt\\drums.wav",
+          "sha256": "cbaf9072e91f54df609a13c6b59a87491b433c5ad296f0266a2a93971174580e",
+          "samples": 384000,
+          "peak": 0.3333822190761566,
+          "samples_over_unit_peak": 0,
+          "rms": 0.039457386417663755,
+          "float32_readback_exact": true
+        },
+        "other": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\f4b735de-14b1-4091-a9ba-c8b30c0740a7\\simo-bsrnn-opt\\other.wav",
+          "sha256": "11574928647ee06bee6fd324f5cbab3cf23224218107ea0020f19df3a45fb132",
+          "samples": 384000,
+          "peak": 0.10885495692491531,
+          "samples_over_unit_peak": 0,
+          "rms": 0.030899916927623387,
+          "float32_readback_exact": true
+        }
+      },
+      "other_nsdr_db": 12.285529585696366,
+      "other_si_sdr_channel_mean_db": 12.024291832375638
+    },
+    {
+      "model": "simo-bsrnn-opt",
+      "targets": [
+        "vocals",
+        "bass",
+        "drums",
+        "other"
+      ],
+      "song": "1fc37390-1769-452d-9bea-19025be4c467",
+      "gpu_forward_seconds": 0.7049758000066504,
+      "gpu_peak_allocated_bytes": 2079321088,
+      "outputs": {
+        "vocals": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\1fc37390-1769-452d-9bea-19025be4c467\\simo-bsrnn-opt\\vocals.wav",
+          "sha256": "468e6770574c34f107640a59b5144877de41faba193c1a4ba9255355e52ad18f",
+          "samples": 384000,
+          "peak": 0.13429895043373108,
+          "samples_over_unit_peak": 0,
+          "rms": 0.011504448875485448,
+          "float32_readback_exact": true
+        },
+        "bass": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\1fc37390-1769-452d-9bea-19025be4c467\\simo-bsrnn-opt\\bass.wav",
+          "sha256": "8980e9fc8a5833ff0dc82cdcbc255ca4cc49950d2301a4c62ce193c3742f58e6",
+          "samples": 384000,
+          "peak": 9.16278895601863e-06,
+          "samples_over_unit_peak": 0,
+          "rms": 7.836805379261107e-07,
+          "float32_readback_exact": true
+        },
+        "drums": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\1fc37390-1769-452d-9bea-19025be4c467\\simo-bsrnn-opt\\drums.wav",
+          "sha256": "dddbc8d18397ef8f1a8718eb165181a47a526fac51f94da340958118bea289a3",
+          "samples": 384000,
+          "peak": 0.05273750424385071,
+          "samples_over_unit_peak": 0,
+          "rms": 0.007010517416741918,
+          "float32_readback_exact": true
+        },
+        "other": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\1fc37390-1769-452d-9bea-19025be4c467\\simo-bsrnn-opt\\other.wav",
+          "sha256": "d5429009d829f4ccdc96c89a6b3aa31a57545434a5cd6fa11f9f155c6a1be5cf",
+          "samples": 384000,
+          "peak": 0.07541177421808243,
+          "samples_over_unit_peak": 0,
+          "rms": 0.011128501318325034,
+          "float32_readback_exact": true
+        }
+      },
+      "other_nsdr_db": 19.16038660014167,
+      "other_si_sdr_channel_mean_db": 19.189761669935358
+    },
+    {
+      "model": "simo-bsrnn-opt",
+      "targets": [
+        "vocals",
+        "bass",
+        "drums",
+        "other"
+      ],
+      "song": "ad6c3742-e517-42eb-9dec-e74ed05387cc",
+      "gpu_forward_seconds": 0.8523159000324085,
+      "gpu_peak_allocated_bytes": 2079321088,
+      "outputs": {
+        "vocals": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\ad6c3742-e517-42eb-9dec-e74ed05387cc\\simo-bsrnn-opt\\vocals.wav",
+          "sha256": "910db6b8b9e4b2b3f2d4dfa57d210c163f89ef0f592a9121bc6175baccb14df6",
+          "samples": 384000,
+          "peak": 0.24603880941867828,
+          "samples_over_unit_peak": 0,
+          "rms": 0.025482001660471095,
+          "float32_readback_exact": true
+        },
+        "bass": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\ad6c3742-e517-42eb-9dec-e74ed05387cc\\simo-bsrnn-opt\\bass.wav",
+          "sha256": "441062493dca62016ba1d44589f214b76360c9d1db7b5e99e14f445f4371b80c",
+          "samples": 384000,
+          "peak": 0.07177039235830307,
+          "samples_over_unit_peak": 0,
+          "rms": 0.01940363087143267,
+          "float32_readback_exact": true
+        },
+        "drums": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\ad6c3742-e517-42eb-9dec-e74ed05387cc\\simo-bsrnn-opt\\drums.wav",
+          "sha256": "18150f2f9cfe7cbb4a6dd9d4e4d8363f396da9e9e1d181e1f393e9a880cdb5dc",
+          "samples": 384000,
+          "peak": 0.4017452001571655,
+          "samples_over_unit_peak": 0,
+          "rms": 0.035328477718307404,
+          "float32_readback_exact": true
+        },
+        "other": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\ad6c3742-e517-42eb-9dec-e74ed05387cc\\simo-bsrnn-opt\\other.wav",
+          "sha256": "635828915a36c279ee3f18fc87cd84df6ef2beb67adc2d7fc0ffab8e0ce54b2c",
+          "samples": 384000,
+          "peak": 0.08047905564308167,
+          "samples_over_unit_peak": 0,
+          "rms": 0.01210917339031388,
+          "float32_readback_exact": true
+        }
+      },
+      "other_nsdr_db": 8.996346168349273,
+      "other_si_sdr_channel_mean_db": 8.082022292740414
+    },
+    {
+      "model": "simo-bsrnn-opt",
+      "targets": [
+        "vocals",
+        "bass",
+        "drums",
+        "other"
+      ],
+      "song": "fd6e4b4a-f33a-4f3c-aa6e-7c65fd5dc0bc",
+      "gpu_forward_seconds": 1.175366299925372,
+      "gpu_peak_allocated_bytes": 2079321088,
+      "outputs": {
+        "vocals": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\fd6e4b4a-f33a-4f3c-aa6e-7c65fd5dc0bc\\simo-bsrnn-opt\\vocals.wav",
+          "sha256": "bd44780a3199be7efa06f59c532f9ea8dba2010753e6419f9d34619676e765fe",
+          "samples": 384000,
+          "peak": 0.18907630443572998,
+          "samples_over_unit_peak": 0,
+          "rms": 0.02293758103008734,
+          "float32_readback_exact": true
+        },
+        "bass": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\fd6e4b4a-f33a-4f3c-aa6e-7c65fd5dc0bc\\simo-bsrnn-opt\\bass.wav",
+          "sha256": "16c38f310bad542940de76f753bad2090638abc38d40f202e42aa6b40b71fa79",
+          "samples": 384000,
+          "peak": 0.16576005518436432,
+          "samples_over_unit_peak": 0,
+          "rms": 0.03317886288391034,
+          "float32_readback_exact": true
+        },
+        "drums": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\fd6e4b4a-f33a-4f3c-aa6e-7c65fd5dc0bc\\simo-bsrnn-opt\\drums.wav",
+          "sha256": "ad467e88e5c980972e8a561d642126e49557cb9822e6f14fe918c76ef50fdf8a",
+          "samples": 384000,
+          "peak": 0.4324805736541748,
+          "samples_over_unit_peak": 0,
+          "rms": 0.047109843658455046,
+          "float32_readback_exact": true
+        },
+        "other": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\fd6e4b4a-f33a-4f3c-aa6e-7c65fd5dc0bc\\simo-bsrnn-opt\\other.wav",
+          "sha256": "8d8eed245500cd2bf1e5f93fafc04ebeea5bb314c759056bb476efa31bf8c8e8",
+          "samples": 384000,
+          "peak": 0.1517072468996048,
+          "samples_over_unit_peak": 0,
+          "rms": 0.02634445009979165,
+          "float32_readback_exact": true
+        }
+      },
+      "other_nsdr_db": 10.499244320955867,
+      "other_si_sdr_channel_mean_db": 10.00167024368159
+    },
+    {
+      "model": "bsrnn-large",
+      "targets": [
+        "bass"
+      ],
+      "song": "f4b735de-14b1-4091-a9ba-c8b30c0740a7",
+      "gpu_forward_seconds": 0.9472051999764517,
+      "gpu_peak_allocated_bytes": 1049907200,
+      "outputs": {
+        "bass": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\f4b735de-14b1-4091-a9ba-c8b30c0740a7\\bsrnn-large\\bass.wav",
+          "sha256": "c838412a176264dce58da12447d13c056f1503d74c37fbebd0ed4c325510086e",
+          "samples": 384000,
+          "peak": 0.10417156666517258,
+          "samples_over_unit_peak": 0,
+          "rms": 0.027613211538013632,
+          "float32_readback_exact": true
+        }
+      }
+    },
+    {
+      "model": "bsrnn-large",
+      "targets": [
+        "bass"
+      ],
+      "song": "1fc37390-1769-452d-9bea-19025be4c467",
+      "gpu_forward_seconds": 1.0068090999266133,
+      "gpu_peak_allocated_bytes": 1049907200,
+      "outputs": {
+        "bass": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\1fc37390-1769-452d-9bea-19025be4c467\\bsrnn-large\\bass.wav",
+          "sha256": "1406aaf58127be3364561329dbe153060055b943d6296cb4ed8364e136f4a49e",
+          "samples": 384000,
+          "peak": 0.0006012573721818626,
+          "samples_over_unit_peak": 0,
+          "rms": 3.326629431250956e-05,
+          "float32_readback_exact": true
+        }
+      }
+    },
+    {
+      "model": "bsrnn-large",
+      "targets": [
+        "bass"
+      ],
+      "song": "ad6c3742-e517-42eb-9dec-e74ed05387cc",
+      "gpu_forward_seconds": 0.4497466000029817,
+      "gpu_peak_allocated_bytes": 1049907200,
+      "outputs": {
+        "bass": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\ad6c3742-e517-42eb-9dec-e74ed05387cc\\bsrnn-large\\bass.wav",
+          "sha256": "cca314d048ac84d15c3fc4428683a8b853feba1859ee0c9ebaba30a45285d7c0",
+          "samples": 384000,
+          "peak": 0.07732576131820679,
+          "samples_over_unit_peak": 0,
+          "rms": 0.019973683438815747,
+          "float32_readback_exact": true
+        }
+      }
+    },
+    {
+      "model": "bsrnn-large",
+      "targets": [
+        "bass"
+      ],
+      "song": "fd6e4b4a-f33a-4f3c-aa6e-7c65fd5dc0bc",
+      "gpu_forward_seconds": 0.9106827999930829,
+      "gpu_peak_allocated_bytes": 1049907200,
+      "outputs": {
+        "bass": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\fd6e4b4a-f33a-4f3c-aa6e-7c65fd5dc0bc\\bsrnn-large\\bass.wav",
+          "sha256": "cb475c45fce38d66f0d7391406ffae303108587e130387ef3cfbf44a161194d8",
+          "samples": 384000,
+          "peak": 0.1812901645898819,
+          "samples_over_unit_peak": 0,
+          "rms": 0.03288551065073603,
+          "float32_readback_exact": true
+        }
+      }
+    },
+    {
+      "model": "bsrnn-large",
+      "targets": [
+        "drums"
+      ],
+      "song": "f4b735de-14b1-4091-a9ba-c8b30c0740a7",
+      "gpu_forward_seconds": 0.6677722000749782,
+      "gpu_peak_allocated_bytes": 1756528640,
+      "outputs": {
+        "drums": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\f4b735de-14b1-4091-a9ba-c8b30c0740a7\\bsrnn-large\\drums.wav",
+          "sha256": "ae7848ef8fc62332c1123b45fa8c4c0835ecc25b38870ae49c0bae38a91dd85a",
+          "samples": 384000,
+          "peak": 0.32502511143684387,
+          "samples_over_unit_peak": 0,
+          "rms": 0.0389276574982709,
+          "float32_readback_exact": true
+        }
+      }
+    },
+    {
+      "model": "bsrnn-large",
+      "targets": [
+        "drums"
+      ],
+      "song": "1fc37390-1769-452d-9bea-19025be4c467",
+      "gpu_forward_seconds": 0.5255777999991551,
+      "gpu_peak_allocated_bytes": 1756528640,
+      "outputs": {
+        "drums": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\1fc37390-1769-452d-9bea-19025be4c467\\bsrnn-large\\drums.wav",
+          "sha256": "b79ad7cf4f82740e5b64d3fe2f230759e2c0ee65fe0397754c396463d604bbaa",
+          "samples": 384000,
+          "peak": 0.05293647199869156,
+          "samples_over_unit_peak": 0,
+          "rms": 0.0068714718554718215,
+          "float32_readback_exact": true
+        }
+      }
+    },
+    {
+      "model": "bsrnn-large",
+      "targets": [
+        "drums"
+      ],
+      "song": "ad6c3742-e517-42eb-9dec-e74ed05387cc",
+      "gpu_forward_seconds": 0.5351688000373542,
+      "gpu_peak_allocated_bytes": 1756528640,
+      "outputs": {
+        "drums": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\ad6c3742-e517-42eb-9dec-e74ed05387cc\\bsrnn-large\\drums.wav",
+          "sha256": "709231baf02e9da2d8dd467452341d29de1a0c342ee12881a463faf2cd97b211",
+          "samples": 384000,
+          "peak": 0.4008575677871704,
+          "samples_over_unit_peak": 0,
+          "rms": 0.034642851599743806,
+          "float32_readback_exact": true
+        }
+      }
+    },
+    {
+      "model": "bsrnn-large",
+      "targets": [
+        "drums"
+      ],
+      "song": "fd6e4b4a-f33a-4f3c-aa6e-7c65fd5dc0bc",
+      "gpu_forward_seconds": 0.5139211000641808,
+      "gpu_peak_allocated_bytes": 1756528640,
+      "outputs": {
+        "drums": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\fd6e4b4a-f33a-4f3c-aa6e-7c65fd5dc0bc\\bsrnn-large\\drums.wav",
+          "sha256": "93ead2cdffd855f184fb5f0ada2997c170ee2b0a2a01c4fad7ba7cbc2ddc0685",
+          "samples": 384000,
+          "peak": 0.4689377248287201,
+          "samples_over_unit_peak": 0,
+          "rms": 0.04522122018053914,
+          "float32_readback_exact": true
+        }
+      }
+    },
+    {
+      "model": "bsrnn-large",
+      "targets": [
+        "other"
+      ],
+      "song": "f4b735de-14b1-4091-a9ba-c8b30c0740a7",
+      "gpu_forward_seconds": 0.9901298999320716,
+      "gpu_peak_allocated_bytes": 1360949248,
+      "outputs": {
+        "other": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\f4b735de-14b1-4091-a9ba-c8b30c0740a7\\bsrnn-large\\other.wav",
+          "sha256": "866e5d16a21e86a5fe4307720848ee7725aeb671584fe42243b19f23bea26a81",
+          "samples": 384000,
+          "peak": 0.10475611686706543,
+          "samples_over_unit_peak": 0,
+          "rms": 0.03023048330673518,
+          "float32_readback_exact": true
+        }
+      },
+      "other_nsdr_db": 8.576232069501085,
+      "other_si_sdr_channel_mean_db": 7.975674676248896
+    },
+    {
+      "model": "bsrnn-large",
+      "targets": [
+        "other"
+      ],
+      "song": "1fc37390-1769-452d-9bea-19025be4c467",
+      "gpu_forward_seconds": 0.4725277000106871,
+      "gpu_peak_allocated_bytes": 1360949248,
+      "outputs": {
+        "other": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\1fc37390-1769-452d-9bea-19025be4c467\\bsrnn-large\\other.wav",
+          "sha256": "0183ed2aeffbd4a6835bf041bfde2de820a9b60d3c086d45448ae76a946954d1",
+          "samples": 384000,
+          "peak": 0.07432504743337631,
+          "samples_over_unit_peak": 0,
+          "rms": 0.011039368075602725,
+          "float32_readback_exact": true
+        }
+      },
+      "other_nsdr_db": 14.52611956284313,
+      "other_si_sdr_channel_mean_db": 14.36191167914832
+    },
+    {
+      "model": "bsrnn-large",
+      "targets": [
+        "other"
+      ],
+      "song": "ad6c3742-e517-42eb-9dec-e74ed05387cc",
+      "gpu_forward_seconds": 0.6720641000429168,
+      "gpu_peak_allocated_bytes": 1360949248,
+      "outputs": {
+        "other": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\ad6c3742-e517-42eb-9dec-e74ed05387cc\\bsrnn-large\\other.wav",
+          "sha256": "02bf31c95eecd3d636d885ec1e62f15559f81d836f0cd5f9083aecf4b554fed9",
+          "samples": 384000,
+          "peak": 0.0704774558544159,
+          "samples_over_unit_peak": 0,
+          "rms": 0.011313668717120431,
+          "float32_readback_exact": true
+        }
+      },
+      "other_nsdr_db": 5.16253094200875,
+      "other_si_sdr_channel_mean_db": 3.485831616311944
+    },
+    {
+      "model": "bsrnn-large",
+      "targets": [
+        "other"
+      ],
+      "song": "fd6e4b4a-f33a-4f3c-aa6e-7c65fd5dc0bc",
+      "gpu_forward_seconds": 0.4889473000075668,
+      "gpu_peak_allocated_bytes": 1360949248,
+      "outputs": {
+        "other": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\fd6e4b4a-f33a-4f3c-aa6e-7c65fd5dc0bc\\bsrnn-large\\other.wav",
+          "sha256": "e2d5fdb2adcfd3edafa82ec214f00120a5ec0654140b51106f0e8f91839ee67d",
+          "samples": 384000,
+          "peak": 0.14556074142456055,
+          "samples_over_unit_peak": 0,
+          "rms": 0.025679004449184972,
+          "float32_readback_exact": true
+        }
+      },
+      "other_nsdr_db": 7.829796670538222,
+      "other_si_sdr_channel_mean_db": 6.950901118550959
+    },
+    {
+      "model": "bsrnn-large",
+      "targets": [
+        "vocals"
+      ],
+      "song": "f4b735de-14b1-4091-a9ba-c8b30c0740a7",
+      "gpu_forward_seconds": 0.5447238000342622,
+      "gpu_peak_allocated_bytes": 1360949248,
+      "outputs": {
+        "vocals": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\f4b735de-14b1-4091-a9ba-c8b30c0740a7\\bsrnn-large\\vocals.wav",
+          "sha256": "146582e180ce2af98d44f4d87c09dd73f078cbe6e7165d9d14f94146e20c377e",
+          "samples": 384000,
+          "peak": 0.17846836149692535,
+          "samples_over_unit_peak": 0,
+          "rms": 0.024179962683739856,
+          "float32_readback_exact": true
+        }
+      }
+    },
+    {
+      "model": "bsrnn-large",
+      "targets": [
+        "vocals"
+      ],
+      "song": "1fc37390-1769-452d-9bea-19025be4c467",
+      "gpu_forward_seconds": 0.4896557000465691,
+      "gpu_peak_allocated_bytes": 1360949248,
+      "outputs": {
+        "vocals": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\1fc37390-1769-452d-9bea-19025be4c467\\bsrnn-large\\vocals.wav",
+          "sha256": "f4d293f177e63723225b53ab56e3a5ad6286ee69f31f7bba0e0b2194798b868f",
+          "samples": 384000,
+          "peak": 0.1354813277721405,
+          "samples_over_unit_peak": 0,
+          "rms": 0.01144449462561566,
+          "float32_readback_exact": true
+        }
+      }
+    },
+    {
+      "model": "bsrnn-large",
+      "targets": [
+        "vocals"
+      ],
+      "song": "ad6c3742-e517-42eb-9dec-e74ed05387cc",
+      "gpu_forward_seconds": 0.5732104000635445,
+      "gpu_peak_allocated_bytes": 1360949248,
+      "outputs": {
+        "vocals": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\ad6c3742-e517-42eb-9dec-e74ed05387cc\\bsrnn-large\\vocals.wav",
+          "sha256": "f45c86bd002ae3a772cb6faa9fa29ae688891c4707eb3a7d4402312db28c5e79",
+          "samples": 384000,
+          "peak": 0.24491217732429504,
+          "samples_over_unit_peak": 0,
+          "rms": 0.02524333971284081,
+          "float32_readback_exact": true
+        }
+      }
+    },
+    {
+      "model": "bsrnn-large",
+      "targets": [
+        "vocals"
+      ],
+      "song": "fd6e4b4a-f33a-4f3c-aa6e-7c65fd5dc0bc",
+      "gpu_forward_seconds": 0.4757910999469459,
+      "gpu_peak_allocated_bytes": 1360949248,
+      "outputs": {
+        "vocals": {
+          "path": "D:\\upmix\\runs\\bsrnn_pretrained_train4_v1\\fd6e4b4a-f33a-4f3c-aa6e-7c65fd5dc0bc\\bsrnn-large\\vocals.wav",
+          "sha256": "64d14e03625e124487e92e7bd504299d6ba5416b0fd5b0d64fff7876467fc303",
+          "samples": 384000,
+          "peak": 0.18954776227474213,
+          "samples_over_unit_peak": 0,
+          "rms": 0.022801709336289385,
+          "float32_readback_exact": true
+        }
+      }
+    }
+  ],
+  "complete": true,
+  "audio_files": 52
+}

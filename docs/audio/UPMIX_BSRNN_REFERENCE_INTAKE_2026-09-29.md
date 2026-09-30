@@ -1,5 +1,7 @@
 # BSRNN reference intake — 2026-09-29
 
+**Subsequent item 1 completed:** [Pretrained inference report](UPMIX_BSRNN_PRETRAINED_INFERENCE_2026-09-29.md). Five checkpoints strictly loaded and four TRAIN excerpts processed, with original-gain WAVs and runtime audit. The download-only state and dependency inventory below describe the earlier intake snapshot. Neither model is an Audi candidate.
+
 ## Scope and result
 
 The owner redirected the proposed custom causal-encoder work: **download a complete BSRNN implementation first**. Completed: full upstream source, training/evaluation/inference configs, BSRNN-large checkpoints and optimized SIMO-BSRNN checkpoints. No downloaded model was executed, trained or adapted. No dependency installation, dataset evaluation, Track A change or head-unit operation occurred.

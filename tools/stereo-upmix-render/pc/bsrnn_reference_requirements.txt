@@ -1,0 +1,8 @@
+# Install only in D:\upmix\venvs\bsrnn_reference (--system-site-packages).
+# Reuse shared torch/torchaudio 2.11.0+cu128; do not install upstream requirements.
+lightning==2.5.5
+pytorch-lightning==2.5.5
+omegaconf==2.3.0
+pandas==3.0.6
+museval==0.4.1
+musdb==0.4.3
