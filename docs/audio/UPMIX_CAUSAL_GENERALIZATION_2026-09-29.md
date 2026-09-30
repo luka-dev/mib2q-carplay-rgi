@@ -1,12 +1,75 @@
 # Causal reference: broad true-stem generalization
 
-_2026-09-29. Track B. The owner authorized the next stage after the successful fixed-decoder causal fit. Freeze this protocol before GPU execution._
+_Track B. Protocol frozen2026-09-29; both40k checkpoints, CPU audit and full40 source-entry/C comparison completed2026-09-30. Causal PC reference above the device compute allowance._
 
 ## 🎯 Question and scope
 
 The [completed causal fitting pair](UPMIX_CAUSAL_REFERENCE_ENCODER_2026-09-29.md) improved median SI-SDR 7.754→10.500 dB and objective by 20.584% on four known TRAIN crops, with the same trained decoder. Its vocal/bass attributions increased, high frequencies remain weak and the reference costs 2.168 G estimated neural MAC/s. It needs a natural-song generalization test before compression.
 
 Compare **the same two causal encoder packages on the complete original MoisesDB TRAIN pool**, with matched draws and supervision. This tests whether the demonstrated fitting advantage survives broader training. Mixed-corpus training, teacher output distillation and loss changes remain separate comparisons after this result. The renderer comparison uses the already frozen original/direct C routes; there is no hook port.
+
+## ✅ Completed full40 result, 2026-09-30
+
+Both40k arms, saved-checkpoint CPU replay, **40 DEV songs ×60s ×both C routes**, exact231 stem-row coverage per route and **265 full-song source-attributed events per arm** completed. Evaluator and supervisor returned0; final readback has no Python evaluator/trainer and no GPU lease. No next job is queued. Main [complete decision](UPMIX_CAUSAL_GENERALIZATION_2026-09-29_complete.json): **all11 frozen relative quality gates pass; absolute causal product gate fails**. This preserves the stronger causal reference for a targeted mechanism experiment; it is not a product completion.
+
+### Fixed direct-C result at the original gain
+
+| Metric | Control40k | Reference40k | Absolute requirement | Reference result |
+| --- | ---: | ---: | ---: | --- |
+| Guitar rear share | .103295 | .121142 | ≥.15 | Fail |
+| Keys rear share | .104612 | .159371 | ≥.15 | Pass |
+| Piano rear share | .091219 | .134890 | ≥.10 | Pass |
+| Strings rear share | .102565 | .108989 | ≥.14 | Fail |
+| Voice rear share | .015153 | .005917 | ≤.02 | Pass |
+| Bass rear share | .053625 | .052086 | ≤.06 | Pass |
+| Drums rear share | .009577 | .008540 | ≤.08 | Pass |
+| Any-stem swinging songs | 0/40 | 0/40 | ≤5 | Pass |
+| Guitar/keys/wind absolute depth-level slopes | .015740/.019570/.017812 | .021117/.024371/.021009 | ≤.05 each | Pass |
+| Source-attributed vocal-entry ducking median | .806338 | .803796 | ≥.85 | Fail |
+| Vocal-entry ducking p10 | .432415 | .419774 | ≥.60 | Fail |
+| Direct-C median rear RMS, dBFS | −39.393480 | −39.027645 | Within.5dB across arms | Pass, +.365834dB |
+
+The reference passes **10/14** recorded observed direct-route gates. Its direct/original-C rear difference is only **−.032572dB**; the control direct/original-C difference was−.645444dB. Gains were fixed before inference; no quieter-rear rescue or posthoc gain adjustment. The between-arm+.365834dB meets the frozen tolerance but is not exact acoustic level matching.
+
+**Renderer dependence remains material:** with the original C route, control→reference any-stem swings **10→15/40**, drums rear share **.093867→.095876** (both fail); reference guitar/keys/piano/strings **.121066/.130421/.101760/.089652**, voice/bass **.015993/.052854**. The direct-route0/40 was already present in the control. Thus the improved encoder alone does not repair the original renderer's stability and must not be credited for removing swings.
+
+### Extraction and vocal-entry evidence
+
+Natural20s paired DEV SI-SDR gain remains **+1.302827dB**,90% interval **[1.051355,1.443251]**,39/40 nonworse; independently recorded by the completed evaluator. On full60s, median SI-SDR is **−.375794→+.713427dB**, actual-mixture-mask eligible/vocal/drum/bass transmissions **.429580/.127615/.025759/.029043 → .450696/.077266/.022632/.027400**. Upper-band eligible transmission improves **.007559→.021407 (8–14k)** and **.003135→.011576 (>14k)**, but remains weak; transmission is extraction energy, not rear share.
+
+Entry coverage is84 events in36 songs, with83 valid ducking ratios; exits79 and sustained controls102, total265 across all40 songs in each arm. Median absolute eligible pre/post entry retention improves **.501457/.385067→.645218/.490729**. Ratio median/p10 slightly worsen **.806338/.432415→.803796/.419774**, within the predeclared .02 relative allowance but below absolute .85/.60. Sustained median/p10 ratios improve **.967229/.705597→.993441/.736453**. The reference preserves more instruments on both sides of a vocal entry, but still ducks when singing starts.
+
+Verified local captures: all four CSV exports contain identical unique231 song/stem keys; all40 extraction closures per arm ≤**4.881e−14**;265 event rows per arm cover exactly40 songs and satisfy≤1e−9 attribution closure. Final model hashes equal independently audited40k hashes; final evaluator protocol hash matches its exact exported protocol. No independent20, device int8/latency or owner listening test is claimed. Estimated reference neural compute remains2.168G MAC/s versus≤150M device requirement.
+
+### Decision and next experiment
+
+The larger causal encoder package gives a reproducible DEV reconstruction/selectivity improvement and reaches the keys/piano rear thresholds, so the architecture comparison has a useful positive result. **Guitar, strings and vocal-entry retention remain the binding measured failures**, plus the current reference's compute cost. This single-seed, warm-started package comparison is not an equal-compute ablation or proof of a unique cause.
+
+Follow the frozen decision plan: retain both terminal checkpoints and the stronger reference; prepare **one matched source/loss mechanism experiment** on the unchanged best true-stem recipe, using per-song guitar/strings and entry errors to select its intervention. First distinguish mask/target representation limits from objective tradeoffs on these observed failures. Compression becomes useful once the target behavior is established; a new architecture sweep or merely extending this finished horizon is not justified by this result. No new job, hook port or shared-package install is started by this report update.
+
+### Exact completed evidence
+
+| Artifact | Exact PC capture |
+| --- | --- |
+| All final relative/absolute decisions and both arms | [Complete result](UPMIX_CAUSAL_GENERALIZATION_2026-09-29_complete.json) |
+| Reference full40 source/C summaries | [Reference full40](UPMIX_CAUSAL_GENERALIZATION_2026-09-29_residual_full40.json) |
+| Frozen C/source evaluation protocol | [C protocol](UPMIX_CAUSAL_GENERALIZATION_2026-09-29_c_protocol.json) |
+| All265 control transition rows | [Control transitions](UPMIX_CAUSAL_GENERALIZATION_2026-09-29_original_transitions.json) |
+| All265 reference transition rows | [Reference transitions](UPMIX_CAUSAL_GENERALIZATION_2026-09-29_residual_transitions.json) |
+| Control231 original/direct C stem rows | [Original C](UPMIX_CAUSAL_GENERALIZATION_2026-09-29_original_baseline_stems.csv), [direct C](UPMIX_CAUSAL_GENERALIZATION_2026-09-29_original_direct_stems.csv) |
+| Reference231 original/direct C stem rows | [Original C](UPMIX_CAUSAL_GENERALIZATION_2026-09-29_residual_baseline_stems.csv), [direct C](UPMIX_CAUSAL_GENERALIZATION_2026-09-29_residual_direct_stems.csv) |
+
+- `complete.json` SHA-256 `5337c8e64a0b9203a819ab03d34fa37d9b04a40abd699ffd453621edf7a047a9`.
+- `residual_full40.json` SHA-256 `3d3153d92d4db26683b8a28b32fe78846bbe2fddc2b124cfd4cd983a16299c59`.
+- `c_protocol.json` SHA-256 `df5d16048b236c33b53ebf66ac2301233e2a5ba232beb3ca9bac851be911908e`.
+- `original_transitions.json` SHA-256 `7888f1af4ce4ba1291b0e9b1c3f0fdc3821d61d14f1ad0b54fa57f6f52344096`.
+- `residual_transitions.json` SHA-256 `01e016513faba6eaa1d54496f6d939329ab198bf6e77065eeea29739b70214fc`.
+- `original_baseline_stems.csv` SHA-256 `87e35f75d9329f2a737d0ec53505a919f37c22a1c60b03a3af345359a5e6c24c`.
+- `original_direct_stems.csv` SHA-256 `5e80ae1d16d51f8734a9934e340936c7e24a5d4734eb38635984aeeaa796e7a4`.
+- `residual_baseline_stems.csv` SHA-256 `94ebaef6b941574f0a5155e9a61b7167da041151397b299eebed82a9a1c865c0`.
+- `residual_direct_stems.csv` SHA-256 `dd3162489e36bad2a280801c2f3e9b286aafe551fd6d9367cd7493777b8cbe7a`.
+
+The following preparation, pause and live snapshots are preserved as history; they no longer describe a running job.
 
 ## 🧊 Frozen initialization and data
 
