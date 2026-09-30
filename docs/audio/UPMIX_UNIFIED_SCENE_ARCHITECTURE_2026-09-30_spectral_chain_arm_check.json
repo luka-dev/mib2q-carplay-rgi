@@ -1,0 +1,98 @@
+{
+  "complete": true,
+  "passed": true,
+  "scope": "QEMU Cortex-A15/QNX full causal FFT/one spectral int8 or float model/WOLA/NN-free C arithmetic; no Audi/Krait timing, quantized broad acoustic or loaded deadline proof",
+  "arms": [
+    {
+      "mode": "float",
+      "passed": true,
+      "streams_interleaved": 4,
+      "hops_per_stream": 64,
+      "selected_dense_macs_frame": 1244928,
+      "neural_dense_macs_s": 116712000,
+      "channel_source_nse": [
+        1.60990911815e-09,
+        2.47927024141e-09,
+        0,
+        0,
+        1.52156104352e-09,
+        1.68629146821e-09,
+        2.54274153935e-10,
+        3.45700048897e-10
+      ],
+      "channel_source_max_lsb": [
+        2,
+        2,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1
+      ],
+      "old_neural_invocations": 0,
+      "old_blobs": 0,
+      "worker_stack_bytes": 262144,
+      "execution": "qnx-arm",
+      "scope": "Full FFT/single model/WOLA/NN-free C arithmetic on saved TRAIN prefix; native-reference parity, no device timing or acoustic promotion"
+    },
+    {
+      "mode": "int8",
+      "passed": true,
+      "streams_interleaved": 4,
+      "hops_per_stream": 64,
+      "selected_dense_macs_frame": 1244928,
+      "neural_dense_macs_s": 116712000,
+      "channel_source_nse": [
+        3.73282497822e-06,
+        3.30984059539e-06,
+        0,
+        0,
+        6.55337126409e-05,
+        4.07047748254e-05,
+        6.30306192059e-05,
+        3.96416874524e-05
+      ],
+      "channel_source_max_lsb": [
+        25,
+        23,
+        0,
+        0,
+        23,
+        21,
+        57,
+        51
+      ],
+      "old_neural_invocations": 0,
+      "old_blobs": 0,
+      "worker_stack_bytes": 262144,
+      "execution": "qnx-arm",
+      "scope": "Full FFT/single model/WOLA/NN-free C arithmetic on saved TRAIN prefix; native-reference parity, no device timing or acoustic promotion"
+    }
+  ],
+  "fixture": {
+    "version": "spectral-chain-arm-fixture-v1",
+    "checkpoint_sha256": "ff072970aef01749f44afc0c8bc010c542eb7e2384cdf88d8b7473b6a3854da2",
+    "fixture_sha256": "4a596cd721628bdc53caa120586501790a819014ce7f89a355c206659431758d",
+    "native_audit_sha256": "5f80a41a5b3c743aacca28d61e48eeb3aeaa80524641470e81cd0810ed5e0bed",
+    "native_protocol_sha256": "8e2148ca1eafaa25c9d9f0e3df0053faccdf40cef8d1af70e424211b94797ba8",
+    "source_identities": {
+      "float.input": "e194972a0ca62d3d033b4f19072223547a6cddafe643de5f1a06a6ba6c15dda7",
+      "float.output": "f8dc35d20bc374276ca2dfb8a76bf3ed7d9f5917a6139f2bab70ee1489d8e42b",
+      "float.source": "6198091e0bd6dbb2717ef0124c48fd6c86712d0f13eddefc2e045de33db4e615",
+      "int8.output": "7fb64f7bf3fcf55cfcbc1fcf3d4499a473d089b832c1f89965b9d20b9116b585",
+      "int8.source": "b79d53f3fdbf6780d1072cb2fe9ba3cb91be1e70cafc617f04bbb79e6a50dcf0"
+    },
+    "selection": "First64 consecutive512sample PCM hops of each of four previously inspected TRAIN8s full-chain inputs; same native fitting20k checkpoint float/int8 references",
+    "gates": "ARM float all6+source PCM16 NSE<=1e-7/max<=4LSB; ARM int8 all6+source PCM16 NSE<=1e-4 to native int8; selected count exact; four independent interleaved streams; record every channel and peak error",
+    "scope": "ARM/QNX arithmetic integration only; no native-vs-GT int8 qualification, physical loaded deadline/latency, holdout quality, scene semantics or owner listening",
+    "script_sha256": "2258433c92440f55233d5e2bf51bfd6ff97617cc66f349e066a861d683fe1b41"
+  },
+  "compiler": "arm-unknown-nto-qnx6.5.0eabi-gcc (GCC) 8.5.0\nCopyright (C) 2018 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n",
+  "flags": "-O2 -g -std=gnu99 -Wall -Wextra -fdata-sections -ffunction-sections -O3 -fno-math-errno -Werror -mfpu=neon -mfloat-abi=softfp -DSPA_HSSR_TEST_MASK -DSPA_HSSR_TEST_DIRECT_NO_BED -I/src/hook/audio -I/src/tools/stereo-upmix-render/unified_spectral_runtime_v1\n",
+  "docker_image_id": "sha256:59cf5a575d69869e3983f136bdcf9e7e7d997e1206dcfc912e0d1988c68ad213",
+  "source_identity": "0abcf5ba6b8320f2442d95743838640a31309c0b680be17d92a38c7df2eeb937  /Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/tools/stereo-upmix-render/unified_spectral_chain_v1/spectral_chain_arm_check.c\n16e80ba2fd6af03503f6ae53444fc6249bdd26aa11d852acf0f1140aeb536fe4  /Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/tools/stereo-upmix-render/unified_spectral_chain_v1/spectral_chain_cli.c\nb7899528e67f3d3f06e5d2d300fe74ec2f3b0a943e1b8eb42232cf7536415644  /Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/tools/stereo-upmix-render/unified_spectral_runtime_v1/unified_runtime.c\n7e6fa4e220ea70b59ac676238e06ac14fdfb80e90799d128cfa3a1faf4f3b1c3  /Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/tools/stereo-upmix-render/unified_spectral_runtime_v1/unified_runtime.h\n829f9062d69f86e94424d8bec193835d5efccf61f8682f7e8932cbcab1f5f12e  /Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/tools/stereo-upmix-render/unified_spectral_runtime_v1/unified_audio_stream.c\n8ef0a6f1101faebead744344c6535c94c74be1bf9830953dcb2d9b0d009c8c26  /Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/tools/stereo-upmix-render/unified_spectral_runtime_v1/unified_audio_stream.h\n4fca2a5fa594132d2ec7c05c37de81b4db4d9cd4ea36b5e25ab2b07f26ce60c9  /tmp/upmix_spectral_chain_mac_v1/copies/stereo_upmix.c\n7b7f9710f18129a9a6af75a962dc2048304738c4d316c1a0ff71f03624e0ea18  /tmp/upmix_spectral_chain_mac_v1/copies/hssr_dsp.c\na9b9cd6910806594d07b8c456439da2484f6a5716ee8782363aff382888a82fa  /tmp/upmix_spectral_chain_mac_v1/copies/hssr_neon.c\n63bf34125859f0562f6c217fc94260dcb9da7147b1f8e7db53596ad94ba9f56c  /tmp/upmix_spectral_chain_mac_v1/copies/hssr_mask.c\n",
+  "executable_sha256": "bd1050eb35012dad656082f04a4e34fe88d4d1a943e7fd5c61aec4dedb11fb06",
+  "boot_image_sha256": "01de8490336e92aa6011a2b6a63296afde2df7ae361edfd75bab26e1268e2fb1",
+  "log_sha256": "47d863873dcdca5c91b5149610829342225c0f64e24c03a2085955672e34656c"
+}

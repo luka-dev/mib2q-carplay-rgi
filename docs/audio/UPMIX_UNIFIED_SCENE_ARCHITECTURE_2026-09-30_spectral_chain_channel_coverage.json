@@ -1,0 +1,113 @@
+{
+  "scope": "Measured actual channel coverage, no gate amendment; C is structurally zero in this configuration, five other rails exercised including LFE in ARM prefix",
+  "arms": {
+    "float": {
+      "native_full4x8s": {
+        "channel_rms_pcm16": [
+          1248.5005041134655,
+          1225.3210263563985,
+          0.0,
+          57.068615750246536,
+          265.8023528204349,
+          297.03705037826336
+        ],
+        "channel_nonzero_samples": [
+          1539319,
+          1538941,
+          0,
+          1400615,
+          1534500,
+          1534430
+        ],
+        "channels": [
+          "FL",
+          "FR",
+          "C",
+          "LFE",
+          "Ls",
+          "Rs"
+        ]
+      },
+      "arm_fixture_first64hops": {
+        "channel_rms_pcm16": [
+          1156.0294846500187,
+          1155.654375127742,
+          0.0,
+          48.05368695359373,
+          255.3124673981103,
+          300.81099994918685
+        ],
+        "channel_nonzero_samples": [
+          127252,
+          126985,
+          0,
+          108681,
+          124899,
+          124564
+        ],
+        "channels": [
+          "FL",
+          "FR",
+          "C",
+          "LFE",
+          "Ls",
+          "Rs"
+        ]
+      }
+    },
+    "int8": {
+      "native_full4x8s": {
+        "channel_rms_pcm16": [
+          1247.2979005779582,
+          1224.093497022538,
+          0.0,
+          57.068615750246536,
+          266.26651657799215,
+          298.17800346939487
+        ],
+        "channel_nonzero_samples": [
+          1539251,
+          1538896,
+          0,
+          1400615,
+          1534540,
+          1534440
+        ],
+        "channels": [
+          "FL",
+          "FR",
+          "C",
+          "LFE",
+          "Ls",
+          "Rs"
+        ]
+      },
+      "arm_fixture_first64hops": {
+        "channel_rms_pcm16": [
+          1154.8629746804513,
+          1154.7359026064669,
+          0.0,
+          48.05368695359373,
+          256.42478180562046,
+          301.61101009145244
+        ],
+        "channel_nonzero_samples": [
+          127248,
+          126963,
+          0,
+          108681,
+          124900,
+          124568
+        ],
+        "channels": [
+          "FL",
+          "FR",
+          "C",
+          "LFE",
+          "Ls",
+          "Rs"
+        ]
+      }
+    }
+  }
+}

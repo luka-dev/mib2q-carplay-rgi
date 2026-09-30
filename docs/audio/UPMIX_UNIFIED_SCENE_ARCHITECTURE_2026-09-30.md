@@ -2,7 +2,7 @@
 
 _2026-09-30. Track B. Owner direction: replace q6d + guard + v21a with one capable network and make the rear scene more expressive. Paired TRAIN fitting completed; real-FFT defect corrected and waveform/host contracts verified. No DEV-quality, scene, device or car candidate established._
 
-**Latest verified state:** the spectral20k fitting checkpoint now has a standalone C/int8 port with native float parity, exact selected-output/state replay, ARM/QNX arithmetic and full TRAIN4 quantization screen passing (eligible loss.0658dB). Broad156TRAIN comparison remains active, control18,000/40k, followed by spectral40k and original full40 renderer/events. These are distinct scopes; independent20, broad int8, loaded device and owner ears remain open.
+**Latest verified state:** the spectral20k fitting checkpoint now has a standalone C/int8 port with native float parity, exact selected-output/state replay, ARM/QNX arithmetic and full TRAIN4 quantization screen passing (eligible loss.0658dB). The complete standalone FFT/WOLA/NN-free C5.1 chain also passes native Mac/Windows19numeric gates and ARM/QNX64hop arithmetic replay; C is zero and scene dormant. Broad156TRAIN comparison remains active, control27,250/40k, followed by spectral40k and original full40 renderer/events. These are distinct scopes; independent20, broad int8, loaded device and owner ears remain open.
 
 ## 🎯 Decision and acceptance
 
@@ -687,3 +687,54 @@ The first64-frame int8-to-float Torch source NSE is.001143/.000614/.000768/.0011
 [Resolved QNX build/compiler/flags/stack record](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_runtime_qnx_build.json), [ARM reference fixture](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_runtime_arm_fixture_manifest.json), [actual ARM/QNX guest result](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_runtime_arm_check.json). The existing isolated toolchain builds both neural and FFT/WOLA audio-stream binaries with warnings as errors. QNX compiler stack record: predictor68,848bytes, audio process112bytes, additional callees separate; no worker deadline proof. Local QEMU Cortex-A15/QNX executes four interleaved streams×16frames of the same saved TRAIN prefix. All24 private int8 dot cases are exact; float source NSE≤1.456e−12/scene1.535e−6; int8-to-native-int8 source NSE≤3.080e−5/scene.034353 pass the frozen guest bounds1e−4/.05. This compares ARM int8 with the corresponding native int8 arithmetic, not with ground-truth extraction. The unit is never contacted or restarted.
 
 Broad supervisor45888/control26924/32840 remains verified live, last18,000/40k/all156songs exposed; spectral40k follows, then saved terminal and original full40 real-C/event gates. No test or gain selection moved earlier. Next finish the matched broad acoustic comparison; qualify any passing terminal with its own fresh export, full5.1 int8 render, independent20, actual≤150M/≤85ms loaded unit and owner CarPlay. Scene semantics and a physical bright rear remain unproved.
+
+## Spectral single-network FFT/WOLA/5.1 chain: full TRAIN numeric integration passes
+
+[New isolated chain](../../tools/stereo-upmix-render/unified_spectral_chain_v1/README.md), [builder](../../tools/stereo-upmix-render/build_spectral_context_chain.py), [native full-chain verifier](../../tools/stereo-upmix-render/verify_spectral_context_chain.py). The graph-specific C runtime now connects to past-only2048/512 Hann FFT/WOLA, a1536sample front-mixture FIFO and copied NN-free real C renderer. The actual fitted spectral20k checkpoint `ff072970aef01749f44afc0c8bc010c542eb7e2384cdf88d8b7473b6a3854da2` is used. It is not a broad winner. Scene remains computed but dormant. Source overflow fails with preserved outputs; neither gain nor clipping rescue is applied.
+
+```mermaid
+flowchart LR
+    PCM["Stereo PCM16"] --> FFT["Past-only STFT"]
+    FFT --> NET["One spectral encoder and eligible head"]
+    NET --> WOLA["Physical endpoints and WOLA"]
+    PCM --> FIFO["1536-sample front FIFO"]
+    WOLA --> DSP["Copied NN-free C renderer"]
+    FIFO --> DSP
+    DSP --> SIX["FL / FR / C / LFE / Ls / Rs"]
+```
+
+The selected source path executes one unified prediction per hop,116.712M dense MAC/s, and skips training-only protected output rows while retaining bit-exact state/eligible/scene. Legacy q6d/guard/mask loads and inference abort in the copied host. Original and v2 chain/runtime files, live Python/imported helpers, Track A and unit remain unchanged.
+
+### Native Mac and actual Windows PC results
+
+[Mac build](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_chain_mac_build.json), [Mac frozen protocol](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_chain_mac_protocol.json), [Mac result](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_chain_mac_check.json), [Windows build](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_chain_windows_build.json), [PC frozen protocol](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_chain_pc_protocol.json), [actual PC result](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_chain_pc_check.json). Same already inspected four TRAIN8s mixtures, exact float input SHA`47dc5768a7ff38100a7d7cfbfa209fd5ea95e43101382d6e5cbf7819400e7233`, rounded once to nativePCM16; no new audio subset or level. Both hosts pass **all19 frozen numeric/integration gates** on3016processed hops.
+
+| Check | Mac | Windows PC |
+| --- | ---: | ---: |
+| Unrounded native float source vs past-only Torch waveform NSE | 3.071136e−10 | 3.725834e−10 |
+| Maximum unrounded source difference, PCM16 LSB | .209961 | .274658 |
+| Native PCM16 vs once-rounded Torch source NSE | 1.270248e−8 | 1.396232e−8 |
+| Maximum rounded source difference, LSB | 1 | 1 |
+| All six output fields vs independent saved-source real C, float and int8 | Bit exact | Bit exact |
+| Both float/int8 repeat/reset and changed-future prefix | Exact | Exact |
+| Old learned model invocations/blobs | 0 / 0 | 0 / 0 |
+
+Unrounded and once-rounded arithmetic remain separate under the existing1e−7/max4LSB bounds; mixed rounded-versus-unrounded diagnostic is not substituted for either gate. Fixed renderer: nominal surround.40, front bass−3dB, front retention.5, body0, air−9dB, bed delays enabled, attackoff and default LFE assistance. Independent rendering has exactly the same delayed front mix and saved actual C source for each stream; every source/output hash is retained. That equality establishes integration, not source separation or cabin preference.
+
+[Actual channel coverage](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_chain_channel_coverage.json) makes the scope explicit: **C is zero in this configuration**, so the C arithmetic comparison is a zero-field check, not active center playback validation. FL/FR/LFE/Ls/Rs and both eligible rails are exercised, including nonzero LFE in the ARM prefix. Voice remains in the front stereo path; scene semantics/center use are not established by these checks. No six-active-speaker or physical routing claim is made.
+
+Identity-pulse peak/onset offsets agree on both hosts: eligible1536samples/32ms, front2048/42.667ms, rear2624/54.667ms. Up to512samples/10.667ms acquisition, measured execution, queue/scheduling and live hook/CarPlay transport are separate. A single pulse and desktop timings do not prove the85ms loaded unit requirement. Worker stack256KiB; combined native chain state581,536bytes excluding model and stack; processing does not allocate per hop.
+
+Desktop timing is retained only as host evidence. Mac float/int8 mean.626/.634ms,p99.715/.732,max.840/.870; Windows1.123/1.613,p991.646/2.196,max4.439/9.335ms, no10.667ms-overdue hops in these cases. These are different hardware/compiler/library contexts, not Krait headroom or physical loaded-worker results. The [SFTP CPU bundle](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_chain_cpu_bundle.json) is SHA-verified in a new own PC directory; WMI CPU supervisor45800 returned0, executed with process-local CUDA_VISIBLE_DEVICES=−1/two threads and is now terminal/own CPU process set empty. No GPU/queue/lease/package/shared-source mutation occurs.
+
+### ARM/QNX full-chain execution and retained verifier failure
+
+[QNX build/flags/compiler/stack record](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_chain_qnx_build.json), [ARM fixture and predeclared gates](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_chain_arm_fixture.json), [actual local ARM/QNX guest result](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_chain_arm_check.json), [fixture builder](../../tools/stereo-upmix-render/make_spectral_chain_arm_fixture.py). The guest executes **the full PCM FFT→single model→WOLA→NN-free C chain**, four independent streams interleaved for64consecutive512sample hops each, including actual front FIFO, eligible rounding and rear DSP; both models share the saved20k checkpoint. A native checker precheck reproduces all reference rails exactly. The guest labels its actual platform `qnx-arm`; no Audi process is contacted. Its checked dense count is the selected1,244,928MAC/frame, old learned calls0, and worker stack256KiB.
+
+ARM float all6+eligible channel NSE≤2.480e−9, maximum2LSB, passes the predeclared1e−7/max4LSB gates. ARM int8 versus corresponding **native int8** channel/source NSE≤6.554e−5 passes the predeclared1e−4 platform bound; maximum rear-channel difference23LSB and eligible57LSB are reported, not silently forced to the float4LSB bound. Center is zero; LFE is an exercised exact match. This is arithmetic tolerance versus the same quantized native model. It does not qualify int8 against ground truth, full60s state, original DEV protection/entry/stability, loaded Krait deadlines or ears. Any viable fixed broad terminal still needs its own export, full native/ARM/quantized broad acoustic replay and device qualification. QNX compiler static frames: chain execute25,032bytes, predictor68,848bytes, additional callees separate; this is not measured peak hook stack.
+
+[Retained first verifier failure and correction](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_chain_recovery.json). First Mac audit v1 failed before C processing: a templated architecture-check insertion accidentally left the mixture-array assignment inside the failure conditional, producing UnboundLocalError. The failing source and protocol are retained. Moving the assignment onto an unconditional next line fixes only the verifier; model, C runtime, renderer, input/gains and numerical gates are unchanged. Fresh v2 Mac audit then passes; PC and ARM use the corrected fixed verifier/reference. No training or unit restart occurs.
+
+### Current completion boundary
+
+Broad156TRAIN supervisor45888/control26924/32840 remains **verified live**, latest27,250/40k/4,458.342s, all156songs exposed. Spectral40k follows sequentially, then saved terminal audit/original40×60s231stem rows265events at fixed nominal.40. DEV is still first evaluated at the fixed terminal, reserved20 audio unread; no early promotion/gain selection. This turn completes new graph's standalone native/ARM arithmetic integration, not the requested bright and stable rear. Original13 acoustic gates, adequate independent20, full int8 device chain≤150M/≤85ms and owner blind live CarPlay preference remain open. No goal-completion claim.

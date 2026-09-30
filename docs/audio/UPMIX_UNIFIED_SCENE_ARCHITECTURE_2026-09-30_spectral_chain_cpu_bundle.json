@@ -1,0 +1,12 @@
+{
+  "zip_sha256": "110d35e9541afd0289944074dcce6e39197649fe4673c89ffad0af99300ecd9c",
+  "files": {
+    "verify_spectral_context_chain.py": "8b1499fc29771fc22e56af22c91cde3502179a429150399cb94284180345c59d",
+    "upmix_spectral_chain.exe": "91213ee92001c53c98a57217de8664af75633582168b90c995184c52102052f1",
+    "upmix_unified_audio.exe": "bd9b23f46f63473cd45e8dcf05d84b8c49d9f3688ef58f000eeba32be4bcfb9e",
+    "train_input.float": "47dc5768a7ff38100a7d7cfbfa209fd5ea95e43101382d6e5cbf7819400e7233",
+    "unified_float.bin": "690e7e4a12b8b697330b2620d7fb66173e08e846ed02f961cfc1c4475e66294a",
+    "unified_int8.bin": "1eef7e486c3aaea39be2171ab136eb501de793a9dd634034fc309c3a80f8a46a",
+    "manifest.json": "3d0336b6bdac32a3c7ac75866e2213e38947631d70453c5b34c35ef2d4efb54c"
+  }
+}
