@@ -83,7 +83,7 @@ def prepare(a):
     raw=T.MN.read_window(str(a.cache/(replay['song']+'.npy')),replay['start_sample'],replay['samples'])
     replay['crop_sha256']=hashlib.sha256(raw.tobytes()).hexdigest()
     prepared=json.loads((a.initial/'prepared.json').read_bytes())
-    manifest=dict(version='unified-broad-source-v1',sources=hashes(),steps=STEPS,seed=G.SEED,batch=G.BATCH,seconds=G.SECONDS,
+    manifest=dict(version='unified-broad-source-v2',sources=hashes(),steps=STEPS,seed=G.SEED,batch=G.BATCH,seconds=G.SECONDS,
         initial_sha256=T.F.sha(path),parent_audit_sha256=T.F.sha(a.initial/'complete.json'),
         parent_protocol_sha256=T.F.sha(a.initial/'protocol.json'),partition_sha256=T.F.sha(a.partition),
         monitor_manifest_sha256=T.F.sha(a.monitor),split_sha256=partition['split_sha256'],
@@ -91,6 +91,8 @@ def prepare(a):
         architecture=net.config,cost=net.cost(),normalizers=prepared['normalizers'],auxiliary_weight=prepared['auxiliary_weight'],
         scene_frozen_sha256=T.P.tensors_sha(net.scene),snapshots=list(SNAPSHOTS),
         optimizer='fresh AdamW wd1e-4/clip5, float32 TF32 off;2k warmup to3e-4, cosine to3e-5 at40k',
+        numeric_gates=dict(same_input_all_source_waveform_nse=1e-9,native_input_stft_nse=1e-12,
+                           native_end_to_end_waveform_nse=1e-7,native_max_error_pcm16_lsb=4.,loss_error=1e-4,sdr_error_db=.05),
         data='uniform156 real TRAIN songs, uniform8s crops, independent7-slot +/-6dB gains, exact sum; same G.Reader sequence in both arms; no remix/teacher/new corpus',
         inference='past-only zero-start Hann2048/512, physical inverseFFT endpoints, carried neural state; TRAIN compensates fixed1536-sample output delay',
         objective='same spectral+multires audio objective and four-crop fixed normalizers/coefficient; eligible_only omits protected3 terms; both start with identical trained4-source decoder',
@@ -124,7 +126,7 @@ def read_roles(a,record,device):
 
 @torch.inference_mode()
 def eval_row(net,roles,record):
-    net.eval();refs=spectra(roles);pred,_=net.forward_stft(refs.sum(2),with_scene=False)
+    net.eval();refs=spectra(roles);pred,_=net.forward_stft(S.analyze(roles.sum(1)),with_scene=False)
     n=roles.shape[-1];cut=record['warm_samples'];source_waves=waves(pred['source_stft'],n)
     attributed=waves(pred['source_masks'][:,:,0,None]*refs,n)
     closure=float((attributed.sum(1)-source_waves[:,0]).square().sum()/source_waves[:,0].square().sum().clamp_min(1e-12))
@@ -163,7 +165,7 @@ def snapshot(net,a,m,folder,step,smoke=False):
     G.write(folder/f'eval_step{step}.json',result)
     if step==(20 if smoke else STEPS):
         roles=read_roles(a,m['replay'],'cuda');row,wave=eval_row(net,roles,m['replay'])
-        torch.save(dict(waveform=wave.cpu(),row=row,checkpoint_sha256=result['checkpoint_sha256'],
+        torch.save(dict(waveform=wave.cpu(),input_stft=S.analyze(roles.sum(1)).cpu(),row=row,checkpoint_sha256=result['checkpoint_sha256'],
                         crop_sha256=m['replay']['crop_sha256']),folder/'cuda_replay.pt')
     print('EVAL',a.mode,step,json.dumps({k:v['summary'] for k,v in result['metrics'].items()}),flush=True)
 
@@ -202,7 +204,7 @@ def train(a):
                 counts.update(r['song'] for r in draws);exposure+=(energies>10**(-55/10)).sum(0)
                 roles=torch.from_numpy(arrays).to('cuda');refs=spectra(roles);net.train();opt.zero_grad(set_to_none=True)
                 for group in opt.param_groups:group['lr']=G.lr_at(step)
-                pred,_=net.forward_stft(refs.sum(2),with_scene=False)
+                pred,_=net.forward_stft(S.analyze(roles.sum(1)),with_scene=False)
                 loss=objective(pred['source_stft'],refs,roles,0)
                 if a.mode=='joint_audio':
                     loss+=m['auxiliary_weight']*sum(objective(pred['source_stft'],refs,roles,i,m['normalizers'][i]) for i in range(1,4))/3
@@ -239,18 +241,32 @@ def audit(a):
         saved=torch.load(folder/'cuda_replay.pt',map_location='cpu',weights_only=True)
         if saved['checkpoint_sha256']!=T.F.sha(path) or saved['crop_sha256']!=m['replay']['crop_sha256']:
             raise ValueError('GPU saved waveform/input provenance differs')
-        roles=read_roles(a,m['replay'],'cpu');row,wave=eval_row(net,roles,m['replay']);errors={}
+        roles=read_roles(a,m['replay'],'cpu');row,wave=eval_row(net,roles,m['replay']);errors={};native_errors={}
+        gates=m['numeric_gates'];native_input=S.analyze(roles.sum(1));canonical=saved['input_stft']
+        input_nse=float((native_input-canonical).abs().double().square().sum()/canonical.abs().double().square().sum().clamp_min(1e-12))
+        if input_nse>gates['native_input_stft_nse']:raise ValueError('Native FFT input parity failed')
+        with torch.inference_mode():
+            canonical_pred,_=net.forward_stft(canonical,with_scene=False)
+            canonical_wave=waves(canonical_pred['source_stft'],roles.shape[-1])
         for i,s in enumerate(T.U.SOURCES):
-            y=saved['waveform'][:,i];errors[s]=float((y-wave[:,i]).double().square().sum()/y.double().square().sum().clamp_min(1e-12))
-        if max(errors.values())>1e-9:raise ValueError('Saved all-output CPU/CUDA waveform parity failed')
-        cause=T.temporal_audit(net,spectra(roles).sum(2))
+            y=saved['waveform'][:,i];den=y.double().square().sum().clamp_min(1e-12)
+            errors[s]=float((y-canonical_wave[:,i]).double().square().sum()/den)
+            native_errors[s]=dict(nse=float((y-wave[:,i]).double().square().sum()/den),
+                max_pcm16_lsb=float((y-wave[:,i]).abs().max()*32768),loss_error=abs(row['loss'][s]-saved['row']['loss'][s]),
+                sdr_error_db=abs(row['sdr_db'][s]-saved['row']['sdr_db'][s]) if row['sdr_db'][s] is not None and saved['row']['sdr_db'][s] is not None else 0.)
+            e=native_errors[s]
+            if e['nse']>gates['native_end_to_end_waveform_nse'] or e['max_pcm16_lsb']>gates['native_max_error_pcm16_lsb'] or e['loss_error']>gates['loss_error'] or e['sdr_error_db']>gates['sdr_error_db']:
+                raise ValueError('Native end-to-end CPU/CUDA signal or acoustic parity failed')
+        if max(errors.values())>gates['same_input_all_source_waveform_nse']:raise ValueError('Same-input all-output CPU/CUDA waveform parity failed')
+        cause=T.temporal_audit(net,native_input)
         stream=S.Stream(net);n=roles.shape[-1];mix=roles.sum(1);parts=[];start=0
         with torch.inference_mode():
             for end in (1,337,1024,16001,n):parts.append(stream.push(mix[...,start:end]));start=end
             parts.append(stream.finish());chunk=torch.cat(parts,-1)[...,S.DELAY:]
         stream_error=float((chunk-wave[:,0]).square().sum()/wave[:,0].square().sum().clamp_min(1e-12))
         if stream_error>1e-9:raise ValueError('Real waveform chunk-state replay failed')
-        result[mode]=dict(checkpoint_sha256=T.F.sha(path),waveform_cpu_cuda_nse=errors,source_row=row,
+        result[mode]=dict(checkpoint_sha256=T.F.sha(path),same_input_waveform_cpu_cuda_nse=errors,
+                          native_input_spectral_nse=input_nse,native_end_to_end_errors=native_errors,source_row=row,
                           neural_causality=cause,real_waveform_chunk_nse=stream_error,
                           distinct_train_songs=len(ck['song_counts']),sealed_holdout_audio_unread=True)
         digests.append(final['last']['sample_sequence_sha256'])

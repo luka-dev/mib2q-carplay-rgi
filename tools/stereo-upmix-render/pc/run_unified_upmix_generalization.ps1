@@ -2,14 +2,14 @@ param([switch]$Resume)
 $ErrorActionPreference='Stop'
 $tools='D:\upmix\tools'
 $runs='D:\upmix\runs'
-$out="$runs\unified_source_generalization_v1"
+$out="$runs\unified_source_generalization_v2"
 $initial="$runs\unified_upmix_fit20k_v1"
 $py='D:\upmix\venvs\bsrnn_reference\Scripts\python.exe'
 $lease="$runs\GPU_LEASE"
 $partition="$tools\UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_candidate_holdout.json"
 $monitor="$runs\causal_reference_generalization_v1\manifest.json"
 $expected=@{
-    'train_unified_upmix_generalization.py'='458ad706bee02706c4f626d901cc748ba761763e38afdc212339503654b72a64'
+    'train_unified_upmix_generalization.py'='921dd4a3edae2e9d7ed612d69777f61fc4a9d01ec66d166ba9e3a6f144e26a2d'
     'eval_unified_upmix_generalization.py'='09367324d9642466ab18305865ebdb140f6dd5d52dda2b89b0736b946d184b3c'
     'unified_upmix_net.py'='c7aa0abc74dda830a5c306a5f61c30ae95ece5f8bdf61cd693ee4db57ff3fc46'
     'unified_upmix_stream.py'='590eee8e93dc0eb29b757f64490fd9854910076a3ae28a86dbe1285eb056e098'
@@ -35,7 +35,7 @@ $busy=@(Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'python.exe' 
 if($busy.Count) {throw 'Python/rapid worker active'}
 $token=[guid]::NewGuid().ToString()
 $handle=[IO.File]::Open($lease,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
-try {$bytes=[Text.Encoding]::ASCII.GetBytes("unified_source_generalization_v1 $token");$handle.Write($bytes,0,$bytes.Length)} finally {$handle.Dispose()}
+try {$bytes=[Text.Encoding]::ASCII.GetBytes("unified_source_generalization_v2 $token");$handle.Write($bytes,0,$bytes.Length)} finally {$handle.Dispose()}
 function Invoke-Worker([string[]]$Arguments) {
     $tag=[guid]::NewGuid().ToString()
     $stdout=Join-Path $env:TEMP ("upmix_unified_fit_$tag.stdout.log")
