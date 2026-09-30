@@ -27,19 +27,25 @@ public final class AltScreenContextRaceTest {
         final CountDownLatch entered = new CountDownLatch(1);
         final CountDownLatch release = new CountDownLatch(1);
         int heldContext = -1;
+        int failedContext = -1;
+        int failedRateCall;
+        int rateCalls;
         int current;
         int rate = 30;
 
         public Object invoke(Object proxy, Method method, Object[] args) throws Exception {
             String name = method.getName();
             if ("switchContext".equals(name)) {
-                current = ((Integer) args[0]).intValue();
+                int target = ((Integer) args[0]).intValue();
+                if (target == failedContext) throw new IllegalStateException("injected context failure");
+                current = target;
                 writes.add(Integer.valueOf(current));
                 if (current == heldContext) {
                     entered.countDown();
                     check(release.await(3, TimeUnit.SECONDS), "target IPC release timeout");
                 }
             } else if ("setUpdateRate".equals(name)) {
+                if (++rateCalls == failedRateCall) throw new IllegalStateException("injected rate failure");
                 rate = ((Integer) args[1]).intValue();
                 rates.add(Integer.valueOf(rate));
             } else if ("getCurrentContextID".equals(name)) {
@@ -127,7 +133,20 @@ public final class AltScreenContextRaceTest {
     public static void main(String[] args) throws Exception {
         Log.setLevel(-1);
         String scenario = args[0];
-        if ("direct".equals(scenario)) {
+        if (scenario.endsWith("-error")) {
+            int target = "stock-error".equals(scenario) ? 74 : 80;
+            Fixture f = new Fixture("bounce-error".equals(scenario) ? -1 : 81, target);
+            field("clusterActive").setBoolean(null, true);
+            if ("rate-error".equals(scenario)) f.display.failedRateCall = 1;
+            else f.display.failedContext = "bounce-error".equals(scenario) ? 72 : target;
+            f.apply(target, f.manager);
+            f.expectState(-1, false);
+            if (target == 74) check(f.display.rate == 30, "failed stock IPC lost FPS restoration");
+            f.display.failedContext = -1;
+            f.display.failedRateCall = 0;
+            f.apply(target, f.manager);
+            f.expectState(target, target != 74);
+        } else if ("direct".equals(scenario)) {
             Fixture f = new Fixture(81, 80);
             f.apply(80, f.manager);
             f.expectState(80, true);
