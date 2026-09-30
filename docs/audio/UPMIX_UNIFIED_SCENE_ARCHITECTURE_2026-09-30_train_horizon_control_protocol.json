@@ -1,0 +1,9 @@
+{
+  "mode": "eligible_only",
+  "checkpoint_sha256": "c38353ca13cde00cd580b75b92e761b5f3cc39f8e3038e38fa3c724add851376",
+  "manifest_sha256": "63daea1cecbf94441024b3ceafd09294e73da5cd47d27eb99f068419c5578c67",
+  "script_sha256": "1379faf7255ccfbf2af15f8f9e31d66904cfceb2a2bb785a41184b32d689fe2a",
+  "scope": "frozen TRAIN12 only, exact20s scored cuts with original up-to10s warmup, fixed40k weights; no DEV or fitting/selection",
+  "cases": "same continuous past-only spectra: full carry, time/global reset8s with level retained, all-neural reset8s; final case also repeats zero-start transform independently8s",
+  "interpretation": ">=.5dB paired median SDR increase or>=.03 eligibleTX gain with<=.01 vocalTX increase is a diagnostic signal, not an acoustic promotion; resets can introduce audible discontinuities"
+}
