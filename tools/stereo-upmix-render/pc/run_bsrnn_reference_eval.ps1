@@ -52,8 +52,10 @@ function Invoke-Check([string]$destination, [bool]$smokeOnly) {
         '--moisesdb', 'D:\upmix\datasets\moisesdb\moisesdb_v0.1', '--out', $destination)
     if ($smokeOnly) { $argsForPython += '--smoke' }
     if ($Resume -and -not $smokeOnly) { $argsForPython += '--resume' }
+    $logPath = if ($Resume) { Join-Path $env:TEMP ('upmix_bsrnn_evaluation_' + [guid]::NewGuid().ToString() + '.log') } else { "$destination.log" }
+    Write-Output "EVALUATION_LOG $logPath"
     $ErrorActionPreference = 'Continue'
-    & $py @argsForPython 2>&1 | Tee-Object -FilePath "$destination.log" -Append
+    & $py @argsForPython 2>&1 | Tee-Object -FilePath $logPath
     $code = $LASTEXITCODE
     $ErrorActionPreference = 'Stop'
     if ($code -ne 0 -or -not (Test-Path "$destination\complete.json")) {
