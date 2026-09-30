@@ -839,24 +839,30 @@ public class BAPBridge {
              * 1. RGStatus(0) - triggers sync(0) for {17,39,23,18,49}
              * 2. Complete sync(0) window: descriptor(23), distance(18), exitView(49)
              * 3. Non-sync FctIDs last
-             * Best-effort: a BAP send throwing here must NOT skip the renderer/gate/context
-             * cleanup below (else a mid-teardown exception leaves an orphan renderer or, in TAB,
-             * a permanently shut RG gate). */
-            try {
-                appConnectorNavi.updateRGStatus(0);
-                appConnectorNavi.updateActiveRGType(0);
-                sendNoSymbol();
-                sendDistanceToManeuverRaw(0, false, 0);
-                sendExitView();
-                appConnectorNavi.updateManeuverState(0);
-                appConnectorNavi.updateTurnToInfo("", "");
-                appConnectorNavi.updateCurrentPositionInfo("");
-                sendDistanceToDestinationRaw(0, false);
-                appConnectorNavi.updateTimeToDestination(0, 0, -1);
-                appConnectorNavi.updateLaneGuidance(false, new CombiBAPNaviLaneGuidanceData[0]);
-            } catch (Throwable t) {
-                Log.w(TAG, "onShutdown: BAP teardown threw (continuing to cleanup): " + t);
-            }
+             * Each write is best-effort independently: a failed endpoint must not suppress
+             * the remaining symbol/text/lane withdrawals or renderer/gate/context cleanup. */
+            try { appConnectorNavi.updateRGStatus(0); }
+            catch (Throwable t) { Log.w(TAG, "onShutdown: RGStatus clear failed: " + t); }
+            try { appConnectorNavi.updateActiveRGType(0); }
+            catch (Throwable t) { Log.w(TAG, "onShutdown: ActiveRGType clear failed: " + t); }
+            try { sendNoSymbol(); }
+            catch (Throwable t) { Log.w(TAG, "onShutdown: descriptor clear failed: " + t); }
+            try { sendDistanceToManeuverRaw(0, false, 0); }
+            catch (Throwable t) { Log.w(TAG, "onShutdown: maneuver distance clear failed: " + t); }
+            try { sendExitView(); }
+            catch (Throwable t) { Log.w(TAG, "onShutdown: ExitView clear failed: " + t); }
+            try { appConnectorNavi.updateManeuverState(0); }
+            catch (Throwable t) { Log.w(TAG, "onShutdown: maneuver state clear failed: " + t); }
+            try { appConnectorNavi.updateTurnToInfo("", ""); }
+            catch (Throwable t) { Log.w(TAG, "onShutdown: TurnToInfo clear failed: " + t); }
+            try { appConnectorNavi.updateCurrentPositionInfo(""); }
+            catch (Throwable t) { Log.w(TAG, "onShutdown: CurrentPositionInfo clear failed: " + t); }
+            try { sendDistanceToDestinationRaw(0, false); }
+            catch (Throwable t) { Log.w(TAG, "onShutdown: destination distance clear failed: " + t); }
+            try { appConnectorNavi.updateTimeToDestination(0, 0, -1); }
+            catch (Throwable t) { Log.w(TAG, "onShutdown: destination time clear failed: " + t); }
+            try { appConnectorNavi.updateLaneGuidance(false, new CombiBAPNaviLaneGuidanceData[0]); }
+            catch (Throwable t) { Log.w(TAG, "onShutdown: lane guidance clear failed: " + t); }
             /* CarPlay RGI no longer owns FctIDs 19/20. Keep the rest of native RG
              * gated until phone disconnect, but let stock update route text. */
             com.luka.carplay.core.AltScreenNavStatusGate.setCurrentPositionInfoBlocked(false);
