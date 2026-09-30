@@ -503,3 +503,71 @@ Synthetic CPU v2 checks pass: future-prefix NSE0 for every field; maximum carrie
 The [first structural result](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_context_structure_v1.json) is preserved with its limitation: perturbing low frequencies through the whole network also changes running level/global pooling, so that test cannot isolate the new frequency mixer. V2 tests the block directly and adds independent operation counting. Architecture and signal arithmetic did not change; no acoustic gate was relaxed.
 
 **Next action is conditional on the completed frozen capacity C/event result.** If the existing candidate passes its joint acoustic gates, prioritize its int8/device qualification. Otherwise, before any broad new run, compare fresh matched trunks against the same fixed trained decoder on identical original TRAIN crops/objectives/steps, with exact saved-checkpoint source and causality audits. This trunk cannot preserve the old function; comparing a fresh prototype with a trained incumbent would confound the result. Initial checkpoints, fit horizon and promotion gates for that comparison are not frozen yet; nothing is copied to PC or scheduled. Do not infer instrument rear gain, protected safety, controller training or compression success from synthetic structure.
+
+## Capacity control full40 complete: longer training still fails the joint product gates
+
+[Control full40 result](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_capacity_control_full40.json), [frozen paired protocol](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_capacity_full40_protocol.json), [all265 source-attributed events](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_capacity_control_transitions.json). Saved terminal checkpoint65c0572774d1fff4150a80c1bcef365f83be701bb09e2c741127384f0e651641; original40×60s and231stem rows at each frozen gain completed. Expanded is still evaluated by the same live one-GPU supervisor; no paired verdict or new GPU run follows yet.
+
+| Fixed gain | Guitar | Keys | Piano | Strings | Voice | Bass | Drums | Swings | Rear dBFS |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| .3235 | .097256 | .120001 | .101378 | .098951 | .006710 | .075260 | .007681 | 1/40 | −39.610087 |
+| .40 nominal | .164366 | .210210 | .177933 | .172318 | .010622 | .119398 | .011835 | 27/40 | −37.766140 |
+| .50 diagnostic | .285758 | .365111 | .312504 | .307096 | .017342 | .173636 | .018561 | 36/40 | −35.827806 |
+
+Raw [reference .3235](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_capacity_control_reference_03235.csv), [nominal .40](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_capacity_control_nominal_040.csv), [diagnostic .50](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_capacity_control_diagnostic_050.csv) preserve every row/failure. Nominal passes9/13 observed combined gates: all four instrument floors, vocal/drum protection and guitar/keys/wind slopes pass, while bass, any-stem swing count and both vocal-entry gates fail. Entry retention median/p10 **.741696/.399899** over84entries (36songs,83valid ratios) remains below.85/.60. Nominal rear is3.247956dB below current Track A at unchanged input/injection gain.
+
+Full60s eligible SI-SDR median−.070852 is not comparable to the terminal20s monitor median−.588197; window length/start/context differ. Full source eligible/vocal/drum/bass sensitivities.399247/.087698/.025164/.023018; upper eligible responses.014042/.011092 remain weak. Rear-share proxies and source sensitivities retain their previously stated limits. Lower gain still fails guitar/strings/bass; higher gain fails stability/bass/slopes. No alternate gain is selected and no source quality is inferred from the successful numerical C port.
+
+The control alone establishes that another20k of the unchanged source recipe does not solve the goal. It does not establish the expanded arm's outcome or prove that the prepared spectral-context graph repairs extraction. Finish the frozen paired test before selecting the next training action.
+
+## Completed capacity full40 pair: reject this expansion as the repair
+
+[Paired result](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_capacity_full40.json), [expanded full40](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_capacity_expanded_full40.json), [expanded265 attributed events](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_capacity_expanded_transitions.json). Both fixed terminal20k arms completed the original40×60s/231stem rows at all three frozen gains. The supervisor completed and released its own GPU lease before the next study. Paired eligible DEV20s monitor gain is+.102677dB,25/40nonworse; this small improvement does not translate into the required rear stability.
+
+| Nominal .40 | Control | Expanded | Required |
+| --- | ---: | ---: | ---: |
+| Guitar rear share | .164366 | .165255 | ≥.15 |
+| Keys | .210210 | .211962 | ≥.15 |
+| Piano | .177933 | .174850 | ≥.10 |
+| Strings | .172318 | .163198 | ≥.14 |
+| Voice | .010622 | .011288 | ≤.02 |
+| Bass | .119398 | .119668 | ≤.06 |
+| Drums | .011835 | .012311 | ≤.08 |
+| Any-stem swing songs | 27/40 | 28/40 | ≤5 |
+| Attributed vocal-entry median | .741696 | .747545 | ≥.85 |
+| Attributed vocal-entry p10 | .399899 | .373510 | ≥.60 |
+| Rear RMS dBFS | −37.766140 | −37.753698 | Record level; no gain rescue |
+
+Each arm passes9/13 absolute observed gates and fails bass, swing count and both entry floors. Expansion passes6/8 relative gates, failing nonworse swings and entry p10. **Reject promotion of this larger old graph and another continuation of the same recipe as a demonstrated solution.** The result does not prove that all wider encoders are ineffective.
+
+Expanded raw [.3235](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_capacity_expanded_reference_03235.csv), [.40](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_capacity_expanded_nominal_040.csv), [.50](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_capacity_expanded_diagnostic_050.csv) retain all failures. At .3235 guitar/keys/piano/strings.096445/.121097/.103430/.093012 and bass.073232 fail despite1/40swings; rear−39.597640dBFS. At .50 those instruments.286867/.370817/.301257/.294194 accompany bass.173325 and36/40swings. No diagnostic gain is selected. Expanded nominal rear is3.235514dB below Track A. Full60s eligible medianSI-SDR+.000227dB differs in scope from the DEV20s monitor; full source eligible/vocal/drum/bass sensitivities.407728/.090278/.026251/.022821 and upper eligible responses.015366/.010593 remain weak. Component sensitivity is not isolated audible leakage.
+
+## Fresh spectral encoder: fixed-decoder source fitting is running
+
+[Frozen PC protocol](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_fit_protocol.json), [prepared initial identities](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_fit_prepared.json), [fitter](../../tools/stereo-upmix-render/train_spectral_context_fit.py), [one-GPU runner](../../tools/stereo-upmix-render/pc/run_spectral_context_fit.ps1). Root `D:\upmix\runs\spectral_context_fixed_decoder_fit_v1`. Preparation requires the completed capacity acoustic/numerical pair and expanded absolute failure; both prerequisites were verified. Four original8s fitting crops were checked against the156true-TRAIN inventory. Reserved20 and DEV audio are not used in this fit.
+
+Both encoders start fresh with seed1. Control uses the original width24/depth3/local24/global24 architecture; candidate uses width48/depth2 with four12-unit temporal GRUs per block, full48-channel group communication, a current-frame7-band depthwise frequency convolution, and eight learned full-band mixers. Both have identical local/global/decoder24 interfaces. Their per-band decoder and dormant scene tensors are copied bit exactly from fixed expanded20k checkpoint `1b0cb33f1b3faac1c0f655a7c0f40cebe55640b7a60a254346edf0a762ce9aa6` and frozen. This parent is an available trained compatible decoder, not an acoustic winner. Fresh initial functions differ, so the experiment tests the entire fresh encoder package with fixed heads; it is not a function-preserving continuation or a comparison against the warm incumbent.
+
+| Arm | Selected eligible-plus-scene dense M MAC/s | All-source-plus-scene dense M MAC/s |
+| --- | ---: | ---: |
+| Fresh original24×3 | 132.2505 | 159.9255 |
+| Fresh spectral48×2 | 116.712 | 144.387 |
+
+Counts omit FFT, nonlinearities, renderer, memory traffic and scheduling. Selected candidate count requires a future verified final-row pruning; Python currently computes all four sources. Existing C exporter/runtime does not support this new grouped/mixer graph. These numbers do not certify the physical150M/85ms constraints.
+
+Same original fixed physical spectral and multiresolution four-source objective, auxiliary coefficient/normalizers; no remix, teacher, new corpus, gain or loss change. Fresh AdamW3e−4 constant, weight decay1e−4, clip5, float32/TF32off; all four crops each step. Sequential fixed20k per arm. Snapshots0/1k/4k/10k/20k are diagnostic; no early acoustic stop, best-DEV selection or broader training from a smoke result.
+
+Frozen fitting promotion requires paired crop eligible SI-SDR median gain≥.5dB, candidate eligible median≥7dB, each eligible crop delta≥−.3dB, median eligible crop loss≤1.05control, every present protected source median≥0dB and≥control−.3dB, plus saved decoder/scene identity and CPU/device/native/chunk/future audits. A passing result would establish only a TRAIN fitting advantage. Next would be a separately frozen broad matched study on156TRAIN ending in full40 real-C/events; independent20, int8, device and owner ears remain mandatory.
+
+[Actual two20-step GPU smokes and saved audit](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_fit_smoke_audit.json) passes numerical provenance and frozen heads. All-source same-input CPU/device waveform NSE≤6.05e−12, native waveform NSE≤7.23e−12, maximum≤.048PCM16LSB; neural future-prefix error0 and actual carried PCM chunk NSE≤2.80e−14. Smoke acoustic floors fail and do not promote. [CPU synthetic update/reload boot](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_fit_cpu_boot.json) separately verifies trainable gradients, exact frozen decoder and bit-exact reload for both architecture tags; it is not an acoustic result or the frozen PC preparation.
+
+[Launch failure and recovery](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_fit_launch_recovery.json) preserves both launcher sources. First hidden Start-Process reported PID24208 but later had no live supervisor, Python, lease, preparation markers or live log; no observed training is attributed to it. Fresh v2 Win32_Process.Create returned0/supervisor8104 and survived SSH; actual launcher12844/child trainer37444, GPU lease, both smokes and full control progress were verified. Original wrapper is retained. Recovery did not follow an ambiguous observation timeout and did not restart a running worker. Latest observed control progress14k/20k,1,738.546s, loss.084775; spectral full20k follows automatically under the same single tenant. Source bytes are frozen while this job runs.
+
+| Frozen new source | SHA256 |
+| --- | --- |
+| unified_spectral_context_net.py | `5d67e9c5ab7b92b145887aac0ae754db96b10f99c9541bc66c0434e3e6494335` |
+| train_spectral_context_fit.py | `4c2b18067e0bc73b1626410902651be05dd4b844ec1fac34e72566353394c9a6` |
+| pc/run_spectral_context_fit.ps1 | `040f474960c6bdf40f5843b2aa64ddcbfe18b30145d25809a7fca22b46e1f3b4` |
+| PC protocol | `99f19ad71f64f0d9dab12ad52c46ecdf0cb37af042336424b0f59bdc727abdbb` |
+
+This is Track B execution. Track A hook/int8 files, unit, existing environments and other agents' changes remain untouched. Structural connectivity and successful numeric smokes establish that the experiment is valid, not that the encoder has broken the extraction shelf.

@@ -1,0 +1,198 @@
+{
+  "version": "spectral-context-fresh-encoder-fit-v1",
+  "steps": 20000,
+  "snapshots": [
+    0,
+    1000,
+    4000,
+    10000,
+    20000
+  ],
+  "seed": 1,
+  "sources": {
+    "train_unified_upmix_fit.py": "8b777f2ed4914b8184e94f728d47c98f08550f04e69e98d18dcc85746a86bb78",
+    "train_unified_upmix_generalization.py": "921dd4a3edae2e9d7ed612d69777f61fc4a9d01ec66d166ba9e3a6f144e26a2d",
+    "expand_unified_upmix.py": "af56cd6d31d1b7875cece507a812f5c6aaa92c9ec111ecf6b961a3cf19ec514d",
+    "unified_spectral_context_net.py": "5d67e9c5ab7b92b145887aac0ae754db96b10f99c9541bc66c0434e3e6494335",
+    "unified_upmix_stream.py": "590eee8e93dc0eb29b757f64490fd9854910076a3ae28a86dbe1285eb056e098",
+    "mask_net.py": "5caae687105ae492f5bbb5de5843593882da43c73e6cf90878bf28af8f54be40",
+    "sep_net.py": "11e0c4fe89c82d3be3814e5d2a421c5fd73c40d4e3fa505904c57ae1d7dba905",
+    "separator_causal_reference_probe.py": "e514fff84f29b0cc52236b6f4a2095cccd79b5c1777a77eb5f29a60347f37ccc",
+    "separator_fit_probe.py": "ceb3c158d1955e3a384c1f21317d00282f50e1c52b3e56ecb698aa5c05fcea0d",
+    "unified_upmix_net.py": "c7aa0abc74dda830a5c306a5f61c30ae95ece5f8bdf61cd693ee4db57ff3fc46",
+    "train_causal_reference_generalization.py": "43ca0739a3d110031d72648bdaf10e47cb83c1c1569026603a4b91a901a5dffb",
+    "unified_upmix_audio.py": "0692531b4290d12adb114648fbd072f1cc781a36ce03fe8510816e9f67a051b2",
+    "train_spectral_context_fit.py": "4c2b18067e0bc73b1626410902651be05dd4b844ec1fac34e72566353394c9a6"
+  },
+  "parent_sha256": "1b0cb33f1b3faac1c0f655a7c0f40cebe55640b7a60a254346edf0a762ce9aa6",
+  "parent_full40_sha256": "af1b43ab2ba10d9d2f6a26827f616dfe69d0d8967100f944333a003bff088a40",
+  "parent_audit_sha256": "ba80e4889b876a2e454f7337a68a234bace7be797557412a3c3b714c70a506aa",
+  "original_fixture_manifest_sha256": "95edc076b2bf10fb0019b440da147d64046dcea16128bb038f4022c6b72bbc99",
+  "split_sha256": "3972aa752b44d872c84b002c217735ca2ff5da0653bdeeb8c1003262f0bd265f",
+  "windows": [
+    {
+      "song": "f4b735de-14b1-4091-a9ba-c8b30c0740a7",
+      "artist": "Drawing Hands",
+      "start_sample": 1226181,
+      "samples": 384000,
+      "selected_int16_sha256": "d2808c195d5176bc2be5aae5107ce6fada6f85f78024e08e6dc2e6c564a9a172",
+      "source_energy_fraction": [
+        0.15140154418151644,
+        2.638360612862907e-08,
+        0.3843919437754533,
+        0.000894400338101266,
+        0.0,
+        0.22326116612622468,
+        0.2400509191950982
+      ],
+      "int16_boundary_samples": 0
+    },
+    {
+      "song": "1fc37390-1769-452d-9bea-19025be4c467",
+      "artist": "Firefly",
+      "start_sample": 883636,
+      "samples": 384000,
+      "selected_int16_sha256": "f194b7c6fc480fcb5afc9e8d88d0c9470ce9f7b40d86b27829482dacb5cd28fe",
+      "source_energy_fraction": [
+        0.43410116785072367,
+        1.2880572289834024e-10,
+        0.0,
+        0.0,
+        0.15953061727080534,
+        0.0,
+        0.4063682147496652
+      ],
+      "int16_boundary_samples": 0
+    },
+    {
+      "song": "ad6c3742-e517-42eb-9dec-e74ed05387cc",
+      "artist": "Firefly",
+      "start_sample": 929057,
+      "samples": 384000,
+      "selected_int16_sha256": "6d867332f65c5bdb3f2df1cd4984c3e89bf04ce45ec7458aec2e315c53ba9b09",
+      "source_energy_fraction": [
+        0.26909944843133937,
+        0.0,
+        0.4819383016808926,
+        0.010876287553371233,
+        0.0,
+        0.16574410459749128,
+        0.07234185773690555
+      ],
+      "int16_boundary_samples": 0
+    },
+    {
+      "song": "fd6e4b4a-f33a-4f3c-aa6e-7c65fd5dc0bc",
+      "artist": "Firefly",
+      "start_sample": 920727,
+      "samples": 384000,
+      "selected_int16_sha256": "36dfe87d93c9e4c0e434d05d06c9ecfc1caac1b078e90ebe7203ce6a08bf7ca3",
+      "source_energy_fraction": [
+        0.11493588413020632,
+        0.0,
+        0.4238601030295351,
+        0.021467519674390128,
+        2.9078182118801493e-05,
+        0.27851577936269445,
+        0.1611916356210552
+      ],
+      "int16_boundary_samples": 0
+    }
+  ],
+  "role_tensor_sha256": "24350016eded6e139e31bdd93801f5be120c0ec02fc47ac5494d5ec38fb896b7",
+  "normalizers": [
+    1.0,
+    1.0245922803878784,
+    0.6465073823928833,
+    0.880676805973053
+  ],
+  "auxiliary_weight": 0.46671395813700733,
+  "fixed_decoder_sha256": "b7b0f63c10380baa2c84a78e562bbe5955138fbd9dda5aad77deeab373e6923c",
+  "fixed_scene_sha256": "0dab6cca1abf0dc9bc7e83b961942eed446452fe584985221aa6f751ba182c0b",
+  "cost": {
+    "control": {
+      "full_output": {
+        "parameters": 655478,
+        "fps": 93.75,
+        "dense_macs_per_frame": {
+          "input_projection": 147600,
+          "time_grus": 497664,
+          "frequency_grus": 373248,
+          "residual_projections": 165888,
+          "interface": 27648,
+          "global_gru": 3456,
+          "decoder_bottleneck": 55296,
+          "four_source_projection": 393600,
+          "scene_projection": 41472
+        },
+        "dense_macs_per_second": 159925500.0,
+        "excluded": "FFT/iFFT, norms, activations, level/features, complex products, pooling, scene state, renderer, int8 kernels and memory traffic"
+      },
+      "eligible_plus_all_scene_dense_macs_frame": 1410672,
+      "eligible_plus_all_scene_dense_macs_s": 132250500.0,
+      "limits": "Counted dense graph only; current default C blob/runtime does not accept this configuration. No measured device or full-chain fit."
+    },
+    "spectral": {
+      "parameters": 834534,
+      "fps": 93.75,
+      "all_source_dense_macs_per_frame": {
+        "input_projection": 295200,
+        "grouped_time_grus": 331776,
+        "time_projection": 221184,
+        "frequency_neighbours": 32256,
+        "full_band_down_up": 73728,
+        "full_band_matrix": 36864,
+        "interface": 55296,
+        "global_gru": 3456,
+        "decoder_bottleneck": 55296,
+        "scene_projection": 41472,
+        "source_projection": 393600
+      },
+      "eligible_scene_dense_macs_per_frame": {
+        "input_projection": 295200,
+        "grouped_time_grus": 331776,
+        "time_projection": 221184,
+        "frequency_neighbours": 32256,
+        "full_band_down_up": 73728,
+        "full_band_matrix": 36864,
+        "interface": 55296,
+        "global_gru": 3456,
+        "decoder_bottleneck": 55296,
+        "scene_projection": 41472,
+        "source_projection": 98400
+      },
+      "all_source_dense_macs_s": 144387000.0,
+      "eligible_scene_dense_macs_s": 116712000.0,
+      "excluded": "FFT/iFFT, norms, activations, level/features, complex products, pooling, scene state, renderer, int8 kernels and memory traffic; not device measured"
+    }
+  },
+  "architecture": {
+    "control": {
+      "width": 24,
+      "depth": 3,
+      "local": 24,
+      "global_width": 24,
+      "decoder": 24,
+      "log_mean": -3.6760525703430176,
+      "log_std": 2.43422794342041
+    },
+    "spectral": {
+      "width": 48,
+      "depth": 2,
+      "local": 24,
+      "global_width": 24,
+      "decoder": 24,
+      "log_mean": -3.6760525703430176,
+      "log_std": 2.43422794342041,
+      "time_groups": 4,
+      "frequency_channels": 8,
+      "kernel": 7
+    }
+  },
+  "objective": "unchanged physical spectral+multires four-source loss and original fixed coefficient/normalizers; no gain/remix/teacher/loss change",
+  "intervention": "fresh24x3 time/frequency RNN control versus fresh48x2 grouped-time/current-frame spectral mixer; same frozen trained24 decoder in both; no incumbent warm start",
+  "optimizer": "fresh AdamW lr3e-4,wd1e-4,clip5; float32 TF32off; all four original8s TRAIN crops every step, no augmentation or random windows",
+  "selection": "fixed terminal20k, diagnostics only at0/1k/4k/10k; no DEV/holdout/early acoustic stop or broader run from a smoke",
+  "gates": "eligible paired crop median SI-SDR gain>=.5dB, candidate median>=7dB, all eligible crop deltas>=-.3dB; each present protected source median>=0dB and>=control-.3dB; eligible loss<=1.05control; strict fixed-decoder/numeric/chunk/future audit",
+  "scope": "TRAIN encoder-fitting package only; not causal generalization, renderer/int8/device/listening promotion; current scene dormant; different fresh initial functions are part of graph package"
+}

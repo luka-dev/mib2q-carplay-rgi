@@ -1,0 +1,25 @@
+{
+  "v1": {
+    "launcher_source": "$ErrorActionPreference='Stop'\n$script='D:\\upmix\\tools\\run_spectral_context_fit.ps1'\nif((Get-FileHash $script -Algorithm SHA256).Hash.ToLowerInvariant() -ne '040f474960c6bdf40f5843b2aa64ddcbfe18b30145d25809a7fca22b46e1f3b4'){throw 'Runner hash changed'}\n$wrapper=Join-Path $env:TEMP 'upmix_spectral_context_wrapper_v1.ps1'\n$live=Join-Path $env:TEMP 'upmix_spectral_context_live_v1.log'\nif((Test-Path $wrapper) -or (Test-Path $live)){throw 'Preserve previous launch'}\n$body=\"`$ErrorActionPreference='Stop'; & '$script' *>&1 | Out-File -FilePath '$live' -Encoding utf8\"\n[IO.File]::WriteAllText($wrapper,$body)\n$p=Start-Process -FilePath 'powershell.exe' -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',$wrapper) -WindowStyle Hidden -PassThru\nWrite-Output \"SPECTRAL_SUPERVISOR_PID $($p.Id)\"\nWrite-Output \"SPECTRAL_LIVE_LOG $live\"\n",
+    "pid": 24208,
+    "later_pid_absent": true,
+    "python_workers": 0,
+    "gpu_lease": false,
+    "run_markers_absent": true,
+    "wrapper_retained": true,
+    "live_log_created": false,
+    "parser_errors": 0,
+    "claim": "Start-Process returned a PID but no persistent training/preparation was observed; no result is attributed to this launch."
+  },
+  "v2": {
+    "launcher_source": "$ErrorActionPreference='Stop'\n$errors=$null;$tokens=$null\n[Management.Automation.Language.Parser]::ParseFile('D:\\upmix\\tools\\run_spectral_context_fit.ps1',[ref]$tokens,[ref]$errors)|Out-Null\nif($errors.Count){$errors|ForEach-Object{$_.Message};throw 'Runner parse failed'}\n$wrapper=Join-Path $env:TEMP 'upmix_spectral_context_wrapper_v2.ps1'\n$log=Join-Path $env:TEMP 'upmix_spectral_context_live_v2.log'\nif((Test-Path $wrapper) -or (Test-Path $log)){throw 'Preserve prior launch'}\n$content=@\"\n`$ErrorActionPreference='Stop'\ntry { & 'D:\\upmix\\tools\\run_spectral_context_fit.ps1' *> '$log'; exit 0 } catch { `$_ | Out-File -Append '$log'; exit 1 }\n\"@\n[IO.File]::WriteAllText($wrapper,$content,[Text.Encoding]::UTF8)\n$r=Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine=\"powershell.exe -NoProfile -ExecutionPolicy Bypass -File $wrapper\"}\n@{return_value=$r.ReturnValue;supervisor_pid=$r.ProcessId;log=$log}|ConvertTo-Json -Compress\nif($r.ReturnValue -ne 0){throw 'Detached spectral-context launch failed'}\n",
+    "method": "Win32_Process.Create, same working pattern as completed capacity supervisor; fresh wrapper/log preservev1",
+    "supervisor_pid": 8104,
+    "return_value": 0,
+    "actual_verified_workers": [
+      12844,
+      37444
+    ],
+    "claim": "Both real20step smokes and saved CPU/device/native/chunk/future/frozen-decoder audit passed; control full20k live. No retry from an observation timeout."
+  }
+}
