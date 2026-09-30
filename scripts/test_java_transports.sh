@@ -8,9 +8,20 @@ TEST_DIR=$(mktemp -d)
 trap 'rm -rf "$TEST_DIR"' EXIT
 "$TEST_JDK/bin/javac" -encoding UTF-8 -cp "$PROJECT_DIR/build/carplay_hook.jar" -d "$TEST_DIR" \
     "$PROJECT_DIR/tests/CarplayBusTransportTest.java" \
-    "$PROJECT_DIR/tests/RendererServerTransportTest.java"
+    "$PROJECT_DIR/tests/RendererServerTransportTest.java" \
+    "$PROJECT_DIR/tests/RendererRerouteTransportTest.java"
 "$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar" com.luka.carplay.bus.CarplayBusTransportTest
 "$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar" com.luka.carplay.rgd.RendererServerTransportTest
+for variant in us eu cn; do
+    case "$variant" in
+        us) patch=carplay_hook.jar; stock=US_MU1316_lsd.jar ;;
+        eu) patch=carplay_hook.jar; stock=EU_MU1329_lsd.jar ;;
+        cn) patch=carplay_hook_cn.jar; stock=CN_MU1003_lsd.jar ;;
+    esac
+    echo "Renderer reroute transport: $variant"
+    "$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/$patch:$PROJECT_DIR/java_stock/$stock" \
+        com.luka.carplay.rgd.RendererRerouteTransportTest
+done
 
 # Stock Navigation may remain INITIALIZING while CarPlay already owns the
 # independent cluster video plane. Verify that takeover forces NAVSD ready and
