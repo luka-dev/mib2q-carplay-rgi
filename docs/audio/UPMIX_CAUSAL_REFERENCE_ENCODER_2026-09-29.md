@@ -90,12 +90,96 @@ Source SHA-256: model `764a594242d26e7f75884d122b91656adc3037b53a7c54f602b74678f
 
 ### Undefined-source audit correction
 
-During training, a read-only progress summary encountered an undefined transmission for an absent bass source. The training metric correctly returns `null` below its fixed energy floor. This exposed that the not-yet-executed CPU auditor would attempt subtraction on an array containing `None`. Before final auditing, its comparison was corrected to require **identical undefined positions** and compare only valid numeric pairs. No missing source is assigned zero, and no training model, loss, target, checkpoint or gate changed. Both training arms continue in the original process; this is not a failed acoustic run.
+During training, a read-only progress summary encountered an undefined transmission for an absent bass source. The training metric correctly returns `null` below its fixed energy floor. This exposed that the not-yet-executed CPU auditor would attempt subtraction on an array containing `None`. Before final auditing, its comparison was corrected to require **identical undefined positions** and compare only valid numeric pairs. No missing source is assigned zero, and no training model, loss, target, checkpoint or gate changed. Both training arms completed in the original process; this was not a failed acoustic run.
 
-Corrected auditor SHA-256 `1765c9407c850ef640707f54bf1327c0ef1aa2cb71d9a691d0dde0ac703add3f`; runner hash table updated for future launches, SHA-256 `2825c628d4c74ae5c66e86268d0c915d86eee29ffcfc96115f48e1bc2905e267`. The already active PowerShell run had passed the original preflight; it invokes the corrected auditor after training. The final audit records its own executed source hash. The model/probe fingerprints above remain unchanged.
+Corrected auditor SHA-256 `1765c9407c850ef640707f54bf1327c0ef1aa2cb71d9a691d0dde0ac703add3f`; runner hash table updated for future launches, SHA-256 `2825c628d4c74ae5c66e86268d0c915d86eee29ffcfc96115f48e1bc2905e267`. The already active PowerShell run had passed the original preflight; it invoked the corrected auditor after training. The final audit records its own executed source hash. The model/probe fingerprints above remain unchanged.
 
-## 📊 Results and next gate
+## 📊 Completed 10k result
 
-Protocol/source commit **`de861b23`**. Both 20-step GPU smoke arms completed with finite losses/gradients and trained-decoder hash `d04d9fd5a73ebb3788240772b3be0fb1ecf420e059ddfc2a0bf5aeff1f4fec05`; global initialization matched and future-prefix NSE was 0. Historical checkpoint replay passed. Smoke does not satisfy the 10k acoustic gate. The guarded runner started the full pair; fresh original first, residual second, then CPU audit. Live log `C:\Users\LuKa\AppData\Local\Temp\upmix_causal_reference_live_v1.log`. No completed 10k result yet.
+Protocol/source commit **`de861b23`** preceded training. Both 20-step smoke arms, both full 10k arms and the independent CPU checkpoint audit completed. **All eight predeclared fitting comparisons passed**, with decoder parity and fixed-STFT future-prefix NSE **0** before and after training. This supports further causal training; it does not satisfy the product gates.
 
-Full-data source/entry/C evaluation, independent instrument-covered songs, ≤150 M measured int8 MAC/s, ≤85 ms additional chain latency, Track A hook integration and owner blind live CarPlay remain separate gates. Track A's files, others' uncommitted files, the head unit and shared packages are untouched. Never reboot or restart the unit/j9; no Co-Authored-By; no credentials or private dataset link in output.
+| Metric | Fresh original, frozen decoder | Residual reference, same frozen decoder | Historical joint 10k, replayed |
+| --- | ---: | ---: | ---: |
+| Actual audio objective | .05706710 | **.04532031** | .05558142 |
+| Median waveform SI-SDR, dB | 7.754112 | **10.499900** | 7.796632 |
+| Full training elapsed, seconds | 409.323 | 1,013.072 | Historical run |
+
+Against the matched fresh control, the reference reduced objective **20.584%** and improved median SI-SDR **2.745788 dB**. Against the historical jointly trained model, these were **18.461%** and **2.703268 dB**. The historical checkpoint was replayed with TF32 disabled; its small difference from the earlier rounded report is within the frozen replay tolerance.
+
+### Per-crop reconstruction
+
+All four crops improved against both controls. IDs and exact 8-second offsets, cache hashes and TRAIN membership are in the [run manifest](UPMIX_CAUSAL_REFERENCE_ENCODER_2026-09-29_manifest.json).
+
+| Frozen TRAIN crop ID | Fresh original SI-SDR, dB | Reference SI-SDR, dB | Historical SI-SDR, dB | Reference − fresh, dB |
+| --- | ---: | ---: | ---: | ---: |
+| `f4b735de-14b1-4091-a9ba-c8b30c0740a7` | 9.444428 | 12.372866 | 9.599886 | +2.928437 |
+| `1fc37390-1769-452d-9bea-19025be4c467` | 12.243742 | 14.355640 | 12.315094 | +2.111898 |
+| `ad6c3742-e517-42eb-9dec-e74ed05387cc` | 3.590248 | 6.811723 | 3.642384 | +3.221476 |
+| `fd6e4b4a-f33a-4f3c-aa6e-7c65fd5dc0bc` | 6.063796 | 8.626934 | 5.993379 | +2.563138 |
+
+Waveform NSE in the same order changed **.102247/.058664/.288845/.195928 → .054905/.038838/.161112/.117979**. These are repeated fits to known training crops, not unseen-song performance.
+
+### Learning curves and optimization evidence
+
+| Step | Original objective | Original median SI-SDR, dB | Reference objective | Reference median SI-SDR, dB |
+| --- | ---: | ---: | ---: | ---: |
+| 1,000 | .06568507 | 6.582145 | .06064538 | 7.472159 |
+| 4,000 | .05924069 | 7.415839 | .05100829 | 9.345152 |
+| 10,000 | .05706710 | 7.754112 | .04532031 | 10.499900 |
+
+Both runs have all 41 scheduled evaluations, steps 0–10k at intervals of 250, in the raw progress exports below. No clipped optimization steps occurred. Final gradient norm was .120890 for the control and .170040 for the reference. The reference continued improving through 10k; this experiment does not measure its converged ceiling.
+
+The control's median input-tanh saturation fraction (absolute activation >.95) across the first 11 bands rose **.421840→.499806**; across all bands **.036743→.115714**, with final maximum band .836995. The reference omits that input tanh. This observation does not isolate saturation as the cause: width, depth, residual processing, frequency recurrence and local interface also changed together.
+
+### Remaining source and frequency problems
+
+| Median attributed source transmission | Fresh original | Reference |
+| --- | ---: | ---: |
+| Eligible instruments | .821695 | .880152 |
+| Vocal | .063274 | **.076691** |
+| Drums/percussion | .015109 | .013498 |
+| Bass | .074805 | **.090090** |
+
+One crop has no measurable bass; its transmission stays undefined and is excluded from the median. **Vocal and bass contributions increased**, despite better summed reconstruction. These frozen-mask attributions can cancel in the summed waveform; they are neither a rear-share measurement nor proof of audible contamination. They nevertheless prevent treating reconstruction success as a demonstrated selectivity improvement. Vocal-entry, natural-song source attribution and real-C output must be tested together.
+
+| STFT band | Original error NSE | Reference error NSE | Original eligible transmission | Reference eligible transmission |
+| --- | ---: | ---: | ---: | ---: |
+| 0–300 Hz | .284928 | .172315 | .748765 | .870629 |
+| 300 Hz–8 kHz | .121665 | .096453 | .893167 | .950792 |
+| 8–14 kHz | .400355 | .381964 | .560895 | .578638 |
+| 14–24 kHz | .535331 | .509892 | .445206 | .490618 |
+
+Most improvement is in the low/mid bands. High-frequency transmission improves modestly and **treble loss remains unresolved**. These TRAIN-crop STFT measurements differ from the SIMO full40 waveform protocol; they cannot establish a treble advantage over the frozen SIMO reference.
+
+## 🔎 Saved-checkpoint audit and evidence
+
+The CPU auditor strictly loaded both saved checkpoints, verified finite tensors and identical frozen decoder SHA-256 **`d04d9fd5a73ebb3788240772b3be0fb1ecf420e059ddfc2a0bf5aeff1f4fec05`**, and reproduced all eight gate decisions. Prefix future-perturbation NSE remained **0** in both trained networks on CPU. This tests the network's fixed-frame temporal causality, not complete streaming STFT state or measured latency.
+
+| CPU versus GPU discrepancy | Original | Reference | Frozen tolerance |
+| --- | ---: | ---: | ---: |
+| Objective, absolute | 6.333e−7 | 1.438e−6 | 1e−4 |
+| Maximum crop SI-SDR, dB | 7.629e−6 | 1.907e−6 | .05 |
+| Maximum valid source transmission | 5.960e−7 | 2.384e−7 | .005 |
+
+| Exact captured PC artifact | Repository copy |
+| --- | --- |
+| Full completed pair and all gate decisions | [Complete](UPMIX_CAUSAL_REFERENCE_ENCODER_2026-09-29.json) |
+| Sources, architecture, frozen crop and split hashes | [Manifest](UPMIX_CAUSAL_REFERENCE_ENCODER_2026-09-29_manifest.json) |
+| Independent CPU saved-checkpoint verification | [Audit](UPMIX_CAUSAL_REFERENCE_ENCODER_2026-09-29_audit.json) |
+| All original-arm evaluations | [Original progress](UPMIX_CAUSAL_REFERENCE_ENCODER_2026-09-29_original_progress.json) |
+| All reference-arm evaluations | [Reference progress](UPMIX_CAUSAL_REFERENCE_ENCODER_2026-09-29_residual_progress.json) |
+| Both 20-step smokes; no acoustic promotion | [Smoke](UPMIX_CAUSAL_REFERENCE_ENCODER_2026-09-29_smoke.json) |
+
+Exports preserve the PC bytes, including CRLF. Complete SHA-256 **`5125791f3226d6e41a315276b0372df39c2f2d1ea8c8a2d0c0fab872ecc5626c`**; audit SHA-256 **`97edcb233c3d59cb6d31aa967806babffbee6b133d4781febce1f8065bbad9b3`**. The audit identifies the corrected auditor source recorded above. Model/probe hashes did not change during training.
+
+Checkpoints remain under `D:\upmix\runs\separator_causal_reference_v1\original\fit.pt` (SHA-256 `7d3d1fde1f8bd2c64bd539292a7cb0eac4bce19b8377b06f7c22a32ed4b4e470`) and `residual96x4\fit.pt` (`682c09f1d253fb694bfde6fa43e1bfd1168f9161398a3abd969b0ad7fec1603a`). They require the reference loader and original feature/normalization semantics; do not load them permissively through a different model class.
+
+## 🧭 Decision and next gates
+
+**Preserve this causal encoder package as a successful fitting reference.** A frozen decoder that previously admitted much better privileged states now receives substantially better states from an actual causal encoder on all four crops. The gain is measurable without new data, teacher imitation or a new audio loss. It does not identify which architectural change caused it, prove generalization or validate compression.
+
+Next prepare broader true-stem training and source-specific TRAIN/DEV comparisons with frozen duration, sampling and held-out splits. Use truth as the primary target; any SIMO output distillation is a separate, audited intervention. Decide protected-source and high-frequency loss changes through matched comparisons rather than tuning them into this completed result. Require natural-song source/entry and real-C success before choosing what to preserve through compression. The 2.168 G estimated neural MAC/s reference is about 14.45× the allowance; this run does not establish that its gain survives the required reduction.
+
+Full DEV40, 20 untouched instrument-covered songs, ≤150 M **measured device int8** MAC/s, ≤85 ms additional chain latency and owner blind live CarPlay remain open for a causal candidate. The prior SIMO full40 result stays a separate noncausal quality reference. No causal prototype was ported or heard in the car.
+
+Terminal PC readback: **zero active Python, GPU lease absent, rapid queue empty**. Full pair and CPU audit markers are complete; no next training is queued. Track A's files, others' uncommitted files, the head unit and shared packages were untouched. Never reboot or restart the unit/j9; no Co-Authored-By; no credentials or private dataset link in output.
