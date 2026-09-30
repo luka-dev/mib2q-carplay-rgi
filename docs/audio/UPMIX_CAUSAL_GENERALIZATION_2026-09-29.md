@@ -153,6 +153,14 @@ The DEV median difference at10k was +1.296771 dB; the reference's DEV median imp
 
 SHA-256 respectively: `c51373ce91d19ddac6344c57040e4b3520a608ea7397681425eefcf1e38fcfa6`, `edaac6409b029be8f52c6e8c358cdd7b90c8eec2679f543a1bd843bd66f9ef75`, `da6c6e64ce94910b11d796f289454e47388a6ad77085a6f7e057fa2e52359f83`. Original20k and paused progress captures remain linked above. No source, initialization, data, loss, manifest, gain, horizon or gate changed for this update.
 
+## 📈 Reference30k monitoring update, 2026-09-30
+
+Latest live check: reference **37,250/40,000** remains active under the same owned supervisor/interpreter tree and lease; control stays paused28,750. Final CPU audit and full source-entry/C evaluation have not started.
+
+The reference's declared DEV40 natural-crop monitor at30k has median SI-SDR **+.186781 dB**, versus −.082041 at20k (**+.268822 dB**). Objective .330738→.333745 is slightly worse; eligible/vocal/drum/bass attributed transmissions change **.430342/.102618/.023434/.021538 → .407860/.093647/.028673/.024243**. This is continued reconstruction improvement with mixed source/objective changes, not improvement on every criterion. Upper-band eligible transmission is **.010223 (8–14k) / .007967 (14–24k)** and remains weak.
+
+Control has no30k snapshot yet, so this is a within-reference curve update, **not a matched30k architecture comparison**. Fixed terminal40k selection, learning schedule, gain, data and joint gates remain unchanged. Full per-song rows are preserved in [Reference30k](UPMIX_CAUSAL_GENERALIZATION_2026-09-29_residual_step30000.json), SHA-256 `ca20d3d0ab31b6ee98fd290c4248b99efe976cfdd71edee93668e068c944437e`.
+
 ## 🧪 Completed smoke evidence and live snapshot
 
 Both smokes used **the identical 80 sampled windows**, reaching 59 distinct TRAIN songs, with sequence SHA-256 `0d48421888b525c7a4c387957ac2e61f426edfa60c20fe581111f16621daac4c`. Every source/offset/gain descriptor matched. Decoder gradient norm .079162 (original) / .074431 (reference), zero clipped steps; saved decoder tensors changed in both arms. CPU reconstruction replay and source-coverage checks passed, future-prefix NSE **0** in both trained networks.
