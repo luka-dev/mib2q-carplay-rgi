@@ -1,0 +1,7 @@
+{
+  "method": "Win32_Process.Create",
+  "supervisor_pid": 45888,
+  "return_value": 0,
+  "launcher_source": "$ErrorActionPreference='Stop'\n$script='D:\\upmix\\tools\\run_spectral_context_generalization.ps1'\nif((Get-FileHash $script -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'debc2a8e43203c6d27e35b478c3a5a0a8fb51bb8f3da8835699458a7ab8ae8f4'){throw 'Prepared broad runner changed'}\n$wrapper=Join-Path $env:TEMP 'upmix_spectral_broad_wrapper_v1.ps1'\n$log=Join-Path $env:TEMP 'upmix_spectral_broad_live_v1.log'\nif((Test-Path $wrapper) -or (Test-Path $log)){throw 'Preserve prior broad launch'}\n$content=@\"\n`$ErrorActionPreference='Stop'\ntry { & '$script' *> '$log'; exit 0 } catch { `$_ | Out-File -Append '$log'; exit 1 }\n\"@\n[IO.File]::WriteAllText($wrapper,$content,[Text.Encoding]::UTF8)\n$r=Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine=\"powershell.exe -NoProfile -ExecutionPolicy Bypass -File $wrapper\"}\n@{return_value=$r.ReturnValue;supervisor_pid=$r.ProcessId;log=$log}|ConvertTo-Json -Compress\nif($r.ReturnValue -ne 0){throw 'Detached broad launch failed'}\n",
+  "scope": "Broad launcher accepted after verified fitting terminal/saved audit/pass and observed old supervisor terminal, Pythonempty, leaseabsent; actual new stages inspected separately"
+}

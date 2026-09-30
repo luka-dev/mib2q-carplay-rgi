@@ -1,0 +1,34 @@
+{
+  "verified": true,
+  "arms": {
+    "control": {
+      "decoder_unfrozen": true,
+      "scene_frozen_exact": true,
+      "decoder_gradient_norm": 0.04096768132633155,
+      "reload_bit_exact": true,
+      "causality": {
+        "future_prefix_nse": 0.0,
+        "chunk_nse": 3.0561162189237864e-14,
+        "perturbed_suffix_nse": 8.417133331298828,
+        "scope": "neural STFT interface only; scene dormant; centered waveform transform not certified"
+      },
+      "architecture": "unified-upmix-prototype-v1"
+    },
+    "spectral": {
+      "decoder_unfrozen": true,
+      "scene_frozen_exact": true,
+      "decoder_gradient_norm": 0.05097582031996537,
+      "reload_bit_exact": true,
+      "causality": {
+        "future_prefix_nse": 0.0,
+        "chunk_nse": 4.0475669284322294e-14,
+        "perturbed_suffix_nse": 7.446493625640869,
+        "scope": "neural STFT interface only; scene dormant; centered waveform transform not certified"
+      },
+      "architecture": "unified-spectral-context-prototype-v1"
+    }
+  },
+  "trainer_sha256": "41b6b7120acea648950fc20eb8f5f52da5424a31f9d122d27205a885965c2a13",
+  "evaluator_sha256": "3ee5bc4b4e519cff2987881b4d8cc5a441de41f71a0ea3aac754e23d592fb418",
+  "scope": "CPU synthetic update/load/causality boot using disposable prior-smoke copies; no passed fitting prerequisite, PC preparation, GPU/data run or acoustic claim"
+}
