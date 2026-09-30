@@ -157,17 +157,26 @@ def render_rows(out, track_id, meta, stems, mixture, estimate, executable, args)
     out6 = T.read_wav6(str(dst))
     if out6.shape != (6, mixture.shape[-1]):
         raise RuntimeError('C output duration differs')
+    rows = rows_from_output(meta, stems, out6)
+    write(out / (track_id+'.rows.json'), rows)
+    return rows, dict(mixture_sha256=ref.sha(pcm), injection_sha256=ref.sha(inj),
+                      output_sha256=ref.sha(dst), input_peak=float(mixture.abs().max()),
+                      injection_peak=float(estimate.abs().max()))
+
+
+def rows_from_output(meta, stems, out6):
+    """Use the original harness's exact eligibility expression, including gain."""
     tag = re.sub(r'[\\/:*?"<>|]', '_', f"{meta.get('artist','?')} - {meta.get('song','?')}")[:60]
     k = 0.7 / (np.abs(sum(stems.values())).max() + 1e-9)
     dry_mix = sum(stems.values())
     rear_rms = float(20*np.log10(np.sqrt(((out6[4]**2+out6[5]**2)/2).mean())+1e-9))
     rows = []
     for name, stem in stems.items():
-        if (stem**2).sum() < 1e-3 * (dry_mix**2).sum():
-            continue
         lead, rest = stem*k, (dry_mix-stem)*k
+        if (lead**2).sum() < 1e-3 * (dry_mix**2).sum():
+            continue
         share, w, dt = T.rear_share(lead, rest, out6)
-        metrics = T.metrics(share, w, dt, np.ones(mixture.shape[-1], bool))
+        metrics = T.metrics(share, w, dt, np.ones(dry_mix.shape[-1], bool))
         slope, corr, level = H.level_dependence(lead, rest, share, dt)
         rows.append(dict(song=tag, genre=meta.get('genre','?'), stem=name,
                          median_rear=metrics['median_rear'], steady_std=metrics['steady_std'],
@@ -175,10 +184,7 @@ def render_rows(out, track_id, meta, stems, mixture, estimate, executable, args)
                          slope_per_6dB=slope, level_corr=corr, level_db=level,
                          frames=int(np.sum(~np.isnan(share))), rear_rms_db=rear_rms,
                          **dict(zip(H.BAND_KEYS, H.band_shares(lead, rest, out6)))))
-    write(out / (track_id+'.rows.json'), rows)
-    return rows, dict(mixture_sha256=ref.sha(pcm), injection_sha256=ref.sha(inj),
-                      output_sha256=ref.sha(dst), input_peak=float(mixture.abs().max()),
-                      injection_peak=float(estimate.abs().max()))
+    return rows
 
 
 def extraction_row(song, estimate, attributed, refs):
@@ -425,7 +431,8 @@ def main():
                maximum_source_closure_nse=max(r['parity']['final_source_sum_nse'] for r in extractions),
                device_causal_and_listening_gates='unmeasured; reference cannot be deployed',
                protocol_sha256=ref.sha(a.out/'protocol.json'),
-               resume_protocol_sha256=ref.sha(a.out/'resume_protocol.json') if a.resume else None)
+               resume_protocol_sha256=ref.sha(a.out/'resume_protocol.json') if a.resume else None,
+               coverage_repair_sha256=ref.sha(a.out/'coverage_repair.json') if (a.out/'coverage_repair.json').exists() else None)
     write(a.out/'complete.json',final)
     faulthandler.cancel_dump_traceback_later()
     print('COMPLETE',json.dumps(clean(final)),flush=True)
