@@ -541,10 +541,9 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
 
     /** Perform ONE context switch (bounce + settle + select).  Only this thread ever writes the DM,
      *  so there is no cross-worker race; the loop re-runs if desiredCtx changed during the settle.
-     *  Note: a stop()/start() landing in the tiny window between the post-sleep recheck and the
-     *  switchContext write can still cause ONE transient physical write before the next loop restores
-     *  the newly-desired ctx — it is self-healing.  Closing it fully needs LOCK held across a DSI IPC
-     *  call → deadlock risk, not worth it for a cosmetic transient on connect/disconnect. */
+     *  Lifecycle/readiness may change during target IPC. Recheck after the write before publishing
+     *  an active composition; a superseded write leaves currentCtx unknown for worker recovery.
+     *  The physical transient is repaired on the next loop without holding LOCK across DSI IPC. */
     private void applySwitch(int ctx, IDisplayManager d) {
         try {
             if (ctx != CTX_STOCK_CLUSTER) {
@@ -578,8 +577,18 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
                     }
                 }
                 d.switchContext(ctx, TERMINAL_CLUSTER, null);
-                d.setUpdateRate(TERMINAL_CLUSTER, CLUSTER_FPS);   /* (idempotent when already running) */
-                clusterActive = true;
+                boolean stillValid;
+                synchronized (LOCK) {
+                    stillValid = (dm == d && desiredCtx == ctx && rendererReady);
+                    currentCtx = stillValid ? ctx : -1;
+                    clusterActive = stillValid;
+                    if (!stillValid)
+                        Log.i(TAG, "switch(" + ctx + ") superseded at write → " + desiredCtx);
+                }
+                if (stillValid) {
+                    d.setUpdateRate(TERMINAL_CLUSTER, CLUSTER_FPS);
+                    com.luka.carplay.cluster.ClusterLayerController.reapply();
+                }
             } else {
                 /* Preserve the stop-before-switch ordering, but never leave terminal 1
                  * parked at 0 FPS. On this A5/MHI2Q the stock
@@ -594,12 +603,12 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
                 } finally {
                     d.setUpdateRate(TERMINAL_CLUSTER, CLUSTER_FPS);
                 }
-                clusterActive = false;
+                synchronized (LOCK) {
+                    if (dm == d) currentCtx = (desiredCtx == ctx) ? ctx : -1;
+                    clusterActive = false;
+                }
+                com.luka.carplay.cluster.ClusterLayerController.reapply();
             }
-            synchronized (LOCK) { if (dm == d) currentCtx = ctx; }
-            /* Context composition is now final: replay the last KDK popup/sport geometry so a
-             * navActive edge cannot leave planes 98/101/102 at their previous opacity. */
-            com.luka.carplay.cluster.ClusterLayerController.reapply();
             Log.i(TAG, "cluster -> ctx " + ctx + " (active=" + clusterActive + ")");
         } catch (Throwable t) {
             Log.w(TAG, "switch(" + ctx + ") failed: " + t);

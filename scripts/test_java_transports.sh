@@ -21,7 +21,8 @@ mkdir -p "$TEST_DIR/nav-init"
     -cp "$PROJECT_DIR/build/carplay_hook.jar:$STOCK_JAR" \
     -d "$TEST_DIR/nav-init" \
     "$PROJECT_DIR/tests/GatedCombiServiceInitStateTest.java" \
-    "$PROJECT_DIR/tests/AltScreenStartupTest.java"
+    "$PROJECT_DIR/tests/AltScreenStartupTest.java" \
+    "$PROJECT_DIR/tests/AltScreenContextRaceTest.java"
 "$TEST_JDK/bin/java" \
     -cp "$TEST_DIR/nav-init:$PROJECT_DIR/build/carplay_hook.jar:$STOCK_JAR" \
     com.luka.carplay.rgd.GatedCombiServiceInitStateTest
@@ -29,6 +30,11 @@ for scenario in cold warm stop bounce-loss; do
     "$TEST_JDK/bin/java" \
         -cp "$TEST_DIR/nav-init:$PROJECT_DIR/build/carplay_hook.jar:$STOCK_JAR" \
         com.luka.carplay.core.AltScreenStartupTest "$scenario"
+done
+for scenario in stop change peer readiness reconnect direct; do
+    "$TEST_JDK/bin/java" \
+        -cp "$TEST_DIR/nav-init:$PROJECT_DIR/build/carplay_hook.jar:$STOCK_JAR" \
+        com.luka.carplay.core.AltScreenContextRaceTest "$scenario"
 done
 # Isolate the native-HMI callback, while running the actual control-server source.
 mkdir -p "$TEST_DIR/altctl"
