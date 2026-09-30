@@ -190,6 +190,26 @@ static void linear(const Linear *l,const float *x,float *y,uint64_t *macs) {
     }
     *macs+=(uint64_t)w->rows*w->cols;
 }
+/* Outputs are frequency-major, four sources, stereo, real/imag. Eligible
+ * occupies the first4 of each16 rows. The same vector quantizer/dot order
+ * preserves those rows exactly while avoiding three unused training heads. */
+static void linear_eligible(const Linear *l,const float *x,float *y,uint64_t *macs) {
+    const Tensor *w=l->weight;unsigned i,j;int8_t q[MAX_INPUT];float scale=1;
+    if(w->storage) {
+        float maximum=0;
+        for(j=0;j<w->cols;j++)if(fabsf(x[j])>maximum)maximum=fabsf(x[j]);
+        if(maximum>0)scale=maximum/127;
+        for(j=0;j<w->cols;j++){int v=round_even(x[j]/scale);q[j]=(int8_t)(v>127?127:v<-127?-127:v);}
+    }
+    memset(y,0,w->rows*sizeof(float));
+    for(i=0;i<w->rows;i++)if(i%16<4) {
+        float sum=0;
+        if(w->storage)sum=(float)dot_int8(q,w->q+i*w->cols,w->cols)*scale*w->scale[i];
+        else for(j=0;j<w->cols;j++)sum+=x[j]*w->data[i*w->cols+j];
+        y[i]=sum+l->bias->data[i];
+    }
+    *macs+=(uint64_t)(w->rows/4)*w->cols;
+}
 static void norm(const Norm *l,const float *x,float *y) {
     unsigned i;double mean=0,var=0;
     for (i=0;i<l->n;i++) mean+=x[i];
@@ -209,7 +229,7 @@ static void gru(const Gru *g,const float *x,float *state,uint64_t *macs) {
     }
 }
 void umx_reset(UmxState *s) {if(s) memset(s,0,sizeof(*s));}
-int umx_predict(const UmxModel *m,UmxState *s,const float input[UMX_BINS][2][2],UmxOutput *out) {
+static int predict_selected(const UmxModel *m,UmxState *s,const float input[UMX_BINS][2][2],UmxOutput *out,int eligible_only) {
     float features[UMX_BINS][6],x[UMX_BANDS][W],normalized[UMX_BANDS][W],frequency[UMX_BANDS][W];
     float local[UMX_BANDS][LOCAL],mean[LOCAL]={0},z[LOCAL+GLOBAL],hidden[H],work[MAX_INPUT],temp[1424];
     double energy=0;float scale;unsigned i,j,k,d,source,c;uint64_t macs=0;
@@ -251,7 +271,8 @@ int umx_predict(const UmxModel *m,UmxState *s,const float input[UMX_BINS][2][2],
     for(k=0;k<UMX_BANDS;k++) {
         memcpy(z,local[k],LOCAL*sizeof(float));memcpy(z+LOCAL,s->global,GLOBAL*sizeof(float));
         linear(&m->dec_first[k],z,work,&macs);for(j=0;j<DECODER;j++)work[j]=tanhf(work[j]);
-        linear(&m->dec_last[k],work,temp,&macs);
+        if(eligible_only)linear_eligible(&m->dec_last[k],work,temp,&macs);
+        else linear(&m->dec_last[k],work,temp,&macs);
         for(i=m->lo[k];i<m->hi[k];i++)for(source=0;source<UMX_SOURCES;source++)for(c=0;c<2;c++)for(j=0;j<2;j++)
             out->mask[source][i][c][j]=temp[(((i-m->lo[k])*UMX_SOURCES+source)*2+c)*2+j];
         linear(&m->scene,z,temp,&macs);
@@ -264,4 +285,11 @@ int umx_predict(const UmxModel *m,UmxState *s,const float input[UMX_BINS][2][2],
     }
     out->dense_macs=macs;s->frames++;
     return 0;
+}
+
+int umx_predict(const UmxModel *m,UmxState *s,const float input[UMX_BINS][2][2],UmxOutput *out) {
+    return predict_selected(m,s,input,out,0);
+}
+int umx_predict_eligible(const UmxModel *m,UmxState *s,const float input[UMX_BINS][2][2],UmxOutput *out) {
+    return predict_selected(m,s,input,out,1);
 }

@@ -49,7 +49,7 @@ int main(int argc,char **argv) {
     }
     if(fgetc(input)!=EOF || fflush(output))goto done;
     qsort(times,frames,sizeof(double),order);
-    fprintf(stderr,"{\"frames\":%u,\"identity\":%s,\"audio_state_bytes\":%u,\"algorithmic_array_delay_samples\":%u,\"hop_acquisition_max_samples\":%u,\"stream_ms_mean\":%.9f,\"stream_ms_p99\":%.9f,\"stream_ms_max\":%.9f,\"scope\":\"standalone FFT+neural+eligible iFFT/WOLA; no renderer, scheduling, transport, int8-quality or device qualification\"}\n",frames,identity?"true":"false",umx_audio_state_bytes(),UMX_DELAY,UMX_HOP,sum/frames*1000,times[(frames-1)*99/100]*1000,times[frames-1]*1000);
+    fprintf(stderr,"{\"frames\":%u,\"identity\":%s,\"audio_state_bytes\":%u,\"neural_dense_macs_frame\":%.0f,\"neural_dense_macs_s_at_93_75fps\":%.0f,\"algorithmic_array_delay_samples\":%u,\"hop_acquisition_max_samples\":%u,\"stream_ms_mean\":%.9f,\"stream_ms_p99\":%.9f,\"stream_ms_max\":%.9f,\"scope\":\"standalone FFT+neural+eligible iFFT/WOLA; no renderer, scheduling, transport, int8-quality or device qualification\"}\n",frames,identity?"true":"false",umx_audio_state_bytes(),(double)umx_audio_prediction(stream)->dense_macs,(double)umx_audio_prediction(stream)->dense_macs*93.75,UMX_DELAY,UMX_HOP,sum/frames*1000,times[(frames-1)*99/100]*1000,times[frames-1]*1000);
     status=0;
 done:
     if(status)fprintf(stderr,"unified audio execution failed; own partial output preserved\n");

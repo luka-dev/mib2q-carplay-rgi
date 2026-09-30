@@ -54,3 +54,10 @@ The stream owns163760bytes on the checked x64 build, with no heap allocation dur
 `make_unified_arm_fixture.py` packages fixed TRAIN prefix spectra plus the saved Windows float/int8 outputs. `qnx_qemu_check.sh ASSETS NEW_OUTPUT` builds a separate QNX guest and runs `unified_runtime_arm_check.c`. The checker includes the actual runtime translation unit to exercise the private NEON dot implementation, tests24 exact integer cases, and interleaves four stream states. Float/int8 source and scene numerical tolerances are stored in the fixture manifest before execution. Neither guest wall time nor QEMU virtual time qualifies Krait performance.
 
 Use explicit volatile stores for signed-byte kernel patterns: the observed guest libc mishandles negative `memset` values, and GCC can fold a constant signed-byte fill into that call. Both model checks run sequentially in one persistent process because the tested boot image failed its second spawn. All initial failed logs/protocols are preserved in the report. These are guest-specific observations, not device or audio quality fixes.
+
+
+## ✂️ Selected inference outputs
+
+`umx_predict_eligible` preserves eligible, all scene outputs and all recurrent state exactly while skipping unused protected reconstruction affine rows. Protected mask fields are explicitly zero. The original `umx_predict` still evaluates every source for diagnostics and training parity. Standalone audio synthesis calls the selected API. Default24 dense count is976592/frame (91.5555M/s), versus1173392/frame (110.0055M/s) for all sources. The training model and blob retain all heads.
+
+`unified_runtime_prune_check.c` compares both APIs on all753 frames of four interleaved frozen TRAIN streams. Windows and isolated QNX/ARM float/int8 checks are bit exact within each platform. `qnx_qemu_prune_check.sh ASSETS NEW_OUTPUT` runs that guest check. This saves computation without correcting source/quantization quality or proving loaded device timing; the main report records wider untrained cost options separately.

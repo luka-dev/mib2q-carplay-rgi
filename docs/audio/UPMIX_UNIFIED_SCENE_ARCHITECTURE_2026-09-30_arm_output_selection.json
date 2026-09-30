@@ -1,0 +1,46 @@
+{
+  "complete": true,
+  "passed": true,
+  "scope": "QEMU ARM exact eligible/scene/state output-selection equivalence only; no Audi/Krait timing, int8 acoustic recovery or loaded deadline proof",
+  "arms": [
+    {
+      "mode": "float",
+      "passed": true,
+      "streams_interleaved": 4,
+      "frames_per_stream": 753,
+      "eligible_scene_state_bit_exact": true,
+      "protected_fields_zero": true,
+      "all_dense_macs_frame": 1173392,
+      "selected_dense_macs_frame": 976592,
+      "selected_dense_macs_s": 91555500,
+      "scope": "exact output-selection equivalence on inspected TRAIN, not original quantization quality recovery or device deadlines"
+    },
+    {
+      "mode": "int8",
+      "passed": true,
+      "streams_interleaved": 4,
+      "frames_per_stream": 753,
+      "eligible_scene_state_bit_exact": true,
+      "protected_fields_zero": true,
+      "all_dense_macs_frame": 1173392,
+      "selected_dense_macs_frame": 976592,
+      "selected_dense_macs_s": 91555500,
+      "scope": "exact output-selection equivalence on inspected TRAIN, not original quantization quality recovery or device deadlines"
+    }
+  ],
+  "fixture": {
+    "scope": "exactly same original saved four TRAIN8s spectral inputs, output selection only; no acoustic/gain/training modification",
+    "fixture_sha256": "2ba8a3532b28e9eba6454a6bdc6b4b8515cbadedc4d2901228acc6a41eaf5e9e",
+    "fixture_bytes": 49396820,
+    "streams": 4,
+    "frames": 753,
+    "gates": "eligible masks, all scene fields and every state byte bit-exact all-vs-selected, protected unused fields zero, dense976592/frame vs1173392all"
+  },
+  "compiler": "arm-unknown-nto-qnx6.5.0eabi-gcc (GCC) 8.5.0\nCopyright (C) 2018 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n",
+  "flags": "-O2 -g -std=gnu99 -Wall -Wextra -fdata-sections -ffunction-sections -O3 -fno-math-errno -Werror -mfpu=neon -mfloat-abi=softfp\n",
+  "docker_image_id": "sha256:59cf5a575d69869e3983f136bdcf9e7e7d997e1206dcfc912e0d1988c68ad213",
+  "source_identity": "e5d27325ae7f4aa23ba30c43f4c3f90cb7893a6bf81af238892c656ef7138e8c  /Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/tools/stereo-upmix-render/unified_runtime/unified_runtime_prune_check.c\n1af99556eea45b1cffabe722e633f47fc1d862cabf9c9df98a49e325b71822ed  /Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/tools/stereo-upmix-render/unified_runtime/unified_runtime.c\n3701e417dba15b6886620e0b6a6fbdf543db9e89e3bfeccf223d82e58f0299eb  /Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/tools/stereo-upmix-render/unified_runtime/unified_runtime.h\n",
+  "executable_sha256": "7e477a826d1eea7eca0f73f27c601dde3e2486e4d233d1b40cd8f5d12f50b7b6",
+  "boot_image_sha256": "9d5d0c3ae14ba150f5600607f662d77d3f496b68f1268f75c8ffef7df12a0400",
+  "log_sha256": "4858d3608308710af0a232864dde8e1e361a9fe7d3f14cb50ba28d48f48ac61b"
+}

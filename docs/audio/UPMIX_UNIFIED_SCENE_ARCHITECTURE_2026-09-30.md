@@ -307,3 +307,22 @@ The next guest passed float but could not spawn the same boot-image executable a
 Continuous median eligible SDR−.636459dB. Paired median changes: hidden reset−.128080, all-neural reset−.127594, independent zero-start−.106111dB. Eligible transmission changes+.008741/+.008125/−.001955; vocal transmission+.007289/+.007494/+.003389. Every predeclared≥.5dB or≥.03-retention diagnostic improvement signal is false. Restoring the8s training horizon does not repair this control's observed shortfall. This rejects that particular explanation on these TRAIN cuts, not every long-state failure or the joint model's eventual result.
 
 All raw ARM serial logs are now marked binary-preserved in `.gitattributes`, alongside the JSON evidence, so stored bytes agree with the recorded log hashes.
+
+
+## ✂️ Training-only reconstruction outputs skipped at inference
+
+The source-supervised model still trains and stores four source operators. Live rear synthesis consumes only eligible; protected reconstruction heads can remain auxiliary training targets without computing their terminal affine rows. `umx_predict` retains the original full-output API. New `umx_predict_eligible` computes eligible plus every scene field, writes zero to unused protected mask fields, and retains the identical shared state. The standalone audio path uses this selected API. No running Python training or renderer evaluation source changed.
+
+[Exact ARM check](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_arm_output_selection.json), [raw guest log](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_arm_output_selection.log.txt), [checker](../../tools/stereo-upmix-render/unified_runtime/unified_runtime_prune_check.c), [isolated guest script](../../tools/stereo-upmix-render/unified_runtime/qnx_qemu_prune_check.sh). Both float and int8 pass on Windows and ARM/QNX: all753 frames of each of four interleaved TRAIN streams preserve eligible masks, every scene field and every caller-owned state byte **bit exactly** against the same platform's full-output graph. Unused protected output fields are zero. This preserves current eligible acoustics; it does not recover the original int8 drum reconstruction failure or establish device deadlines.
+
+Counted dense operations drop1173392→976592/frame, or110.0055→91.5555M MAC/s. FFT, norms, nonlinearities, features, DSP and scheduling remain excluded. The blob and trained shared encoder are unchanged.
+
+[Architecture cost table](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_inference_budget.json), [counter](../../tools/stereo-upmix-render/unified_runtime_budget.py):
+
+| Shared width, two blocks | Four outputs, M MAC/s | Eligible plus scene, M MAC/s | Status |
+| --- | ---: | ---: | --- |
+|24|110.0055|91.5555|Current trained graph; selected C API verified|
+|28|135.9998|117.5498|Untrained architecture option|
+|32|165.5940|147.1440|Untrained option with little dense margin|
+
+This creates a concrete budget lever for a wider encoder without increasing the150M ceiling. It is not a width selection, a generalization result or measured head-unit compute. Current blob format/state/export support24 only; wider options need explicit implementation and verification. Choose any new source experiment after the fixed broad40k C/events result, rather than changing the live matched study.

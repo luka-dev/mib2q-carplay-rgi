@@ -15,7 +15,8 @@ void umx_audio_reset(UmxAudioStream *stream);
  * array delay. Caller handles incomplete hop and three-hop end flush. Never
  * compensate delay by advancing real-time output; align front accordingly. */
 int umx_audio_process(UmxAudioStream *stream,const float input[UMX_HOP][2],float output[UMX_HOP][2]);
-/* Family fields remain untrained in current assets. */
+/* Only eligible audio rows are evaluated; protected mask fields are zero.
+ * Family fields remain untrained in current assets. */
 const UmxOutput *umx_audio_prediction(const UmxAudioStream *stream);
 unsigned umx_audio_state_bytes(void);
 #endif

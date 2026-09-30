@@ -32,4 +32,9 @@ void umx_reset(UmxState *state);
 /* After applying any complex mask, zero imaginary DC/Nyquist before iFFT. */
 int umx_predict(const UmxModel *model, UmxState *state,
                 const float spectrum[UMX_BINS][2][2], UmxOutput *output);
+/* Identical eligible/scene/state path, skip unused protected output rows.
+ * Protected mask fields are explicitly zero; all heads remain in the blob.
+ * Auxiliary training heads do not need inference when routing only eligible. */
+int umx_predict_eligible(const UmxModel *model, UmxState *state,
+                        const float spectrum[UMX_BINS][2][2], UmxOutput *output);
 #endif

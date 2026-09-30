@@ -69,7 +69,7 @@ int umx_audio_process(UmxAudioStream *s,const float input[UMX_HOP][2],float outp
         fft(s,0);
         for(i=0;i<UMX_BINS;i++){s->spectrum[i][c][0]=s->real[i];s->spectrum[i][c][1]=(i==0||i==UMX_BINS-1)?0:s->imag[i];}
     }
-    if(s->model){result=umx_predict(s->model,&s->neural,s->spectrum,&s->prediction);if(result)return result;}
+    if(s->model){result=umx_predict_eligible(s->model,&s->neural,s->spectrum,&s->prediction);if(result)return result;}
     for(c=0;c<2;c++) {
         for(i=0;i<UMX_BINS;i++) {
             float re=s->spectrum[i][c][0],im=s->spectrum[i][c][1];
