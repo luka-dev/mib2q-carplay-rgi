@@ -112,7 +112,7 @@ Before releasing its lease, validate ownership of the live original supervisor/w
 
 Amendment/source freeze commit **`4e7c6913`** preceded the pause. The positively identified original supervisor10456 and child interpreter tree34632/29684 were terminated; no other Python work was active. The last complete checkpoint was **added step28,750**, 115,000 windows. CPU validation passed: strict original-mode/frozen-protocol/stats, finite weights and optimizer, exact saved scheduler position, exposure counts and sampling digest. The archived checkpoint is byte-identical to the resumable `original/last.pt`, SHA-256 **`0dd6f28ffb35579813c07643af6150a3f40247ee505da017a21dcd3b7b8b0c0e`**; sampled-descriptor digest **`3b10fb9573fb7221b816b3f0eaaba1b1c2a751282d9046f785df44f259175743`**. The original progress snapshot also ends28,750. The old lease was moved into this run's own pause archive after verification.
 
-**Current verified execution: residual96×4 is active**, captured through added **step1,000**, under the sole GPU lease. Priority wrapper20256, Python launcher/worker43460/51060 (one interpreter tree), C: supervisor log `upmix_causal_generalization_live_priority_v1.log`; new worker log names are recorded there. The original control is paused at28,750 with **11,250 steps remaining**. The priority runner automatically runs reference40k, resumes original40k using saved optimizer/history and the unchanged step-indexed sampler/schedule, then performs final CPU/full40 source-entry/C evaluation. No broad matched-age comparison is complete yet; the declared20k comparison is informational when both snapshots exist.
+**Current verified execution: residual96×4 is active**, latest captured through added **step29,000**, under the sole GPU lease. Priority wrapper20256, Python launcher/worker43460/51060 (one interpreter tree), C: supervisor log `upmix_causal_generalization_live_priority_v1.log`; new worker log names are recorded there. The original control is paused at28,750 with **11,250 steps remaining**. The priority runner automatically runs reference40k, resumes original40k using saved optimizer/history and the unchanged step-indexed sampler/schedule, then performs final CPU/full40 source-entry/C evaluation. The declared20k matched-age monitor comparison is now captured below; it is informational and does not replace terminal40k selection.
 
 | Scheduling/evidence artifact | Repository capture |
 | --- | --- |
@@ -124,6 +124,34 @@ Amendment/source freeze commit **`4e7c6913`** preceded the pause. The positively
 | New reference captured progress through1k | [Reference priority progress](UPMIX_CAUSAL_GENERALIZATION_2026-09-29_residual_priority_progress.json) |
 
 Archive on PC: `priority_pause/original_last.pt`, `original_progress_before_pause.json`, `original_supervisor.log`, `process_stop.json`, `old_gpu_lease.txt`. Pause-audit artifact SHA-256 **`7b76aa5a73d3d70d1fc97cd0211c81a836d3990838e87fa628148a6f01aa1251`**. Report the pause as owner steering and a resumable order change; do not call the28,750 control a completed40k model or evidence that future improvement is impossible. No model/data/loss/gain/threshold/manifest change, reboot, driver reset, unit action, extra GPU tenant or shared-package install.
+
+## 📈 Informational matched20k result, 2026-09-30
+
+Both arms now have the declared added20k snapshot on the identical frozen TRAIN12/DEV40 natural crops. Their sampling digest at20k is identical: `76d2ed4b6b34666ab2618f7c70562fc7f335d2db44be896dddafb9d0019366b3`, **80,000 windows each**. This is a comparison at equal training exposure, not equal compute. Latest reference progress capture is29,000/40,000, 116,000 windows, all176 TRAIN songs, zero clipped steps; control remains paused28,750. No final CPU/full60s/entry/C result exists yet.
+
+| Frozen monitor metric at20k | Original | Residual96×4 |
+| --- | ---: | ---: |
+| TRAIN12 median SI-SDR, dB | −1.741768 | +0.103475 |
+| DEV40 median SI-SDR, dB | −1.746900 | −0.082041 |
+| DEV40 objective | .364772 | .330738 |
+| DEV40 median eligible attributed transmission | .319297 | .430342 |
+| DEV40 median vocal attributed transmission | .142786 | .102618 |
+| DEV40 median drum attributed transmission | .023592 | .023434 |
+| DEV40 median bass attributed transmission | .018522 | .021538 |
+| DEV40 8–14k eligible transmission | .002888 | .006920 |
+| DEV40 14–24k eligible transmission | .002256 | .003812 |
+
+The difference of DEV medians is **+1.664859 dB**, objective decreases **9.330%**, eligible attributed energy rises .111046, vocal falls .040168, drums are nearly unchanged and bass increases .003017. These transmission statistics describe extraction under the actual mixture-inferred mask; **they are not rear shares**. The joint extraction direction is encouraging at20k, but upper-band transmission remains below1% of eligible source energy. This has not resolved treble loss or established rear stability, vocal-entry retention, level parity or product acceptance.
+
+The DEV median difference at10k was +1.296771 dB; the reference's DEV median improves −.800233→−.082041 from10k→20k. Preserve both curves; do not declare a converged control, early-select the reference or infer the terminal paired-song bootstrap gate from differences of aggregate medians. Continue both original40k caps and the frozen final audit/C protocol.
+
+| New exact PC evidence | Repository capture |
+| --- | --- |
+| Reference10k, all frozen song rows | [Reference10k](UPMIX_CAUSAL_GENERALIZATION_2026-09-29_residual_step10000.json) |
+| Reference20k, all frozen song rows | [Reference20k](UPMIX_CAUSAL_GENERALIZATION_2026-09-29_residual_step20000.json) |
+| Reference progress through29k, including matching20k sampler digest | [Reference29k progress](UPMIX_CAUSAL_GENERALIZATION_2026-09-29_residual_progress_29000.json) |
+
+SHA-256 respectively: `c51373ce91d19ddac6344c57040e4b3520a608ea7397681425eefcf1e38fcfa6`, `edaac6409b029be8f52c6e8c358cdd7b90c8eec2679f543a1bd843bd66f9ef75`, `da6c6e64ce94910b11d796f289454e47388a6ad77085a6f7e057fa2e52359f83`. Original20k and paused progress captures remain linked above. No source, initialization, data, loss, manifest, gain, horizon or gate changed for this update.
 
 ## 🧪 Completed smoke evidence and live snapshot
 
