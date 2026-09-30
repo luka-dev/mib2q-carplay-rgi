@@ -1,0 +1,17 @@
+{
+  "verified": true,
+  "scope": "independent archived-result checks; no additional model or audio run",
+  "original_fitting_sha256": "ff072970aef01749f44afc0c8bc010c542eb7e2384cdf88d8b7473b6a3854da2",
+  "all48_affine_nse_within_1e9": true,
+  "max_affine_nse": 2.632549688546397e-14,
+  "saved_sdr_max_delta_from_prior_audited_fit_db": 1.9073486328125e-06,
+  "weighted_quadratic_sums": {
+    "saved_weighted_squared_error": 677566.5846450663,
+    "unbounded_weighted_squared_error": 156574.6445315974,
+    "bounded_weighted_squared_error": 282560.05301506154
+  },
+  "bounded_joint_relative_weighted_error": 0.41702182400726956,
+  "unbounded_joint_relative_weighted_error": 0.23108377549878265,
+  "bounded_projected_step_max": 0.14983868860162464,
+  "product_pass": false
+}
