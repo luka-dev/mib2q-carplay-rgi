@@ -75,6 +75,7 @@ flowchart TB
 | [Upmix BSRNN Real-C Check 2026-09-29](UPMIX_BSRNN_REAL_C_CHECK_2026-09-29.md) | Completed pretrained SIMO DEV40: all observed offline gates pass with direct C, 11→0 swings, entry .876/.746; source attribution, paired sep9 comparison, failures and device/ear limits. |
 | [Upmix Causal Reference Encoder 2026-09-29](UPMIX_CAUSAL_REFERENCE_ENCODER_2026-09-29.md) | Completed fixed-decoder causal pair: +2.746 dB / −20.584% objective on four TRAIN crops; CPU audit passed, protected-source and compute limits remain. |
 | [Upmix Causal Reference Generalization 2026-09-29](UPMIX_CAUSAL_GENERALIZATION_2026-09-29.md) | Frozen 40k matched true-stem continuation on all 176 TRAIN songs, TRAIN/DEV curves, CPU replay and terminal full40 source/entry/C gates before compression. |
+| [Unified Rear Scene Architecture 2026-09-30](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30.md) | Owner-directed single audio/scene network and expressive rear: implemented110M-MAC/s CPU prototype, structural checks, controlled supervision/renderer plan and acoustic acceptance. |
 
 ### Upmix runtime and release
 
