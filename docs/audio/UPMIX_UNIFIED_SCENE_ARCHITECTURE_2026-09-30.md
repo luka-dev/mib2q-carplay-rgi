@@ -335,3 +335,33 @@ This creates a concrete budget lever for a wider encoder without increasing the1
 This tests missing mixture completeness, a constraint described in [Wisdom et al., ICASSP2019](https://research.google/pubs/differentiable-consistency-constraints-for-improved-deep-speech-enhancement/). Their reported speech enhancement improvement does not establish success for music or this renderer. Our risk is explicit: residual correction can restore instrument energy while sending protected reconstruction error to the rear. The diagnostic requires each protected attributed-transmission delta≤.01 alongside a≥.5dB paired median eligible SDR or≥.03 eligible-transmission improvement. This is an explanatory signal, not a product promotion gate. A failed post-hoc projection does not disprove learning with a projection during training.
 
 Both corrections can be folded into each existing terminal affine decoder because all source outputs share its16 tanh features. No extra shared network, recurrent state or inference rows are needed. Random-graph CPU fold parity passes below1.2e−14 spectral NSE; the saved-checkpoint diagnostic must independently pass≤1e−9 fold parity and≤1e−10 summed waveform closure. No acoustic result exists yet. All current broad40k and real-C gates remain unchanged.
+
+
+## 🧪 Terminal broad source training and numerical audit complete
+
+[Control monitor](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_broad_control40k_monitor.json), [joint monitor](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_broad_joint40k_monitor.json), [terminal audit](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_broad_terminal_audit.json), [manifest](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_broad_manifest.json). Both fixed40k arms completed with156distinctTRAIN/160000windows and identical draw digest. Control/joint elapsed5245.797/6415.205s. Every saved all-source CPU/CUDA, actual native PCM, chunk and causality gate passes; native PCM source errors≤1.13e−10NSE and≤.124PCM16LSB. No numeric tolerance was changed.
+
+| Terminal monitor | Eligible-only | Joint audio |
+| --- | ---: | ---: |
+| TRAIN12 eligible median SI-SDR |−.6365dB|−.8688dB|
+| DEV40 eligible median SI-SDR |−.8314dB|−.7098dB|
+| DEV40 eligible operator TX |.360815|.366473|
+| DEV40 vocal operator TX into eligible |.111066|.106075|
+| DEV40 drum operator TX into eligible |.032638|.025723|
+| DEV40 bass operator TX into eligible |.022540|.020078|
+| DEV40 eligible8–14k TX |.010281|.004729|
+| DEV40 eligible14–24k TX |.009531|.005921|
+
+The difference of unpaired DEV medians is positive, but the **paired40-song median eligible SDR delta is−.017403dB**, with20/40nonworse. There is no demonstrated broad extraction gain from auxiliary source supervision alone. Joint protected reconstruction medians on DEV are voice3.225/drums2.015/bass2.806dB; the control's untrained protected reconstruction heads do not provide a quality baseline. All transmission figures describe frozen-operator response to components, not literal audible isolated content or rear shares. Full60s C/entries is still required.
+
+### C execution-path failure recovered
+
+[Initial failure](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_broad_c_path_failure.json), [recovery preflight](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_broad_c_path_recovery.json). Initial C evaluation stopped before any rendered song: runner passed the parent Moises directory and `load_song` could not find the first `data.json`. Actual root is `D:\upmix\datasets\moisesdb\moisesdb_v0.1`. All40metadata paths were preflighted and hashed; old runner and failure were preserved. The runner now uses the correct existing root and, on explicit resume, reuses the already verified terminal audit only after manifest/checkpoint/evaluator-audit identity checks. The evaluator, checkpoints, frozen nominal gain, source data, renderer and gates did not change. New supervisor2560 owns oneGPUlease and resumes the original full40protocol. No retraining was performed.
+
+## 🔬 TRAIN mixture-consistency result: no diagnostic gain
+
+[Protocol](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_mixture_consistency_train_protocol.json), [all12rows/result](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_mixture_consistency_train.json). Both folded-decoder numerical checks pass≤2.42e−14spectralNSE; both projections restore summed waveform identity≤1.88e−14NSE. Raw summed-source waveform mismatch median.007465NSE (about−21.3dB) was already much smaller than individual-source reconstruction errors.
+
+Uniform projection gives paired median eligible SDR+.020265dB, eligibleTX−.012780 and vocalTX−.005902; no predeclared diagnostic improvement. Eligible residual gives−.357355dB, eligibleTX−.054089 and drumTX+.010372; no diagnostic improvement, with a protected-response regression. Neither restores upper-band eligible transmission. No projected candidate, new training recipe, DEV test or gate waiver follows. This rejects a cheap post-hoc missing-mixture repair on these TRAIN cuts; it does not prove projection-trained models cannot improve.
+
+Next explanatory probe is [fixed-terminal TRAIN source allocation](../../tools/stereo-upmix-render/audit_unified_source_allocation.py):4×4 frozen output/input operator responses by frequency band, actual source reconstruction errors and summed-spectrum closure. It uses only FFT windows entirely inside original20s scored cuts. Responses quantify sensitivity and can cancel in a sum, so are never labelled literal audible contents. CPU-only execution does not alter current full40GPU evaluation.

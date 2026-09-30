@@ -1,0 +1,25 @@
+{
+  "complete": true,
+  "mode": "joint_audio",
+  "smoke": false,
+  "step": 40000,
+  "last": {
+    "step": 40000,
+    "seconds": 6415.204682499985,
+    "loss": 0.41347694396972656,
+    "grad_norm": 0.5540578365325928,
+    "decoder_grad_norm": 0.05517078592832732,
+    "lr": 3e-05,
+    "distinct_train_songs": 156,
+    "windows": 160000,
+    "audible_source_windows": [
+      159014,
+      136331,
+      151742,
+      151110
+    ],
+    "sample_sequence_sha256": "57c2e4a48bd581634700f868e90f327664418eb6124770101692194f2380e26d"
+  },
+  "checkpoint_sha256": "ea4133f8983898d0b728b7aa969875b0574092cdcbe0bce1fbf7df33f3092a48",
+  "protocol_sha256": "63daea1cecbf94441024b3ceafd09294e73da5cd47d27eb99f068419c5578c67"
+}

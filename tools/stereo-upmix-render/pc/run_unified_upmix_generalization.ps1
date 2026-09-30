@@ -8,6 +8,7 @@ $py='D:\upmix\venvs\bsrnn_reference\Scripts\python.exe'
 $lease="$runs\GPU_LEASE"
 $partition="$tools\UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_candidate_holdout.json"
 $monitor="$runs\causal_reference_generalization_v1\manifest.json"
+$moisesdb='D:\upmix\datasets\moisesdb\moisesdb_v0.1'
 $expected=@{
     'train_unified_upmix_generalization.py'='921dd4a3edae2e9d7ed612d69777f61fc4a9d01ec66d166ba9e3a6f144e26a2d'
     'eval_unified_upmix_generalization.py'='09367324d9642466ab18305865ebdb140f6dd5d52dda2b89b0736b946d184b3c'
@@ -28,6 +29,10 @@ if((Get-FileHash $partition -Algorithm SHA256).Hash.ToLowerInvariant() -ne '7a88
 $fit=Get-Content "$initial\complete.json" -Raw | ConvertFrom-Json
 if(-not $fit.complete -or -not $fit.audit_verified -or -not $fit.fitting_gate_pass) {throw 'Passed audited20k prerequisite required'}
 if(Test-Path "$out\full40\complete.json") {throw 'Preserve completed full40 pair'}
+$declared=Get-Content "$runs\direct_object_full40\manifest.json" -Raw | ConvertFrom-Json
+foreach($track in $declared.song_track_ids.PSObject.Properties.Value) {
+    if(-not (Test-Path "$moisesdb\$track\data.json")) {throw 'Full40 raw source preflight failed'}
+}
 if((Test-Path $out) -and -not $Resume) {throw 'Partial experiment requires verified resume'}
 $pending=@(Get-Content "$runs\rapid\QUEUE.txt" -ErrorAction SilentlyContinue | Where-Object {$_ -match '\|' -and $_ -notmatch '^\s*#'})
 if($pending.Count) {throw 'Rapid queue active'}
@@ -98,10 +103,24 @@ try {
     $smoke=Get-Content "$out\smoke_audit.json" -Raw | ConvertFrom-Json
     if(-not $smoke.verified -or -not $smoke.smoke) {throw 'TRAIN20-step execution audit required'}
     foreach($mode in @('eligible_only','joint_audio')) {Invoke-TrainArm $mode}
-    Invoke-Worker (@('-u',"$tools\train_unified_upmix_generalization.py",'audit')+$common)
+    if($Resume -and (Test-Path "$out\audit.json")) {
+        $saved=Get-Content "$out\audit.json" -Raw | ConvertFrom-Json
+        if(-not $saved.verified -or $saved.smoke -or
+            $saved.protocol_sha256 -ne (Get-FileHash "$out\manifest.json" -Algorithm SHA256).Hash.ToLowerInvariant()) {throw 'Saved terminal audit differs'}
+        foreach($mode in @('eligible_only','joint_audio')) {
+            if($saved.arms.$mode.checkpoint_sha256 -ne (Get-FileHash "$out\$mode\step40000.pt" -Algorithm SHA256).Hash.ToLowerInvariant()) {throw 'Saved audited checkpoint differs'}
+        }
+        if(Test-Path "$out\full40\protocol.json") {
+            $oldProtocol=Get-Content "$out\full40\protocol.json" -Raw | ConvertFrom-Json
+            if($oldProtocol.audit_sha256 -ne (Get-FileHash "$out\audit.json" -Algorithm SHA256).Hash.ToLowerInvariant()) {throw 'Saved evaluator audit identity differs'}
+        }
+        Write-Output 'REUSED_VERIFIED_TERMINAL_AUDIT'
+    } else {
+        Invoke-Worker (@('-u',"$tools\train_unified_upmix_generalization.py",'audit')+$common)
+    }
     $audit=Get-Content "$out\audit.json" -Raw | ConvertFrom-Json
     if(-not $audit.verified -or $audit.smoke) {throw 'Terminal checkpoint audit required'}
-    $arguments=@('-u',"$tools\eval_unified_upmix_generalization.py")+$common+@('--tools',$tools,'--runs',$runs,'--moisesdb','D:\upmix\datasets\moisesdb')
+    $arguments=@('-u',"$tools\eval_unified_upmix_generalization.py")+$common+@('--tools',$tools,'--runs',$runs,'--moisesdb',$moisesdb)
     if(Test-Path "$out\full40\protocol.json") {
         if(-not $Resume) {throw 'Own partial C evaluation requires verified resume'}
         $arguments+='--resume'
