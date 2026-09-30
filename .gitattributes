@@ -3,6 +3,10 @@
 /output/maneuver-parity/*.csv -text whitespace=cr-at-eol
 /output/maneuver-selection/*.csv -text whitespace=cr-at-eol
 
+# Preserve PC source-audio evaluation exports and their recorded SHA-256 values.
+/docs/audio/UPMIX_BSRNN_REAL_C_CHECK_2026-09-29*.json -text whitespace=cr-at-eol
+/docs/audio/UPMIX_BSRNN_REAL_C_CHECK_2026-09-29*.csv -text whitespace=cr-at-eol
+
 # Decompiler/disassembler exports preserve the tools' original formatting.
 /output/ios-sentinel/*.asm -text -whitespace
 /output/r2/hud-ramps-2026-09-11/*.c -text -whitespace
