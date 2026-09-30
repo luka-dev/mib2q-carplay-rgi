@@ -25,7 +25,7 @@ MODES = T.MODES
 
 
 def hashes():
-    return T.hashes() | {Path(m.__file__).name:T.F.sha(m.__file__) for m in (G,H,S)} | {Path(__file__).name:T.F.sha(__file__)}
+    return T.hashes() | {Path(m.__file__).name:T.F.sha(Path(m.__file__)) for m in (G,H,S)} | {Path(__file__).name:T.F.sha(Path(__file__))}
 
 
 def spectra(roles):

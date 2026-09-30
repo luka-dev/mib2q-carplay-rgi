@@ -71,8 +71,8 @@ def main(a):
     baseline=json.loads((a.runs/'tracka_matched40_2026_09_30/complete.json').read_bytes())
     destination=a.out/'full40';destination.mkdir(exist_ok=True)
     protocol=dict(source_manifest_sha256=B.T.F.sha(a.out/'manifest.json'),audit_sha256=B.T.F.sha(a.out/'audit.json'),
-        source_hashes=B.hashes(),script_sha256=B.T.F.sha(__file__),
-        helpers={Path(mod.__file__).name:B.T.F.sha(mod.__file__) for mod in (E,E.ref,E.H,E.T,E.DT,E.gate)},
+        source_hashes=B.hashes(),script_sha256=B.T.F.sha(Path(__file__)),
+        helpers={Path(mod.__file__).name:B.T.F.sha(Path(mod.__file__)) for mod in (E,E.ref,E.H,E.T,E.DT,E.gate)},
         c_sha256=C_SHA,points=POINTS,nominal='nominal_040',input_gain='0.7/dry mixture peak; injection unity; no front trim or per-song normalization',
         renderer='copied direct no-bed/body0; frontretention.5, frontbass-3, air-9, attackoff, LFEnosemanticassist; oldNNcalls0',
         selection='terminal40k; same predeclared operating points in both arms; nominal.40 fixed before DEV; no checkpoint/gain best-of search',
