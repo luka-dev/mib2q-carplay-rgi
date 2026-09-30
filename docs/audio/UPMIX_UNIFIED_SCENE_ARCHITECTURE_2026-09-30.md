@@ -571,3 +571,47 @@ Frozen fitting promotion requires paired crop eligible SI-SDR median gain≥.5dB
 | PC protocol | `99f19ad71f64f0d9dab12ad52c46ecdf0cb37af042336424b0f59bdc727abdbb` |
 
 This is Track B execution. Track A hook/int8 files, unit, existing environments and other agents' changes remain untouched. Structural connectivity and successful numeric smokes establish that the experiment is valid, not that the encoder has broken the extraction shelf.
+
+## Source-attribution semantics: independent exact-mask diagnostic running
+
+[CPU-only evaluator](../../tools/stereo-upmix-render/diag_unified_exact_mask_attribution.py), [synthetic counterexample](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_exact_mask_attribution_synthetic.json), [actual launch provenance](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_exact_mask_attribution_launch.json). Root `D:\upmix\runs\exact_complex_mask_attribution_v1`; CPU supervisor40288/launcher31184/child2620 are verified live alongside the separate GPU fitting study. CUDA visibility is disabled only for this new CPU process; one GPU tenant remains. No imported active fitting/evaluation module is edited.
+
+Question: can attributed eligible retention change at a vocal entry even when the actual reconstructed eligible waveform is exact? For a privileged diagonal complex mask `M=E/X`, actual `M*X=E`; the frozen-mask eligible component is `M*E`, and protected components can cancel in the sum. This calculation establishes non-uniqueness of component interpretation, not that existing candidate failures are measurement artifacts.
+
+A fixed synthetic collinear entry verifies this distinction: attributed eligible post/pre.111674 versus actual target post/pre1.000000000008; exact target reconstruction and component-sum numerical gates pass. It is a constructed component counterexample, not a music result. Real-data protocol uses every original40/265 event, rechecks the unchanged detector/event set, same22s crops/10s warm/4pre8post, centered reanalysis, energy floor and .85/.60 entry gates. CPUfloat64 past-only2048/512 target/mask calculation; no magnitude cap, learned network, teacher, normalization adjustment or threshold selection. Each event must prove actual target waveform NSE and component-sum NSE≤1e−9; zero mask only where mixture spectrum is exactlyzero. Per-event input hashes, mask maxima, all-source sensitivities, attributed retention/leakage and actual target retention are preserved.
+
+Real-data outcome is pending. This diagnostic cannot relax the original product gates, establish causal learnability or replace rear/int8/device/ear evaluation. The privileged unbounded mask may have very large cancelling components and is not a head-unit candidate. Earlier bounded real IRM audit used a different transform/source scope; it is not the exact complex-mask test.
+
+The fresh fixed-decoder control snapshots are also preserved: [4k](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_fit_control4000_monitor.json), [10k](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_fit_control10000_monitor.json). Eligible crop medians5.849115→6.298156dB;10k vocal/drums/present-bass8.040965/10.797274/5.645786dB. These are four TRAIN fitting crops with fixed heads, not a paired terminal verdict or broad generalization gain. Latest full control18,750/20k,2,331.880s; spectral20k follows. Both terminal arms and saved numeric/acoustic audits are required before fitting promotion.
+
+### Fresh fixed-decoder control completed20k; spectral arm started
+
+[Terminal control fitting result](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_fit_control20000_monitor.json), [completion marker](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_fit_control_training.json). Checkpoint `b8c9559ff4d8b334de6e95edd8e418e303bb659247e7c071bc1e5d82359d4488`, fixed20k in2,491.101s. Eligible/vocal/drum/present-bass crop medians **6.653578/8.284472/11.051271/5.991181dB**; four eligible crop SDRs8.539931/11.662354/2.353253/4.767225dB. This is a fresh encoder with frozen broad-trained24 decoder and cannot be directly compared to the earlier jointly trained16-decoder fitting result.
+
+The same supervisor8104 launched actual spectral trainer42192/child17468;500/20k,68.993s, loss.099147 is verified. Control launcher12844/child37444 completed; two Python pairs now represent one GPU trainer plus the explicitly CPU-only diagnostic. The terminal paired saved CPU/device/acoustic audit remains pending; no winner or broad new-model run is selected from intermediate results.
+
+Exact-mask diagnostic arithmetic uses the algebraic sum of float64 analyzed true-source spectra as its denominator, with actual source waveforms reconstructed and checked. It studies privileged component interpretation in high precision; float32/int8 behavior and physical playback are outside its scope. Its script and live protocol bytes remain fixed until the run ends.
+
+## Exact complex-mask real40 result: entry gates are achievable
+
+[Full265-row result](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_exact_mask_attribution_full40.json), [frozen source/event protocol](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_exact_mask_attribution_protocol.json), [exit0 execution record](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_exact_mask_attribution_execution.json). All40original DEV songs and265 unchanged detected events completed onCPU. Supervisor40288 and its launcher/child are terminal; the new spectral fitting study remains the sole GPU tenant. No event/threshold selection or live training-source change occurred.
+
+| Entry measure | Privileged exact mask | Required |
+| --- | ---: | ---: |
+| Entries / songs / valid ratios | 84 / 36 / 83 | Same original coverage |
+| Attributed eligible post/pre median | 1.034611 | ≥.85 |
+| Attributed eligible post/pre p10 | .881974 | ≥.60 |
+| Actual target post/pre median | .999999999830 | Diagnostic exact-target check |
+| Actual target post/pre p10 | .999999998903 | Diagnostic exact-target check |
+
+Every event verifies exact target waveform and source-attribution sum: maximum waveform NSE4.585100e−15, component-sum NSE4.687623e−31. Thus this high-precision privileged per-channel complex mask passes both original aggregate entry gates on the actual40/265 event inventory. **The conjecture that these aggregate thresholds necessarily reject exact extraction is unsupported by this test.** Current learned entry failures still require repair. This result does not prove a causal budgeted network can infer the privileged mask.
+
+The component caveat is real but narrower. Eight of83entries have attributed duck<.85 and one<.60, despite exact actual target throughout. Worst: song1f98fe4d… at16.25s, attributed duck.416403 with actual target duck.999999998961. Median all265-event source component sensitivities eligible/vocal/drum/bass1.088654/.164883/.072980/.088134; entry vocal component0–2s median.180804 even though the actual waveform equals the labelled eligible target. These quantities reflect cancelling responses of a frozen operator and cannot be labelled literal audible vocal/bass leakage. Actual source reconstruction, real-C protected proxies and event gates must remain visible separately; lowering protected component energy alone is not evidence of cleaner audio.
+
+Maximum privileged mask magnitude366,795.425. Unbounded/high-precision ratios and unavailable true stems exclude deployment or int8/compute/causal-quality claims. The existing exact-labelled real-C renderer oracle and this cache-event diagnostic have different source/window/normalization scopes; they are separate bounds, not a combined candidate passing all13product gates. No thresholds are relaxed and neither oracle replaces independent20, physical chain or owner listening evidence.
+
+### Spectral encoder4k diagnostic: positive matched fitting signal, terminal test pending
+
+[Candidate4k GPU monitor](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_fit_spectral4000_monitor.json), [same-age control4k](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_fit_control4000_monitor.json). Same four8s TRAIN crops and identical fixed decoder/objective. Eligible medians control5.849115 versus spectral6.801737dB. **Paired crop median gain+1.140835dB**, all four deltas positive:1.455091/.826578/1.464856/.450152dB. Difference of aggregate medians+.952622dB is a different statistic. Eligible median crop loss.070346→.062654; vocal/drum/present-bass medians7.359949/10.294687/5.113802→8.067246/11.343552/6.386748dB.
+
+Candidate4k checkpoint `c513db911d2fdd8187dbf1b93a0ff153987feb247ab3d898df3bb17e095d3fa1`. Actual supervisor8104/trainer42192/child17468 is live at4,250/20k. This is a positive encoder-fitting signal on four known crops, not a broad extraction shelf breakthrough. Candidate median6.802 remains below the frozen7dB fitting floor at this diagnostic age. Saved CPU/device/acoustic/causal audit and every gate apply only after the fixed20k endpoint; no early checkpoint selection or extra run is authorized by the4k monitor alone.
