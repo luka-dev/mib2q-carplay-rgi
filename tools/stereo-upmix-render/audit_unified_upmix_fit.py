@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Post-run audit amendment: task losses plus all-output CPU/CUDA parity.
 
-The original audit fails on dormant control-head loss roundoff. Training,
-checkpoints and all acoustic gates are unchanged. This file never trains.
+The original audit exposed a real-FFT endpoint violation, amplified in the
+dormant control heads. Explicit endpoint projection resolves signal parity.
+Training, checkpoints and acoustic gates remain unchanged; this never trains.
 """
 import argparse
 import json
@@ -10,6 +11,7 @@ from pathlib import Path
 import numpy as np
 import torch
 import train_unified_upmix_fit as T
+import unified_upmix_audio as H
 
 
 def verify(a, steps=T.STEPS, checker=T.check, filename='audited.json', scope='TRAIN-only; original10k pair; no broad/scene/DEV/device/car verdict'):
@@ -37,8 +39,8 @@ def verify(a, steps=T.STEPS, checker=T.check, filename='audited.json', scope='TR
                 p=cpu_pred['source_stft'][:,:,i]
                 q=gpu_pred['source_stft'][:,:,i].cpu()
                 spectral=float((p-q).abs().double().square().sum()/q.abs().double().square().sum().clamp_min(1e-12))
-                w=T.SN.istft(torch,p,roles.shape[-1])
-                z=T.SN.istft(torch,gpu_pred['source_stft'][:,:,i],roles.shape[-1]).cpu()
+                w=H.istft_centered(p,roles.shape[-1])
+                z=H.istft_centered(gpu_pred['source_stft'][:,:,i],roles.shape[-1]).cpu()
                 waveform=float((w-z).double().square().sum()/z.double().square().sum().clamp_min(1e-12))
                 if max(spectral,waveform)>1e-9:raise ValueError('All-output CPU/CUDA signal parity failed')
                 nse[s]=dict(spectral_nse=spectral,waveform_nse=waveform)
@@ -63,7 +65,7 @@ def verify(a, steps=T.STEPS, checker=T.check, filename='audited.json', scope='TR
         gates[s+'_median_sdr_nonnegative']=bool(valid.any() and np.median(np.asarray(new['sdr_db'][s])[valid])>=0)
     T.F.write_json(out,dict(complete=True,audit_verified=True,arms=result,gates={k:bool(v) for k,v in gates.items()},
          fitting_gate_pass=bool(all(gates.values())),protocol_sha256=T.F.sha(a.out/'protocol.json'),
-         auditor_sha256=T.F.sha(Path(__file__)),amendment='Only trained-task losses use original1e-4 replay gate; dormant control outputs additionally require CPU/CUDA spectral and waveform NSE<=1e-9. Original failed runner record retained. Acoustic gates unchanged.',
+         auditor_sha256=T.F.sha(Path(__file__)),synthesis_sha256=T.F.sha(Path(H.__file__)),amendment='Only trained-task losses use original1e-4 replay gate; dormant control outputs additionally require CPU/CUDA spectral and waveform NSE<=1e-9. DC/Nyquist imaginary components are explicitly projected before inverse real FFT, resolving the verified cuFFT boundary violation. Original failed runner record retained. Acoustic gates unchanged.',
          scope=scope))
     print('UNIFIED_FIT_AUDITED',json.dumps({k:bool(v) for k,v in gates.items()}),flush=True)
 

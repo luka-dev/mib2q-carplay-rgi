@@ -1,0 +1,270 @@
+{
+  "complete": true,
+  "audit_verified": true,
+  "arms": {
+    "eligible_only": {
+      "checkpoint_sha256": "550cca224cea3605e7e8e95cd36166e19551cf0470be21e0afe5418bd461f636",
+      "cpu": {
+        "loss": {
+          "eligible": 0.06009203568100929,
+          "vocal": 0.32657039165496826,
+          "drums": 0.31354308128356934,
+          "bass": 0.32256340980529785
+        },
+        "sdr_db": {
+          "eligible": [
+            8.592734336853027,
+            11.582338333129883,
+            1.7135649919509888,
+            4.908246040344238
+          ],
+          "vocal": [
+            -38.70623016357422,
+            -21.683414459228516,
+            -31.458356857299805,
+            -35.127662658691406
+          ],
+          "drums": [
+            -25.287837982177734,
+            -13.891716003417969,
+            -17.324054718017578,
+            -18.859495162963867
+          ],
+          "bass": [
+            -13.127415657043457,
+            -104.45880126953125,
+            -15.628498077392578,
+            -14.961492538452148
+          ]
+        },
+        "eligible_source_tx": {
+          "eligible": [
+            0.8650254607200623,
+            0.9314998984336853,
+            0.5925882458686829,
+            0.744621753692627
+          ],
+          "vocal": [
+            0.07194947451353073,
+            0.04713227227330208,
+            0.03584558516740799,
+            0.11822119355201721
+          ],
+          "drums": [
+            0.020422955974936485,
+            0.01650555618107319,
+            0.005635794252157211,
+            0.012368959374725819
+          ],
+          "bass": [
+            0.06958547234535217,
+            null,
+            0.07129931449890137,
+            0.03935461491346359
+          ]
+        },
+        "source_present": {
+          "eligible": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "vocal": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "drums": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "bass": [
+            true,
+            false,
+            true,
+            true
+          ]
+        }
+      },
+      "trained_tasks": [
+        "eligible"
+      ],
+      "loss_errors": {
+        "eligible": 8.456408977508545e-07,
+        "vocal": 0.00010818243026733398,
+        "drums": 0.0001628100872039795,
+        "bass": 0.00014212727546691895
+      },
+      "sdr_error": 0.0029697418212890625,
+      "all_output_cpu_cuda_parity": {
+        "eligible": {
+          "spectral_nse": 5.826535277547163e-11,
+          "waveform_nse": 4.0250543675746267e-11
+        },
+        "vocal": {
+          "spectral_nse": 2.3442999262111733e-11,
+          "waveform_nse": 2.465438698872085e-11
+        },
+        "drums": {
+          "spectral_nse": 2.9103841963601e-11,
+          "waveform_nse": 2.7356879652419035e-11
+        },
+        "bass": {
+          "spectral_nse": 3.733108762578043e-11,
+          "waveform_nse": 3.505654909165221e-11
+        }
+      },
+      "temporal_audit": {
+        "future_prefix_nse": 0.0,
+        "chunk_nse": 9.693546014705526e-14,
+        "perturbed_suffix_nse": 9.43311595916748,
+        "scope": "neural STFT interface only; scene dormant; centered waveform transform not certified"
+      }
+    },
+    "joint_audio": {
+      "checkpoint_sha256": "3c672d0103b92aad95e143a586fd70af1c5c0b2a69f3a7795758469659364a10",
+      "cpu": {
+        "loss": {
+          "eligible": 0.060444556176662445,
+          "vocal": 0.06214435398578644,
+          "drums": 0.06448778510093689,
+          "bass": 0.033904921263456345
+        },
+        "sdr_db": {
+          "eligible": [
+            8.85000991821289,
+            11.614008903503418,
+            2.12926983833313,
+            4.977545261383057
+          ],
+          "vocal": [
+            8.24462604522705,
+            11.601720809936523,
+            9.505815505981445,
+            7.010807514190674
+          ],
+          "drums": [
+            8.850959777832031,
+            12.286200523376465,
+            12.848217964172363,
+            8.982925415039062
+          ],
+          "bass": [
+            6.405536651611328,
+            -82.41575622558594,
+            5.981237888336182,
+            6.17254114151001
+          ]
+        },
+        "eligible_source_tx": {
+          "eligible": [
+            0.8511488437652588,
+            0.9205089211463928,
+            0.5479867458343506,
+            0.7339107394218445
+          ],
+          "vocal": [
+            0.06714798510074615,
+            0.04194767028093338,
+            0.03258781135082245,
+            0.10570137947797775
+          ],
+          "drums": [
+            0.01930556260049343,
+            0.01521265134215355,
+            0.005070289596915245,
+            0.011771224439144135
+          ],
+          "bass": [
+            0.07249832153320312,
+            null,
+            0.05499779433012009,
+            0.035393115133047104
+          ]
+        },
+        "source_present": {
+          "eligible": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "vocal": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "drums": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "bass": [
+            true,
+            false,
+            true,
+            true
+          ]
+        }
+      },
+      "trained_tasks": [
+        "eligible",
+        "vocal",
+        "drums",
+        "bass"
+      ],
+      "loss_errors": {
+        "eligible": 6.631016731262207e-07,
+        "vocal": 5.289912223815918e-07,
+        "drums": 7.897615432739258e-07,
+        "bass": 6.332993507385254e-07
+      },
+      "sdr_error": 5.0067901611328125e-05,
+      "all_output_cpu_cuda_parity": {
+        "eligible": {
+          "spectral_nse": 8.070517123269812e-11,
+          "waveform_nse": 5.675366887259629e-11
+        },
+        "vocal": {
+          "spectral_nse": 6.123719220018117e-11,
+          "waveform_nse": 4.230678038235271e-11
+        },
+        "drums": {
+          "spectral_nse": 4.0160805016021835e-11,
+          "waveform_nse": 3.193032435188673e-11
+        },
+        "bass": {
+          "spectral_nse": 1.0113791314566323e-10,
+          "waveform_nse": 8.080609501897461e-11
+        }
+      },
+      "temporal_audit": {
+        "future_prefix_nse": 0.0,
+        "chunk_nse": 1.4012672044840663e-13,
+        "perturbed_suffix_nse": 8.486798286437988,
+        "scope": "neural STFT interface only; scene dormant; centered waveform transform not certified"
+      }
+    }
+  },
+  "gates": {
+    "eligible_loss_nonworse_5pct": true,
+    "eligible_median_no_more_than_03db_regression": true,
+    "eligible_median_at_least_7db": false,
+    "no_eligible_crop_regression_over_1db": true,
+    "vocal_median_sdr_nonnegative": true,
+    "drums_median_sdr_nonnegative": true,
+    "bass_median_sdr_nonnegative": true
+  },
+  "fitting_gate_pass": false,
+  "protocol_sha256": "1a9e23e12df9dd80d1e587d01e00688cc131fd871e851e9645589b537f20c805",
+  "auditor_sha256": "b1ac3551539b51262749d034a7d97238af7449d51edec5fff1a2488c69db6ba7",
+  "synthesis_sha256": "0692531b4290d12adb114648fbd072f1cc781a36ce03fe8510816e9f67a051b2",
+  "amendment": "Only trained-task losses use original1e-4 replay gate; dormant control outputs additionally require CPU/CUDA spectral and waveform NSE<=1e-9. DC/Nyquist imaginary components are explicitly projected before inverse real FFT, resolving the verified cuFFT boundary violation. Original failed runner record retained. Acoustic gates unchanged.",
+  "scope": "TRAIN-only; original10k pair; no broad/scene/DEV/device/car verdict"
+}

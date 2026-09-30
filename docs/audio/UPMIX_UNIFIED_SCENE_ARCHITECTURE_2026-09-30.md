@@ -1,6 +1,6 @@
 # One causal network for a stronger rear scene
 
-_2026-09-30. Track B. Owner direction: replace q6d + guard + v21a with one capable network and make the rear scene more expressive. CPU prototype implemented; first paired fitting protocol frozen below. No trained quality result or hook integration._
+_2026-09-30. Track B. Owner direction: replace q6d + guard + v21a with one capable network and make the rear scene more expressive. Paired TRAIN fitting completed; real-FFT defect corrected and waveform/host contracts verified. No DEV-quality, scene, device or car candidate established._
 
 ## 🎯 Decision and acceptance
 
@@ -105,7 +105,7 @@ Explore predeclared instrument transfer settings aimed at approximate **20%,30%,
 
 ## 📍 Current handoff
 
-Implemented: compact unified prototype; paired true-stem fitting launched after protocol commit `0a6fe70a`; copied-host audio-only renderer built and verified; past-only waveform transform implemented. The pair is supervised by an exclusive GPU lease and runs eligible-only10k → joint-audio10k → independent CPU audit. Do not promote an intermediate snapshot. Scene supervision, broad generalization, device and listening remain open. Keep both completed reference checkpoints and all negative experiments available for comparison.
+Implemented: compact unified prototype; paired true-stem fitting launched after protocol commit `0a6fe70a`; copied-host audio-only renderer built and verified; past-only waveform transform implemented. The original pair completed with a verified audit but failed the absolute fitting gate. A bounded20k extension is frozen below; do not promote an intermediate snapshot. Scene supervision, broad generalization, device and listening remain open. Keep both completed reference checkpoints and all negative experiments available for comparison.
 
 ## 🧪 Frozen first fitting pair
 
@@ -152,3 +152,21 @@ The original CPU audit stopped because it compared all output losses to1e−4, i
 **Audit amendment, frozen before execution:** [audit_unified_upmix_fit.py](../../tools/stereo-upmix-render/audit_unified_upmix_fit.py) applies the original1e−4 loss tolerance to trained tasks, retains.05dB SDR comparison for every output, and adds independent CPU/CUDA spectral **and waveform** parity NSE≤1e−9 for every source, including the dormant control heads. Checkpoint/protocol/source hashes and saved-weight causality/chunk checks remain mandatory. This changes numerical verification of unused outputs; it does not weaken the≥7dB fitting gate or change any training weight, source, target or schedule.
 
 [verify_unified_stream_train.py](../../tools/stereo-upmix-render/verify_unified_stream_train.py) replayed the eligible-only terminal checkpoint on all four actual TRAIN waveforms: identity NSE1.746e−14, saved-model whole/stream replay1.233e−13, future-input prefix9.933e−14. The causal-transform full-crop scores are.25–.51dB below centered-reflect fitting; after2s warmup differences are−.096..+.006dB. Startup/edge treatment measurably matters; broad training must use the causal transform.
+
+## 🐛 Verified inverse-FFT boundary defect and correction
+
+The first strengthened audit also failed: neural spectra agreed on CPU/CUDA (NSE2.35e−11..1.02e−10), but synthesized waveforms did not. Dormant control source waveform NSE reached2.069e−4; joint eligible NSE was1.784e−8. Replaying **identical spectra** isolated the discrepancy to inverse real FFT, not the encoder, TF32, window generation or tensor contiguity. Generating the Hann window on CPU and forcing contiguous input did not resolve it.
+
+The complex outputs contain imaginary DC/Nyquist coefficients. NVIDIA requires real endpoints for C2R and documents undefined behavior otherwise ([cuFFT documentation](https://docs.nvidia.com/cuda/cufft/index.html)); PyTorch describes those imaginary components as unrepresentable in real output ([inverse real FFT documentation](https://docs.pytorch.org/docs/stable/generated/torch.fft.irfft.html)). Explicitly zeroing those two imaginary values reduced same-spectrum CPU/CUDA waveform NSE to3.27e−14, without changing any weights or interior frequency bins. [Before](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_fft_before.json) and [endpoint probe](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_fft_endpoint_probe.json) retain the measurements.
+
+[unified_upmix_audio.py](../../tools/stereo-upmix-render/unified_upmix_audio.py) now implements functional, differentiable endpoint projection before inverse FFT; endpoint imaginary gradients are zero. The causal waveform path uses it. Legacy `sep_net.py`, Track A and the original10k trainer remain unchanged so their hashes and historical results survive. This is a verified synthesis defect, **not evidence that it caused the guitar/entry quality shelf**. Old GPU estimates remain historical PCM measurements; they do not qualify the corrected real-audio path.
+
+The corrected saved-checkpoint [audit](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_fit_audit.json) passes all numerical/source/hash/temporal checks: maximum all-source CPU/CUDA spectral NSE1.011e−10 and waveform NSE8.081e−11. The original≥7dB fitting gate still fails. The numerical defect was resolved, rather than accepting the earlier divergent waveforms.
+
+## ⏩ Frozen20k extension
+
+The first joint checkpoint misses only the7dB absolute fitting floor; all four eligible crop scores improve, all protected reconstructions are positive, and relative loss/stability checks pass. Execute one bounded continuation of **both** arms to20k total, retaining the original10k checkpoint/protocol/audit and optimizer states in a separate root `D:\upmix\runs\unified_upmix_fit20k_v1`. No architecture, data, source coefficient, scene, DEV or gain change. The mandatory real-FFT endpoint correction applies to both arms. Additional steps and the correction are confounded across phases; do not attribute10k→20k improvement exclusively to either.
+
+[Extension trainer](../../tools/stereo-upmix-render/extend_unified_upmix_fit.py), [single-GPU runner](../../tools/stereo-upmix-render/pc/run_unified_upmix_fit20k.ps1): original terminal states copied byte-for-byte; same constant AdamW3e−4/wd1e−4/clip5; same four TRAIN8s crops and fixed auxiliary coefficient. Eligible-only then joint-audio; fixed terminal20k; every250-step four-source/source-attribution report; numerical audit uses the corrected physical synthesis and original acoustic gates. No best-checkpoint selection or broad promotion from an intermediate crossing. If the absolute fitting floor still fails, diagnose the measured decoder/encoder limit before a long generalization run.
+
+[Current Track A matched40 report](UPMIX_TRACKA_MATCHED40_2026-09-30.md) is complete and freezes the relevant baseline:29/40 any-stem swings; rear instrument shares guitar.1650, keys.1523, piano.0953, strings.0691; voice.0756, bass.1493, drums.2964. Its complete231stem rows, protocol and source hashes are preserved.

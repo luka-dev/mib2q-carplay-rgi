@@ -12,6 +12,7 @@ import torch
 import torch.nn.functional as TF
 from sep_net import SR, HOP, N_FFT
 from unified_upmix_net import UnifiedUpmixNet
+from unified_upmix_audio import real_endpoints
 
 DELAY = N_FFT-HOP
 
@@ -34,7 +35,7 @@ def synthesize(spectra, samples, compensate=True):
         raise ValueError('Complex stereo spectra required')
     b, t = spectra.shape[:2]
     win = torch.hann_window(N_FFT, device=spectra.device)
-    frames = torch.fft.irfft(spectra.permute(0,3,1,2), n=N_FFT, dim=-1)*win/1.5
+    frames = torch.fft.irfft(real_endpoints(spectra).permute(0,3,1,2), n=N_FFT, dim=-1)*win/1.5
     length = (t-1)*HOP+N_FFT
     flat = frames.reshape(b*2,t,N_FFT).transpose(1,2)
     output = TF.fold(flat, output_size=(1,length),kernel_size=(1,N_FFT),stride=(1,HOP)).reshape(b,2,length)
@@ -80,7 +81,7 @@ class Stream:
             else:
                 prediction,self.state=self.net.forward_stft(x,self.state,with_scene=False)
                 selected=prediction['source_stft'][:,:,0]
-            y=torch.fft.irfft(selected[:,0].permute(0,2,1),n=N_FFT,dim=-1)
+            y=torch.fft.irfft(real_endpoints(selected)[:,0].permute(0,2,1),n=N_FFT,dim=-1)
             self.ola=self.ola+y*self.window/1.5
             outputs.append(self.ola[...,:HOP])
             self.ola=torch.cat((self.ola[...,HOP:],torch.zeros_like(block)),-1)

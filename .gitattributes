@@ -17,3 +17,8 @@
 
 # SWDL files copied byte-for-byte from M.I.B. (metainfo2.txt is CRLF; FinalScript is checksummed).
 /rescue_Swdlautorun/** -text -whitespace
+
+# Byte-preserved unified fitting and current Track A PC evidence.
+/docs/audio/UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30*.json -text whitespace=cr-at-eol
+/docs/audio/UPMIX_TRACKA_MATCHED40_2026-09-30*.json -text whitespace=cr-at-eol
+/docs/audio/UPMIX_TRACKA_MATCHED40_2026-09-30*.csv -text whitespace=cr-at-eol
