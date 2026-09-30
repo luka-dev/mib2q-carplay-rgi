@@ -136,6 +136,8 @@ Entry true-vocal transmission has median **.081401 in the first two seconds / .1
 
 Local readback independently recomputed all C summaries and gates from the fetched CSVs, all three transition ratio median/p10 statistics from individual rows, exact 231 paired stem keys, 265 unique event keys covering 40 songs, completion/protocol/repair hashes, and the deployed evaluator's source hash. CPU event-resume smoke passed all 121 cached rows exactly without a model call. Accepted complete JSON SHA-256 **`679f1dea7b18ec2017275b1ed8c5ab831ddd23319cdda6c727fc884f45414637`**; final evaluator **`e5ded4764041d9e5ee65ffcbf60b8fc47f2f782427a9121d8889f628ed409c51`**.
 
+Captured JSON/CSV files preserve their PC bytes, including CRLF; narrowly scoped `.gitattributes` entries disable text normalization for this report's exports. Git staging initially retained older normalized blobs until explicitly re-added with `--renormalize`. The resulting Git blobs were compared byte-for-byte with every local export, and completion/protocol/repair hashes were rechecked against the PC. These hashes therefore remain valid after checkout.
+
 Terminal PC readback: **zero active Python, GPU lease absent, rapid queue empty, upstream checkout clean**. No training, shared package change, Track A edit, unit action or owner listening occurred in this evaluation. Failed attempts and recovery are recorded above; their partial markers are not completion evidence.
 
 ## Decision and next step
