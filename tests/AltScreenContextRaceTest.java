@@ -30,8 +30,8 @@ public final class AltScreenContextRaceTest {
         int failedContext = -1;
         int failedRateCall;
         int rateCalls;
-        int current;
-        int rate = 30;
+        volatile int current;
+        volatile int rate = 30;
 
         public Object invoke(Object proxy, Method method, Object[] args) throws Exception {
             String name = method.getName();
@@ -102,6 +102,17 @@ public final class AltScreenContextRaceTest {
                 check(field("clusterActive").getBoolean(null) == active, "cluster activity is stale");
             }
         }
+        void awaitState(int current, boolean active) throws Exception {
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+            while (System.nanoTime() < deadline) {
+                synchronized (lock) {
+                    if (field("currentCtx").getInt(null) == current
+                        && field("clusterActive").getBoolean(null) == active) return;
+                }
+                Thread.sleep(10);
+            }
+            expectState(current, active);
+        }
         void supersede(final int target, String scenario) throws Exception {
             display.heldContext = target;
             final Throwable[] failure = new Throwable[1];
@@ -133,7 +144,31 @@ public final class AltScreenContextRaceTest {
     public static void main(String[] args) throws Exception {
         Log.setLevel(-1);
         String scenario = args[0];
-        if (scenario.endsWith("-error")) {
+        if ("drift".equals(scenario)) {
+            final Fixture f = new Fixture(81, 81);
+            f.display.current = 74;
+            f.display.heldContext = 72;
+            final Method loop = AltScreenModule.class.getDeclaredMethod("switchLoop");
+            loop.setAccessible(true);
+            Thread worker = new Thread(new Runnable() {
+                public void run() {
+                    try { loop.invoke(f.module); }
+                    catch (Exception e) { throw new RuntimeException(e); }
+                }
+            }, "context-drift-worker");
+            worker.setDaemon(true);
+            worker.start();
+            try {
+                check(f.display.entered.await(3, TimeUnit.SECONDS), "drift did not trigger a physical recovery");
+                f.expectState(-1, false);
+            } finally { f.display.release.countDown(); }
+            f.awaitState(81, true);
+            check(f.display.current == 81, "drift recovery did not select the physical target");
+            f.publish(74, false);
+            f.awaitState(74, false);
+            check(f.display.current == 74 && f.display.rate == 30, "worker failed stock restoration");
+            f.display.expectWrites(72, 81, 74);
+        } else if (scenario.endsWith("-error")) {
             int target = "stock-error".equals(scenario) ? 74 : 80;
             Fixture f = new Fixture("bounce-error".equals(scenario) ? -1 : 81, target);
             field("clusterActive").setBoolean(null, true);
