@@ -1,0 +1,6590 @@
+{
+  "version": "unified-runtime-assets-v1",
+  "checkpoint_sha256": "4eacc7d14c91856d92434c2c11eff210324fb401b93fa766fc5ab17850e2c672",
+  "checkpoint_mode": "joint_audio",
+  "checkpoint_step": 20000,
+  "source_sha256": "defc0d824ff382f21e84e67a34ea5e3263046bb2f46959a8e1d53b9037960208",
+  "architecture": {
+    "width": 24,
+    "depth": 2,
+    "local": 16,
+    "global_width": 16,
+    "decoder": 16,
+    "log_mean": -3.6760525703430176,
+    "log_std": 2.43422794342041
+  },
+  "cost": {
+    "parameters": 483086,
+    "fps": 93.75,
+    "dense_macs_per_frame": {
+      "input_projection": 147600,
+      "time_grus": 331776,
+      "frequency_grus": 248832,
+      "residual_projections": 110592,
+      "interface": 18432,
+      "global_gru": 1536,
+      "decoder_bottleneck": 24576,
+      "four_source_projection": 262400,
+      "scene_projection": 27648
+    },
+    "dense_macs_per_second": 110005500.0,
+    "excluded": "FFT/iFFT, norms, activations, level/features, complex products, pooling, scene state, renderer, int8 kernels and memory traffic"
+  },
+  "files": {
+    "unified_float.bin": {
+      "sha256": "00020de259d89c83b7490ec91e82c2d66fd056d6c1954315316e33c35421daa9",
+      "bytes": 1945892,
+      "tensor_table": [
+        {
+          "name": "enc.0.0.weight",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.0.0.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.0.1.weight",
+          "shape": [
+            24,
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.0.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.1.0.weight",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.1.0.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.1.1.weight",
+          "shape": [
+            24,
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.1.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.2.0.weight",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.2.0.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.2.1.weight",
+          "shape": [
+            24,
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.2.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.3.0.weight",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.3.0.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.3.1.weight",
+          "shape": [
+            24,
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.3.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.4.0.weight",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.4.0.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.4.1.weight",
+          "shape": [
+            24,
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.4.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.5.0.weight",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.5.0.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.5.1.weight",
+          "shape": [
+            24,
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.5.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.6.0.weight",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.6.0.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.6.1.weight",
+          "shape": [
+            24,
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.6.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.7.0.weight",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.7.0.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.7.1.weight",
+          "shape": [
+            24,
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.7.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.8.0.weight",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.8.0.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.8.1.weight",
+          "shape": [
+            24,
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.8.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.9.0.weight",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.9.0.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.9.1.weight",
+          "shape": [
+            24,
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.9.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.10.0.weight",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.10.0.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.10.1.weight",
+          "shape": [
+            24,
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.10.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.11.0.weight",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.11.0.bias",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.11.1.weight",
+          "shape": [
+            24,
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.11.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.12.0.weight",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.12.0.bias",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.12.1.weight",
+          "shape": [
+            24,
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.12.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.13.0.weight",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.13.0.bias",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.13.1.weight",
+          "shape": [
+            24,
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.13.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.14.0.weight",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.14.0.bias",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.14.1.weight",
+          "shape": [
+            24,
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.14.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.15.0.weight",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.15.0.bias",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.15.1.weight",
+          "shape": [
+            24,
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.15.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.16.0.weight",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.16.0.bias",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.16.1.weight",
+          "shape": [
+            24,
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.16.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.17.0.weight",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.17.0.bias",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.17.1.weight",
+          "shape": [
+            24,
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.17.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.18.0.weight",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.18.0.bias",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.18.1.weight",
+          "shape": [
+            24,
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.18.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.19.0.weight",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.19.0.bias",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.19.1.weight",
+          "shape": [
+            24,
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.19.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.20.0.weight",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.20.0.bias",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.20.1.weight",
+          "shape": [
+            24,
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.20.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.21.0.weight",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.21.0.bias",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.21.1.weight",
+          "shape": [
+            24,
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.21.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.22.0.weight",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.22.0.bias",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.22.1.weight",
+          "shape": [
+            24,
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.22.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.23.0.weight",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.23.0.bias",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.23.1.weight",
+          "shape": [
+            24,
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.23.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.24.0.weight",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.24.0.bias",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.24.1.weight",
+          "shape": [
+            24,
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.24.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.25.0.weight",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.25.0.bias",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.25.1.weight",
+          "shape": [
+            24,
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.25.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.26.0.weight",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.26.0.bias",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.26.1.weight",
+          "shape": [
+            24,
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.26.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.27.0.weight",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.27.0.bias",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.27.1.weight",
+          "shape": [
+            24,
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.27.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.28.0.weight",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.28.0.bias",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.28.1.weight",
+          "shape": [
+            24,
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.28.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.29.0.weight",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.29.0.bias",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.29.1.weight",
+          "shape": [
+            24,
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.29.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.30.0.weight",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.30.0.bias",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.30.1.weight",
+          "shape": [
+            24,
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.30.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.31.0.weight",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.31.0.bias",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.31.1.weight",
+          "shape": [
+            24,
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.31.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.32.0.weight",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.32.0.bias",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.32.1.weight",
+          "shape": [
+            24,
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.32.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.33.0.weight",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.33.0.bias",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.33.1.weight",
+          "shape": [
+            24,
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.33.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.34.0.weight",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.34.0.bias",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.34.1.weight",
+          "shape": [
+            24,
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.34.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.35.0.weight",
+          "shape": [
+            192
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.35.0.bias",
+          "shape": [
+            192
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.35.1.weight",
+          "shape": [
+            24,
+            192
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.35.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.36.0.weight",
+          "shape": [
+            192
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.36.0.bias",
+          "shape": [
+            192
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.36.1.weight",
+          "shape": [
+            24,
+            192
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.36.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.37.0.weight",
+          "shape": [
+            192
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.37.0.bias",
+          "shape": [
+            192
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.37.1.weight",
+          "shape": [
+            24,
+            192
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.37.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.38.0.weight",
+          "shape": [
+            192
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.38.0.bias",
+          "shape": [
+            192
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.38.1.weight",
+          "shape": [
+            24,
+            192
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.38.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.39.0.weight",
+          "shape": [
+            192
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.39.0.bias",
+          "shape": [
+            192
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.39.1.weight",
+          "shape": [
+            24,
+            192
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.39.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.40.0.weight",
+          "shape": [
+            192
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.40.0.bias",
+          "shape": [
+            192
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.40.1.weight",
+          "shape": [
+            24,
+            192
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.40.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.41.0.weight",
+          "shape": [
+            192
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.41.0.bias",
+          "shape": [
+            192
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.41.1.weight",
+          "shape": [
+            24,
+            192
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.41.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.42.0.weight",
+          "shape": [
+            192
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.42.0.bias",
+          "shape": [
+            192
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.42.1.weight",
+          "shape": [
+            24,
+            192
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.42.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.43.0.weight",
+          "shape": [
+            510
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.43.0.bias",
+          "shape": [
+            510
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.43.1.weight",
+          "shape": [
+            24,
+            510
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.43.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.44.0.weight",
+          "shape": [
+            510
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.44.0.bias",
+          "shape": [
+            510
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.44.1.weight",
+          "shape": [
+            24,
+            510
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.44.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.45.0.weight",
+          "shape": [
+            510
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.45.0.bias",
+          "shape": [
+            510
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.45.1.weight",
+          "shape": [
+            24,
+            510
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.45.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.46.0.weight",
+          "shape": [
+            510
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.46.0.bias",
+          "shape": [
+            510
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.46.1.weight",
+          "shape": [
+            24,
+            510
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.46.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.47.0.weight",
+          "shape": [
+            534
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.47.0.bias",
+          "shape": [
+            534
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.47.1.weight",
+          "shape": [
+            24,
+            534
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.47.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.0.time_norm.weight",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.0.time_norm.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.0.time_gru.weight_ih_l0",
+          "shape": [
+            72,
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.0.time_gru.weight_hh_l0",
+          "shape": [
+            72,
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.0.time_gru.bias_ih_l0",
+          "shape": [
+            72
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.0.time_gru.bias_hh_l0",
+          "shape": [
+            72
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.0.time_proj.weight",
+          "shape": [
+            24,
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.0.time_proj.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.0.band_norm.weight",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.0.band_norm.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.0.band_gru.weight_ih_l0",
+          "shape": [
+            36,
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.0.band_gru.weight_hh_l0",
+          "shape": [
+            36,
+            12
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.0.band_gru.bias_ih_l0",
+          "shape": [
+            36
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.0.band_gru.bias_hh_l0",
+          "shape": [
+            36
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.0.band_gru.weight_ih_l0_reverse",
+          "shape": [
+            36,
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.0.band_gru.weight_hh_l0_reverse",
+          "shape": [
+            36,
+            12
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.0.band_gru.bias_ih_l0_reverse",
+          "shape": [
+            36
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.0.band_gru.bias_hh_l0_reverse",
+          "shape": [
+            36
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.0.band_proj.weight",
+          "shape": [
+            24,
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.0.band_proj.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.1.time_norm.weight",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.1.time_norm.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.1.time_gru.weight_ih_l0",
+          "shape": [
+            72,
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.1.time_gru.weight_hh_l0",
+          "shape": [
+            72,
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.1.time_gru.bias_ih_l0",
+          "shape": [
+            72
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.1.time_gru.bias_hh_l0",
+          "shape": [
+            72
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.1.time_proj.weight",
+          "shape": [
+            24,
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.1.time_proj.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.1.band_norm.weight",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.1.band_norm.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.1.band_gru.weight_ih_l0",
+          "shape": [
+            36,
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.1.band_gru.weight_hh_l0",
+          "shape": [
+            36,
+            12
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.1.band_gru.bias_ih_l0",
+          "shape": [
+            36
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.1.band_gru.bias_hh_l0",
+          "shape": [
+            36
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.1.band_gru.weight_ih_l0_reverse",
+          "shape": [
+            36,
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.1.band_gru.weight_hh_l0_reverse",
+          "shape": [
+            36,
+            12
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.1.band_gru.bias_ih_l0_reverse",
+          "shape": [
+            36
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.1.band_gru.bias_hh_l0_reverse",
+          "shape": [
+            36
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.1.band_proj.weight",
+          "shape": [
+            24,
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.1.band_proj.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "interface.weight",
+          "shape": [
+            16,
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "interface.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "global_gru.weight_ih_l0",
+          "shape": [
+            48,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "global_gru.weight_hh_l0",
+          "shape": [
+            48,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "global_gru.bias_ih_l0",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "global_gru.bias_hh_l0",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.0.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.0.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.0.2.weight",
+          "shape": [
+            64,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.0.2.bias",
+          "shape": [
+            64
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.1.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.1.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.1.2.weight",
+          "shape": [
+            64,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.1.2.bias",
+          "shape": [
+            64
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.2.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.2.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.2.2.weight",
+          "shape": [
+            64,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.2.2.bias",
+          "shape": [
+            64
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.3.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.3.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.3.2.weight",
+          "shape": [
+            64,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.3.2.bias",
+          "shape": [
+            64
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.4.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.4.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.4.2.weight",
+          "shape": [
+            64,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.4.2.bias",
+          "shape": [
+            64
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.5.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.5.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.5.2.weight",
+          "shape": [
+            64,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.5.2.bias",
+          "shape": [
+            64
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.6.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.6.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.6.2.weight",
+          "shape": [
+            64,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.6.2.bias",
+          "shape": [
+            64
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.7.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.7.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.7.2.weight",
+          "shape": [
+            64,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.7.2.bias",
+          "shape": [
+            64
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.8.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.8.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.8.2.weight",
+          "shape": [
+            64,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.8.2.bias",
+          "shape": [
+            64
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.9.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.9.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.9.2.weight",
+          "shape": [
+            64,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.9.2.bias",
+          "shape": [
+            64
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.10.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.10.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.10.2.weight",
+          "shape": [
+            64,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.10.2.bias",
+          "shape": [
+            64
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.11.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.11.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.11.2.weight",
+          "shape": [
+            128,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.11.2.bias",
+          "shape": [
+            128
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.12.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.12.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.12.2.weight",
+          "shape": [
+            128,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.12.2.bias",
+          "shape": [
+            128
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.13.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.13.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.13.2.weight",
+          "shape": [
+            128,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.13.2.bias",
+          "shape": [
+            128
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.14.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.14.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.14.2.weight",
+          "shape": [
+            128,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.14.2.bias",
+          "shape": [
+            128
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.15.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.15.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.15.2.weight",
+          "shape": [
+            128,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.15.2.bias",
+          "shape": [
+            128
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.16.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.16.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.16.2.weight",
+          "shape": [
+            128,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.16.2.bias",
+          "shape": [
+            128
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.17.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.17.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.17.2.weight",
+          "shape": [
+            128,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.17.2.bias",
+          "shape": [
+            128
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.18.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.18.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.18.2.weight",
+          "shape": [
+            128,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.18.2.bias",
+          "shape": [
+            128
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.19.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.19.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.19.2.weight",
+          "shape": [
+            128,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.19.2.bias",
+          "shape": [
+            128
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.20.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.20.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.20.2.weight",
+          "shape": [
+            128,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.20.2.bias",
+          "shape": [
+            128
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.21.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.21.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.21.2.weight",
+          "shape": [
+            128,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.21.2.bias",
+          "shape": [
+            128
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.22.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.22.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.22.2.weight",
+          "shape": [
+            256,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.22.2.bias",
+          "shape": [
+            256
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.23.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.23.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.23.2.weight",
+          "shape": [
+            256,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.23.2.bias",
+          "shape": [
+            256
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.24.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.24.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.24.2.weight",
+          "shape": [
+            256,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.24.2.bias",
+          "shape": [
+            256
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.25.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.25.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.25.2.weight",
+          "shape": [
+            256,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.25.2.bias",
+          "shape": [
+            256
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.26.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.26.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.26.2.weight",
+          "shape": [
+            256,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.26.2.bias",
+          "shape": [
+            256
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.27.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.27.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.27.2.weight",
+          "shape": [
+            256,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.27.2.bias",
+          "shape": [
+            256
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.28.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.28.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.28.2.weight",
+          "shape": [
+            256,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.28.2.bias",
+          "shape": [
+            256
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.29.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.29.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.29.2.weight",
+          "shape": [
+            256,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.29.2.bias",
+          "shape": [
+            256
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.30.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.30.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.30.2.weight",
+          "shape": [
+            256,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.30.2.bias",
+          "shape": [
+            256
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.31.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.31.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.31.2.weight",
+          "shape": [
+            256,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.31.2.bias",
+          "shape": [
+            256
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.32.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.32.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.32.2.weight",
+          "shape": [
+            256,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.32.2.bias",
+          "shape": [
+            256
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.33.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.33.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.33.2.weight",
+          "shape": [
+            256,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.33.2.bias",
+          "shape": [
+            256
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.34.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.34.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.34.2.weight",
+          "shape": [
+            256,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.34.2.bias",
+          "shape": [
+            256
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.35.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.35.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.35.2.weight",
+          "shape": [
+            512,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.35.2.bias",
+          "shape": [
+            512
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.36.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.36.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.36.2.weight",
+          "shape": [
+            512,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.36.2.bias",
+          "shape": [
+            512
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.37.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.37.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.37.2.weight",
+          "shape": [
+            512,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.37.2.bias",
+          "shape": [
+            512
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.38.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.38.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.38.2.weight",
+          "shape": [
+            512,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.38.2.bias",
+          "shape": [
+            512
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.39.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.39.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.39.2.weight",
+          "shape": [
+            512,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.39.2.bias",
+          "shape": [
+            512
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.40.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.40.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.40.2.weight",
+          "shape": [
+            512,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.40.2.bias",
+          "shape": [
+            512
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.41.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.41.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.41.2.weight",
+          "shape": [
+            512,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.41.2.bias",
+          "shape": [
+            512
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.42.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.42.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.42.2.weight",
+          "shape": [
+            512,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.42.2.bias",
+          "shape": [
+            512
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.43.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.43.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.43.2.weight",
+          "shape": [
+            1360,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.43.2.bias",
+          "shape": [
+            1360
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.44.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.44.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.44.2.weight",
+          "shape": [
+            1360,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.44.2.bias",
+          "shape": [
+            1360
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.45.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.45.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.45.2.weight",
+          "shape": [
+            1360,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.45.2.bias",
+          "shape": [
+            1360
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.46.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.46.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.46.2.weight",
+          "shape": [
+            1360,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.46.2.bias",
+          "shape": [
+            1360
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.47.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.47.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.47.2.weight",
+          "shape": [
+            1424,
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.47.2.bias",
+          "shape": [
+            1424
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "scene.weight",
+          "shape": [
+            18,
+            32
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "scene.bias",
+          "shape": [
+            18
+          ],
+          "storage": "float32"
+        }
+      ]
+    },
+    "unified_int8.bin": {
+      "sha256": "34d0b94c894d8062d2db8a3575e6f776e0f6dc8437de43c2e852053eb77873fe",
+      "bytes": 667964,
+      "tensor_table": [
+        {
+          "name": "enc.0.0.weight",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.0.0.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.0.1.weight",
+          "shape": [
+            24,
+            24
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0025624260306358337
+        },
+        {
+          "name": "enc.0.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.1.0.weight",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.1.0.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.1.1.weight",
+          "shape": [
+            24,
+            24
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0014921724796295166
+        },
+        {
+          "name": "enc.1.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.2.0.weight",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.2.0.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.2.1.weight",
+          "shape": [
+            24,
+            24
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0011696629226207733
+        },
+        {
+          "name": "enc.2.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.3.0.weight",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.3.0.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.3.1.weight",
+          "shape": [
+            24,
+            24
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.001617535948753357
+        },
+        {
+          "name": "enc.3.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.4.0.weight",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.4.0.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.4.1.weight",
+          "shape": [
+            24,
+            24
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0018386244773864746
+        },
+        {
+          "name": "enc.4.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.5.0.weight",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.5.0.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.5.1.weight",
+          "shape": [
+            24,
+            24
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0016350043006241322
+        },
+        {
+          "name": "enc.5.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.6.0.weight",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.6.0.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.6.1.weight",
+          "shape": [
+            24,
+            24
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0012728646397590637
+        },
+        {
+          "name": "enc.6.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.7.0.weight",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.7.0.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.7.1.weight",
+          "shape": [
+            24,
+            24
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0015411227941513062
+        },
+        {
+          "name": "enc.7.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.8.0.weight",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.8.0.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.8.1.weight",
+          "shape": [
+            24,
+            24
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0017024800181388855
+        },
+        {
+          "name": "enc.8.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.9.0.weight",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.9.0.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.9.1.weight",
+          "shape": [
+            24,
+            24
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.00214444100856781
+        },
+        {
+          "name": "enc.9.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.10.0.weight",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.10.0.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.10.1.weight",
+          "shape": [
+            24,
+            24
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0016326606273651123
+        },
+        {
+          "name": "enc.10.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.11.0.weight",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.11.0.bias",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.11.1.weight",
+          "shape": [
+            24,
+            48
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0017454847693443298
+        },
+        {
+          "name": "enc.11.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.12.0.weight",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.12.0.bias",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.12.1.weight",
+          "shape": [
+            24,
+            48
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0015078471042215824
+        },
+        {
+          "name": "enc.12.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.13.0.weight",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.13.0.bias",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.13.1.weight",
+          "shape": [
+            24,
+            48
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0013832300901412964
+        },
+        {
+          "name": "enc.13.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.14.0.weight",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.14.0.bias",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.14.1.weight",
+          "shape": [
+            24,
+            48
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.001217678189277649
+        },
+        {
+          "name": "enc.14.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.15.0.weight",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.15.0.bias",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.15.1.weight",
+          "shape": [
+            24,
+            48
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0016113482415676117
+        },
+        {
+          "name": "enc.15.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.16.0.weight",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.16.0.bias",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.16.1.weight",
+          "shape": [
+            24,
+            48
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.000960896722972393
+        },
+        {
+          "name": "enc.16.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.17.0.weight",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.17.0.bias",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.17.1.weight",
+          "shape": [
+            24,
+            48
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0012750476598739624
+        },
+        {
+          "name": "enc.17.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.18.0.weight",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.18.0.bias",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.18.1.weight",
+          "shape": [
+            24,
+            48
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0012312084436416626
+        },
+        {
+          "name": "enc.18.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.19.0.weight",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.19.0.bias",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.19.1.weight",
+          "shape": [
+            24,
+            48
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.001269809901714325
+        },
+        {
+          "name": "enc.19.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.20.0.weight",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.20.0.bias",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.20.1.weight",
+          "shape": [
+            24,
+            48
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0011182315647602081
+        },
+        {
+          "name": "enc.20.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.21.0.weight",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.21.0.bias",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.21.1.weight",
+          "shape": [
+            24,
+            48
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0013031167909502983
+        },
+        {
+          "name": "enc.21.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.22.0.weight",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.22.0.bias",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.22.1.weight",
+          "shape": [
+            24,
+            96
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0009015239775180817
+        },
+        {
+          "name": "enc.22.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.23.0.weight",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.23.0.bias",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.23.1.weight",
+          "shape": [
+            24,
+            96
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0008002035319805145
+        },
+        {
+          "name": "enc.23.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.24.0.weight",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.24.0.bias",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.24.1.weight",
+          "shape": [
+            24,
+            96
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0009267441928386688
+        },
+        {
+          "name": "enc.24.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.25.0.weight",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.25.0.bias",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.25.1.weight",
+          "shape": [
+            24,
+            96
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0009576901793479919
+        },
+        {
+          "name": "enc.25.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.26.0.weight",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.26.0.bias",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.26.1.weight",
+          "shape": [
+            24,
+            96
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0009620040655136108
+        },
+        {
+          "name": "enc.26.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.27.0.weight",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.27.0.bias",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.27.1.weight",
+          "shape": [
+            24,
+            96
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0009182728826999664
+        },
+        {
+          "name": "enc.27.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.28.0.weight",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.28.0.bias",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.28.1.weight",
+          "shape": [
+            24,
+            96
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0007803291082382202
+        },
+        {
+          "name": "enc.28.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.29.0.weight",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.29.0.bias",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.29.1.weight",
+          "shape": [
+            24,
+            96
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0008609043434262276
+        },
+        {
+          "name": "enc.29.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.30.0.weight",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.30.0.bias",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.30.1.weight",
+          "shape": [
+            24,
+            96
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0010104798711836338
+        },
+        {
+          "name": "enc.30.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.31.0.weight",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.31.0.bias",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.31.1.weight",
+          "shape": [
+            24,
+            96
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0008344277739524841
+        },
+        {
+          "name": "enc.31.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.32.0.weight",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.32.0.bias",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.32.1.weight",
+          "shape": [
+            24,
+            96
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0007085204124450684
+        },
+        {
+          "name": "enc.32.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.33.0.weight",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.33.0.bias",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.33.1.weight",
+          "shape": [
+            24,
+            96
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0007480308413505554
+        },
+        {
+          "name": "enc.33.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.34.0.weight",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.34.0.bias",
+          "shape": [
+            96
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.34.1.weight",
+          "shape": [
+            24,
+            96
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0009343326091766357
+        },
+        {
+          "name": "enc.34.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.35.0.weight",
+          "shape": [
+            192
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.35.0.bias",
+          "shape": [
+            192
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.35.1.weight",
+          "shape": [
+            24,
+            192
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0005239011370576918
+        },
+        {
+          "name": "enc.35.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.36.0.weight",
+          "shape": [
+            192
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.36.0.bias",
+          "shape": [
+            192
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.36.1.weight",
+          "shape": [
+            24,
+            192
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0006076321005821228
+        },
+        {
+          "name": "enc.36.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.37.0.weight",
+          "shape": [
+            192
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.37.0.bias",
+          "shape": [
+            192
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.37.1.weight",
+          "shape": [
+            24,
+            192
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0005688592791557312
+        },
+        {
+          "name": "enc.37.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.38.0.weight",
+          "shape": [
+            192
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.38.0.bias",
+          "shape": [
+            192
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.38.1.weight",
+          "shape": [
+            24,
+            192
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0007880923803895712
+        },
+        {
+          "name": "enc.38.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.39.0.weight",
+          "shape": [
+            192
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.39.0.bias",
+          "shape": [
+            192
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.39.1.weight",
+          "shape": [
+            24,
+            192
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0005813091993331909
+        },
+        {
+          "name": "enc.39.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.40.0.weight",
+          "shape": [
+            192
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.40.0.bias",
+          "shape": [
+            192
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.40.1.weight",
+          "shape": [
+            24,
+            192
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0005525886081159115
+        },
+        {
+          "name": "enc.40.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.41.0.weight",
+          "shape": [
+            192
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.41.0.bias",
+          "shape": [
+            192
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.41.1.weight",
+          "shape": [
+            24,
+            192
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0005609691143035889
+        },
+        {
+          "name": "enc.41.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.42.0.weight",
+          "shape": [
+            192
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.42.0.bias",
+          "shape": [
+            192
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.42.1.weight",
+          "shape": [
+            24,
+            192
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0005858801305294037
+        },
+        {
+          "name": "enc.42.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.43.0.weight",
+          "shape": [
+            510
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.43.0.bias",
+          "shape": [
+            510
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.43.1.weight",
+          "shape": [
+            24,
+            510
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0004880903288722038
+        },
+        {
+          "name": "enc.43.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.44.0.weight",
+          "shape": [
+            510
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.44.0.bias",
+          "shape": [
+            510
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.44.1.weight",
+          "shape": [
+            24,
+            510
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.000489136204123497
+        },
+        {
+          "name": "enc.44.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.45.0.weight",
+          "shape": [
+            510
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.45.0.bias",
+          "shape": [
+            510
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.45.1.weight",
+          "shape": [
+            24,
+            510
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.000511903315782547
+        },
+        {
+          "name": "enc.45.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.46.0.weight",
+          "shape": [
+            510
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.46.0.bias",
+          "shape": [
+            510
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.46.1.weight",
+          "shape": [
+            24,
+            510
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0004494544118642807
+        },
+        {
+          "name": "enc.46.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.47.0.weight",
+          "shape": [
+            534
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.47.0.bias",
+          "shape": [
+            534
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "enc.47.1.weight",
+          "shape": [
+            24,
+            534
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0006720647215843201
+        },
+        {
+          "name": "enc.47.1.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.0.time_norm.weight",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.0.time_norm.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.0.time_gru.weight_ih_l0",
+          "shape": [
+            72,
+            24
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.002287190407514572
+        },
+        {
+          "name": "blocks.0.time_gru.weight_hh_l0",
+          "shape": [
+            72,
+            24
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.002193320542573929
+        },
+        {
+          "name": "blocks.0.time_gru.bias_ih_l0",
+          "shape": [
+            72
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.0.time_gru.bias_hh_l0",
+          "shape": [
+            72
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.0.time_proj.weight",
+          "shape": [
+            24,
+            24
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0012154653668403625
+        },
+        {
+          "name": "blocks.0.time_proj.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.0.band_norm.weight",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.0.band_norm.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.0.band_gru.weight_ih_l0",
+          "shape": [
+            36,
+            24
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0037329643964767456
+        },
+        {
+          "name": "blocks.0.band_gru.weight_hh_l0",
+          "shape": [
+            36,
+            12
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0021994193084537983
+        },
+        {
+          "name": "blocks.0.band_gru.bias_ih_l0",
+          "shape": [
+            36
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.0.band_gru.bias_hh_l0",
+          "shape": [
+            36
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.0.band_gru.weight_ih_l0_reverse",
+          "shape": [
+            36,
+            24
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.00233381986618042
+        },
+        {
+          "name": "blocks.0.band_gru.weight_hh_l0_reverse",
+          "shape": [
+            36,
+            12
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0031898468732833862
+        },
+        {
+          "name": "blocks.0.band_gru.bias_ih_l0_reverse",
+          "shape": [
+            36
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.0.band_gru.bias_hh_l0_reverse",
+          "shape": [
+            36
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.0.band_proj.weight",
+          "shape": [
+            24,
+            24
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.001400195062160492
+        },
+        {
+          "name": "blocks.0.band_proj.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.1.time_norm.weight",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.1.time_norm.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.1.time_gru.weight_ih_l0",
+          "shape": [
+            72,
+            24
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.00383777916431427
+        },
+        {
+          "name": "blocks.1.time_gru.weight_hh_l0",
+          "shape": [
+            72,
+            24
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.004601508378982544
+        },
+        {
+          "name": "blocks.1.time_gru.bias_ih_l0",
+          "shape": [
+            72
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.1.time_gru.bias_hh_l0",
+          "shape": [
+            72
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.1.time_proj.weight",
+          "shape": [
+            24,
+            24
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.003558427095413208
+        },
+        {
+          "name": "blocks.1.time_proj.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.1.band_norm.weight",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.1.band_norm.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.1.band_gru.weight_ih_l0",
+          "shape": [
+            36,
+            24
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.004496566951274872
+        },
+        {
+          "name": "blocks.1.band_gru.weight_hh_l0",
+          "shape": [
+            36,
+            12
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.005193114280700684
+        },
+        {
+          "name": "blocks.1.band_gru.bias_ih_l0",
+          "shape": [
+            36
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.1.band_gru.bias_hh_l0",
+          "shape": [
+            36
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.1.band_gru.weight_ih_l0_reverse",
+          "shape": [
+            36,
+            24
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.005583077669143677
+        },
+        {
+          "name": "blocks.1.band_gru.weight_hh_l0_reverse",
+          "shape": [
+            36,
+            12
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0053646862506866455
+        },
+        {
+          "name": "blocks.1.band_gru.bias_ih_l0_reverse",
+          "shape": [
+            36
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.1.band_gru.bias_hh_l0_reverse",
+          "shape": [
+            36
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "blocks.1.band_proj.weight",
+          "shape": [
+            24,
+            24
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.005763307213783264
+        },
+        {
+          "name": "blocks.1.band_proj.bias",
+          "shape": [
+            24
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "interface.weight",
+          "shape": [
+            16,
+            24
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.002022871747612953
+        },
+        {
+          "name": "interface.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "global_gru.weight_ih_l0",
+          "shape": [
+            48,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.008436232805252075
+        },
+        {
+          "name": "global_gru.weight_hh_l0",
+          "shape": [
+            48,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.009178943932056427
+        },
+        {
+          "name": "global_gru.bias_ih_l0",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "global_gru.bias_hh_l0",
+          "shape": [
+            48
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.0.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.002879589796066284
+        },
+        {
+          "name": "dec.0.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.0.2.weight",
+          "shape": [
+            64,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.00409814715385437
+        },
+        {
+          "name": "dec.0.2.bias",
+          "shape": [
+            64
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.1.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.004106685519218445
+        },
+        {
+          "name": "dec.1.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.1.2.weight",
+          "shape": [
+            64,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.002987151499837637
+        },
+        {
+          "name": "dec.1.2.bias",
+          "shape": [
+            64
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.2.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0029053539037704468
+        },
+        {
+          "name": "dec.2.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.2.2.weight",
+          "shape": [
+            64,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.00252552330493927
+        },
+        {
+          "name": "dec.2.2.bias",
+          "shape": [
+            64
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.3.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.003337157890200615
+        },
+        {
+          "name": "dec.3.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.3.2.weight",
+          "shape": [
+            64,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0033044815063476562
+        },
+        {
+          "name": "dec.3.2.bias",
+          "shape": [
+            64
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.4.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.004052340984344482
+        },
+        {
+          "name": "dec.4.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.4.2.weight",
+          "shape": [
+            64,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.002541273832321167
+        },
+        {
+          "name": "dec.4.2.bias",
+          "shape": [
+            64
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.5.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.004167452454566956
+        },
+        {
+          "name": "dec.5.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.5.2.weight",
+          "shape": [
+            64,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0029136650264263153
+        },
+        {
+          "name": "dec.5.2.bias",
+          "shape": [
+            64
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.6.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.006728053092956543
+        },
+        {
+          "name": "dec.6.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.6.2.weight",
+          "shape": [
+            64,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0028021633625030518
+        },
+        {
+          "name": "dec.6.2.bias",
+          "shape": [
+            64
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.7.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.003888547420501709
+        },
+        {
+          "name": "dec.7.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.7.2.weight",
+          "shape": [
+            64,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0030558407306671143
+        },
+        {
+          "name": "dec.7.2.bias",
+          "shape": [
+            64
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.8.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.005226455628871918
+        },
+        {
+          "name": "dec.8.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.8.2.weight",
+          "shape": [
+            64,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.002361312508583069
+        },
+        {
+          "name": "dec.8.2.bias",
+          "shape": [
+            64
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.9.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.006253033876419067
+        },
+        {
+          "name": "dec.9.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.9.2.weight",
+          "shape": [
+            64,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0022820234298706055
+        },
+        {
+          "name": "dec.9.2.bias",
+          "shape": [
+            64
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.10.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.004114061594009399
+        },
+        {
+          "name": "dec.10.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.10.2.weight",
+          "shape": [
+            64,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0023239105939865112
+        },
+        {
+          "name": "dec.10.2.bias",
+          "shape": [
+            64
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.11.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.004770338535308838
+        },
+        {
+          "name": "dec.11.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.11.2.weight",
+          "shape": [
+            128,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0027406662702560425
+        },
+        {
+          "name": "dec.11.2.bias",
+          "shape": [
+            128
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.12.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.004298880696296692
+        },
+        {
+          "name": "dec.12.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.12.2.weight",
+          "shape": [
+            128,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0027275681495666504
+        },
+        {
+          "name": "dec.12.2.bias",
+          "shape": [
+            128
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.13.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.003780018538236618
+        },
+        {
+          "name": "dec.13.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.13.2.weight",
+          "shape": [
+            128,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.003089308738708496
+        },
+        {
+          "name": "dec.13.2.bias",
+          "shape": [
+            128
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.14.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.005939774215221405
+        },
+        {
+          "name": "dec.14.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.14.2.weight",
+          "shape": [
+            128,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0026634708046913147
+        },
+        {
+          "name": "dec.14.2.bias",
+          "shape": [
+            128
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.15.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.006734281778335571
+        },
+        {
+          "name": "dec.15.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.15.2.weight",
+          "shape": [
+            128,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0026269720401614904
+        },
+        {
+          "name": "dec.15.2.bias",
+          "shape": [
+            128
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.16.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0062528252601623535
+        },
+        {
+          "name": "dec.16.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.16.2.weight",
+          "shape": [
+            128,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0028954781591892242
+        },
+        {
+          "name": "dec.16.2.bias",
+          "shape": [
+            128
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.17.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.004571929574012756
+        },
+        {
+          "name": "dec.17.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.17.2.weight",
+          "shape": [
+            128,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0033379048109054565
+        },
+        {
+          "name": "dec.17.2.bias",
+          "shape": [
+            128
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.18.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.003698160871863365
+        },
+        {
+          "name": "dec.18.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.18.2.weight",
+          "shape": [
+            128,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.002497207373380661
+        },
+        {
+          "name": "dec.18.2.bias",
+          "shape": [
+            128
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.19.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.005937432870268822
+        },
+        {
+          "name": "dec.19.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.19.2.weight",
+          "shape": [
+            128,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0024616550654172897
+        },
+        {
+          "name": "dec.19.2.bias",
+          "shape": [
+            128
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.20.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.006290026009082794
+        },
+        {
+          "name": "dec.20.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.20.2.weight",
+          "shape": [
+            128,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0028167814016342163
+        },
+        {
+          "name": "dec.20.2.bias",
+          "shape": [
+            128
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.21.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.006398539990186691
+        },
+        {
+          "name": "dec.21.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.21.2.weight",
+          "shape": [
+            128,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0035033226013183594
+        },
+        {
+          "name": "dec.21.2.bias",
+          "shape": [
+            128
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.22.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.003980915993452072
+        },
+        {
+          "name": "dec.22.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.22.2.weight",
+          "shape": [
+            256,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.002757859183475375
+        },
+        {
+          "name": "dec.22.2.bias",
+          "shape": [
+            256
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.23.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0028505325317382812
+        },
+        {
+          "name": "dec.23.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.23.2.weight",
+          "shape": [
+            256,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.002522110939025879
+        },
+        {
+          "name": "dec.23.2.bias",
+          "shape": [
+            256
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.24.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.003169417381286621
+        },
+        {
+          "name": "dec.24.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.24.2.weight",
+          "shape": [
+            256,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0026021040976047516
+        },
+        {
+          "name": "dec.24.2.bias",
+          "shape": [
+            256
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.25.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0024394989013671875
+        },
+        {
+          "name": "dec.25.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.25.2.weight",
+          "shape": [
+            256,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0027348175644874573
+        },
+        {
+          "name": "dec.25.2.bias",
+          "shape": [
+            256
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.26.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.004027962684631348
+        },
+        {
+          "name": "dec.26.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.26.2.weight",
+          "shape": [
+            256,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.003001198172569275
+        },
+        {
+          "name": "dec.26.2.bias",
+          "shape": [
+            256
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.27.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.00278424471616745
+        },
+        {
+          "name": "dec.27.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.27.2.weight",
+          "shape": [
+            256,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.002600880339741707
+        },
+        {
+          "name": "dec.27.2.bias",
+          "shape": [
+            256
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.28.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.002630069851875305
+        },
+        {
+          "name": "dec.28.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.28.2.weight",
+          "shape": [
+            256,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0029854923486709595
+        },
+        {
+          "name": "dec.28.2.bias",
+          "shape": [
+            256
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.29.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.003783971071243286
+        },
+        {
+          "name": "dec.29.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.29.2.weight",
+          "shape": [
+            256,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.00292336568236351
+        },
+        {
+          "name": "dec.29.2.bias",
+          "shape": [
+            256
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.30.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.003175586462020874
+        },
+        {
+          "name": "dec.30.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.30.2.weight",
+          "shape": [
+            256,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0026851221919059753
+        },
+        {
+          "name": "dec.30.2.bias",
+          "shape": [
+            256
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.31.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.004726186394691467
+        },
+        {
+          "name": "dec.31.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.31.2.weight",
+          "shape": [
+            256,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0029765889048576355
+        },
+        {
+          "name": "dec.31.2.bias",
+          "shape": [
+            256
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.32.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.003253161907196045
+        },
+        {
+          "name": "dec.32.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.32.2.weight",
+          "shape": [
+            256,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.002857595682144165
+        },
+        {
+          "name": "dec.32.2.bias",
+          "shape": [
+            256
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.33.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.003518521785736084
+        },
+        {
+          "name": "dec.33.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.33.2.weight",
+          "shape": [
+            256,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0035675615072250366
+        },
+        {
+          "name": "dec.33.2.bias",
+          "shape": [
+            256
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.34.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0035729408264160156
+        },
+        {
+          "name": "dec.34.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.34.2.weight",
+          "shape": [
+            256,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0029534492641687393
+        },
+        {
+          "name": "dec.34.2.bias",
+          "shape": [
+            256
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.35.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0026040971279144287
+        },
+        {
+          "name": "dec.35.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.35.2.weight",
+          "shape": [
+            512,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0027236342430114746
+        },
+        {
+          "name": "dec.35.2.bias",
+          "shape": [
+            512
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.36.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.002282442059367895
+        },
+        {
+          "name": "dec.36.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.36.2.weight",
+          "shape": [
+            512,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0028938651084899902
+        },
+        {
+          "name": "dec.36.2.bias",
+          "shape": [
+            512
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.37.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0027390122413635254
+        },
+        {
+          "name": "dec.37.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.37.2.weight",
+          "shape": [
+            512,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0028789788484573364
+        },
+        {
+          "name": "dec.37.2.bias",
+          "shape": [
+            512
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.38.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.002852708101272583
+        },
+        {
+          "name": "dec.38.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.38.2.weight",
+          "shape": [
+            512,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0032211244106292725
+        },
+        {
+          "name": "dec.38.2.bias",
+          "shape": [
+            512
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.39.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0021658390760421753
+        },
+        {
+          "name": "dec.39.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.39.2.weight",
+          "shape": [
+            512,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0027201976627111435
+        },
+        {
+          "name": "dec.39.2.bias",
+          "shape": [
+            512
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.40.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.005654275417327881
+        },
+        {
+          "name": "dec.40.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.40.2.weight",
+          "shape": [
+            512,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.002359740436077118
+        },
+        {
+          "name": "dec.40.2.bias",
+          "shape": [
+            512
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.41.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0024157408624887466
+        },
+        {
+          "name": "dec.41.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.41.2.weight",
+          "shape": [
+            512,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0026743561029434204
+        },
+        {
+          "name": "dec.41.2.bias",
+          "shape": [
+            512
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.42.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.00221174955368042
+        },
+        {
+          "name": "dec.42.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.42.2.weight",
+          "shape": [
+            512,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0026004016399383545
+        },
+        {
+          "name": "dec.42.2.bias",
+          "shape": [
+            512
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.43.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0017268359661102295
+        },
+        {
+          "name": "dec.43.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.43.2.weight",
+          "shape": [
+            1360,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0025002211332321167
+        },
+        {
+          "name": "dec.43.2.bias",
+          "shape": [
+            1360
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.44.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0023439377546310425
+        },
+        {
+          "name": "dec.44.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.44.2.weight",
+          "shape": [
+            1360,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0023315846920013428
+        },
+        {
+          "name": "dec.44.2.bias",
+          "shape": [
+            1360
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.45.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0025702565908432007
+        },
+        {
+          "name": "dec.45.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.45.2.weight",
+          "shape": [
+            1360,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0022177807986736298
+        },
+        {
+          "name": "dec.45.2.bias",
+          "shape": [
+            1360
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.46.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.004048638045787811
+        },
+        {
+          "name": "dec.46.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.46.2.weight",
+          "shape": [
+            1360,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0021469444036483765
+        },
+        {
+          "name": "dec.46.2.bias",
+          "shape": [
+            1360
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.47.0.weight",
+          "shape": [
+            16,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.005468353629112244
+        },
+        {
+          "name": "dec.47.0.bias",
+          "shape": [
+            16
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "dec.47.2.weight",
+          "shape": [
+            1424,
+            16
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0020274817943573
+        },
+        {
+          "name": "dec.47.2.bias",
+          "shape": [
+            1424
+          ],
+          "storage": "float32"
+        },
+        {
+          "name": "scene.weight",
+          "shape": [
+            18,
+            32
+          ],
+          "storage": "int8",
+          "maximum_weight_error": 0.0006902068853378296
+        },
+        {
+          "name": "scene.bias",
+          "shape": [
+            18
+          ],
+          "storage": "float32"
+        }
+      ]
+    }
+  },
+  "contract": "48bands2048FFT/512hop/48k; features [normalized real L/R, imaginary L/R, standardized logmag L/R]; PyTorch GRU gate order reset/update/new with reset AFTER recurrent affine; per-stream level/time/global/family state; current-frame frequency bidirectionality",
+  "quantization": "matrices per output-row int8, symmetric maxabs127; LN/bias float; runtime activation scale per vector maxabs127, nearest-even signed[-127,127], exact int32 dot",
+  "status": "assets only; no runtime/NEON, quantization-aware training, acoustic parity, device benchmark or hook integration. Scene status must be read from training manifest; export does not train it. Neural cost is estimated, not measured-device proof."
+}
