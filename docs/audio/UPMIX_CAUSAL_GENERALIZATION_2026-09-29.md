@@ -112,7 +112,7 @@ Before releasing its lease, validate ownership of the live original supervisor/w
 
 Amendment/source freeze commit **`4e7c6913`** preceded the pause. The positively identified original supervisor10456 and child interpreter tree34632/29684 were terminated; no other Python work was active. The last complete checkpoint was **added step28,750**, 115,000 windows. CPU validation passed: strict original-mode/frozen-protocol/stats, finite weights and optimizer, exact saved scheduler position, exposure counts and sampling digest. The archived checkpoint is byte-identical to the resumable `original/last.pt`, SHA-256 **`0dd6f28ffb35579813c07643af6150a3f40247ee505da017a21dcd3b7b8b0c0e`**; sampled-descriptor digest **`3b10fb9573fb7221b816b3f0eaaba1b1c2a751282d9046f785df44f259175743`**. The original progress snapshot also ends28,750. The old lease was moved into this run's own pause archive after verification.
 
-**Current verified execution: residual96×4 is active**, latest captured through added **step29,000**, under the sole GPU lease. Priority wrapper20256, Python launcher/worker43460/51060 (one interpreter tree), C: supervisor log `upmix_causal_generalization_live_priority_v1.log`; new worker log names are recorded there. The original control is paused at28,750 with **11,250 steps remaining**. The priority runner automatically runs reference40k, resumes original40k using saved optimizer/history and the unchanged step-indexed sampler/schedule, then performs final CPU/full40 source-entry/C evaluation. The declared20k matched-age monitor comparison is now captured below; it is informational and does not replace terminal40k selection.
+**Historical priority-training snapshot: residual96×4 was active**, captured through added **step29,000**, under the sole GPU lease. Priority wrapper20256, Python launcher/worker43460/51060 (one interpreter tree), C: supervisor log `upmix_causal_generalization_live_priority_v1.log`; new worker log names are recorded there. The original control is paused at28,750 with **11,250 steps remaining**. The priority runner automatically runs reference40k, resumes original40k using saved optimizer/history and the unchanged step-indexed sampler/schedule, then performs final CPU/full40 source-entry/C evaluation. The declared20k matched-age monitor comparison is now captured below; it is informational and does not replace terminal40k selection.
 
 | Scheduling/evidence artifact | Repository capture |
 | --- | --- |
@@ -160,6 +160,37 @@ Latest live check: reference **37,250/40,000** remains active under the same own
 The reference's declared DEV40 natural-crop monitor at30k has median SI-SDR **+.186781 dB**, versus −.082041 at20k (**+.268822 dB**). Objective .330738→.333745 is slightly worse; eligible/vocal/drum/bass attributed transmissions change **.430342/.102618/.023434/.021538 → .407860/.093647/.028673/.024243**. This is continued reconstruction improvement with mixed source/objective changes, not improvement on every criterion. Upper-band eligible transmission is **.010223 (8–14k) / .007967 (14–24k)** and remains weak.
 
 Control has no30k snapshot yet, so this is a within-reference curve update, **not a matched30k architecture comparison**. Fixed terminal40k selection, learning schedule, gain, data and joint gates remain unchanged. Full per-song rows are preserved in [Reference30k](UPMIX_CAUSAL_GENERALIZATION_2026-09-29_residual_step30000.json), SHA-256 `ca20d3d0ab31b6ee98fd290c4248b99efe976cfdd71edee93668e068c944437e`.
+
+## 🏁 Both terminal40k checkpoints and CPU audit, 2026-09-30
+
+Both arms have completed their original **40,000 added steps**. The control resumed its exact28,750 optimizer/history and reached40k; the reference also reached40k. The independent [terminal CPU audit](UPMIX_CAUSAL_GENERALIZATION_2026-09-29_terminal_audit.json) **passed**, with the identical160k-window sampling digest `ec6c437bbb1d1b7c61d25a8abbda265abaf67ffe904dce5e1eda90dea75823e6`, unchanged protocol hash and strict saved-checkpoint replay. Prefix future-perturbation NSE is0 for both fixed-STFT neural networks; waveform streaming latency/device execution remain unqualified.
+
+| Frozen DEV40 natural20s monitor at40k | Original | Residual96×4 |
+| --- | ---: | ---: |
+| Median SI-SDR, dB | −1.443339 | +.284302 |
+| Objective | .356960 | .327978 |
+| Eligible attributed transmission | .357370 | .417543 |
+| Vocal attributed transmission | .156708 | .099341 |
+| Drum attributed transmission | .027366 | .028529 |
+| Bass attributed transmission | .022014 | .023086 |
+| 8–14k eligible transmission | .004530 | .009331 |
+| 14–24k eligible transmission | .002841 | .010302 |
+
+Difference of aggregate SI-SDR medians is **+1.727641 dB**; objective decreases **8.119%**. More precisely, applying the unchanged evaluator's `paired_sdr` function to the exact exported40k song rows gives **median paired improvement +1.302827 dB**, 90% song-bootstrap interval **[+1.051355,+1.443251] dB**, and **39/40 songs nonworse** (2,000 resamples, seed0). The two predeclared natural20s reconstruction subgates pass. This does not decide the remaining full60s/source/entry/rear-level joint gates. Drums/bass slightly increase and upper-band transmission remains around1%.
+
+Latest C evaluation check: control complete on all40 songs/231 stem rows plus transitions; reference **33/40 songs**, still running, its transitions and final decision pending. The [completed control full40](UPMIX_CAUSAL_GENERALIZATION_2026-09-29_original_full40.json) remains below absolute acceptance: direct-C guitar/keys/piano/strings **.103295/.104612/.091219/.102565**, voice/bass/drums **.015153/.053625/.009577**, **0/40 swings**, but instrument and vocal-entry thresholds fail, and direct-C rear level is **−.645444 dB** versus its original C route. These are control results, not the candidate's final outcome. Do not infer a final reference C win from its improved20s extraction monitor.
+
+Terminal model SHA-256: original `ba984a6e680b22ac6dc6b3d113ed79adbc007f5e2523f227e04ee85755d4fc7d`; reference `3a0400e912b9a855fb40307ad12c2bfbb81e496d5c1072dbb44d17c9912a9d1b`. Evaluator interpreter tree3184/44452 under priority supervisor20256 and the same owned lease; C: evaluator stdout `upmix_causal_generalization_7f92a1b2-4740-4fe7-8b27-94e182038f3a.stdout.log`. No new training job, source/loss/data/gain/gate change or hook/unit action.
+
+| Exact terminal evidence | Repository capture |
+| --- | --- |
+| Original30k curve snapshot | [Original30k](UPMIX_CAUSAL_GENERALIZATION_2026-09-29_original_step30000.json) |
+| Original40k song rows | [Original40k](UPMIX_CAUSAL_GENERALIZATION_2026-09-29_original_step40000.json) |
+| Reference40k song rows | [Reference40k](UPMIX_CAUSAL_GENERALIZATION_2026-09-29_residual_step40000.json) |
+| Strict CPU audit and common sampler digest | [Terminal audit](UPMIX_CAUSAL_GENERALIZATION_2026-09-29_terminal_audit.json) |
+| Completed control C/source/transition results | [Control full40](UPMIX_CAUSAL_GENERALIZATION_2026-09-29_original_full40.json) |
+
+Exact artifact SHA-256 in table order: `7815b8237b203de7412daec4f003674a8fea02789ee4a2b7ff2d54a5a92b892c`, `35fc39aef7e7094d681f8a1e09d154d29e5a4f4c678d9727c289ae4852b561c1`, `fcda95347b87d6ce696363bedbb4c0eed3a323ac3e301b76592db147def8adf6`, `68d7cd69fa04933dc083d39f90ffe1282f251c0dbd3f9b02534452fb06069e42`, `bfbc70e357aa913854d84df9b422609c69800546bcc0adf3901489f0b832136a`. Earlier active-training/pause snapshots below and above this section are historical.
 
 ## 🧪 Completed smoke evidence and live snapshot
 
