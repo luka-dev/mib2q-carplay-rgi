@@ -105,7 +105,7 @@ Explore predeclared instrument transfer settings aimed at approximate **20%,30%,
 
 ## 📍 Current handoff
 
-Implemented: compact unified prototype; paired true-stem fitting launched after protocol commit `0a6fe70a`; copied-host audio-only renderer built and verified; past-only waveform transform implemented. The original pair completed with a verified audit but failed the absolute fitting gate. A bounded20k extension is frozen below; do not promote an intermediate snapshot. Scene supervision, broad generalization, device and listening remain open. Keep both completed reference checkpoints and all negative experiments available for comparison.
+Implemented: compact unified prototype; paired true-stem fitting launched after protocol commit `0a6fe70a`; copied-host audio-only renderer built and verified; past-only waveform transform implemented. The original pair completed with a verified audit but failed the absolute fitting gate. The bounded20k extension completed and passed all frozen fitting/numerical gates; details below. The next frozen study uses156TRAIN songs and the actual past-only waveform path, with20candidate-specific holdout songs reserved before broad training. Scene supervision, broad generalization, device and listening remain open. Keep both completed reference checkpoints and all negative experiments available for comparison.
 
 ## 🧪 Frozen first fitting pair
 
@@ -170,3 +170,32 @@ The first joint checkpoint misses only the7dB absolute fitting floor; all four e
 [Extension trainer](../../tools/stereo-upmix-render/extend_unified_upmix_fit.py), [single-GPU runner](../../tools/stereo-upmix-render/pc/run_unified_upmix_fit20k.ps1): original terminal states copied byte-for-byte; same constant AdamW3e−4/wd1e−4/clip5; same four TRAIN8s crops and fixed auxiliary coefficient. Eligible-only then joint-audio; fixed terminal20k; every250-step four-source/source-attribution report; numerical audit uses the corrected physical synthesis and original acoustic gates. No best-checkpoint selection or broad promotion from an intermediate crossing. If the absolute fitting floor still fails, diagnose the measured decoder/encoder limit before a long generalization run.
 
 [Current Track A matched40 report](UPMIX_TRACKA_MATCHED40_2026-09-30.md) is complete and freezes the relevant baseline:29/40 any-stem swings; rear instrument shares guitar.1650, keys.1523, piano.0953, strings.0691; voice.0756, bass.1493, drums.2964. Its complete231stem rows, protocol and source hashes are preserved.
+
+
+## ✅ Completed20k fitting and numerical audit
+
+Both terminal20k arms and the saved-checkpoint CPU/CUDA audit completed. All seven frozen fitting gates pass. The [20k protocol](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_fit20k_protocol.json), [audit](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_fit20k_audit.json) and complete250-step curves ([control](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_eligible_fit20k_progress.json), [joint](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_joint_fit20k_progress.json)) retain both phases; original10k failure/checkpoints remain separate.
+
+| Terminal20k TRAIN metric | Eligible-only | Joint four-source |
+| --- | ---: | ---: |
+| Eligible median SI-SDR |7.563687dB|7.539014dB|
+| Eligible objective |.056150999|.057022773|
+| Vocal median SI-SDR |Untrained control head|9.203519dB|
+| Drum median SI-SDR |Untrained control head|11.022015dB|
+| Present-bass median SI-SDR |Untrained control head|6.616205dB|
+
+Joint eligible objective is1.55% higher, within the predeclared5% allowance; median eligible SDR is.025dB below control, within.3dB. Every protected median is positive; absent bass remains excluded. This establishes compact four-source fitting, not better rear share or generalization. Relative/source quality outside these four crops is still unknown. Additional training and corrected IFFT are confounded across phases.
+
+Audited control checkpoint `5c8c3343cdd8d434405af659f37435a25dc7d69f08aa8903b2eb88a46cae24b6`; joint checkpoint `4eacc7d14c91856d92434c2c11eff210324fb401b93fa766fc5ab17850e2c672`.20k audit SHA256 `accc66d3efb1c1033b05350b54dd893cae50f64c9437d021e8847411958f8735`. All-source CPU/CUDA waveform parity, frozen dormant scene and future-prefix/chunk audits passed. The supervisor returned0 and released its sole GPU lease.
+
+## 🔒 Frozen broad source study and holdout scope
+
+[Trainer](../../tools/stereo-upmix-render/train_unified_upmix_generalization.py), [real-C evaluator](../../tools/stereo-upmix-render/eval_unified_upmix_generalization.py), [runner](../../tools/stereo-upmix-render/pc/run_unified_upmix_generalization.ps1). Both arms start from the **same audited joint20k weights**, with fresh optimizers and a fixed40k broad horizon. Eligible-only versus joint changes only the three protected audio objectives. Same source coefficient/normalizers, architecture,156TRAIN inventory, deterministic crop/gain sequence,2k warmup/cosine schedule and terminal checkpoint selection. Scene heads remain frozen. No new corpus, teacher, remix or gain search is bundled into this mechanism comparison; prior failed remix results remain in their reports.
+
+The broad loss and inference now use **the actual past-only Hann analysis and WOLA synthesis**, including explicit real DC/Nyquist endpoints. TRAIN compensates the fixed1536-sample output delay for supervision; deployment still needs aligned mixture/front/rear delays and measured execution latency. No centered inference shortcut. Local four-source transform reconstruction NSE1.77e−14, attribution closure2.05e−14 and all-head finite backpropagation passed. The PC must next pass matched20-step TRAIN smoke, saved all-output CPU/CUDA PCM parity and real chunk-state replay before either long run.
+
+Before broad training, [metadata-only partition](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_candidate_holdout.json) reserved20originalTRAIN songs by whole artist, excluding every fitting/monitor artist. Remaining156songs train both arms. Metadata presence covers17guitar/7keys/6piano/2strings/2winds songs; this does not guarantee activity inside60s cuts. Deterministic hash order and bounded subset-sum choose the partition without audio or model scores. [Reservation tool](../../tools/stereo-upmix-render/reserve_unified_holdout.py) and metadata provenance are recorded. **These20are independent of this fresh candidate, not globally pristine:** historical students trained on the original176TRAIN pool. Do not relabel them untouched DEV or claim they close the strict acceptance goal. Legacy inspected TEST20 also cannot serve as pristine validation. The strict untouched20 acceptance remains open. Reserved audio stays sealed until a fixed terminal candidate passes the inspected full40; no checkpoint/knob selection uses it.
+
+TRAIN12/DEV40 monitors retain the previous exact20s cuts with up to10s preceding context; intermediate reports are diagnostics only. At terminal40k both arms undergo CPU/CUDA signal audit, then full40×60s/231stem rows through the copied **NN-free C host**, plus every detected source-attributed vocal entry/exit/sustained event. Historical models and Track A are never run inside this candidate renderer. Nominal surround gain **.40** is fixed before DEV; .3235 and.50 are diagnostic operating points, not best-of-DEV or per-song fitting. Common front retention.5, front bass−3, air−9, body0, attackoff and unchanged `.7/dry_mix_peak` input gain. Absolute levels, clipping, protected shares and swings are exported at each point; an increase in loudness alone is not a quality or listening verdict. Product floor gates use the nominal point, with the original voice/bass/drum, instrument, slope, swing and entry limits.
+
+Scene/family supervision is a subsequent isolated step on verified true Moises instrument sidecars, after source generalization is measured. One shared audio model and an NN-free C route are not yet the complete three-model semantic replacement: persistent family state,48→renderer-band mapping, bass/LFE semantics, int8/device execution, strict unseen20 and owner live-CarPlay listening remain required.
