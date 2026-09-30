@@ -90,6 +90,6 @@ Source SHA-256: model `764a594242d26e7f75884d122b91656adc3037b53a7c54f602b74678f
 
 ## 📊 Results and next gate
 
-_Pending training. A frozen protocol and construction check are not an acoustic result._
+Protocol/source commit **`de861b23`**. Both 20-step GPU smoke arms completed with finite losses/gradients and trained-decoder hash `d04d9fd5a73ebb3788240772b3be0fb1ecf420e059ddfc2a0bf5aeff1f4fec05`; global initialization matched and future-prefix NSE was 0. Historical checkpoint replay passed. Smoke does not satisfy the 10k acoustic gate. The guarded runner started the full pair; fresh original first, residual second, then CPU audit. Live log `C:\Users\LuKa\AppData\Local\Temp\upmix_causal_reference_live_v1.log`. No completed 10k result yet.
 
 Full-data source/entry/C evaluation, independent instrument-covered songs, ≤150 M measured int8 MAC/s, ≤85 ms additional chain latency, Track A hook integration and owner blind live CarPlay remain separate gates. Track A's files, others' uncommitted files, the head unit and shared packages are untouched. Never reboot or restart the unit/j9; no Co-Authored-By; no credentials or private dataset link in output.
