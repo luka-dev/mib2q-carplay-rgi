@@ -1,0 +1,66 @@
+{
+  "complete": true,
+  "passed": true,
+  "scope": "QEMU Cortex-A15/QNX/NEON numerical execution only; no Audi/Krait timing, int8 acoustic recovery or loaded deadline proof",
+  "arms": [
+    {
+      "mode": "float",
+      "passed": true,
+      "streams_interleaved": 4,
+      "frames_per_stream": 64,
+      "dot_cases_exact": 24,
+      "source_estimate_nse": [
+        5.77804635011e-14,
+        6.53147852794e-14,
+        8.58114603533e-14,
+        7.05198210712e-14
+      ],
+      "scene_max_abs_error": 9.38773155212e-07,
+      "scope": "QEMU ARM/QNX numerical execution only; not head-unit deadlines or int8 acoustic success"
+    },
+    {
+      "mode": "int8",
+      "passed": true,
+      "streams_interleaved": 4,
+      "frames_per_stream": 64,
+      "dot_cases_exact": 24,
+      "source_estimate_nse": [
+        9.47869634734e-06,
+        1.68813406471e-05,
+        7.17413048477e-06,
+        8.89862568003e-06
+      ],
+      "scene_max_abs_error": 0.0182430446148,
+      "scope": "QEMU ARM/QNX numerical execution only; not head-unit deadlines or int8 acoustic success"
+    }
+  ],
+  "fixture": {
+    "scope": "Expanded20step TRAIN graph, fixed first64frames of original4 fittingcrops; Mac C reference versus QNXARM/NEON, not source quality/int8 recovery or device timing",
+    "selection": "no DEV; prefix64fixed before ARM; fourcaller states interleaved",
+    "reference_sha256": "181631d5b4a8b46bebbfc654904ac18fe4cae0cb47f8aad2e983618cb094f570",
+    "checkpoint_sha256": "5699c9b5a08492f805b9d02f68a336f4350e3faa435a7815c87928db7a2f7354",
+    "fixture_sha256": "51150d33a77de1f954aff1227fe7127b987994d19fda7a1ba833598c37b67580",
+    "input_sha256": "b50772267e6a537c7978be4732fa84164f161b4595970ecc758a8f491b387a84",
+    "float_output_sha256": "643d2f3535953c5fc20ec0424ef1267d6677be85edffd632e9a6c97f810b7809",
+    "int8_output_sha256": "e3fead9be02e52861a0da0ef9865562c0fa3fec02b84a2b967b4ce2fb26e04e0",
+    "source_estimate_nse_gates": {
+      "float": 1e-07,
+      "int8": 0.0001
+    },
+    "scene_max_abs_gates": {
+      "float": 0.0001,
+      "int8": 0.05
+    },
+    "assets": {
+      "unified_float.bin": "26f3c4c39f0517b81f1bfd8ddb4bd0c9a634406123dfee3fa952fada455fb2aa",
+      "unified_int8.bin": "f5482114955f42061a3b1f8284fc31f195e044137d8d5781a9f0777c6068bccb"
+    }
+  },
+  "compiler": "arm-unknown-nto-qnx6.5.0eabi-gcc (GCC) 8.5.0\nCopyright (C) 2018 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n",
+  "flags": "-O2 -g -std=gnu99 -Wall -Wextra -fdata-sections -ffunction-sections -O3 -fno-math-errno -Werror -mfpu=neon -mfloat-abi=softfp\n",
+  "docker_image_id": "sha256:59cf5a575d69869e3983f136bdcf9e7e7d997e1206dcfc912e0d1988c68ad213",
+  "source_identity": "96dc2deb958bcbd8afd23ffe948a3fa24be2db73a36f62cf31812b712a62563a  /Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/tools/stereo-upmix-render/unified_runtime_v2/unified_runtime_arm_check.c\na8d1011bd8792332cf7c2bbba95f65c3d95759881ed9bbea81d50a7bf4d8dcd5  /Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/tools/stereo-upmix-render/unified_runtime_v2/unified_runtime.c\n9769ee0251933dc731ee299956bb9cf8bc578958e4bda8ded8d406233d49b293  /Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/tools/stereo-upmix-render/unified_runtime_v2/unified_runtime.h\n",
+  "executable_sha256": "8028d3082f6e5e5fc015c63be0497a2a647957dc9f6417039af854b6e0985c14",
+  "boot_image_sha256": "94ded222195e569278882ce9722c217a9d5f1d33e4cf83d84584b051083b2166",
+  "log_sha256": "d9b4deef9cead104c4edd1a77c7b8e03e8c15dd75fd854e91bfabc7a4839da87"
+}
