@@ -100,6 +100,33 @@ Manifest SHA-256 **`d5583a4d4b01682dbdd9bc853a5595249c838e3589eb27b7f5f60178c691
 
 Protocol commit **`e07027eb`** preceded GPU execution. First launch on 2026-09-30 completed the original 20-step smoke, but PowerShell `Start-Process` lost its exit code after `Refresh` and the supervisor stopped conservatively; no full run began, no Python or lease remained. A separate CPU exit probe reproduced a valid exit code 0 when the native process handle is retained. The supervisor now retains that handle, treats undefined exit codes as failures and reuses only completed, matching-protocol smoke markers before CPU auditing. Original smoke/checkpoint/logs are preserved; no training model, loss, schedule, manifest or acoustic gate changed. A read-only import preflight also initially omitted the tools working directory; corrected preflight passed CPU import and PowerShell parse without GPU execution.
 
-Current recorded state: **original smoke complete; corrected supervisor restart pending**. Update this paragraph from verified run markers after launch. The exclusive runner requires empty rapid queue and no Python/rapid daemon, exact source/manifest/model/C hashes, and acquires its own GUID lease. It uses the already existing isolated BSRNN venv with the unchanged shared torch stack; no installs. C: stdout/stderr logs and plain persistent cache reads avoid known WinBtrfs traps. A 20-minute log-silence watchdog terminates only its own launched worker tree and preserves artifacts; resumption is explicit and restores the same fixed schedule and checkpointed state. No automatic horizon extension or orphan lease cleanup.
+Current verified state, **2026-09-30: both 20-step smokes and independent CPU replay passed; full original-arm training is active**. Corrected wrapper PID **10456**, Python launcher/worker **34632/29684** (one interpreter tree, not two GPU tenants), GUID lease owned by `causal_generalization`. Live supervisor log `C:\Users\LuKa\AppData\Local\Temp\upmix_causal_generalization_live_v2.log`; worker logs have distinct C: names recorded there. Rapid queue empty. Original progress export at **step 500**, 2,000 sampled windows, **all 176 TRAIN songs reached**, 86.54 s recorded, zero clipped steps; sampled training objective .195257, decoder gradient norm .078611. This is one stochastic training-batch loss, not a DEV improvement or an estimate of the final result. Residual full40k, final CPU audit and full40/source-entry/C are sequenced automatically after the original arm and remain pending. The exclusive runner requires empty rapid queue and no Python/rapid daemon, exact source/manifest/model/C hashes, and acquires its own GUID lease. It uses the already existing isolated BSRNN venv with the unchanged shared torch stack; no installs. C: stdout/stderr logs and plain persistent cache reads avoid known WinBtrfs traps. A 20-minute log-silence watchdog terminates only its own launched worker tree and preserves artifacts; resumption is explicit and restores the same fixed schedule and checkpointed state. No automatic horizon extension or orphan lease cleanup.
+
+## 🧪 Completed smoke evidence and live snapshot
+
+Both smokes used **the identical 80 sampled windows**, reaching 59 distinct TRAIN songs, with sequence SHA-256 `0d48421888b525c7a4c387957ac2e61f426edfa60c20fe581111f16621daac4c`. Every source/offset/gain descriptor matched. Decoder gradient norm .079162 (original) / .074431 (reference), zero clipped steps; saved decoder tensors changed in both arms. CPU reconstruction replay and source-coverage checks passed, future-prefix NSE **0** in both trained networks.
+
+Largest CPU/GPU absolute discrepancies across both replay crops/arms: objective **3.109e−5**, SI-SDR **1.287e−5 dB**, transmission **6.557e−7**, below the frozen tolerances. These are execution checks, not an acoustic promotion: 20 steps on a broad pool do not assess learned generalization.
+
+| Captured evidence | Repository copy |
+| --- | --- |
+| Independent CPU smoke audit, exact matched sequence | [Smoke audit](UPMIX_CAUSAL_GENERALIZATION_2026-09-29_smoke_audit.json) |
+| Original smoke: two fresh TRAIN crops | [Original smoke](UPMIX_CAUSAL_GENERALIZATION_2026-09-29_original_smoke.json) |
+| Reference smoke: same crops | [Reference smoke](UPMIX_CAUSAL_GENERALIZATION_2026-09-29_residual_smoke.json) |
+| Original checkpoint before broad training, TRAIN12/DEV40 | [Original initial monitor](UPMIX_CAUSAL_GENERALIZATION_2026-09-29_original_initial.json) |
+| Captured original-arm progress through step 500 | [Original live snapshot](UPMIX_CAUSAL_GENERALIZATION_2026-09-29_original_progress.json) |
+
+### Early control monitoring; reference arm pending
+
+The original control's first declared broad-training snapshot is now captured. This establishes that a positive four-crop fit does not mean useful unseen-song separation at initialization. It does not compare the two broad-trained architectures or justify an early stopping decision.
+
+| Original control monitor | Before broad training | Added step 1,000 |
+| --- | ---: | ---: |
+| Fresh TRAIN12 median SI-SDR, dB | −7.053622 | −3.590665 |
+| DEV40 median SI-SDR, dB | −5.285403 | −2.942938 |
+
+[Exact original step-1k metrics](UPMIX_CAUSAL_GENERALIZATION_2026-09-29_original_step1000.json) retain every song/source/band row. DEV 8–14 kHz eligible transmission is still .000910 at this early control age. The matched reference's broad results are pending, and the full40k schedule/selection/gates remain unchanged.
+
+CPU smoke audit SHA-256 `e36f98e78c9fe50b4add923f88dc2d49d6528e7d2ec38e98fe68ef9fd5ace581`. Exports retain captured PC bytes under the narrow attributes rule. The initial monitor and training snapshot are recorded without selecting checkpoints or changing the protocol. Fetch final curves/results separately when terminal markers exist; a captured live snapshot is not automatically current.
 
 Never reboot/reset the PC, GPU driver, head unit or j9. English docs, own paths only, no Co-Authored-By, no credentials or private dataset links in output.
