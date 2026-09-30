@@ -1,0 +1,10 @@
+{
+  "checkpoint_sha256": "4eacc7d14c91856d92434c2c11eff210324fb401b93fa766fc5ab17850e2c672",
+  "executable_sha256": "6c677a215b9135d93edf09e8572c0812ff4d06ddbb71e11a3dbfbdb38f22e7f5",
+  "script_sha256": "21c1a303be8ce65e2fdf7a65c6999d978021298be9e83080104ef8255281a245",
+  "fixture_manifest_sha256": "95edc076b2bf10fb0019b440da147d64046dcea16128bb038f4022c6b72bbc99",
+  "asset_manifest_sha256": "bc8bc6346c112d46f40d3bd8acb468abd36d58d0f19f78b63c4cdfa7fc5632a9",
+  "gates": "identity NSE<=1e-10; float real PCM path NSE<=1e-7; eligible SI-SDR max delta<=.01dB; repeat/reset exact; future-changed suffix leaves complete emitted-hop prefix exact",
+  "quantized_scope": "recorded against the original int8 neural-only PCM; no int8 acoustic gate waiver or scene/device claim",
+  "scope": "four exact TRAIN8s PCM crops; standalone C actual past FFT, unified neural graph, physical endpoints, eligible iFFT/Hann WOLA; device/renderer scheduling and semantic scene excluded"
+}

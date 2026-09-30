@@ -1,0 +1,31 @@
+{
+  "compiled": true,
+  "scope": "C waveform path compilation only; no ARM execution or device deadline proof",
+  "compiler": "arm-unknown-nto-qnx6.5.0eabi-gcc (GCC) 8.5.0\nCopyright (C) 2018 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n",
+  "flags": "-O2 -g -std=gnu99 -Wall -Wextra -fdata-sections -ffunction-sections -O3 -fno-math-errno -Werror -mfpu=neon -mfloat-abi=softfp -fstack-usage\n",
+  "docker_image_id": "sha256:59cf5a575d69869e3983f136bdcf9e7e7d997e1206dcfc912e0d1988c68ad213",
+  "source_sha256": {
+    "unified_runtime.h": "7073ae4ddc29f9db7ae0e186e8aface91b1a58d28915748a27a040f3c1eba962",
+    "unified_runtime.c": "a4653ca7a9facaf6dd64eb5f20aba94ee1ce23017281291c1a61de19c5446b98",
+    "unified_runtime_cli.c": "8723ddec43af6bfafc605439e65c71a623b0a1b38176850019d83c8efe4e9bf6",
+    "unified_audio_stream.h": "1e8b0485c34f737774d85dd908121795eaf3200d976a49ec0b160a39b9676907",
+    "unified_audio_stream.c": "48eef8421c7b709b605d86027cf8aa9c48b95dc779ba3011fd6e2763ee4ab0f8",
+    "unified_audio_cli.c": "4b6c35473d3b32b1dc0224037c2bc6b7cb4cb7786ee5c0e4fce6003d42ac7a1e"
+  },
+  "executables": {
+    "upmix_unified_runtime": {
+      "bytes": 65152,
+      "sha256": "4be79dbba412586ee5e6b9750efa5ddec4ff5cef5eae4cff3df77a17d21cafcb"
+    },
+    "upmix_unified_audio_stream": {
+      "bytes": 75203,
+      "sha256": "26ce0e86fb0ef8ab16decd16b2a0425b9df8bb35589d356174f824c80694a8f5"
+    }
+  },
+  "compiler_stack_usage": {
+    "unified_runtime_cli.su": "unified_runtime_cli.c:23:12:order\t0\tstatic\nunified_runtime_cli.c:14:15:now\t16\tstatic\nunified_runtime_cli.c:24:5:main\t16752\tstatic\n",
+    "unified_audio_cli.su": "unified_audio_cli.c:19:12:order\t0\tstatic\nunified_audio_cli.c:10:15:now\t16\tstatic\nunified_audio_cli.c:20:5:main\t8544\tstatic\n",
+    "unified_audio_stream.su": "unified_audio_stream.c:21:13:fft\t64\tstatic\nunified_audio_stream.c:39:10:umx_audio_state_bytes\t0\tstatic\nunified_audio_stream.c:40:17:umx_audio_create\t64\tstatic\nunified_audio_stream.c:53:6:umx_audio_free\t0\tstatic\nunified_audio_stream.c:54:6:umx_audio_reset\t8\tstatic\nunified_audio_stream.c:59:18:umx_audio_prediction\t0\tstatic\nunified_audio_stream.c:60:5:umx_audio_process\t112\tstatic\n",
+    "unified_runtime.su": "unified_runtime.c:52:17:read_u16\t16\tstatic\nunified_runtime.c:47:17:read_u32\t16\tstatic\nunified_runtime.c:193:13:norm\t8\tstatic\nunified_runtime.c:177:13:linear.isra.1\t608\tstatic\nunified_runtime.c:202:13:gru\t632\tstatic\nunified_runtime.c:71:12:linear_bind.isra.0\t128\tstatic\nunified_runtime.c:77:12:norm_bind\t128\tstatic\nunified_runtime.c:83:12:gru_bind\t152\tstatic\nunified_runtime.c:57:14:read_float\t24\tstatic\nunified_runtime.c:92:6:umx_free\t16\tstatic\nunified_runtime.c:97:11:umx_load\t192\tstatic\nunified_runtime.c:211:6:umx_reset\t0\tstatic\nunified_runtime.c:212:5:umx_predict\t49712\tstatic\n"
+  }
+}

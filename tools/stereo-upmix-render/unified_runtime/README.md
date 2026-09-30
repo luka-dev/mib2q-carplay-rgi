@@ -38,3 +38,12 @@ Input must be an actual past-only Hann2048/512 stereo spectrum at48kHz, with rea
 Apply source masks to the **same mixture spectrum**, then zero imaginary DC/Nyquist before any inverse real FFT. C neural masks themselves can contain nonreal endpoints. The reference causal WOLA has1536samples/32ms array delay and up to512samples/10.667ms acquisition delay; align front and rear paths explicitly. FFT, WOLA, source attribution, bass/LFE semantics,48-to-renderer-band mapping, DSP and scheduler costs are outside this library.
 
 The header is an isolated Track B API, not q6d's32-band ABI. The loaded full chain, int8 quality, arbitrary stream interleaving on ARM, memory ownership, device MAC/time budget and live CarPlay behavior remain deployment gates. Do not insert these weights into the shipping hook by treating the two interfaces as interchangeable.
+
+
+## 🌊 Standalone waveform path
+
+`unified_audio_stream.h/.c` adds past-only Hann2048/512 analysis, an independent radix2 FFT, one shared network invocation, physical eligible endpoints and constant-normalization WOLA. The caller supplies exactly512 stereo float samples per hop. Zero-start history and three-hop flush preserve1536samples of array delay. Partial PCM hops belong to the caller; the audio CLI handles padding and trims the final emitted tail. Never remove this delay by advancing live output; align the front path.
+
+`unified_audio_cli.c` accepts `MODEL|identity INPUT_PCM OUTPUT_PCM`. Input is `UMXPC001` plus uint32 streams/samples/2 and interleaved float stereo; output is `UMXAU001` plus streams/samples+1536/2. It records standalone FFT+network+eligible synthesis timing, excluding the renderer and scheduler. `verify_unified_audio_stream.py` checks actual frozen TRAIN waveforms, physical signal parity, reset, future prefix and the original quantized-neural reference.
+
+The stream owns163760bytes on the checked x64 build, with no heap allocation during process/reset. The ARM compiler reports49712bytes for `umx_predict` alone, plus nested function/worker/caller stack; integration must reserve sufficient stack explicitly rather than assuming the existing worker's size is adequate. The QNX build emits stack-usage files and both neural/audio executables. Compilation does not establish NEON execution or Krait timing.
