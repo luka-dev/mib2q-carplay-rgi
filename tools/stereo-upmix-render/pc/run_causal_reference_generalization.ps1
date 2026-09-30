@@ -1,4 +1,4 @@
-param([switch]$SmokeOnly,[switch]$Resume)
+param([switch]$SmokeOnly,[switch]$Resume,[switch]$PrioritizeReference)
 $ErrorActionPreference='Stop'
 $tools='D:\upmix\tools'
 $runs='D:\upmix\runs'
@@ -40,6 +40,14 @@ $busy=@(Get-CimInstance Win32_Process | Where-Object {
     $_.Name -eq 'python.exe' -or ($_.Name -eq 'powershell.exe' -and $_.CommandLine -match 'rapid_daemon\.ps1')
 })
 if($busy.Count) {throw 'Python or rapid daemon active'}
+if($PrioritizeReference) {
+    if(-not $Resume -or $SmokeOnly) {throw 'Priority order requires explicit full-run resume'}
+    $amendment=Get-Content "$out\priority_amendment.json" -Raw | ConvertFrom-Json
+    if(-not $amendment.verified -or $amendment.protocol_sha256 -ne $inputs["$out\manifest.json"].ToLowerInvariant() -or
+        (Get-FileHash "$out\priority_pause\original_last.pt" -Algorithm SHA256).Hash.ToLowerInvariant() -ne $amendment.paused_checkpoint_sha256) {
+        throw 'Verified immutable control pause record required'
+    }
+}
 $token=[guid]::NewGuid().ToString()
 $handle=[IO.File]::Open($lease,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
 try {$bytes=[Text.Encoding]::ASCII.GetBytes("causal_generalization $token");$handle.Write($bytes,0,$bytes.Length)} finally {$handle.Dispose()}
@@ -104,7 +112,9 @@ try {
     if(-not $smoke.verified -or $smoke.protocol_sha256 -ne $inputs["$out\manifest.json"].ToLowerInvariant()) {throw 'Smoke audit differs'}
     if($SmokeOnly) {Write-Output 'SMOKE_AND_CPU_AUDIT_COMPLETE';return}
     Remove-Item Env:CUDA_VISIBLE_DEVICES -ErrorAction SilentlyContinue
-    foreach($mode in @('original','residual96x4')) {
+    $modeOrder=if($PrioritizeReference) {@('residual96x4','original')} else {@('original','residual96x4')}
+    Write-Output "FULL_ARM_ORDER $($modeOrder -join ',')"
+    foreach($mode in $modeOrder) {
         $marker="$out\$mode\train_complete.json"
         if(Test-Path $marker) {
             $finished=Get-Content $marker -Raw | ConvertFrom-Json
