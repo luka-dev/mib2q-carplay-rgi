@@ -421,6 +421,7 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
             connected = true;
             navActive = false;
             navHidePending = false;
+            clusterActive = false;
             acceptVideoFallback = true;
             lifecycleGeneration++;
             desiredCtx = CTX_CLUSTER_MAP;
@@ -455,6 +456,7 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
             connected = false;
             navActive = false;
             navHidePending = false;
+            clusterActive = false;
             acceptVideoFallback = true;
             generation = ++lifecycleGeneration;
         }
@@ -525,6 +527,7 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
                     synchronized (LOCK) {
                         if (dm == d && desiredCtx == target && currentCtx == target) {
                             currentCtx = -1;
+                            clusterActive = false;
                             retry = true;
                             LOCK.notifyAll();
                         }
@@ -571,6 +574,7 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
                     synchronized (LOCK) {
                         if (dm != d || desiredCtx != ctx || !rendererReady) {
                             currentCtx = -1;
+                            clusterActive = false;
                             Log.i(TAG, "switch(" + ctx + ") superseded during bounce → " + desiredCtx);
                             return;
                         }
@@ -612,7 +616,10 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
             Log.i(TAG, "cluster -> ctx " + ctx + " (active=" + clusterActive + ")");
         } catch (Throwable t) {
             Log.w(TAG, "switch(" + ctx + ") failed: " + t);
-            synchronized (LOCK) { currentCtx = -1; }
+            synchronized (LOCK) {
+                currentCtx = -1;
+                clusterActive = false;
+            }
             /* Throttle the retry: the bounce write and the stock path have no settle sleep, so a
              * persistently-throwing switchContext would otherwise hot-spin (busy loop + log flood). */
             try { Thread.sleep(BOUNCE_SLEEP_MS); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }

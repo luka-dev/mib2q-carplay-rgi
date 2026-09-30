@@ -31,7 +31,7 @@ for scenario in cold warm stop bounce-loss; do
         -cp "$TEST_DIR/nav-init:$PROJECT_DIR/build/carplay_hook.jar:$STOCK_JAR" \
         com.luka.carplay.core.AltScreenStartupTest "$scenario"
 done
-for scenario in stop change peer readiness reconnect direct; do
+for scenario in stop change peer readiness reconnect direct target-error rate-error stock-error bounce-error; do
     "$TEST_JDK/bin/java" \
         -cp "$TEST_DIR/nav-init:$PROJECT_DIR/build/carplay_hook.jar:$STOCK_JAR" \
         com.luka.carplay.core.AltScreenContextRaceTest "$scenario"
