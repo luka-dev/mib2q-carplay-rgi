@@ -6,6 +6,8 @@ No training, DEV selection, gain search, upstream edits or Track A edits.
 import argparse
 import csv
 import gc
+import faulthandler
+import tempfile
 import hashlib
 import json
 from pathlib import Path
@@ -148,6 +150,8 @@ def render_rows(out, track_id, meta, stems, mixture, estimate, executable, args)
             raise RuntimeError(f'{label} would clip in C PCM input')
     T.write_wav(str(pcm), mixture.numpy())
     T.write_wav(str(inj), estimate.numpy())
+    if dst.exists():
+        dst.unlink()  # Own partial C output; avoid WinBtrfs identical-inode guard.
     subprocess.run([str(executable), *args, '--rear-audio', str(inj), str(pcm), str(dst)],
                    check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     out6 = T.read_wav6(str(dst))
@@ -251,7 +255,13 @@ def main():
     p.add_argument('--moisesdb',type=Path,required=True)
     p.add_argument('--out',type=Path,required=True)
     p.add_argument('--smoke',action='store_true',help='TRAIN-only closure/attribution execution gate')
+    p.add_argument('--resume',action='store_true',help='Reuse verified complete C pairs only')
     a=p.parse_args()
+    trace_path=Path(tempfile.gettempdir())/('upmix_bsrnn_trace_'+str(int(time.time()))+'.txt')
+    trace_file=trace_path.open('w')
+    faulthandler.enable(file=trace_file)
+    faulthandler.dump_traceback_later(90,repeat=True,file=trace_file)
+    print('TRACE_FILE',str(trace_path),flush=True)
     code=a.root/'code'
     if subprocess.check_output(['git','-C',str(code),'rev-parse','HEAD'],text=True).strip()!=ref.REV:
         raise RuntimeError('Upstream revision changed')
@@ -278,7 +288,7 @@ def main():
     ck=bundle['extracted']['checkpoints'][0]
     model,audit=ref.load_strict(a.root/'weights'/bundle['name']/ck['path'],ck['hashes'],ref.TARGETS,code)
     frozen=FrozenMask(model)
-    a.out.mkdir(parents=True,exist_ok=False)
+    a.out.mkdir(parents=True,exist_ok=a.resume)
     if a.smoke:
         if fraction(torch.tensor([2j]),torch.tensor([1j])) != 4.0:
             raise RuntimeError('Complex energy discarded imaginary part')
@@ -299,22 +309,65 @@ def main():
               reconstruction=ref.acoustic_sanity(estimate,sources[0]),checkpoint=audit))
         print('TRAIN_SMOKE_COMPLETE',flush=True)
         return
-    write(a.out/'manifest.json',manifest)
+    if a.resume:
+        if json.loads((a.out/'manifest.json').read_text())!=manifest:
+            raise RuntimeError('Resume song manifest changed')
+    else:
+        write(a.out/'manifest.json',manifest)
     protocol=dict(source_revision=ref.REV,script_sha256=ref.sha(__file__),
                   intake_script_sha256=ref.sha(ref.__file__),checkpoint=audit,
                   manifest_sha256=ref.sha(manifest_path),binary_hashes={k:ref.sha(v) for k,v in binaries.items()},
                   harness_hashes={m.__name__:ref.sha(m.__file__) for m in [H,T,DT,SN,MN]},
                   injection_gain=1.0,chunk_seconds=11,hop_seconds=10,
                   scope='previously inspected DEV40; offline noncausal SIMO, no training')
-    write(a.out/'protocol.json',protocol)
+    protocol['trace_file']=str(trace_path)
+    if a.resume:
+        old=json.loads((a.out/'protocol.json').read_text())
+        if old['script_sha256'] != '468bc58cbce8c16f80bfcc9fe51c1a8a2b8cf593f16bf1f6c90e5d7fc440ec68':
+            raise RuntimeError('Resume requires the corrected frozen audit')
+        for key in ['manifest_sha256','binary_hashes','harness_hashes','injection_gain','chunk_seconds','hop_seconds']:
+            if old[key] != protocol[key]:
+                raise RuntimeError('Resume changed protocol: '+key)
+        if old['checkpoint']['sha256'] != audit['sha256']:
+            raise RuntimeError('Resume checkpoint changed')
+        write(a.out/'resume_protocol.json',protocol)
+    else:
+        write(a.out/'protocol.json',protocol)
     common=T.VARIANTS['shipped']+['--model',str(a.tools/'hssr_model.bin'),
                                  '--guard-model',str(a.tools/'hssr_guard.bin'),'--mask-drive','1.0']
     rowsets={'baseline':[], 'direct_no_bed_body0_cal':[]}
     extractions=[]
     input_hashes=[]
+    saved_extraction={r['track_id']:r for r in json.loads((a.out/'extraction_progress.json').read_text())['rows']} if a.resume else {}
+    saved_inputs={r['track_id']:r for r in json.loads((a.out/'inputs_progress.json').read_text())} if a.resume else {}
     for index,(song,track_id) in enumerate(manifest['song_track_ids'].items(),1):
         started=time.perf_counter()
+        if a.resume and track_id in saved_extraction and track_id in saved_inputs:
+            folders=[a.out/point for point in rowsets]
+            paths=[folder/(track_id+'.rows.json') for folder in folders]
+            if all(path.exists() for path in paths):
+                cached=saved_inputs[track_id]
+                for point,path in zip(rowsets,paths):
+                    for suffix,key in [('.wav','mixture_sha256'),('.inj.wav','injection_sha256'),('.6ch.wav','output_sha256')]:
+                        if ref.sha(path.parent/(track_id+suffix)) != cached[point][key]:
+                            raise RuntimeError('Resume C file hash changed')
+                    rows=json.loads(path.read_text())
+                    if not rows or any(r['song']!=song for r in rows):
+                        raise RuntimeError('Resume rows changed')
+                    for r in rows:
+                        for key,value in r.items():
+                            if value is None and key not in ('song','genre','stem'):
+                                r[key]=float('nan')
+                    rowsets[point].extend(rows)
+                if saved_extraction[track_id]['parity']['final_source_sum_nse']>1e-9:
+                    raise RuntimeError('Resume source closure invalid')
+                extractions.append(saved_extraction[track_id])
+                input_hashes.append(cached)
+                print('REUSED_C_PAIR',index,40,song,flush=True)
+                continue
+        print('LOAD_SONG',index,40,song,flush=True)
         meta,stems=H.load_song(str(a.moisesdb/track_id),60)
+        print('LOADED_SONG',index,flush=True)
         n=min(v.shape[-1] for v in stems.values())
         stems={k:v[:,:n] for k,v in stems.items()}
         mixture=torch.from_numpy(sum(stems.values()))
@@ -322,6 +375,7 @@ def main():
         refs=roles_from_stems(stems)*k
         mixture=mixture*k
         estimate,sent,parity=frozen.apply(mixture,refs)
+        print('INFERRED_SONG',index,flush=True)
         row=extraction_row(song,estimate,sent,refs)
         row.update(track_id=track_id, samples=n, parity=parity)
         extractions.append(row)
@@ -329,6 +383,7 @@ def main():
         hashes={}
         for point,binary,extra in [('baseline','control',[]),
                                    ('direct_no_bed_body0_cal','direct_no_bed',['--rear-body','0','--surround','0.3235'])]:
+            print('C_RENDER',index,point,flush=True)
             rows,h=render_rows(a.out/point,track_id,meta,stems,mixture,estimate,binaries[binary],common+extra)
             if not rows or any(r['song']!=song for r in rows):
                 raise RuntimeError('C song label/rows differ from manifest')
@@ -369,8 +424,10 @@ def main():
                extraction=extraction['summary'],transitions=entries['summaries'],variants=decisions,
                maximum_source_closure_nse=max(r['parity']['final_source_sum_nse'] for r in extractions),
                device_causal_and_listening_gates='unmeasured; reference cannot be deployed',
-               protocol_sha256=ref.sha(a.out/'protocol.json'))
+               protocol_sha256=ref.sha(a.out/'protocol.json'),
+               resume_protocol_sha256=ref.sha(a.out/'resume_protocol.json') if a.resume else None)
     write(a.out/'complete.json',final)
+    faulthandler.cancel_dump_traceback_later()
     print('COMPLETE',json.dumps(clean(final)),flush=True)
 
 

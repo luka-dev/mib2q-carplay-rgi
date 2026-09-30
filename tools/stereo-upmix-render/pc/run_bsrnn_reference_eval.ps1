@@ -1,4 +1,5 @@
 # One GPU tenant: TRAIN closure smoke then frozen full40 C/source/entry evaluation.
+param([switch]$Resume)
 $ErrorActionPreference = 'Stop'
 $tools = 'D:\upmix\tools'
 $runs = 'D:\upmix\runs'
@@ -6,9 +7,9 @@ $out = "$runs\bsrnn_reference_check40_v1"
 $smoke = "$runs\bsrnn_reference_check_smoke_v1"
 $py = 'D:\upmix\venvs\bsrnn_reference\Scripts\python.exe'
 $lease = "$runs\GPU_LEASE"
-if ((Test-Path $out) -or (Test-Path $smoke)) { throw 'Output exists; preserve previous attempt' }
+if (-not $Resume -and ((Test-Path $out) -or (Test-Path $smoke))) { throw 'Output exists; preserve previous attempt' }
 $expected = @{
-    'bsrnn_reference_eval.py' = '468BC58CBCE8C16F80BFCC9FE51C1A8A2B8CF593F16BF1F6C90E5D7FC440EC68'
+    'bsrnn_reference_eval.py' = '214A8F0375DE9CBAF87C5FB234F46F207BFA4FDDEA510564CAF022662E099B75'
     'bsrnn_reference_infer.py' = '1FC41E4451E212FA0FF662D699B000FF8080E06DD9B7956926B2E130E4AAA30B'
     'upmix_stem_tests.py' = '184CC28B493DDE68B0106410515CE578A2719CDEEA4558D38976C625A02573FE'
     'diag_transitions.py' = 'B2626F320F2E77FDC71E32F547FDD894F7E9E3F1A689F52F8CD714AFF65B62C7'
@@ -24,10 +25,19 @@ $pending = @(Get-Content "$runs\rapid\QUEUE.txt" -ErrorAction SilentlyContinue |
     Where-Object { $_ -match '\|' -and $_ -notmatch '^\s*#' })
 if ($pending.Count) { throw 'Rapid queue active' }
 $busy = @(Get-CimInstance Win32_Process | Where-Object {
-    $_.Name -eq 'python.exe' -or
+    ($_.Name -eq 'python.exe' -and -not (Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue).HasExited) -or
     ($_.Name -eq 'powershell.exe' -and $_.CommandLine -match 'rapid_daemon\.ps1')
 })
 if ($busy.Count) { throw 'Python work or rapid daemon active' }
+if ($Resume -and (Test-Path $lease)) {
+    $old = Get-CimInstance Win32_Process -Filter 'ProcessId=21788'
+    if (-not $old -or $old.CommandLine -notmatch 'bsrnn_reference_eval\.py' -or
+        -not (Get-Process -Id 21788).HasExited -or
+        (Get-Content $lease -Raw) -notmatch '^bsrnn_eval ') {
+        throw 'Existing lease does not belong to the verified exited evaluator'
+    }
+    Move-Item $lease "$runs\GPU_LEASE.bsrnn_exited_21788"
+}
 $token = [guid]::NewGuid().ToString()
 $handle = [System.IO.File]::Open($lease, [System.IO.FileMode]::CreateNew,
     [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
@@ -41,8 +51,9 @@ function Invoke-Check([string]$destination, [bool]$smokeOnly) {
         '--tools', $tools, '--cache', 'D:\upmix\datasets\masknet_cache7',
         '--moisesdb', 'D:\upmix\datasets\moisesdb\moisesdb_v0.1', '--out', $destination)
     if ($smokeOnly) { $argsForPython += '--smoke' }
+    if ($Resume -and -not $smokeOnly) { $argsForPython += '--resume' }
     $ErrorActionPreference = 'Continue'
-    & $py @argsForPython 2>&1 | Tee-Object -FilePath "$destination.log"
+    & $py @argsForPython 2>&1 | Tee-Object -FilePath "$destination.log" -Append
     $code = $LASTEXITCODE
     $ErrorActionPreference = 'Stop'
     if ($code -ne 0 -or -not (Test-Path "$destination\complete.json")) {
@@ -53,7 +64,7 @@ try {
     Remove-Item Env:CUDA_VISIBLE_DEVICES -ErrorAction SilentlyContinue
     $env:PATH = "$tools\ffmpeg\bin;" + $env:PATH
     Set-Location $tools
-    Invoke-Check $smoke $true
+    if (-not $Resume) { Invoke-Check $smoke $true }
     $test = Get-Content "$smoke\complete.json" -Raw | ConvertFrom-Json
     if ($test.finite_retention_bins -lt 1 -or $test.parity.final_source_sum_nse -gt 0.000000001) {
         throw 'Attribution smoke gate failed'
