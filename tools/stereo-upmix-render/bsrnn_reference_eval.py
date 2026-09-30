@@ -200,8 +200,20 @@ def extraction_row(song, estimate, attributed, refs):
     return row
 
 
-def transitions(frozen, cache, track_ids, out):
-    rows = []
+def transitions(frozen, cache, track_ids, out, resume=False):
+    progress_path = out/'transitions_progress.json'
+    rows = json.loads(progress_path.read_text())['rows'] if resume and progress_path.exists() else []
+    event_key = lambda r: (r['song'], r['kind'], int(round(r['t']*SR)))
+    cached = {event_key(r):r for r in rows}
+    if len(cached) != len(rows):
+        raise RuntimeError('Duplicate cached transition')
+    for r in rows:
+        closure = r.get('closure_nse')
+        if r['song'] not in track_ids or closure is None or not 0 <= closure <= 1e-9:
+            raise RuntimeError('Cached transition attribution invalid')
+        if r['duck'] is not None and abs(r['duck']*r['ret_pre']-r['ret_post']) > 1e-8:
+            raise RuntimeError('Cached transition retention differs')
+    seen = set()
     for index, song in enumerate(track_ids, 1):
         path = cache / (song+'.npy')
         n = MN.npy_header(str(path))[0][2]
@@ -210,6 +222,12 @@ def transitions(frozen, cache, track_ids, out):
                   if s-DT.PRE-DT.WARM >= 0 and s+DT.POST <= n]
         del vocal
         for kind, onset in events:
+            key = (song, kind, int(onset))
+            if key in seen:
+                raise RuntimeError('Duplicate detected transition')
+            seen.add(key)
+            if key in cached:
+                continue
             start, end = onset-DT.PRE-DT.WARM, onset+DT.POST
             w = torch.from_numpy(ref.read_crop(path, start, end-start).astype(np.float32)/32768)
             sources = torch.stack([w[6],w[0]+w[1],w[2:5].sum(0),w[5]])
@@ -234,6 +252,9 @@ def transitions(frozen, cache, track_ids, out):
             rows.append(clean(r))
             write(out / 'transitions_progress.json',dict(rows=rows, songs_complete=index-1))
         print('TRANSITIONS',index,len(track_ids),song,'events',len(events),flush=True)
+        write(progress_path,dict(rows=rows, songs_complete=index))
+    if {event_key(r) for r in rows} != seen:
+        raise RuntimeError('Cached/detected transition event sets differ')
     summaries = {}
     for kind in ['entry','exit','sustained']:
         selected = [r for r in rows if r['kind']==kind]
@@ -414,7 +435,7 @@ def main():
                    other_nsdr_db=med([r['other_nsdr_db'] for r in extractions]),
                    bands={band:med([r['bands'][band] for r in extractions]) for band in ['8-14k','>14k']}))
     write(a.out/'extraction.json',extraction)
-    entries=transitions(frozen,a.cache,ids,a.out)
+    entries=transitions(frozen,a.cache,ids,a.out,resume=a.resume)
     oracle= json.loads((a.runs/'direct_object_full40/decision.json').read_text())
     source={**summaries, 'true_audio_reference': oracle}
     decisions={}
