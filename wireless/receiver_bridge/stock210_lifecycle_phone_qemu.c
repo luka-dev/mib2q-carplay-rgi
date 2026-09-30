@@ -27,6 +27,9 @@ static int lifecycle_start_phone(void)
     setenv("MHI2Q_PHONE_QEMU_REAL_RECEIVER","1",1);
     setenv("MHI2Q_PHONE_QEMU_HOLD_MEDIA","1",1);
     setenv("MHI2Q_PHONE_QEMU_CONTROL","1",1);
+    /* Exercise both iOS orderings through one real QNX daemon, with a new
+     * RFCOMM generation after the intervening wired takeover. */
+    setenv("MHI2Q_PHONE_QEMU_AUTH_FIRST",lifecycle_cycle==2?"1":"0",1);
     lifecycle_phone=spawnl(P_NOWAIT,"/mnt/pairing/bin/phone-qemu-probe","phone-qemu-probe",(char *)NULL);
     printf("[stock210-lifecycle] phone pid=%ld\n",(long)lifecycle_phone);fflush(stdout);
     if(lifecycle_phone<0)return -1;

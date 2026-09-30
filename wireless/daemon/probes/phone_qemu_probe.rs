@@ -265,12 +265,15 @@ fn handle_csm(
             }
             println!("[phone-qemu] identification=1");
             engine.send(CONTROL_SESSION_ID, IdentificationAccepted {}.encode(), now);
-            engine.send(
-                CONTROL_SESSION_ID,
-                RequestAuthenticationCertificate {}.encode(),
-                now,
-            );
-            *phase = Phase::Certificate;
+            if std::env::var("MHI2Q_PHONE_QEMU_AUTH_FIRST").as_deref() == Ok("1") {
+                engine.send(CONTROL_SESSION_ID,
+                    RequestAccessoryWiFiConfigurationInformation {}.encode(), now);
+                *phase = Phase::Wifi;
+            } else {
+                engine.send(CONTROL_SESSION_ID,
+                    RequestAuthenticationCertificate {}.encode(), now);
+                *phase = Phase::Certificate;
+            }
         }
         (Phase::Certificate, 0xaa01) => {
             let cert = AuthenticationCertificate::decode(frame).map_err(io::Error::other)?;
@@ -295,12 +298,15 @@ fn handle_csm(
             }
             println!("[phone-qemu] signature=1");
             engine.send(CONTROL_SESSION_ID, AuthenticationSucceeded {}.encode(), now);
-            engine.send(
-                CONTROL_SESSION_ID,
-                RequestAccessoryWiFiConfigurationInformation {}.encode(),
-                now,
-            );
-            *phase = Phase::Wifi;
+            if std::env::var("MHI2Q_PHONE_QEMU_AUTH_FIRST").as_deref() == Ok("1") {
+                println!("[phone-qemu] authentication before identification=1");
+                engine.send(CONTROL_SESSION_ID, StartIdentification {}.encode(), now);
+                *phase = Phase::Identification;
+            } else {
+                engine.send(CONTROL_SESSION_ID,
+                    RequestAccessoryWiFiConfigurationInformation {}.encode(), now);
+                *phase = Phase::Wifi;
+            }
         }
         (Phase::Wifi, 0x5703) => {
             let wifi =
@@ -405,8 +411,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         if engine.state() == LinkState::Normal && phase == Phase::Link {
             println!("[phone-qemu] iap2 normal=1");
-            engine.send(CONTROL_SESSION_ID, StartIdentification {}.encode(), now);
-            phase = Phase::Identification;
+            if std::env::var("MHI2Q_PHONE_QEMU_AUTH_FIRST").as_deref() == Ok("1") {
+                engine.send(CONTROL_SESSION_ID, RequestAuthenticationCertificate {}.encode(), now);
+                phase = Phase::Certificate;
+            } else {
+                engine.send(CONTROL_SESSION_ID, StartIdentification {}.encode(), now);
+                phase = Phase::Identification;
+            }
         }
         if phase == Phase::CarPlay
             && last_availability_ms.is_none_or(|last| now.saturating_sub(last) >= 9000)

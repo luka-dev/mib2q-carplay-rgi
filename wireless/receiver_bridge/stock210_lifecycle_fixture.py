@@ -14,7 +14,14 @@ def prepare_lifecycle(work):
         '-v',f'{AUDI}:/src','-w','/src/Patches/mhi2-carplay',IMAGE,
         '/opt/rust/qnx-cargo','build','-q','--manifest-path',
         '/src/Patches/mhi2-carplay/wireless/daemon/Cargo.toml',
-        '--features','qemu-probe','--bin','mhi2q-wireless-daemon','--bin','phone-qemu-probe'],check=True)
+        '--features','qemu-probe','--bin','phone-qemu-probe'],check=True)
+    # Stage the same default-feature daemon that the review builder packages.
+    # Probe features belong to the synthetic phone, not the production daemon.
+    subprocess.run(['docker','run','--rm','--platform=linux/amd64',
+        '-v',f'{AUDI}:/src','-w','/src/Patches/mhi2-carplay',IMAGE,
+        '/opt/rust/qnx-cargo','build','-q','--manifest-path',
+        '/src/Patches/mhi2-carplay/wireless/daemon/Cargo.toml',
+        '--bin','mhi2q-wireless-daemon'],check=True)
     cc='arm-unknown-nto-qnx6.5.0eabi-gcc'
     root='/src/Patches/mhi2-carplay/wireless/'
     assets=[]
@@ -114,6 +121,8 @@ def validate_lifecycle(output):
         '[stock210-lifecycle] two media generations, USB priority, wireless resume passed']
     for marker in required:
         if marker not in output:raise RuntimeError(f'missing {marker}')
+    if output.count('[phone-qemu] authentication before identification=1') != 1:
+        raise RuntimeError('second phone must authenticate before identification')
     for marker in ('[phone-qemu] wifi=1','[phone-qemu] CarPlayStartSession=1',
                    '[phone-qemu] full daemon path=1','[dio-property] handoff installed'):
         if output.count(marker)!=3:raise RuntimeError(f'expected 3: {marker}')
@@ -126,6 +135,10 @@ def validate_lifecycle(output):
         if info.get('pi')!=ids[0] or info.get('sourceVersion')!='210.81':
             raise RuntimeError('wrong info identity/version')
         features=info['features']
+        if 'altScreen' in info.get('extendedFeatures', []):
+            raise RuntimeError('unsupported wireless altScreen advertised')
+        if len(info.get('displays', [])) > 1 or len(info.get('displayPanels', [])) > 1:
+            raise RuntimeError('unsupported second wireless display advertised')
         if features & ((1<<37)|(1<<38)) != ((1<<37)|(1<<38)) or features & ((1<<20)|(1<<22)):
             raise RuntimeError('incorrect wireless features')
         for audio in info['audioFormats']:

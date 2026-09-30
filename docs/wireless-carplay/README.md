@@ -18,6 +18,10 @@ the factory receiver. [Architecture](STOCK210_ARCHITECTURE.md) and
 Combined QNX/QEMU validation passed three DIO owner generations and two media
 sessions, including wired-priority drain and wireless resume. Real iPhone,
 MFi chip, radio, decoded media and physical USB behavior remain unverified.
+The subsequent [iOS/stock210 code review and corrections](IOS210_CODE_REVIEW.md)
+fixed authentication-first iAP2 handling, unsupported stream 111 negotiation
+and wired SETUP with inherited wireless flags. The combined QEMU rerun covers
+both authentication orders; wireless offers the main display only.
 All work remains **offline only**; no HU connection, process restart, reboot or
 original firmware-file change is part of this milestone.
 
@@ -56,14 +60,15 @@ flowchart TB
 Bonjour, `/info`, signed PairSetup and iAP2 StartSession share one persistent
 pairing identifier `pi`. It is separate from the Ed25519 public key. Pairing
 keys, owner locks and the advisory generation marker use `/mnt/persist`;
-`/tmp` is transient RAM. The hook activates pairing/media only in wireless
-owner mode with the corresponding flags enabled. See
+`/tmp` is transient RAM. Pairing initialization and the media SETUP guard are
+scoped to wireless owner mode. See [review corrections](IOS210_CODE_REVIEW.md#-corrections-and-regression-coverage) and
 [receiver lifecycle](STOCK210_RECEIVER_LIFECYCLE.md#queue-and-owner-lifecycle).
 
 ## 📚 Reading paths
 
 | Topic | Notes |
 |---|---|
+| Current code review | [iOS and stock210 findings, reproductions and fixes required](IOS210_CODE_REVIEW.md) |
 | Current receiver | [Architecture](STOCK210_ARCHITECTURE.md) · [Startup](RECEIVER_START.md) · [Bridge](RECEIVER_BRIDGE.md) · [Readiness and restart](STOCK210_RECEIVER_LIFECYCLE.md) |
 | Bluetooth transport | [Graft](BTSTACK_GRAFT.md) · [Channel layout](RFCOMM_CHANNEL_LAYOUT.md) · [Duplex ABI](RFCOMM_DUPLEX.md) · [Discovery](BLUETOOTH_DISCOVERY.md) |
 | Graft construction | [Insertion plan](GRAFT_INSERTION_PLAN.md) · [Factory launcher experiments](GRAFT_LAUNCHER_LIFECYCLE.md) |
@@ -117,7 +122,7 @@ artifact hashes are preserved in [the lifecycle report](STOCK210_RECEIVER_LIFECY
 | Combined QNX lifecycle | Three owners, two media sessions, stable pi | Synthetic peripherals and wired child |
 | Pairing and control | Setup/Verify, reconnect, invalid signature/tag rejection | Independent protocol client, shared primitive helpers |
 | Media adapters | Two AVC inputs, 160 PCM packets, events and microphone checks | Input-only OMX; no decoded output |
-| Host protocol/ownership | 23 daemon tests and native ownership checks | No physical radio or SI session |
+| Host protocol/ownership | 27 daemon tests, C callback suites under ASan/UBSan and native ownership checks | CF/key/pointer fixtures; no physical radio or SI session |
 | Build and ABI guards | Wireless41 / wired26 exports, graft8/8 | Pinned local firmware images |
 
 The [validation ledger](STOCK210_VALIDATION.md) preserves earlier hashes and
@@ -135,6 +140,8 @@ Local log links require running the corresponding fixtures; logs are not in Git.
    current iPhone pairing/discovery, radio traffic and persistent storage.
 3. Validate decoded video, audio/microphone, disconnect/reconnect and physical
    SI/USB takeover. The QEMU wired child verifies ownership logic only.
+4. Implement paired crypto for stream 111 before enabling a wireless second
+   display. The current wired altScreen path uses legacy AES.
 
 Original offsets, byte layouts, hashes and negative results remain in the
 technical notes. [The migration map](MIGRATION.md) accounts for every document

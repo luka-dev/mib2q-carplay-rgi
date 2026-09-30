@@ -101,7 +101,8 @@ def prepare(work, media=False, lifecycle=False):
     source = '\n'.join(lines) + '\n'
     if media:
         source = source.replace('    MHI2Q_CP_WIRELESS_PAIRING=1\n',
-                                '    MHI2Q_CP_WIRELESS_PAIRING=1\n    MHI2Q_CP_WIRELESS_MEDIA=1\n')
+                                '    MHI2Q_CP_WIRELESS_PAIRING=1\n    MHI2Q_CP_WIRELESS_MEDIA=1\n'
+                                '    ALTSCREEN_HANDLE_ALT=1\n    ALTSCREEN_ADVERT_DISPLAYS=1\n')
     manifest.write_text(source)
     if lifecycle:
         from stock210_lifecycle_fixture import prepare_lifecycle
@@ -130,6 +131,13 @@ def validate(output, log, media=False, lifecycle=False):
     if '[pairing-store-qemu] reopen, process lock, permissions, corruption, symlink passed' not in output:
         missing.append('persistent-store regression')
     if media:
+        import plistlib
+        bodies = re.findall(r'\[independent-srp-qemu\] screen-setup-body-hex=([0-9a-f]+)', output)
+        if len(bodies) != (2 if lifecycle else 1):
+            missing.append('paired SETUP response count')
+        for body in bodies:
+            if 'altScreen' in plistlib.loads(bytes.fromhex(body)).get('enabledFeatures', []):
+                missing.append('unsupported paired altScreen negotiated')
         if len(re.findall(r'\[fakeomx\] EmptyThisBuffer #\d+ nFilledLen=8 flags=0x10', output)) != (2 if lifecycle else 1):
             missing.append('authenticated video frame count')
         if output.count('[stock210-media] authenticated PCM reached stock jitter buffer') != (160 if lifecycle else 80):

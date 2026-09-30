@@ -324,7 +324,7 @@ static void wireless_shutdown(void)
 static void wireless_setup(hook_setup_ctx_t *setup)
 {
     unsigned i;
-    if (setup->result || !cp_media_enabled()) return;
+    if (setup->result || !cp_dio_owner_is_wireless() || !cp_media_enabled()) return;
     pthread_mutex_lock(&lock);
     /* Never normalize a paired SETUP and then silently run legacy media if
      * the guarded stock context cannot be associated with its verifier. */

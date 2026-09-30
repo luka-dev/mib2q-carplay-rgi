@@ -22,7 +22,9 @@ fn receiver_profile(name: &str) -> Result<(&'static str, u32), String> {
 /// 252 bytes leave room for "pi=" inside one DNS-SD TXT item.
 pub fn validate_pairing_id(id: &str) -> Result<(), String> {
     if id.is_empty() || id.len() > 252 || id.bytes().any(|b| b <= 0x20 || b == 0x7f) {
-        return Err("invalid pairing identifier (expected 1..252 bytes without control/space)".into());
+        return Err(
+            "invalid pairing identifier (expected 1..252 bytes without control/space)".into(),
+        );
     }
     Ok(())
 }
@@ -86,10 +88,12 @@ impl Config {
         }
         let receiver = std::env::var("MHI2Q_CP_RECEIVER").unwrap_or_else(|_| "stock210".into());
         let (expected_version, expected_port) = receiver_profile(&receiver)?;
-        let source_version = std::env::var("MHI2Q_CP_SOURCE_VERSION")
-            .unwrap_or_else(|_| expected_version.into());
+        let source_version =
+            std::env::var("MHI2Q_CP_SOURCE_VERSION").unwrap_or_else(|_| expected_version.into());
         if source_version != expected_version {
-            return Err(format!("MHI2Q_CP_SOURCE_VERSION must match {receiver}: {expected_version}"));
+            return Err(format!(
+                "MHI2Q_CP_SOURCE_VERSION must match {receiver}: {expected_version}"
+            ));
         }
         let config = Self {
             name: read("MHI2Q_CP_NAME")?,
@@ -115,7 +119,9 @@ impl Config {
             source_version,
         };
         if config.airplay_port != expected_port {
-            return Err(format!("MHI2Q_CP_AIRPLAY_PORT must match {receiver}: {expected_port}"));
+            return Err(format!(
+                "MHI2Q_CP_AIRPLAY_PORT must match {receiver}: {expected_port}"
+            ));
         }
         if std::env::var("MHI2Q_CP_PUBLIC_KEY").is_ok_and(|value| !value.is_empty()) {
             return Err("MHI2Q_CP_PUBLIC_KEY is obsolete: use MHI2Q_CP_PAIRING_ID to pin pi, not an Ed25519 pk".into());
@@ -169,6 +175,8 @@ pub struct ControlMachine<A: AuthProvider> {
     config: Config,
     auth: A,
     phase: Phase,
+    identification_complete: bool,
+    authentication_complete: bool,
 }
 
 impl<A: AuthProvider> ControlMachine<A> {
@@ -177,41 +185,58 @@ impl<A: AuthProvider> ControlMachine<A> {
             config,
             auth,
             phase: Phase::AwaitIdentification,
+            identification_complete: false,
+            authentication_complete: false,
         }
     }
     pub fn phase(&self) -> Phase {
         self.phase
     }
 
+    fn update_phase(&mut self) {
+        self.phase = if !self.identification_complete {
+            Phase::AwaitIdentification
+        } else if !self.authentication_complete {
+            Phase::AwaitAuth
+        } else {
+            Phase::Authenticated
+        };
+    }
+
     pub fn handle(&mut self, frame: &[u8]) -> Result<Option<Vec<u8>>, String> {
         let id = message_id(frame)?;
+        if self.phase == Phase::Failed {
+            return Err("iAP2 control session failed; a new link generation is required".into());
+        }
         match (self.phase, id) {
             (Phase::AwaitIdentification, 0x1D00) => Ok(Some(self.identification().encode())),
-            (Phase::AwaitIdentification, 0x1D02) => {
-                self.phase = Phase::AwaitAuth;
+            (_, 0x1D02) => {
+                self.identification_complete = true;
+                self.update_phase();
                 Ok(None)
             }
-            (Phase::AwaitIdentification, 0x1D03) => {
+            (_, 0x1D03) => {
                 self.phase = Phase::Failed;
                 Err("identification rejected by phone".into())
             }
-            (Phase::AwaitAuth, 0xAA00) => {
+            (_, 0xAA00) if !self.authentication_complete => {
                 let cert = self.auth.certificate()?;
                 Ok(Some(
                     AuthenticationCertificate { certificate: cert }.encode(),
                 ))
             }
-            (Phase::AwaitAuth, 0xAA02) => {
+            (_, 0xAA02) if !self.authentication_complete => {
                 let request = RequestAuthenticationChallengeResponse::decode(frame)
                     .map_err(|e| e.to_string())?;
                 let response = self.auth.sign(&request.challenge)?;
                 Ok(Some(AuthenticationResponse { response }.encode()))
             }
-            (Phase::AwaitAuth, 0xAA05) => {
-                self.phase = Phase::Authenticated;
+            (_, 0xAA05) => {
+                self.authentication_complete = true;
+                self.update_phase();
                 Ok(None)
             }
-            (Phase::AwaitAuth, 0xAA04) => {
+            (_, 0xAA04) => {
                 self.phase = Phase::Failed;
                 Err("MFi authentication rejected by phone".into())
             }
@@ -251,7 +276,9 @@ impl<A: AuthProvider> ControlMachine<A> {
                     .encode(),
                 ))
             }
-            (_, 0x5702 | 0x4300) => Err("CarPlay request before MFi authentication".into()),
+            (_, 0x5702 | 0x4300) => {
+                Err("CarPlay request before identification and MFi authentication complete".into())
+            }
             _ => Ok(None),
         }
     }
@@ -367,6 +394,196 @@ mod tests {
             device_id: "01:02:03:04:05:06".into(),
             pairing_id: None,
             source_version: "test".into(),
+        }
+    }
+
+    fn authenticate(machine: &mut ControlMachine<TestAuth>) {
+        let cert = machine
+            .handle(&RequestAuthenticationCertificate {}.encode())
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            AuthenticationCertificate::decode(&cert)
+                .unwrap()
+                .certificate,
+            [1, 2, 3]
+        );
+        let answer = machine
+            .handle(
+                &RequestAuthenticationChallengeResponse {
+                    challenge: vec![4, 5, 6],
+                }
+                .encode(),
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            AuthenticationResponse::decode(&answer).unwrap().response,
+            [6, 5, 4]
+        );
+        machine
+            .handle(&AuthenticationSucceeded {}.encode())
+            .unwrap();
+    }
+
+    #[test]
+    fn authentication_first_keeps_bootstrap_gated_until_identification() {
+        let mut machine = ControlMachine::new(config(), TestAuth);
+        authenticate(&mut machine);
+        assert_eq!(machine.phase(), Phase::AwaitIdentification);
+        assert!(
+            machine
+                .handle(&RequestAccessoryWiFiConfigurationInformation {}.encode())
+                .is_err()
+        );
+        let availability = CarPlayAvailability {
+            wired_attributes: None,
+            wireless_attributes: Some(CarPlayAvailabilityWirelessAttributes {
+                available: Some(true),
+                bluetooth_transport_identifier: None,
+            }),
+        }
+        .encode();
+        assert!(machine.handle(&availability).is_err());
+        let ident = machine
+            .handle(&StartIdentification {}.encode())
+            .unwrap()
+            .unwrap();
+        assert!(IdentificationInformation::decode(&ident).is_ok());
+        machine.handle(&IdentificationAccepted {}.encode()).unwrap();
+        assert_eq!(machine.phase(), Phase::Authenticated);
+        assert!(machine.handle(&availability).unwrap().is_some());
+        assert!(
+            machine
+                .handle(&RequestAccessoryWiFiConfigurationInformation {}.encode())
+                .unwrap()
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn identification_can_complete_between_authentication_requests() {
+        let mut machine = ControlMachine::new(config(), TestAuth);
+        assert!(
+            machine
+                .handle(&RequestAuthenticationCertificate {}.encode())
+                .unwrap()
+                .is_some()
+        );
+        machine.handle(&StartIdentification {}.encode()).unwrap();
+        machine.handle(&IdentificationAccepted {}.encode()).unwrap();
+        assert_eq!(machine.phase(), Phase::AwaitAuth);
+        assert!(
+            machine
+                .handle(&RequestAccessoryWiFiConfigurationInformation {}.encode())
+                .is_err()
+        );
+        authenticate(&mut machine);
+        assert_eq!(machine.phase(), Phase::Authenticated);
+        // Duplicate completion messages cannot regress a completed session.
+        machine.handle(&IdentificationAccepted {}.encode()).unwrap();
+        machine
+            .handle(&AuthenticationSucceeded {}.encode())
+            .unwrap();
+        assert_eq!(machine.phase(), Phase::Authenticated);
+    }
+
+    #[test]
+    fn every_identification_authentication_interleaving_gates_credentials() {
+        // Merge the two ordered exchanges: 2 identification messages and
+        // 3 authentication messages have ten legal interleavings.
+        let identification = [
+            StartIdentification {}.encode(),
+            IdentificationAccepted {}.encode(),
+        ];
+        let authentication = [
+            RequestAuthenticationCertificate {}.encode(),
+            RequestAuthenticationChallengeResponse {
+                challenge: vec![4, 5, 6],
+            }
+            .encode(),
+            AuthenticationSucceeded {}.encode(),
+        ];
+        let wifi = RequestAccessoryWiFiConfigurationInformation {}.encode();
+        let carplay = CarPlayAvailability {
+            wired_attributes: None,
+            wireless_attributes: Some(CarPlayAvailabilityWirelessAttributes {
+                available: Some(true),
+                bluetooth_transport_identifier: None,
+            }),
+        }
+        .encode();
+        let mut permutations = 0;
+        for first_ident in 0..5 {
+            for second_ident in first_ident + 1..5 {
+                let mut machine = ControlMachine::new(config(), TestAuth);
+                let (mut ident_index, mut auth_index) = (0, 0);
+                for step in 0..5 {
+                    let frame = if step == first_ident || step == second_ident {
+                        ident_index += 1;
+                        &identification[ident_index - 1]
+                    } else {
+                        auth_index += 1;
+                        &authentication[auth_index - 1]
+                    };
+                    let reply = machine.handle(frame).unwrap();
+                    match message_id(frame).unwrap() {
+                        0x1D00 => {
+                            IdentificationInformation::decode(&reply.unwrap()).unwrap();
+                        }
+                        0xAA00 => {
+                            assert_eq!(
+                                AuthenticationCertificate::decode(&reply.unwrap())
+                                    .unwrap()
+                                    .certificate,
+                                [1, 2, 3]
+                            );
+                        }
+                        0xAA02 => {
+                            assert_eq!(
+                                AuthenticationResponse::decode(&reply.unwrap())
+                                    .unwrap()
+                                    .response,
+                                [6, 5, 4]
+                            );
+                        }
+                        _ => assert!(reply.is_none()),
+                    }
+                    let complete = ident_index == 2 && auth_index == 3;
+                    assert_eq!(machine.handle(&wifi).is_ok(), complete);
+                    assert_eq!(machine.handle(&carplay).is_ok(), complete);
+                    assert_eq!(machine.phase() == Phase::Authenticated, complete);
+                }
+                permutations += 1;
+            }
+        }
+        assert_eq!(permutations, 10);
+    }
+
+    #[test]
+    fn either_failure_is_terminal_in_both_orders_and_new_session_resets() {
+        for failure in [0xAA04u16, 0x1D03] {
+            for completed in 0..4 {
+                let mut machine = ControlMachine::new(config(), TestAuth);
+                if completed == 1 || completed == 3 {
+                    machine.handle(&IdentificationAccepted {}.encode()).unwrap();
+                }
+                if completed == 2 || completed == 3 {
+                    authenticate(&mut machine);
+                }
+                let [hi, lo] = failure.to_be_bytes();
+                assert!(machine.handle(&[0x40, 0x40, 0, 6, hi, lo]).is_err());
+                assert_eq!(machine.phase(), Phase::Failed);
+                for id in [0xAA00u16, 0xAA05, 0x1D00, 0x1D02, 0x5702, 0x4300] {
+                    let [hi, lo] = id.to_be_bytes();
+                    assert!(machine.handle(&[0x40, 0x40, 0, 6, hi, lo]).is_err());
+                    assert_eq!(machine.phase(), Phase::Failed);
+                }
+                let mut next = ControlMachine::new(config(), TestAuth);
+                assert_eq!(next.phase(), Phase::AwaitIdentification);
+                authenticate(&mut next);
+                assert_eq!(next.phase(), Phase::AwaitIdentification);
+            }
         }
     }
 

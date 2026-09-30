@@ -735,7 +735,8 @@ static int advert_preflight(void *session, uint32_t sequence)
 {
     void *displays = NULL;
     void *features = NULL;
-    if (!session || !env_on("ALTSCREEN_ADVERT_DISPLAYS") || disp_ok != 1)
+    if (cp_dio_owner_is_wireless() || !session ||
+        !env_on("ALTSCREEN_ADVERT_DISPLAYS") || disp_ok != 1)
         goto fail;
     displays = build_displays(g_alt_night_mode ? 1 : 0);
     if (!displays) goto fail;
@@ -806,6 +807,9 @@ static int advert_ready_for_session(void *session)
  * stock receiver cannot satisfy and can restart the whole CarPlay session. */
 static void alt_on_server_info(void *session, void *info)
 {
+    /* This receiver's stream111 uses legacy AES. Paired wireless media
+     * currently supports the main display only, regardless of wrapper flags. */
+    if (cp_dio_owner_is_wireless()) return;
     if (cf_init() == 1 && env_on("ALTSCREEN_HANDLE_ALT") &&
         alt_resolve() == 1 && advert_ready_for_session(session)) {
         /* Hold the retained contract stable until BOTH extendedFeatures and
@@ -1829,6 +1833,7 @@ static void *alt_find_111(void *request)
  * the response. */
 static void alt_on_setup_response(hook_setup_ctx_t *setup)
 {
+    if (cp_dio_owner_is_wireless()) return;
     void *session = setup->session;
     void *request = setup->request;
     void *respOut = setup->response;
