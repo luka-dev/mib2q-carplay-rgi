@@ -51,6 +51,8 @@ function Invoke-Worker([string[]]$Arguments) {
     Write-Output "WORKER_STDOUT $stdout"
     Write-Output "WORKER_STDERR $stderr"
     $process=Start-Process -FilePath $py -ArgumentList $Arguments -PassThru -NoNewWindow -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+    # Start-Process may otherwise lose the native exit status after Refresh.
+    $retainedHandle=$process.Handle
     $processId=$process.Id
     Write-Output "WORKER_PID $processId"
     $lastOutput=Get-Date
@@ -69,8 +71,9 @@ function Invoke-Worker([string[]]$Arguments) {
         }
     }
     $process.WaitForExit()
+    Write-Output "WORKER_EXIT $($process.ExitCode)"
     Get-Content $stdout -Tail 8 -ErrorAction SilentlyContinue
-    if($process.ExitCode -ne 0) {
+    if($null -eq $process.ExitCode -or $process.ExitCode -ne 0) {
         Get-Content $stderr -Tail 20 -ErrorAction SilentlyContinue
         throw "Worker exit $($process.ExitCode); explicit verified resume required"
     }
@@ -82,6 +85,16 @@ try {
     if(-not(Test-Path "$out\smoke_audit.json")) {
         Remove-Item Env:CUDA_VISIBLE_DEVICES -ErrorAction SilentlyContinue
         foreach($mode in @('original','residual96x4')) {
+            $marker="$out\${mode}_smoke\train_complete.json"
+            if(Test-Path $marker) {
+                $finished=Get-Content $marker -Raw | ConvertFrom-Json
+                if(-not $finished.complete -or $finished.step -ne 20 -or -not $finished.smoke -or
+                    $finished.protocol_sha256 -ne $inputs["$out\manifest.json"].ToLowerInvariant()) {
+                    throw 'Completed smoke semantics differ'
+                }
+                Write-Output "REUSE_COMPLETED_SMOKE $mode; CPU audit still required"
+                continue
+            }
             Invoke-Worker (@('-u',"$tools\train_causal_reference_generalization.py",'train','--mode',$mode,'--smoke')+$common)
         }
         $env:CUDA_VISIBLE_DEVICES='-1'
