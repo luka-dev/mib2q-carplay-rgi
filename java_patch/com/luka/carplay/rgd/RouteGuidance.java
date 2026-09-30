@@ -824,6 +824,12 @@ public class RouteGuidance implements CarplayBus.Listener {
         // Keep failed HUD/renderer updates across subsequent distance-only deltas.
         if (d.has("route_generation")) {
             long generation = d.num64("route_generation", -1L);
+            if (generation >= 0L && state.routeGeneration >= 0L && generation < state.routeGeneration) {
+                // Native generations use a monotonic clock, including hook respawns. Drop the
+                // entire old frame before it can clear route authority, slots or pending dirty bits.
+                // A real disconnect resets state, allowing the next session's first generation.
+                return;
+            }
             if (generation >= 0L && generation != state.routeGeneration) {
                 // Native resets can be hidden by debounce and reuse every slot
                 // version. Reset content before applying this generation's fields,
