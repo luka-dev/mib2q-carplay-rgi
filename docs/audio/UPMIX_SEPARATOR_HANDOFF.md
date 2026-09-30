@@ -1,5 +1,8 @@
 # Upmix Separator Track — Handoff
 
+**Capacity live state:** Original-graph control completed20k continuation (3,340.869s,156TRAIN); expanded arm is now training under the same singleGPU supervisor. Control TRAIN12 eligible median−.935dB/DEV40−.588dB, upper DEV transmission .0067/.0057 remain weak. Final paired audit/full40 C/entries waits for expanded20k. [Terminal control evidence](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30.md#capacity-control-continuation-completed-expanded-arm-started).
+
+
 **Perfect-label renderer bound complete, 2026-09-30:** Same NN-free C,40×60s/231rows and fixed .40: guitar/keys/piano/strings .386/.396/.395/.392,voice/bass/drums .0057/.0125/.0117,2/40swings; all11 observed renderer gates pass. Thus the nominal harness can support a much stronger rear than the current network's .177guitar/27swings. The .50 oracle fails11swings/keys slope; gain alone is not a repair. [Raw evidence and scope](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30.md#exact-labelled-audio-nn-free-renderer-result-expressive-rear-is-attainable-in-this-harness). Capacity continuation remains running; expanded standalone C and ARM/QNX numerical checks pass on actual20-step TRAIN weights, without terminal acoustic/int8/device/ears qualification.
 
 
