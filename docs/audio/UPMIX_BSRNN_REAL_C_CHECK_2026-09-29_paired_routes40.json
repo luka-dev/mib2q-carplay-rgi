@@ -1,0 +1,384 @@
+{
+  "scope": "paired stem harness; held-out, causality, device budget and listening are separate gates",
+  "anchor": "UPMIX_BSRNN_REAL_C_CHECK_2026-09-29_baseline.csv",
+  "candidate": "UPMIX_BSRNN_REAL_C_CHECK_2026-09-29_direct.csv",
+  "songs": 40,
+  "rows_anchor": 231,
+  "rows_candidate": 231,
+  "any_stem_swing": {
+    "anchor": 11,
+    "candidate": 0,
+    "new": [],
+    "resolved": [
+      "Ben James - Home",
+      "Fake Eyes - I'm A Mess",
+      "Holy Magick - Even Though",
+      "Holy Magick - Hold Your Own",
+      "Holy Magick - Hungry Mind",
+      "Holy Magick - Is It All On Me",
+      "Holy Magick - Old Friends",
+      "Holy Magick - Panic!",
+      "Holy Magick - Take Another Line",
+      "Juniper - Nice To Be Home",
+      "Modified Freq - Take You Away"
+    ]
+  },
+  "by_stem": {
+    "vocals": {
+      "median_rear": {
+        "n": 40,
+        "anchor_median": 0.0078,
+        "candidate_median": 0.0022,
+        "difference_of_medians": -0.0056,
+        "paired_median_delta": -0.0048,
+        "paired_median_delta_ci90": [
+          -0.0065,
+          -0.0037
+        ]
+      },
+      "slope_per_6dB": {
+        "n": 40,
+        "anchor_median": -0.0221,
+        "candidate_median": -0.0086,
+        "difference_of_medians": 0.0136,
+        "paired_median_delta": 0.0108,
+        "paired_median_delta_ci90": [
+          0.0084,
+          0.0151
+        ]
+      },
+      "rear_rms_db": {
+        "n": 40,
+        "anchor_median": -38.0297,
+        "candidate_median": -37.9287,
+        "difference_of_medians": 0.101,
+        "paired_median_delta": -0.0885,
+        "paired_median_delta_ci90": [
+          -0.2996,
+          0.0545
+        ]
+      }
+    },
+    "guitar": {
+      "median_rear": {
+        "n": 39,
+        "anchor_median": 0.2171,
+        "candidate_median": 0.2002,
+        "difference_of_medians": -0.0168,
+        "paired_median_delta": -0.0176,
+        "paired_median_delta_ci90": [
+          -0.033,
+          0.0059
+        ]
+      },
+      "slope_per_6dB": {
+        "n": 39,
+        "anchor_median": 0.0141,
+        "candidate_median": 0.0228,
+        "difference_of_medians": 0.0087,
+        "paired_median_delta": 0.0081,
+        "paired_median_delta_ci90": [
+          0.003,
+          0.012
+        ]
+      },
+      "rear_rms_db": {
+        "n": 39,
+        "anchor_median": -37.9657,
+        "candidate_median": -37.3739,
+        "difference_of_medians": 0.5919,
+        "paired_median_delta": -0.1056,
+        "paired_median_delta_ci90": [
+          -0.3695,
+          0.0425
+        ]
+      }
+    },
+    "piano": {
+      "median_rear": {
+        "n": 15,
+        "anchor_median": 0.158,
+        "candidate_median": 0.2187,
+        "difference_of_medians": 0.0607,
+        "paired_median_delta": 0.0655,
+        "paired_median_delta_ci90": [
+          0.0424,
+          0.0791
+        ]
+      },
+      "slope_per_6dB": {
+        "n": 15,
+        "anchor_median": 0.0087,
+        "candidate_median": 0.0267,
+        "difference_of_medians": 0.018,
+        "paired_median_delta": 0.0165,
+        "paired_median_delta_ci90": [
+          0.0086,
+          0.0241
+        ]
+      },
+      "rear_rms_db": {
+        "n": 15,
+        "anchor_median": -37.0692,
+        "candidate_median": -36.0969,
+        "difference_of_medians": 0.9723,
+        "paired_median_delta": 0.1668,
+        "paired_median_delta_ci90": [
+          -0.1157,
+          1.189
+        ]
+      }
+    },
+    "other_keys": {
+      "median_rear": {
+        "n": 27,
+        "anchor_median": 0.18,
+        "candidate_median": 0.2108,
+        "difference_of_medians": 0.0309,
+        "paired_median_delta": -0.0087,
+        "paired_median_delta_ci90": [
+          -0.0539,
+          0.0211
+        ]
+      },
+      "slope_per_6dB": {
+        "n": 27,
+        "anchor_median": 0.0153,
+        "candidate_median": 0.0284,
+        "difference_of_medians": 0.0131,
+        "paired_median_delta": 0.0098,
+        "paired_median_delta_ci90": [
+          0.0059,
+          0.0139
+        ]
+      },
+      "rear_rms_db": {
+        "n": 27,
+        "anchor_median": -36.9429,
+        "candidate_median": -36.1442,
+        "difference_of_medians": 0.7987,
+        "paired_median_delta": 0.0408,
+        "paired_median_delta_ci90": [
+          -0.2288,
+          0.1944
+        ]
+      }
+    },
+    "bowed_strings": {
+      "median_rear": {
+        "n": 6,
+        "anchor_median": 0.1346,
+        "candidate_median": 0.2042,
+        "difference_of_medians": 0.0696,
+        "paired_median_delta": -0.01,
+        "paired_median_delta_ci90": [
+          -0.0701,
+          0.1189
+        ]
+      },
+      "slope_per_6dB": {
+        "n": 6,
+        "anchor_median": -0.0063,
+        "candidate_median": 0.0363,
+        "difference_of_medians": 0.0426,
+        "paired_median_delta": 0.02,
+        "paired_median_delta_ci90": [
+          0.0128,
+          0.0465
+        ]
+      },
+      "rear_rms_db": {
+        "n": 6,
+        "anchor_median": -38.6643,
+        "candidate_median": -37.7431,
+        "difference_of_medians": 0.9211,
+        "paired_median_delta": 1.0499,
+        "paired_median_delta_ci90": [
+          -0.7084,
+          1.6451
+        ]
+      }
+    },
+    "wind": {
+      "median_rear": {
+        "n": 5,
+        "anchor_median": 0.252,
+        "candidate_median": 0.2159,
+        "difference_of_medians": -0.036,
+        "paired_median_delta": -0.0413,
+        "paired_median_delta_ci90": [
+          -0.0873,
+          0.0314
+        ]
+      },
+      "slope_per_6dB": {
+        "n": 5,
+        "anchor_median": 0.0155,
+        "candidate_median": 0.0107,
+        "difference_of_medians": -0.0048,
+        "paired_median_delta": 0.01,
+        "paired_median_delta_ci90": [
+          -0.0131,
+          0.0407
+        ]
+      },
+      "rear_rms_db": {
+        "n": 5,
+        "anchor_median": -39.4002,
+        "candidate_median": -39.4715,
+        "difference_of_medians": -0.0713,
+        "paired_median_delta": 0.0074,
+        "paired_median_delta_ci90": [
+          -1.3852,
+          0.1884
+        ]
+      }
+    },
+    "other": {
+      "median_rear": {
+        "n": 9,
+        "anchor_median": 0.1075,
+        "candidate_median": 0.0368,
+        "difference_of_medians": -0.0707,
+        "paired_median_delta": -0.0422,
+        "paired_median_delta_ci90": [
+          -0.0707,
+          -0.0111
+        ]
+      },
+      "slope_per_6dB": {
+        "n": 9,
+        "anchor_median": -0.0083,
+        "candidate_median": 0.0049,
+        "difference_of_medians": 0.0132,
+        "paired_median_delta": 0.0065,
+        "paired_median_delta_ci90": [
+          0.0002,
+          0.0138
+        ]
+      },
+      "rear_rms_db": {
+        "n": 9,
+        "anchor_median": -39.3628,
+        "candidate_median": -38.6081,
+        "difference_of_medians": 0.7547,
+        "paired_median_delta": 0.1944,
+        "paired_median_delta_ci90": [
+          -0.4155,
+          0.6445
+        ]
+      }
+    },
+    "bass": {
+      "median_rear": {
+        "n": 28,
+        "anchor_median": 0.0133,
+        "candidate_median": 0.007,
+        "difference_of_medians": -0.0063,
+        "paired_median_delta": -0.0023,
+        "paired_median_delta_ci90": [
+          -0.0061,
+          -0.001
+        ]
+      },
+      "slope_per_6dB": {
+        "n": 34,
+        "anchor_median": -0.0206,
+        "candidate_median": -0.0124,
+        "difference_of_medians": 0.0082,
+        "paired_median_delta": 0.0096,
+        "paired_median_delta_ci90": [
+          0.0061,
+          0.0119
+        ]
+      },
+      "rear_rms_db": {
+        "n": 40,
+        "anchor_median": -38.0297,
+        "candidate_median": -37.9287,
+        "difference_of_medians": 0.101,
+        "paired_median_delta": -0.0885,
+        "paired_median_delta_ci90": [
+          -0.3111,
+          0.0545
+        ]
+      }
+    },
+    "drums": {
+      "median_rear": {
+        "n": 40,
+        "anchor_median": 0.0649,
+        "candidate_median": 0.0033,
+        "difference_of_medians": -0.0616,
+        "paired_median_delta": -0.0596,
+        "paired_median_delta_ci90": [
+          -0.0648,
+          -0.052
+        ]
+      },
+      "slope_per_6dB": {
+        "n": 40,
+        "anchor_median": -0.0198,
+        "candidate_median": -0.0048,
+        "difference_of_medians": 0.015,
+        "paired_median_delta": 0.0149,
+        "paired_median_delta_ci90": [
+          0.0135,
+          0.0183
+        ]
+      },
+      "rear_rms_db": {
+        "n": 40,
+        "anchor_median": -38.0297,
+        "candidate_median": -37.9287,
+        "difference_of_medians": 0.101,
+        "paired_median_delta": -0.0885,
+        "paired_median_delta_ci90": [
+          -0.3111,
+          0.0665
+        ]
+      }
+    },
+    "percussion": {
+      "median_rear": {
+        "n": 10,
+        "anchor_median": 0.0523,
+        "candidate_median": 0.0021,
+        "difference_of_medians": -0.0502,
+        "paired_median_delta": -0.0469,
+        "paired_median_delta_ci90": [
+          -0.0626,
+          -0.0345
+        ]
+      },
+      "slope_per_6dB": {
+        "n": 10,
+        "anchor_median": -0.0248,
+        "candidate_median": -0.0001,
+        "difference_of_medians": 0.0247,
+        "paired_median_delta": 0.0181,
+        "paired_median_delta_ci90": [
+          0.0075,
+          0.0257
+        ]
+      },
+      "rear_rms_db": {
+        "n": 10,
+        "anchor_median": -38.176,
+        "candidate_median": -38.3395,
+        "difference_of_medians": -0.1635,
+        "paired_median_delta": -0.0932,
+        "paired_median_delta_ci90": [
+          -0.4159,
+          0.7348
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "bootstrap_trials": 5000,
+    "seed": 1609,
+    "comparison_script_sha256": "820af958617bc1900541e378d10753acfb0f89e72c9d96d71c057300fb80d708",
+    "paired_song_stem_keys_equal": true
+  }
+}

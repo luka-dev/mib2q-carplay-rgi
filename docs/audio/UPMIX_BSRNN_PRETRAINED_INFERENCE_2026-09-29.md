@@ -83,3 +83,7 @@ Use SIMO as the stronger offline reference for a predeclared same-input comparis
 
 Terminal readback: **no GPU lease, rapid queue empty, zero Python processes**, upstream checkout clean, runtime freeze present and 52 WAVs. Shared Python still lacks the newly installed reference packages; torch/torchaudio stayed `2.11.0+cu128`. Completed item 1; full source/entry/C/device/independent-song/owner-ear gates remain open.
 
+
+## Completed follow-up
+
+The subsequent [full40 source/entry/real-C check](UPMIX_BSRNN_REAL_C_CHECK_2026-09-29.md) completed: SIMO with the frozen direct route passes all observed offline gates (0/40 swings; entry retention .875674/.745983 median/p10). The original route still gives 11/40 swings. That report contains the full fixed-gain CSVs, attribution, per-song failures and recovery history. This supersedes the pending follow-up above; causality, device, independent data and owner ears remain open.

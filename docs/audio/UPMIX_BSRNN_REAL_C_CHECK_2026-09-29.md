@@ -57,7 +57,7 @@ The saved transition rows, execution protocol and stdout were preserved before c
 
 ## Execution and results
 
-**C stage completed:** 40 paired 60-second songs, exactly 231 original-harness stem rows per condition, injection gain 1.0. Transition evaluation is still running; no joint completion verdict yet.
+**Completed:** 40 paired 60-second songs, exactly 231 original-harness stem rows per condition, injection gain 1.0; 265 source-attributed transition/control events across all 40 songs. **SIMO + the frozen direct C route passes all 14 predeclared observed offline gates.** The original C route fails swing count and strings. This is a learned noncausal reference result on previously inspected DEV, not achievement of the product goal.
 
 ### Fixed-gain real-C results
 
@@ -106,3 +106,42 @@ Aggregate passes are not per-song guarantees. Direct-C guitar is .0376 on **Holy
 Actual-mask source attribution across the 40 excerpts gives median eligible energy transmission **.760908**, vocal **.071496**, drums-plus-percussion **.028737**, bass **.050555**. These are extractor transmissions, not C rear shares. `Other` median SI-SDR is **6.534351 dB**, fixed-gain nSDR **7.468483 dB**. Eligible transmission at 8–14 kHz is **.118433 (−9.265 dB)**, above 14 kHz **.118947**: this reference still loses upper-band instrument energy. Maximum final source-sum NSE is **2.82461×10⁻¹³**; chunk mask parity and source closure passed the declared assertions.
 
 Renderer aliases read back unchanged against the repository: `hssr_model.bin` SHA-256 `96abe57d9ee703f2e39c0231de97580c303ce896ce044b7450c14240002b0a0e`, `hssr_guard.bin` `ab01463e9359f013c4b40f311d630bd20af48d761ad361563cb5246f6bd686ae`. PC modification timestamps precede the run (2026-09-25). C binary, harness, checkpoint and execution hashes are in the protocol records.
+
+### Vocal entries, exits and sustained controls
+
+| Event kind | Events / songs | Valid post/pre ratios | Retention ratio median | Retention ratio p10 |
+| --- | ---: | ---: | ---: | ---: |
+| Vocal entry | 84 / 36 | 83 | **.875674** | **.745983** |
+| Vocal exit | 79 / 35 | 78 | 1.121178 | .972516 |
+| Sustained vocal control | 102 / 37 | 102 | 1.000665 | .886347 |
+
+Entry limits **median ≥ .85 and p10 ≥ .60 both pass**. These are medians/percentiles of each event's post/pre ratio, not ratios of aggregate medians. Entry absolute eligible retention is median **.909435 before / .763892 after**. Thus suppression has not disappeared: 27 of 83 valid entries have a ratio below .85, and two are below .60: **Holy Magick — Hungry Mind, 34.0 s (.459905)** and **Strugzy — RW, 14.0 s (.542847)**. These are concrete remaining failure cuts, even though the predeclared distribution gates pass.
+
+One entry (**Holy Magick — It's Your Money, 151 s**) has no valid pre-entry eligible denominator; one exit (**Modified Freq — Fire, 36 s**) has no valid pre/post denominator. Their ratios remain undefined under the frozen −55 dBFS floor and are counted as events but excluded from ratio percentiles; no replacement value is invented. Every detected event key is present exactly once in the final result.
+
+Entry true-vocal transmission has median **.081401 in the first two seconds / .137165 at steady state**. It is an extractor transmission, not rear vocal share; the C chain's low vocal median cannot be attributed to a perfectly vocal-free `other` estimate. Exit eligible retention increases by median 12.1%, and some individual entries still duck strongly. Neither an offline pass nor a noncausal event-aligned chunk schedule establishes the owner's “nothing moves when singing starts” verdict. Maximum event source-sum NSE **6.27170×10⁻¹³**.
+
+### Evidence, verification and terminal state
+
+| Artifact | Record |
+| --- | --- |
+| Completed numerical verdict | [Final JSON](UPMIX_BSRNN_REAL_C_CHECK_2026-09-29.json) |
+| All C stem measurements | [Original CSV](UPMIX_BSRNN_REAL_C_CHECK_2026-09-29_baseline.csv), [direct CSV](UPMIX_BSRNN_REAL_C_CHECK_2026-09-29_direct.csv) |
+| Per-song attribution / reconstruction | [Extraction JSON](UPMIX_BSRNN_REAL_C_CHECK_2026-09-29_extraction.json) |
+| All events, including invalid ratios and failures | [Transition JSON](UPMIX_BSRNN_REAL_C_CHECK_2026-09-29_transitions.json) |
+| Paired song bootstrap | [Two C routes, DEV40](UPMIX_BSRNN_REAL_C_CHECK_2026-09-29_paired_routes40.json), [sep9 versus SIMO, matched DEV20](UPMIX_BSRNN_REAL_C_CHECK_2026-09-29_paired_sep9_dev20.json) |
+| Frozen and resumed execution | [Original protocol](UPMIX_BSRNN_REAL_C_CHECK_2026-09-29_protocol.json), [first resume](UPMIX_BSRNN_REAL_C_CHECK_2026-09-29_execution_resume.json), [coverage resume](UPMIX_BSRNN_REAL_C_CHECK_2026-09-29_event_resume.json), [final resume](UPMIX_BSRNN_REAL_C_CHECK_2026-09-29_resume_protocol.json) |
+| Quiet-stem restoration | [Coverage audit](UPMIX_BSRNN_REAL_C_CHECK_2026-09-29_coverage_repair.json) |
+| Host outputs / attempt logs / original backups | `D:\upmix\runs\bsrnn_reference_check40_v1`, with C: execution/trace logs listed in the protocols |
+
+Local readback independently recomputed all C summaries and gates from the fetched CSVs, all three transition ratio median/p10 statistics from individual rows, exact 231 paired stem keys, 265 unique event keys covering 40 songs, completion/protocol/repair hashes, and the deployed evaluator's source hash. CPU event-resume smoke passed all 121 cached rows exactly without a model call. Accepted complete JSON SHA-256 **`679f1dea7b18ec2017275b1ed8c5ab831ddd23319cdda6c727fc884f45414637`**; final evaluator **`e5ded4764041d9e5ee65ffcbf60b8fc47f2f782427a9121d8889f628ed409c51`**.
+
+Terminal PC readback: **zero active Python, GPU lease absent, rapid queue empty, upstream checkout clean**. No training, shared package change, Track A edit, unit action or owner listening occurred in this evaluation. Failed attempts and recovery are recorded above; their partial markers are not completion evidence.
+
+## Decision and next step
+
+The known numerical frontier is **not an unavoidable property of the target or of the tested corrected C route**: a pretrained learned estimator now passes the observed joint DEV40 gates at fixed gain. The matching-song sep9 comparison supports extraction quality as a remaining limitation of the earlier student. Conversely, identical strong SIMO audio gives 11 swing songs through the original route and zero through the corrected route at +.101 dB median rear level, so renderer routing remains a separate measured cause of instability.
+
+This does not diagnose which combination of corpus, training duration, capacity, complex head, normalization or future context explains the student gap. Optimized SIMO has **108.7 million parameters** and uses unrestricted future within offline chunks. Its extraction quality cannot be assumed to survive ≤150 M measured int8 MAC/s and ≤85 ms total extra latency. No independent untouched-20 result exists here, and the owner has not heard this candidate through live CarPlay.
+
+Next use this executable reference and fixed-gain C evaluation as a quality target for a **matched causal mechanism test**, before compression or head-unit porting. The literature plan's normalized residual causal encoder against the original encoder, using the same fixed trained decoder and exact four TRAIN crops, remains the next proposed controlled diagnostic; it has not been implemented/queued by this check. A positive acoustic result must then survive full DEV, source/entry/C gates, an independently reserved set, and device measurement. No automatic promise that a new encoder will work, no larger device budget, and no imitation of q6d's errors as the sole training target. Track A owns any eventual hook integration; owner blind live CarPlay remains a separate final gate.

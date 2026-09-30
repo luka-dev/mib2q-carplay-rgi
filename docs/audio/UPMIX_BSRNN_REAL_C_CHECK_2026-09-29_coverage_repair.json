@@ -1,0 +1,122 @@
+{
+  "scope": "CPU restoration of original DEV40 coverage, saved audio unchanged",
+  "expected_csv_sha256": "d3ae0c73eccc3938201a0271ac33eb3e97b8ab7aff31dd93102a6339e6244c30",
+  "expected_rows": 231,
+  "original_expression": "(stem*k)**2 sum < 1e-3 * raw_mix**2 sum",
+  "previous_expression": "stem**2 sum < 1e-3 * raw_mix**2 sum",
+  "repair_script_sha256": "cc160f43df3002357373f6dc0da77713d5f4921ca1d578f74e56e67210a62fef",
+  "records": [
+    {
+      "point": "baseline",
+      "song": "Ben James - Home",
+      "added": [
+        {
+          "song": "Ben James - Home",
+          "genre": "pop",
+          "stem": "other",
+          "median_rear": 0.21983114598478445,
+          "steady_std": 0.10215086326972991,
+          "range_1s": 0.37510626593345,
+          "worst_half_s": 0.15869481993064716,
+          "slope_per_6dB": -0.011766722801074821,
+          "level_corr": -0.04281992212699856,
+          "level_db": -22.476078048867684,
+          "frames": 325,
+          "rear_rms_db": -40.128703187989416,
+          "rear_300_1k": 0.07462431514194064,
+          "rear_1_2k": 0.12445560126404841,
+          "rear_2_4k": 0.08763375802855548,
+          "rear_4_6k": 0.18708382743519372,
+          "rear_6_10k": 0.37505271660712347,
+          "rear_10_16k": 0.1942761464779482
+        }
+      ],
+      "old_rows_sha256": "3ffaaf3b22a19deed920ab0da64d16f975737f1263d1e9c27b607f8b6dee5afd",
+      "new_rows_sha256": "70c240a319c41c6b36d3bff936b3a7203097a6cdd136cd1bdf6de8514a0397f5"
+    },
+    {
+      "point": "baseline",
+      "song": "Holy Magick - Crystal Observatory",
+      "added": [
+        {
+          "song": "Holy Magick - Crystal Observatory",
+          "genre": "rock",
+          "stem": "percussion",
+          "median_rear": 0.0542038414650954,
+          "steady_std": 0.035377735187248134,
+          "range_1s": 0.036898088949675695,
+          "worst_half_s": 0.027715169192877635,
+          "slope_per_6dB": -0.0032941731258573598,
+          "level_corr": -0.08147481716909509,
+          "level_db": -24.481426233358707,
+          "frames": 643,
+          "rear_rms_db": -35.459261694936764,
+          "rear_300_1k": null,
+          "rear_1_2k": null,
+          "rear_2_4k": null,
+          "rear_4_6k": 0.07990458779791161,
+          "rear_6_10k": 0.0805635290209885,
+          "rear_10_16k": 0.03977590352275773
+        }
+      ],
+      "old_rows_sha256": "d694c172da67ed0d69b6dc6e6739622414c083f30ac475b4fe9eb6e91750a341",
+      "new_rows_sha256": "8d6a5ea16c75b3756e53ea89abc66fd25b93b309fdd9417be5660b91b9a32e87"
+    },
+    {
+      "point": "direct_no_bed_body0_cal",
+      "song": "Ben James - Home",
+      "added": [
+        {
+          "song": "Ben James - Home",
+          "genre": "pop",
+          "stem": "other",
+          "median_rear": 0.06068574093610444,
+          "steady_std": 0.05795697561026123,
+          "range_1s": 0.26493470810338143,
+          "worst_half_s": 0.052690807866727814,
+          "slope_per_6dB": 0.014278312545092115,
+          "level_corr": 0.07222662716116819,
+          "level_db": -22.476078048867684,
+          "frames": 325,
+          "rear_rms_db": -38.48359875389089,
+          "rear_300_1k": 0.12268285614599009,
+          "rear_1_2k": 0.11367305301096138,
+          "rear_2_4k": 0.019239995790513467,
+          "rear_4_6k": 0.04663904684086217,
+          "rear_6_10k": 0.21071998441770004,
+          "rear_10_16k": 0.04652937312226121
+        }
+      ],
+      "old_rows_sha256": "af225ebe8c8983c9ae124792a9775019247ebca755bf2e9c226ce6c4c0b47423",
+      "new_rows_sha256": "66f80b5781f131b39db87bc9c056df63f6dab06d476cd3369fff086b920e14e8"
+    },
+    {
+      "point": "direct_no_bed_body0_cal",
+      "song": "Holy Magick - Crystal Observatory",
+      "added": [
+        {
+          "song": "Holy Magick - Crystal Observatory",
+          "genre": "rock",
+          "stem": "percussion",
+          "median_rear": 2.4516461369601873e-05,
+          "steady_std": 0.0008617511816907494,
+          "range_1s": 0.00021958120173965075,
+          "worst_half_s": 2.206068747446134e-05,
+          "slope_per_6dB": -9.653373081915605e-05,
+          "level_corr": -0.052947222266722126,
+          "level_db": -24.481426233358707,
+          "frames": 643,
+          "rear_rms_db": -35.68807820324827,
+          "rear_300_1k": null,
+          "rear_1_2k": null,
+          "rear_2_4k": null,
+          "rear_4_6k": 0.0014558054023613017,
+          "rear_6_10k": 3.7133934769972946e-05,
+          "rear_10_16k": 3.0916682382328694e-06
+        }
+      ],
+      "old_rows_sha256": "8a525ca904650317542f673151383454a4224f21c091e66fa2a0c36c2d023dbd",
+      "new_rows_sha256": "7c7b6587f290191eab51d8d9cf7080a569613f1342559f4ff1f68294ffc4566d"
+    }
+  ]
+}
