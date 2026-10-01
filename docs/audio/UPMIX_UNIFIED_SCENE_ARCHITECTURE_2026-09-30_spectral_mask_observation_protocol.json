@@ -1,0 +1,12 @@
+{
+  "scope": "Original four TRAIN8s mixtures, synthetic proportional source partitions; arithmetic/observation only, no true-stem/DEV/scene/device/ear pass",
+  "fixture_sha256": "47dc5768a7ff38100a7d7cfbfa209fd5ea95e43101382d6e5cbf7819400e7233",
+  "assets_manifest_sha256": "3d0336b6bdac32a3c7ac75866e2213e38947631d70453c5b34c35ef2d4efb54c",
+  "old_executable_sha256": "6ba27079615ee98579f1e558cbd99f15a28087cdafa723ce106842ac236e114a",
+  "new_executable_sha256": "a5092001ce6c71238dcb04a71cb1ccea9d9fe97b9c553be02ceb98840261ea12",
+  "script_sha256": "8ccb923fcce2c7ddb32bd9e065eb519fb1ca9256b96e85dc7169dac5605035b5",
+  "library_sha256": "38d07329fd4dcdd6ac50fb076b9a640ad597bce4af8261c6d5c6bfdf007b2703",
+  "numeric_gates": "All4x8s float/int8 old/new-observed PCM6/sourcePCM/unrounded source bit exact; actual-mask source replay NSE<=1e-7/max4LSB; true partitions+rounding residual closure<=1e-9; selected116.712M; prefix/reset exact",
+  "rounding_case": "First original mixture's8193samples multiplied by.913, synthetic.4/.6 partitions; not a candidate gain or source quality comparison",
+  "malformed_case": "One trailing byte rejected for mask and sample formats"
+}

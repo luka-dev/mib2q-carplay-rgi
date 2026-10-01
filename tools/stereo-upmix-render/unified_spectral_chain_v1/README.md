@@ -26,7 +26,7 @@ unchanged. A static Windows executable can be built with MinGW using
 ## Interface
 
 ```text
-upmix_spectral_chain MODEL|identity INPUT_PCM16 OUTPUT6 SOURCE2 [SOURCE_FLOAT]
+upmix_spectral_chain MODEL|identity INPUT_PCM16 OUTPUT6 SOURCE2 [SOURCE_FLOAT [MASK_FLOAT]]
 ```
 
 Input uses little-endian `UMX16I01` plus three uint32 fields: stream count,
@@ -34,6 +34,20 @@ samples per stream and channels=2, followed by stream-major interleaved PCM16.
 Outputs use `UMX16O01` (six PCM16 channels), `UMX16S01` (stereo PCM16 eligible
 source), and optionally `UMXFLS01` (unrounded float32 source). Every stream
 starts from its own zero state. Flush emits whole512-sample hops.
+
+The optional diagnostic mask file starts with little-endian `<8s6I>`:
+`UMXMSK01`, version1, streams, hops,1025bins,2channels,2real/imaginary values.
+Float32 values follow in stream/hop/bin/channel/real-imaginary order. Masks
+come from inference on the actual PCM16 mixture, never separate stem inference.
+Identity writes1+0i. Observation runs after timed processing and audio writes;
+this diagnostic IO is not part of a live worker deadline measurement.
+
+`spectral_chain_mask_replay.py` applies those masks to true sources on CPU,
+keeping input rounding/sum residual separate. It preserves native delayed
+outputs and uses only the fixed1536sample array shift for offline scoring.
+`verify_spectral_chain_masks.py` checks unchanged audio, replay arithmetic,
+reset/future prefixes, rounding and malformed-file rejection. Its proportional
+synthetic source partitions establish arithmetic closure, not stem separation.
 
 The front mixture FIFO delays1536samples to align with the source estimator.
 Renderer settings stay fixed at nominal surround.40, front bass−3dB, front

@@ -72,12 +72,12 @@ static int process(Chain *s,const int16_t input[UMX_HOP][2],int16_t output[UMX_H
     return spa_stereo_upmix_process_s16(s->renderer,&delayed[0][0],UMX_HOP,&output[0][0],UMX_HOP);
 }
 static int execute(int argc,char **argv) {
-    UmxModel *model=NULL;Chain *chain=NULL;FILE *input=NULL,*output=NULL,*sources=NULL,*floats=NULL;
+    UmxModel *model=NULL;Chain *chain=NULL;FILE *input=NULL,*output=NULL,*sources=NULL,*floats=NULL,*masks=NULL;
     char error[192],magic[8];unsigned header[3],samples,hops,stream,hop,frames=0,overdue=0;
     int16_t in[UMX_HOP][2],out[UMX_HOP][6],eligible[UMX_HOP][2];
     float source_float[UMX_HOP][2];
     double *times=NULL,sum=0;uint64_t checksum=0,dense=0;int status=1,identity;
-    if(argc!=5&&argc!=6){fprintf(stderr,"usage: unified_chain MODEL|identity INPUT_PCM16 OUTPUT6 SOURCE2 [SOURCE_FLOAT]\n");return 2;}
+    if(argc<5||argc>7){fprintf(stderr,"usage: unified_chain MODEL|identity INPUT_PCM16 OUTPUT6 SOURCE2 [SOURCE_FLOAT [MASK_FLOAT]]\n");return 2;}
     identity=!strcmp(argv[1],"identity");
     if(!identity){model=umx_load(argv[1],error,sizeof(error));if(!model){fprintf(stderr,"%s\n",error);goto done;}}
     input=fopen(argv[2],"rb");if(!input)goto done;
@@ -85,12 +85,17 @@ static int execute(int argc,char **argv) {
        !header[0]||header[0]>40||!header[1]||header[1]>48000*120||header[2]!=2)goto done;
     samples=header[1];hops=(samples+UMX_DELAY+512+UMX_HOP-1)/UMX_HOP;
     times=(double*)malloc((size_t)header[0]*hops*sizeof(double));output=fopen(argv[3],"wb");sources=fopen(argv[4],"wb");
-    if(argc==6)floats=fopen(argv[5],"wb");
-    if(!times||!output||!sources||(argc==6&&!floats))goto done;
+    if(argc>=6)floats=fopen(argv[5],"wb");
+    if(argc==7)masks=fopen(argv[6],"wb");
+    if(!times||!output||!sources||(argc>=6&&!floats)||(argc==7&&!masks))goto done;
     header[1]=hops*UMX_HOP;header[2]=6;
     if(fwrite("UMX16O01",1,8,output)!=8||fwrite(header,4,3,output)!=3)goto done;
     header[2]=2;if(fwrite("UMX16S01",1,8,sources)!=8||fwrite(header,4,3,sources)!=3)goto done;
     if(floats&&(fwrite("UMXFLS01",1,8,floats)!=8||fwrite(header,4,3,floats)!=3))goto done;
+    if(masks) {
+        uint32_t mh[6]={1,header[0],hops,UMX_BINS,2,2};
+        if(fwrite("UMXMSK01",1,8,masks)!=8||fwrite(mh,4,6,masks)!=6)goto done;
+    }
     for(stream=0;stream<header[0];stream++) {
         unsigned read=0;chain=create(model);if(!chain)goto done;
         for(hop=0;hop<hops;hop++) {
@@ -104,11 +109,23 @@ static int execute(int argc,char **argv) {
             for(i=0;i<UMX_HOP;i++)for(c=0;c<6;c++)checksum=checksum*33+(uint16_t)out[i][c];
             if(fwrite(out,sizeof(int16_t)*6,UMX_HOP,output)!=UMX_HOP||fwrite(eligible,sizeof(int16_t)*2,UMX_HOP,sources)!=UMX_HOP)goto done;
             if(floats&&fwrite(source_float,sizeof(float)*2,UMX_HOP,floats)!=UMX_HOP)goto done;
+            /* Observation only, after timed inference and audio writes. The
+             * masks belong to the actual PCM mixture/state, never to stems
+             * passed individually through the network. No state is changed. */
+            if(masks) {
+                if(identity) {
+                    const float one[2]={1,0};
+                    for(i=0;i<UMX_BINS;i++)for(c=0;c<2;c++)if(fwrite(one,sizeof(float),2,masks)!=2)goto done;
+                } else {
+                    const UmxOutput *prediction=umx_audio_prediction(chain->neural);
+                    if(!prediction||fwrite(prediction->mask[0],sizeof(float),UMX_BINS*2*2,masks)!=UMX_BINS*2*2)goto done;
+                }
+            }
         }
         if(read!=samples)goto done;
         destroy(chain);chain=NULL;
     }
-    if(fgetc(input)!=EOF||fflush(output)||fflush(sources)||(floats&&fflush(floats)))goto done;
+    if(fgetc(input)!=EOF||fflush(output)||fflush(sources)||(floats&&fflush(floats))||(masks&&fflush(masks)))goto done;
     qsort(times,frames,sizeof(double),order);
     fprintf(stderr,"{\"frames\":%u,\"identity\":%s,\"streams\":%u,\"causal_front_alignment_samples\":1536,\"hop_acquisition_samples\":512,\"neural_dense_macs_s\":%.0f,\"chain_ms_mean\":%.9f,\"chain_ms_p99\":%.9f,\"chain_ms_max\":%.9f,\"hops_over_10_667ms\":%u,\"state_bytes\":%u,\"worker_stack_bytes\":262144,\"output_checksum\":%llu,\"old_neural_invocations\":0,\"old_blobs\":0,\"scope\":\"standalone causal FFT+one model+WOLA+copied NN-free real C renderer; IO excluded, no hook transport, loaded-worker or CarPlay proof\"}\n",frames,identity?"true":"false",header[0],(double)dense/frames*93.75,sum/frames*1000,times[(frames-1)*99/100]*1000,times[frames-1]*1000,overdue,(unsigned)(sizeof(Chain)+sizeof(struct spa_stereo_upmix)+umx_audio_state_bytes()),(unsigned long long)checksum);
     status=0;
@@ -118,6 +135,7 @@ done:
     if(output)fclose(output);
     if(sources)fclose(sources);
     if(floats)fclose(floats);
+    if(masks)fclose(masks);
     destroy(chain);free(times);umx_free(model);return status;
 }
 static void *worker(void *p){Task *t=(Task*)p;t->status=execute(t->argc,t->argv);return NULL;}
