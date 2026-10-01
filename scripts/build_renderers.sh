@@ -18,7 +18,7 @@ set -e
 [ "$#" -le 1 ] || { echo "usage: ./scripts/build_renderers.sh [grid]"; exit 2; }
 [ "$#" -eq 0 ] || [ "$1" = "grid" ] || { echo "usage: ./scripts/build_renderers.sh [grid]"; exit 2; }
 
-IMG=qnx65-armv7-toolchain:latest
+IMG=${QNX_IMAGE:-qnx65-armv7-toolchain:8.5}
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 GRID=""
@@ -39,7 +39,9 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
   CC=arm-unknown-nto-qnx6.5.0eabi-gcc
   CXX=arm-unknown-nto-qnx6.5.0eabi-g++
   AR=arm-unknown-nto-qnx6.5.0eabi-ar
-  mkdir -p /src/build/maneuver-scene-qnx
+  WORK=/tmp/mib2q-render
+  rm -rf "$WORK"
+  mkdir -p "$WORK/objects" /src/build
   ABI_INCLUDE=/src/toolchain/qnx65-abi/include
   GRID="'"$GRID"'"
 
@@ -57,17 +59,16 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
   gen_stub libGLESv2.so.1  "\bgl[A-Z][A-Za-z0-9]+"  $MR_SRCS
   SCENE_OBJECTS=""
   for source in scene/scene.cpp scene/geometry.cpp scene/layout.cpp scene/lane_panel.cpp; do
-    object=/src/build/maneuver-scene-qnx/$(basename "$source" .cpp).o
+    object=$WORK/objects/$(basename "$source" .cpp).o
     $CXX -O2 -std=c++11 -Wall -Wextra -fno-exceptions -fno-rtti \
         -D__QNX__ -DPLATFORM_QNX -fdata-sections -ffunction-sections $GRID \
         -I. -I../common -I"$ABI_INCLUDE" -c "$source" -o "$object"
     SCENE_OBJECTS="$SCENE_OBJECTS $object"
   done
-  rm -f /src/build/libmaneuver_scene.a
-  $AR rcs /src/build/libmaneuver_scene.a $SCENE_OBJECTS
+  $AR rcs $WORK/libmaneuver_scene.a $SCENE_OBJECTS
   $CC -O2 -std=gnu99 -Wall -D__QNX__ -DPLATFORM_QNX -fdata-sections -ffunction-sections $GRID \
       -I. -I../common -I"$ABI_INCLUDE" $MR_SRCS $SCENE_OBJECTS \
-      -o /src/build/maneuver_render \
+      -o $WORK/maneuver_render \
       -Wl,--gc-sections -Wl,--allow-shlib-undefined \
       -L/tmp -l:libscreen.so.1 -l:libEGL.so.1 -l:libGLESv2.so.1 -lsocket -lm
   if arm-unknown-nto-qnx6.5.0eabi-nm -u $SCENE_OBJECTS | grep -E "(__cxa|_ZSt|_ZTI|_ZTV|_Zn[aw]|_Zd[al]|gxx_personality)"; then
@@ -77,12 +78,13 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
 
   echo "--- verify (ARM ELF, no emutls) ---"
   for b in maneuver_render; do
-    B=/src/build/$b
+    B=$WORK/$b
     m=$(arm-unknown-nto-qnx6.5.0eabi-readelf -h "$B" | awk -F: "/Machine/{print \$2}" | tr -d " ")
     e=$(arm-unknown-nto-qnx6.5.0eabi-nm "$B" 2>/dev/null | grep -ci emutls || true)
     echo "  $b: machine=$m emutls=$e"
     [ "$m" = ARM ] && [ "$e" = 0 ] || exit 1
   done
+  cp $WORK/maneuver_render $WORK/libmaneuver_scene.a /src/build/
 '
 
 echo ""

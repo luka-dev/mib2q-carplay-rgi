@@ -19,6 +19,15 @@ tools/loader_preview/loader_preview
 **/.obsidian/
 __pycache__/
 output/
+/dist/
+/.build-cache/
+/android_auto/java/build/
+/android_auto/java/firmware-source/
+/firmware/private/
+*.jxe
+*.h264
+*.raw
+*.ppm
 
 # M.I.B. release payload is staged by hand from build/ and deploy/ (see docs/deploy/install.md)
 install_MoreIncredibleBash/mod/carplay/*

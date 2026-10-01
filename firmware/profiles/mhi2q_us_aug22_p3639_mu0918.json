@@ -1,0 +1,29 @@
+{
+  "id": "mhi2q_us_aug22_p3639_mu0918",
+  "label": "MHI2Q_US_AUG22_P3639 MU0918",
+  "status": "validated-on-car",
+  "files": {
+    "gal": {
+      "size": 1389617,
+      "sha256": "6fffb3608a5c504ec245b90ec4aed2646209dffd0644c5fa0504c29d0603a1b4",
+      "posix_cksum": 4240940011
+    },
+    "libautoreceiver.so": {
+      "size": 1069943,
+      "sha256": "6ef4abea8264ab7787b0ecb3fe278a65488301f703148d0175010f7b228bdaf6",
+      "posix_cksum": 1653920605
+    },
+    "lsd.jxe": {
+      "size": 59183739,
+      "sha256": "62891a9b72ad86be709dfa8cfdfffb69ba5ad9b732850289eb07bc091ec4b7d0"
+    },
+    "stock_jar": {
+      "size": 40256281,
+      "sha256": "6b168083f6672454214d04ec96ed07ffc747d66df83879be4409601ad03560a0"
+    },
+    "compile_jar": {
+      "size": 40638328,
+      "sha256": "3f32dad748c1e431e2a40908f21f66bfd93f3403c2bd7abb5b36210a9155797e"
+    }
+  }
+}

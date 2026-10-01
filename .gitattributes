@@ -1,0 +1,10 @@
+*.sh text eol=lf
+*.py text eol=lf
+*.c text eol=lf
+*.h text eol=lf
+*.java text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.rgba binary
+*.jar binary
+*.so binary
