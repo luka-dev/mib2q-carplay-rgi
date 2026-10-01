@@ -81,6 +81,40 @@ terminal int8 requalification, physical loaded Krait timing/latency and owner
 blind CarPlay preference remain necessary. Native host/QEMU timing or a single
 pulse cannot prove the actual ≤150M/≤85ms requirements.
 
+## Native acoustic qualification
+
+`assess_spectral_native_full40.py` runs on the existing PC environment, CPU
+only. First use `--train-smoke --initial ORIGINAL_FITTING_FIXTURES` with the
+actual fitted checkpoint. It reads four true TRAIN8s crops and the first
+eligible detected vocal entry per TRAIN song. Synthetic partitions are not
+used. A TRAIN smoke cannot set `native_acoustic_pass` or product readiness.
+
+For a promoted fixed40k terminal, use:
+
+```sh
+python3 tools/stereo-upmix-render/assess_spectral_native_full40.py \
+  --cache ORIGINAL_CACHE7 --checkpoint AUDITED_SPECTRAL_STEP40000 \
+  --assets FRESH_TERMINAL_EXPORT --executable NATIVE_MASK_CHAIN \
+  --build-manifest MATCHING_CHAIN_BUILD_MANIFEST \
+  --broad COMPLETED_SPECTRAL_BROAD_PAIR --runs ORIGINAL_RUNS \
+  --moisesdb ORIGINAL_RAW_MOISESDB --out NEW_NATIVE_ACOUSTIC_DIRECTORY
+```
+
+The full path refuses an unpromoted or unaudited checkpoint. It checks the
+original40 songs/231 stem keys and the exact265 event inventory before replay.
+Float/int8 share nearest-even PCM16 input and fixed.40 settings. All13 absolute
+acoustic gates apply to both; paired eligible SDR loss, fixed-level and relative
+instrument/protected/stability/entry gates apply to int8. Rear bands, coverage,
+native delayed six-channel PCM, masks and separate input residual are retained.
+Source attribution uses actual-mixture masks, unchanged original event formulas
+and CPU reanalysis. Components describe a conditional operator; they are not
+literal audible leakage. Scene is dormant and center remains zero.
+
+Use `--resume` only for complete item markers with matching input/runtime/helper
+identities and all saved native file hashes. Incomplete items are preserved and
+require a fresh run. No gain/checkpoint selection is offered. This path does not
+read the reserved20 or establish a head-unit deadline or owner listening verdict.
+
 ## Full ARM/QNX arithmetic replay
 
 ```sh
