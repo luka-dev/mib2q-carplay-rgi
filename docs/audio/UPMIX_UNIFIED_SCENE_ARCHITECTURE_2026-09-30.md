@@ -1,5 +1,7 @@
 # One causal network for a stronger rear scene
 
+**Historical ledger and final spectral result, owner-requested documentation:** [Complete separator attempt chronicle](UPMIX_SEPARATOR_CHRONICLE_2026-09-25_TO_2026-09-30.md) continues the original training history with named mask/sep variants, every review16–43 mechanism, data interventions, interrupted/paused attempts, BSRNN and one-network iterations. [Completed spectral40k full40 pair](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30.md#-completed-spectral40k-pair-joint-promotion-fails): nominal G/K/P/S .225/.217/.219/.191, V/B/D .0139/.1585/.0139,31/40 swings, entry .799/.451;9/13 absolute gates pass but bass/movement/both entry gates fail. Paired DEV source gain+.1383dB<+.3 and string regression fail relative promotion. Original CSV/event/hash evidence is archived. At2026-10-01T03:28:25Z the study is terminal, matching processes/lease absent; no new efficacy run is queued and the agent stays paused. Earlier pending/running snapshots are historical.
+
 **Owner-requested wrap / agent pause, 2026-09-30:** [Consolidated session record](UPMIX_SESSION_WRAP_2026-09-30.md) collects results, failures, all experiment-report links, one-network architecture, raw artifacts, acceptance gaps and the finite restart sequence. At 2026-10-01T01:38:36.9304050Z spectral is 37,000/40k with supervisor45888/launcher37976/trainer18188 live; control40k is terminal. The already running supervisor may finish its fixed training/audit/full40 evaluation; pausing the agent does not stop that external job. No upper64 efficacy training is queued. Upper64 Python preparation passes23 structural checks and observes129.327M selected denseMAC/s; no quality, int8 port or device claim. Full40 spectral, native int8 qualification, genuinely untouched20, loaded-device≤150M/≤85ms and owner CarPlay proof remain open. Earlier live snapshots below are historical.
 
 _2026-09-30. Track B. Owner direction: replace q6d + guard + v21a with one capable network and make the rear scene more expressive. Paired TRAIN fitting completed; real-FFT defect corrected and waveform/host contracts verified. No DEV-quality, scene, device or car candidate established._
@@ -875,3 +877,63 @@ A disposable copy receives one synthetic squared-output SGD update; the initiali
 **Port risk:** this graph has a distinct architecture tag and heterogeneous decoder widths. Existing C/int8 export/runtime and native full40 qualifier target the uniform24 graph and must not be reused as if compatible. A passing trained64 variant needs a fresh port, quantization and native acoustic qualification. Float-preserving initialization alone does not guarantee int8-preserving initialization: the current vector quantizer takes maxabs over the entire input vector, so extra hidden activations can alter the old coordinates' scale even with zero outgoing new weights. This mechanism is visible in the current runtime; its actual effect on this new graph is unmeasured. Preserve this risk when specifying the port, rather than assuming the prior.06dB TRAIN loss transfers.
 
 Current GPU remains the sole existing broad study: at2026-10-01T01:08:36Z supervisor45888/launcher37976/child18188 are live, spectral28,250/40k,5,159.238s/all156TRAIN/113,000windows. Control remains terminal40k. No active model/helper, GPU recipe, shared lease/queue, PC environment, Track A or unit changed. Next finish that fixed terminal/numeric/full40 evaluation; only the already bounded, matched64-versus24 hypothesis may follow if its measured upper-band defect persists. Original independent20/native int8/device/owner listening requirements remain open.
+
+
+## 🏁 Completed spectral40k pair: joint promotion fails
+
+Final readback at2026-10-01T03:28:25Z: both fixed40k trainings, saved terminal numerical audit, original full40×60s/231-row C comparisons and original265-event inventories are complete. The study supervisor/trainer/evaluator are no longer observed; its lease is absent and no runner-failure marker exists. The owner-requested agent pause stays in force. No upper64 efficacy run or native full40 int8 qualification was launched. Earlier running/partial snapshots are historical.
+
+[Original final pair decision](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_broad_full40_complete.json), [frozen full40 protocol](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_broad_full40_protocol.json), [terminal numerical audit](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_broad_terminal_audit.json), [18-file archive hashes](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_broad_final_inventory.json), [final read-only PC snapshot](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_broad_final_pc_state.json), [independent saved-output aggregation checks](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_broad_archive_checks.json).
+
+### Nominal fixed .40 result
+
+| Original full40 metric | Control24×3 | Spectral48×2 | Required |
+| --- | ---: | ---: | ---: |
+| Guitar rear share | 0.194270 | 0.225364 | ≥.15 |
+| Keys rear share | 0.190331 | 0.216898 | ≥.15 |
+| Piano rear share | 0.204842 | 0.219015 | ≥.10 |
+| Strings rear share | 0.216352 | 0.191086 | ≥.14 |
+| Voice rear share | 0.015550 | 0.013869 | ≤.02 |
+| Bass rear share | 0.161813 | 0.158550 | ≤.06 |
+| Drums rear share | 0.015328 | 0.013857 | ≤.08 |
+| Any-stem swinging songs | 33/40 | 31/40 | ≤5 |
+| Attributed vocal-entry median | 0.762592 | 0.799061 | ≥.85 |
+| Attributed vocal-entry p10 | 0.408296 | 0.450894 | ≥.60 |
+| Guitar depth-follows-level slope | +0.035791 | +0.031650 | absolute≤.05 |
+| Keys depth-follows-level slope | +0.031591 | +0.023695 | absolute≤.05 |
+| Wind depth-follows-level slope | +0.010579 | +0.004877 | absolute≤.05 |
+| Rear RMS dBFS | -37.507149 | -37.298210 | Nominal gain fixed |
+
+Both arms pass9/13 original absolute conditions and fail the same four: bass, any-stem movement, entry median and entry p10. Spectral improves nominal guitar, keys and piano and protects voice/drums, but that is not joint promotion. The new whole-stem string median drops .216352→.191086, beyond the relative−.01 allowance. Relative gates pass10/12: the other failed condition is paired DEV40×20s eligible SDR gain **+.138302dB<+.3dB**;23/40 songs are nonworse. `acoustic_promotion_pass=false`, `device_or_product_pass=false`. The native full40 assessor therefore has no promoted terminal prerequisite.
+
+Each arm uses40 songs and231 identical song/stem rows at each of three predeclared points. Event inventories match exactly:84 vocal entries in36 songs,79 exits in35 songs and102 sustained controls in37 songs,265 events total. “265 events” does not mean265 vocal entries. Numerical validation is a separate passed gate; device/ears/independent20 remain unproved.
+
+### Diagnostic gain points do not rescue the candidate
+
+| Spectral fixed point | Guitar / keys / piano / strings | Voice / bass / drums | Any-stem swings |
+| --- | --- | --- | ---: |
+| reference_03235 | 0.1326 / 0.1263 / 0.1279 / 0.1105 | 0.0089 / 0.0946 / 0.0088 | 1/40 |
+| nominal_040 | 0.2254 / 0.2169 / 0.2190 / 0.1911 | 0.0139 / 0.1585 / 0.0139 | 31/40 |
+| diagnostic_050 | 0.3860 / 0.3786 / 0.3742 / 0.3236 | 0.0225 / 0.1855 / 0.0227 | 37/40 |
+
+Quiet.3235 reaches one swinging song but guitar/keys/strings and bass still fail. Loud.50 raises instruments with37 swinging songs, voice above.02 and bass .185530. Source-attributed entry failures remain. These are predeclared diagnostics, not a selected new gain; the .40 nominal and original thresholds are unchanged. All six control/candidate CSVs are archived with hashes.
+
+### Treble remains weak despite higher overall rear shares
+
+[Saved-C spectral/Track A/oracle band and coverage audit](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_broad_rear_spectrum_audit.json) runs the unchanged standalone reporter on the completed rows; no audio inference, new tuning or pass threshold is introduced.
+
+| Stem,6–10kHz | Control rear ratio | Spectral rear ratio | Exact-labelled oracle | Finite rows |
+| --- | ---: | ---: | ---: | ---: |
+| Guitar | 0.023488 | 0.018478 | 0.412032 | 39/39 |
+| Keys | 0.030188 | 0.022471 | 0.366858 | 21/27 |
+| Piano | 0.051947 | 0.029074 | 0.413794 | 12/15 |
+| Strings | 0.017383 | 0.020673 | 0.251518 | 6/6 |
+| Wind | 0.025389 | 0.029417 | 0.409814 | 5/5 |
+
+At10–16kHz the spectral guitar/keys/string ratios are .010982/.004237/.006252 versus oracle .322519/.288704/.217993. These are whole-excerpt source-dominant rear/(front+rear) power proxies; sparse family coverage is retained, and they are not isolated source-energy fractions or cabin brightness/attack/sustain judgments. Overall guitar .225 therefore does not show a bright expressive rear. This confirms a targeted upper-band defect in the completed learned path but does not uniquely identify decoder rank, upstream representation, loss or optimization as its sole cause.
+
+### Historical disposition and bounded next step
+
+This full-horizon result supersedes the positive four-TRAIN-crop fitting signal as an acoustic decision. The single-network prototype and native arithmetic remain useful engineering results; the spectral architecture package is **rejected for joint acoustic promotion**. Preserve both terminals, all gain points, event outputs and failed gates. No best-checkpoint search, extra10k continuation, device deployment or acceptance relaxation follows.
+
+If the owner resumes, the reserved upper64-versus24 matched hypothesis may be planned against this measured treble defect. Its existing23-check Python preparation is not an efficacy result or compatible C/int8 port. Any such comparison still must retain bass, movement and entry gates; treble recovery alone cannot meet the goal. The finite search limit and the owner listening/device/untouched20 requirements remain unchanged. For the complete attempt inventory, including interrupted and unexecuted paths, see the [historical separator chronicle](UPMIX_SEPARATOR_CHRONICLE_2026-09-25_TO_2026-09-30.md).

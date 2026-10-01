@@ -1,0 +1,96 @@
+{
+  "retrieved_utc": "2026-10-01T03:30:36.8390000Z",
+  "scope": "Read-only original terminal evaluation artifact retrieval",
+  "files": {
+    "spectral\\train_complete.json": {
+      "archive": "UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_broad_spectral_terminal_training.json",
+      "sha256": "539872228dec4091864e53e193613f395683a3fa785789d803277be3436d7c03",
+      "bytes": 736
+    },
+    "full40\\spectral\\complete.json": {
+      "archive": "UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_broad_spectral_full40_complete.json",
+      "sha256": "561a33ba0f582b2d11112c19dfe9f7ddad7d1c034b43139e9fc70c0852abf57f",
+      "bytes": 47529
+    },
+    "full40\\control\\transitions.json": {
+      "archive": "UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_broad_control_full40_transitions.json",
+      "sha256": "8a30c45593f505e54b4c68f003d50954a4608d18fa98d87808fbfafd057bfa0b",
+      "bytes": 118962
+    },
+    "full40\\complete.json": {
+      "archive": "UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_broad_full40_complete.json",
+      "sha256": "39dcc3b31861b642bc6bdd96ce493a81c4ac9eb6ac430edf2f5066924c1e6130",
+      "bytes": 109974
+    },
+    "manifest.json": {
+      "archive": "UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_broad_manifest.json",
+      "sha256": "dc884c742d10dbd26d9488e8a914c30e5805d5000dd6e1020b22e5bca37ea5c0",
+      "bytes": 60049
+    },
+    "audit.json": {
+      "archive": "UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_broad_terminal_audit.json",
+      "sha256": "1e12f61ba5d5ef9ac9a6dd271b683bd398820458b537fde4d29174d5091b06e8",
+      "bytes": 6385
+    },
+    "full40\\control\\reference_03235\\stems.csv": {
+      "archive": "UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_broad_control_reference_03235.csv",
+      "sha256": "d7838ef9b955e5de68c6353eea7063045e17796ef3bf2bd103df3231f23c0ab1",
+      "bytes": 72217
+    },
+    "full40\\spectral\\diagnostic_050\\stems.csv": {
+      "archive": "UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_broad_spectral_diagnostic_050.csv",
+      "sha256": "3fab608c7e477e3e41c0fa07cf9803997733314e886f567415cfa4950652655b",
+      "bytes": 71371
+    },
+    "full40\\control\\diagnostic_050\\stems.csv": {
+      "archive": "UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_broad_control_diagnostic_050.csv",
+      "sha256": "724e2fb55abf7f9291345e87954d34223bec5f58b867de6bbb3dd80b623f60b4",
+      "bytes": 71244
+    },
+    "full40\\protocol.json": {
+      "archive": "UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_broad_full40_protocol.json",
+      "sha256": "a5d8cc81d80ba435e54773cbae37913577c0e703db79cac1809edbb01ecdffa6",
+      "bytes": 4264
+    },
+    "control\\eval_step40000.json": {
+      "archive": "UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_broad_control_terminal_eval.json",
+      "sha256": "7ccdb9b1797d0fd54d1546afdcb52adb13346c04772e48612ac93887c14409a0",
+      "bytes": 72703
+    },
+    "full40\\spectral\\reference_03235\\stems.csv": {
+      "archive": "UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_broad_spectral_reference_03235.csv",
+      "sha256": "d22c78fd6454cf04417323a98b6a4d681a5617bdf9ff6eb434067b1dde7028ca",
+      "bytes": 72300
+    },
+    "full40\\spectral\\transitions.json": {
+      "archive": "UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_broad_spectral_full40_transitions.json",
+      "sha256": "9d1f11f3c45816dd4207f08bacaab239c5bbb105e9bb24b72d23330a497f2bfe",
+      "bytes": 118961
+    },
+    "control\\train_complete.json": {
+      "archive": "UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_broad_control_terminal_training.json",
+      "sha256": "db3a581fee55a7675fabba5f91c7ac3aee2fa10fa5f6deb816ec141eaabc738e",
+      "bytes": 735
+    },
+    "full40\\spectral\\nominal_040\\stems.csv": {
+      "archive": "UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_broad_spectral_nominal_040.csv",
+      "sha256": "4287d55d3ba7f52d60fa7c9202eaa6c33800abf81d7306a8525b69b506207645",
+      "bytes": 71897
+    },
+    "spectral\\eval_step40000.json": {
+      "archive": "UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_broad_spectral_terminal_eval.json",
+      "sha256": "7aa592dbd0fb23b09cc46cce906d5864c6d1228f10ce9fbb9d092636503e0588",
+      "bytes": 72687
+    },
+    "full40\\control\\nominal_040\\stems.csv": {
+      "archive": "UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_broad_control_nominal_040.csv",
+      "sha256": "c27356ca9d6d044935ac116c548f5eb1b258f98f7dfe456abb5f07c71b407eab",
+      "bytes": 71784
+    },
+    "full40\\control\\complete.json": {
+      "archive": "UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_broad_control_full40_complete.json",
+      "sha256": "4dd32cacb3cfaeed74ee69887705535aab591a62c6d967d9a15c8f7a602d2b3a",
+      "bytes": 47602
+    }
+  }
+}

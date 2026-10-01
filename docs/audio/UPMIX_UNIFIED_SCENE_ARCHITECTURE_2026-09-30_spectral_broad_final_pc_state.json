@@ -1,0 +1,97 @@
+{
+  "scope": "Read-only process and existing marker snapshot; no training, queue, lease or environment mutation",
+  "gpu_supervisor": [],
+  "runner_failure_exists": false,
+  "evaluation_processes": [],
+  "control": {
+    "step": 40000,
+    "seconds": 6538.498741899966,
+    "loss": 0.40026187896728516,
+    "grad_norm": 0.3304736018180847,
+    "decoder_grad_norm": 0.055213529234051366,
+    "lr": 3e-05,
+    "distinct_train_songs": 156,
+    "windows": 160000,
+    "audible_source_windows": [
+      159014,
+      136331,
+      151742,
+      151110
+    ],
+    "sample_sequence_sha256": "57c2e4a48bd581634700f868e90f327664418eb6124770101692194f2380e26d"
+  },
+  "spectral_training_complete": {
+    "complete": true,
+    "mode": "spectral",
+    "smoke": false,
+    "step": 40000,
+    "last": {
+      "step": 40000,
+      "seconds": 7689.848001800012,
+      "loss": 0.39406150579452515,
+      "grad_norm": 0.3299171030521393,
+      "decoder_grad_norm": 0.049949577301157504,
+      "lr": 3e-05,
+      "distinct_train_songs": 156,
+      "windows": 160000,
+      "audible_source_windows": [
+        159014,
+        136331,
+        151742,
+        151110
+      ],
+      "sample_sequence_sha256": "57c2e4a48bd581634700f868e90f327664418eb6124770101692194f2380e26d"
+    },
+    "checkpoint_sha256": "ec72ba791bf86fab74e322cb3dc6ab876664a00c9535773f47244de4eba59b36",
+    "protocol_sha256": "dc884c742d10dbd26d9488e8a914c30e5805d5000dd6e1020b22e5bca37ea5c0"
+  },
+  "full40_complete_exists": true,
+  "terminal_audit_exists": true,
+  "run_root": "D:\\upmix\\runs\\spectral_context_generalization_v1",
+  "utc": "2026-10-01T03:28:25.0605028Z",
+  "gpu_lease_exists": false,
+  "train_processes": [],
+  "spectral": {
+    "step": 40000,
+    "seconds": 7689.848001800012,
+    "loss": 0.39406150579452515,
+    "grad_norm": 0.3299171030521393,
+    "decoder_grad_norm": 0.049949577301157504,
+    "lr": 3e-05,
+    "distinct_train_songs": 156,
+    "windows": 160000,
+    "audible_source_windows": [
+      159014,
+      136331,
+      151742,
+      151110
+    ],
+    "sample_sequence_sha256": "57c2e4a48bd581634700f868e90f327664418eb6124770101692194f2380e26d"
+  },
+  "rapid_daemon_live": false,
+  "control_training_complete": {
+    "complete": true,
+    "mode": "control",
+    "smoke": false,
+    "step": 40000,
+    "last": {
+      "step": 40000,
+      "seconds": 6538.498741899966,
+      "loss": 0.40026187896728516,
+      "grad_norm": 0.3304736018180847,
+      "decoder_grad_norm": 0.055213529234051366,
+      "lr": 3e-05,
+      "distinct_train_songs": 156,
+      "windows": 160000,
+      "audible_source_windows": [
+        159014,
+        136331,
+        151742,
+        151110
+      ],
+      "sample_sequence_sha256": "57c2e4a48bd581634700f868e90f327664418eb6124770101692194f2380e26d"
+    },
+    "checkpoint_sha256": "5aaed6380ad35b59dcb30ea3446088d0550218590c0daeeea969a50796f2e841",
+    "protocol_sha256": "dc884c742d10dbd26d9488e8a914c30e5805d5000dd6e1020b22e5bca37ea5c0"
+  }
+}

@@ -8,13 +8,19 @@ _Owner-requested wrap, 2026-09-30 local date; PC observations use UTC. Consolida
 
 - **Product goal remains unmet.** No new Track B candidate has passed the combined rear-instrument, protection, stability, generalization, device and owner-listening requirements.
 - **One-network execution is implemented.** An isolated causal spectral model runs through an independent float/int8 C FFT/WOLA and NN-free six-channel renderer. Its numerical checks pass within their recorded scopes. It has not replaced the three models in the car.
-- **The new spectral encoder improves fitting:** eligible TRAIN4 median SI-SDR is 7.524 dB versus 6.654 dB for the matched control; paired median improvement is +0.811 dB. Broad acoustic benefit is still pending.
+- **The new spectral encoder improves fitting:** eligible TRAIN4 median SI-SDR is 7.524 dB versus 6.654 dB for the matched control; paired median improvement is +0.811 dB. The completed broad comparison fails joint promotion; see the final result below.
 - **The renderer has demonstrated room for a stronger rear.** Exact labelled eligible audio reaches approximately 39% rear share with two swinging songs on the original full40 harness. Those labels are unavailable to a deployable model.
-- **Work is being paused at the owner's request.** The already running fixed spectral/control study is left to finish its existing training, numerical audit and full40 evaluation. No new training is queued by this wrap.
+- **Work is being paused at the owner's request.** The existing fixed spectral/control study has now finished training, numerical audit and full40 evaluation and released its lease. No new training is queued.
 
 The [unified architecture ledger](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30.md) retains the detailed chronology, protocols, errors, recoveries and raw artifacts. This document is the readable restart point; earlier process snapshots in the other reports are historical.
 
 ## 📊 Measurements and what they establish
+
+### Final completed result, 2026-10-01 03:28 UTC
+
+The [spectral40k full40 result](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30.md#-completed-spectral40k-pair-joint-promotion-fails) supersedes the pending observations in this wrap. At nominal.40, control→spectral G/K/P/S is .194/.190/.205/.216→.225/.217/.219/.191; V/B/D .0156/.1618/.0153→.0139/.1585/.0139; any-stem swings33→31/40; attributed vocal-entry median/p10 .7626/.4083→.7991/.4509. Both pass9/13 absolute gates but fail bass, movement and both entry requirements. Paired DEV20s gain+.1383dB and string regression also fail relative promotion. No candidate is ready for the car.
+
+Both arms have40 songs×60s,231rows at all three predeclared gains and the same84entries+79exits+102sustained controls=265events. [Archive/hashes](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_broad_final_inventory.json) and [aggregation checks](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_broad_archive_checks.json) are retained. The [complete attempt chronicle](UPMIX_SEPARATOR_CHRONICLE_2026-09-25_TO_2026-09-30.md) links every recorded route, including interrupted and unexecuted attempts. Previous training/partial-full40 snapshots are historical.
 
 ### Original full40 acoustic results
 
@@ -123,6 +129,8 @@ The old int8 runtime uses the maximum across an entire decoder-input vector for 
 The existing full standalone chain uses 581,536 bytes of state, a 256 KiB worker stack and no per-hop allocation. Identity delays measured on the host are 32 ms eligible, 42.667 ms front and 54.667 ms rear, with another 10.667 ms frame acquisition plus execution/transport still to qualify. These are implementation measurements, not proof of the ≤85 ms loaded-device requirement. [Native/ARM chain details](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30.md#spectral-single-network-fftwola51-chain-full-train-numeric-integration-passes).
 
 ## 🖥️ PC state at wrap
+
+**Latest final observation:** the [2026-10-01T03:28:25Z snapshot](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_broad_final_pc_state.json) finds the study complete, matching supervisor/trainer/evaluator absent, lease absent and no runner-failure marker. The older37k and19/40 observations below are preserved as historical snapshots. Agent pause remains in force and no next efficacy task is queued.
 
 ### Read-only status follow-up, 2026-10-01 02:50 UTC
 

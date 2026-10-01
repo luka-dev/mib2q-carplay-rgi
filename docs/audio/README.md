@@ -65,7 +65,8 @@ flowchart TB
 
 | Note | What it covers |
 |---|---|
-| [Upmix Training History](UPMIX_TRAINING_HISTORY.md) | Iteration ledger V9→q6d (V16, G, H1, P1, R1/C1/C2, Q1–Q5): what each measured and why it stopped. |
+| [Upmix Training History](UPMIX_TRAINING_HISTORY.md) | Historical entry point,09-04→09-30: original V/G/H/P/Q generations plus the complete separator continuation and final spectral40k verdict. |
+| [Upmix Separator Attempt Chronicle](UPMIX_SEPARATOR_CHRONICLE_2026-09-25_TO_2026-09-30.md) | Named mask/sep recipes, reviews16–43, data and BSRNN tests, unified-model iterations, failed/stopped/unexecuted attempts and evidence links. |
 | [Upmix Datasets and Teachers](UPMIX_DATASETS_AND_TEACHERS.md) | MoisesDB, MUSDB18, FLOAT, AlbumDB, teacher networks, their defects and licences, the role-label contract. |
 | [Upmix Compute Budget](UPMIX_COMPUTE_BUDGET.md) | Krait cost units and measurements, the arithmetic that admitted HSSR and blocked CUpGAN/H1/Q2, training machines. |
 | [Upmix Literature](UPMIX_LITERATURE.md) | The papers and systems the work drew on, what each changed, and which paper files are failed downloads. |
@@ -75,8 +76,8 @@ flowchart TB
 | [Upmix BSRNN Real-C Check 2026-09-29](UPMIX_BSRNN_REAL_C_CHECK_2026-09-29.md) | Completed pretrained SIMO DEV40: all observed offline gates pass with direct C, 11→0 swings, entry .876/.746; source attribution, paired sep9 comparison, failures and device/ear limits. |
 | [Upmix Causal Reference Encoder 2026-09-29](UPMIX_CAUSAL_REFERENCE_ENCODER_2026-09-29.md) | Completed fixed-decoder causal pair: +2.746 dB / −20.584% objective on four TRAIN crops; CPU audit passed, protected-source and compute limits remain. |
 | [Upmix Causal Reference Generalization 2026-09-29](UPMIX_CAUSAL_GENERALIZATION_2026-09-29.md) | Frozen 40k matched true-stem continuation on all 176 TRAIN songs, TRAIN/DEV curves, CPU replay and terminal full40 source/entry/C gates before compression. |
-| [Upmix Track B Session Wrap 2026-09-30](UPMIX_SESSION_WRAP_2026-09-30.md) | Start here at the owner-requested pause: consolidated successes/failures, experiment index, actual PC snapshot, architecture, pending gates and finite restart sequence. |
-| [Unified Rear Scene Architecture 2026-09-30](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30.md) | Complete one-network ledger: failed broad/capacity pairs, positive spectral TRAIN fitting, native float/int8 FFT/WOLA/C and ARM checks, treble diagnosis, live fixed40k study and contingent upper64 structural evidence. |
+| [Upmix Track B Session Wrap 2026-09-30](UPMIX_SESSION_WRAP_2026-09-30.md) | Start here at the owner-requested pause: successes/failures, complete attempt chronology, final spectral40k failure, PC/archive state and finite restart sequence. |
+| [Unified Rear Scene Architecture 2026-09-30](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30.md) | Complete one-network ledger: failed broad/capacity pairs, positive spectral TRAIN fitting, native float/int8 FFT/WOLA/C and ARM checks, treble diagnosis, completed spectral40k joint failure and contingent upper64 structural evidence. |
 | [Current Track A Matched40 2026-09-30](UPMIX_TRACKA_MATCHED40_2026-09-30.md) | Current three-model baseline at−9dB rear-air, same40×60s/231rows:29swing songs and all source/band metrics. |
 
 ### Upmix runtime and release

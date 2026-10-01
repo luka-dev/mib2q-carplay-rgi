@@ -1,12 +1,12 @@
 # Upmix Training History
 
-*Iteration ledger for the stereo→5.1 upmix model, 2026-09-04 → 2026-09-18: every research line (V, V16, G, H1, P1, R1/C1/C2, Q1–Q5, q6), what it measured, why it stopped, and the acceptance contract it was judged against.*
+*Iteration ledger for the stereo→5.1 upmix model, 2026-09-04 → 2026-09-30: original controller/source generations and the linked complete separator continuation, including successes, rejected mechanisms, interrupted attempts and unexecuted plans.*
 
 ---
 
 ## 📋 The arc in one screen
 
-Fifteen-plus model generations ran in two weeks. The shipped result ([HSSR Model](HSSR_MODEL.md)) is the *first* design, the 2×GRU-160 routing controller, retrained once on real MoisesDB stems (q6d) and paired with its predecessor V11 as a vocal guard. Every attempt to replace it with a waveform separator (V16 → G → H1 → P1 → Q2) failed on the same axis: it could not keep the lead out of the rear while still sending useful backing material there. The 2026-09-17 independent audit closed the separation line and redirected to the genre-agnostic second scene.
+**Historical arc through2026-09-18:** Fifteen-plus model generations ran in two weeks. The shipped result ([HSSR Model](HSSR_MODEL.md)) is the *first* design, the 2×GRU-160 routing controller, retrained once on real MoisesDB stems (q6d) and paired with its predecessor V11 as a vocal guard. Every attempt to replace it with a waveform separator (V16 → G → H1 → P1 → Q2) failed on the same axis: it could not keep the lead out of the rear while still sending useful backing material there. The 2026-09-17 independent audit closed the separation line and redirected to the genre-agnostic second scene.
 
 ```mermaid
 flowchart TB
@@ -54,7 +54,7 @@ timeline
   09-18 : q6d selected and shipped
 ```
 
-Truth tags: **[model]** offline training/eval result, **[code]** checked in the current tree, **[car]** heard or measured on the unit, **[open]** unverified. None of the lines below except V11 and q6d ever ran in the car.
+Truth tags: **[model]** offline training/eval result, **[code]** checked in the current tree, **[car]** heard or measured on the unit, **[open]** unverified. For the pre-09-18 generations summarized below, only V11 and q6d ran in the car. Track A later added the deployed protection mask; its phase1/car record is linked in the continuation. No new one-network candidate has run in the car.
 
 Sources: `UPMIX_MASTER_PLAN`, `UPMIX_RETROSPECTIVE_AND_STEREO71`, [HSSR_UPMIX_MODEL](../research/HSSR_UPMIX_MODEL.md).
 
@@ -360,6 +360,23 @@ Sources: `UPMIX_MASTER_PLAN`, `UPMIX_AGENT_HANDOFF_2026-09-17`, `UPMIX_MODEL_REA
 - **Controls must be real controls.** A control equal to initialization or to MUTE makes any model look like progress.
 
 Sources: `UPMIX_INDEPENDENT_AUDIT_2026-09-17`, `UPMIX_Q2_MPS_RESTART_QUALIFICATION`, `UPMIX_NAS_ATTEMPT_INVENTORY`.
+
+## 📜 Separator continuation, 2026-09-25 to 09-30
+
+The [complete attempt chronicle](UPMIX_SEPARATOR_CHRONICLE_2026-09-25_TO_2026-09-30.md) extends this history rather than replacing its earlier generation tables. It indexes all named mask students from v2–v29/diag7, sep1–sep12 completed and paused paths, shared-mask4k/10k confirmation, review16 membership/CMA/renderer variants, reviews19–43 source/spatial/memory probes, every data intervention, later fitting/BSRNN reference tests and the single-network iterations. Each entry states the change, result, decision and evidence source. Interrupted/no-checkpoint launches, pending recipes and structural-only prototypes are explicitly separated from completed efficacy results.
+
+| Later period | Historical outcome | Primary record |
+| --- | --- | --- |
+|09-21 to09-27 Track A | In-car tuning, protection-mask reset repair and int8/NEON mask implementation; still three models | [Phase1/car record](UPMIX_MASK_PHASE1_REPORT_2026-09-27.md), [deploy/listening log](UPMIX_LISTENING_AND_DEPLOY_LOG.md) |
+|09-25 to09-27 mask/sep ladder | Weak rear/protection frontier persists across specific controlled recipes | [Source plan](UPMIX_SOURCE_SEPARATION_PLAN.md), [night report](UPMIX_SEPARATOR_NIGHT_REPORT_2026-09-28.md) |
+|09-28 renderer and ownership | Privileged direct-object bound succeeds; learned cue/source/entry comparisons fail | [Historical chronicle](UPMIX_SEPARATOR_CHRONICLE_2026-09-25_TO_2026-09-30.md) |
+|09-29 data and fitting | Moises/OnAir/instrument/Cambridge comparisons fail their frozen gates; large SIMO reference establishes offline room | [Historical chronicle](UPMIX_SEPARATOR_CHRONICLE_2026-09-25_TO_2026-09-30.md), [BSRNN C result](UPMIX_BSRNN_REAL_C_CHECK_2026-09-29.md) |
+|09-30 one-network research | Native causal chain and spectral TRAIN fitting pass limited gates; broad/capacity/spectral product comparisons fail | [Unified chronology](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30.md) |
+|Final03:28UTC readback | Spectral40k original full40 complete;31swings/bass .1585/entry .799/.451; joint promotion false; lease released | [Final measured result](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30.md#-completed-spectral40k-pair-joint-promotion-fails) |
+
+The [session wrap](UPMIX_SESSION_WRAP_2026-09-30.md) preserves the original acceptance contract and paused restart boundary. The [final18-file archive inventory](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_broad_final_inventory.json) and [independent aggregation checks](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_broad_archive_checks.json) retain both terminals, every predeclared gain, source/event evidence and exact hashes. Higher overall guitar share (.225) does not establish treble recovery, stability, device readiness or owner preference. The reserved upper64 decoder has23 structural checks but has not received efficacy training or a new C/int8 port.
+
+Historical holdout and car statements above describe their recorded date. Later inspected DEV/TEST songs and the candidate-independent reserved20 cannot be called genuinely untouched now. No architecture count should be inferred by adding review IDs, seeds, checkpoint monitors, renderer points and diagnostics. Work remains paused at the owner's request; this documentation update started no new training.
 
 ## 📚 Sources
 
