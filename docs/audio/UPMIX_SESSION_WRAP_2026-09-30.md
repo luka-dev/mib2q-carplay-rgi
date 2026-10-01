@@ -124,6 +124,12 @@ The existing full standalone chain uses 581,536 bytes of state, a 256 KiB worker
 
 ## 🖥️ PC state at wrap
 
+### Read-only status follow-up, 2026-10-01 02:50 UTC
+
+Both arms completed their fixed40k training. The saved terminal numerical audit reports `verified=true`, `smoke=false` and the original manifest hash. The existing full40 evaluator is live: control has40/40 song markers and its arm-complete marker; spectral has19/40 song markers, with its arm and pair completion still pending. Agent pause remains in force; no new job was started. [Captured terminal summaries and completion counts](UPMIX_SESSION_WRAP_2026-09-30_status_0250UTC.json).
+
+Terminal DEV40×20s eligible SI-SDR medians are −.903642 dB control and −.770136 dB spectral. Their difference is a difference of medians, not the predeclared song-paired gain. Spectral eligible transmission in8–14/14–24kHz is .004843/.006290 with target-normalized spectral error1.008218/1.036058. These extraction diagnostics still show weak treble; they are not rear shares or a full40 promotion verdict. Original rear/protection/swing/265-event joint results are not yet available for the spectral terminal. The snapshot below preserves the earlier wrap-time observation rather than claiming37k is current.
+
 The archived [read-only PC snapshot](UPMIX_SESSION_WRAP_2026-09-30_pc_snapshot.json) records the observation timestamp, exact process identities, last progress rows, terminal markers and fixed control checkpoint hash. This is a point-in-time observation, not a live dashboard.
 
 **Observed at 2026-10-01T01:38:36.9304050Z:** spectral is **37,000/40,000** (6,996.816 s; 156 TRAIN songs; 148,000 windows). Control training is terminal **40,000/40,000** (6,538.499 s; 160,000 windows).
