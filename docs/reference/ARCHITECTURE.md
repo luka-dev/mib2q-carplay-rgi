@@ -45,6 +45,22 @@ The four ports and their frame formats are in [Hook to Java Bus](HOOK_TO_JAVA_BU
 
 Sources: `ARCHITECTURE`, `DEPLOYMENT`
 
+## 🎵 Audio runtime and research boundary
+
+The production stereo path remains Track A's q6d routing controller, V11 vocal guard and v21a eligibility mask inside the audio hook; discrete multichannel audio follows its separate reorder path. Track B's single causal spectral network runs in an isolated research chain. Its completed spectral40k full40 study fails joint acoustic promotion and research is paused. Host/ARM numerical checks do not establish a deployed replacement or an owner listening verdict.
+
+```mermaid
+flowchart LR
+  accTitle: Production audio and isolated research
+  accDescr: Production CarPlay uses the existing Track A hook and J525 amplifier. The isolated single-network Track B prototype feeds archived offline evidence with no connection to the deployed runtime.
+  carplay_audio["CarPlay stereo"] --> audio_hook["Audio hook<br/>q6d + V11 + v21a"]
+  audio_hook --> j525_amp["PCM6 to J525"]
+  frozen_audio["Frozen real-stem stereo"] --> track_b_research["Track B single-network C chain"]
+  track_b_research --> archived_verdict["Full40 joint failure<br/>research paused"]
+```
+
+See [Audio overview](../audio/README.md), [upmix domain and evidence model](../audio/UPMIX_DOMAIN_MODEL.md), [Track A matched40](../audio/UPMIX_TRACKA_MATCHED40_2026-09-30.md), [Track B wrap](../audio/UPMIX_SESSION_WRAP_2026-09-30.md) and the [attempt chronicle](../audio/UPMIX_SEPARATOR_CHRONICLE_2026-09-25_TO_2026-09-30.md).
+
 ## ⚙️ Native hook: a module table over framework seams
 
 `hook/main.c` is only the module table (`hook/main.c:28-36`): `rgd`, `coverart`, `altscreen`, `telephony`, and `audio` when `HOOK_AUDIO=1`. The framework never names a module. It registers the table in order through one `pthread_once` at the **first real Cinemo boundary** (`hook/framework/hook_framework.c:117`, `:582`) and logs one WARN, `lazy runtime init complete (constructor-free; first Cinemo boundary)` (`:608`). It tears the table down in reverse from its destructor. There is no ELF constructor, and the build enforces that ([Build System](../build-and-deploy/BUILD_SYSTEM.md)). **[code]**

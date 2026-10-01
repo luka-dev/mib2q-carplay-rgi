@@ -11,12 +11,12 @@ For stereo music (type-103 decoded stereo and type-100 realtime media). Spatial 
 ```mermaid
 flowchart TB
     accTitle: HSSR upmix at a glance
-    accDescr: Stereo input is split into a delayed bit-exact front and a feature path; a small GRU controller decides per band what goes to the rear, which is built from moving objects and an ambience bed delayed 12 ms; LFE and the output stage finish the six channels that go over MOST150 to the B&O amp, whose Virtual Cabin renders them on 19 speakers.
+    accDescr: Stereo input is split into a delayed front and a feature path. Track A uses q6d routing, V11 protection and v21a eligibility to build rear objects and an ambience bed delayed 12 ms; PCM6 then reaches the B&O amplifier and its 19 speakers.
     stereo["🎵 Stereo input<br/>128-sample hop, 48 kHz"]
 
     subgraph hssr ["HSSR upmix in the hook"]
         front["Front L/R<br/>input delayed bit-exact<br/>minus the part moved to the rear<br/>(50 % kept in front, less above 1–2.5 kHz)"]
-        ctrl["GRU controller ~94 Hz<br/>32 bands: what belongs<br/>behind the listener"]
+        ctrl["Track A worker ~94 Hz<br/>q6d routing + V11 guard<br/>+ v21a eligibility mask"]
         rear["Rear Ls/Rs<br/>up to 4 moving objects<br/>+ decorrelated ambience bed<br/>delayed 12 ms (Haas), gain 0.40"]
         lfe["LFE<br/>mono assist, 60 Hz LR4"]
         centre["C = 0<br/>amp derives centre from L+R"]
@@ -49,7 +49,7 @@ flowchart TB
 | Channel / stage | What it gets |
 |---|---|
 | **Front L/R** | The input itself, delayed and bit-exact, minus what moves to the rear; 50 % of that part stays in front (`AUDIO_STEREO_FRONT_RETENTION`), less of it above 1–2.5 kHz (HF taper). |
-| **Controller** | A small GRU, about 94 times a second, decides per band (32 bands) what belongs behind the listener ([HSSR Model](HSSR_MODEL.md)). |
+| **Controller and protection** | q6d routing and the V11 guard supply 32-band controls; v21a adds per-cell eligibility on the same worker, about 94 times a second ([HSSR Model](HSSR_MODEL.md), [mask phase 1](UPMIX_MASK_PHASE1_REPORT_2026-09-27.md)). |
 | **Rear Ls/Rs** | Up to 4 moving objects plus a decorrelated ambience bed, delayed 12 ms so the front still anchors the image; rear gain 0.40 (`AUDIO_STEREO_SURROUND`). |
 | **LFE** | Low-passed mono assist, Butterworth LR4 at 60 Hz. |
 | **C** | 0 on purpose: the amp derives the centre from L+R. |
@@ -57,6 +57,8 @@ flowchart TB
 | **Amp** | PCM 6ch over MOST150; the B&O Virtual Cabin handles centre, crossovers and sub management across 19 speakers ([Virtual Cabin and Amp RE](VIRTUAL_CABIN_AND_AMP_RE.md)). |
 
 ## 🎯 The big picture
+
+This page describes Track A and the discrete production path. Track B's isolated single-network causal C prototype has not passed its joint acoustic gates or replaced the hook. The [domain model](UPMIX_DOMAIN_MODEL.md) distinguishes runtime, evidence and qualification; the [session wrap](UPMIX_SESSION_WRAP_2026-09-30.md) records the final spectral40k failure and research pause.
 
 Two things had to be built: get the **right six PCM channels**, and **synthesize them** for stereo content. The amp (J525 B&O) is a complete 5.1 renderer — the [Virtual Cabin](VIRTUAL_CABIN_AND_AMP_RE.md) — so the head unit only feeds it `L R C LFE Ls Rs` and lets it do the acoustics: it derives the centre, manages the sub, crosses over every driver, and fans out to 19 speakers.
 
@@ -77,7 +79,7 @@ flowchart TB
     discrete_reorder["APAC 5.1 reorder"]
     hssr_upmix["HSSR stereo upmix"]
     cabin_guard["cabin guard S16 peak"]
-    pcm6_out["PCM6 with C zero"]
+    pcm6_out["PCM6<br/>upmix C zero; discrete C preserved"]
   end
   subgraph downstream["Head unit and amp"]
     deva_csd["deva asad 0xfc to CSD"]

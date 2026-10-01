@@ -51,6 +51,11 @@ mindmap
       Upmix Literature
       Upmix Release and Acceptance
       Upmix Training History
+      Upmix Domain Model
+      Track A Three-Model Runtime
+      Track B Paused Single-Network Research
+      Separator Attempt Chronicle
+      Final Spectral40k Verdict
       Virtual Cabin and Amp RE
     Cluster and RGI
       Cluster Contexts
@@ -114,7 +119,7 @@ mindmap
 
 | Domain | Map of content | Covers |
 | --- | --- | --- |
-| **Audio** | [Audio overview](audio/README.md) | stereo→5.1 upmix, the HSSR AI, the J525 amp / Virtual Cabin, Dolby, discrete 5.1 |
+| **Audio** | [Audio overview](audio/README.md) | stereo→5.1, Track A runtime, Track B research/evidence, J525 / Virtual Cabin, Dolby, discrete 5.1 |
 | **Cluster and RGI** | [Cluster and RGI overview](cluster-and-rgi/README.md) | cluster contexts, BAP route guidance, HUD renderer, third-party nav, phone tab |
 | **AltScreen and Video** | [AltScreen and Video overview](altscreen-and-video/README.md) | cluster video (stream 111), OMX pipeline, boot loader, reconnect lifecycle |
 | **Connect and USB** | [Connect and USB overview](connect-and-usb/README.md) | NCM connect, USB replug recovery, PF firewall, iOS version gate |
@@ -146,7 +151,7 @@ flowchart TB
     end
 
     subgraph outputs ["⚙️ Output domains"]
-        audio["Audio upmix to amp"]
+        audio["Audio to amp<br/>Track A upmix or discrete 5.1"]
         cluster["📊 Cluster + route guidance"]
         alt["🖥️ AltScreen cluster video"]
     end
@@ -169,7 +174,7 @@ flowchart TB
     class amp,kombi neutral
 ```
 
-- **Audio** → [Stereo to 5.1 Upmix](audio/STEREO_TO_5_1_UPMIX.md) · [HSSR Model](audio/HSSR_MODEL.md) · [Virtual Cabin and Amp RE](audio/VIRTUAL_CABIN_AND_AMP_RE.md)
+- **Audio** → [Stereo to 5.1 Upmix](audio/STEREO_TO_5_1_UPMIX.md) · [HSSR Model](audio/HSSR_MODEL.md) · [Domain and qualification map](audio/UPMIX_DOMAIN_MODEL.md) · [Paused Track B wrap](audio/UPMIX_SESSION_WRAP_2026-09-30.md) · [Virtual Cabin and Amp RE](audio/VIRTUAL_CABIN_AND_AMP_RE.md)
 - **Cluster** → [Cluster Contexts](cluster-and-rgi/CLUSTER_CONTEXTS.md) · [RGI and BAP Bridge](cluster-and-rgi/RGI_AND_BAP_BRIDGE.md) · [HUD Renderer](cluster-and-rgi/HUD_RENDERER.md)
 - **AltScreen** → [AltScreen Cluster Video](altscreen-and-video/ALTSCREEN_CLUSTER_VIDEO.md) · [Video Pipeline](altscreen-and-video/VIDEO_PIPELINE.md)
 - **Connect** → [USB and NCM Connect](connect-and-usb/USB_AND_NCM_CONNECT.md) · [USB Replug Recovery](connect-and-usb/USB_REPLUG_RECOVERY.md)

@@ -1,0 +1,322 @@
+{
+  "complete": true,
+  "mermaid": "11.12.0",
+  "results": [
+    {
+      "file": "docs/README.md",
+      "index": 0,
+      "theme": "default",
+      "type": "mindmap",
+      "width": 1811.415771484375,
+      "height": 789.3823852539062
+    },
+    {
+      "file": "docs/README.md",
+      "index": 1,
+      "theme": "default",
+      "type": "flowchart-v2",
+      "width": 939.890625,
+      "height": 690
+    },
+    {
+      "file": "docs/audio/README.md",
+      "index": 0,
+      "theme": "default",
+      "type": "flowchart-v2",
+      "width": 563.328125,
+      "height": 438
+    },
+    {
+      "file": "docs/audio/README.md",
+      "index": 1,
+      "theme": "default",
+      "type": "flowchart-v2",
+      "width": 646.01171875,
+      "height": 1284
+    },
+    {
+      "file": "docs/audio/HSSR_MODEL.md",
+      "index": 0,
+      "theme": "default",
+      "type": "flowchart-v2",
+      "width": 940.23828125,
+      "height": 1164
+    },
+    {
+      "file": "docs/audio/HSSR_MODEL.md",
+      "index": 1,
+      "theme": "default",
+      "type": "flowchart-v2",
+      "width": 260,
+      "height": 598
+    },
+    {
+      "file": "docs/audio/HSSR_MODEL.md",
+      "index": 2,
+      "theme": "default",
+      "type": "timeline",
+      "width": 1490,
+      "height": 469.6003723144531
+    },
+    {
+      "file": "docs/audio/STEREO_TO_5_1_UPMIX.md",
+      "index": 0,
+      "theme": "default",
+      "type": "flowchart-v2",
+      "width": 1223.75,
+      "height": 1112
+    },
+    {
+      "file": "docs/audio/STEREO_TO_5_1_UPMIX.md",
+      "index": 1,
+      "theme": "default",
+      "type": "flowchart-v2",
+      "width": 644.62109375,
+      "height": 1364
+    },
+    {
+      "file": "docs/audio/STEREO_TO_5_1_UPMIX.md",
+      "index": 2,
+      "theme": "default",
+      "type": "flowchart-v2",
+      "width": 538.04296875,
+      "height": 542
+    },
+    {
+      "file": "docs/audio/STEREO_TO_5_1_UPMIX.md",
+      "index": 3,
+      "theme": "default",
+      "type": "flowchart-v2",
+      "width": 703.90625,
+      "height": 678
+    },
+    {
+      "file": "docs/audio/STEREO_TO_5_1_UPMIX.md",
+      "index": 4,
+      "theme": "default",
+      "type": "stateDiagram",
+      "width": 523.6875,
+      "height": 444
+    },
+    {
+      "file": "docs/audio/UPMIX_DOMAIN_MODEL.md",
+      "index": 0,
+      "theme": "default",
+      "type": "flowchart-v2",
+      "width": 860.015625,
+      "height": 510
+    },
+    {
+      "file": "docs/audio/UPMIX_DOMAIN_MODEL.md",
+      "index": 1,
+      "theme": "default",
+      "type": "er",
+      "width": 779.9453125,
+      "height": 1531
+    },
+    {
+      "file": "docs/audio/UPMIX_DOMAIN_MODEL.md",
+      "index": 2,
+      "theme": "default",
+      "type": "flowchart-v2",
+      "width": 855.3125,
+      "height": 846
+    },
+    {
+      "file": "docs/audio/UPMIX_DOMAIN_MODEL.md",
+      "index": 3,
+      "theme": "default",
+      "type": "stateDiagram",
+      "width": 792.2890625,
+      "height": 1206
+    },
+    {
+      "file": "docs/reference/ARCHITECTURE.md",
+      "index": 0,
+      "theme": "default",
+      "type": "flowchart-v2",
+      "width": 714.6484375,
+      "height": 742
+    },
+    {
+      "file": "docs/reference/ARCHITECTURE.md",
+      "index": 1,
+      "theme": "default",
+      "type": "flowchart-v2",
+      "width": 786.15625,
+      "height": 206
+    },
+    {
+      "file": "docs/reference/ARCHITECTURE.md",
+      "index": 2,
+      "theme": "default",
+      "type": "sequence",
+      "width": 1059,
+      "height": 429
+    },
+    {
+      "file": "docs/README.md",
+      "index": 0,
+      "theme": "dark",
+      "type": "mindmap",
+      "width": 1811.415771484375,
+      "height": 789.3823852539062
+    },
+    {
+      "file": "docs/README.md",
+      "index": 1,
+      "theme": "dark",
+      "type": "flowchart-v2",
+      "width": 939.890625,
+      "height": 690
+    },
+    {
+      "file": "docs/audio/README.md",
+      "index": 0,
+      "theme": "dark",
+      "type": "flowchart-v2",
+      "width": 563.328125,
+      "height": 438
+    },
+    {
+      "file": "docs/audio/README.md",
+      "index": 1,
+      "theme": "dark",
+      "type": "flowchart-v2",
+      "width": 646.01171875,
+      "height": 1284
+    },
+    {
+      "file": "docs/audio/HSSR_MODEL.md",
+      "index": 0,
+      "theme": "dark",
+      "type": "flowchart-v2",
+      "width": 940.23828125,
+      "height": 1164
+    },
+    {
+      "file": "docs/audio/HSSR_MODEL.md",
+      "index": 1,
+      "theme": "dark",
+      "type": "flowchart-v2",
+      "width": 260,
+      "height": 598
+    },
+    {
+      "file": "docs/audio/HSSR_MODEL.md",
+      "index": 2,
+      "theme": "dark",
+      "type": "timeline",
+      "width": 1490,
+      "height": 469.6003723144531
+    },
+    {
+      "file": "docs/audio/STEREO_TO_5_1_UPMIX.md",
+      "index": 0,
+      "theme": "dark",
+      "type": "flowchart-v2",
+      "width": 1223.75,
+      "height": 1112
+    },
+    {
+      "file": "docs/audio/STEREO_TO_5_1_UPMIX.md",
+      "index": 1,
+      "theme": "dark",
+      "type": "flowchart-v2",
+      "width": 644.62109375,
+      "height": 1364
+    },
+    {
+      "file": "docs/audio/STEREO_TO_5_1_UPMIX.md",
+      "index": 2,
+      "theme": "dark",
+      "type": "flowchart-v2",
+      "width": 538.04296875,
+      "height": 542
+    },
+    {
+      "file": "docs/audio/STEREO_TO_5_1_UPMIX.md",
+      "index": 3,
+      "theme": "dark",
+      "type": "flowchart-v2",
+      "width": 703.90625,
+      "height": 678
+    },
+    {
+      "file": "docs/audio/STEREO_TO_5_1_UPMIX.md",
+      "index": 4,
+      "theme": "dark",
+      "type": "stateDiagram",
+      "width": 523.6875,
+      "height": 444
+    },
+    {
+      "file": "docs/audio/UPMIX_DOMAIN_MODEL.md",
+      "index": 0,
+      "theme": "dark",
+      "type": "flowchart-v2",
+      "width": 860.015625,
+      "height": 510
+    },
+    {
+      "file": "docs/audio/UPMIX_DOMAIN_MODEL.md",
+      "index": 1,
+      "theme": "dark",
+      "type": "er",
+      "width": 779.9453125,
+      "height": 1531
+    },
+    {
+      "file": "docs/audio/UPMIX_DOMAIN_MODEL.md",
+      "index": 2,
+      "theme": "dark",
+      "type": "flowchart-v2",
+      "width": 855.3125,
+      "height": 846
+    },
+    {
+      "file": "docs/audio/UPMIX_DOMAIN_MODEL.md",
+      "index": 3,
+      "theme": "dark",
+      "type": "stateDiagram",
+      "width": 792.2890625,
+      "height": 1206
+    },
+    {
+      "file": "docs/reference/ARCHITECTURE.md",
+      "index": 0,
+      "theme": "dark",
+      "type": "flowchart-v2",
+      "width": 714.6484375,
+      "height": 742
+    },
+    {
+      "file": "docs/reference/ARCHITECTURE.md",
+      "index": 1,
+      "theme": "dark",
+      "type": "flowchart-v2",
+      "width": 786.15625,
+      "height": 206
+    },
+    {
+      "file": "docs/reference/ARCHITECTURE.md",
+      "index": 2,
+      "theme": "dark",
+      "type": "sequence",
+      "width": 1059,
+      "height": 429
+    }
+  ],
+  "internal_links_checked": 332,
+  "unresolved_internal_links": 0,
+  "visual_inspection": "Evidence ER in light mode and qualification lifecycle in dark mode inspected; labels readable.",
+  "scope": "Six documentation files; all 19 embedded diagrams rendered in both themes. PNG previews remain temporary.",
+  "document_sha256": {
+    "docs/README.md": "20c2165232456b121f08d1555e82f138f329c6e5f85c0c770135f54311831956",
+    "docs/audio/HSSR_MODEL.md": "9b1a9c3c93acc8508040a567704519ab44cc290f77fbfa254e0d24294da6328a",
+    "docs/audio/README.md": "7338498b242ec79c251a089a6a6400699fac77d5107c957219c62c666aa165c7",
+    "docs/audio/STEREO_TO_5_1_UPMIX.md": "9a40524763e67af3fc717e3531318f3330db243e37b6d5e5d7eface86ad76047",
+    "docs/audio/UPMIX_DOMAIN_MODEL.md": "5b2eb2e0cbeb9a1dd0cd3e69c30dbdf6c1b7735cfa1195c57f9a19c356dd9a1c",
+    "docs/reference/ARCHITECTURE.md": "5c5ec130e37758f390aa5eded9429b7e34b40aeb9979b3d49034e20ab19518cb"
+  }
+}

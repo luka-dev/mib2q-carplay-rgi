@@ -8,7 +8,9 @@
 
 HSSR = High-Selectivity Semantic Rear-routing. It is a small, causal, quantized GRU **routing controller** — not a source separator. It never splits audio into stems. It listens to a stereo signal 93.75 times a second and emits, per frequency band, a decision: *how much of this belongs behind the listener, and where*. A deterministic DSP then builds a 5.1 field from that decision, on top of the reverse-engineered [J525 Virtual Cabin](VIRTUAL_CABIN_AND_AMP_RE.md).
 
-The honest one-paragraph history: ~15 model generations tried to make a network *separate* music into 12 instrument classes on 240 songs, and it never worked — an independent audit found the trained model equalled "mute plus drums". Separation was abandoned for a genre-agnostic **second scene**: move the not-protected, spatially-wide part of the stereo image behind the listener, delayed so the front still anchors the sound. What ships is that DSP second scene gated by two GRUs: `q6d` (primary, real MoisesDB stems) with `V11` kept as a conservative vocal-protection guard.
+The early history: ~15 model generations tried to make a network *separate* music into 12 instrument classes on 240 songs, and it never worked — an independent audit found the trained model equalled "mute plus drums". That implementation gave way to a genre-agnostic **second scene**: move the not-protected, spatially-wide part of the stereo image behind the listener, delayed so the front still anchors the sound. Current Track A uses three models: `q6d` routing, `V11` vocal-protection guard and `v21a` per-cell eligibility mask. The [phase 1 report](UPMIX_MASK_PHASE1_REPORT_2026-09-27.md) records its car integration; the [matched40 report](UPMIX_TRACKA_MATCHED40_2026-09-30.md) records the current-setting host baseline.
+
+Track B subsequently returned to eligible-audio separation with a single causal spectral network and an isolated C float/int8 runtime. Its final spectral40k full40 comparison fails joint acoustic promotion; it has not replaced Track A. See the [domain diagrams](UPMIX_DOMAIN_MODEL.md), [session wrap](UPMIX_SESSION_WRAP_2026-09-30.md) and [complete attempt chronicle](UPMIX_SEPARATOR_CHRONICLE_2026-09-25_TO_2026-09-30.md). Earlier conclusions below describe the named historical implementations, not a proof that source separation is impossible.
 
 Provenance: [HSSR_UPMIX_MODEL](../research/HSSR_UPMIX_MODEL.md), `hook/audio/hssr_dsp.{c,h}`, `hook/audio/hssr_neon.{c,h}`. See also [Stereo to 5.1 Upmix](STEREO_TO_5_1_UPMIX.md) and [Dolby Atmos](DOLBY_ATMOS.md). Companion notes: [Upmix Training History](UPMIX_TRAINING_HISTORY.md) (every experiment line), [Upmix Datasets and Teachers](UPMIX_DATASETS_AND_TEACHERS.md) (corpora, teachers, role labels), [Upmix Compute Budget](UPMIX_COMPUTE_BUDGET.md) (Krait cost), [Upmix Literature](UPMIX_LITERATURE.md) (prior art).
 
@@ -21,7 +23,7 @@ For roughly fifteen generations (V11…Q2) the model was asked to do supervised 
 - Only 2,352 of 111,132 parameters did per-bin separation; even *oracle* 32-band hints left backing NMSE 0.57–0.89 — the band-power interface structurally cannot separate lead/backing or keys/guitar.
 - A static per-bin 2×2 Wiener filter with zero trainable parameters beat the trained model on every family except drums.
 
-The conclusion was not "train longer" but "this problem is mis-posed": 12-class supervised separation on 240 songs cannot work; the rear loudspeaker needs **one mask, not twelve**. The full ledger (V16, G1–G17, H1, P1, C1/C2, Q1–Q5) with every number is in [Upmix Training History](UPMIX_TRAINING_HISTORY.md).
+The 2026-09-17 decision was to stop that 12-class implementation and pursue a rear protection/routing mask. Its data and band-power interface had not supported the requested separation. The full ledger (V16, G1–G17, H1, P1, C1/C2, Q1–Q5) with every number is in [Upmix Training History](UPMIX_TRAINING_HISTORY.md). Later Track B audio-separation evidence is tracked separately in the [attempt chronicle](UPMIX_SEPARATOR_CHRONICLE_2026-09-25_TO_2026-09-30.md).
 
 Sources: `UPMIX_INDEPENDENT_AUDIT_2026-09-17`, `UPMIX_AGENT_HANDOFF_2026-09-17`, `UPMIX_RETROSPECTIVE_AND_STEREO71`.
 
@@ -35,7 +37,7 @@ Given the Virtual Cabin, split the stereo image and move part of it behind the l
 
 **Why the rear is delayed.** The shipped mechanism delays the rear only, by 12 ms (`SPA_SCENE_REAR_DELAY_FRAMES = 576` at 48 kHz, `hook/audio/stereo_upmix.h:31`), and leaves the front aligned, so the louder, earlier front anchors the image by the precedence (Haas) effect and the rear reads as distinct objects, not an echo. The in-mix rear copy sits ~20–30 dB under the front and 12 ms late — "which is why Luka hears objects, not a vocal echo". This is deliberately unlike Dolby.
 
-> **Caveat.** "A learned protection mask, not 12 classes" is the design *direction*. The purpose-built learned mask (the Q4 line) was prototyped, measured worse than V11 for vocals, and shelved. What is deployed is a DSP azimuth/coherence second scene gated by q6d + the V11 guard.
+> **Historical scope.** The Q4 mask line was prototyped, measured worse than V11 for vocals and shelved. Current Track A additionally deploys the later v21a eligibility mask; it is a different model and experiment line.
 
 ## 🔧 How the runtime works
 
@@ -44,12 +46,15 @@ Output rail is fixed PCM6 `L, R, C, LFE, Ls, Rs`. **C is always digital zero** �
 ```mermaid
 flowchart TB
   accTitle: HSSR runtime signal path
-  accDescr: One hop splits into a delayed front and an STFT feature path feeding the GRU controller, routing, object slots and the scene bed, then rear synthesis, LFE assist and the cabin guard to PCM6.
+  accDescr: One hop splits into a delayed front and an STFT feature path. The asynchronous worker runs q6d, the V11 guard and v21a eligibility; their controls feed object and scene-bed synthesis, LFE and the cabin guard to PCM6.
   subgraph analysis["Analysis and control"]
     stereo_in["stereo S16 in"]
     stft_features["STFT to 368 features"]
-    gru_worker["async GRU worker 93.75 Hz"]
-    routing_decode["routing vetoes and gates"]
+    gru_worker["async worker 93.75 Hz"]
+    q6d_control["q6d routing controller"]
+    v11_guard["V11 vocal guard"]
+    v21a_mask["v21a per-cell eligibility"]
+    routing_decode["routing vetoes and mask drive"]
   end
   subgraph synthesis["Scene synthesis"]
     object_slots["four object slots"]
@@ -64,7 +69,10 @@ flowchart TB
     pcm6_out["PCM6 S16 out"]
   end
   stereo_in --> front_delay --> front_out
-  stereo_in --> stft_features --> gru_worker --> routing_decode
+  stereo_in --> stft_features --> gru_worker
+  gru_worker --> q6d_control --> routing_decode
+  gru_worker --> v11_guard --> routing_decode
+  gru_worker --> v21a_mask --> routing_decode
   routing_decode --> object_slots --> rear_synth
   routing_decode --> scene_bed --> rear_synth
   rear_synth --> lfe_assist

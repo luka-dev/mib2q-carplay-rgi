@@ -10,6 +10,21 @@ Two problems had to be solved to play surround over CarPlay: get the **right six
 
 This page is the entry point for the domain. Start with [Stereo to 5.1 Upmix](STEREO_TO_5_1_UPMIX.md) for the end-to-end flow, then branch into the model, the amp, Dolby, or the discrete path. For the hub note and the trap list see [Home](../README.md) and [Landmines](../LANDMINES.md).
 
+## 🧭 Runtime and research map
+
+As of 2026-10-01, live CarPlay uses **Track A's three models**: q6d routing, V11 protection and v21a eligibility. **Track B's single-network spectral prototype** has isolated causal C float/int8 execution, but its completed spectral40k full40 comparison fails joint promotion. Research is paused; no Track B replacement is deployed. The [domain model](UPMIX_DOMAIN_MODEL.md) maps evidence entities, architecture and qualification; the [session wrap](UPMIX_SESSION_WRAP_2026-09-30.md) and [attempt chronicle](UPMIX_SEPARATOR_CHRONICLE_2026-09-25_TO_2026-09-30.md) hold the final verdict and history.
+
+```mermaid
+flowchart TB
+  accTitle: Audio production and research map
+  accDescr: Live CarPlay uses the three-model Track A hook and the cabin amplifier. Track B feeds offline real-C qualification, whose failed result is archived without a deployment transition.
+  carplay_stereo["Live CarPlay stereo"] --> deployed_track_a["Track A hook<br/>q6d + V11 + v21a"]
+  deployed_track_a --> cabin_chain["PCM6 to J525 and speakers"]
+  fixed_stereo["Frozen real-stem mixtures"] --> research_track_b["Track B<br/>one causal spectral model"]
+  research_track_b --> offline_qualification["Real C full40 and transitions"]
+  offline_qualification --> paused_verdict["Joint promotion fails<br/>archived; research paused"]
+```
+
 ## 📊 The whole pipeline
 
 Both CarPlay audio streams reach the HSSR upmix: the buffered type-103 stream for decoded stereo, and the stock realtime type-100 stream for media apps such as Spotify (`AUDIO_REALTIME_UPMIX=on`, `deploy/smartphone_integrator/carplay_startup.sh:86`).
@@ -27,8 +42,8 @@ flowchart TB
     cookie_decode["decode by magic cookie"]
     classify_pcm["classify decoded PCM"]
     discrete_51["discrete 5.1 reorder"]
-    hssr_upmix["HSSR stereo upmix"]
-    pcm6_out["PCM6 with C zero"]
+    hssr_upmix["Track A HSSR upmix<br/>q6d + V11 + v21a"]
+    pcm6_out["PCM6<br/>upmix C zero; discrete C preserved"]
   end
   subgraph car_side["Head unit and amp"]
     deva_csd["deva to CSD to LPASS"]
@@ -56,6 +71,7 @@ flowchart TB
 | Note | What it covers |
 |---|---|
 | [Stereo to 5.1 Upmix](STEREO_TO_5_1_UPMIX.md) | End-to-end pipeline: ingest, where upmix vs discrete kicks in, the shipped calibration, what ships. |
+| [Upmix Domain Model](UPMIX_DOMAIN_MODEL.md) | Production/research boundaries, evidence entities, single-network architecture and qualification lifecycle at the final paused state. |
 | [HSSR Model](HSSR_MODEL.md) | The AI: why separation failed, the second-scene design, the runtime, every model iteration V9→q6d, calibration. |
 | [Virtual Cabin and Amp RE](VIRTUAL_CABIN_AND_AMP_RE.md) | The J525 amp reverse-engineered: two-SoC topology, the single-byte routing decision, the SHARC DSP chain. |
 | [Dolby Atmos](DOLBY_ATMOS.md) | What Atmos is on CarPlay, why phone-side spatial is blocked, what HSSR borrowed and where it diverges. |
