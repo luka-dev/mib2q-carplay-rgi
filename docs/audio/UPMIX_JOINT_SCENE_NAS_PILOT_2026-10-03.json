@@ -1612,5 +1612,13 @@
   },
   "fitting_pass": false,
   "elapsed_seconds": 804.3775268520694,
-  "product_qualified": false
+  "product_qualified": false,
+  "posthoc_scalar_gain_diagnostic": {
+    "method": "Optimal unconstrained real scalar independently per monitored crop and rear channel: NMSE_min=1-cosine^2; requires target information, permits signed gain, not a deployable gain configuration",
+    "median_optimal_nmse": {
+      "train": 0.9598905854627658,
+      "dev": 0.997228687153215
+    },
+    "new_audio_inference_or_training": false
+  }
 }

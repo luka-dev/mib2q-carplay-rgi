@@ -115,6 +115,8 @@ Terminal checks: train_rear=false, inspected_dev_rear=false, front_nonworse=true
 
 The rear fitting gates failed; this recipe has not demonstrated useful authored rear recovery even on TRAIN. Low rear target correlation also rules out treating this as a simple gain fix. This bounded run does not prove that every joint-scene architecture will fail, or isolate architecture from loss, state horizon and target ambiguity. No extension or follow-up training was queued.
 
+A post-hoc calculation from the saved energy/cosine metrics grants each rear channel in each crop its own target-informed, unconstrained real gain. Its optimistic NMSE is `1 - cosine^2`: median .959891 on TRAIN and .997229 on inspected DEV. Even allowing polarity reversal, amplification alone does not recover the target structure. This is a numerical bound, not a rendered or deployable gain candidate. No additional audio inference or training was run.
+
 Per-channel terminal median NMSE, order FL/FR/C/Ls/Rs:
 
 - TRAIN: 0.526455, 0.501774, 0.139408, 0.950203, 1.005330.
@@ -136,3 +138,11 @@ Even a fitting pass would leave the original full40/untouched20 source protectio
 - [train_scene_joint_nas.py](../../tools/stereo-upmix-render/train_scene_joint_nas.py): finite NAS runner, frozen catalog validation, monitoring and terminal report.
 
 The terminal result fails both rear fitting gates. Retain this run and diagnose target recoverability and the optimization/estimator mechanism before extending the same recipe. A follow-up should distinguish recoverable coherent rear content from ambiguous diffuse effects and compare target-informed operator reachability with estimator fitting on the same excerpts. Changing encoder, loss and dataset together would again obscure the cause. A future fitting pass would still require recording-disjoint authored data and protected-source/entry analysis before considering a hook port.
+
+### Proposed diagnostic order
+
+1. Establish target-informed reachability using this exact five-head projection and coefficient limits on the same TRAIN crops. The earlier P1 oracle is evidence for a different output construction.
+2. Attempt fitting one fixed TRAIN excerpt with the unchanged model/loss. Failure would focus investigation on the estimator, output, gradients and optimization; success only proves memorization of that excerpt.
+3. Restore multiple TRAIN recordings under matched conditions, then inspected DEV. Separate coherent rear recovery from diffuse ambience statistics if their learning behaviour differs.
+
+These are proposed diagnostics, not queued training jobs. No architecture or dataset replacement is justified by the failed pilot alone.
