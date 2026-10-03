@@ -177,39 +177,41 @@ The revised hypothesis would combine **joint coherent front/rear reconstruction*
 
 A meaningful test first shows that exact target rear/front correction yields the requested scene, then uses a larger PC reference to establish learnability on recording-disjoint masters, including actual commercial stereo as a separate domain-shift evaluation. Audit masters for unwanted rear vocals before admitting targets; a professionally authored mix need not follow this owner's policy. Only a successful reference justifies a compact causal student. Compare explicitly against P1's failed mixed-protection cases and today's full40 gates. Ten AlbumDB songs can support a pilot, not broad quality claims. No new training or replacement of the reserved finite experiment is authorized by this discussion.
 
-### Owner constraint: exact reconstruction of the input downmix
+### Owner clarification: detect losses while allowing spatial duplication
 
-**Owner requirement, October3:** the coordinated outputs must reconstruct the input when summed through the chosen stereo downmix. Treat this as a hard structural constraint during training and inference, not only a loss penalty. This section records a required property of a future candidate; no new projection has been implemented or measured here.
+**Latest owner clarification, October3:** summing/downmixing the outputs is a check for lost input content. Modest intentional duplication for spatial effects is acceptable. This supersedes the earlier interpretation requiring exact equality of the complete wet output. Preserve the loss-detection purpose; do not impose a blanket prohibition on added ambience or duplicated content. No new model/projection/effect has been implemented or measured here.
 
-Let `X` be the delayed stereo input and `D` the explicitly frozen2×6 downmix matrix for `[FL,FR,C,LFE,Ls,Rs]`. Require `D Y = X`. This means two equations, preserving left/right separately, with centre/rear/LFE coefficients declared in `D`. An excluded LFE is not covered by the conservation claim; including an active LFE requires an explicit accounting rule. Apply the constraint to signed PCM or complex spectra, retaining phase, never sums of spectral magnitudes.
-
-For a network predicting all channels, one possible fixed differentiable projection is:
+Let `X` be the delayed stereo input, `D` the declared2×6 downmix matrix and `Y_base` the baseline front/centre/rear redistribution. Keep the independently traceable effect contribution `E` separate:
 
 ```text
-raw_channels = network(X)
-error        = X - D * raw_channels
-channels     = raw_channels + B * error
-require D * B = identity_2
-therefore D * channels = X
+Y_out                 = Y_base + E
+dry_reconstruction    = D * Y_base
+declared_effect_delta = D * E
+unexplained_residual  = D * Y_out - declared_effect_delta - X
 ```
 
-Here `B` is a fixed right inverse chosen and tested for numerical conditioning and channel correction policy. General projection allows jointly trained front/rear outputs; a projection that puts the whole error only into FL/FR cancels their independent raw heads algebraically. In that alternative, front audio is calculated from the other outputs and learned through its loss, making separate unconstrained front heads redundant. Specify this choice before architecture selection.
+Check dry reconstruction and the unexplained residual with aligned signed PCM or complex spectra, retaining phase and left/right separately. Declare centre/rear/LFE coefficients; an excluded LFE is outside that downmix identity. Added effects can make `D * Y_out` differ from `X` legitimately. Their actual audio and configured processing must be retained; defining `E` after the fact as whatever makes the residual zero would hide the very losses this check is intended to detect.
 
-For the simple centre-free/LFE-free example, `FL = XL - k * Ls` and `FR = XR - k * Rs` enforce `FL + k * Ls = XL` and `FR + k * Rs = XR`. Use the actual rendered rear signals and matching coefficients for accounting. Independently choosing a partial subtraction coefficient different from rear placement gain deliberately violates the same identity, as described above; it cannot carry an exact-conservation claim.
+One possible baseline implementation enforces `D * Y_base = X` using a fixed differentiable projection. For raw predictions `Z`, use `Y_base = Z + B * (X - D * Z)` with `D * B = identity_2`. This is an implementation option for baseline conservation, not a renewed requirement that the entire wet mix equal the input. If the correction goes only to FL/FR, their independent raw heads cancel algebraically; a jointly learned front/rear design must account for that. [Wisdom et al., ICASSP2019](https://research.google/pubs/differentiable-consistency-constraints-for-improved-deep-speech-enhancement/) supports source-sum projection; this weighted scene/effect accounting is our proposal.
 
-Projection layers for source-sum consistency are supported by [Wisdom et al., ICASSP2019](https://research.google/pubs/differentiable-consistency-constraints-for-improved-deep-speech-enhancement/). The weighted5.1 extension here is our proposal. Projection must appear during training and final output validation; alignment, synthesis, quantization, clipping and later gain/filter changes can break equality. State a numerical tolerance for the final PCM chain and retain its null-test evidence; mathematical equality before processing is not bit-exact equality after int8/PCM rendering.
+The clarification also permits partial relocation. In the centre-free/LFE-free example, `front = X - alpha * k * r` and `rear = beta * r`, with `beta >= alpha`, preserve an exactly reconstructing baseline rear `alpha * r` plus a declared duplicate `(beta - alpha) * r`. Thus some component can stay in front while more reaches the rear. This is bookkeeping, not a proven removal/gain setting. Decorrelation and reverberation require their own actual effect streams and alignment.
 
-This protects the specified electrical round trip. It does not guarantee equal acoustic energy or correct placement: cancellation, a silent rear and compensated rear vocals can all coexist with `D Y = X`. Our earlier P1 folded comparison already had downmix error ~2.43e−7 while failing mixed protection; a [post-hoc source-mixture projection](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30.md#-train-mixture-consistency-result-no-diagnostic-gain) also failed to improve its frozen acoustic diagnostic. Those do not reject projection-trained scene models, but reconstruction closure alone is not the missing rear-scene solution.
+Track effect level, spectral balance, coherence, peaks/loudness and entry stability independently. A stereo null test does not measure speaker energy: effects can cancel under `D` while remaining audible in the cabin. “Modest” has no newly authorized numeric ceiling; freeze a bounded effect configuration before comparison and verify it by the owner's existing level-matched CarPlay protocol. Original vocal/bass/drum protection and scene-stability requirements remain in force. Quantization, filtering and clipping still require final PCM checks; global gain and unrecorded processing are not explanations for missing content.
+
+Historical P1 already had downmix error ~2.43e−7 while failing mixed protection; a [post-hoc source-mixture projection](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30.md#-train-mixture-consistency-result-no-diagnostic-gain) also failed its frozen improvement diagnostic. Conservation accounting remains useful, but does not establish a convincing rear scene or correct allocation.
 
 ```mermaid
 flowchart LR
-    accTitle: Hard stereo reconstruction constraint for a proposed scene model
-    accDescr: The delayed input supplies both the model and a fixed projection. Projection adjusts the jointly predicted channels so their declared stereo downmix matches the input. The complete rendered PCM path still needs a numerical null test.
+    accTitle: Preserve the baseline and account for allowed spatial effects
+    accDescr: A scene model redistributes the input into baseline channels. A separately traceable effect stream may add spatial duplication. Validation checks baseline reconstruction and unexplained residual while measuring the effect contribution independently.
     input_stereo["Delayed stereo input"] --> scene_model["One scene model"]
-    scene_model --> hard_projection["Fixed projection<br/>D times Y equals X"]
-    input_stereo --> hard_projection
-    hard_projection --> output_channels["Joint front, centre and rear"]
-    output_channels --> pcm_check["Final PCM downmix null test"]
+    scene_model --> base_channels["Baseline front, centre and rear"]
+    base_channels --> output_channels["Combined output"]
+    base_channels --> effect_stream["Recorded spatial effect contribution"]
+    effect_stream --> output_channels
+    base_channels --> pcm_check["Dry reconstruction and<br/>unexplained-residual checks"]
+    effect_stream --> pcm_check
+    output_channels --> pcm_check
     input_stereo --> pcm_check
 ```
 
