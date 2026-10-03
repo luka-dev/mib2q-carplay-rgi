@@ -177,7 +177,43 @@ The revised hypothesis would combine **joint coherent front/rear reconstruction*
 
 A meaningful test first shows that exact target rear/front correction yields the requested scene, then uses a larger PC reference to establish learnability on recording-disjoint masters, including actual commercial stereo as a separate domain-shift evaluation. Audit masters for unwanted rear vocals before admitting targets; a professionally authored mix need not follow this owner's policy. Only a successful reference justifies a compact causal student. Compare explicitly against P1's failed mixed-protection cases and today's full40 gates. Ten AlbumDB songs can support a pilot, not broad quality claims. No new training or replacement of the reserved finite experiment is authorized by this discussion.
 
-### Claims we can and cannot make now
+### Owner constraint: exact reconstruction of the input downmix
+
+**Owner requirement, October3:** the coordinated outputs must reconstruct the input when summed through the chosen stereo downmix. Treat this as a hard structural constraint during training and inference, not only a loss penalty. This section records a required property of a future candidate; no new projection has been implemented or measured here.
+
+Let `X` be the delayed stereo input and `D` the explicitly frozen2×6 downmix matrix for `[FL,FR,C,LFE,Ls,Rs]`. Require `D Y = X`. This means two equations, preserving left/right separately, with centre/rear/LFE coefficients declared in `D`. An excluded LFE is not covered by the conservation claim; including an active LFE requires an explicit accounting rule. Apply the constraint to signed PCM or complex spectra, retaining phase, never sums of spectral magnitudes.
+
+For a network predicting all channels, one possible fixed differentiable projection is:
+
+```text
+raw_channels = network(X)
+error        = X - D * raw_channels
+channels     = raw_channels + B * error
+require D * B = identity_2
+therefore D * channels = X
+```
+
+Here `B` is a fixed right inverse chosen and tested for numerical conditioning and channel correction policy. General projection allows jointly trained front/rear outputs; a projection that puts the whole error only into FL/FR cancels their independent raw heads algebraically. In that alternative, front audio is calculated from the other outputs and learned through its loss, making separate unconstrained front heads redundant. Specify this choice before architecture selection.
+
+For the simple centre-free/LFE-free example, `FL = XL - k * Ls` and `FR = XR - k * Rs` enforce `FL + k * Ls = XL` and `FR + k * Rs = XR`. Use the actual rendered rear signals and matching coefficients for accounting. Independently choosing a partial subtraction coefficient different from rear placement gain deliberately violates the same identity, as described above; it cannot carry an exact-conservation claim.
+
+Projection layers for source-sum consistency are supported by [Wisdom et al., ICASSP2019](https://research.google/pubs/differentiable-consistency-constraints-for-improved-deep-speech-enhancement/). The weighted5.1 extension here is our proposal. Projection must appear during training and final output validation; alignment, synthesis, quantization, clipping and later gain/filter changes can break equality. State a numerical tolerance for the final PCM chain and retain its null-test evidence; mathematical equality before processing is not bit-exact equality after int8/PCM rendering.
+
+This protects the specified electrical round trip. It does not guarantee equal acoustic energy or correct placement: cancellation, a silent rear and compensated rear vocals can all coexist with `D Y = X`. Our earlier P1 folded comparison already had downmix error ~2.43e−7 while failing mixed protection; a [post-hoc source-mixture projection](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30.md#-train-mixture-consistency-result-no-diagnostic-gain) also failed to improve its frozen acoustic diagnostic. Those do not reject projection-trained scene models, but reconstruction closure alone is not the missing rear-scene solution.
+
+```mermaid
+flowchart LR
+    accTitle: Hard stereo reconstruction constraint for a proposed scene model
+    accDescr: The delayed input supplies both the model and a fixed projection. Projection adjusts the jointly predicted channels so their declared stereo downmix matches the input. The complete rendered PCM path still needs a numerical null test.
+    input_stereo["Delayed stereo input"] --> scene_model["One scene model"]
+    scene_model --> hard_projection["Fixed projection<br/>D times Y equals X"]
+    input_stereo --> hard_projection
+    hard_projection --> output_channels["Joint front, centre and rear"]
+    output_channels --> pcm_check["Final PCM downmix null test"]
+    input_stereo --> pcm_check
+```
+
+### Scope of current conclusions
 
 The latest paper evidence supports **testing stable object rendering, explicit ambience and perceptually informed channel objectives**. It does not establish that any downloaded model is a deployable single-network replacement. The existing BSRNN/direct-route result already establishes a strong offline reference; the current compact model has not retained its stability and bass rejection.
 
@@ -185,7 +221,7 @@ A scene that passes host metrics still requires level-matched listening in the A
 
 ## 🔗 Primary references
 
-Documentation verification: 16 footnote definitions and local file links checked; both Mermaid diagrams parsed and rendered with Mermaid 11.12.0 in light and dark themes. The 12 unrelated dirty/untracked files matched their pre-existing content hashes. These checks validate the document, not any proposed audio result.
+Documentation verification: 16 footnote definitions and local file links checked; three Mermaid diagrams parsed and rendered with Mermaid 11.12.0 in light and dark themes. The 12 unrelated dirty/untracked files matched their pre-existing content hashes. These checks validate the document, not any proposed audio result.
 
 [^s2x]: [IEEE Signal Processing Society: S2X-Net, October 2026](https://signalprocessingsociety.org/publications-resources/ieee-transactions-audio-speech-and-language-processing/2026/10/s2x-net-stereo-multichannel-neural-upmixing-network); [author manuscript](https://www.researchgate.net/publication/413816112_S2X-Net_Stereo-to-Multichannel_Neural_Upmixing_Network). Official link resolves to IEEE document 11673289; the direct full-text endpoint returned browser verification during this review.
 [^send]: [SEND: DAFx 2026 paper 09](https://dafx.de/paper-archive/2026/papers/DAFx26_paper_09.pdf).
