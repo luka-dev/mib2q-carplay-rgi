@@ -1,6 +1,6 @@
 # Rear Scene Research: Recent Papers and a Bounded Architecture Proposal
 
-*2026-10-03 · Track B literature follow-up · Research and planning; no training, PC jobs, deployment or runtime edits.*
+*2026-10-03 · Track B literature follow-up · Initial research and planning, followed by the separately recorded owner-authorized NAS pilot; no hook deployment.*
 
 ---
 
@@ -10,7 +10,9 @@
 
 This is a hypothesis assembled from recent research and our measured failures. None of the reviewed papers demonstrates our complete Audi target: causal int8 inference at ≤150 M MAC/s measured on the loaded unit, ≤85 ms extra latency, protected-source limits, stable vocal entries and owner preference through live CarPlay.
 
-The immediate useful experiment is a **scene/rendering comparison with extraction held fixed**, using the existing BSRNN reference and true stems. A new large encoder is not yet justified by these papers. Training remains paused; the reserved upper64-versus24 experiment in the [session wrap](UPMIX_SESSION_WRAP_2026-09-30.md) remains unexecuted.
+The immediate experiment recommended by this literature review is a **scene/rendering comparison with extraction held fixed**, using the existing BSRNN reference and true stems. A new large encoder is not yet justified by these papers. At the initial review, training remained paused; the reserved upper64-versus24 experiment in the [session wrap](UPMIX_SESSION_WRAP_2026-09-30.md) remains unexecuted.
+
+**Owner-authorized follow-up:** the owner subsequently requested training on NAS. The [joint front/rear pilot](UPMIX_JOINT_SCENE_NAS_PILOT_2026-10-03.md) records a separate 4096-update CPU fitting screen on existing authored targets, five learned channels, signal/effect accounting and its measured outcome. This implements the later joint-scene hypothesis, not the extraction-held-fixed comparison above; it does not resume the PC queue or satisfy release qualification.
 
 ## 📏 What actually needs improving
 

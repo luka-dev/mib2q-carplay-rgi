@@ -1,8 +1,14 @@
 # Upmix Training History
 
-*Iteration ledger for the stereo→5.1 upmix model, 2026-09-04 → 2026-09-30: original controller/source generations and the linked complete separator continuation, including successes, rejected mechanisms, interrupted attempts and unexecuted plans.*
+*Iteration ledger for the stereo→5.1 upmix model, 2026-09-04 → 2026-10-03: original controller/source generations and linked separator/scene continuation, including successes, rejected mechanisms, interrupted attempts and unexecuted plans.*
 
 ---
+
+## 🧭 October 3 joint scene continuation
+
+The owner resumed a finite NAS CPU experiment after the [saved P1 report recheck](UPMIX_NAS_SCENE_RECHECK_2026-10-03.md). The [joint front/rear pilot](UPMIX_JOINT_SCENE_NAS_PILOT_2026-10-03.md) records its immutable run root, shared band/global encoder, five learned outputs, exact dry downmix projection with permitted separately accounted effects, tests, fitting protocol and measured outcome. This is a new recipe fitting screen, not a matched single-factor P1 ablation. The prior spectral40k rejection and live Track A deployment remain the recorded September 30 result.
+
+The4096-update run completed: TRAIN rear NMSE .970831 and inspected DEV1.135732 fail the .50/.80 fitting gates. Front medians improved and dry PCM conservation passed; all three local and NAS contract tests passed. Rear recovery failed even on TRAIN, so no longer identical run was queued. This is a bounded negative result, not proof that authored joint-scene learning is impossible.
 
 ## 📋 The arc in one screen
 

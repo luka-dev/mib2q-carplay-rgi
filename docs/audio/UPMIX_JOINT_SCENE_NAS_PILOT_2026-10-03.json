@@ -1,0 +1,1616 @@
+{
+  "schema": "joint-scene-nas-evidence-v1",
+  "captured_utc": "2026-10-03T23:22:21.527450+00:00",
+  "root": "/mnt/shared/users/luka/Audi/upmix-training-2026-09-11/runtime/scene-joint-front-rear-20261003-a",
+  "launch": {
+    "started_utc": "2026-10-03T23:08:04.960675+00:00",
+    "pid": 403068,
+    "root": "/mnt/shared/users/luka/Audi/upmix-training-2026-09-11/runtime/scene-joint-front-rear-20261003-a",
+    "source_hashes": {
+      "scene_joint_net.py": "c0df585b44146301c160beacd4997d5a1b45ba16c036b74684105026edbcc238",
+      "test_scene_joint_net.py": "723fa88fc5bf5f4d7213e68dcbdde2b836a665df89498cd9350243e9029285e8",
+      "train_scene_joint_nas.py": "bc6a72cef88ba17781e0631ffe2a5cf233b1626e34b038cf6570ab35f5c286a0"
+    },
+    "steps": 4096,
+    "threads": 3,
+    "nas_checks_passed": true,
+    "model_only_device_claim": false
+  },
+  "protocol": {
+    "schema": "joint-scene-nas-pilot-v1",
+    "started_utc": "2026-10-03T23:08:15.923540+00:00",
+    "pid": 403068,
+    "steps": 4096,
+    "seed": 20261003,
+    "lr": 0.001,
+    "threads": 3,
+    "warm_frames": 32,
+    "score_frames": 96,
+    "catalog_sha256": "f9f4860cb7d09a0b65860eae95df3c39160f3f8a2b492f5f84047b4a46770c5f",
+    "split_sha256": "62a85f6d0d1b98031aed28a7b4cc0dc844213531390a21a3eb7393174a291a38",
+    "train": [
+      "albumdb-01",
+      "albumdb-04",
+      "albumdb-05",
+      "albumdb-06",
+      "albumdb-07",
+      "albumdb-08",
+      "albumdb-09"
+    ],
+    "dev": [
+      "albumdb-02",
+      "albumdb-03"
+    ],
+    "input_domain": "known downmix of same authored target; not independent stereo masters",
+    "artist_disjoint": false,
+    "heldout_opened": false,
+    "training_target_cabin_safe": false,
+    "role_policy_approved": false,
+    "train_loss": "fixed TRAIN channel-power-normalized complex MSE + .05 magnitude MAE",
+    "normalization_power": [
+      0.7001636624336243,
+      0.7018644213676453,
+      6.427074432373047,
+      0.22349132597446442,
+      0.2112828493118286
+    ],
+    "learned_channels": [
+      "FL",
+      "FR",
+      "C",
+      "Ls",
+      "Rs"
+    ],
+    "lfe": "absent from pilot model/targets; separate DSP proposed, not implemented",
+    "effect": "0 in supervised baseline; declared .10 rear duplication accounting diagnostic only",
+    "changed_mechanism": "full-bin five-head operators, band/global recurrence, channel-normalized joint reconstruction",
+    "comparison": "fresh recipe fitting screen; not a single-factor architecture ablation against P1",
+    "pilot_gates": "TRAIN median rear NMSE<=.50; inspected DEV<=.80; both front medians nonworse than initial; dry PCM null relative RMS<=1e-5; fitting screen only, never release approval",
+    "specification": {
+      "architecture": "joint-scene-band-global-v1",
+      "config": {
+        "sample_rate": 48000,
+        "fft_size": 1024,
+        "hop": 256,
+        "width": 10,
+        "bands": 32,
+        "depth": 3,
+        "global_width": 64,
+        "coefficient_limit": 2.0
+      },
+      "parameters": 68044,
+      "learned_channels": [
+        "FL",
+        "FR",
+        "C",
+        "Ls",
+        "Rs"
+      ],
+      "dense_neural_macs_per_second": 103418625.0,
+      "dense_neural_macs_per_frame": {
+        "input_projection": 61560,
+        "frequency": 200070,
+        "band_gru": 19200,
+        "global_encode": 20480,
+        "global_gru": 24576,
+        "global_decode": 20480,
+        "operator_head": 205200
+      },
+      "excludes": "FFT/WOLA, features, projection, complex application, normalization, nonlinearities and LFE DSP",
+      "future_neural_frames": 0,
+      "framing_window_ms": 21.333333333333332,
+      "device_measured": false,
+      "int8_supported": false,
+      "production_ready": false
+    },
+    "source_hashes": {
+      "train_scene_joint_nas.py": "bc6a72cef88ba17781e0631ffe2a5cf233b1626e34b038cf6570ab35f5c286a0",
+      "scene_joint_net.py": "c0df585b44146301c160beacd4997d5a1b45ba16c036b74684105026edbcc238"
+    },
+    "release_gates": "original full40 source/entry/stability, new untouched recordings, native int8 complete device<=150M MAC/s<=85ms, owner live CarPlay; not evaluated by this pilot"
+  },
+  "status": {
+    "state": "complete",
+    "pid": 403068,
+    "step": 4096,
+    "updated_utc": "2026-10-03T23:21:30.648379+00:00"
+  },
+  "latest": {
+    "checkpoint": "step04096.pt",
+    "sha256": "f1fbe00066e2c870af364f781360bff3a3b3579071cbcfdfe264d47a2956e867",
+    "step": 4096,
+    "monitor": "monitor04096.json"
+  },
+  "initial": {
+    "train": {
+      "rows": [
+        {
+          "song": "albumdb-01",
+          "start_sample": 1354304,
+          "frames": 256,
+          "nmse": [
+            5.794801235198975,
+            5.804073810577393,
+            1.0004054307937622,
+            1.0342992544174194,
+            1.0151731967926025
+          ],
+          "cosine": [
+            0.4196822941303253,
+            0.40638846158981323,
+            0.004228647332638502,
+            0.049115799367427826,
+            -0.02660987339913845
+          ],
+          "energy_ratio": [
+            7.0184807777404785,
+            6.946197986602783,
+            0.0006156882154755294,
+            0.0579453781247139,
+            0.009882683865725994
+          ],
+          "dry_pcm_null_max": 7.037073373794556e-06,
+          "dry_pcm_null_relative_rms": 4.592948528170382e-07,
+          "accounted_effect_stft_residual_max": 1.1483759408292826e-05,
+          "baseline_zero_rear_nmse": 1.0,
+          "denominator_known": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ]
+        },
+        {
+          "song": "albumdb-01",
+          "start_sample": 3521190,
+          "frames": 256,
+          "nmse": [
+            1.8599244356155396,
+            1.9383047819137573,
+            1.0020679235458374,
+            0.9582811594009399,
+            1.0012511014938354
+          ],
+          "cosine": [
+            0.7165070176124573,
+            0.7469369769096375,
+            -0.0209018737077713,
+            0.3419918119907379,
+            0.0021038814447820187
+          ],
+          "energy_ratio": [
+            3.5660130977630615,
+            3.8814430236816406,
+            0.0008492789347656071,
+            0.004582354798913002,
+            0.001409401884302497
+          ],
+          "dry_pcm_null_max": 7.3015689849853516e-06,
+          "dry_pcm_null_relative_rms": 3.3609023830649676e-07,
+          "accounted_effect_stft_residual_max": 1.206313208967913e-05,
+          "baseline_zero_rear_nmse": 1.0,
+          "denominator_known": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ]
+        },
+        {
+          "song": "albumdb-04",
+          "start_sample": 3363515,
+          "frames": 256,
+          "nmse": [
+            4.0081963539123535,
+            1.9691967964172363,
+            1.001421332359314,
+            1.107862949371338,
+            1.0136196613311768
+          ],
+          "cosine": [
+            0.5091760754585266,
+            0.6194175481796265,
+            -0.01419175136834383,
+            0.00034303287975490093,
+            0.052992627024650574
+          ],
+          "energy_ratio": [
+            5.367499828338623,
+            3.177480936050415,
+            0.0006805295124650002,
+            0.10808822512626648,
+            0.0328204445540905
+          ],
+          "dry_pcm_null_max": 1.2541189789772034e-05,
+          "dry_pcm_null_relative_rms": 4.3598123511401354e-07,
+          "accounted_effect_stft_residual_max": 1.528856228105724e-05,
+          "baseline_zero_rear_nmse": 1.0,
+          "denominator_known": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ]
+        },
+        {
+          "song": "albumdb-04",
+          "start_sample": 8745139,
+          "frames": 256,
+          "nmse": [
+            0.03833576291799545,
+            0.0014193025417625904,
+            504512800.0,
+            0.9844690561294556,
+            1.1059516668319702
+          ],
+          "cosine": [
+            0.9812299013137817,
+            0.9992939233779907,
+            0.0,
+            0.12555384635925293,
+            0.00011241900210734457
+          ],
+          "energy_ratio": [
+            1.0304399728775024,
+            1.004238247871399,
+            504512800.0,
+            0.012165130116045475,
+            0.10602488368749619
+          ],
+          "dry_pcm_null_max": 1.0888325050473213e-06,
+          "dry_pcm_null_relative_rms": 3.725691328781977e-07,
+          "accounted_effect_stft_residual_max": 1.5078915112098912e-06,
+          "baseline_zero_rear_nmse": 1.0,
+          "denominator_known": [
+            true,
+            true,
+            false,
+            true,
+            true
+          ]
+        },
+        {
+          "song": "albumdb-05",
+          "start_sample": 2308397,
+          "frames": 256,
+          "nmse": [
+            5.14946174621582,
+            9.628035545349121,
+            1.0029159784317017,
+            1.0991811752319336,
+            1.0962493419647217
+          ],
+          "cosine": [
+            0.3886033892631531,
+            0.27600720524787903,
+            -0.0564645417034626,
+            0.11477993428707123,
+            -0.04223110154271126
+          ],
+          "energy_ratio": [
+            6.06322717666626,
+            10.4089994430542,
+            0.00046930674579925835,
+            0.20247747004032135,
+            0.0733710378408432
+          ],
+          "dry_pcm_null_max": 1.0706484317779541e-05,
+          "dry_pcm_null_relative_rms": 6.051899958947615e-07,
+          "accounted_effect_stft_residual_max": 1.078959303413285e-05,
+          "baseline_zero_rear_nmse": 1.0,
+          "denominator_known": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ]
+        },
+        {
+          "song": "albumdb-05",
+          "start_sample": 6001832,
+          "frames": 256,
+          "nmse": [
+            5.280547142028809,
+            4.172545909881592,
+            1.0011215209960938,
+            1.0154343843460083,
+            1.005129337310791
+          ],
+          "cosine": [
+            0.39494404196739197,
+            0.4337640404701233,
+            -0.012898863293230534,
+            0.03987996652722359,
+            0.0034273185301572084
+          ],
+          "energy_ratio": [
+            6.256255626678467,
+            5.139218330383301,
+            0.000528572651091963,
+            0.029022088274359703,
+            0.0056444029323756695
+          ],
+          "dry_pcm_null_max": 9.417533874511719e-06,
+          "dry_pcm_null_relative_rms": 4.502973922626552e-07,
+          "accounted_effect_stft_residual_max": 6.031566044839565e-06,
+          "baseline_zero_rear_nmse": 1.0,
+          "denominator_known": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ]
+        },
+        {
+          "song": "albumdb-06",
+          "start_sample": 2202072,
+          "frames": 256,
+          "nmse": [
+            3.5150182247161865,
+            3.46256422996521,
+            1.0019681453704834,
+            1.2283856868743896,
+            1.019347071647644
+          ],
+          "cosine": [
+            0.4939233064651489,
+            0.47462451457977295,
+            -0.028476543724536896,
+            -0.04030025005340576,
+            0.04222576320171356
+          ],
+          "energy_ratio": [
+            4.643769264221191,
+            4.469358921051025,
+            0.0005875601200386882,
+            0.19297856092453003,
+            0.035189252346754074
+          ],
+          "dry_pcm_null_max": 7.413327693939209e-06,
+          "dry_pcm_null_relative_rms": 4.396313215693226e-07,
+          "accounted_effect_stft_residual_max": 1.1796299986599479e-05,
+          "baseline_zero_rear_nmse": 1.0,
+          "denominator_known": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ]
+        },
+        {
+          "song": "albumdb-06",
+          "start_sample": 5725389,
+          "frames": 256,
+          "nmse": [
+            4.4651899337768555,
+            4.206087589263916,
+            1.000344157218933,
+            0.9636420607566833,
+            0.9971151351928711
+          ],
+          "cosine": [
+            0.5488812923431396,
+            0.5843824148178101,
+            0.005540894810110331,
+            0.23866130411624908,
+            0.05398118123412132
+          ],
+          "energy_ratio": [
+            6.198199272155762,
+            6.090468406677246,
+            0.0006198470946401358,
+            0.00904948078095913,
+            0.00236094044521451
+          ],
+          "dry_pcm_null_max": 4.824250936508179e-06,
+          "dry_pcm_null_relative_rms": 2.409745150089293e-07,
+          "accounted_effect_stft_residual_max": 1.528856228105724e-05,
+          "baseline_zero_rear_nmse": 1.0,
+          "denominator_known": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ]
+        },
+        {
+          "song": "albumdb-07",
+          "start_sample": 2171290,
+          "frames": 256,
+          "nmse": [
+            12.14107894897461,
+            49.718902587890625,
+            1.001129150390625,
+            0.992307722568512,
+            1.028591275215149
+          ],
+          "cosine": [
+            0.4715743660926819,
+            0.45526114106178284,
+            -0.012090330943465233,
+            0.11507134139537811,
+            -0.07679008692502975
+          ],
+          "energy_ratio": [
+            14.765172004699707,
+            55.50228500366211,
+            0.000557737541384995,
+            0.03593473136425018,
+            0.011863320134580135
+          ],
+          "dry_pcm_null_max": 4.461035132408142e-06,
+          "dry_pcm_null_relative_rms": 4.800017450179439e-07,
+          "accounted_effect_stft_residual_max": 5.7220458984375e-06,
+          "baseline_zero_rear_nmse": 1.0,
+          "denominator_known": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ]
+        },
+        {
+          "song": "albumdb-07",
+          "start_sample": 5645355,
+          "frames": 256,
+          "nmse": [
+            4.818894863128662,
+            4.339503288269043,
+            1.0005298852920532,
+            1.0259507894515991,
+            1.0095138549804688
+          ],
+          "cosine": [
+            0.5389263033866882,
+            0.5618942975997925,
+            0.0030465670861303806,
+            -0.05209942162036896,
+            -0.02413247339427471
+          ],
+          "energy_ratio": [
+            6.584748268127441,
+            6.119487285614014,
+            0.0006901700398884714,
+            0.013737671077251434,
+            0.005828780587762594
+          ],
+          "dry_pcm_null_max": 7.450580596923828e-06,
+          "dry_pcm_null_relative_rms": 3.843369711375999e-07,
+          "accounted_effect_stft_residual_max": 1.1483759408292826e-05,
+          "baseline_zero_rear_nmse": 1.0,
+          "denominator_known": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ]
+        },
+        {
+          "song": "albumdb-08",
+          "start_sample": 2115628,
+          "frames": 256,
+          "nmse": [
+            4.0475921630859375,
+            3.7971463203430176,
+            1.0025193691253662,
+            1.2023028135299683,
+            1.102864146232605
+          ],
+          "cosine": [
+            0.4205302596092224,
+            0.45107635855674744,
+            -0.04128165915608406,
+            0.08381396532058716,
+            -0.040787309408187866
+          ],
+          "energy_ratio": [
+            4.911554336547852,
+            4.766821384429932,
+            0.0005620563752017915,
+            0.2930464446544647,
+            0.07981798052787781
+          ],
+          "dry_pcm_null_max": 4.723668098449707e-06,
+          "dry_pcm_null_relative_rms": 2.667227931851812e-07,
+          "accounted_effect_stft_residual_max": 1.526065170764923e-05,
+          "baseline_zero_rear_nmse": 1.0,
+          "denominator_known": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ]
+        },
+        {
+          "song": "albumdb-08",
+          "start_sample": 5500634,
+          "frames": 256,
+          "nmse": [
+            3.5456058979034424,
+            5.093355655670166,
+            0.9982482194900513,
+            0.9949450492858887,
+            1.0048916339874268
+          ],
+          "cosine": [
+            0.5784839391708374,
+            0.5736057162284851,
+            0.04596506804227829,
+            0.07189770042896271,
+            -0.0032233772799372673
+          ],
+          "energy_ratio": [
+            5.178417682647705,
+            7.163924217224121,
+            0.0007269761408679187,
+            0.006821294315159321,
+            0.0044609373435378075
+          ],
+          "dry_pcm_null_max": 6.143469363451004e-06,
+          "dry_pcm_null_relative_rms": 2.611890295156627e-07,
+          "accounted_effect_stft_residual_max": 1.5258905477821827e-05,
+          "baseline_zero_rear_nmse": 1.0,
+          "denominator_known": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ]
+        },
+        {
+          "song": "albumdb-09",
+          "start_sample": 2919162,
+          "frames": 256,
+          "nmse": [
+            5.720396995544434,
+            6.307540416717529,
+            1.0013059377670288,
+            0.9984386563301086,
+            0.9985716938972473
+          ],
+          "cosine": [
+            0.41223543882369995,
+            0.396236777305603,
+            -0.014960984699428082,
+            0.053257059305906296,
+            0.040207769721746445
+          ],
+          "energy_ratio": [
+            6.88351583480835,
+            7.474062442779541,
+            0.0005831356975249946,
+            0.007915104739367962,
+            0.0029081760440021753
+          ],
+          "dry_pcm_null_max": 9.26293432712555e-06,
+          "dry_pcm_null_relative_rms": 4.876125672126363e-07,
+          "accounted_effect_stft_residual_max": 1.5728399375802837e-05,
+          "baseline_zero_rear_nmse": 1.0,
+          "denominator_known": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ]
+        },
+        {
+          "song": "albumdb-09",
+          "start_sample": 7589823,
+          "frames": 256,
+          "nmse": [
+            9.034266471862793,
+            12.8040771484375,
+            1.00080144405365,
+            1.018112063407898,
+            1.001225471496582
+          ],
+          "cosine": [
+            0.3601103723049164,
+            0.34310483932495117,
+            -0.004811231512576342,
+            0.001139363506808877,
+            0.026403794065117836
+          ],
+          "energy_ratio": [
+            10.351484298706055,
+            14.408860206604004,
+            0.0005713932914659381,
+            0.018421631306409836,
+            0.004934729542583227
+          ],
+          "dry_pcm_null_max": 6.6943466663360596e-06,
+          "dry_pcm_null_relative_rms": 3.121141389783588e-07,
+          "accounted_effect_stft_residual_max": 1.37540864670882e-05,
+          "baseline_zero_rear_nmse": 1.0,
+          "denominator_known": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ]
+        }
+      ],
+      "median_nmse_by_channel": [
+        4.642042398452759,
+        4.2727954387664795,
+        1.001217544078827,
+        1.0167732238769531,
+        1.0115667581558228
+      ],
+      "median_rear_nmse": 1.0143964290618896,
+      "max_pcm_null": 1.2541189789772034e-05,
+      "max_relative_pcm_null_rms": 6.051899958947615e-07,
+      "scope": "fixed short crops, inspected AlbumDB only; no source attribution, entry/device/ear gate"
+    },
+    "dev": {
+      "rows": [
+        {
+          "song": "albumdb-02",
+          "start_sample": 2581690,
+          "frames": 256,
+          "nmse": [
+            14.640106201171875,
+            16.396018981933594,
+            1.0010476112365723,
+            1.0096557140350342,
+            1.0122318267822266
+          ],
+          "cosine": [
+            0.30344119668006897,
+            0.2874393165111542,
+            -0.01193708274513483,
+            0.07301925867795944,
+            -0.014307464472949505
+          ],
+          "energy_ratio": [
+            16.073183059692383,
+            17.8230037689209,
+            0.0005087097524665296,
+            0.03819803521037102,
+            0.009449958801269531
+          ],
+          "dry_pcm_null_max": 7.361173629760742e-06,
+          "dry_pcm_null_relative_rms": 2.8847938438048004e-07,
+          "accounted_effect_stft_residual_max": 1.537753632874228e-05,
+          "baseline_zero_rear_nmse": 1.0,
+          "denominator_known": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ]
+        },
+        {
+          "song": "albumdb-02",
+          "start_sample": 6712395,
+          "frames": 256,
+          "nmse": [
+            2.6008286476135254,
+            2.8356826305389404,
+            0.9974796175956726,
+            0.99232417345047,
+            1.0238263607025146
+          ],
+          "cosine": [
+            0.687286913394928,
+            0.6927720904350281,
+            0.05560164153575897,
+            0.09076374769210815,
+            -0.2502470910549164
+          ],
+          "energy_ratio": [
+            4.524747371673584,
+            4.9039506912231445,
+            0.0010053132427856326,
+            0.0044962214305996895,
+            0.0019163974793627858
+          ],
+          "dry_pcm_null_max": 1.4424324035644531e-05,
+          "dry_pcm_null_relative_rms": 3.982053158324561e-07,
+          "accounted_effect_stft_residual_max": 1.52587890625e-05,
+          "baseline_zero_rear_nmse": 1.0,
+          "denominator_known": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ]
+        },
+        {
+          "song": "albumdb-03",
+          "start_sample": 2367699,
+          "frames": 256,
+          "nmse": [
+            4.549149513244629,
+            4.582043647766113,
+            1.0033410787582397,
+            1.1820762157440186,
+            1.0579679012298584
+          ],
+          "cosine": [
+            0.44147512316703796,
+            0.440541535615921,
+            -0.06109369546175003,
+            0.058896176517009735,
+            -0.015240981243550777
+          ],
+          "energy_ratio": [
+            5.647419452667236,
+            5.682338714599609,
+            0.0005294450675137341,
+            0.23975278437137604,
+            0.05107865855097771
+          ],
+          "dry_pcm_null_max": 1.940131187438965e-05,
+          "dry_pcm_null_relative_rms": 9.160460763268929e-07,
+          "accounted_effect_stft_residual_max": 7.864199687901419e-06,
+          "baseline_zero_rear_nmse": 1.0,
+          "denominator_known": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ]
+        },
+        {
+          "song": "albumdb-03",
+          "start_sample": 6156018,
+          "frames": 256,
+          "nmse": [
+            3.2569267749786377,
+            2.946049690246582,
+            1.0005844831466675,
+            1.170939326286316,
+            1.035144329071045
+          ],
+          "cosine": [
+            0.6048420071601868,
+            0.6178991198539734,
+            0.0025139462668448687,
+            0.035268791019916534,
+            0.02303166501224041
+          ],
+          "energy_ratio": [
+            4.947669506072998,
+            4.595139503479004,
+            0.0007195511134341359,
+            0.20269666612148285,
+            0.044906262308359146
+          ],
+          "dry_pcm_null_max": 4.8857182264328e-06,
+          "dry_pcm_null_relative_rms": 2.621726480356301e-07,
+          "accounted_effect_stft_residual_max": 9.5367431640625e-06,
+          "baseline_zero_rear_nmse": 1.0,
+          "denominator_known": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ]
+        }
+      ],
+      "median_nmse_by_channel": [
+        3.9030381441116333,
+        3.7640466690063477,
+        1.0008160471916199,
+        1.090297520160675,
+        1.0294853448867798
+      ],
+      "median_rear_nmse": 1.0294853448867798,
+      "max_pcm_null": 1.940131187438965e-05,
+      "max_relative_pcm_null_rms": 9.160460763268929e-07,
+      "scope": "fixed short crops, inspected AlbumDB only; no source attribution, entry/device/ear gate"
+    }
+  },
+  "monitor": {
+    "step": 4096,
+    "train": {
+      "rows": [
+        {
+          "song": "albumdb-01",
+          "start_sample": 1354304,
+          "frames": 256,
+          "nmse": [
+            0.488840788602829,
+            0.47851258516311646,
+            0.08098802715539932,
+            1.070894718170166,
+            1.0978848934173584
+          ],
+          "cosine": [
+            0.7229971885681152,
+            0.7370129227638245,
+            0.9588181376457214,
+            0.09961576014757156,
+            0.07005628198385239
+          ],
+          "energy_ratio": [
+            0.3787809908390045,
+            0.3477488160133362,
+            0.9539761543273926,
+            0.14737996459007263,
+            0.15262269973754883
+          ],
+          "dry_pcm_null_max": 5.995854735374451e-06,
+          "dry_pcm_null_relative_rms": 3.785926026012021e-07,
+          "accounted_effect_stft_residual_max": 1.160194915428292e-05,
+          "baseline_zero_rear_nmse": 1.0,
+          "denominator_known": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ]
+        },
+        {
+          "song": "albumdb-01",
+          "start_sample": 3521190,
+          "frames": 256,
+          "nmse": [
+            0.31150898337364197,
+            0.32431721687316895,
+            0.3396863043308258,
+            0.46266770362854004,
+            0.4053574502468109
+          ],
+          "cosine": [
+            0.8304025530815125,
+            0.8266522884368896,
+            0.8132795691490173,
+            0.7348133325576782,
+            0.7713024616241455
+          ],
+          "energy_ratio": [
+            0.7451632618904114,
+            0.8358308672904968,
+            0.6083532571792603,
+            0.6177731156349182,
+            0.5700475573539734
+          ],
+          "dry_pcm_null_max": 9.581446647644043e-06,
+          "dry_pcm_null_relative_rms": 3.31999586933307e-07,
+          "accounted_effect_stft_residual_max": 1.52587890625e-05,
+          "baseline_zero_rear_nmse": 1.0,
+          "denominator_known": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ]
+        },
+        {
+          "song": "albumdb-04",
+          "start_sample": 3363515,
+          "frames": 256,
+          "nmse": [
+            0.6767496466636658,
+            0.3456609547138214,
+            0.18009085953235626,
+            0.9801367521286011,
+            1.1257692575454712
+          ],
+          "cosine": [
+            0.5769118070602417,
+            0.8231998682022095,
+            0.9060972929000854,
+            0.23331092298030853,
+            0.08308407664299011
+          ],
+          "energy_ratio": [
+            0.4553157687187195,
+            0.4495643377304077,
+            0.8822951912879944,
+            0.1757638156414032,
+            0.20010067522525787
+          ],
+          "dry_pcm_null_max": 1.8401071429252625e-05,
+          "dry_pcm_null_relative_rms": 6.096651645748352e-07,
+          "accounted_effect_stft_residual_max": 8.529922524758149e-06,
+          "baseline_zero_rear_nmse": 1.0,
+          "denominator_known": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ]
+        },
+        {
+          "song": "albumdb-04",
+          "start_sample": 8745139,
+          "frames": 256,
+          "nmse": [
+            0.6393609642982483,
+            0.4725973904132843,
+            908474712064.0,
+            0.8004710674285889,
+            1.7537282705307007
+          ],
+          "cosine": [
+            0.7570996284484863,
+            0.8611738085746765,
+            0.0,
+            0.5556633472442627,
+            0.004917210899293423
+          ],
+          "energy_ratio": [
+            0.08764950931072235,
+            0.15867255628108978,
+            908474712064.0,
+            0.05069684237241745,
+            0.7623144388198853
+          ],
+          "dry_pcm_null_max": 1.0906951501965523e-06,
+          "dry_pcm_null_relative_rms": 3.061522306779807e-07,
+          "accounted_effect_stft_residual_max": 1.0662403155947686e-06,
+          "baseline_zero_rear_nmse": 1.0,
+          "denominator_known": [
+            true,
+            true,
+            false,
+            true,
+            true
+          ]
+        },
+        {
+          "song": "albumdb-05",
+          "start_sample": 2308397,
+          "frames": 256,
+          "nmse": [
+            0.44527101516723633,
+            0.7978501915931702,
+            0.08408548682928085,
+            1.404951572418213,
+            1.6592979431152344
+          ],
+          "cosine": [
+            0.7448118329048157,
+            0.5234401226043701,
+            0.9601179957389832,
+            0.04666055738925934,
+            0.013938063755631447
+          ],
+          "energy_ratio": [
+            0.5488011240959167,
+            0.62642502784729,
+            0.7800926566123962,
+            0.468851238489151,
+            0.6823244094848633
+          ],
+          "dry_pcm_null_max": 9.208917617797852e-06,
+          "dry_pcm_null_relative_rms": 4.703931040239695e-07,
+          "accounted_effect_stft_residual_max": 7.68876816437114e-06,
+          "baseline_zero_rear_nmse": 1.0,
+          "denominator_known": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ]
+        },
+        {
+          "song": "albumdb-05",
+          "start_sample": 6001832,
+          "frames": 256,
+          "nmse": [
+            0.6455343961715698,
+            0.5213075280189514,
+            0.1250876635313034,
+            0.9656013250350952,
+            0.939384400844574
+          ],
+          "cosine": [
+            0.6009430885314941,
+            0.6919363141059875,
+            0.9367190003395081,
+            0.19114691019058228,
+            0.2471882849931717
+          ],
+          "energy_ratio": [
+            0.46593835949897766,
+            0.4662182033061981,
+            0.7857331037521362,
+            0.05635390803217888,
+            0.05068471282720566
+          ],
+          "dry_pcm_null_max": 6.94766640663147e-06,
+          "dry_pcm_null_relative_rms": 3.728843580574903e-07,
+          "accounted_effect_stft_residual_max": 5.741879704146413e-06,
+          "baseline_zero_rear_nmse": 1.0,
+          "denominator_known": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ]
+        },
+        {
+          "song": "albumdb-06",
+          "start_sample": 2202072,
+          "frames": 256,
+          "nmse": [
+            0.5795546770095825,
+            0.5769921541213989,
+            0.16462896764278412,
+            1.2931082248687744,
+            1.1615067720413208
+          ],
+          "cosine": [
+            0.6518682837486267,
+            0.652060329914093,
+            0.9143287539482117,
+            0.123529352247715,
+            0.11196199059486389
+          ],
+          "energy_ratio": [
+            0.34208670258522034,
+            0.3665453791618347,
+            0.882379949092865,
+            0.4608210623264313,
+            0.2799951732158661
+          ],
+          "dry_pcm_null_max": 9.924173355102539e-06,
+          "dry_pcm_null_relative_rms": 4.6489091687362816e-07,
+          "accounted_effect_stft_residual_max": 1.1444091796875e-05,
+          "baseline_zero_rear_nmse": 1.0,
+          "denominator_known": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ]
+        },
+        {
+          "song": "albumdb-06",
+          "start_sample": 5725389,
+          "frames": 256,
+          "nmse": [
+            0.48057132959365845,
+            0.44897159934043884,
+            0.23625820875167847,
+            0.6395885944366455,
+            0.58241206407547
+          ],
+          "cosine": [
+            0.7261003255844116,
+            0.7443928122520447,
+            0.874216616153717,
+            0.6332967877388,
+            0.7014163136482239
+          ],
+          "energy_ratio": [
+            0.6632143259048462,
+            0.6400022506713867,
+            0.8043578267097473,
+            0.18633852899074554,
+            0.1837480515241623
+          ],
+          "dry_pcm_null_max": 5.807727575302124e-06,
+          "dry_pcm_null_relative_rms": 2.6343053605160094e-07,
+          "accounted_effect_stft_residual_max": 8.529922524758149e-06,
+          "baseline_zero_rear_nmse": 1.0,
+          "denominator_known": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ]
+        },
+        {
+          "song": "albumdb-07",
+          "start_sample": 2171290,
+          "frames": 256,
+          "nmse": [
+            0.5192756056785583,
+            1.6264419555664062,
+            0.04058622196316719,
+            0.8777784109115601,
+            1.019780158996582
+          ],
+          "cosine": [
+            0.6998729705810547,
+            0.3046340346336365,
+            0.9803722500801086,
+            0.3679860532283783,
+            0.07508042454719543
+          ],
+          "energy_ratio": [
+            0.6324353814125061,
+            1.328755259513855,
+            0.8816313147544861,
+            0.06407412886619568,
+            0.0549938827753067
+          ],
+          "dry_pcm_null_max": 4.161149263381958e-06,
+          "dry_pcm_null_relative_rms": 4.1587807686482847e-07,
+          "accounted_effect_stft_residual_max": 3.814697265625e-06,
+          "baseline_zero_rear_nmse": 1.0,
+          "denominator_known": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ]
+        },
+        {
+          "song": "albumdb-07",
+          "start_sample": 5645355,
+          "frames": 256,
+          "nmse": [
+            0.49768316745758057,
+            0.48223990201950073,
+            0.14172345399856567,
+            0.8532817959785461,
+            0.9319543838500977
+          ],
+          "cosine": [
+            0.7127432823181152,
+            0.7203826308250427,
+            0.9285155534744263,
+            0.38963133096694946,
+            0.264642596244812
+          ],
+          "energy_ratio": [
+            0.4061957001686096,
+            0.4704133868217468,
+            0.9814505577087402,
+            0.10128827393054962,
+            0.09563590586185455
+          ],
+          "dry_pcm_null_max": 3.649294376373291e-05,
+          "dry_pcm_null_relative_rms": 8.88553813638282e-07,
+          "accounted_effect_stft_residual_max": 1.160194915428292e-05,
+          "baseline_zero_rear_nmse": 1.0,
+          "denominator_known": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ]
+        },
+        {
+          "song": "albumdb-08",
+          "start_sample": 2115628,
+          "frames": 256,
+          "nmse": [
+            0.5673137307167053,
+            0.5523948073387146,
+            0.13709300756454468,
+            1.5441259145736694,
+            1.5444400310516357
+          ],
+          "cosine": [
+            0.6695162057876587,
+            0.6874289512634277,
+            0.9291685223579407,
+            0.16251768171787262,
+            0.02513563074171543
+          ],
+          "energy_ratio": [
+            0.2967579960823059,
+            0.28033173084259033,
+            0.9030925631523132,
+            0.8424619436264038,
+            0.5828186273574829
+          ],
+          "dry_pcm_null_max": 5.774199962615967e-06,
+          "dry_pcm_null_relative_rms": 2.9959261382828117e-07,
+          "accounted_effect_stft_residual_max": 1.206313208967913e-05,
+          "baseline_zero_rear_nmse": 1.0,
+          "denominator_known": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ]
+        },
+        {
+          "song": "albumdb-08",
+          "start_sample": 5500634,
+          "frames": 256,
+          "nmse": [
+            0.33585208654403687,
+            0.46666181087493896,
+            0.17360346019268036,
+            0.3527897894382477,
+            0.4881851375102997
+          ],
+          "cosine": [
+            0.8164799809455872,
+            0.7595111131668091,
+            0.9129102826118469,
+            0.8060386180877686,
+            0.7185060977935791
+          ],
+          "energy_ratio": [
+            0.7506393194198608,
+            0.9372614622116089,
+            0.6875599026679993,
+            0.5717765688896179,
+            0.6163971424102783
+          ],
+          "dry_pcm_null_max": 7.498543709516525e-06,
+          "dry_pcm_null_relative_rms": 2.628608513077779e-07,
+          "accounted_effect_stft_residual_max": 1.52587890625e-05,
+          "baseline_zero_rear_nmse": 1.0,
+          "denominator_known": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ]
+        },
+        {
+          "song": "albumdb-09",
+          "start_sample": 2919162,
+          "frames": 256,
+          "nmse": [
+            0.5874216556549072,
+            0.6349279880523682,
+            0.10920385271310806,
+            0.9348050951957703,
+            0.959525465965271
+          ],
+          "cosine": [
+            0.6467772126197815,
+            0.6115239858627319,
+            0.9438375234603882,
+            0.28836172819137573,
+            0.20900164544582367
+          ],
+          "energy_ratio": [
+            0.5220847129821777,
+            0.4981669485569,
+            0.9017412662506104,
+            0.02382558584213257,
+            0.023216955363750458
+          ],
+          "dry_pcm_null_max": 2.9966235160827637e-05,
+          "dry_pcm_null_relative_rms": 1.0518829185457435e-06,
+          "accounted_effect_stft_residual_max": 8.529922524758149e-06,
+          "baseline_zero_rear_nmse": 1.0,
+          "denominator_known": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ]
+        },
+        {
+          "song": "albumdb-09",
+          "start_sample": 7589823,
+          "frames": 256,
+          "nmse": [
+            0.5336350798606873,
+            0.7173075675964355,
+            0.06603623926639557,
+            0.9760600328445435,
+            0.9908797740936279
+          ],
+          "cosine": [
+            0.6855563521385193,
+            0.5678440928459167,
+            0.9666985869407654,
+            0.1761581003665924,
+            0.1282159686088562
+          ],
+          "energy_ratio": [
+            0.5561383366584778,
+            0.5886408686637878,
+            0.8900107145309448,
+            0.06779366731643677,
+            0.04569549486041069
+          ],
+          "dry_pcm_null_max": 5.234032869338989e-06,
+          "dry_pcm_null_relative_rms": 2.492679698207212e-07,
+          "accounted_effect_stft_residual_max": 8.529922524758149e-06,
+          "baseline_zero_rear_nmse": 1.0,
+          "denominator_known": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ]
+        }
+      ],
+      "median_nmse_by_channel": [
+        0.5264553427696228,
+        0.5017737150192261,
+        0.13940823078155518,
+        0.9502032101154327,
+        1.005329966545105
+      ],
+      "median_rear_nmse": 0.9708306789398193,
+      "max_pcm_null": 3.649294376373291e-05,
+      "max_relative_pcm_null_rms": 1.0518829185457435e-06,
+      "scope": "fixed short crops, inspected AlbumDB only; no source attribution, entry/device/ear gate"
+    },
+    "dev": {
+      "rows": [
+        {
+          "song": "albumdb-02",
+          "start_sample": 2581690,
+          "frames": 256,
+          "nmse": [
+            0.7310376763343811,
+            0.8206643462181091,
+            0.05443626269698143,
+            1.1050770282745361,
+            1.0871882438659668
+          ],
+          "cosine": [
+            0.5286259055137634,
+            0.45337942242622375,
+            0.9724118113517761,
+            -0.016431065276265144,
+            -0.012756585143506527
+          ],
+          "energy_ratio": [
+            0.39817652106285095,
+            0.37859034538269043,
+            0.9367786049842834,
+            0.0949508547782898,
+            0.07997307181358337
+          ],
+          "dry_pcm_null_max": 1.3113021850585938e-06,
+          "dry_pcm_null_relative_rms": 1.491747667614618e-07,
+          "accounted_effect_stft_residual_max": 8.529922524758149e-06,
+          "baseline_zero_rear_nmse": 1.0,
+          "denominator_known": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ]
+        },
+        {
+          "song": "albumdb-02",
+          "start_sample": 6712395,
+          "frames": 256,
+          "nmse": [
+            0.3792266547679901,
+            0.3941344916820526,
+            0.32901084423065186,
+            0.5086966753005981,
+            0.5769626498222351
+          ],
+          "cosine": [
+            0.7935922741889954,
+            0.7795678973197937,
+            0.8292843699455261,
+            0.7615635991096497,
+            0.6826362609863281
+          ],
+          "energy_ratio": [
+            0.4881008565425873,
+            0.542332112789154,
+            0.9189190864562988,
+            0.21509088575839996,
+            0.2259865701198578
+          ],
+          "dry_pcm_null_max": 1.4871358871459961e-05,
+          "dry_pcm_null_relative_rms": 4.720459116924758e-07,
+          "accounted_effect_stft_residual_max": 1.526623782410752e-05,
+          "baseline_zero_rear_nmse": 1.0,
+          "denominator_known": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ]
+        },
+        {
+          "song": "albumdb-03",
+          "start_sample": 2367699,
+          "frames": 256,
+          "nmse": [
+            0.7115271687507629,
+            0.7299718260765076,
+            0.15940967202186584,
+            1.4837605953216553,
+            1.3051505088806152
+          ],
+          "cosine": [
+            0.5433039665222168,
+            0.5311862230300903,
+            0.9192581176757812,
+            0.04331326484680176,
+            0.06055234745144844
+          ],
+          "energy_ratio": [
+            0.2128974199295044,
+            0.17727996408939362,
+            0.9720596075057983,
+            0.5478805303573608,
+            0.3797830641269684
+          ],
+          "dry_pcm_null_max": 9.909272193908691e-06,
+          "dry_pcm_null_relative_rms": 4.976471359441348e-07,
+          "accounted_effect_stft_residual_max": 8.529922524758149e-06,
+          "baseline_zero_rear_nmse": 1.0,
+          "denominator_known": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ]
+        },
+        {
+          "song": "albumdb-03",
+          "start_sample": 6156018,
+          "frames": 256,
+          "nmse": [
+            0.6211511492729187,
+            0.5576213002204895,
+            0.19204461574554443,
+            1.2562731504440308,
+            1.1663874387741089
+          ],
+          "cosine": [
+            0.630887508392334,
+            0.7035912871360779,
+            0.9093284010887146,
+            0.029553066939115524,
+            0.10607965290546417
+          ],
+          "energy_ratio": [
+            0.24248844385147095,
+            0.2247796207666397,
+            1.0959746837615967,
+            0.2879924774169922,
+            0.27831363677978516
+          ],
+          "dry_pcm_null_max": 6.42240047454834e-06,
+          "dry_pcm_null_relative_rms": 3.521712130805099e-07,
+          "accounted_effect_stft_residual_max": 7.76234628574457e-06,
+          "baseline_zero_rear_nmse": 1.0,
+          "denominator_known": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ]
+        }
+      ],
+      "median_nmse_by_channel": [
+        0.6663391590118408,
+        0.6437965631484985,
+        0.17572714388370514,
+        1.1806750893592834,
+        1.1267878413200378
+      ],
+      "median_rear_nmse": 1.1357322335243225,
+      "max_pcm_null": 1.4871358871459961e-05,
+      "max_relative_pcm_null_rms": 4.976471359441348e-07,
+      "scope": "fixed short crops, inspected AlbumDB only; no source attribution, entry/device/ear gate"
+    }
+  },
+  "contract_tests": {
+    "local_passed": 3,
+    "nas_passed": 3
+  },
+  "monitor_curve": [
+    {
+      "step": 256,
+      "train_rear_nmse": 0.9550891518592834,
+      "dev_rear_nmse": 0.9657129645347595
+    },
+    {
+      "step": 512,
+      "train_rear_nmse": 0.9942685961723328,
+      "dev_rear_nmse": 1.4133734703063965
+    },
+    {
+      "step": 768,
+      "train_rear_nmse": 0.9533690214157104,
+      "dev_rear_nmse": 1.0076929330825806
+    },
+    {
+      "step": 1024,
+      "train_rear_nmse": 0.9781129658222198,
+      "dev_rear_nmse": 1.074643075466156
+    },
+    {
+      "step": 1280,
+      "train_rear_nmse": 1.0212514996528625,
+      "dev_rear_nmse": 1.3083800673484802
+    },
+    {
+      "step": 1536,
+      "train_rear_nmse": 0.966847151517868,
+      "dev_rear_nmse": 1.0813512802124023
+    },
+    {
+      "step": 1792,
+      "train_rear_nmse": 0.9604513645172119,
+      "dev_rear_nmse": 1.0200202465057373
+    },
+    {
+      "step": 2048,
+      "train_rear_nmse": 0.9758105278015137,
+      "dev_rear_nmse": 1.1495412588119507
+    },
+    {
+      "step": 2304,
+      "train_rear_nmse": 1.0471922159194946,
+      "dev_rear_nmse": 1.438793122768402
+    },
+    {
+      "step": 2560,
+      "train_rear_nmse": 0.9546488225460052,
+      "dev_rear_nmse": 0.9986064732074738
+    },
+    {
+      "step": 2816,
+      "train_rear_nmse": 0.9579657316207886,
+      "dev_rear_nmse": 1.0223573446273804
+    },
+    {
+      "step": 3072,
+      "train_rear_nmse": 0.9797010123729706,
+      "dev_rear_nmse": 1.106652319431305
+    },
+    {
+      "step": 3328,
+      "train_rear_nmse": 0.9472342133522034,
+      "dev_rear_nmse": 1.0581029057502747
+    },
+    {
+      "step": 3584,
+      "train_rear_nmse": 0.950329452753067,
+      "dev_rear_nmse": 1.0306579768657684
+    },
+    {
+      "step": 3840,
+      "train_rear_nmse": 0.955832451581955,
+      "dev_rear_nmse": 1.0938228964805603
+    },
+    {
+      "step": 4096,
+      "train_rear_nmse": 0.9708306789398193,
+      "dev_rear_nmse": 1.1357322335243225
+    }
+  ],
+  "terminal_checks": {
+    "train_rear": false,
+    "inspected_dev_rear": false,
+    "front_nonworse": true,
+    "dry_null": true
+  },
+  "fitting_pass": false,
+  "elapsed_seconds": 804.3775268520694,
+  "product_qualified": false
+}

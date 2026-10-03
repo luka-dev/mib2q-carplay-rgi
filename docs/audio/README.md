@@ -12,17 +12,19 @@ This page is the entry point for the domain. Start with [Stereo to 5.1 Upmix](ST
 
 ## 🧭 Runtime and research map
 
-As of 2026-10-01, live CarPlay uses **Track A's three models**: q6d routing, V11 protection and v21a eligibility. **Track B's single-network spectral prototype** has isolated causal C float/int8 execution, but its completed spectral40k full40 comparison fails joint promotion. Research is paused; no Track B replacement is deployed. The [domain model](UPMIX_DOMAIN_MODEL.md) maps evidence entities, architecture and qualification; the [session wrap](UPMIX_SESSION_WRAP_2026-09-30.md) and [attempt chronicle](UPMIX_SEPARATOR_CHRONICLE_2026-09-25_TO_2026-09-30.md) hold the final verdict and history.
+As of 2026-10-03, live CarPlay uses **Track A's three models**: q6d routing, V11 protection and v21a eligibility. **Track B's single-network spectral prototype** has isolated causal C float/int8 execution, but its completed spectral40k full40 comparison fails joint promotion. The owner has resumed a separate [joint front/rear NAS fitting pilot](UPMIX_JOINT_SCENE_NAS_PILOT_2026-10-03.md); no Track B replacement is deployed. The [domain model](UPMIX_DOMAIN_MODEL.md) maps evidence entities, architecture and qualification; the [session wrap](UPMIX_SESSION_WRAP_2026-09-30.md) and [attempt chronicle](UPMIX_SEPARATOR_CHRONICLE_2026-09-25_TO_2026-09-30.md) hold the September 30 verdict and history.
 
 ```mermaid
 flowchart TB
   accTitle: Audio production and research map
-  accDescr: Live CarPlay uses the three-model Track A hook and the cabin amplifier. Track B feeds offline real-C qualification, whose failed result is archived without a deployment transition.
+  accDescr: Live CarPlay uses the three-model Track A hook and cabin amplifier. The failed spectral Track B result remains archived; a separate owner-resumed authored front and rear fitting pilot runs on NAS without a deployment transition.
   carplay_stereo["Live CarPlay stereo"] --> deployed_track_a["Track A hook<br/>q6d + V11 + v21a"]
   deployed_track_a --> cabin_chain["PCM6 to J525 and speakers"]
   fixed_stereo["Frozen real-stem mixtures"] --> research_track_b["Track B<br/>one causal spectral model"]
   research_track_b --> offline_qualification["Real C full40 and transitions"]
-  offline_qualification --> paused_verdict["Joint promotion fails<br/>archived; research paused"]
+  offline_qualification --> paused_verdict["Spectral promotion fails<br/>September 30 archive"]
+  authored_targets["Authored masters and exact downmix"] --> joint_scene_pilot["NAS joint front/rear pilot"]
+  joint_scene_pilot --> fitting_screen["Short inspected crops<br/>not release qualification"]
 ```
 
 ## 📊 The whole pipeline
@@ -87,8 +89,9 @@ flowchart TB
 | [Upmix Compute Budget](UPMIX_COMPUTE_BUDGET.md) | Krait cost units and measurements, the arithmetic that admitted HSSR and blocked CUpGAN/H1/Q2, training machines. |
 | [Upmix Literature](UPMIX_LITERATURE.md) | The papers and systems the work drew on, what each changed, and which paper files are failed downloads. |
 | [Upmix Separator Research Review 2026-09-29](UPMIX_RESEARCH_REVIEW_2026-09-29.md) | 22 research lines and implementation checks against the plateau; proposed causal reference fitting, generalization and compression sequence. |
-| [Rear Scene Research 2026-10-03](UPMIX_REAR_SCENE_RESEARCH_2026-10-03.md) | 16 primary-source entries, including recent spatial-control and streaming work; stable instrument objects, separate ambience, one-network proposal and finite verification sequence. Research only; training remains paused. |
+| [Rear Scene Research 2026-10-03](UPMIX_REAR_SCENE_RESEARCH_2026-10-03.md) | 16 primary-source entries, including recent spatial-control and streaming work; stable objects, separate ambience, joint front/rear proposal and owner-authorized NAS follow-up. |
 | [NAS Scene-Training Recheck 2026-10-03](UPMIX_NAS_SCENE_RECHECK_2026-10-03.md) | Live saved-report inspection: direct 5.1 P1, analytical front, later multisong loss/startup failures, bounded target witness and gain/correlation diagnosis; nine report hashes and sanitized excerpts. |
+| [Joint Front/Rear NAS Pilot 2026-10-03](UPMIX_JOINT_SCENE_NAS_PILOT_2026-10-03.md) | Owner-resumed five-output shared causal encoder, dry downmix/effect accounting, frozen seven-TRAIN/two-inspected-DEV authored fitting protocol, NAS tests and measured run outcome. |
 | [Upmix BSRNN Reference Intake 2026-09-29](UPMIX_BSRNN_REFERENCE_INTAKE_2026-09-29.md) | Full pinned BSRNN pipeline and verified large/SIMO weights on PC; runtime readiness, loader/gain traps and next reference check. |
 | [Upmix BSRNN Pretrained Inference 2026-09-29](UPMIX_BSRNN_PRETRAINED_INFERENCE_2026-09-29.md) | Strict five-checkpoint TRAIN inference, original-gain stems; optimized SIMO 11.013 dB versus large 7.463 dB, setup failures and reference-only limits. |
 | [Upmix BSRNN Real-C Check 2026-09-29](UPMIX_BSRNN_REAL_C_CHECK_2026-09-29.md) | Completed pretrained SIMO DEV40: all observed offline gates pass with direct C, 11→0 swings, entry .876/.746; source attribution, paired sep9 comparison, failures and device/ear limits. |
