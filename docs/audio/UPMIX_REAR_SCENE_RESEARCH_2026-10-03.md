@@ -148,6 +148,35 @@ flowchart TB
     student_check -->|Yes| qualification["Fresh holdout, full int8 device chain<br/>owner blind CarPlay verdict"]
 ```
 
+### Owner proposal: learn the rear scene from authored multichannel masters
+
+**Discussion follow-up, 2026-10-03; proposed, not trained.** The owner suggests making front/rear scene reconstruction the primary task, removing instrument classification as the main target, and partially subtracting relocated sound from the front. This is a legitimate alternative training contract: stereo input predicts rear audio and a coordinated front correction. Musical instrument labels need not be runtime outputs. Existing protected-source and stability requirements remain acceptance checks unless the owner explicitly changes them.
+
+There is a directly relevant earlier attempt. [P1 direct stereo-to-multichannel](UPMIX_TRAINING_HISTORY.md#-p1-direct-stereo-to-multichannel), September 13, used native/derived multichannel targets and a consistent synthetic downmix. The first pilot reduced rear NMSE from1 to.292 but worsened centre NMSE from1 to1.588. The later rear-only decoder with analytical front passed8/9 checks but failed mixed-source protection (.141 against a≤.0876 ceiling). Reconstruction/protection gradients conflicted in15/16 audited measurements. These are historical P1 metrics, not the current full40 rear-share/entry protocol. This proposal must therefore identify a changed mechanism rather than relabel P1 as a new untested idea.
+
+**NAS follow-up verified October3:** the [saved-report recheck](UPMIX_NAS_SCENE_RECHECK_2026-10-03.md) adds later multisong evidence: selected loss and startup-policy changes retained worst assessment rear NMSE near1.0, while a target-informed bounded-ratio witness reached .0000276744 on the original assessment geometry. One scaling case combines rear/target energy .00683 with cosine .12656. These bounded diagnostics support investigating what the estimator fails to learn; they do not establish a causal, generalizing scene model or a product pass.
+
+For a clean training pair, start with an authored multichannel signal `Y` and explicitly produce stereo `X = D Y` using a frozen downmix matrix `D`. **The input should include the downmixed rear contribution**, not just the master's FL/FR: material present only in the rear would otherwise be missing from the observation. Commercial stereo and surround releases can differ in balances, effects and mastering, even for the same recording. AlbumDB provides10 songs and separate stereo/7.1.4 mixes; our [dataset audit](UPMIX_DATASETS_AND_TEACHERS.md#-multichannel-masters) records different effect construction, so those masters are not interchangeable with a sample-exact downmix pair. [ImmersiveFlow](https://arxiv.org/html/2601.12950v2) likewise constructs paired stereo inputs by downmixing its500 multichannel songs; that collection is not established as available to this project.
+
+**Front subtraction must refer to the estimated component's contribution to the original stereo.** In a simplified linear model excluding LFE, let `A_c` and `A_r` be the centre and rear downmix operators. For estimated centre `c` and rear `r`:
+
+```text
+rear_out  = beta * r
+front_out = X - A_c * c - alpha * A_r * r
+```
+
+When `alpha = beta`, the corresponding linear downmix reconstructs `X`. When `alpha < beta`, the retained front component plus added rear deliberately changes that downmix. Neither condition proves correct source allocation, loudness or cabin placement. Delay-align the dry path and component estimates; do not subtract a newly decorrelated/reverberated waveform as if it were the component originally present in `X`. A separate generated diffuse tail needs its own energy accounting.
+
+Our [C2 relocation reference](UPMIX_TRAINING_HISTORY.md#-cabin-first-references-r1-c1-and-c2) already tested35%/70% removal using true sources. The70% cells reduced front-bus power to roughly.12–.17 of front-only in the scored cases, while simple addition left it approximately2–3% higher. No listening established preference. This supports testing relocation as a renderer mechanism; it does not establish a safe removal amount for a learned estimate or the Audi.
+
+**Owner follow-up: jointly learn the front AND rear scene.** A shared causal encoder can predict front residuals `delta_FL/delta_FR`, centre audio and rear `Ls/Rs`. The front outputs are `FL = delayed_XL + delta_FL` and `FR = delayed_XR + delta_FR`; all five channels are supervised jointly against the same aligned master. A deterministic LFE path is sufficient for the first pilot and is excluded from the research stereo downmix. Residual parameterization preserves an explicit stereo baseline while allowing the front to change; it does not itself bound the correction or guarantee preserved vocals.
+
+The learned front residual should be compared with analytical front subtraction as a matched ablation. Train front fidelity/foreground anchoring and rear presence/spatial structure alongside protected-source and entry stability. A downmix-consistency term couples the channels but also admits a silent rear with stereo left entirely in front; independent rear recovery and scene checks are essential. Before decoder choice, audit how much of the authored front/rear is uniquely recoverable and how much reflects an ambiguous creative mix.
+
+The revised hypothesis would combine **joint coherent front/rear reconstruction** with a separately learned diffuse-scene target. Train phase-sensitive reconstruction on recoverable coherent content and scene-envelope/coherence objectives on diffuse ambience. Exact waveform regression to arbitrary decorrelated tails may average incompatible solutions toward a weak rear; this is our identifiability/optimization concern, not a reproduced paper result. Downmixing six channels into two loses spatial information, so learning an authored spatial prior cannot uniquely recover the original scene.
+
+A meaningful test first shows that exact target rear/front correction yields the requested scene, then uses a larger PC reference to establish learnability on recording-disjoint masters, including actual commercial stereo as a separate domain-shift evaluation. Audit masters for unwanted rear vocals before admitting targets; a professionally authored mix need not follow this owner's policy. Only a successful reference justifies a compact causal student. Compare explicitly against P1's failed mixed-protection cases and today's full40 gates. Ten AlbumDB songs can support a pilot, not broad quality claims. No new training or replacement of the reserved finite experiment is authorized by this discussion.
+
 ### Claims we can and cannot make now
 
 The latest paper evidence supports **testing stable object rendering, explicit ambience and perceptually informed channel objectives**. It does not establish that any downloaded model is a deployable single-network replacement. The existing BSRNN/direct-route result already establishes a strong offline reference; the current compact model has not retained its stability and bass rejection.

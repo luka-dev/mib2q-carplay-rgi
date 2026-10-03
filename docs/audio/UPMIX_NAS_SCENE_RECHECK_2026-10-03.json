@@ -1,0 +1,1224 @@
+{
+  "schema": "upmix-nas-scene-archive-recheck-v1",
+  "read_at_utc": "2026-10-03T20:07:45.975318+00:00",
+  "nas": "100.85.38.96",
+  "root": "/mnt/shared/users/luka/Audi/upmix-training-2026-09-11",
+  "scope": "Bounded metadata read on NAS; 10 selected runtime trees, 9 selected raw reports hashed. No model loading, PCM decoding, training, file changes on NAS, or new listening. Sanitized numerical/structural excerpts only.",
+  "directory_counts": {
+    "runtime_directories": 206,
+    "p1_directories": 57
+  },
+  "report_bindings": [
+    {
+      "file": "runtime/p1-native51-pilot-a/pilot/run/report.json",
+      "sha256": "2a86be24b907438273320aec9668819ab27d379f3f9688edf9d06c0265cfb83e",
+      "shape": {
+        "schema": "string",
+        "engine": "string",
+        "plan_sha256": "string",
+        "bounded_run_complete": true,
+        "requested_epochs_complete": true,
+        "completed_epochs": 2,
+        "updates": 5014,
+        "history": {
+          "length": 5014,
+          "first_keys": [
+            "update",
+            "epoch",
+            "song_id",
+            "loss",
+            "gradient_norm"
+          ]
+        },
+        "exposure": {
+          "length": 2,
+          "first_keys": [
+            "epoch",
+            "id",
+            "source_frames",
+            "scored_frames",
+            "completed_song",
+            "expected_frames"
+          ]
+        },
+        "checkpoint": [
+          "sha256",
+          "model_adam_rng_roundtrip_exact",
+          "carried_audio_replay_exact",
+          "carried_state_replay_exact",
+          "resume_cursor_supported"
+        ],
+        "resume_cursor_supported": true,
+        "resumed": false,
+        "synthetic_only": false,
+        "real_music_training": true,
+        "admission_scope": "string",
+        "role_policy_approved": false,
+        "foreground_protection_trained": false,
+        "elapsed_work_seconds": 547.6714929480222,
+        "heldout_opened": false,
+        "model_quality_approved": false,
+        "car_approved": false
+      }
+    },
+    {
+      "file": "runtime/p1-folded-orchestrator-a/comparison/comparison.json",
+      "sha256": "c0064405e491c83abd48f7ff6def7d59d208bac4945a9f1772c9a7085cfdab66",
+      "shape": {
+        "complete": true,
+        "matched_exposure_verified": true,
+        "summaries": [
+          "canonical",
+          "folded"
+        ],
+        "historical_natural_reference": [
+          "front_nmse",
+          "front_nmse_interval",
+          "rear_nmse",
+          "rear_energy_ratio",
+          "worst_isolated_rear_ratio",
+          "worst_counterfactual_ratio",
+          "scored_samples",
+          "front_target_energy",
+          "target_rear_energy",
+          "original_v4_acceptance_passed"
+        ],
+        "research_checks": [
+          "front_fidelity_vs_natural",
+          "rear_fidelity_vs_natural",
+          "rear_energy_vs_natural",
+          "isolated_at_least_halved_vs_natural",
+          "mixed_at_least_halved_vs_natural",
+          "rear_not_worse_than_protected_control",
+          "isolated_preserved_vs_protected_control",
+          "explicit_silent_C_LFE",
+          "downmix_closure"
+        ],
+        "research_improvement_passed": false,
+        "common_comparison_domain": "string",
+        "independent_authored_FC_reconstruction_target": false,
+        "previous_v4_failure_unchanged": true,
+        "development_reused": true,
+        "heldout_opened": false,
+        "genre_generalization_established": false,
+        "car_approved": false,
+        "elapsed_seconds": 1758.7062662460085
+      }
+    },
+    {
+      "file": "runtime/p1-front-rate-orchestrator-b/comparison/report.json",
+      "sha256": "23bd6eaca37aa48d7563a7a2aa803411a60cd9d990d0a2fd5bad101158088811",
+      "shape": {
+        "complete": true,
+        "plan_sha256": "string",
+        "candidate_report_sha256": "string",
+        "qualification_sha256": "string",
+        "independent_pcm_sha256": "string",
+        "geometry_sha256": "string",
+        "summaries": [
+          "original",
+          "rotate_left",
+          "rotate_right",
+          "opposite_polarity",
+          "right_delay_7ms"
+        ],
+        "matched_training_contract": true,
+        "updates": 1024,
+        "learning_rate": 0.0003,
+        "full_corpus_training": false,
+        "dev_pcm_opened": false,
+        "heldout_opened": false,
+        "car_approved": false,
+        "elapsed_seconds": 1342.230191451963
+      }
+    },
+    {
+      "file": "runtime/p1-prefix-probe-owner-a/experiment/report.json",
+      "sha256": "50e98c671973054a3997f176f09e719f963dc991af4f44f4c46d7745e2ecf6ef",
+      "shape": {
+        "complete": true,
+        "plan_sha256": "string",
+        "before": [
+          "0",
+          "4096",
+          "49152",
+          "98304"
+        ],
+        "arms": [
+          "control",
+          "prefix_jitter"
+        ],
+        "original_parent_preserved": true,
+        "real_music_training": true,
+        "added_updates_per_arm": 64,
+        "full_corpus_training": false,
+        "dev_pcm_opened": false,
+        "heldout_opened": false,
+        "car_approved": false,
+        "elapsed_seconds": 263.72862114897
+      }
+    },
+    {
+      "file": "runtime/p1-multisong-loss-ablation-a/study/report.json",
+      "sha256": "1ed2b2262edc0d8dbf7fa8e66d57969fdfad8d0a4a936894d101e79c1ed5ef70",
+      "shape": {
+        "schema": "string",
+        "complete": true,
+        "plan_sha256": "string",
+        "checkpoint": [
+          "path",
+          "sha256",
+          "plan_sha256",
+          "cursor"
+        ],
+        "optimizer_updates": 480,
+        "updates_per_arm": 240,
+        "final_state_sha256": [
+          "joint_reference",
+          "reconstruction_detail"
+        ],
+        "initial_state_sha256": [
+          "joint_reference",
+          "reconstruction_detail"
+        ],
+        "history": [
+          "joint_reference",
+          "reconstruction_detail"
+        ],
+        "exposure": [
+          "joint_reference",
+          "reconstruction_detail"
+        ],
+        "assessment": [
+          "joint_reference",
+          "reconstruction_detail"
+        ],
+        "optimizer_assessment_whole_song_groups_disjoint": true,
+        "assessment_is_historical_train": true,
+        "source_model_architecture_same": true,
+        "sole_experimental_difference": "string",
+        "joint_total_math_and_graph_unchanged": true,
+        "all_loss_components_logged_both_arms": true,
+        "car_protection_policy_changed": false,
+        "positive_only_is_deployable": false,
+        "final_case_groups": {
+          "length": 2,
+          "first_keys": []
+        },
+        "training_admission": [
+          "training_admitted",
+          "finite_shape_closure_verified",
+          "retained_case_ids",
+          "authored_active_case_ids",
+          "controlled_active_case_ids",
+          "source_core_exact_zero_case_ids",
+          "source_whole_exact_zero_case_ids",
+          "source_core_zero_nonzero_preroll_case_ids",
+          "rejection_reasons"
+        ],
+        "original_optimizer_ready": false,
+        "all_fixed_cases_retained": true,
+        "assessment_contract": [
+          "schema",
+          "gains",
+          "original_gates",
+          "core_mean_square_floor",
+          "coverage",
+          "authored_eligibility",
+          "protection_eligibility",
+          "mixed_delta",
+          "source_denominator",
+          "quiet_ratios",
+          "absolute_errors",
+          "closure_gate",
+          "nonfinite",
+          "aggregation",
+          "no_unknown_case_dropping",
+          "semantic_role_approved",
+          "training_target_cabin_safe",
+          "car_approved"
+        ],
+        "code_and_data_preserved": true,
+        "dev_pcm_opened": false,
+        "heldout_opened": false,
+        "full_corpus_training": false,
+        "car_approved": false,
+        "native_export_supported": false,
+        "final_prefix_frames": 0,
+        "prefix_invariance_assessed": false,
+        "work_budget_pointer": [
+          "path",
+          "sha256",
+          "plan_sha256"
+        ],
+        "elapsed_seconds": 566.100401335978
+      }
+    },
+    {
+      "file": "runtime/p1-multisong-v2-prep-a/matched-study/report.json",
+      "sha256": "23ca6c5ebf58e43631e883b3404dc795723d75db2d82fd68e277ac1343bc0a60",
+      "shape": {
+        "schema": "string",
+        "complete": true,
+        "plan_sha256": "string",
+        "checkpoint": [
+          "path",
+          "sha256",
+          "plan_sha256",
+          "cursor"
+        ],
+        "optimizer_updates": 480,
+        "updates_per_arm": 240,
+        "final_state_sha256": [
+          "baseline",
+          "startup_exact_zero_v1"
+        ],
+        "initial_state_sha256": [
+          "baseline",
+          "startup_exact_zero_v1"
+        ],
+        "history": [
+          "baseline",
+          "startup_exact_zero_v1"
+        ],
+        "exposure": [
+          "baseline",
+          "startup_exact_zero_v1"
+        ],
+        "assessment": [
+          "baseline",
+          "startup_exact_zero_v1"
+        ],
+        "optimizer_assessment_whole_song_groups_disjoint": true,
+        "assessment_is_historical_train": true,
+        "source_model_policy_differs_only_by_architecture": true,
+        "same_new_loss_both_arms": true,
+        "loss_math_unchanged_from_v1": true,
+        "training_admission": [
+          "training_admitted",
+          "finite_shape_closure_verified",
+          "retained_case_ids",
+          "authored_active_case_ids",
+          "controlled_active_case_ids",
+          "source_core_exact_zero_case_ids",
+          "source_whole_exact_zero_case_ids",
+          "source_core_zero_nonzero_preroll_case_ids",
+          "rejection_reasons"
+        ],
+        "original_optimizer_ready": false,
+        "all_fixed_cases_retained": true,
+        "assessment_contract": [
+          "schema",
+          "gains",
+          "original_gates",
+          "core_mean_square_floor",
+          "coverage",
+          "authored_eligibility",
+          "protection_eligibility",
+          "mixed_delta",
+          "source_denominator",
+          "quiet_ratios",
+          "absolute_errors",
+          "closure_gate",
+          "nonfinite",
+          "aggregation",
+          "no_unknown_case_dropping",
+          "semantic_role_approved",
+          "training_target_cabin_safe",
+          "car_approved"
+        ],
+        "code_and_data_preserved": true,
+        "dev_pcm_opened": false,
+        "heldout_opened": false,
+        "full_corpus_training": false,
+        "car_approved": false,
+        "native_export_supported": false,
+        "final_prefix_frames": 0,
+        "prefix_invariance_assessed": false,
+        "work_budget_pointer": [
+          "path",
+          "sha256",
+          "plan_sha256"
+        ],
+        "elapsed_seconds": 587.7969381010043
+      }
+    },
+    {
+      "file": "runtime/p1-multisong-v2-diagnosis-a/oracle/report.json",
+      "sha256": "fe68220b0f0bff733286d5695031239947af18d069c67b3ef5c3578452c8e888",
+      "shape": {
+        "schema": "string",
+        "complete": true,
+        "plan_sha256": "string",
+        "results": [
+          "target_spectrum",
+          "bounded_ratio"
+        ],
+        "exact_target_numerical_sanity_pass": true,
+        "source_checkpoint": [
+          "path",
+          "sha256",
+          "plan_sha256",
+          "cursor"
+        ],
+        "dataset_manifest_sha256": "string",
+        "source_report_sha256": "string",
+        "read_only_files_code_pcm_rng_verified": true,
+        "source_permissions_changed": false,
+        "all21_cases_all5_geometries_both_witnesses_evaluated": true,
+        "optimizer_updates": 0,
+        "learned_model_forward": false,
+        "target_information_used": true,
+        "future_target_information_available": true,
+        "causal_inference_feasibility_proven": false,
+        "bounded_failure_proves_unrepresentable": false,
+        "bounded_coefficients_are_optimal": false,
+        "numerical_failure_means_audit_reference_problem": false,
+        "semantic_role_approved": false,
+        "training_target_cabin_safe": false,
+        "deployable": false,
+        "dev_pcm_opened": false,
+        "heldout_opened": false,
+        "car_approved": false,
+        "synthetic_only": false,
+        "elapsed_seconds": 79.54592645296361
+      }
+    },
+    {
+      "file": "runtime/p1-multisong-v2-diagnosis-a/scaling/report.json",
+      "sha256": "dcfeda9633bac31d940e230c77542d4b2e7915a8363e0b5c7e33572242664c50",
+      "shape": {
+        "schema": "string",
+        "complete": true,
+        "plan_sha256": "string",
+        "arm": "string",
+        "rows": {
+          "length": 21,
+          "first_keys": [
+            "id",
+            "partition",
+            "geometry",
+            "metrics",
+            "bands",
+            "scaling",
+            "chunk_max_difference"
+          ]
+        },
+        "pooled": [
+          "optimizer",
+          "assessment"
+        ],
+        "pooled_all_cases": [
+          "case_count",
+          "case_ids",
+          "aggregation",
+          "curves",
+          "metrics",
+          "authored_active_case_count",
+          "controlled_active_case_count",
+          "source_quiet_case_ids",
+          "rear_quiet_case_ids",
+          "band_fail_case_ids",
+          "band_unknown_case_ids",
+          "car_approved"
+        ],
+        "model_state_sha256": "string",
+        "model_rng_grad_and_files_unchanged": true,
+        "all_21_original_cases": true,
+        "train_diagnostic_only": true,
+        "assessment_historical_train": true,
+        "dev_pcm_opened": false,
+        "heldout_opened": false,
+        "target_informed_nondeployable_control": true,
+        "alpha_optimum_not_applied": true,
+        "optimizer_updates": 0,
+        "audio_exported": false,
+        "car_approved": false,
+        "elapsed_seconds": 45.98417461599456
+      }
+    },
+    {
+      "file": "runtime/c2-scene-reference-a/comparison/report.json",
+      "sha256": "ec4405399ff7248828b558c7508de2132fcadccaf86282c61259ce4d526cb4f9",
+      "shape": {
+        "acoustic_scene_approved": false,
+        "c1_zero_removal_parity": true,
+        "c1_zero_removal_parity_cells": {
+          "length": 2,
+          "first_keys": []
+        },
+        "car_approved": false,
+        "cases": {
+          "length": 7,
+          "first_keys": [
+            "id",
+            "path",
+            "sha256"
+          ]
+        },
+        "complete": true,
+        "elapsed_seconds": 450.99943221197464,
+        "musical_quality_pass": null,
+        "neural_training": false,
+        "plan_sha256": "string",
+        "schema": "string",
+        "semantic_roles_approved": false
+      }
+    }
+  ],
+  "selected_metrics": [
+    {
+      "report": "runtime/p1-multisong-loss-ablation-a/study/report.json",
+      "arm": "joint_reference",
+      "split": "optimizer",
+      "original": {
+        "total_case_count": 15,
+        "original_metrics_all_known": false,
+        "worst_rear_nmse": 1.0094069740069878,
+        "worst_augmented_rear_nmse": 1.0117519715742191,
+        "worst_mixed_ratio": 0.00018770142033773738,
+        "worst_isolated_ratio": 3.374938621880355e-05,
+        "downmix_max_error": 1.617729696867798e-07,
+        "input_closure_max_error": 1.6112780243382474e-07,
+        "diagnostic_checks": {
+          "clean_rear": false,
+          "mixed_rear_fidelity": false,
+          "protected_mixed": null,
+          "protected_isolated": null,
+          "closure": true,
+          "silent_C_LFE": true,
+          "finite_pcm": true
+        },
+        "diagnostic_joint_fit": false,
+        "gates": {
+          "max_rear_nmse": 0.1,
+          "max_mixed_ratio": 0.02,
+          "max_isolated_ratio": 0.01,
+          "max_closure": 1e-06
+        },
+        "quiet_ratios_are_unknown": true,
+        "semantic_role_approved": false,
+        "training_target_cabin_safe": false,
+        "car_approved": false
+      },
+      "active_band_pass": false,
+      "joint_pass_geometries": 0,
+      "geometries": 5
+    },
+    {
+      "report": "runtime/p1-multisong-loss-ablation-a/study/report.json",
+      "arm": "joint_reference",
+      "split": "assessment",
+      "original": {
+        "total_case_count": 6,
+        "original_metrics_all_known": false,
+        "worst_rear_nmse": 0.999549363882487,
+        "worst_augmented_rear_nmse": 0.9999335664342899,
+        "worst_mixed_ratio": 0.00027418850758472157,
+        "worst_isolated_ratio": 3.215359708781066e-05,
+        "downmix_max_error": 1.7729184292880618e-07,
+        "input_closure_max_error": 1.9478326718225247e-07,
+        "diagnostic_checks": {
+          "clean_rear": false,
+          "mixed_rear_fidelity": false,
+          "protected_mixed": null,
+          "protected_isolated": null,
+          "closure": true,
+          "silent_C_LFE": true,
+          "finite_pcm": true
+        },
+        "diagnostic_joint_fit": false,
+        "gates": {
+          "max_rear_nmse": 0.1,
+          "max_mixed_ratio": 0.02,
+          "max_isolated_ratio": 0.01,
+          "max_closure": 1e-06
+        },
+        "quiet_ratios_are_unknown": true,
+        "semantic_role_approved": false,
+        "training_target_cabin_safe": false,
+        "car_approved": false
+      },
+      "active_band_pass": false,
+      "joint_pass_geometries": 0,
+      "geometries": 5
+    },
+    {
+      "report": "runtime/p1-multisong-loss-ablation-a/study/report.json",
+      "arm": "reconstruction_detail",
+      "split": "optimizer",
+      "original": {
+        "total_case_count": 15,
+        "original_metrics_all_known": false,
+        "worst_rear_nmse": 1.018885599536043,
+        "worst_augmented_rear_nmse": 1.0212690673570084,
+        "worst_mixed_ratio": 0.00019758524436309558,
+        "worst_isolated_ratio": 3.6370747215045323e-05,
+        "downmix_max_error": 1.7066154534006728e-07,
+        "input_closure_max_error": 1.6890415388548519e-07,
+        "diagnostic_checks": {
+          "clean_rear": false,
+          "mixed_rear_fidelity": false,
+          "protected_mixed": null,
+          "protected_isolated": null,
+          "closure": true,
+          "silent_C_LFE": true,
+          "finite_pcm": true
+        },
+        "diagnostic_joint_fit": false,
+        "gates": {
+          "max_rear_nmse": 0.1,
+          "max_mixed_ratio": 0.02,
+          "max_isolated_ratio": 0.01,
+          "max_closure": 1e-06
+        },
+        "quiet_ratios_are_unknown": true,
+        "semantic_role_approved": false,
+        "training_target_cabin_safe": false,
+        "car_approved": false
+      },
+      "active_band_pass": false,
+      "joint_pass_geometries": 0,
+      "geometries": 5
+    },
+    {
+      "report": "runtime/p1-multisong-loss-ablation-a/study/report.json",
+      "arm": "reconstruction_detail",
+      "split": "assessment",
+      "original": {
+        "total_case_count": 6,
+        "original_metrics_all_known": false,
+        "worst_rear_nmse": 1.0015535073052688,
+        "worst_augmented_rear_nmse": 1.0019280512782074,
+        "worst_mixed_ratio": 0.00028805070566084186,
+        "worst_isolated_ratio": 3.458332233023377e-05,
+        "downmix_max_error": 1.6478311459788841e-07,
+        "input_closure_max_error": 1.577477980463371e-07,
+        "diagnostic_checks": {
+          "clean_rear": false,
+          "mixed_rear_fidelity": false,
+          "protected_mixed": null,
+          "protected_isolated": null,
+          "closure": true,
+          "silent_C_LFE": true,
+          "finite_pcm": true
+        },
+        "diagnostic_joint_fit": false,
+        "gates": {
+          "max_rear_nmse": 0.1,
+          "max_mixed_ratio": 0.02,
+          "max_isolated_ratio": 0.01,
+          "max_closure": 1e-06
+        },
+        "quiet_ratios_are_unknown": true,
+        "semantic_role_approved": false,
+        "training_target_cabin_safe": false,
+        "car_approved": false
+      },
+      "active_band_pass": false,
+      "joint_pass_geometries": 0,
+      "geometries": 5
+    },
+    {
+      "report": "runtime/p1-multisong-v2-prep-a/matched-study/report.json",
+      "arm": "baseline",
+      "original": {
+        "total_case_count": 6,
+        "original_metrics_all_known": false,
+        "worst_rear_nmse": 0.999549363882487,
+        "worst_augmented_rear_nmse": 0.9999335664342899,
+        "worst_mixed_ratio": 0.00027418850758472157,
+        "worst_isolated_ratio": 3.215359708781066e-05,
+        "downmix_max_error": 1.7729184292880618e-07,
+        "input_closure_max_error": 1.9478326718225247e-07,
+        "diagnostic_checks": {
+          "clean_rear": false,
+          "mixed_rear_fidelity": false,
+          "protected_mixed": null,
+          "protected_isolated": null,
+          "closure": true,
+          "silent_C_LFE": true,
+          "finite_pcm": true
+        },
+        "diagnostic_joint_fit": false,
+        "gates": {
+          "max_rear_nmse": 0.1,
+          "max_mixed_ratio": 0.02,
+          "max_isolated_ratio": 0.01,
+          "max_closure": 1e-06
+        },
+        "quiet_ratios_are_unknown": true,
+        "semantic_role_approved": false,
+        "training_target_cabin_safe": false,
+        "car_approved": false
+      },
+      "active_band_pass": false,
+      "joint_pass_geometries": 0,
+      "geometries": 5
+    },
+    {
+      "report": "runtime/p1-multisong-v2-prep-a/matched-study/report.json",
+      "arm": "startup_exact_zero_v1",
+      "original": {
+        "total_case_count": 6,
+        "original_metrics_all_known": false,
+        "worst_rear_nmse": 0.9995493718341999,
+        "worst_augmented_rear_nmse": 0.9999335729109092,
+        "worst_mixed_ratio": 0.00027418888024337816,
+        "worst_isolated_ratio": 3.2153618838256066e-05,
+        "downmix_max_error": 1.815545667138707e-07,
+        "input_closure_max_error": 2.0334434569502235e-07,
+        "diagnostic_checks": {
+          "clean_rear": false,
+          "mixed_rear_fidelity": false,
+          "protected_mixed": null,
+          "protected_isolated": null,
+          "closure": true,
+          "silent_C_LFE": true,
+          "finite_pcm": true
+        },
+        "diagnostic_joint_fit": false,
+        "gates": {
+          "max_rear_nmse": 0.1,
+          "max_mixed_ratio": 0.02,
+          "max_isolated_ratio": 0.01,
+          "max_closure": 1e-06
+        },
+        "quiet_ratios_are_unknown": true,
+        "semantic_role_approved": false,
+        "training_target_cabin_safe": false,
+        "car_approved": false
+      },
+      "active_band_pass": false,
+      "joint_pass_geometries": 0,
+      "geometries": 5
+    },
+    {
+      "report": "runtime/p1-multisong-v2-diagnosis-a/oracle/report.json",
+      "witness": "target_spectrum",
+      "split": "optimizer",
+      "original": {
+        "total_case_count": 15,
+        "original_metrics_all_known": false,
+        "worst_rear_nmse": 1.285749717328058e-14,
+        "worst_augmented_rear_nmse": 1.285749717328058e-14,
+        "worst_mixed_ratio": 0.0,
+        "worst_isolated_ratio": 0.0,
+        "downmix_max_error": 1.2974600166471006e-07,
+        "input_closure_max_error": 1.472564170601487e-07,
+        "diagnostic_checks": {
+          "clean_rear": null,
+          "mixed_rear_fidelity": null,
+          "protected_mixed": null,
+          "protected_isolated": null,
+          "closure": true,
+          "silent_C_LFE": true,
+          "finite_pcm": true
+        },
+        "diagnostic_joint_fit": null,
+        "gates": {
+          "max_rear_nmse": 0.1,
+          "max_mixed_ratio": 0.02,
+          "max_isolated_ratio": 0.01,
+          "max_closure": 1e-06
+        },
+        "quiet_ratios_are_unknown": true,
+        "semantic_role_approved": false,
+        "training_target_cabin_safe": false,
+        "car_approved": false
+      },
+      "active_band_pass": true,
+      "combined_diagnostic_fit": null,
+      "numerical_sanity_pass": true
+    },
+    {
+      "report": "runtime/p1-multisong-v2-diagnosis-a/oracle/report.json",
+      "witness": "target_spectrum",
+      "split": "assessment",
+      "original": {
+        "total_case_count": 6,
+        "original_metrics_all_known": false,
+        "worst_rear_nmse": 1.2887565118662141e-14,
+        "worst_augmented_rear_nmse": 1.2887565118662141e-14,
+        "worst_mixed_ratio": 0.0,
+        "worst_isolated_ratio": 0.0,
+        "downmix_max_error": 1.7881393432617188e-07,
+        "input_closure_max_error": 2.0060371330732352e-07,
+        "diagnostic_checks": {
+          "clean_rear": null,
+          "mixed_rear_fidelity": null,
+          "protected_mixed": null,
+          "protected_isolated": null,
+          "closure": true,
+          "silent_C_LFE": true,
+          "finite_pcm": true
+        },
+        "diagnostic_joint_fit": null,
+        "gates": {
+          "max_rear_nmse": 0.1,
+          "max_mixed_ratio": 0.02,
+          "max_isolated_ratio": 0.01,
+          "max_closure": 1e-06
+        },
+        "quiet_ratios_are_unknown": true,
+        "semantic_role_approved": false,
+        "training_target_cabin_safe": false,
+        "car_approved": false
+      },
+      "active_band_pass": true,
+      "combined_diagnostic_fit": null,
+      "numerical_sanity_pass": true
+    },
+    {
+      "report": "runtime/p1-multisong-v2-diagnosis-a/oracle/report.json",
+      "witness": "bounded_ratio",
+      "split": "optimizer",
+      "original": {
+        "total_case_count": 15,
+        "original_metrics_all_known": false,
+        "worst_rear_nmse": 0.00017885769242672347,
+        "worst_augmented_rear_nmse": 0.0003136682785521327,
+        "worst_mixed_ratio": 0.0006095605710341298,
+        "worst_isolated_ratio": 0.0,
+        "downmix_max_error": 1.516457899253254e-07,
+        "input_closure_max_error": 1.3900381667930617e-07,
+        "diagnostic_checks": {
+          "clean_rear": null,
+          "mixed_rear_fidelity": null,
+          "protected_mixed": null,
+          "protected_isolated": null,
+          "closure": true,
+          "silent_C_LFE": true,
+          "finite_pcm": true
+        },
+        "diagnostic_joint_fit": null,
+        "gates": {
+          "max_rear_nmse": 0.1,
+          "max_mixed_ratio": 0.02,
+          "max_isolated_ratio": 0.01,
+          "max_closure": 1e-06
+        },
+        "quiet_ratios_are_unknown": true,
+        "semantic_role_approved": false,
+        "training_target_cabin_safe": false,
+        "car_approved": false
+      },
+      "active_band_pass": true,
+      "combined_diagnostic_fit": null,
+      "numerical_sanity_pass": null
+    },
+    {
+      "report": "runtime/p1-multisong-v2-diagnosis-a/oracle/report.json",
+      "witness": "bounded_ratio",
+      "split": "assessment",
+      "original": {
+        "total_case_count": 6,
+        "original_metrics_all_known": false,
+        "worst_rear_nmse": 2.7674418708377252e-05,
+        "worst_augmented_rear_nmse": 6.349594547020626e-05,
+        "worst_mixed_ratio": 1.552410444117969e-05,
+        "worst_isolated_ratio": 0.0,
+        "downmix_max_error": 1.7881393432617188e-07,
+        "input_closure_max_error": 2.0060371330732352e-07,
+        "diagnostic_checks": {
+          "clean_rear": null,
+          "mixed_rear_fidelity": null,
+          "protected_mixed": null,
+          "protected_isolated": null,
+          "closure": true,
+          "silent_C_LFE": true,
+          "finite_pcm": true
+        },
+        "diagnostic_joint_fit": null,
+        "gates": {
+          "max_rear_nmse": 0.1,
+          "max_mixed_ratio": 0.02,
+          "max_isolated_ratio": 0.01,
+          "max_closure": 1e-06
+        },
+        "quiet_ratios_are_unknown": true,
+        "semantic_role_approved": false,
+        "training_target_cabin_safe": false,
+        "car_approved": false
+      },
+      "active_band_pass": true,
+      "combined_diagnostic_fit": null,
+      "numerical_sanity_pass": null
+    }
+  ],
+  "folded_comparison": {
+    "summaries": {
+      "canonical": {
+        "front_nmse": 0.10868798438069406,
+        "rear_nmse": 0.31129657581610454,
+        "rear_energy_ratio": 0.45687227104189015,
+        "center_predicted_energy": 1047.1528312487376,
+        "lfe_predicted_energy": 0.0,
+        "downmix_max_error": 2.3905151080166887e-07,
+        "worst_isolated_rear_ratio": 0.01848076337071104,
+        "worst_counterfactual_ratio": 0.16413155825334866
+      },
+      "folded": {
+        "front_nmse": 0.10511741296943632,
+        "rear_nmse": 0.301069994325938,
+        "rear_energy_ratio": 0.45168663786045155,
+        "center_predicted_energy": 0.0,
+        "lfe_predicted_energy": 0.0,
+        "downmix_max_error": 2.426212558142779e-07,
+        "worst_isolated_rear_ratio": 0.018260477071687466,
+        "worst_counterfactual_ratio": 0.1405040186481999
+      }
+    },
+    "research_checks": {
+      "front_fidelity_vs_natural": true,
+      "rear_fidelity_vs_natural": true,
+      "rear_energy_vs_natural": true,
+      "isolated_at_least_halved_vs_natural": true,
+      "mixed_at_least_halved_vs_natural": false,
+      "rear_not_worse_than_protected_control": true,
+      "isolated_preserved_vs_protected_control": true,
+      "explicit_silent_C_LFE": true,
+      "downmix_closure": true
+    }
+  },
+  "front_geometry_comparison": {
+    "summaries": {
+      "original": {
+        "worst_rear_nmse": 0.2824968997571023,
+        "worst_augmented_rear_nmse": 0.337032332110772,
+        "worst_mixed_ratio": 0.05617781297959128,
+        "worst_isolated_ratio": 0.00889211908831661,
+        "downmix_max_error": 6.264131002797768e-08,
+        "center_lfe_exact_zero": true,
+        "diagnostic_checks": {
+          "clean_rear": false,
+          "mixed_rear_fidelity": false,
+          "protected_mixed": false,
+          "protected_isolated": true,
+          "closure": true,
+          "silent_C_LFE": true
+        },
+        "diagnostic_joint_fit": false,
+        "car_approved": false
+      },
+      "rotate_left": {
+        "worst_rear_nmse": 0.2824968997571023,
+        "worst_augmented_rear_nmse": 0.35280776908233624,
+        "worst_mixed_ratio": 0.12886179759575625,
+        "worst_isolated_ratio": 0.005308339843280146,
+        "downmix_max_error": 7.078263841719945e-08,
+        "center_lfe_exact_zero": true,
+        "diagnostic_checks": {
+          "clean_rear": false,
+          "mixed_rear_fidelity": false,
+          "protected_mixed": false,
+          "protected_isolated": true,
+          "closure": true,
+          "silent_C_LFE": true
+        },
+        "diagnostic_joint_fit": false,
+        "car_approved": false
+      },
+      "rotate_right": {
+        "worst_rear_nmse": 0.2824968997571023,
+        "worst_augmented_rear_nmse": 0.3804320699491535,
+        "worst_mixed_ratio": 0.08989259669870901,
+        "worst_isolated_ratio": 0.008791950506488913,
+        "downmix_max_error": 8.224739300732864e-08,
+        "center_lfe_exact_zero": true,
+        "diagnostic_checks": {
+          "clean_rear": false,
+          "mixed_rear_fidelity": false,
+          "protected_mixed": false,
+          "protected_isolated": true,
+          "closure": true,
+          "silent_C_LFE": true
+        },
+        "diagnostic_joint_fit": false,
+        "car_approved": false
+      },
+      "opposite_polarity": {
+        "worst_rear_nmse": 0.2824968997571023,
+        "worst_augmented_rear_nmse": 0.4445519187813319,
+        "worst_mixed_ratio": 0.16825515443542421,
+        "worst_isolated_ratio": 0.025678088431076402,
+        "downmix_max_error": 5.835748614901881e-08,
+        "center_lfe_exact_zero": true,
+        "diagnostic_checks": {
+          "clean_rear": false,
+          "mixed_rear_fidelity": false,
+          "protected_mixed": false,
+          "protected_isolated": false,
+          "closure": true,
+          "silent_C_LFE": true
+        },
+        "diagnostic_joint_fit": false,
+        "car_approved": false
+      },
+      "right_delay_7ms": {
+        "worst_rear_nmse": 0.2824968997571023,
+        "worst_augmented_rear_nmse": 0.37852468028906444,
+        "worst_mixed_ratio": 0.10316218202218093,
+        "worst_isolated_ratio": 0.020923067255713558,
+        "downmix_max_error": 6.047333822589707e-08,
+        "center_lfe_exact_zero": true,
+        "diagnostic_checks": {
+          "clean_rear": false,
+          "mixed_rear_fidelity": false,
+          "protected_mixed": false,
+          "protected_isolated": false,
+          "closure": true,
+          "silent_C_LFE": true
+        },
+        "diagnostic_joint_fit": false,
+        "car_approved": false
+      }
+    }
+  },
+  "scaling_diagnostic": {
+    "first_scaling_row": {
+      "curves": {
+        "R": {
+          "value_at_one": 0.6609854997831733,
+          "derivative_at_one": -0.002854711841791868,
+          "curvature": 0.009659595787525177,
+          "alpha_optimum_unconstrained": 1.295531190391897,
+          "nonnegative_alpha_optimum": 1.295531190391897,
+          "optimum_known": true,
+          "unknown_reason": null,
+          "inferred_optimum_evaluated": false,
+          "quadratic_A": 0.0048297978937625885,
+          "quadratic_B": 0.006257153814658523,
+          "raw_complex_abs_autograd_curvature": 0.009659595787525177,
+          "smooth_equivalent_value_parity": {
+            "absolute_error": 0.0,
+            "allowed_error": 6.709854997831734e-05
+          },
+          "smooth_equivalent_first_derivative_parity": {
+            "absolute_error": 0.0,
+            "allowed_error": 2.1427355920895934e-06
+          }
+        },
+        "P": {
+          "value_at_one": 6.86878920532763e-05,
+          "derivative_at_one": 0.0001373757841065526,
+          "curvature": 0.0001373757841065526,
+          "alpha_optimum_unconstrained": 0.0,
+          "nonnegative_alpha_optimum": 0.0,
+          "optimum_known": true,
+          "unknown_reason": null,
+          "inferred_optimum_evaluated": false,
+          "quadratic_A": 6.86878920532763e-05,
+          "quadratic_B": 0.0,
+          "raw_complex_abs_autograd_curvature": 0.0001373757841065526,
+          "smooth_equivalent_value_parity": {
+            "absolute_error": 0.0,
+            "allowed_error": 1.0068687892053276e-06
+          },
+          "smooth_equivalent_first_derivative_parity": {
+            "absolute_error": 0.0,
+            "allowed_error": 2.0068687892053275e-06
+          }
+        },
+        "total": {
+          "value_at_one": 0.6610541643339546,
+          "derivative_at_one": -0.0027173359412699938,
+          "curvature": 0.009796972386538982,
+          "alpha_optimum_unconstrained": 1.2773648668239188,
+          "nonnegative_alpha_optimum": 1.2773648668239188,
+          "optimum_known": true,
+          "unknown_reason": null,
+          "inferred_optimum_evaluated": false,
+          "quadratic_A": 0.004898486193269491,
+          "quadratic_B": 0.006257154163904488,
+          "raw_complex_abs_autograd_curvature": 0.009796972386538982,
+          "smooth_equivalent_value_parity": {
+            "absolute_error": 2.334127202630043e-08,
+            "allowed_error": 6.710541876752267e-05
+          },
+          "smooth_equivalent_first_derivative_parity": {
+            "absolute_error": 0.0,
+            "allowed_error": 2.1358667970634994e-06
+          }
+        }
+      },
+      "fixed_alpha_values": {
+        "0.0": {
+          "R": 0.6686700284481049,
+          "P": 0.0,
+          "total": 0.6686700284481049
+        },
+        "0.5": {
+          "R": 0.6636202959925277,
+          "P": 1.7171973013319075e-05,
+          "total": 0.6636374919325454
+        },
+        "1.0": {
+          "R": 0.6609854997831733,
+          "P": 6.86878920532763e-05,
+          "total": 0.6610541643339546
+        },
+        "2.0": {
+          "R": 0.662960567091521,
+          "P": 0.0002747515682131052,
+          "total": 0.6632353147016131
+        }
+      },
+      "quadratic_checks": {
+        "0.0": {
+          "R": {
+            "absolute_error": 1.892937706582387e-08,
+            "allowed_error": 3.543350142240524e-05
+          },
+          "P": {
+            "absolute_error": 0.0,
+            "allowed_error": 2e-06
+          },
+          "total": {
+            "absolute_error": 4.1979610787556965e-08,
+            "allowed_error": 3.543350142240524e-05
+          }
+        },
+        "0.5": {
+          "R": {
+            "absolute_error": 9.184982219245796e-09,
+            "allowed_error": 3.51810152588755e-05
+          },
+          "P": {
+            "absolute_error": 0.0,
+            "allowed_error": 2.000858598650666e-06
+          },
+          "total": {
+            "absolute_error": 3.807963844248974e-08,
+            "allowed_error": 3.518187459662727e-05
+          }
+        },
+        "1.0": {
+          "R": {
+            "absolute_error": 0.0,
+            "allowed_error": 3.504927498915867e-05
+          },
+          "P": {
+            "absolute_error": 0.0,
+            "allowed_error": 2.0034343946026637e-06
+          },
+          "total": {
+            "absolute_error": 0.0,
+            "allowed_error": 3.505270821669773e-05
+          }
+        },
+        "2.0": {
+          "R": {
+            "absolute_error": 1.874362309806088e-08,
+            "allowed_error": 3.514802929175721e-05
+          },
+          "P": {
+            "absolute_error": 0.0,
+            "allowed_error": 2.013737578410655e-06
+          },
+          "total": {
+            "absolute_error": 1.1565903790256016e-10,
+            "allowed_error": 3.516176573508066e-05
+          }
+        }
+      },
+      "projection_max_pcm_difference": 8.940696716308594e-08,
+      "original_unprojected_loss": {
+        "total": 0.6610541643339546,
+        "natural": 0.33104008436203003,
+        "augmented": 0.33059757947921753,
+        "counterfactual": 2.661974576767534e-05,
+        "isolated": 1.5448398698936217e-05,
+        "rear_detail": 0.9891840226007108
+      },
+      "projection_loss_parity": {
+        "total": {
+          "absolute_error": 0.0,
+          "allowed_error": 6.710541643339546e-05
+        },
+        "natural": {
+          "absolute_error": 0.0,
+          "allowed_error": 3.4104008436203e-05
+        },
+        "augmented": {
+          "absolute_error": 0.0,
+          "allowed_error": 3.405975794792175e-05
+        },
+        "counterfactual": {
+          "absolute_error": 0.0,
+          "allowed_error": 1.0026619745767675e-06
+        },
+        "isolated": {
+          "absolute_error": 0.0,
+          "allowed_error": 1.0015448398698935e-06
+        },
+        "rear_detail": {
+          "absolute_error": 0.0,
+          "allowed_error": 9.991840226007108e-05
+        }
+      },
+      "predicted_rear_energy": 0.01594486657095575,
+      "target_rear_energy": 2.334360831277529,
+      "actual_rear_energy_ratio": 0.006830506388435922,
+      "actual_rear_target_inner_product": 0.024417230761870863,
+      "actual_rear_target_cosine": 0.1265616036868041,
+      "scalar_graph_only": true,
+      "no_optimum_rendered": true,
+      "audio_exported": false,
+      "car_approved": false
+    },
+    "pooled_curve_sample": {
+      "R": {
+        "value_at_one": 11.733233321536007,
+        "derivative_at_one": -0.10079685458913445,
+        "curvature": 0.2804972876328975,
+        "alpha_optimum_unconstrained": 1.3593505500169147,
+        "nonnegative_alpha_optimum": 1.3593505500169147,
+        "optimum_known": true,
+        "unknown_reason": null,
+        "inferred_optimum_evaluated": false,
+        "quadratic_A": 0.14024864381644875,
+        "quadratic_B": 0.19064707111101598,
+        "per_case_known_optimum_count": 21,
+        "per_case_unknown_optimum_ids": {
+          "length": 0,
+          "first": null
+        }
+      },
+      "P": {
+        "value_at_one": 0.0013596523722299025,
+        "derivative_at_one": 0.002719304695347091,
+        "curvature": 0.002719304695347091,
+        "alpha_optimum_unconstrained": 0.0,
+        "nonnegative_alpha_optimum": 0.0,
+        "optimum_known": true,
+        "unknown_reason": null,
+        "inferred_optimum_evaluated": false,
+        "quadratic_A": 0.0013596523476735456,
+        "quadratic_B": 0.0,
+        "per_case_known_optimum_count": 18,
+        "per_case_unknown_optimum_ids": {
+          "length": 3,
+          "first": "[string omitted]"
+        }
+      },
+      "total": {
+        "value_at_one": 11.734592948186817,
+        "derivative_at_one": -0.09807755728252232,
+        "curvature": 0.2832166022853926,
+        "alpha_optimum_unconstrained": 1.3462987568210822,
+        "nonnegative_alpha_optimum": 1.3462987568210822,
+        "optimum_known": true,
+        "unknown_reason": null,
+        "inferred_optimum_evaluated": false,
+        "quadratic_A": 0.1416083011426963,
+        "quadratic_B": 0.19064707978395745,
+        "per_case_known_optimum_count": 21,
+        "per_case_unknown_optimum_ids": {
+          "length": 0,
+          "first": null
+        }
+      }
+    }
+  }
+}
