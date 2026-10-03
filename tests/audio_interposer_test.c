@@ -726,6 +726,143 @@ static void *test_dlsym(void *scope, const char *name)
 #undef SYMBOL
     return NULL;
 }
+
+/* CF boundaries for the real final SETUP and /info callbacks. */
+struct contract_array { const char *items[3]; long count; };
+struct contract_dict { void *features, *enabled, *info; };
+static int contract_alloc_fail, contract_info_string_fail, contract_allocations;
+static struct contract_dict contract_empty_info;
+static char contract_info_key[] = "mainBufferedInfo";
+static int contract_key_refs, contract_info_refs;
+static void *contract_string(void *allocator, const char *text, uint32_t encoding)
+{
+    if ((contract_info_string_fail == 1 && !strcmp(text, "mainBufferedInfo")) ||
+        (contract_info_string_fail == 2 && !strcmp(text, "mainBuffered"))) return NULL;
+    if (!strcmp(text, "mainBufferedInfo")) {
+        ++contract_key_refs;
+        return contract_info_key;
+    }
+    return fake_string(allocator, text, encoding);
+}
+static const void *contract_retain(const void *p)
+{
+    if (p == contract_info_key) ++contract_key_refs;
+    if (p == &contract_empty_info) ++contract_info_refs;
+    return p;
+}
+static void contract_release(const void *p)
+{
+    if (p == contract_info_key) assert(--contract_key_refs >= 0);
+    if (p == &contract_empty_info) assert(--contract_info_refs >= 0);
+}
+static int contract_equal(const void *a, const void *b)
+{ return !strcmp(a, b); }
+static void *contract_dict_get(const void *p, const void *key)
+{
+    const struct contract_dict *d = p;
+    if (!strcmp(key, "features")) return d->features;
+    if (!strcmp(key, "enabledFeatures")) return d->enabled;
+    if (!strcmp(key, "mainBufferedInfo")) return d->info;
+    return NULL;
+}
+static void contract_dict_set(void *p, const void *key, const void *value)
+{
+    struct contract_dict *d = p;
+    assert(!strcmp(key, "mainBufferedInfo"));
+    d->info = (void *)value;
+}
+static void *contract_dict_create(void *allocator, long capacity,
+                                   const void *keys, const void *values)
+{
+    (void)allocator; (void)capacity; (void)keys; (void)values;
+    ++contract_allocations;
+    if (contract_alloc_fail) return NULL;
+    ++contract_info_refs;
+    return &contract_empty_info;
+}
+static long contract_array_count(const void *p)
+{ return p ? ((const struct contract_array *)p)->count : 0; }
+static void *contract_array_index(const void *p, long index)
+{ return (void *)((const struct contract_array *)p)->items[index]; }
+
+static void buffered_contract_tests(void)
+{
+    struct contract_array offered = {{"mainBuffered", "altScreen"}, 2};
+    struct contract_array accepted = {{"altScreen", "mainBuffered"}, 2};
+    struct contract_array removed = {{"altScreen"}, 1};
+    struct contract_dict request = {&offered, NULL, NULL};
+    struct contract_dict response = {NULL, &accepted, NULL};
+    struct contract_dict info = {0};
+    int session_a, session_b, allocations;
+    hook_setup_ctx_t setup = {0};
+    cfa_ready = 1; cfa_str = contract_string; cfa_equal = contract_equal;
+    cfa_dictget = contract_dict_get; cfa_dictset = contract_dict_set;
+    cfa_dictm = contract_dict_create;
+    cfa_arrcount = contract_array_count; cfa_arridx = contract_array_index;
+    cfa_retain = contract_retain; cfa_rel = contract_release;
+    setup.session = &session_a; setup.request = &request; setup.response = &response;
+    setup.sequence = spa_contract_sequence + 1;
+
+    spa_on_setup_response_final(&setup);
+    assert(!setup.result && spa_mainbuffered_session == &session_a);
+    assert(contract_key_refs == 1 && contract_info_refs == 1);
+    allocations = contract_allocations;
+    contract_alloc_fail = contract_info_string_fail = 1;
+    spa_capture_server_info_seam(&session_b, &info);
+    assert(!info.info); /* another session must not inherit the contract */
+    spa_capture_server_info_seam(&session_a, &info);
+    assert(info.info == &contract_empty_info && contract_allocations == allocations);
+    assert(contract_key_refs == 1 && contract_info_refs == 1);
+    contract_alloc_fail = contract_info_string_fail = 0;
+
+    /* A later response mutator removed the token. No unnegotiated /info key. */
+    response.enabled = &removed; ++setup.sequence;
+    spa_on_setup_response_final(&setup);
+    assert(!setup.result && !spa_mainbuffered_session);
+    assert(!contract_key_refs && !contract_info_refs);
+    memset(&info, 0, sizeof(info)); spa_augment_server_info(&session_a, &info);
+    assert(!info.info);
+
+    response.enabled = &accepted; ++setup.sequence;
+    setup.result = -EIO;
+    spa_on_setup_response_final(&setup);
+    assert(setup.result == -EIO && !spa_mainbuffered_session);
+    setup.result = 0; contract_alloc_fail = 1; ++setup.sequence;
+    spa_on_setup_response_final(&setup);
+    assert(setup.result == -6728 && !spa_mainbuffered_session);
+    contract_alloc_fail = 0; contract_info_string_fail = 1;
+    setup.result = 0; ++setup.sequence; spa_on_setup_response_final(&setup);
+    assert(setup.result == -6728 && !spa_mainbuffered_session);
+    contract_info_string_fail = 2;
+    setup.result = 0; ++setup.sequence; spa_on_setup_response_final(&setup);
+    assert(setup.result == -6728 && !spa_mainbuffered_session);
+    contract_info_string_fail = 0;
+    setup.result = 0; setup.response = NULL; ++setup.sequence;
+    spa_on_setup_response_final(&setup);
+    assert(setup.result == -6728 && !spa_mainbuffered_session);
+    setup.response = &response;
+
+    offered.count = 0; setup.result = 0; ++setup.sequence;
+    spa_on_setup_response_final(&setup);
+    assert(setup.result == -6714 && !spa_mainbuffered_session); /* unoffered token */
+    offered.count = 2; setup.session = &session_b; setup.result = 0; ++setup.sequence;
+    spa_on_setup_response_final(&setup);
+    assert(!setup.result && spa_mainbuffered_session == &session_b);
+    setup.session = &session_a; --setup.sequence;
+    spa_on_setup_response_final(&setup);
+    assert(setup.result == -ECANCELED && spa_mainbuffered_session == &session_b);
+
+    /* Media SETUP has no feature proposal and must leave the control owner intact. */
+    request.features = NULL; setup.result = 0; setup.sequence += 2;
+    spa_on_setup_response_final(&setup);
+    assert(!setup.result && spa_mainbuffered_session == &session_b);
+    spa_teardown_buffered_receiver(&session_a, NULL);
+    assert(spa_mainbuffered_session == &session_b);
+    spa_teardown_buffered_receiver(&session_b, NULL);
+    assert(!spa_mainbuffered_info_key && !spa_mainbuffered_info_value);
+    assert(!contract_key_refs && !contract_info_refs);
+    puts("audio_interposer_test: final mainBuffered/info pairing, allocation and stale-session PASS");
+}
 int main(void)
 {
     /* Local environment parser only; no vehicle-side configuration. */
@@ -757,6 +894,7 @@ int main(void)
     absent_cleanup_generation();
     control_generation_tests();
     teardown_scope_tests();
+    buffered_contract_tests();
     free(spa_pcm_sink.scratch);
     spa_pcm_sink.scratch = NULL; spa_pcm_sink.scratchBytes = 0;
     free(image_base);

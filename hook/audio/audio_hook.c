@@ -702,6 +702,8 @@ static void spa103_retry_now_playing_after_media(void);
 static pthread_mutex_t spa_contract_lock = PTHREAD_MUTEX_INITIALIZER;
 static void            *spa_mainbuffered_session;
 static uint32_t         spa_contract_sequence;
+static const void      *spa_mainbuffered_info_key;
+static const void      *spa_mainbuffered_info_value;
 
 /* updateFeedback belongs to the stock realtime stream, but iOS deliberately
  * tears that stream down when the phone/app leaves the foreground while the
@@ -719,23 +721,25 @@ static pthread_mutex_t spa_feedback_lock = PTHREAD_MUTEX_INITIALIZER;
 static void            *spa_feedback_session;
 static const void      *spa_feedback_response;
 
-static void spa_set_mainbuffered_contract(void *session, int enabled, uint32_t sequence)
+static int spa_set_mainbuffered_contract(void *session, int enabled, uint32_t sequence,
+                                          const void *infoKey, const void *infoValue)
 {
+    const void *oldKey = 0, *oldValue = 0;
+    int current = 0;
     pthread_mutex_lock(&spa_contract_lock);
     if ((int32_t)(sequence - spa_contract_sequence) >= 0) {
+        oldKey = spa_mainbuffered_info_key;
+        oldValue = spa_mainbuffered_info_value;
         spa_contract_sequence = sequence;
         spa_mainbuffered_session = enabled ? session : 0;
+        spa_mainbuffered_info_key = enabled ? cfa_retain(infoKey) : 0;
+        spa_mainbuffered_info_value = enabled ? cfa_retain(infoValue) : 0;
+        current = 1;
     }
     pthread_mutex_unlock(&spa_contract_lock);
-}
-
-static int spa_has_mainbuffered_contract(void *session)
-{
-    int match;
-    pthread_mutex_lock(&spa_contract_lock);
-    match = session && spa_mainbuffered_session == session;
-    pthread_mutex_unlock(&spa_contract_lock);
-    return match;
+    if (oldKey) cfa_rel(oldKey);
+    if (oldValue) cfa_rel(oldValue);
+    return current;
 }
 
 static int spa_cf_resolve(void)
@@ -1217,23 +1221,26 @@ static int spa_write_control_plist(const void *object, const char *kind, uint32_
 #endif
 }
 
-static int spa_array_contains_string(const void *array, const char *wanted)
+static int spa_array_contains_value(const void *array, const void *needle)
 {
-    void *needle;
     long count, i;
-    int found = 0;
-
-    if (!array || !wanted) return 0;
-    needle = cfa_str(0, wanted, SPA_CFENC_UTF8);
-    if (!needle) return 0;
+    if (!array || !needle) return 0;
     count = cfa_arrcount(array);
     for (i = 0; i < count; i++) {
         void *value = cfa_arridx(array, i);
-        if (value && cfa_equal(value, needle)) {
-            found = 1;
-            break;
-        }
+        if (value && cfa_equal(value, needle)) return 1;
     }
+    return 0;
+}
+
+static int spa_array_contains_string(const void *array, const char *wanted)
+{
+    void *needle;
+    int found;
+    if (!array || !wanted) return 0;
+    needle = cfa_str(0, wanted, SPA_CFENC_UTF8);
+    if (!needle) return 0;
+    found = spa_array_contains_value(array, needle);
     cfa_rel(needle);
     return found;
 }
@@ -8782,9 +8789,17 @@ static void spa_teardown_buffered_receiver(void *session, void *request)
     }
 
     if (!request) {
+        const void *oldKey = 0, *oldValue = 0;
         pthread_mutex_lock(&spa_contract_lock);
-        if (spa_mainbuffered_session == session) spa_mainbuffered_session = 0;
+        if (spa_mainbuffered_session == session) {
+            spa_mainbuffered_session = 0;
+            oldKey = spa_mainbuffered_info_key;
+            oldValue = spa_mainbuffered_info_value;
+            spa_mainbuffered_info_key = spa_mainbuffered_info_value = 0;
+        }
         pthread_mutex_unlock(&spa_contract_lock);
+        if (oldKey) cfa_rel(oldKey);
+        if (oldValue) cfa_rel(oldValue);
     }
 }
 
@@ -8896,9 +8911,9 @@ static int spa_augment_setup_response(void *session, void *request, void *respon
     if (!proposed) { cfa_rel(kReq); return 0; }
     cfa_rel(kReq);
 
-    /* A new control SETUP retires any previous session's contract. Once this response enables the
-     * feature we set the new owner below. */
-    spa_set_mainbuffered_contract(session, 0, sequence);
+    /* Retire the previous contract; the final response pass commits the new
+     * owner only after all response mutations and paired /info preparation. */
+    spa_set_mainbuffered_contract(session, 0, sequence, 0, 0);
     mode = spa_probe103_mode();
     if (!mode) return 0;
 
@@ -8934,7 +8949,6 @@ static int spa_augment_setup_response(void *session, void *request, void *respon
         }
         if (added) {
             cfa_dictset(response, kEnab, neg);
-            spa_set_mainbuffered_contract(session, 1, sequence);
             LOG_INFO(LOG_MODULE,
                      "probe103: control SETUP response enabledFeatures includes proposed "
                      "mainBuffered (preserved %ld existing)", curN);
@@ -8945,21 +8959,72 @@ static int spa_augment_setup_response(void *session, void *request, void *respon
     return added;
 }
 
+/* Commit only after every response-mutating subscriber has finished. Preparing
+ * the paired /info objects here avoids a second allocation-dependent contract
+ * decision after mainBuffered has already been sent to the phone. */
+static void spa_finalize_mainbuffered_contract(hook_setup_ctx_t *setup)
+{
+    void *requestKey = 0, *enabledKey = 0, *featureToken = 0;
+    void *infoKey = 0, *infoValue = 0;
+    void *proposed, *enabled;
+    int accepted = 0;
+
+    if (!setup->session || !setup->request || !spa_cf_resolve()) return;
+    requestKey = cfa_str(0, "features", SPA_CFENC_UTF8);
+    if (!requestKey) { setup->result = setup->result ? setup->result : -6728; return; }
+    proposed = cfa_dictget(setup->request, requestKey);
+    cfa_rel(requestKey);
+    if (!proposed) return; /* media SETUP must not retire the control contract */
+    if (setup->result) goto commit;
+    if (!setup->response) { setup->result = -6728; goto commit; }
+    enabledKey = cfa_str(0, "enabledFeatures", SPA_CFENC_UTF8);
+    featureToken = cfa_str(0, "mainBuffered", SPA_CFENC_UTF8);
+    if (!enabledKey || !featureToken) { setup->result = -6728; goto commit; }
+    enabled = cfa_dictget(setup->response, enabledKey);
+    accepted = spa_array_contains_value(enabled, featureToken);
+    if (!accepted) goto commit;
+    if (!spa_array_contains_value(proposed, featureToken) || !spa_probe103()) {
+        setup->result = -6714;
+        accepted = 0;
+        goto commit;
+    }
+    infoKey = cfa_str(0, "mainBufferedInfo", SPA_CFENC_UTF8);
+    infoValue = cfa_dictm(0, 0, cfa_dk_cb, cfa_dv_cb);
+    if (!infoKey || !infoValue) {
+        setup->result = -6728;
+        accepted = 0;
+    }
+commit:
+    if (!spa_set_mainbuffered_contract(setup->session, accepted, setup->sequence,
+                                       infoKey, infoValue) && !setup->result)
+        setup->result = -ECANCELED;
+    STATE_TRACE("BUFFERED_CONTRACT", "setup_seq=%u accepted=%d result=%d",
+                (unsigned)setup->sequence, accepted, setup->result);
+    if (infoValue) cfa_rel(infoValue);
+    if (infoKey) cfa_rel(infoKey);
+    if (featureToken) cfa_rel(featureToken);
+    if (enabledKey) cfa_rel(enabledKey);
+}
+
 static void spa_augment_server_info(void *session, void *info)
 {
-    void *key, *dict;
+    const void *key = 0, *dict = 0;
 
-    if (!session || !info || !spa_has_mainbuffered_contract(session) || !spa_cf_resolve()) return;
-    key = cfa_str(0, "mainBufferedInfo", SPA_CFENC_UTF8);
-    dict = cfa_dictm(0, 0, cfa_dk_cb, cfa_dv_cb);
+    if (!session || !info || !spa_cf_resolve()) return;
+    pthread_mutex_lock(&spa_contract_lock);
+    if (spa_mainbuffered_session == session) {
+        key = cfa_retain(spa_mainbuffered_info_key);
+        dict = cfa_retain(spa_mainbuffered_info_value);
+    }
+    pthread_mutex_unlock(&spa_contract_lock);
     if (key && dict) {
         cfa_dictset(info, key, dict);
-        LOG_INFO(LOG_MODULE,
-                 "probe103: /info mainBufferedInfo={} added for negotiated mainBuffered "
-                 "(DCXEnabled absent)");
-    } else {
-        LOG_ERROR(LOG_MODULE,
-                  "probe103: failed to build required /info mainBufferedInfo — session will reject");
+        if (cfa_dictget(info, key))
+            LOG_INFO(LOG_MODULE,
+                     "probe103: /info mainBufferedInfo={} added for negotiated mainBuffered "
+                     "(DCXEnabled absent)");
+        else
+            LOG_ERROR(LOG_MODULE, "buffer103: paired /info insertion failed after final SETUP");
     }
     if (dict) cfa_rel(dict);
     if (key) cfa_rel(key);
@@ -9267,6 +9332,7 @@ static void spa_on_setup_response(hook_setup_ctx_t *setup)
 /* After every module has merged its own keys into the response. */
 static void spa_on_setup_response_final(hook_setup_ctx_t *setup)
 {
+    spa_finalize_mainbuffered_contract(setup);
     spa_state_trace_setup(setup->response, setup->sequence, "response",
                           setup->result);
     if (setup->request && setup->response)
@@ -9276,7 +9342,8 @@ static void spa_on_setup_response_final(hook_setup_ctx_t *setup)
 /* spa_capture_server_info() predates the seam and takes only the dictionary. */
 static void spa_capture_server_info_seam(void *session, void *info)
 {
-    (void)session;
+    /* Pair with the accepted control contract after all /info mutators. */
+    spa_augment_server_info(session, info);
     spa_capture_server_info(info);
 }
 
@@ -9347,7 +9414,6 @@ const hook_module_def_t audio_module_def = {
         .on_setup_request = spa_on_setup_request,
         .on_setup_response = spa_on_setup_response,
         .on_setup_response_final = spa_on_setup_response_final,
-        .on_server_info = spa_augment_server_info,
         .on_server_info_final = spa_capture_server_info_seam,
         .on_teardown = spa_on_teardown
     }

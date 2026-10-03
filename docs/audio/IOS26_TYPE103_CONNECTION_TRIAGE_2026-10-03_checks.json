@@ -1,0 +1,81 @@
+{
+  "date": "2026-10-03",
+  "scope": "Control SETUP and paired mainBufferedInfo contract hardening; not incident root-cause proof",
+  "base_commit": "eb104105b5a4716a267928dc489d62831c173204",
+  "base_tree_matches_master": "ca20865755f54ffba78843903212db0fb757599f",
+  "sources": [
+    {
+      "path": "hook/audio/audio_hook.c",
+      "sha256": "6bbd1fe762dfce4d4231c28588e400b8890aa4224d2d751e60acd10697463402"
+    },
+    {
+      "path": "tests/audio_interposer_test.c",
+      "sha256": "38b656b0364083c5313438c7e96ae65e1d62dc5e98d48d4f0ebe803369c1ebf5"
+    }
+  ],
+  "qnx_build": {
+    "status": "pass",
+    "command": "bash scripts/build_hook.sh",
+    "workspace": "Isolated detached base plus changed audio_hook.c and host test file; unrelated dirty files excluded",
+    "docker_image": "qnx65-armv7-toolchain:latest",
+    "docker_image_id": "sha256:59cf5a575d69869e3983f136bdcf9e7e7d997e1206dcfc912e0d1988c68ad213",
+    "artifact_kind": "Unprotected ARMv7 test build, no VIN packaging",
+    "gates": [
+      "26 exact dynamic interpose exports",
+      "APAC ABI v1",
+      "no emutls, exceptions, RTTI, STL or libstdc++",
+      "hook init_array compiler-only"
+    ],
+    "build_log_sha256": "516618ac19b5b5189f0e6389e2372063e84fa3dc97308cab46c25bbcccac199e",
+    "artifacts": [
+      {
+        "path": "build/ios26-mainbuffered-contract-20261003/libcarplay_hook.so",
+        "sha256": "06c6ea4d4ad82f4601eb966cae89e9dcf656acb3a09bcb89a5e822d4c545e023",
+        "bytes": 1197981
+      },
+      {
+        "path": "build/ios26-mainbuffered-contract-20261003/libcarplay_apac.so",
+        "sha256": "1c25799f4dd47549335cbc22cc9a059efab030d4e489937fc4d8460e341e09ce",
+        "bytes": 696491
+      }
+    ]
+  },
+  "host_tests": {
+    "status": "pass",
+    "command": "SANITIZE=address,undefined sh scripts/test_audio_interposers.sh",
+    "output": [
+      "audio_interposer_test: QSA transactions/rollback/partial-error PASS",
+      "audio_interposer_test: real AirPlay SETUP/teardown seams, 64 races + restart PASS",
+      "audio_interposer_test: stale SETUP (32), controls, PCM-wait and QSA-wait generations PASS",
+      "audio_interposer_test: NULL/missing/empty/selective TEARDOWN scope PASS",
+      "audio_interposer_test: final mainBuffered/info pairing, allocation and stale-session PASS"
+    ],
+    "log_sha256": "e7fb2126d6f08491e7b664710eedc4610ac60b10bfa84dd19b65da17a247ff67",
+    "limitation": "Injected CF/native boundaries on host, not QNX driver or iOS 26.4.2 execution"
+  },
+  "mermaid_qa": {
+    "complete": true,
+    "mermaid": "11.12.0",
+    "results": [
+      {
+        "file": "docs/audio/IOS26_TYPE103_CONNECTION_TRIAGE_2026-10-03.md",
+        "index": 0,
+        "theme": "default",
+        "type": "flowchart-v2",
+        "width": 1046.44921875,
+        "height": 1560.421875
+      },
+      {
+        "file": "docs/audio/IOS26_TYPE103_CONNECTION_TRIAGE_2026-10-03.md",
+        "index": 0,
+        "theme": "dark",
+        "type": "flowchart-v2",
+        "width": 1046.44921875,
+        "height": 1560.421875
+      }
+    ]
+  },
+  "unit_deployed": false,
+  "incident_verified_fixed": false,
+  "pending": "Failing iOS 26.4.2 connection/playback log and deployed build identity"
+}

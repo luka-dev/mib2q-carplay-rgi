@@ -167,6 +167,7 @@ flowchart TB
 | Note | What it covers |
 |---|---|
 | [Buffered Audio Path](BUFFERED_AUDIO_PATH.md) | The hook-owned type-103 receiver: negotiation, SETUP/control/APAP contract, codec switching. |
+| [iOS 26 Type-103 Connection Triage](IOS26_TYPE103_CONNECTION_TRIAGE_2026-10-03.md) | iOS 26.4.2 disconnect on music start: final SETUP/info contract hardening, host/QNX checks, and the same rejection in iOS 27 beta; incident cause remains unverified. |
 | [Buffered Playback Lifecycle](BUFFERED_PLAYBACK_LIFECYCLE.md) | The single QSA handle, lock/background ownership, rate/flush state machine, feedback clock, car failures. |
 | [APAC Codec](APAC_CODEC.md) | Format indices, cookie grammar, `C L R Ls Rs LFE` order, the 5.1.2 fold, the ARMv7 port. |
 | [Cinemo AAC Decoder](CINEMO_AAC_DECODER.md) | Index-23 AAC-LC through dio's Cinemo SDK: recovered ABI, header-ownership abort, plugin-dir error 23. |
