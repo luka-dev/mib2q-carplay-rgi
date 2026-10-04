@@ -1,0 +1,189 @@
+{
+  "launch": {
+    "started_utc": "2026-10-04T14:17:59.122053+00:00",
+    "start_time_source": "oracle protocol, not exact spawn time",
+    "pid": 440289,
+    "root": "/mnt/shared/users/luka/Audi/upmix-training-2026-09-11/runtime/scene-output-oracle-20261004-a",
+    "nas_tests_passed": 3,
+    "source_hashes": {
+      "scene_operator_oracle.py": "b043027c219f0ee8f1901a4bf7e949617a6e7ee0b6a50ace6dd6a2a52b84ff8a",
+      "run_scene_operator_oracle_nas.py": "081ad4889c2dc31af10b56b7df6c84f98e3f679075689d98074d401a4e0869f9",
+      "test_scene_operator_oracle.py": "6389f86ff98d12b888e6fa9e7f77431013c38962cb7701a17684ed066185d132",
+      "scene_joint_net.py": "c0df585b44146301c160beacd4997d5a1b45ba16c036b74684105026edbcc238",
+      "train_scene_joint_nas.py": "bc6a72cef88ba17781e0631ffe2a5cf233b1626e34b038cf6570ab35f5c286a0",
+      "fit_scene_fixed_nas.py": "98e0748f75112a0a4ee4deb2d35137cc75e2b9a884e9b09eafe6622368b68e94",
+      "scene_joint_head_net.py": "7e0aac4eb4c0010215acae4029e7fb469e2fe57fa421689396f4bcbc78d56ef9"
+    },
+    "network_training": false,
+    "launch_metadata_recovered": true,
+    "recovered_utc": "2026-10-04T14:23:11.783093+00:00",
+    "recovery_reason": "child spawned successfully; launcher then failed hashing __pycache__ directory"
+  },
+  "status": {
+    "state": "complete",
+    "pid": 440289,
+    "updated_utc": "2026-10-04T14:17:59.311358+00:00"
+  },
+  "protocol": {
+    "schema": "scene-output-oracle-v1",
+    "started_utc": "2026-10-04T14:17:59.122053+00:00",
+    "anchor_protocol_sha256": "108c7db3fa20d855abdece172702c0d53886c9a31cdc1985b4586154cab7fe92",
+    "catalog_sha256": "f9f4860cb7d09a0b65860eae95df3c39160f3f8a2b492f5f84047b4a46770c5f",
+    "audio_sha256": "71de78c2c48ce30dce33c1b27bcf55a9b527db46b2451be9887293cce44d49be",
+    "song": "albumdb-01",
+    "partition": "train",
+    "start_sample": 1354304,
+    "length_samples": 33536,
+    "common_gain": 0.7247313718421923,
+    "warm_frames": 32,
+    "normalization_power": [
+      0.7001636624336243,
+      0.7018644213676453,
+      6.427074432373047,
+      0.22349132597446442,
+      0.2112828493118286
+    ],
+    "bound": 2.0,
+    "interior_fraction": 0.99999,
+    "same_stock_projection": true,
+    "dev_audio_opened": false,
+    "effect_gain": 0.0,
+    "privileged_target": true,
+    "causal_inference": false,
+    "network_training": false,
+    "pass_rule": "BOTH rear NMSE<=.10 and dry PCM relative null RMS<=1e-5",
+    "source_hashes": {
+      "scene_joint_net.py": "c0df585b44146301c160beacd4997d5a1b45ba16c036b74684105026edbcc238",
+      "scene_operator_oracle.py": "b043027c219f0ee8f1901a4bf7e949617a6e7ee0b6a50ace6dd6a2a52b84ff8a",
+      "run_scene_operator_oracle_nas.py": "081ad4889c2dc31af10b56b7df6c84f98e3f679075689d98074d401a4e0869f9",
+      "fit_scene_fixed_nas.py": "98e0748f75112a0a4ee4deb2d35137cc75e2b9a884e9b09eafe6622368b68e94",
+      "train_scene_joint_nas.py": "bc6a72cef88ba17781e0631ffe2a5cf233b1626e34b038cf6570ab35f5c286a0"
+    }
+  },
+  "report": {
+    "complete": true,
+    "metrics": {
+      "loss": 1.7625101463636383e-05,
+      "channel_loss": [
+        6.349263003357919e-06,
+        5.923031494603492e-06,
+        2.4766357000771677e-06,
+        2.8342456062091514e-05,
+        2.970237073895987e-05
+      ],
+      "nmse": [
+        1.4003750948177185e-05,
+        1.4467225810221862e-05,
+        6.384164862538455e-06,
+        0.0002651857503224164,
+        0.0003171144926454872
+      ],
+      "energy_ratio": [
+        0.9998969435691833,
+        0.9998583793640137,
+        0.9999366998672485,
+        0.9984673261642456,
+        0.998355507850647
+      ],
+      "cosine": [
+        0.9999930262565613,
+        0.999992847442627,
+        0.9999966025352478,
+        0.9998674988746643,
+        0.9998416900634766
+      ],
+      "target_power": [
+        15633.8916015625,
+        14151.439453125,
+        122789.140625,
+        1176.35009765625,
+        974.6033325195312
+      ],
+      "denominator_known": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "worst_rear_nmse": 0.0003171144926454872,
+      "dry_pcm_null_max": 8.573755621910095e-06,
+      "dry_pcm_null_relative_rms": 5.852406275153044e-07
+    },
+    "constructed_rear_nmse": [
+      0.00026518580853007734,
+      0.0003171144926454872
+    ],
+    "unbounded_rear_nmse": [
+      2.9260497020136556e-13,
+      3.3508791444716857e-13
+    ],
+    "unbounded_max_raw": 13.802339553833008,
+    "bounded_max_raw": 1.9999799728393555,
+    "clipped_raw_fraction": 0.0003700657980516553,
+    "finite_head_logit_max": 6.102355480194092,
+    "stock_forward_max_difference": 4.2649612623790745e-06,
+    "refinement_history": [],
+    "fitting_reachable": true,
+    "all_channel_nmse_below_point1": true,
+    "certified_rear_gate_impossible": false,
+    "decision": "reachable",
+    "coefficients_sha256": "33994f2b1902647c8dd6933ac176fcf3a558245ab905b964f739c18db9899666",
+    "elapsed_seconds": 0.27973660407587886,
+    "causal_or_product_qualified": false
+  },
+  "schema": "scene-output-reachability-evidence-v1",
+  "captured_utc": "2026-10-04T14:28:13.346344+00:00",
+  "scope": "privileged target-informed constructive oracle on one fixed TRAIN crop; not a deployable network",
+  "trained_anchor": {
+    "evidence": "UPMIX_JOINT_SCENE_MLP12_HEAD_2026-10-03.json",
+    "metrics": {
+      "loss": 0.019574332982301712,
+      "channel_loss": [
+        0.014226307161152363,
+        0.014382848516106606,
+        0.0032098067458719015,
+        0.030436184257268906,
+        0.029483169317245483
+      ],
+      "nmse": [
+        0.03137713298201561,
+        0.03513064235448837,
+        0.00827410165220499,
+        0.28477567434310913,
+        0.31477418541908264
+      ],
+      "energy_ratio": [
+        0.9664624333381653,
+        0.961113452911377,
+        0.9880756735801697,
+        0.7269454598426819,
+        0.7038449048995972
+      ],
+      "cosine": [
+        0.9841869473457336,
+        0.9822794795036316,
+        0.9958559274673462,
+        0.8457371592521667,
+        0.8278581500053406
+      ],
+      "target_power": [
+        15633.8916015625,
+        14151.439453125,
+        122789.140625,
+        1176.35009765625,
+        974.6033325195312
+      ],
+      "denominator_known": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "worst_rear_nmse": 0.31477418541908264,
+      "dry_pcm_null_max": 5.7425349950790405e-06,
+      "dry_pcm_null_relative_rms": 5.457335987557599e-07
+    }
+  }
+}

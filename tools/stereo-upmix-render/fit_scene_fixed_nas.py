@@ -37,6 +37,8 @@ def restore_checkpoint(net, optimizer, run, expected, total_steps):
         model_sources.append("scene_joint_head_net.py")
     if "scene_fly_net.py" in expected["source_hashes"]:
         model_sources.append("scene_fly_net.py")
+    if "scene_interband_net.py" in expected["source_hashes"]:
+        model_sources.append("scene_interband_net.py")
     for name in model_sources:
         if previous["source_hashes"][name] != expected["source_hashes"][name]:
             raise ValueError("Resume changes model/loss source")
@@ -100,7 +102,10 @@ def main():
     parser.add_argument("--head", choices=("linear", "mlp12"), default="linear")
     parser.add_argument("--global-core", choices=("gru", "fly", "shuffled"), default="gru")
     parser.add_argument("--graph", type=Path)
+    parser.add_argument("--interband", action="store_true", help="One within-frame bidirectional frequency GRU12 on the MLP12 anchor")
     a = parser.parse_args()
+    if a.interband and (a.head != "mlp12" or a.global_core != "gru"):
+        raise ValueError("Interband ablation requires the MLP12/GRU anchor")
     if a.global_core != "gru" and (a.head != "mlp12" or a.graph is None):
         raise ValueError("Reservoir trial requires mlp12 head and explicit graph")
     if a.out.exists() or a.steps<1 or a.threads<1:
@@ -147,6 +152,9 @@ def main():
         if a.global_core != "gru":
             from scene_fly_net import FlySceneNet
             net = FlySceneNet(config, a.graph, a.global_core)
+        elif a.interband:
+            from scene_interband_net import InterbandSceneNet
+            net = InterbandSceneNet(config)
         elif a.head == "mlp12":
             from scene_joint_head_net import JointSceneHeadNet
             net = JointSceneHeadNet(config)
@@ -180,6 +188,11 @@ def main():
                             initialization="fresh same-seed weights; shared encoder identical to fresh linear anchor; new head initialization",
                             extra_milestone_checkpoint=2048)
         protocol["global_core"] = a.global_core
+        if a.interband:
+            protocol['source_hashes']['scene_interband_net.py'] = sha(Path(__file__).with_name('scene_interband_net.py'))
+            protocol.update(interband=True,
+                            intervention='add one within-frame bidirectional frequency GRU12 after independent temporal band GRU; same MLP12 head, global GRU, crop and learning recipe',
+                            initialization='fresh same-seed weights; all anchor weights identical; new residual frequency branch')
         if a.global_core != "gru":
             protocol["source_hashes"]["scene_fly_net.py"] = sha(Path(__file__).with_name("scene_fly_net.py"))
             protocol.update(intervention="replace global GRU64 with fixed signed leaky reservoir; "

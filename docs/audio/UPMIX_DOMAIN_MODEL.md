@@ -1,23 +1,27 @@
 # Upmix domain model and qualification map
 
-_Documentation snapshot, 2026-10-01. Runtime boundaries, experimental evidence and release decisions for CarPlay stereo to 5.1._
+_Documentation snapshot, 2026-10-04. Runtime boundaries, experimental evidence and release decisions for CarPlay stereo to 5.1._
+
+<!-- SCENE_DOMAIN_STATUS_START -->
+**October4 research update:** The owner resumed NAS CPU joint front/centre/rear research after the September30 source-model study closed. [MLP12](UPMIX_JOINT_SCENE_MLP12_HEAD_2026-10-03.md) improves fixed-crop reconstruction but fails the strict rear fitting gate. The [FlyWire reduction](UPMIX_FLYWIRE_TOPOLOGY_SCREEN_2026-10-04.md) is closed. A [target-informed output witness](UPMIX_SCENE_OUTPUT_REACHABILITY_2026-10-04.md) proves near-exact reconstruction is representable on this crop. The completed [interband8192 trial](UPMIX_SCENE_INTERBAND_CONTEXT_2026-10-04.md) fails its matched comparison and strict fitting gates, so that variant is closed and MLP12 retained. Explicit16ms past encoded-frame memory is an unrun next hypothesis. These are short TRAIN diagnostics, with no new full40/device/live-CarPlay qualification. No follow-up efficacy run is queued; earlier running/paused entries are historical.
+<!-- SCENE_DOMAIN_STATUS_END -->
 
 ## 🧭 Domain boundaries and current state
 
 | Area | Responsibility | Current evidence |
 | --- | --- | --- |
 | Track A | Deployed hook, three-model routing/protection, int8 implementation and unit integration | q6d + V11 guard + v21a mask; [phase 1 car report](UPMIX_MASK_PHASE1_REPORT_2026-09-27.md), [matched40 host baseline](UPMIX_TRACKA_MATCHED40_2026-09-30.md) |
-| Track B | Causal eligible-audio extraction, isolated one-network runtime and controlled experiments | Spectral decoder24 C float/int8 arithmetic verified; completed spectral40k fails joint acoustic promotion; [architecture ledger](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30.md) |
+| Track B | Eligible extraction and joint authored front/centre/rear research, isolated from deployment | September30 spectral40k fails acoustic promotion; October3–4 joint TRAIN diagnostics test inference/representation, not deployment |
 | Reference models | Offline extraction target and feasibility comparison | Noncausal pretrained BSRNN SIMO passes its observed offline gates; [real-C reference check](UPMIX_BSRNN_REAL_C_CHECK_2026-09-29.md); no device deployment |
 | Qualification | Stable-gain source attribution, transitions, independent generalization, device timing and owner listening | Original full40 complete; genuinely untouched20, loaded-device and blind live CarPlay acceptance remain open |
 | J525 amplifier | Render supplied PCM6 across the cabin speakers | [Virtual Cabin and amp RE](VIRTUAL_CABIN_AND_AMP_RE.md); cabin behavior cannot be inferred from host arithmetic alone |
 
-Track B is paused at the owner's request. The final PC snapshot is dated **2026-10-01 03:28 UTC**: the existing study finished and released its lease; no next efficacy run is queued. This page is a documentation snapshot, not a live queue monitor. See the [session wrap](UPMIX_SESSION_WRAP_2026-09-30.md) and [complete attempt chronicle](UPMIX_SEPARATOR_CHRONICLE_2026-09-25_TO_2026-09-30.md).
+The September30 PC source study ended at **2026-10-01 03:28 UTC**, released its lease and was paused by the owner. That result remains archived in the [session wrap](UPMIX_SESSION_WRAP_2026-09-30.md) and [complete attempt chronicle](UPMIX_SEPARATOR_CHRONICLE_2026-09-25_TO_2026-09-30.md). Later NAS authorization resumes a separate joint-scene recipe. This page is a documentation snapshot, not a live queue monitor.
 
 ```mermaid
 flowchart TB
     accTitle: Upmix runtime and research boundaries
-    accDescr: Live CarPlay uses Track A and the cabin amplifier. Track B and the noncausal reference feed offline evaluation; the failed candidate has no deployed connection to the car.+
+    accDescr: Live CarPlay uses Track A and the cabin amplifier. The archived Track B spectral candidate feeds offline evaluation. Separate joint-scene NAS experiments feed TRAIN fitting diagnostics; neither research branch connects to the car.
     phone_stereo["Phone stereo over live CarPlay"] --> track_a["Track A hook<br/>q6d + V11 + v21a"]
     track_a --> car_pcm["PCM6 to J525"] --> cabin["Owner hears cabin speakers"]
     evaluation_mix["Frozen evaluation stereo"] --> track_b["Track B single spectral network<br/>isolated causal C chain"]
@@ -25,6 +29,10 @@ flowchart TB
     track_b --> real_c_harness["Real C harness<br/>source and transition attribution"]
     reference_model --> real_c_harness
     real_c_harness --> final_verdict["spectral40k: joint gates fail<br/>no deployment promotion"]
+    authored_target["Authored five-channel TRAIN target"] --> known_downmix["Known same-target stereo downmix"]
+    known_downmix --> joint_scene["Joint front/centre/rear research"]
+    authored_target --> fitting_diagnostic["Fixed TRAIN reconstruction<br/>and dry conservation"]
+    joint_scene --> fitting_diagnostic
 ```
 
 ## 📦 Evidence entities
@@ -89,7 +97,7 @@ erDiagram
 | Archive identity | [Final inventory](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_broad_final_inventory.json), [aggregation checks](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_broad_archive_checks.json) | Hashes preserve the original results; recomputation checks their summaries |
 | Car evidence | [Listening protocol](UPMIX_CARPLAY_LISTENING_PROTOCOL.md), [deploy log](UPMIX_LISTENING_AND_DEPLOY_LOG.md) | Only live CarPlay and the owner can establish the requested cabin verdict |
 
-## ⚙️ One-network research architecture
+## ⚙️ September30 source architecture, archived
 
 ```mermaid
 flowchart TB
@@ -116,7 +124,7 @@ The reserved upper64 variant has 23 Python structural checks and 129.327 M selec
 ```mermaid
 stateDiagram-v2
     accTitle: Upmix candidate qualification lifecycle
-    accDescr: A frozen experiment proceeds through terminal and acoustic checks before independent, device and owner qualification. Any failed acoustic decision is archived; the current spectral candidate stops there.
+    accDescr: A frozen experiment proceeds through terminal and acoustic checks before independent, device and owner qualification. Any failed acoustic decision is archived; the September30 spectral candidate stopped there.
 
     state "Freeze paired experiment" as frozen_pair
     state "Audit fixed terminal" as terminal_audit
@@ -143,7 +151,7 @@ stateDiagram-v2
     archived_failure --> [*]
 
     note right of archived_failure
-        Current spectral40k candidate:
+        September30 spectral40k candidate:
         bass, movement and entry gates fail.
         Owner-requested research pause.
     end note
@@ -153,4 +161,4 @@ At nominal .40, the spectral candidate has G/K/P/S rear shares .225/.217/.219/.1
 
 Required release conditions remain all instrument/protection/stability gates on full40 **and genuinely untouched20**, causal execution, ≤150 M MAC/s int8 measured on the device, ≤85 ms extra loaded-chain latency, and the owner's level-matched blind live CarPlay verdict. Previously inspected reserved20 songs cannot satisfy the untouched requirement.
 
-If research is explicitly resumed, at most the reserved matched upper64-versus24 hypothesis may follow the measured treble defect. It must retain bass, movement and entry gates. A further joint failure ends that finite search and leads to delivery of the best measured candidate and evidence of its limits. The current documentation update launches no experiment.
+The September30 source-model stopping plan reserved at most one matched upper64-versus24 hypothesis after explicit resumption, retaining bass, movement and entry gates. A further joint failure was to close that finite source search. The owner subsequently authorized the separate October3–4 joint-scene fitting experiments linked above; that does not promote the archived spectral candidate or remove any release gate. Each new mechanism uses a bounded trial and records failed attempts rather than silently extending architecture enumeration.

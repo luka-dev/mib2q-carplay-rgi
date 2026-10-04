@@ -4,6 +4,12 @@
 
 ---
 
+## 🧭 October 4 output reachability and interband context
+
+<!-- INTERBAND_HISTORY_START -->
+The owner-authorized [output oracle](UPMIX_SCENE_OUTPUT_REACHABILITY_2026-10-04.md) reconstructs the exact fixed TRAIN target through the stock bounded head/projection: rear NMSE .000265/.000317, all five channels accurate, dry PCM relative null RMS5.85e-7. Three local/NAS contracts and retained coefficient/source hashes passed. No refinement or network training was needed. The child completed despite a subsequent launcher metadata-hashing error on `__pycache__`; metadata was recovered with explicit timing provenance, without rerunning the child. This proves representation reachability on one crop, not causal inference/generalization. The [interband trial](UPMIX_SCENE_INTERBAND_CONTEXT_2026-10-04.md) adds one within-frame bidirectional frequency GRU12 with unchanged temporal/global state, MLP12 head, loss, crop and shared initialization. Dense neural cost111.11→122.06 M MAC/s. The first preflight root failed before checks/training because the historical anchor lacks a later `global_core` field; the corrected architecture/hash check used a fresh root and preserved the failed attempt. Four NAS contracts, a20-update real-crop smoke and8192 fresh updates completed. Terminal rear NMSE .289843/.311788 versus anchor .284776/.314774 is1.78% worse/.95% better; FL/C regress8.31%/8.79% and FR2.91%. The predeclared both-rear5% improvement/front-centre5% regression limit and strict≤.10 fitting gate both fail; conservation passes. This specific branch stops without a second efficacy seed or longer continuation. MLP12 remains the control. The owner's current-frame plus explicit past-frame proposal is recorded for a separate16ms history trial (three past256-sample-hop encoded frames), not future lookahead or a change to QSA buffering. No temporal-buffer trial was launched. No Track A, multi-song/device or car claim follows.
+<!-- INTERBAND_HISTORY_END -->
+
 ## 🧬 October 4 FlyWire topology screen
 
 <!-- FLY_HISTORY_START -->
