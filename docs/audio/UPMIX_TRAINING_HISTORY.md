@@ -1,8 +1,14 @@
 # Upmix Training History
 
-*Iteration ledger for the stereo→5.1 upmix model, 2026-09-04 → 2026-10-03: original controller/source generations and linked separator/scene continuation, including successes, rejected mechanisms, interrupted attempts and unexecuted plans.*
+*Iteration ledger for the stereo→5.1 upmix model, 2026-09-04 → 2026-10-04: original controller/source generations and linked separator/scene continuation, including successes, rejected mechanisms, interrupted attempts and unexecuted plans.*
 
 ---
+
+## 🧬 October 4 FlyWire topology screen
+
+<!-- FLY_HISTORY_START -->
+The owner authorized [a finite connectome topology screen](UPMIX_FLYWIRE_TOPOLOGY_SCREEN_2026-10-04.md). Three graph-selection drafts were inspected without efficacy training; the final auditory-seeded AMMC_R subgraph contains 64 intrinsic nodes and 340 directed edges. A null preserves directed degrees, source signs and recipient weight multisets; 76% of edges change. The continuous-state reservoir replaces only global GRU64, keeping the MLP12 head and bit-identical shared initialization. Four contracts and two 20-update real-crop smokes passed on NAS. Both serialized 4096-update runs completed: FlyWire rear NMSE .410671/.442171, rewired .402237/.430779, existing GRU .359372/.402050 at the same count. FlyWire is 2.10%/2.64% worse than its null and 14.27%/9.98% worse than GRU; both predeclared comparison rules and the original≤.10 fitting gate fail. All front/centre errors are also worse than GRU. Dry conservation passes, all 8192 combined gradients are finite/unclipped, and source/checkpoint/protocol/optimizer bindings are verified. Last checkpoints are best; no asymptotic floor is established. The tested biological wiring shows no advantage on this crop/seed. Whole-brain emulation, named-instrument extraction, multi-song/generalization, device and cabin quality remain untested. The lease is released, no tenant remains and no continuation is queued. This bounded negative result rejects this reduction at4096, not every biological prior.
+<!-- FLY_HISTORY_END -->
 
 ## 🧭 October 3 joint scene continuation
 

@@ -35,6 +35,8 @@ def restore_checkpoint(net, optimizer, run, expected, total_steps):
     model_sources = ["scene_joint_net.py", "train_scene_joint_nas.py"]
     if "scene_joint_head_net.py" in expected["source_hashes"]:
         model_sources.append("scene_joint_head_net.py")
+    if "scene_fly_net.py" in expected["source_hashes"]:
+        model_sources.append("scene_fly_net.py")
     for name in model_sources:
         if previous["source_hashes"][name] != expected["source_hashes"][name]:
             raise ValueError("Resume changes model/loss source")
@@ -96,7 +98,11 @@ def main():
     parser.add_argument("--threads", type=int, default=3)
     parser.add_argument("--resume-run", type=Path, help="Completed fixed-crop run; --steps is total target step")
     parser.add_argument("--head", choices=("linear", "mlp12"), default="linear")
+    parser.add_argument("--global-core", choices=("gru", "fly", "shuffled"), default="gru")
+    parser.add_argument("--graph", type=Path)
     a = parser.parse_args()
+    if a.global_core != "gru" and (a.head != "mlp12" or a.graph is None):
+        raise ValueError("Reservoir trial requires mlp12 head and explicit graph")
     if a.out.exists() or a.steps<1 or a.threads<1:
         raise ValueError("New output root and positive horizon/threads required")
     a.out.mkdir(parents=True)
@@ -138,7 +144,10 @@ def main():
         torch.set_num_threads(a.threads)
         torch.set_num_interop_threads(1)
         torch.manual_seed(parent["seed"])
-        if a.head == "mlp12":
+        if a.global_core != "gru":
+            from scene_fly_net import FlySceneNet
+            net = FlySceneNet(config, a.graph, a.global_core)
+        elif a.head == "mlp12":
             from scene_joint_head_net import JointSceneHeadNet
             net = JointSceneHeadNet(config)
         else:
@@ -170,6 +179,14 @@ def main():
             protocol.update(intervention="replace affine operator head with 20->12->20 SiLU MLP; same fixed crop and learning recipe",
                             initialization="fresh same-seed weights; shared encoder identical to fresh linear anchor; new head initialization",
                             extra_milestone_checkpoint=2048)
+        protocol["global_core"] = a.global_core
+        if a.global_core != "gru":
+            protocol["source_hashes"]["scene_fly_net.py"] = sha(Path(__file__).with_name("scene_fly_net.py"))
+            protocol.update(intervention="replace global GRU64 with fixed signed leaky reservoir; "
+                            +a.global_core+" topology; same MLP12 head and fixed learning recipe",
+                            graph_sha256=sha(a.graph),
+                            initialization="fresh same-seed weights; unchanged body and MLP12 head "
+                            "identical to fresh GRU anchor; reservoir input/leak identical across null pair")
         optimizer = torch.optim.AdamW(net.parameters(), lr=parent["lr"], weight_decay=1e-4)
         start_step = 0
         if a.resume_run:
