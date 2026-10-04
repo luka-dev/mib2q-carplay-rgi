@@ -19,6 +19,46 @@ from scene_joint_net import Config, JointSceneNet, analysis, synthesize
 from train_scene_joint_nas import loss, now, sha, write
 
 
+def restore_checkpoint(net, optimizer, run, expected, total_steps):
+    """Restore a hash-bound completed fixed-crop run with an identical recipe."""
+    previous = json.loads((run/"protocol.json").read_text())
+    report = json.loads((run/"report.json").read_text())
+    if previous["schema"] not in ("joint-scene-fixed-train-v1", "joint-scene-fixed-train-v2") or not report["complete"]:
+        raise ValueError("Completed fixed-crop predecessor required")
+    frozen = ("parent_protocol_sha256", "catalog_sha256", "song", "partition", "audio_sha256",
+              "common_gain", "start_sample", "length_samples", "warm_frames", "score_frames", "seed",
+              "normalization_power", "state_reset_each_update", "optimizer", "lr", "weight_decay",
+              "gradient_clip", "loss", "specification", "pass_rule", "effect_gain")
+    for key in frozen:
+        if previous[key] != expected[key]:
+            raise ValueError("Resume changes frozen field: "+key)
+    for name in ("scene_joint_net.py", "train_scene_joint_nas.py"):
+        if previous["source_hashes"][name] != expected["source_hashes"][name]:
+            raise ValueError("Resume changes model/loss source")
+    checkpoint = run/"terminal.pt"
+    binding = sha(checkpoint)
+    if binding != report["terminal_checkpoint_sha256"]:
+        raise ValueError("Resume checkpoint hash mismatch")
+    saved = torch.load(checkpoint, map_location="cpu", weights_only=True)
+    step = saved["step"]
+    if (step != report["terminal_step"] or step != previous["steps"] or
+            not 0 < step < total_steps or saved["config"] != asdict(net.config) or
+            saved["protocol_sha256"] != sha(run/"protocol.json")):
+        raise ValueError("Resume checkpoint protocol/config/step mismatch")
+    net.load_state_dict(saved["model"], strict=True)
+    optimizer.load_state_dict(saved["optimizer"])
+    counters = sorted({int(state["step"]) for state in optimizer.state.values()})
+    if len(optimizer.state) != len(list(net.parameters())) or counters != [step]:
+        raise ValueError("Incomplete or inconsistent optimizer counters")
+    for group in optimizer.param_groups:
+        if group["lr"] != expected["lr"] or group["weight_decay"] != expected["weight_decay"]:
+            raise ValueError("Resume optimizer changes learning rate/decay")
+    return dict(start_step=step, checkpoint_sha256=binding,
+                protocol_sha256=sha(run/"protocol.json"), optimizer_counters=counters,
+                previous_terminal=report["terminal"]["metrics"],
+                predecessor=str(run), randomness="No stochastic operations after initialization in this fixed-crop recipe")
+
+
 def measure(net, x, y, denominator, warm):
     net.eval()
     with torch.inference_mode():
@@ -51,6 +91,7 @@ def main():
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--steps", type=int, default=2048)
     parser.add_argument("--threads", type=int, default=3)
+    parser.add_argument("--resume-run", type=Path, help="Completed fixed-crop run; --steps is total target step")
     a = parser.parse_args()
     if a.out.exists() or a.steps<1 or a.threads<1:
         raise ValueError("New output root and positive horizon/threads required")
@@ -100,7 +141,7 @@ def main():
         input_power = x[:, warm:].abs().square().sum()
         if (powers[3:]<=1e-8).any() or (powers[3:]/input_power.clamp_min(1e-8)<1e-3).any():
             raise ValueError("Preselected crop has insufficient rear target energy")
-        protocol = dict(schema="joint-scene-fixed-train-v1", started_utc=now(), pid=os.getpid(),
+        protocol = dict(schema="joint-scene-fixed-train-v2", started_utc=now(), pid=os.getpid(),
                         parent_protocol_sha256=sha(a.parent/"protocol.json"),
                         catalog_sha256=sha(a.catalog), song=row["id"], partition="train",
                         audio_sha256=row["sha256"], common_gain=row["common_gain"],
@@ -115,13 +156,30 @@ def main():
                         dev_audio_opened=False, heldout_opened=False, effect_gain=0.,
                         scope="same-crop memorization only; not generalization, source safety or product qualification",
                         source_hashes={p.name:sha(p) for p in [Path(__file__), Path(__file__).with_name("scene_joint_net.py"), Path(__file__).with_name("train_scene_joint_nas.py")]})
-        write(a.out/"protocol.json", protocol)
-        initial = measure(net, x, y, denominator, warm)
-        write(a.out/"initial.json", initial)
         optimizer = torch.optim.AdamW(net.parameters(), lr=parent["lr"], weight_decay=1e-4)
+        start_step = 0
+        if a.resume_run:
+            resume = restore_checkpoint(net, optimizer, a.resume_run, protocol, a.steps)
+            start_step = resume["start_step"]
+            protocol.update(initialization="restored predecessor terminal model and AdamW state",
+                            intervention="additional unchanged fixed-crop updates; total horizon extended",
+                            resume=resume)
+        protocol["start_step"] = start_step
+        initial = measure(net, x, y, denominator, warm)
+        if a.resume_run:
+            differences = [abs(left-right) for key in ("nmse", "energy_ratio", "cosine", "channel_loss", "target_power")
+                           for left, right in zip(initial[key], resume["previous_terminal"][key])]
+            if max(differences)>1e-6 or abs(initial["loss"]-resume["previous_terminal"]["loss"])>1e-6:
+                raise ValueError("Restored initial metrics differ from predecessor terminal")
+            protocol["resume"]["max_replayed_metric_difference"] = max(differences)
+        write(a.out/"protocol.json", protocol)
+        write(a.out/"initial.json", initial)
         history, monitors = [], []
-        best = dict(step=0, metrics=initial)
-        for step in range(1, a.steps+1):
+        best = dict(step=start_step, metrics=initial)
+        torch.save(dict(model=net.state_dict(), config=asdict(config), step=start_step,
+                        protocol_sha256=sha(a.out/"protocol.json")), a.out/"best.pt")
+        write(a.out/"best.json", dict(step=start_step, sha256=sha(a.out/"best.pt"), metrics=initial))
+        for step in range(start_step+1, a.steps+1):
             if (a.out/"STOP").exists():
                 raise RuntimeError("Owner stop marker observed; retain outputs")
             pred, _ = net(x)
@@ -135,8 +193,9 @@ def main():
                 raise RuntimeError("Nonfinite gradient")
             optimizer.step()
             history.append(dict(step=step, loss=objective.item(), gradient=float(gradient)))
-            if step==1 or step%32==0:
+            if step==start_step+1 or step%32==0:
                 status = dict(state="training", pid=os.getpid(), step=step, steps=a.steps,
+                              start_step=start_step, updates_this_run=step-start_step,
                               updated_utc=now(), elapsed_seconds=time.monotonic()-started, last_loss=objective.item())
                 write(a.out/"status.json", status)
                 print(json.dumps(status), flush=True)
@@ -157,7 +216,8 @@ def main():
         terminal = monitors[-1]
         def passed(metrics):
             return metrics["worst_rear_nmse"]<=.10 and metrics["dry_pcm_null_relative_rms"]<=1e-5
-        report = dict(complete=True, terminal_step=a.steps, elapsed_seconds=time.monotonic()-started,
+        report = dict(complete=True, start_step=start_step, updates_this_run=a.steps-start_step,
+                      terminal_step=a.steps, elapsed_seconds=time.monotonic()-started,
                       initial=initial, terminal=terminal, best=best, monitor_history=monitors,
                       optimizer_history=history, terminal_pass=passed(terminal["metrics"]),
                       best_pass=passed(best["metrics"]), terminal_checkpoint_sha256=sha(a.out/"terminal.pt"),

@@ -118,4 +118,6 @@ Both rear NMSE values declined at every recorded128-update checkpoint. From1024 
 
 The next narrow choices are exact target-informed reachability under this graph's coefficient limits/projection, or a separately recorded continuation of this fixed-crop checkpoint and optimizer to a bounded longer horizon. The still-decreasing curve provides evidence for the latter; it would measure convergence, not establish generalization. Neither follow-up has been queued. Multisong/DEV fitting and a new encoder should follow stronger same-crop evidence, not replace it.
 
+**Subsequent owner instruction:** the owner authorized [continuation to8192 total steps](UPMIX_JOINT_SCENE_8192_CONTINUATION_2026-10-03.md). That isolated run restores the2048 model and optimizer without altering this completed first-stage result. The exact current-head reachability oracle remains unexecuted.
+
 Generalization, protected voice/bass/drums, source-attributed entries, swinging, full40/untouched20, independently mastered stereo transfer, complete native int8 device cost/latency and owner live CarPlay preference remain unevaluated.
