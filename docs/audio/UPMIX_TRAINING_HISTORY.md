@@ -10,6 +10,8 @@ The owner resumed a finite NAS CPU experiment after the [saved P1 report recheck
 
 The4096-update run completed: TRAIN rear NMSE .970831 and inspected DEV1.135732 fail the .50/.80 fitting gates. Front medians improved and dry PCM conservation passed; all three local and NAS contract tests passed. Rear recovery failed even on TRAIN, so no longer identical run was queued. This is a bounded negative result, not proof that authored joint-scene learning is impossible.
 
+The owner then selected [one fixed TRAIN excerpt fitting](UPMIX_JOINT_SCENE_FIXED_FIT_2026-10-03.md), retaining the network/loss/normalization and original training geometry. After 2048 updates, Ls/Rs NMSE .448540/.469496 and cosine .742676/.728378 demonstrate partial learning, but fail the predeclared .10 fitting gate. Front/centre errors decreased and dry conservation passed. Both rear curves were still declining and the last checkpoint was best; no hard architecture ceiling or generalization success is established. No DEV/heldout audio was decoded in this diagnostic.
+
 ## 📋 The arc in one screen
 
 **Historical arc through2026-09-18:** Fifteen-plus model generations ran in two weeks. The shipped result ([HSSR Model](HSSR_MODEL.md)) is the *first* design, the 2×GRU-160 routing controller, retrained once on real MoisesDB stems (q6d) and paired with its predecessor V11 as a vocal guard. Every attempt to replace it with a waveform separator (V16 → G → H1 → P1 → Q2) failed on the same axis: it could not keep the lead out of the rear while still sending useful backing material there. The 2026-09-17 independent audit closed the separation line and redirected to the genre-agnostic second scene.

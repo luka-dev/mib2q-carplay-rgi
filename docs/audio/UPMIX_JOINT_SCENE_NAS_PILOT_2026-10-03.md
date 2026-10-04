@@ -145,4 +145,4 @@ The terminal result fails both rear fitting gates. Retain this run and diagnose 
 2. Attempt fitting one fixed TRAIN excerpt with the unchanged model/loss. Failure would focus investigation on the estimator, output, gradients and optimization; success only proves memorization of that excerpt.
 3. Restore multiple TRAIN recordings under matched conditions, then inspected DEV. Separate coherent rear recovery from diffuse ambience statistics if their learning behaviour differs.
 
-These are proposed diagnostics, not queued training jobs. No architecture or dataset replacement is justified by the failed pilot alone.
+At the time this sequence was written, these were proposed diagnostics, not queued training jobs. The owner subsequently selected step2: [one fixed TRAIN excerpt fitting](UPMIX_JOINT_SCENE_FIXED_FIT_2026-10-03.md) records that separate bounded run. Step1 reachability and step3 multisong follow-up remain unexecuted. No architecture or dataset replacement is justified by the failed pilot alone.
