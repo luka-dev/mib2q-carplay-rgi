@@ -137,6 +137,8 @@ Learning continues slowly near the end; a hard asymptotic architecture ceiling h
 
 For the next architecture comparison, first test the hidden operator head under the same fixed-crop recipe at matched2048/8192 counts. Then test interband communication independently if needed. Keep front/centre errors and conservation in the comparison; do not promote a rear gain that sacrifices them. Dataset changes and multilayer changes remain separate experiments. These comparisons are proposals, not queued runs.
 
+**Subsequent owner selection:** the owner chose alternative1. The [MLP12 head comparison](UPMIX_JOINT_SCENE_MLP12_HEAD_2026-10-03.md) records its separately launched fresh run. The control measured above remains unchanged; the other architecture proposals remain unexecuted.
+
 ## 🧠 Layers and connections worth comparing
 
 Inspection of the unchanged model gives a concrete distribution, not a proof of the cause of failure:

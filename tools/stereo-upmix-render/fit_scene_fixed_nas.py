@@ -32,7 +32,10 @@ def restore_checkpoint(net, optimizer, run, expected, total_steps):
     for key in frozen:
         if previous[key] != expected[key]:
             raise ValueError("Resume changes frozen field: "+key)
-    for name in ("scene_joint_net.py", "train_scene_joint_nas.py"):
+    model_sources = ["scene_joint_net.py", "train_scene_joint_nas.py"]
+    if "scene_joint_head_net.py" in expected["source_hashes"]:
+        model_sources.append("scene_joint_head_net.py")
+    for name in model_sources:
         if previous["source_hashes"][name] != expected["source_hashes"][name]:
             raise ValueError("Resume changes model/loss source")
     checkpoint = run/"terminal.pt"
@@ -92,6 +95,7 @@ def main():
     parser.add_argument("--steps", type=int, default=2048)
     parser.add_argument("--threads", type=int, default=3)
     parser.add_argument("--resume-run", type=Path, help="Completed fixed-crop run; --steps is total target step")
+    parser.add_argument("--head", choices=("linear", "mlp12"), default="linear")
     a = parser.parse_args()
     if a.out.exists() or a.steps<1 or a.threads<1:
         raise ValueError("New output root and positive horizon/threads required")
@@ -134,7 +138,11 @@ def main():
         torch.set_num_threads(a.threads)
         torch.set_num_interop_threads(1)
         torch.manual_seed(parent["seed"])
-        net = JointSceneNet(config)
+        if a.head == "mlp12":
+            from scene_joint_head_net import JointSceneHeadNet
+            net = JointSceneHeadNet(config)
+        else:
+            net = JointSceneNet(config)
         x, y = analysis(mixture), analysis(target)
         denominator = torch.tensor(parent["normalization_power"], dtype=torch.float32)
         powers = y[:, warm:].abs().square().sum((0, 1, 2))
@@ -156,6 +164,12 @@ def main():
                         dev_audio_opened=False, heldout_opened=False, effect_gain=0.,
                         scope="same-crop memorization only; not generalization, source safety or product qualification",
                         source_hashes={p.name:sha(p) for p in [Path(__file__), Path(__file__).with_name("scene_joint_net.py"), Path(__file__).with_name("train_scene_joint_nas.py")]})
+        protocol["head_variant"] = a.head
+        if a.head == "mlp12":
+            protocol["source_hashes"]["scene_joint_head_net.py"] = sha(Path(__file__).with_name("scene_joint_head_net.py"))
+            protocol.update(intervention="replace affine operator head with 20->12->20 SiLU MLP; same fixed crop and learning recipe",
+                            initialization="fresh same-seed weights; shared encoder identical to fresh linear anchor; new head initialization",
+                            extra_milestone_checkpoint=2048)
         optimizer = torch.optim.AdamW(net.parameters(), lr=parent["lr"], weight_decay=1e-4)
         start_step = 0
         if a.resume_run:
@@ -210,6 +224,12 @@ def main():
                                     protocol_sha256=sha(a.out/"protocol.json")), best_path)
                     write(a.out/"best.json", dict(step=step, sha256=sha(best_path), metrics=best["metrics"]))
                 write(a.out/"latest.json", current)
+                if a.head == "mlp12" and step == 2048:
+                    milestone = a.out/"paired02048.pt"
+                    torch.save(dict(model=net.state_dict(), optimizer=optimizer.state_dict(),
+                                    config=asdict(config), head_variant=a.head, step=step,
+                                    protocol_sha256=sha(a.out/"protocol.json")), milestone)
+                    write(a.out/"paired02048.json", dict(step=step, sha256=sha(milestone), metrics=current["metrics"]))
                 print(json.dumps(current), flush=True)
         torch.save(dict(model=net.state_dict(), optimizer=optimizer.state_dict(), config=asdict(config),
                         step=a.steps, protocol_sha256=sha(a.out/"protocol.json")), a.out/"terminal.pt")
