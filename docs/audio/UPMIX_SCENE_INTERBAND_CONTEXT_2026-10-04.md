@@ -183,6 +183,6 @@ The first sketch used four past frames (21.33ms). The owner then proposed 16 ms,
 
 The shipped [realtime rail](STEREO_TO_5_1_UPMIX.md) has a 768-sample/16ms QSA output period. That cadence is distinct from the research model's256-sample/5.33ms neural hop, history depth and future lookahead. Past-frame caching does not require waiting 16 ms for future data; using future frames would add latency. The output period does not bound allowable history or imply 16 ms of free compute.
 
-This is a proposed experiment only. No temporal-buffer code, training or deployment was launched by that question. The active interband trial keeps its frozen recipe and horizon. A follow-up should compare against the unchanged MLP12 anchor, changing only explicit temporal memory, rather than adding it silently to the running frequency-context model.
+At the time of that question the history trial was unrun; the interband study retained its frozen recipe. After its completion, the owner continued [the separate encoded-history16 trial](UPMIX_SCENE_ENCODED_HISTORY_2026-10-04.md), comparing against unchanged MLP12 and changing only explicit temporal memory. No history branch was mixed into this interband run.
 
 [^1]: Luo and Yu. *Music Source Separation with Band-split RNN*. https://arxiv.org/abs/2209.15174

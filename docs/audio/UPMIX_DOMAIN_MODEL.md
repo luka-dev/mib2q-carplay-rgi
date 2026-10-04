@@ -1,5 +1,9 @@
 # Upmix domain model and qualification map
 
+<!-- HISTORY16_DOMAIN_START -->
+**Latest October4 decision:** [Explicit encoded history16](UPMIX_SCENE_ENCODED_HISTORY_2026-10-04.md) completed8192 and failed joint comparison/strict fitting, with worse rear and front/centre than MLP12. Retain MLP12; NAS is idle and no efficacy extension is queued. A read-only retained-head gradient audit rejects simple local front domination/conflict. A privileged trained-head/context feasibility diagnostic is proposed but unrun. These remain one-crop TRAIN mechanisms, without new full40/device/cabin qualification.
+<!-- HISTORY16_DOMAIN_END -->
+
 _Documentation snapshot, 2026-10-04. Runtime boundaries, experimental evidence and release decisions for CarPlay stereo to 5.1._
 
 <!-- SCENE_DOMAIN_STATUS_START -->

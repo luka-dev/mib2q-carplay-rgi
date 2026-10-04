@@ -39,6 +39,8 @@ def restore_checkpoint(net, optimizer, run, expected, total_steps):
         model_sources.append("scene_fly_net.py")
     if "scene_interband_net.py" in expected["source_hashes"]:
         model_sources.append("scene_interband_net.py")
+    if "scene_history_net.py" in expected["source_hashes"]:
+        model_sources.append("scene_history_net.py")
     for name in model_sources:
         if previous["source_hashes"][name] != expected["source_hashes"][name]:
             raise ValueError("Resume changes model/loss source")
@@ -103,7 +105,10 @@ def main():
     parser.add_argument("--global-core", choices=("gru", "fly", "shuffled"), default="gru")
     parser.add_argument("--graph", type=Path)
     parser.add_argument("--interband", action="store_true", help="One within-frame bidirectional frequency GRU12 on the MLP12 anchor")
+    parser.add_argument("--history16", action="store_true", help="Current and three past encoded frames alongside band GRU")
     a = parser.parse_args()
+    if a.history16 and (a.head != "mlp12" or a.global_core != "gru" or a.interband):
+        raise ValueError("History16 requires the MLP12/GRU anchor without interband changes")
     if a.interband and (a.head != "mlp12" or a.global_core != "gru"):
         raise ValueError("Interband ablation requires the MLP12/GRU anchor")
     if a.global_core != "gru" and (a.head != "mlp12" or a.graph is None):
@@ -152,6 +157,9 @@ def main():
         if a.global_core != "gru":
             from scene_fly_net import FlySceneNet
             net = FlySceneNet(config, a.graph, a.global_core)
+        elif a.history16:
+            from scene_history_net import HistorySceneNet
+            net = HistorySceneNet(config)
         elif a.interband:
             from scene_interband_net import InterbandSceneNet
             net = InterbandSceneNet(config)
@@ -188,6 +196,11 @@ def main():
                             initialization="fresh same-seed weights; shared encoder identical to fresh linear anchor; new head initialization",
                             extra_milestone_checkpoint=2048)
         protocol["global_core"] = a.global_core
+        if a.history16:
+            protocol['source_hashes']['scene_history_net.py'] = sha(Path(__file__).with_name('scene_history_net.py'))
+            protocol.update(history16=True,
+                            intervention='add depthwise temporal kernel4 and pointwise residual on current and three past pooled encoded frames BEFORE unchanged band GRU; same MLP12/global GRU/crop/loss/optimizer',
+                            initialization='fresh same-seed weights; all anchor weights identical; new causal encoded-history branch')
         if a.interband:
             protocol['source_hashes']['scene_interband_net.py'] = sha(Path(__file__).with_name('scene_interband_net.py'))
             protocol.update(interband=True,
