@@ -24,6 +24,12 @@ There is no software-auth runtime selector or external credential loader. The
 feature is disabled by default and its build script rejects QNX and non-Unix
 targets. OpenSSL is invoked only by the host test provider.
 
+A separate [DiPlay public-release identity fixture](../../wireless/fixtures/diplay_mfi/README.md)
+records the P-256 private key and certificate extracted from the upstream 0.2.16
+APK, with pinned provenance and hashes. Its key consistency was checked locally.
+The provider and QNX daemon do not load this fixture; the automated tests
+described here continue to use freshly generated synthetic identities.
+
 ## 🔐 Test profiles
 
 | Profile | Input to `sign` | Signature bytes | Independent prehash check |

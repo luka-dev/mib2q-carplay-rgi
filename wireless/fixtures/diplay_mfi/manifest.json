@@ -1,0 +1,38 @@
+{
+  "upstream_repository": "https://github.com/shihabal3amri/DiPlay",
+  "release_tag": "v0.2.16",
+  "release_commit": "bac419695ca26b7e67d204a279333ca52132c2cb",
+  "release_url": "https://github.com/shihabal3amri/DiPlay/releases/tag/v0.2.16",
+  "apk": {
+    "name": "DiPlay-0.2.16.apk",
+    "url": "https://github.com/shihabal3amri/DiPlay/releases/download/v0.2.16/DiPlay-0.2.16.apk",
+    "asset_id": 624966410,
+    "bytes": 17261776,
+    "sha256": "3d9e4b5da8457ea722112c48df99f2999c1eb56e02f365c6626c47d7bdbe31fc"
+  },
+  "upstream_notice_url": "https://github.com/shihabal3amri/DiPlay/blob/bac419695ca26b7e67d204a279333ca52132c2cb/docs/THIRD_PARTY_NOTICES.md",
+  "files": {
+    "identity.pk8": {
+      "apk_member": "assets/offline-mfi/identity.pk8",
+      "bytes": 67,
+      "sha256": "bd50eda2d8dd95a8464440f1aebca7068dcab46a2461ecaf826c7f98f5621a75"
+    },
+    "certificate.p7b": {
+      "apk_member": "assets/offline-mfi/certificate.p7b",
+      "bytes": 607,
+      "sha256": "634a93dd6c4338080524025411752597ecb828591839cd062a8292fd7e9e844e"
+    }
+  },
+  "key_format": "PKCS8 DER, EC P-256",
+  "certificate_format": "PKCS7 DER, one EC P-256 accessory certificate",
+  "provenance": "Upstream reports recovery from public Carlinkit C2Air Allwinner V821 firmware; data are not relicensed as DiPlay source code.",
+  "validation": {
+    "key_matches_certificate": true,
+    "sha256_prehashed_signature_verified": true,
+    "raw_signature_bytes": 64,
+    "changed_digest_rejected": true,
+    "changed_signature_rejected": true,
+    "iphone_acceptance_tested_here": false
+  },
+  "runtime_integration": "None; stored fixture only. Synthetic TestSoftwareMfi and QNX MfiChip behavior unchanged."
+}
