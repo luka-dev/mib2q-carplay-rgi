@@ -21,7 +21,7 @@ flowchart TB
   src["source: hook C, Java, renderers"]
   docker["Docker qnx65-armv7-toolchain"]
   build["build/ loose binaries only"]
-  models["models/ HSSR model + guard"]
+  models["models/ scene mask net c"]
   deploy["deploy/ scripts, firmware, PF"]
   assemble["hand-assembled release tree"]
   card["SD mod/carplay/root tree"]

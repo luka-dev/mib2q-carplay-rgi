@@ -56,38 +56,15 @@
  * buffered stream by itself.  The code default is off; deployment policy may
  * opt in explicitly.
  *
- * AUDIO_STEREO_UPMIX: off | on.  ON selects HSSR Universal, or the scene
- * renderer with AUDIO_SCENE=1 (below); OFF is the bypass and always wins.
- * AUDIO_STEREO_SURROUND: rear input gain, 0.0 .. 0.5 (default 0.18).
- * HSSR Universal uses persistent half-plane object routing and a bounded,
- * phase-distinct mid/high fallback so difficult or nearly mono masters retain
- * rear activity instead of collapsing to silence.  Its separated Ls/Rs then
- * receive a fixed +3 dB high shelf with a 4-kHz midpoint before the linked
- * rear limiter; the shelf is not applied to dry L/R, C or LFE.
+ * AUDIO_STEREO_UPMIX: off | on.  ON selects the scene renderer (the
+ * AUDIO_SCENE_* knobs below); OFF is the bypass and always wins.
  * AUDIO_STEREO_LFE: off | assist (code default off). `assist` selects only
- * Cabin-Aware LFE V2: a phase-safe 48-Hz LR4 sub-band, HSSR bass/drum level
- * steering, paired front headroom and a recovered-J525-matrix limiter.
- * AUDIO_HSSR_MODEL: model blob path.  The default is next to the hook; an
- * invalid or missing model leaves stereo upmix safely OFF. */
+ * Cabin-Aware LFE V2: a phase-safe 60-Hz LR4 sub-band, the mask net's
+ * bass/drum level steering, paired front headroom and a recovered-J525-matrix
+ * limiter. */
 #define SPA_AUDIO_STEREO_UPMIX_ENV    "AUDIO_STEREO_UPMIX"
-#define SPA_AUDIO_STEREO_SURROUND_ENV "AUDIO_STEREO_SURROUND"
 #define SPA_AUDIO_STEREO_LFE_ENV      "AUDIO_STEREO_LFE"
-#define SPA_AUDIO_STEREO_FRONT_BASS_ENV "AUDIO_STEREO_FRONT_BASS_DB"
-#define SPA_AUDIO_STEREO_REAR_BODY_ENV "AUDIO_STEREO_REAR_BODY_DB" /* -12..0, default -4 */
-#define SPA_AUDIO_HSSR_VOCAL_GATE_ENV "AUDIO_HSSR_VOCAL_GATE"       /* 0..1, default 0.95, 0 = off */
-#define SPA_AUDIO_STEREO_REAR_AIR_ENV "AUDIO_STEREO_REAR_AIR_DB"      /* -40..0 dB, unset = off */
-#define SPA_AUDIO_STEREO_FRONT_TREBLE_ENV "AUDIO_STEREO_FRONT_TREBLE_DB" /* -12..0 dB, unset = off */
-/* Independent experimental front retention0..1, default0 (existing removal).
- * This does not change the rear synthesis gain or select float rendering. */
-#define SPA_AUDIO_STEREO_FRONT_RETENTION_ENV "AUDIO_STEREO_FRONT_RETENTION"
-/* Scene-bed distribution experiments (plan 2026-09-21); all default off. */
-#define SPA_AUDIO_HSSR_BED_DELAYS_ENV      "AUDIO_HSSR_BED_DELAYS"     /* on/off */
-#define SPA_AUDIO_HSSR_BED_ATTACK_ENV      "AUDIO_HSSR_BED_ATTACK"     /* off|owner|front */
-#define SPA_AUDIO_HSSR_ATTACK_COLLAPSE_ENV "AUDIO_HSSR_ATTACK_COLLAPSE" /* 0..1, default 1 */
-/* Front retention taper in Hz, "LO:HI"; HI <= LO disables it (retention flat
- * over frequency).  Default SPA_STEREO_UPMIX_RETENTION_HF_{LO,HI}_HZ. */
-#define SPA_AUDIO_HSSR_RETENTION_HF_ENV "AUDIO_HSSR_RETENTION_HF"
-/* HSSR upmix of the stock realtime (type-100) media PCM, e.g. Spotify, which
+/* Upmix of the stock realtime (type-100) media PCM, e.g. Spotify, which
  * never gets buffered type 103.  on/off, default off. */
 #define SPA_AUDIO_REALTIME_UPMIX_ENV       "AUDIO_REALTIME_UPMIX"
 /* AUDIO_STEREO_LFE_GAIN: assist level in dB re4096 (-24..+12; 0=default).
@@ -95,9 +72,8 @@
  * whole subwoofer level. */
 #define SPA_AUDIO_STEREO_LFE_GAIN_ENV "AUDIO_STEREO_LFE_GAIN"
 /* Scene renderer (stereo_upmix.h SPA_STEREO_UPMIX_SCENE, spec §18 item 6).
- * With AUDIO_STEREO_UPMIX=on, AUDIO_SCENE=1 selects it in place of HSSR
- * Universal; AUDIO_STEREO_UPMIX off/unset is the safety bypass and wins (the
- * scene flag is then ignored, logged once).  The knobs are the engine's
+ * AUDIO_STEREO_UPMIX=on selects it; off/unset is the safety bypass.  The
+ * knobs are the engine's
  * SceneConfig fields in engine units, unset = the variant J default, read
  * once at start like AUDIO_STEREO_*.  Ranges in stereo_upmix.h.
  * AUDIO_SCENE_MASK_BLOB: the fine mask net's weights (scene_mask.h
@@ -106,9 +82,8 @@
  * logged once.  It also steers the LFE V2 assist (bass/drum posteriors).
  * AUDIO_SCENE_MASK_SYNC=1 runs the net on the audio thread (the port tests'
  * exact timing); the default is the scene mask worker (scene_mask_worker.h:
- * SCHED_RR 17 like the HSSR controller, rows one control late, never
+ * SCHED_RR 17, rows one control late, never
  * blocking; a worker that fails to start falls back to the audio thread). */
-#define SPA_AUDIO_SCENE_ENV                "AUDIO_SCENE"                /* 0/1 */
 #define SPA_AUDIO_SCENE_MASK_BLOB_ENV      "AUDIO_SCENE_MASK_BLOB"      /* path, default none */
 #define SPA_AUDIO_SCENE_MASK_SYNC_ENV      "AUDIO_SCENE_MASK_SYNC"      /* 0/1, default 0 = worker */
 #define SPA_AUDIO_SCENE_ALPHA_ENV          "AUDIO_SCENE_ALPHA"          /* 0..1, default 0.7 */
@@ -119,15 +94,6 @@
 #define SPA_AUDIO_SCENE_SIGMA_MIN_ENV      "AUDIO_SCENE_SIGMA_MIN"      /* 0.01..1, default 0.08 */
 #define SPA_AUDIO_SCENE_SIDE_LP_HZ_ENV     "AUDIO_SCENE_SIDE_LP_HZ"     /* 0 = off or 1000..24000, default 7000 */
 #define SPA_AUDIO_SCENE_BLEED_CANCEL_ENV   "AUDIO_SCENE_BLEED_CANCEL"   /* 0..0.5, default 0 */
-#define SPA_AUDIO_HSSR_MODEL_ENV       "AUDIO_HSSR_MODEL"
-/* Phase 1 mask net: AUDIO_HSSR_MASK_MODEL (else hssr_mask.bin beside the main
- * model, absent = off) and AUDIO_HSSR_MASK_DRIVE 0..2 (0 = off, 1.0 = the
- * measured operating point).  Both default to off until the car listening. */
-#define SPA_AUDIO_HSSR_MASK_MODEL_ENV  "AUDIO_HSSR_MASK_MODEL"
-#define SPA_AUDIO_HSSR_MASK_DRIVE_ENV  "AUDIO_HSSR_MASK_DRIVE"
-#define SPA_AUDIO_HSSR_MASK_TREBLE_ENV "AUDIO_HSSR_MASK_TREBLE_DB"
-#define SPA_AUDIO_HSSR_MASK_GAMMA_ENV  "AUDIO_HSSR_MASK_GAMMA"
-#define SPA_AUDIO_HSSR_MODEL_DEFAULT   "/mnt/app/root/hooks/hssr_model.bin"
 
 /* Buffered-stream loudness policy.  Apple's/Pioneer's SoundCheck metadata is
  * enabled by default.  The local RMS substitute and sample-peak limiter are

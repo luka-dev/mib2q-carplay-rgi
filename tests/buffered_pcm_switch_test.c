@@ -23,32 +23,6 @@ static int16_t g_stereo[TEST_TRACK_FRAMES * 2];
 static int16_t g_first_stereo_render[TEST_TRACK_FRAMES * 6];
 static int16_t g_second_stereo_render[TEST_TRACK_FRAMES * 6];
 static struct spa_stereo_upmix g_upmix;
-static union {
-    float align;
-    uint8_t bytes[SPA_HSSR_MODEL_PAYLOAD_BYTES];
-} g_model_payload;
-static struct spa_hssr_model g_model;
-
-static const struct spa_hssr_model *test_model(void)
-{
-    float *floats;
-    unsigned index;
-
-    memset(&g_model_payload, 0, sizeof(g_model_payload));
-    floats = (float *)(void *)(g_model_payload.bytes + SPA_HSSR_WEIGHT_BYTES);
-    for (index = 0; index < SPA_HSSR_FEATURES; ++index)
-        floats[SPA_HSSR_FEATURES + index] = 1.0f;
-    for (index = SPA_HSSR_FEATURES * 2;
-         index < SPA_HSSR_FEATURES * 2 +
-                     SPA_HSSR_GATE_ROWS * 4 + SPA_HSSR_OUTPUTS;
-         ++index)
-        floats[index] = 1.0f / 127.0f;
-    assert(spa_hssr_model_view_payload(
-               &g_model, g_model_payload.bytes,
-               sizeof(g_model_payload.bytes), 0) == SPA_HSSR_OK);
-    return &g_model;
-}
-
 static void assert_buffered_receiver_sizes(void)
 {
     assert(spa_type103_audio_buffer_size_for_index(22) == 5000000);
@@ -336,7 +310,6 @@ static void run_switch_sequence(enum spa_stereo_upmix_backend backend)
     spa_stereo_upmix_default_config(&config);
     spa_stereo_upmix_config_set_lfe(&config, 1);
     config.backend = backend;
-    spa_stereo_upmix_config_set_hssr_model(&config, test_model());
     assert(spa_stereo_upmix_init(&g_upmix, &config) ==
            SPA_STEREO_UPMIX_OK);
 
@@ -374,10 +347,10 @@ int main(void)
     assert_whole_period_policy();
     assert_detached_render_pump_policy();
     fill_stereo();
-    run_switch_sequence(SPA_STEREO_UPMIX_HSSR_UNIVERSAL);
+    run_switch_sequence(SPA_STEREO_UPMIX_SCENE);
     puts("buffered_pcm_switch_test: OK "
          "(receiver sizes, whole QSA periods, detached reserve pump, fast flush drain, "
          "single-owner gap policy, SETUP 65/23, "
-         "AAC <-> APAC, hssr-universal)");
+         "AAC <-> APAC, scene)");
     return 0;
 }

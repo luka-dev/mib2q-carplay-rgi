@@ -13,8 +13,7 @@ fi
     -Wno-unused-parameter -Wno-unused-variable -Wno-unused-but-set-variable \
     -Wno-unused-function "$@" -Itests/mocks -Ihook \
     tests/audio_interposer_test.c \
-    hook/audio/stereo_upmix.c hook/audio/hssr_dsp.c hook/audio/hssr_neon.c \
-    hook/audio/hssr_control_worker.c hook/audio/hssr_mask.c hook/audio/soundcheck.c \
+    hook/audio/stereo_upmix.c hook/audio/soundcheck.c \
     hook/audio/scene_engine_math.c hook/audio/scene_clusters.c hook/audio/scene_engine.c hook/audio/scene_mask.c \
     hook/audio/scene_mask_worker.c \
     hook/audio/spatial_downmix.c hook/audio/apap_lifecycle.c \

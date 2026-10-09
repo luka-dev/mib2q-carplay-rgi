@@ -1,5 +1,9 @@
 # Upmix Calibration and Tuning
 
+> **Retired 2026-10-09 with the Universal backend.** The renderer, models and knobs this note describes left the tree; the last tree that has them is git tag `upmix-universal-last-2026-10-09`.
+> What runs now: [Stereo to 5.1 Upmix](STEREO_TO_5_1_UPMIX.md). Why, and with which numbers: [Upmix History and Results](UPMIX_HISTORY_AND_RESULTS_2026-10-09.md), [Upmix Code Retirement](UPMIX_CODE_RETIREMENT_2026-10-09.md).
+> The LFE, amp and measurement facts below remain valid.
+
 *How every shipped upmix value was reached — the bass complaint, the corrected amp matrix, the 60-second one-lever grid, the Dolby-principle scene bed and the treble taper — plus the offline method to measure the next change. Ledger for 2026-09-07 → 2026-09-22.*
 
 ---

@@ -1,0 +1,448 @@
+{
+  "complete": true,
+  "audit_verified": true,
+  "smoke": false,
+  "fitting_gate_pass": true,
+  "gates": {
+    "eligible_paired_gain_05db": true,
+    "eligible_median_at_least7db": true,
+    "each_eligible_crop_nonworse_03db": true,
+    "eligible_median_crop_loss_nonworse_5pct": true,
+    "vocal_reconstruction_nonworse_03db": true,
+    "vocal_reconstruction_at_least0db": true,
+    "drums_reconstruction_nonworse_03db": true,
+    "drums_reconstruction_at_least0db": true,
+    "bass_reconstruction_nonworse_03db": true,
+    "bass_reconstruction_at_least0db": true
+  },
+  "paired_crop_sdr_deltas_db": [
+    1.16693115234375,
+    0.7286453247070312,
+    0.8940374851226807,
+    0.5729246139526367
+  ],
+  "arms": {
+    "control": {
+      "rows": [
+        {
+          "song": "f4b735de-14b1-4091-a9ba-c8b30c0740a7",
+          "loss": {
+            "eligible": 0.06999930739402771,
+            "vocal": 0.07446609437465668,
+            "drums": 0.08239613473415375,
+            "bass": 0.06722431629896164
+          },
+          "sdr_db": {
+            "eligible": 8.539924621582031,
+            "vocal": 7.400966644287109,
+            "drums": 8.823101043701172,
+            "bass": 5.991146564483643
+          },
+          "source_tx": {
+            "eligible": 0.8377247059383434,
+            "vocal": 0.06844005865403542,
+            "drums": 0.018351844188288845,
+            "bass": 0.06575795259231522
+          },
+          "bands": {
+            "0-300": {
+              "eligible_tx": 0.833715646979737,
+              "error_nse": 0.14311616011692982
+            },
+            "300-8k": {
+              "eligible_tx": 0.8436776317653961,
+              "error_nse": 0.09218312397659396
+            },
+            "8-14k": {
+              "eligible_tx": 0.059393149519945475,
+              "error_nse": 1.4356436128330634
+            },
+            "14-24k": {
+              "eligible_tx": 0.37658806741229756,
+              "error_nse": 1.9296043753533072
+            }
+          },
+          "closure_nse": 1.7374190736281492e-14
+        },
+        {
+          "song": "1fc37390-1769-452d-9bea-19025be4c467",
+          "loss": {
+            "eligible": 0.015260457061231136,
+            "vocal": 0.018488861620426178,
+            "drums": 0.013235016725957394,
+            "bass": 0.0035543981939554214
+          },
+          "sdr_db": {
+            "eligible": 11.662330627441406,
+            "vocal": 10.739435195922852,
+            "drums": 12.884385108947754,
+            "bass": null
+          },
+          "source_tx": {
+            "eligible": 0.9242479287798434,
+            "vocal": 0.04055291901142408,
+            "drums": 0.01455400981475047,
+            "bass": null
+          },
+          "bands": {
+            "0-300": {
+              "eligible_tx": 0.9126174072306134,
+              "error_nse": 0.06634531161189296
+            },
+            "300-8k": {
+              "eligible_tx": 0.9332925640611668,
+              "error_nse": 0.06452579305589212
+            },
+            "8-14k": {
+              "eligible_tx": 0.7824658408405248,
+              "error_nse": 0.18114751704857573
+            },
+            "14-24k": {
+              "eligible_tx": 0.6262595759841693,
+              "error_nse": 0.32210293432209525
+            }
+          },
+          "closure_nse": 1.651585836951082e-14
+        },
+        {
+          "song": "ad6c3742-e517-42eb-9dec-e74ed05387cc",
+          "loss": {
+            "eligible": 0.05677660554647446,
+            "vocal": 0.07139299809932709,
+            "drums": 0.055696357041597366,
+            "bass": 0.026489971205592155
+          },
+          "sdr_db": {
+            "eligible": 2.3532328605651855,
+            "vocal": 9.16795539855957,
+            "drums": 13.197107315063477,
+            "bass": 5.916460037231445
+          },
+          "source_tx": {
+            "eligible": 0.5721974621790431,
+            "vocal": 0.035130829818812784,
+            "drums": 0.005166033782022959,
+            "bass": 0.050821439978181074
+          },
+          "bands": {
+            "0-300": {
+              "eligible_tx": 0.5237624360213693,
+              "error_nse": 0.40897898506043945
+            },
+            "300-8k": {
+              "eligible_tx": 0.6521203822739441,
+              "error_nse": 0.2626158809233069
+            },
+            "8-14k": {
+              "eligible_tx": 0.5570510075203646,
+              "error_nse": 0.3439068398567368
+            },
+            "14-24k": {
+              "eligible_tx": 0.5712438625963049,
+              "error_nse": 0.3195325673014603
+            }
+          },
+          "closure_nse": 2.2934399605128997e-14
+        },
+        {
+          "song": "fd6e4b4a-f33a-4f3c-aa6e-7c65fd5dc0bc",
+          "loss": {
+            "eligible": 0.09827414900064468,
+            "vocal": 0.0865023136138916,
+            "drums": 0.10972680896520615,
+            "bass": 0.04247665777802467
+          },
+          "sdr_db": {
+            "eligible": 4.7672319412231445,
+            "vocal": 6.903761863708496,
+            "drums": 9.218175888061523,
+            "bass": 6.189180374145508
+          },
+          "source_tx": {
+            "eligible": 0.7466682759109418,
+            "vocal": 0.12317008658479256,
+            "drums": 0.012268768273890717,
+            "bass": 0.035493703924469426
+          },
+          "bands": {
+            "0-300": {
+              "eligible_tx": 0.5172023476543304,
+              "error_nse": 0.47440511232792315
+            },
+            "300-8k": {
+              "eligible_tx": 0.8672324441895439,
+              "error_nse": 0.1297681431412188
+            },
+            "8-14k": {
+              "eligible_tx": 0.46574152226044857,
+              "error_nse": 0.4612950351687048
+            },
+            "14-24k": {
+              "eligible_tx": 0.27507631314922143,
+              "error_nse": 0.66706952208991
+            }
+          },
+          "closure_nse": 1.9847203375678198e-14
+        }
+      ],
+      "loss": {
+        "eligible": 0.06338795647025108,
+        "vocal": 0.07292954623699188,
+        "drums": 0.06904624588787556,
+        "bass": 0.034483314491808414
+      },
+      "sdr_db": {
+        "eligible": 6.653578281402588,
+        "vocal": 8.28446102142334,
+        "drums": 11.051280498504639,
+        "bass": 5.991146564483643
+      },
+      "checkpoint_sha256": "b8c9559ff4d8b334de6e95edd8e418e303bb659247e7c071bc1e5d82359d4488"
+    },
+    "spectral": {
+      "rows": [
+        {
+          "song": "f4b735de-14b1-4091-a9ba-c8b30c0740a7",
+          "loss": {
+            "eligible": 0.06250207871198654,
+            "vocal": 0.070572629570961,
+            "drums": 0.07918122410774231,
+            "bass": 0.06262396275997162
+          },
+          "sdr_db": {
+            "eligible": 9.706855773925781,
+            "vocal": 7.72186279296875,
+            "drums": 9.219226837158203,
+            "bass": 6.913199424743652
+          },
+          "source_tx": {
+            "eligible": 0.8931678179973909,
+            "vocal": 0.07665200664657547,
+            "drums": 0.020501590164879745,
+            "bass": 0.07696936317106393
+          },
+          "bands": {
+            "0-300": {
+              "eligible_tx": 0.90009193410377,
+              "error_nse": 0.10691547467128215
+            },
+            "300-8k": {
+              "eligible_tx": 0.8816683520754516,
+              "error_nse": 0.08119529624616927
+            },
+            "8-14k": {
+              "eligible_tx": 0.03234054257758853,
+              "error_nse": 1.493800801733001
+            },
+            "14-24k": {
+              "eligible_tx": 0.33291059407733264,
+              "error_nse": 1.8623636313370997
+            }
+          },
+          "closure_nse": 1.7978545356015646e-14
+        },
+        {
+          "song": "1fc37390-1769-452d-9bea-19025be4c467",
+          "loss": {
+            "eligible": 0.013899896293878555,
+            "vocal": 0.01746588945388794,
+            "drums": 0.013052837923169136,
+            "bass": 0.003211433533579111
+          },
+          "sdr_db": {
+            "eligible": 12.390975952148438,
+            "vocal": 11.790931701660156,
+            "drums": 13.529447555541992,
+            "bass": null
+          },
+          "source_tx": {
+            "eligible": 0.9403845710902021,
+            "vocal": 0.044633955709726024,
+            "drums": 0.013093009554673208,
+            "bass": null
+          },
+          "bands": {
+            "0-300": {
+              "eligible_tx": 0.9261091720716775,
+              "error_nse": 0.06253021429675054
+            },
+            "300-8k": {
+              "eligible_tx": 0.9513167024253681,
+              "error_nse": 0.0528400564079988
+            },
+            "8-14k": {
+              "eligible_tx": 0.7909681045027538,
+              "error_nse": 0.18281195860804705
+            },
+            "14-24k": {
+              "eligible_tx": 0.6107645548320839,
+              "error_nse": 0.3384312514736152
+            }
+          },
+          "closure_nse": 1.6770181705989817e-14
+        },
+        {
+          "song": "ad6c3742-e517-42eb-9dec-e74ed05387cc",
+          "loss": {
+            "eligible": 0.05211397632956505,
+            "vocal": 0.06764283776283264,
+            "drums": 0.05457976087927818,
+            "bass": 0.024546049535274506
+          },
+          "sdr_db": {
+            "eligible": 3.247270345687866,
+            "vocal": 9.748148918151855,
+            "drums": 13.879767417907715,
+            "bass": 7.0579423904418945
+          },
+          "source_tx": {
+            "eligible": 0.6394853702151956,
+            "vocal": 0.039081000483872974,
+            "drums": 0.005727845050003842,
+            "bass": 0.06469566624319283
+          },
+          "bands": {
+            "0-300": {
+              "eligible_tx": 0.6047494059290872,
+              "error_nse": 0.35487526521727963
+            },
+            "300-8k": {
+              "eligible_tx": 0.6964783218068052,
+              "error_nse": 0.23513180032046696
+            },
+            "8-14k": {
+              "eligible_tx": 0.5672068616329923,
+              "error_nse": 0.34872065383518097
+            },
+            "14-24k": {
+              "eligible_tx": 0.5817428615978147,
+              "error_nse": 0.32635369664170455
+            }
+          },
+          "closure_nse": 2.4066122020021362e-14
+        },
+        {
+          "song": "fd6e4b4a-f33a-4f3c-aa6e-7c65fd5dc0bc",
+          "loss": {
+            "eligible": 0.09258107095956802,
+            "vocal": 0.08433698117733002,
+            "drums": 0.10744591057300568,
+            "bass": 0.039605434983968735
+          },
+          "sdr_db": {
+            "eligible": 5.340156555175781,
+            "vocal": 7.2842116355896,
+            "drums": 9.88354778289795,
+            "bass": 7.492834091186523
+          },
+          "source_tx": {
+            "eligible": 0.7754916219802304,
+            "vocal": 0.1356303108537941,
+            "drums": 0.013020213267999126,
+            "bass": 0.03794816929869194
+          },
+          "bands": {
+            "0-300": {
+              "eligible_tx": 0.5559932446289716,
+              "error_nse": 0.4186126613509369
+            },
+            "300-8k": {
+              "eligible_tx": 0.8909858257941778,
+              "error_nse": 0.12164730711528694
+            },
+            "8-14k": {
+              "eligible_tx": 0.4836988251147495,
+              "error_nse": 0.4683290759952027
+            },
+            "14-24k": {
+              "eligible_tx": 0.2917199826908602,
+              "error_nse": 0.6770785187232257
+            }
+          },
+          "closure_nse": 2.0378863933813093e-14
+        }
+      ],
+      "loss": {
+        "eligible": 0.057308027520775795,
+        "vocal": 0.06910773366689682,
+        "drums": 0.06688049249351025,
+        "bass": 0.03207574225962162
+      },
+      "sdr_db": {
+        "eligible": 7.523506164550781,
+        "vocal": 8.735005855560303,
+        "drums": 11.70649766921997,
+        "bass": 7.0579423904418945
+      },
+      "checkpoint_sha256": "ff072970aef01749f44afc0c8bc010c542eb7e2384cdf88d8b7473b6a3854da2"
+    }
+  },
+  "numerical": {
+    "control": {
+      "input_nse": 5.311876749266822e-14,
+      "source_errors": {
+        "eligible": {
+          "same_input_waveform_nse": 6.741830229636011e-11,
+          "native_waveform_nse": 3.584979612935458e-10,
+          "max_pcm16_lsb": 0.28076171875
+        },
+        "vocal": {
+          "same_input_waveform_nse": 6.428132314589373e-11,
+          "native_waveform_nse": 4.04658420579406e-10,
+          "max_pcm16_lsb": 0.315185546875
+        },
+        "drums": {
+          "same_input_waveform_nse": 7.612851008702972e-11,
+          "native_waveform_nse": 3.966426144979155e-10,
+          "max_pcm16_lsb": 0.50390625
+        },
+        "bass": {
+          "same_input_waveform_nse": 1.4743406535956956e-10,
+          "native_waveform_nse": 6.474203334557015e-10,
+          "max_pcm16_lsb": 0.3369140625
+        }
+      },
+      "causality": {
+        "future_prefix_nse": 0.0,
+        "chunk_nse": 2.802599732149025e-13,
+        "perturbed_suffix_nse": 7.666633129119873,
+        "scope": "neural STFT interface only; scene dormant; centered waveform transform not certified"
+      },
+      "waveform_chunk_nse": 2.0892811502483661e-13
+    },
+    "spectral": {
+      "input_nse": 5.311876749266822e-14,
+      "source_errors": {
+        "eligible": {
+          "same_input_waveform_nse": 9.147456665307031e-12,
+          "native_waveform_nse": 5.687919068714992e-10,
+          "max_pcm16_lsb": 0.2598876953125
+        },
+        "vocal": {
+          "same_input_waveform_nse": 7.986214971316962e-12,
+          "native_waveform_nse": 3.9656804951487977e-10,
+          "max_pcm16_lsb": 0.69842529296875
+        },
+        "drums": {
+          "same_input_waveform_nse": 8.600296541333242e-12,
+          "native_waveform_nse": 5.393176756964613e-10,
+          "max_pcm16_lsb": 0.61767578125
+        },
+        "bass": {
+          "same_input_waveform_nse": 1.8331190109691857e-11,
+          "native_waveform_nse": 1.1627248353378605e-09,
+          "max_pcm16_lsb": 0.5999755859375
+        }
+      },
+      "causality": {
+        "future_prefix_nse": 0.0,
+        "chunk_nse": 1.2235834090726372e-13,
+        "perturbed_suffix_nse": 8.293756484985352,
+        "scope": "neural STFT interface only; scene dormant; centered waveform transform not certified"
+      },
+      "waveform_chunk_nse": 1.0137920060463495e-13
+    }
+  },
+  "protocol_sha256": "99f19ad71f64f0d9dab12ad52c46ecdf0cb37af042336424b0f59bdc727abdbb",
+  "scope": "same fixed TRAIN4 decoder, fresh matched encoder fitting; smoke gates never promote; no DEV/C/int8/device/listening proof"
+}

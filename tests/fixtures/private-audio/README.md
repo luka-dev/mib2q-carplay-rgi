@@ -1,4 +1,4 @@
-# Private HSSR music corpus
+# Private upmix music corpus
 
 These commercial stereo masters are private-repository test assets. Do not
 publish or redistribute them outside the private repository.
@@ -14,7 +14,7 @@ generated under ignored `build/` paths and must not be committed.
 Example corpus preparation:
 
 ```sh
-python3 tools/stereo-upmix-render/prepare_local_stereo_stress_corpus.py \
-  --output build/reference-audio/private-local-stereo-heldout-corpus \
-  tests/fixtures/private-audio/heldout/*.mp3
+# prepare_local_stereo_stress_corpus.py was retired with the Universal renderer on 2026-10-09
+# (git tag upmix-universal-last-2026-10-09); the scene tools take the files directly:
+python3 tools/stereo-upmix-render/scene_car_kit.py OUT_DIR name=tests/fixtures/private-audio/heldout/<song>.wav   # 48 kHz stereo WAV in, blinded 6-ch kit out
 ```

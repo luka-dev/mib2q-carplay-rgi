@@ -1,8 +1,0 @@
-{
-  "model": "hssr-selection-v11 (hssr_guard.bin): the V11 guard controller, run beside q6d on the control worker; its vocal posterior feeds the vocal veto",
-  "set_in": "deploy/smartphone_integrator/carplay_startup.sh (checked by scripts/check_model_settings.py at package time)",
-  "knobs": {
-    "AUDIO_HSSR_GUARD_MODEL": {"value": null, "what": "unset = hssr_guard.bin beside AUDIO_HSSR_MODEL (audio_hook.c spa_hssr_guard_init_once)"},
-    "AUDIO_HSSR_VOCAL_GATE": {"value": "0.5", "flag": "--vocal-gate 0.5", "what": "per-band vocal veto on the rendered object (q6d + guard posterior + per-bin comodulation, held ~0.35 s). 0 = the 22.09 behaviour; 0.95 = master 0ffe8eb without the mask net; 0.5 = the soft veto over the mask net, measured on 40 DEV songs (vocals 4 %, guitars 7 %, 2/40 swinging; 0.95 halves the guitars). Shared with models/mask-full-probe-v21a/settings.json"}
-  }
-}

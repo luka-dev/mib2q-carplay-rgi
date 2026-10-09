@@ -1,26 +1,30 @@
 # Upmix domain model and qualification map
 
+> **Retired 2026-10-09 with the Universal backend.** The renderer, models and knobs this note describes left the tree; the last tree that has them is git tag `upmix-universal-last-2026-10-09`.
+> What runs now: [Stereo to 5.1 Upmix](STEREO_TO_5_1_UPMIX.md). Why, and with which numbers: [Upmix History and Results](UPMIX_HISTORY_AND_RESULTS_2026-10-09.md), [Upmix Code Retirement](UPMIX_CODE_RETIREMENT_2026-10-09.md).
+> The LFE, amp and measurement facts below remain valid.
+
 <!-- HISTORY16_DOMAIN_START -->
-**Latest October4 decision:** [Explicit encoded history16](UPMIX_SCENE_ENCODED_HISTORY_2026-10-04.md) completed8192 and failed joint comparison/strict fitting, with worse rear and front/centre than MLP12. Retain MLP12; NAS is idle and no efficacy extension is queued. A read-only retained-head gradient audit rejects simple local front domination/conflict. A privileged trained-head/context feasibility diagnostic is proposed but unrun. These remain one-crop TRAIN mechanisms, without new full40/device/cabin qualification.
+**Latest October4 decision:** [Explicit encoded history16](archive/UPMIX_SCENE_ENCODED_HISTORY_2026-10-04.md) completed8192 and failed joint comparison/strict fitting, with worse rear and front/centre than MLP12. Retain MLP12; NAS is idle and no efficacy extension is queued. A read-only retained-head gradient audit rejects simple local front domination/conflict. A privileged trained-head/context feasibility diagnostic is proposed but unrun. These remain one-crop TRAIN mechanisms, without new full40/device/cabin qualification.
 <!-- HISTORY16_DOMAIN_END -->
 
 _Documentation snapshot, 2026-10-04. Runtime boundaries, experimental evidence and release decisions for CarPlay stereo to 5.1._
 
 <!-- SCENE_DOMAIN_STATUS_START -->
-**October4 research update:** The owner resumed NAS CPU joint front/centre/rear research after the September30 source-model study closed. [MLP12](UPMIX_JOINT_SCENE_MLP12_HEAD_2026-10-03.md) improves fixed-crop reconstruction but fails the strict rear fitting gate. The [FlyWire reduction](UPMIX_FLYWIRE_TOPOLOGY_SCREEN_2026-10-04.md) is closed. A [target-informed output witness](UPMIX_SCENE_OUTPUT_REACHABILITY_2026-10-04.md) proves near-exact reconstruction is representable on this crop. The completed [interband8192 trial](UPMIX_SCENE_INTERBAND_CONTEXT_2026-10-04.md) fails its matched comparison and strict fitting gates, so that variant is closed and MLP12 retained. Explicit16ms past encoded-frame memory is an unrun next hypothesis. These are short TRAIN diagnostics, with no new full40/device/live-CarPlay qualification. No follow-up efficacy run is queued; earlier running/paused entries are historical.
+**October4 research update:** The owner resumed NAS CPU joint front/centre/rear research after the September30 source-model study closed. [MLP12](archive/UPMIX_JOINT_SCENE_MLP12_HEAD_2026-10-03.md) improves fixed-crop reconstruction but fails the strict rear fitting gate. The [FlyWire reduction](archive/UPMIX_FLYWIRE_TOPOLOGY_SCREEN_2026-10-04.md) is closed. A [target-informed output witness](archive/UPMIX_SCENE_OUTPUT_REACHABILITY_2026-10-04.md) proves near-exact reconstruction is representable on this crop. The completed [interband8192 trial](archive/UPMIX_SCENE_INTERBAND_CONTEXT_2026-10-04.md) fails its matched comparison and strict fitting gates, so that variant is closed and MLP12 retained. Explicit16ms past encoded-frame memory is an unrun next hypothesis. These are short TRAIN diagnostics, with no new full40/device/live-CarPlay qualification. No follow-up efficacy run is queued; earlier running/paused entries are historical.
 <!-- SCENE_DOMAIN_STATUS_END -->
 
 ## 🧭 Domain boundaries and current state
 
 | Area | Responsibility | Current evidence |
 | --- | --- | --- |
-| Track A | Deployed hook, three-model routing/protection, int8 implementation and unit integration | q6d + V11 guard + v21a mask; [phase 1 car report](UPMIX_MASK_PHASE1_REPORT_2026-09-27.md), [matched40 host baseline](UPMIX_TRACKA_MATCHED40_2026-09-30.md) |
+| Track A | Deployed hook, three-model routing/protection, int8 implementation and unit integration | q6d + V11 guard + v21a mask; [phase 1 car report](archive/UPMIX_MASK_PHASE1_REPORT_2026-09-27.md), [matched40 host baseline](UPMIX_TRACKA_MATCHED40_2026-09-30.md) |
 | Track B | Eligible extraction and joint authored front/centre/rear research, isolated from deployment | September30 spectral40k fails acoustic promotion; October3–4 joint TRAIN diagnostics test inference/representation, not deployment |
-| Reference models | Offline extraction target and feasibility comparison | Noncausal pretrained BSRNN SIMO passes its observed offline gates; [real-C reference check](UPMIX_BSRNN_REAL_C_CHECK_2026-09-29.md); no device deployment |
+| Reference models | Offline extraction target and feasibility comparison | Noncausal pretrained BSRNN SIMO passes its observed offline gates; [real-C reference check](archive/UPMIX_BSRNN_REAL_C_CHECK_2026-09-29.md); no device deployment |
 | Qualification | Stable-gain source attribution, transitions, independent generalization, device timing and owner listening | Original full40 complete; genuinely untouched20, loaded-device and blind live CarPlay acceptance remain open |
 | J525 amplifier | Render supplied PCM6 across the cabin speakers | [Virtual Cabin and amp RE](VIRTUAL_CABIN_AND_AMP_RE.md); cabin behavior cannot be inferred from host arithmetic alone |
 
-The September30 PC source study ended at **2026-10-01 03:28 UTC**, released its lease and was paused by the owner. That result remains archived in the [session wrap](UPMIX_SESSION_WRAP_2026-09-30.md) and [complete attempt chronicle](UPMIX_SEPARATOR_CHRONICLE_2026-09-25_TO_2026-09-30.md). Later NAS authorization resumes a separate joint-scene recipe. This page is a documentation snapshot, not a live queue monitor.
+The September30 PC source study ended at **2026-10-01 03:28 UTC**, released its lease and was paused by the owner. That result remains archived in the [session wrap](archive/UPMIX_SESSION_WRAP_2026-09-30.md) and [complete attempt chronicle](archive/UPMIX_SEPARATOR_CHRONICLE_2026-09-25_TO_2026-09-30.md). Later NAS authorization resumes a separate joint-scene recipe. This page is a documentation snapshot, not a live queue monitor.
 
 ```mermaid
 flowchart TB
@@ -95,10 +99,10 @@ erDiagram
 | Evidence layer | Canonical entry point | Interpretation boundary |
 | --- | --- | --- |
 | Corpora and stem roles | [Datasets and teachers](UPMIX_DATASETS_AND_TEACHERS.md) | Real stems, pseudo stems and inspected DEV have different evidential value |
-| Recipes and failures | [Attempt chronicle](UPMIX_SEPARATOR_CHRONICLE_2026-09-25_TO_2026-09-30.md) | Stopped, prepared and executed attempts have distinct recorded outcomes |
-| Candidate implementation | [Unified architecture ledger](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30.md) | Numerical parity and operation counts do not establish acoustic or device acceptance |
-| Final acoustic comparison | [Spectral full40 decision](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_broad_full40_complete.json) | 40 songs × 60 s, 231 stem rows, fixed gains and 265 attributed events |
-| Archive identity | [Final inventory](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_broad_final_inventory.json), [aggregation checks](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_broad_archive_checks.json) | Hashes preserve the original results; recomputation checks their summaries |
+| Recipes and failures | [Attempt chronicle](archive/UPMIX_SEPARATOR_CHRONICLE_2026-09-25_TO_2026-09-30.md) | Stopped, prepared and executed attempts have distinct recorded outcomes |
+| Candidate implementation | [Unified architecture ledger](archive/UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30.md) | Numerical parity and operation counts do not establish acoustic or device acceptance |
+| Final acoustic comparison | [Spectral full40 decision](archive/UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_broad_full40_complete.json) | 40 songs × 60 s, 231 stem rows, fixed gains and 265 attributed events |
+| Archive identity | [Final inventory](archive/UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_broad_final_inventory.json), [aggregation checks](archive/UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_broad_archive_checks.json) | Hashes preserve the original results; recomputation checks their summaries |
 | Car evidence | [Listening protocol](UPMIX_CARPLAY_LISTENING_PROTOCOL.md), [deploy log](UPMIX_LISTENING_AND_DEPLOY_LOG.md) | Only live CarPlay and the owner can establish the requested cabin verdict |
 
 ## ⚙️ September30 source architecture, archived
@@ -121,7 +125,7 @@ flowchart TB
 
 Selected eligible + scene dense arithmetic is **116.712 M MAC/s**; the full four-source graph is 144.387 M. These exclude FFT/WOLA, normalization, nonlinearities, DSP, memory and scheduling. They are not measured device int8 throughput. Native float/int8 C and ARM/QNX numerical checks are archived in the ledger; full40 native int8 acoustic qualification has not run.
 
-The reserved upper64 variant has 23 Python structural checks and 129.327 M selected dense MAC/s. It has no efficacy result or compatible new C/int8 port. Float-preserving initialization does not guarantee preserved int8 activation scaling. The [session wrap architecture section](UPMIX_SESSION_WRAP_2026-09-30.md#-architecture-and-implementation-boundary) retains runtime state and latency details.
+The reserved upper64 variant has 23 Python structural checks and 129.327 M selected dense MAC/s. It has no efficacy result or compatible new C/int8 port. Float-preserving initialization does not guarantee preserved int8 activation scaling. The [session wrap architecture section](archive/UPMIX_SESSION_WRAP_2026-09-30.md#-architecture-and-implementation-boundary) retains runtime state and latency details.
 
 ## 🚦 Qualification lifecycle and stopping point
 

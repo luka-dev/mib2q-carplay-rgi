@@ -21,7 +21,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 HOOK = os.path.join(ROOT, "hook", "audio")
 HEADER = os.path.join(HOOK, "scene_engine.h")
-DEFAULT_FIX = "/private/tmp/claude-501/-Users-luka-Desktop-AUDI-2-Patches-mhi2-carplay/68989c4d-7e7a-4c32-aa08-b7c2a6c66c89/scratchpad/port_fixtures"
+DEFAULT_FIX = "/Users/luka/Desktop/AUDI_2/upmix-data/scene_port_fixtures_2026-10-09"
 sys.path.insert(0, os.path.join(HERE, ".."))
 import scene_upmix as su   # the reference (read only)
 

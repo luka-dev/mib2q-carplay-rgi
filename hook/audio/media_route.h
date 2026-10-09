@@ -150,7 +150,7 @@ static inline int spa_media_route_buffered_ready(const spa_media_route_t *route,
     return period && pending >= period && spa_media_route_can_request(route, now_ns);
 }
 
-/* Realtime (type-100) HSSR upmix of one QSA period.  Only while the period
+/* Realtime (type-100) stereo upmix of one QSA period.  Only while the period
  * really comes from the realtime timeline (never inside a type-103 pause or
  * shortage), only 2 -> 6, and only while every tracked main object is media:
  * a phone/Siri/alert owner anywhere means plain L/R.  No tracked main object

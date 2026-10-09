@@ -9,8 +9,8 @@ the level dependence directly: the regression of the stem's rear share on its
 level relative to everything else (mechanism 1 of the 2026-09-25 findings).
 
     python3 tools/stereo-upmix-render/upmix_stem_tests.py --render BIN \
-        --model models/hssr-q6d-moises-a/hssr_model.bin \
-        --guard models/hssr-selection-v11/hssr_guard.bin \
+        (--render = the renderer CLI; since 2026-10-09 that is tools/stereo-upmix-render/scene_upmix.py,
+         the Universal binary and its models are gone: tag upmix-universal-last-2026-10-09) \
         --moisesdb /Volumes/private/Audi/upmix-training-2026-09-11/external/moisesdb/moisesdb_v0.1 \
         --songs 24 --out DIR
 """
@@ -179,32 +179,6 @@ MASK_THRESH = 0.0    # --mask-thresh t: eligibility below t is 0, above rescaled
 MASK_SHARPEN = 1.0   # --mask-sharpen k: eligibility ** k (k > 1 = only confident cells go rear)
 MASK_ELIGIBLE = ""   # --mask-eligible other  (default: the model's other+cymbals)
 RESUME = False
-INJECT_SMOOTH = 0.0    # --inject-smooth MS: slow per-band gain envelope (fast attack, this release) on the injected estimate
-INJECT_GAIN = 1.0      # --inject-gain G: scalar on injected audio for a matched-rear-level screen
-
-
-def smooth_envelope(elig, mix, release_ms, n_fft=2048, hop=512, bands=32):
-    """Stabiliser for a separator's estimate: per band, the estimate's energy relative to the mixture's is
-    held with a fast attack and a slow release, and the estimate is re-scaled to that held ratio.  The
-    spectral shape stays the estimate's; only its level trajectory per band is slowed down."""
-    import sep_net as SN
-    torch = SN._torch()
-    E = SN.stft(torch, torch.as_tensor(elig.astype(np.float32))[None])[0]        # [T,1025,2]
-    X = SN.stft(torch, torch.as_tensor(mix.astype(np.float32))[None])[0]
-    edges = np.unique(np.round(np.geomspace(1, E.shape[1] - 1, bands + 1)).astype(int))
-    pe = (E.abs() ** 2).sum(-1); px = (X.abs() ** 2).sum(-1) + 1e-9               # [T,1025]
-    alpha = float(np.exp(-hop / 48000 / (release_ms / 1000)))
-    gain = torch.ones_like(pe)
-    for a, b in zip(edges[:-1], edges[1:]):
-        r = (pe[:, a:b].sum(-1) / px[:, a:b].sum(-1)).clamp(1e-4, 4.0)           # the estimate's share of the mixture per band
-        held = r.clone()
-        for t in range(1, len(r)):
-            held[t] = max(float(r[t]), float(held[t - 1]) * alpha) if r[t] < held[t - 1] else float(r[t])
-        gain[:, a:b] = (held / r).sqrt()[:, None]                                  # re-scale the estimate to the held share
-    out = SN.istft(torch, (E * gain[..., None])[None], elig.shape[1])[0]
-    return out.numpy()
-TEACHER_MASK = False   # --teacher-mask: the mask from htdemucs's stems of the excerpt (jobs must be 1: one GPU model)
-INJECT = ""            # --inject oracle|teacher: that source's eligible AUDIO drives the object path (needs --render-extra "--mask-drive G")
 MASK_DIR = ""          # --mask-dir: precomputed HSSRMSK0 masks, for offline controller experiments
 
 
@@ -247,62 +221,7 @@ def analyse_song(render, args, out, track_dir, excerpt_s, mask_model=None, oracl
     src = os.path.join(out, f"{tag}.wav")
     dst = os.path.join(out, f"{tag}.6ch.wav")
     T.write_wav(src, mix * k)
-    if INJECT:                                         # interface test (astra 8): the rear-eligible AUDIO through the object path
-        if INJECT == "oracle":
-            elig = sum(v for nme, v in stems.items() if nme not in ORACLE_PROTECT) * k
-        elif INJECT == "irm":                              # astra 9: the optimal BOUNDED REAL mask (ideal ratio mask, mixture phase) at 2048/512
-            import sep_net as SN
-            torch = SN._torch()
-            e = torch.as_tensor((sum(v for nme, v in stems.items() if nme not in ORACLE_PROTECT) * k).astype(np.float32))[None]
-            m = torch.as_tensor((mix * k).astype(np.float32))[None]
-            E, X = SN.stft(torch, e), SN.stft(torch, m)
-            irm = (E.abs() / (X.abs() + 1e-7)).clamp(0.0, 1.0)
-            est = SN.istft(torch, X * irm, m.shape[-1])[0]
-            sdr = float(SN.si_sdr(torch, est, e[0]).mean()); sdr_mix = float(SN.si_sdr(torch, m[0], e[0]).mean())
-            print(f"  IRM {tag}: si_sdr {sdr:.2f} dB (mixture {sdr_mix:.2f})", flush=True)
-            elig = est.numpy()
-        elif INJECT == "role_power":                       # privileged four-role power target, same amplitude mask as the role head
-            import sep_net as SN
-            torch = SN._torch()
-            source = lambda names: sum((v for name, v in stems.items() if name in names), np.zeros_like(mix))
-            voc = source(("vocals",)) * k
-            drums = source(("drums", "percussion")) * k
-            bass = source(("bass",)) * k
-            eligible = (mix * k) - voc - drums - bass
-            parts = [torch.as_tensor(s.astype(np.float32))[None] for s in (voc, drums, bass, eligible)]
-            power = [((SN.stft(torch, part).abs() ** 2).sum(-1)) for part in parts]
-            role_mask = power[3] / sum(power).clamp_min(1e-8)
-            X = SN.stft(torch, torch.as_tensor((mix * k).astype(np.float32))[None])
-            elig = SN.istft(torch, X * role_mask[..., None], n)[0].numpy()
-        elif INJECT.startswith("student:"):                # the separator student's eligible estimate (sep_net.py)
-            import sep_net as SN
-            if "student" not in _MASK:
-                _MASK["student"] = SN.load(INJECT[len("student:"):])
-            elig = SN.separate_array(_MASK["student"], (mix * k).astype(np.float32))
-        elif INJECT == "teacher2":                       # BS-RoFormer vocals + demucs drums/bass
-            import teacher_label as TL
-            if "sep2" not in _MASK:
-                _MASK["sep2"] = TL.separator2()
-            elig = TL.separate_array2(_MASK["sep2"], (mix * k).astype(np.float32))["other"]
-        else:
-            import teacher_label as TL
-            if "sep" not in _MASK:
-                _MASK["sep"] = TL.separator()
-            elig = TL.separate_array(_MASK["sep"], (mix * k).astype(np.float32))["other"]
-        if INJECT_SMOOTH > 0:
-            elig = smooth_envelope(elig, mix * k, INJECT_SMOOTH)
-        if INJECT_GAIN != 1.0:
-            elig = elig * INJECT_GAIN
-        inj = os.path.join(out, f"{tag}.inj.wav")
-        T.write_wav(inj, elig)
-        extra = ["--rear-audio", inj]
-    elif TEACHER_MASK:                                 # htdemucs's own mask through the DSP: the ceiling of the distillation route
-        import teacher_label as TL
-        if "sep" not in _MASK:
-            _MASK["sep"] = TL.separator()
-        est = TL.separate_array(_MASK["sep"], (mix * k).astype(np.float32))   # vocals / drums / bass / other, already scaled
-        extra = oracle_mask_args(est, 1.0, out, tag + ".teacher")
-    elif MASK_DIR:
+    if MASK_DIR:
         mask_path = os.path.join(MASK_DIR, tag + ".msk")
         if not os.path.isfile(mask_path):
             raise FileNotFoundError(mask_path)
@@ -351,7 +270,7 @@ def analyse_song(render, args, out, track_dir, excerpt_s, mask_model=None, oracl
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--render", required=True)
-    ap.add_argument("--model", required=True)
+    ap.add_argument("--model", default="", help="passed through to the renderer; unused since the Universal renderer was retired (2026-10-09)")
     ap.add_argument("--guard")
     ap.add_argument("--moisesdb", required=True)
     ap.add_argument("--out", required=True)
@@ -370,27 +289,19 @@ def main():
     ap.add_argument("--mask-eligible", default="", help="roles allowed rear at routing time, e.g. 'other' (default other+cymbals)")
     ap.add_argument("--mask-presence", type=float, default=0.0, help="full nets: e * (1 - alpha * band vocal presence) at routing")
     ap.add_argument("--resume", action="store_true", help="reuse per-song results already in --out")
-    ap.add_argument("--inject-smooth", type=float, default=0.0, help="ms of release for the per-band gain envelope on the injected estimate")
-    ap.add_argument("--inject-gain", type=float, default=1.0, help="positive scalar on injected eligible audio for level-matched comparisons")
-    ap.add_argument("--teacher-mask", action="store_true", help="mask from htdemucs's stems (ceiling of the distillation route)")
     ap.add_argument("--oracle-ref", default="", help="dir with the oracle condition's *.6ch.wav renders: rear reconstruction error vs them")
-    ap.add_argument("--inject", default="", help="interface test: eligible audio through the object path: oracle | teacher | teacher2 | student:CKPT")
     ap.add_argument("--split-file", help="masknet_cache/split.json")
     ap.add_argument("--split", default="dev", help="with --split-file: which split to take songs from")
     a = ap.parse_args()
-    global ORACLE_AMP, MASK_THRESH, MASK_SHARPEN, MASK_ELIGIBLE, RESUME, TEACHER_MASK, ORACLE_REF, INJECT, INJECT_SMOOTH, INJECT_GAIN, MASK_DIR
-    ORACLE_AMP = a.oracle_amp; RESUME = a.resume; TEACHER_MASK = a.teacher_mask; ORACLE_REF = a.oracle_ref; INJECT = a.inject
-    INJECT_SMOOTH = a.inject_smooth
-    if not np.isfinite(a.inject_gain) or a.inject_gain <= 0 or (a.inject_gain != 1.0 and not a.inject):
-        ap.error("--inject-gain must be positive and requires --inject")
-    INJECT_GAIN = a.inject_gain
+    global ORACLE_AMP, MASK_THRESH, MASK_SHARPEN, MASK_ELIGIBLE, RESUME, ORACLE_REF, MASK_DIR
+    ORACLE_AMP = a.oracle_amp; RESUME = a.resume; ORACLE_REF = a.oracle_ref
     MASK_DIR = a.mask_dir or ""
-    if MASK_DIR and (a.inject or a.teacher_mask or a.mask_model or a.oracle_mask):
+    if MASK_DIR and (a.mask_model or a.oracle_mask):
         ap.error("--mask-dir cannot be combined with another mask or injection source")
     MASK_THRESH, MASK_SHARPEN, MASK_ELIGIBLE = a.mask_thresh, a.mask_sharpen, a.mask_eligible
     import mask_net as MN; MN.PRESENCE_ALPHA = a.mask_presence
     os.makedirs(a.out, exist_ok=True)
-    args = T.VARIANTS[a.variant] + ["--model", a.model] + (["--guard-model", a.guard] if a.guard else []) + a.render_extra.split()
+    args = T.VARIANTS[a.variant] + (["--model", a.model] if a.model else []) + (["--guard-model", a.guard] if a.guard else []) + a.render_extra.split()
     tracks = sorted(d for d in os.listdir(a.moisesdb) if os.path.isdir(os.path.join(a.moisesdb, d)))
     if a.split_file:
         wanted = {t for t, v in json.load(open(a.split_file))["split"].items() if v == a.split}

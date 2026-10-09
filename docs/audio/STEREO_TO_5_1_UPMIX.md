@@ -1,37 +1,39 @@
 # Stereo to 5.1 Upmix
 
-*The end-to-end pipeline from the phone's audio to the six PCM channels the amp renders — where discrete 5.1 and the HSSR upmix each kick in, and the calibration the startup script ships.*
+*The end-to-end pipeline from the phone's audio to the six PCM channels the amp renders — where discrete 5.1 and the scene renderer each kick in, and the configuration the startup script ships. State of 2026-10-09: the SCENE backend is the only stereo renderer; the Universal backend (q6d / V11 / v21a) is retired.*
 
 ---
 
 ## 🧭 At a glance: what each channel gets
 
-For stereo music (type-103 decoded stereo and type-100 realtime media). Spatial Audio / Atmos tracks arrive as real 5.1 and skip this; calls and Siri stay plain stereo. Numbers are the shipped calibration below.
+For stereo music (type-103 decoded stereo and type-100 realtime media). Spatial Audio / Atmos tracks arrive as real 5.1 and skip this; calls and Siri stay plain stereo. Values are the shipped configuration below; nothing has been listened to in the car with this renderer yet (to verify in the car).
 
 ```mermaid
 flowchart TB
-    accTitle: HSSR upmix at a glance
-    accDescr: Stereo input is split into a delayed front and a feature path. Track A uses q6d routing, V11 protection and v21a eligibility to build rear objects and an ambience bed delayed 12 ms; PCM6 then reaches the B&O amplifier and its 19 speakers.
-    stereo["🎵 Stereo input<br/>128-sample hop, 48 kHz"]
+    accTitle: Scene upmix at a glance
+    accDescr: Stereo input enters the scene engine, which analyses it in 1024-sample frames, moves off-centre instruments and the room residual to the rear and keeps the rest in front; the fine mask net steers which instruments move; PCM6 then reaches the B&O amplifier and its 19 speakers.
+    stereo["🎵 Stereo input<br/>48 kHz, 1024/256 STFT"]
 
-    subgraph hssr ["HSSR upmix in the hook"]
-        front["Front L/R<br/>input delayed bit-exact<br/>minus the part moved to the rear<br/>(50 % kept in front, less above 1–2.5 kHz)"]
-        ctrl["Track A worker ~94 Hz<br/>q6d routing + V11 guard<br/>+ v21a eligibility mask"]
-        rear["Rear Ls/Rs<br/>up to 4 moving objects<br/>+ decorrelated ambience bed<br/>delayed 12 ms (Haas), gain 0.40"]
-        lfe["LFE<br/>mono assist, 60 Hz LR4"]
+    subgraph scene ["Scene renderer in the hook"]
+        front["Front L/R<br/>the input minus the transferred objects<br/>(energy-conserving, no inverted copy)"]
+        engine["Scene engine<br/>per-bin decomposition, stage clusters,<br/>exact unmix, side layer + air"]
+        net["Mask net c on its worker thread<br/>eligibility / protect per bin<br/>every 512 frames"]
+        rear["Rear Ls/Rs<br/>transferred places + decorrelated side layer<br/>rear delay 0 (variant J)"]
+        lfe["LFE V2 assist<br/>60 Hz LR4 from the front,<br/>steered by the net's bass/drums"]
         centre["C = 0<br/>amp derives centre from L+R"]
-        out["Output stage<br/>front bass −3 dB, SoundCheck level,<br/>cabin clip guard (predicts amp bus peaks)"]
+        out["Output stage<br/>int16, SoundCheck level,<br/>cabin guard (predicts amp bus peaks)"]
     end
 
     pcm["PCM 6ch<br/>L R C LFE Ls Rs"]
     amp["B&O J525 via MOST150<br/>Virtual Cabin: centre, crossovers,<br/>sub management"]
     spk["🔊 19 speakers"]
 
-    stereo --> front
-    stereo --> ctrl
-    ctrl --> rear
-    ctrl --> front
-    stereo --> lfe
+    stereo --> engine
+    stereo --> net
+    net --> engine
+    engine --> front
+    engine --> rear
+    front --> lfe
     front --> out
     rear --> out
     lfe --> out
@@ -42,32 +44,30 @@ flowchart TB
     classDef success fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
     classDef neutral fill:#f3f4f6,stroke:#6b7280,stroke-width:2px,color:#1f2937
     class stereo,spk primary
-    class ctrl,rear,front success
+    class engine,net,rear,front success
     class lfe,centre,out,pcm,amp neutral
 ```
 
 | Channel / stage | What it gets |
 |---|---|
-| **Front L/R** | The input itself, delayed and bit-exact, minus what moves to the rear; 50 % of that part stays in front (`AUDIO_STEREO_FRONT_RETENTION`), less of it above 1–2.5 kHz (HF taper). |
-| **Controller and protection** | q6d routing and the V11 guard supply 32-band controls; v21a adds per-cell eligibility on the same worker, about 94 times a second ([HSSR Model](HSSR_MODEL.md), [mask phase 1](UPMIX_MASK_PHASE1_REPORT_2026-09-27.md)). |
-| **Rear Ls/Rs** | Up to 4 moving objects plus a decorrelated ambience bed, delayed 12 ms so the front still anchors the image; rear gain 0.40 (`AUDIO_STEREO_SURROUND`). |
-| **LFE** | Low-passed mono assist, Butterworth LR4 at 60 Hz. |
+| **Front L/R** | The input itself, 1024 frames late, minus the share of each admitted off-centre place that moved behind; the subtraction is at the place's own pan, so nothing inverted appears in the other front channel (`hook/audio/scene_engine.c`). |
+| **Rear Ls/Rs** | The transferred places at their own image plus the residual room (the side layer, decorrelated between Ls and Rs by a static per-bin phase table, low-passed at 7 kHz) and the air copy above 2–2.5 kHz. No delay of our own (`AUDIO_SCENE_REAR_DELAY_MS=0`); the amp's rear bus adds ~11.8 ms by itself `[model]`. |
+| **Mask net c** | Four posteriors per bin (vocals, drum core, bass, other) every 512 frames; eligibility = other, protect = vocals + drums + bass. It gates which cells may move as instruments and ducks the spatial transfer and side layer where protected content sits (`hook/audio/scene_mask.c`, `models/scene-masknet-c/manifest.json`). |
+| **LFE** | Cabin-Aware LFE V2: a 60 Hz LR4 sub-band of the front, polarity-safe mono fold, level steered by the net's bass and drum posteriors, paired front headroom 31392/32768 (`hook/audio/stereo_upmix.c:25-34`, `:190-281`). |
 | **C** | 0 on purpose: the amp derives the centre from L+R. |
-| **Output stage** | Front bass −3 dB, SoundCheck level, and the cabin clip guard, which predicts the amp's bus peaks and scales if needed. |
+| **Output stage** | int16 conversion with the existing clamp, SoundCheck level, and the S16 cabin guard, which predicts the amp's bus peaks and scales if needed (`stereo_upmix.c:284-344`). |
 | **Amp** | PCM 6ch over MOST150; the B&O Virtual Cabin handles centre, crossovers and sub management across 19 speakers ([Virtual Cabin and Amp RE](VIRTUAL_CABIN_AND_AMP_RE.md)). |
 
 ## 🎯 The big picture
 
-This page describes Track A and the discrete production path. Track B's isolated single-network causal C prototype has not passed its joint acoustic gates or replaced the hook. The [domain model](UPMIX_DOMAIN_MODEL.md) distinguishes runtime, evidence and qualification; the [session wrap](UPMIX_SESSION_WRAP_2026-09-30.md) records the final spectral40k failure and research pause.
-
 Two things had to be built: get the **right six PCM channels**, and **synthesize them** for stereo content. The amp (J525 B&O) is a complete 5.1 renderer — the [Virtual Cabin](VIRTUAL_CABIN_AND_AMP_RE.md) — so the head unit only feeds it `L R C LFE Ls Rs` and lets it do the acoustics: it derives the centre, manages the sub, crosses over every driver, and fans out to 19 speakers.
 
-Provenance is `docs/research/UPMIX.md` (master), with the deep detail in [HSSR Model](HSSR_MODEL.md), [Virtual Cabin and Amp RE](VIRTUAL_CABIN_AND_AMP_RE.md), and [Dolby Atmos](DOLBY_ATMOS.md). Traps are in [Landmines](../LANDMINES.md).
+The synthesis is the scene renderer of [Stereo-to-Rear Scene Algorithm](UPMIX_SCENE_ALGORITHM_2026-10-08.md) (sections 14–18 are the implementation record), a structural decomposition with one small net for the semantic stage; its numpy reference is `tools/stereo-upmix-render/scene_upmix.py` and the C port in `hook/audio/scene_*.c` matches it to −131 dB on the fixtures (`tools/stereo-upmix-render/port/test_engine.py`). The amp RE is in [Virtual Cabin and Amp RE](VIRTUAL_CABIN_AND_AMP_RE.md) and [Dolby Atmos](DOLBY_ATMOS.md); traps are in [Landmines](../LANDMINES.md).
 
 ```mermaid
 flowchart TB
   accTitle: Master stereo to 5.1 pipeline
-  accDescr: Two transports feed decode and classification, split into a discrete 5.1 path and an HSSR upmix path, pass the cabin guard into PCM6 and travel down to the amp and speakers.
+  accDescr: Two transports feed decode and classification, split into a discrete 5.1 path and the scene upmix path, pass the cabin guard into PCM6 and travel down to the amp and speakers.
   subgraph ingest["Ingest"]
     iphone["iPhone CarPlay over NCM"]
     realtime_100["type-100 realtime PCM stereo"]
@@ -77,7 +77,7 @@ flowchart TB
     cookie_decode["decode by inline cookie"]
     classify_pcm["classify codec and channels"]
     discrete_reorder["APAC 5.1 reorder"]
-    hssr_upmix["HSSR stereo upmix"]
+    scene_upmix["scene stereo upmix"]
     cabin_guard["cabin guard S16 peak"]
     pcm6_out["PCM6<br/>upmix C zero; discrete C preserved"]
   end
@@ -89,15 +89,15 @@ flowchart TB
   end
   iphone --> realtime_100
   iphone --> buffered_103 --> cookie_decode --> classify_pcm
-  realtime_100 -->|media only| hssr_upmix
+  realtime_100 -->|media only| scene_upmix
   classify_pcm -->|5.1| discrete_reorder --> cabin_guard
-  classify_pcm -->|stereo| hssr_upmix --> cabin_guard
+  classify_pcm -->|stereo| scene_upmix --> cabin_guard
   cabin_guard --> pcm6_out --> deva_csd --> most_amp --> j525_dsp --> speakers_19
   classDef primary fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
   classDef success fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
   classDef neutral fill:#f3f4f6,stroke:#6b7280,stroke-width:2px,color:#1f2937
   class iphone,speakers_19 primary
-  class discrete_reorder,hssr_upmix success
+  class discrete_reorder,scene_upmix success
   class j525_dsp neutral
 ```
 
@@ -112,24 +112,24 @@ There are two CarPlay audio streams (`docs/reference/IOS_CARPLAY_SPATIAL_WIREFOR
 
 The stock realtime stream never carries multichannel, and phone-side spatial over it is blocked by a phone feature flag (`ScreenSpatialAudioReceiver`) — see [Dolby Atmos](DOLBY_ATMOS.md). So all **multichannel** input rides the buffered type-103 path. On that path the frame is APAP (BE32 + ChaCha20-Poly1305); the **inline magic cookie** decides the decoder, not the APAP index hint — see [Discrete 5.1 Routing](DISCRETE_5_1_ROUTING.md).
 
-The shipped startup advertises `[65,23]` on type 103: primary APAC 5.1 because `AUDIO_SPATIAL_ATMOS=0` (`hook/audio/audio_hook.c:785-788`, `deploy/smartphone_integrator/carplay_startup.sh:61`), plus AAC-LC stereo via `SPATIAL_103_EXTRA_INDEX=23` (`carplay_startup.sh:92`).
+The shipped startup advertises `[65,23]` on type 103: primary APAC 5.1 because `AUDIO_SPATIAL_ATMOS=0` (`deploy/smartphone_integrator/carplay_startup.sh:71`), plus AAC-LC stereo via `SPATIAL_103_EXTRA_INDEX=23` (`carplay_startup.sh:109`).
 
-Stereo on the realtime stream is upmixed too. With `AUDIO_REALTIME_UPMIX=on` (`carplay_startup.sh:86`) the same HSSR renderer runs on type-100 media PCM — Spotify and every app without type 103 — on its own DSP state and controller (`hook/audio/audio_hook.c:3885-3893`). It falls back to plain L/R while a phone, Siri or alert stream is tracked or while type 103 owns the rail (`hook/audio/media_route.h:153-167`).
+Stereo on the realtime stream is upmixed too. With `AUDIO_REALTIME_UPMIX=on` (`carplay_startup.sh:103`) the same scene renderer runs on type-100 media PCM — Spotify and every app without type 103 — with its own engine state and its own mask worker (`hook/audio/audio_hook.c:3860-3880`). It falls back to plain L/R while a phone, Siri or alert stream is tracked or while type 103 owns the rail (`hook/audio/media_route.h:158`).
 
 ## 🔧 Where upmix vs discrete kicks in
 
-After decode, the PCM is classified by codec, channel count and layout (`hook/audio/spatial_downmix.h:61-79`):
+After decode, the PCM is classified by codec, channel count and layout (`hook/audio/spatial_downmix.h`):
 
 ```mermaid
 flowchart TB
   accTitle: Decode and classification branch
-  accDescr: Decoded PCM is classified; APAC 5.1 is reordered onto the discrete path while stereo goes to the HSSR upmix.
+  accDescr: Decoded PCM is classified; APAC 5.1 is reordered onto the discrete path while stereo goes to the scene upmix.
   apap_frame["APAP frame and cookie"]
   aac_decode["AAC-LC 23 via Cinemo"]
   apac_decode["APAC 65 via libcarplay_apac"]
   classify_pcm["classify codec and layout"]
   reorder_51["reorder to Apple order"]
-  stereo_upmix["stereo to HSSR upmix"]
+  stereo_upmix["stereo to the scene upmix"]
   discrete_path["discrete path bypasses upmix"]
   apap_frame --> aac_decode --> classify_pcm
   apap_frame --> apac_decode --> classify_pcm
@@ -143,49 +143,75 @@ flowchart TB
 
 iOS may alternate AAC-LC ↔ APAC inside one session; the cookie authority makes the switch seamless. iOS never sends ordinary stereo as APAC 5.1, so normal music decodes as stereo and is upmixed on our side. The 5.1 case is `[car]` end to end.
 
-Decoded 5.1.2 (index 66) is accepted only when SETUP itself negotiated 66, which the shipped config never advertises; otherwise the decoder is rejected as `unsupported-layout` because the native PCM8 order is unmeasured (`hook/audio/audio_hook.c:3227-3240`).
+Decoded 5.1.2 (index 66) is accepted only when SETUP itself negotiated 66, which the shipped config never advertises; otherwise the decoder is rejected as `unsupported-layout` because the native PCM8 order is unmeasured.
 
-## 📊 The HSSR upmix, one hop
+## 📊 The scene renderer
 
-HSSR is a **causal routing controller**, not a separator: 93.75 times a second it decides, per frequency band, how much of the signal belongs behind the listener and where; a deterministic DSP builds the field from that decision. Full detail in [HSSR Model](HSSR_MODEL.md).
+The renderer is **structural, not a classifier**: per STFT cell it decides from the two-channel statistics what is a coherent off-centre source and what is room, and moves whole places behind the listener; the only learned part is the mask net, which says which cells may move as instruments and which must stay protected. Every stage lives in `hook/audio/scene_engine.c` (frame and block driver), `scene_engine_math.c` (helpers, tables, the 1024-point real FFT), `scene_clusters.c` (the stage clusters), `scene_mask.c` (the net) and `scene_mask_worker.c` (its thread); `hook/audio/stereo_upmix.c` wraps them with the OFF bypass, the int16 conversion, the LFE V2 assist and the cabin guard. Spec sections 14 and 18 of [the algorithm note](UPMIX_SCENE_ALGORITHM_2026-10-08.md) record every design change the implementation forced and the port's numbers.
+
+One frame: a sine-windowed **1024-sample STFT at hop 256** (ERB-pooled groups for the pooled statistics); per bin the 2×2 covariance of L and R, tracked with three time constants (8 ms for the fast pan gate, 43 ms for the Wiener scalar and the clustering, 300 ms for the direction of the residual), is decomposed into a coherent primary with a pan and an orthogonal residual; the centre-removed pan of the primary feeds the **stage clusters** (at most three admitted places with dwell, 2 s release, shadow rejection, merges and a song memory); for every admitted place each bin is unmixed exactly against the centre (`[L; R] = [a; b]·s + [1; 1]/√2·m`, so a centred source stays in front sample-exactly) and the fraction `alpha` of the place is transferred to the rear at its own pan and subtracted from the front at the same pan; the residual becomes the side layer, decorrelated between Ls and Rs by a static per-bin phase table and low-passed at 7 kHz, with the air copy ramping in at 2.0–2.5 kHz; the **mask net c** posteriors (one row per 512 input frames) set the instrument transfer (`inst_alpha`, `inst_gamma`) and duck the spatial transfer and the side layer by the protect mask (`duck_depth`); the engine writes `L R 0 0 Ls Rs`; `stereo_upmix.c` then converts to int16, adds the LFE V2 assist from the front and runs the cabin guard.
 
 ```mermaid
 flowchart TB
-  accTitle: HSSR per-hop signal flow
-  accDescr: One 128-sample hop splits into a bit-exact delayed front and an STFT feature path driving a GRU controller, routing, objects and bed, then rear synthesis and the PCM6 output.
-  stereo_in["stereo S16 hop 128"]
-  front_delay["front delay line 512"]
-  stft_features["STFT to 32-band features"]
-  gru_worker["async GRU worker 93.75 Hz"]
-  routing_decode["routing vetoes and gates"]
-  object_slots["four object slots"]
-  scene_bed["scene bed with delays"]
-  rear_synth["rear synth 12 ms"]
-  front_out["front minus retention"]
-  pcm6_out["PCM6 float to S16"]
-  stereo_in --> front_delay --> front_out
-  stereo_in --> stft_features --> gru_worker --> routing_decode
-  routing_decode --> object_slots --> rear_synth
-  routing_decode --> scene_bed --> rear_synth
-  rear_synth --> pcm6_out
-  front_out --> pcm6_out
+  accTitle: Scene renderer signal flow
+  accDescr: The 1024-by-256 STFT feeds a per-bin two-by-two decomposition, the stage clusters with song memory, the exact unmix and transfer, the side layer with air and the mask net semantic stage, producing six channels that pass LFE V2 and the cabin guard.
+  stereo_in["stereo S16, any call size up to 1024"]
+  stft["STFT 1024 / 256, sine window"]
+  decompose["per-bin 2x2 eigen decomposition<br/>primary with pan + residual"]
+  clusters["stage clusters with song memory<br/>at most 3 places, dwell and release"]
+  unmix["exact unmix against the centre<br/>transfer alpha of each place"]
+  side["side layer + air<br/>static phase table, 7 kHz low-pass"]
+  mask_net["mask net c every 512 frames<br/>eligibility / protect, duck"]
+  six_out["L R 0 LFE Ls Rs"]
+  lfe_v2["LFE V2 assist from the front"]
+  guard["S16 cabin guard"]
+  stereo_in --> stft --> decompose --> clusters --> unmix --> six_out
+  decompose --> side --> six_out
+  stereo_in --> mask_net --> unmix
+  mask_net --> side
+  six_out --> lfe_v2 --> guard
   classDef primary fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
   classDef success fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
   classDef neutral fill:#f3f4f6,stroke:#6b7280,stroke-width:2px,color:#1f2937
-  class stereo_in,pcm6_out primary
-  class rear_synth,front_out success
-  class gru_worker neutral
+  class stereo_in,guard primary
+  class clusters,unmix,side success
+  class mask_net neutral
 ```
 
-Three design choices carry the sound:
+### Knobs
 
-- **The front is a delayed copy of the input** (an S16 delay line), not the STFT output — only the rear is synthesized float. The front is that delayed input minus the transferred object share; front retention keeps part of it in front, per band with the HF taper (`hook/audio/hssr_dsp.c:1576-1590`).
-- **Second scene, by precedence.** The rear is delayed 12 ms (`SPA_SCENE_REAR_DELAY_FRAMES = 576`, `hook/audio/stereo_upmix.h:31`) so the louder, earlier front anchors the image (Haas effect) and the rear reads as distinct objects, not an echo. This is the deliberate departure from Dolby, which never sends the dominant object rearward.
-- **C = 0 on purpose** — the amp derives the centre from L+R.
+Read once per `dio_manager` start (a change applies at the next HU boot of the CarPlay child); every knob is clamped to its range with an `audio config: invalid …` line and the default on a bad value (`hook/audio/audio_hook.c:134-169`, `hook/audio/audio_hook.h:59-96`). The scene values in the startup block are the engine defaults of variant J, spelled out so the running configuration can be read from the file.
 
-The rear also passes a −4 dB @ 500 Hz low shelf before the transfer and a +3 dB high shelf with a 4 kHz midpoint before its linked limiter (`hook/audio/stereo_upmix.c:32-50`).
+| Knob | Shipped (`carplay_startup.sh`) | Default | Range | What it is |
+|---|---|---|---|---|
+| `AUDIO_STEREO_UPMIX` | `on` (`:73`) | off | on, off | on = the scene renderer; off = the exact `L,R,0,0,0,0` bypass, which always wins |
+| `AUDIO_REALTIME_UPMIX` | `on` (`:103`) | off | on, off | the same renderer on the stock type-100 media stream, own state and own mask worker |
+| `AUDIO_STEREO_LFE` | `assist` (`:74`) | off | off, assist | Cabin-Aware LFE V2 |
+| `AUDIO_STEREO_LFE_GAIN` | `0` (`:76`) | 0 | −24..+12 dB re 4096 | assist level; not the whole subwoofer feed (the corrected BANK1 also feeds the sub from L/R/C/Ls/Rs) |
+| `AUDIO_SCENE_MASK_BLOB` | `$H/scene_masknet_c.bin` (`:92`) | unset | path | the fine mask net c weights (`SMSKNET1`, 32,544 B); unset, unreadable or rejected = spatial only, logged once |
+| `AUDIO_SCENE_MASK_SYNC` | not exported | 0 | 0, 1 | 1 = the net on the audio thread (the port tests' exact timing); 0 = the scene mask worker |
+| `AUDIO_SCENE_ALPHA` | `0.7` (`:97`) | 0.7 | 0..1 | spatial relocation fraction of an admitted place |
+| `AUDIO_SCENE_INST_ALPHA` | `0.9` (`:95`) | 0.9 | 0..1 | instrument transfer fraction (needs the blob) |
+| `AUDIO_SCENE_INST_GAMMA` | `1` (`:94`) | 1 | 0.1..4 | eligibility exponent; 1 = full rear (kit letters I/J), 2 = the balanced fallback H |
+| `AUDIO_SCENE_DUCK_DEPTH` | `0.25` (`:96`) | 0.25 | 0..1 | duck of the spatial transfer and the side layer by the protect mask (needs the blob) |
+| `AUDIO_SCENE_REAR_DELAY_MS` | `0` (`:93`) | 0 | −50..50 | 0 = variant J: our rear and the amp's own front bleed meet the rear doors in phase |
+| `AUDIO_SCENE_SIGMA_MIN` | not exported | 0.08 | 0.01..1 | place width floor; 0.15 is the documented second candidate (spec §15) |
+| `AUDIO_SCENE_SIDE_LP_HZ` | `7000` (`:98`) | 7000 | 0 = off, 1000..24000 | side-layer low-pass |
+| `AUDIO_SCENE_BLEED_CANCEL` | `0` (`:99`) | 0 | 0..0.5 | variant K's cancel of the amp's −3 dB front copy in the rear bus (0.355); 0 = J |
 
-Before output, an S16 cabin guard predicts each amp bus peak (using a linear copy of the amp's profile-0/bank-1 matrix) so no bus clips. It is a peak-detection model, not acoustics: if `peak · 3.53 ≤ 32275` nothing can clip and it returns early; otherwise it repairs via LFE only first, then linked-scales all six channels (`hook/audio/stereo_upmix.c:55-64`, `:340-410`). Until 2026-09-20 this table was the old transposed reading and disagreed with the corrected matrix in 22 of 48 coefficients; it now carries the corrected input-major table shared by every guard (`stereo_upmix.c:57-73`). The same fix stopped the 2.5× transfer intermediate from wrapping in int16 (16384·2.5 = 40960) and the +32768 unity clamp from flipping to −32768 (`stereo_upmix.c:118-119`) — see [Upmix Calibration and Tuning](UPMIX_CALIBRATION_AND_TUNING.md#the-corrected-matrix-changed-the-diagnosis).
+What the renderer no longer has: `AUDIO_STEREO_SURROUND`, `FRONT_BASS_DB`, `FRONT_TREBLE_DB`, `REAR_BODY_DB`, `REAR_AIR_DB`, `FRONT_RETENTION` and every `AUDIO_HSSR_*` knob left with the Universal backend; the fronts and rears leave at the engine's own levels (unity scale, as the car kit renders) and only the LFE assist and the cabin guard apply on top (`hook/audio/stereo_upmix.h:72-83`).
+
+### The mask worker and its timing
+
+The net costs 1.37 M ARMv7 instructions per 512-frame control on the QEMU bench (`models/scene-masknet-c/manifest.json`), so by default it runs on the **scene mask worker** (`hook/audio/scene_mask_worker.c`, SCHED_RR priority 17, started per SETUP on the type-103 path and kept across re-params on the realtime path; `audio_hook.c:1720-1724`): two job slots of 512 frames, two result slots, generation and sequence numbers, stale results dropped. The audio thread pays only the hand-off (about 1.1 k instructions per 768-frame period on the bench) and installs the newest finished row at every 512-frame control boundary (256, 768, 1280 … pushed frames, `hook/audio/stereo_upmix.h:42-60`), so a row applies **one control (10.7 ms) later** than on the audio thread, one more per control the net needs beyond its period — the engine's slow instrument attack absorbs that. A control that arrives while both slots are full is refused, never waited for: the engine keeps its last row and the net's 2048-sample history gets a 512-frame splice. The count is `skipped=N` in the stop line below; 0 is the only healthy value. If the worker thread cannot start, the net runs on the audio thread (`AUDIO_SCENE_MASK_SYNC=1` chooses that on purpose).
+
+### Latency
+
+The engine emits a sample only once its 1024-sample analysis frame is complete, so `spa_stereo_upmix_process_s16` primes its output FIFO with 1024 zero frames and every call then emits exactly the frames it was given: output frame *i* is input frame *i − 1024* rendered, **21.3 ms** on both paths (`stereo_upmix.h:31-38`). The retired Universal renderer lagged 512 frames and never reported them (the type-103 SETUP response carried `arrivalToRenderLatencyMs: 0` since the first build, and the car is tuned to that), so OFF still reports 0 and **SCENE reports only the extra 512 frames, 11 ms** (`audio_hook.c:8184-8200`). What the phone does with the field is to verify in the car.
+
+### Track-change reset
+
+A new song must not inherit the previous song's places and song memory. On the type-103 path the APAP **transition id** of the stream is sample-exact: a changed id calls `spa_stereo_upmix_scene_track_change` (`audio_hook.c:2798-2805`). On the realtime path the hook reads the iAP2 **NowPlayingUpdate** (0x5001) persistent identifier on Cinemo's receive thread and sets an atomic flag that stock's audio thread consumes at its next period (`audio_hook.c:9056-9087`, `:3954-3955`). Both reset the engine only — every place fades out, the histogram and the song memory are cleared, the tables are kept because the reset runs inside the realtime callback — while the net's stream carries on (`stereo_upmix.c:515-526`, `scene_clusters.h:24`).
 
 ### Fail-closed contract
 
@@ -193,58 +219,30 @@ The upmixer never silently picks another renderer `[code]`:
 
 | Condition | Output |
 |---|---|
-| `AUDIO_STEREO_UPMIX=off` | exactly `L,R,0,0,0,0`, all gain/LFE settings ignored (`audio_hook.c:1985-1989`) |
-| model missing, corrupt or wrong size | upmix stays off, `HSSR: model rejected … stereo upmix will stay off` (`audio_hook.c:1746`) |
-| guard model missing | no guard, silently; the primary alone runs (`audio_hook.c:1755-1771`) |
-| process error at render time | exact L/R widening, one ERROR line (`audio_hook.c:3369-3378`) |
-| worker thread cannot start | the synchronous GRU path, logged `hssrController=sync-fallback` |
+| `AUDIO_STEREO_UPMIX=off` | exactly `L,R,0,0,0,0`; every other audio knob ignored |
+| blob unset, unreadable or rejected | spatial only (no instrument transfer, no duck), one line `SCENE: mask blob unreadable … running without a mask` or `… rejected … (expected 32544 bytes of SMSKNET1) …` (`audio_hook.c:1677-1693`) |
+| upmix init fails on the type-103 path | `buffer103: stereo upmix init failed status=…; exact L/R passthrough retained` (`audio_hook.c:1983`) |
+| process error at render time | exact L/R widening, one ERROR line (`audio_hook.c:3275`) |
+| worker thread cannot start | the net on the audio thread, `audio upmix 103|rt: scene mask worker failed to start; net on the audio thread` (`audio_hook.c:1723`) |
+| invalid knob value | `audio config: invalid …`, the default used |
 
-Every reset (prefix FLUSH, pause/rate teardown, cookie or codec change, SETUP replacement, session stop) advances a nonzero generation; the worker drops stale results. Env values are read once per `dio_manager` process — a change applies at the next CarPlay generation (phone reconnect), a replaced `.so` too; no unit reboot is needed for either.
-
-## 📌 The shipped calibration
-
-Luka, 2026-09-21 morning: *current calibration is OK for now — do not tune; no defaults, env or deploys without my word; any later change only after listening, one lever at a time.* The car then ran S16 / 0.40 / −3 / LFE 0 / retention 0. Later that day he chose the scene-bed variant after a headphone A/B, and that is what `carplay_startup.sh` exports now (`carplay_startup.sh:71-78`). The whole history, the measurements behind each value and the symptom → lever table are in [Upmix Calibration and Tuning](UPMIX_CALIBRATION_AND_TUNING.md).
-
-| Parameter | Shipped | Code default | Parser range | Source `[code]` |
-|---|---|---|---|---|
-| Render path | S16 | S16 only | — | float/cabin/quiet paths removed, commit `9255485` |
-| `AUDIO_STEREO_SURROUND` | 0.40 | 0.18 (Q15 5898) | 0..0.50 | `carplay_startup.sh:65`, `audio_hook.c:162-179`, `stereo_upmix.h:27-30` |
-| `AUDIO_STEREO_FRONT_BASS_DB` | −3 | 0 | −12..0 | `carplay_startup.sh:70`, `audio_hook.c:258-275`; RBJ shelf 200 Hz (`stereo_upmix.h:37`) |
-| `AUDIO_STEREO_LFE` | assist | off | off, assist | `carplay_startup.sh:66`, `audio_hook.c:298-308` |
-| `AUDIO_STEREO_LFE_GAIN` | 0 dB re 4096 | 0 dB | −24..+12 dB | `carplay_startup.sh:68`, `audio_hook.c:277-296`; Q15 cap 16384 (`stereo_upmix.h:35-36`) |
-| `AUDIO_STEREO_FRONT_RETENTION` | 0.5 | 0 | 0..1 | `carplay_startup.sh:75`, `audio_hook.c:181-195` |
-| `AUDIO_HSSR_BED_DELAYS` | on | off | bool | `carplay_startup.sh:76`, `audio_hook.c:349-353` |
-| `AUDIO_HSSR_BED_ATTACK` | owner | off | off, owner, front | `carplay_startup.sh:77`, `audio_hook.c:197-208` |
-| `AUDIO_HSSR_ATTACK_COLLAPSE` | 0.75 | 1.0 | 0..1 | `carplay_startup.sh:78`, `audio_hook.c:210-225` |
-| `AUDIO_HSSR_RETENTION_HF` | not exported → 1000:2500 Hz | 1000:2500 | `LO:HI` Hz ≤ 24000; `HI≤LO` = flat | `audio_hook.c:230-255`, `stereo_upmix.h:42-43` |
-| Rear delay | 12 ms (576 frames) | baked in | — | `stereo_upmix.h:31` |
-| LFE low-pass | Butterworth LR4 **60 Hz**, mono fold | baked in | — | `stereo_upmix.c:23-31` (coefficients give 60 Hz; the comments at `:20-22` and `stereo_upmix.h:116` still say 48 Hz) |
-| `AUDIO_REALTIME_UPMIX` | on | off | bool | `carplay_startup.sh:86`, `audio_hook.c:358-362` |
-| `AUDIO_SOUNDCHECK` / `_FALLBACK` / `_LIMITER` | 1 / off / off | on / off / off | bool / off, rms / off, peak | `carplay_startup.sh:87-89`, `audio_hook.c:310-332` |
-| `AUDIO_HSSR_MODEL` | `$H/hssr_model.bin` (q6d `96abe57d…`) | `/mnt/app/root/hooks/hssr_model.bin` | path | `audio_hook.h:93`; guard `hssr_guard.bin` (V11 `ab01463e…`) beside it, or `AUDIO_HSSR_GUARD_MODEL` (`audio_hook.c:1755-1771`) |
-| Object slots | 4 (2 per side), 250 ms hold (94 hops) | single path | — | `hssr_dsp.h:20`, `hssr_dsp.c:940-941` |
-
-An invalid value never aborts: it logs `audio config: invalid …` at ERROR and falls back to the code default (surround 0.18, retention 0, LFE gain 0 dB, collapse 1, bed attack off).
-
-> ⚠️ **The HF taper is tied to `BED_ATTACK`.** Retention runs per band inside HSSR (where the taper lives) only when `AUDIO_HSSR_BED_ATTACK≠off`; with attack off, retention falls back to the flat time-domain transfer and the taper is ignored (`stereo_upmix.h:93-95`, `hssr_dsp.c:1583-1590`). So turning only `BED_ATTACK` off while keeping retention 0.5 brings the bright-front complaint back. The startup comment "any of the three set to off/0 restores the legacy renderer bit-exactly" (`carplay_startup.sh:73-74`) is only true for all three plus retention 0.
-
-Measured facts about these knobs (60 s grid, conditional amp model `[model]`): front bass is the **only** bass lever and it moves the modelled sub too; retention restores front/centre mid and never touches bass; LFE gain is **not** a monotonic sub-volume knob. Details and numbers: [Upmix Calibration and Tuning](UPMIX_CALIBRATION_AND_TUNING.md#one-lever-at-a-time).
+Every reset (prefix FLUSH, pause/rate teardown, cookie or codec change, SETUP replacement, session stop) advances a process-wide generation; the worker drops rows of an older generation (`stereo_upmix.c:528-560`). Env values are read once per `dio_manager` process — a change applies at the next start of the CarPlay child, a replaced `.so` too.
 
 ## ⚙️ SoundCheck and the output order
 
-Per buffered frame the order is fixed `[code]` (`audio_hook.c:3361-3409`):
+Per buffered frame the order is fixed `[code]` (`audio_hook.c:3290-3310`):
 
 ```text
-decoded S16 → reorder (APAC 5.1) or HSSR upmix incl. S16 cabin guard → SoundCheck gain (S16) → optional SoundCheck limiter → PCM ring
+decoded S16 → reorder (APAC 5.1) or scene upmix incl. LFE V2 and the S16 cabin guard → SoundCheck gain (S16) → optional SoundCheck limiter → PCM ring
 ```
 
-SoundCheck is a **programme** gain applied after the upmix on purpose: HSSR uses absolute log-energy features, so a −9 dB AAC gain before analysis would change its routing decisions (`audio_hook.c:3402-3405`). SETUP carries `soundCheckMediaKind {"1":-16}`; APAP type 103 carries MainLoudnessParameters (TLV 11) and media kind (TLV 12). The gain is `target − p0`, positive gain capped at `−1 − p2`, rounded Pioneer-style `floor(x+0.5)`, bounded −128..+20 dB (`soundcheck.c:80-92`); first metadata applies immediately, later changes ramp over 20 ms (`soundcheck.c:7`), FLUSH resets history without forcing unity. Observed tuples: AAC `[-6.5,-1,0.96875]` → −9 dB, the retained APAC tuples → +1 dB. The RMS fallback and sample-peak limiter are separate opt-ins, both off in the shipped config. `-16` is the captured protocol value, not a published Apple rule.
+SoundCheck is a **programme** gain applied after the upmix on purpose: the renderer's statistics and the net's log-power features see the decoded level, not a −9 dB AAC gain (`audio_hook.c:3302-3306`). SETUP carries `soundCheckMediaKind {"1":-16}`; APAP type 103 carries MainLoudnessParameters (TLV 11) and media kind (TLV 12). The gain is `target − p0`, positive gain capped at `−1 − p2`, rounded Pioneer-style `floor(x+0.5)`, bounded −128..+20 dB (`soundcheck.c:80-92`); first metadata applies immediately, later changes ramp over 20 ms (`soundcheck.c:7`), FLUSH resets history without forcing unity. Observed tuples: AAC `[-6.5,-1,0.96875]` → −9 dB, the retained APAC tuples → +1 dB. The RMS fallback and sample-peak limiter are separate opt-ins, both off in the shipped config. `-16` is the captured protocol value, not a published Apple rule.
 
 > 📌 **Open `[code]`:** the S16 cabin guard runs inside the upmix, *before* SoundCheck, and the SoundCheck limiter is off. A positive SoundCheck gain (APAC +1 dB) is therefore applied after the bus bound was checked. A 2026-09-08 diagnostic proved that any limiter placed after S16 clipping cannot restore channel ratios (`[30000,31000]` at +1 dB → `32767,32767`). No clipped song has been captured.
 
 ## ⚡ The realtime path in the car
 
-The stock type-100 media stream (Spotify, every app without buffered 103) is upmixed inside stock's own QSA thread: period 768 frames = 16 ms (`audio_hook.c:1541-1542`), own DSP state and worker, allowed only for realtime periods, 2→6, a tracked media stream and no phone/Siri/alert owner (`media_route.h:158-167`). The deadline guard rules (12 ms budget, 4 consecutive overruns, 64 cold periods (~1 s) excused, revival only after a ≥ 500 ms gap) live in [HSSR Model](HSSR_MODEL.md#async-execution-and-the-realtime-guard); the code is `rt_upmix_guard.h:24-100`.
+The stock type-100 media stream (Spotify, every app without buffered 103) is upmixed inside stock's own QSA thread: period 768 frames = 16 ms (`audio_hook.c:1472`), own engine state and own mask worker, allowed only for realtime periods, 2→6, a tracked media stream and no phone/Siri/alert owner (`media_route.h:158`). The deadline guard (`hook/audio/rt_upmix_guard.h:27-41`): 12 ms budget per period, 4 consecutive overruns disable the upmix (rears silent, fronts untouched), 64 cold periods (~1 s) are excused after every arm or break, revival only after a gap of ≥ 500 ms in the stream.
 
 ```mermaid
 stateDiagram-v2
@@ -252,101 +250,84 @@ stateDiagram-v2
   accDescr: A realtime sink arms the guard with sixty-four excused cold periods, judges each period against the 12 ms budget, disables after four consecutive overruns and revives only after a break of at least 500 ms in the stream.
   [*] --> cold_start: params on a 2 to 6 sink
   cold_start --> judged: 64 periods excused
-  judged --> judged: period within 10 ms
-  judged --> disabled: 4 consecutive over 10 ms
+  judged --> judged: period within 12 ms
+  judged --> disabled: 4 consecutive over 12 ms
   disabled --> cold_start: gap of 500 ms or more
   judged --> cold_start: gap or DSP reset
   disabled --> [*]: handle closed
   judged --> [*]: handle closed
 ```
 
-**What the car recorded on the old 8 ms build** (2026-09-21, five sessions) `[car]` — three of five disabled themselves, which was the audible "rears blinking":
+**Cost on the QEMU ARMv7 bench** (`tools/stereo-upmix-render/bench/`, [Scene Backend Deploy](../build-and-deploy/SCENE_BACKEND_DEPLOY.md)) `[model]`: the engine 0.31–0.34 M instructions per 256-frame hop (0.98 M per 768-frame period at the shipped flags, spatial only 0.31 M per hop), the net 1.37 M per 512-frame control on the worker, the hand-off 1.1 k per period. The only instructions-to-Krait calibration so far (the Universal runs) scales this to **1.1–1.8 ms of the 16 ms period on the audio thread** against the 12 ms guard, 1.6–2.5 ms per control on the worker, 3.5–5.6 ms per period with `AUDIO_SCENE_MASK_SYNC=1`. The guard histogram in the `stop` line is the only real number; none has been collected with this renderer yet. The Universal-era car sessions (three of five disabled themselves on the 8 ms build) and its cost work are in [Upmix History and Results](UPMIX_HISTORY_AND_RESULTS_2026-10-09.md).
 
-| Session | Periods | Upmixed | Worst | Disabled |
-|---:|---:|---:|---:|---|
-| 1 | 11 625 | 9 463 | 11 079 µs | yes |
-| 2 | 575 | 72 | 9 064 µs | yes |
-| 3 | 1 662 | 1 662 | 8 057 µs | no |
-| 4 | 15 075 | 9 928 | 9 064 µs | yes |
-| 5 | 5 902 | 5 902 | 10 071 µs | no |
-
-**Cost work 2026-09-22** — QNX/ARMv7 under QEMU `-icount`, 8 × 1024-frame blocks, the car's config (`--scene`), every step bit-identical (bench checksum `0xe500b91a9b2c337a`) `[model]`:
-
-| Step | Typical block | Loud block |
-|---|---:|---:|
-| before (`48b9851`) | 8 039 373 | 8 039 373 |
-| cabin-guard early-out + drop non-binding divisions | 7 192 336 | |
-| inline biquad | 7 074 435 | |
-| FFT: trivial first pass, twiddle walk | 6 950 678 | |
-| NEON FFT butterflies | 6 220 931 | |
-| NEON cabin-guard matrix | 6 024 357 | 6 228 611 |
-| NEON analysis window, overlap-add, `mix_bed` | **5 726 857** (−28.8 %) | **5 931 362** (−26.2 %) |
-
-The biggest find: 68 % of the per-sample stage was the cabin guard — two passes over the 8×6 matrix and 16 divisions per frame, 14 of them useless because seven of eight buses have the matrix floor as their LFE coefficient and can never bound an S16 sample. Scaling the five recorded worst periods by −26.2 % *estimates* 8.2 / 7.4 / 6.7 / 6.7 / 5.9 ms against the 10 ms limit — an instruction-count estimate, not a measurement; any part that was preemption does not shrink.
-
-Deliberately **not** done: triggering on real `deviceUnderruns` (it reaches into the QSA write interposer that once crashed dio_manager — see [Landmines](../LANDMINES.md)), thread CPU time instead of wall time (`CLOCK_THREAD_CPUTIME_ID` exists on QNX 6.5), vectorising the branchy mask/slot loops (≈ 60 % of `run_hop`, and rewriting them has flipped tracker decisions before), and a cheaper intermediate tier instead of "full HSSR or silent rears".
+Deliberately **not** done: triggering on real `deviceUnderruns` (it reaches into the QSA write interposer that once crashed dio_manager — see [Landmines](../LANDMINES.md)), and thread CPU time instead of wall time (`CLOCK_THREAD_CPUTIME_ID` exists on QNX 6.5).
 
 ## ✅ What ships
 
-Deployed 2026-09-22, each verified by read-back `[car]`:
+The on-unit file set, staged by `scripts/prepare_install.sh` ([Deploy and Release](../build-and-deploy/DEPLOY_AND_RELEASE.md)):
 
 | Path | File |
 |---|---|
-| Upmix + all interposers | `/mnt/app/root/hooks/libcarplay_hook.so` |
+| Upmix + all interposers | `/mnt/app/root/hooks/libcarplay_hook.so` (1,441,797 B unprotected; 2.1 MB with Universal) |
 | APAC decoder (dlopen'd) | `/mnt/app/root/hooks/libcarplay_apac.so` |
-| Models | `hssr_model.bin` (q6d), `hssr_guard.bin` (V11) |
+| Model | `/mnt/app/root/hooks/scene_masknet_c.bin` (32,544 B, sha256 `58cdc72f…`, from `models/scene-masknet-c/`); `hssr_model.bin`, `hssr_guard.bin` and `hssr_mask.bin` are no longer shipped, the uninstaller still removes them from older installs |
+| Startup | `/mnt/app/root/hooks/carplay_startup.sh`, the scene block live at lines 77–99 |
 | Java (needs a unit restart) | `/mnt/app/eso/hmi/lsd/jars/carplay_hook.jar` |
 | Firmware | `/mnt/app/eso/bin/apps/smartphone_integrator` |
 | 6-voice mirror driver | `/mnt/app/armle/lib/dll/deva-ctrl-qc.so` |
 
-The 2026-09-22 set came from `build/release-20260922` (commit `b021ec9`): `libcarplay_hook.so` sha `dbd5da32…`, `libcarplay_apac.so` `1c25799f…` (unchanged content), `carplay_startup.sh` `93e39a67…`, `carplay_hook.jar` `10137756…`; the renderers were not touched. The deploy history and every listening verdict are in [Upmix Listening and Deploy Log](UPMIX_LISTENING_AND_DEPLOY_LOG.md).
+The current package is `build/install_scene_j_unprotected.zip` (2026-10-09, sha256 `74fbad0a…`; hook `33b6ee9b…`, APAC `1c25799f…` unchanged since 2026-09-22). It has not been installed on the unit yet (to verify in the car).
 
 **How to confirm the running config** from `/tmp/carplay_hook.log` at the next phone connect (the log is WARN-only by default, `touch /mnt/app/carplay_verbose` lifts it to INFO):
 
 | Line | Level | Proves | Code |
 |---|---|---|---|
-| `HSSR: guard model ready path=… crc=…` | WARN | V11 guard loaded beside the model | `audio_hook.c:1777` |
-| `audio upmix scene bed: delays=1 attack=1 collapse_q15=24576 (experiment)` | WARN | scene bed on the buffered path | `audio_hook.c:2051-2057` |
-| `buffer103: render … stereoUpmix=… rearGainQ15=13107 frontBassDb10=-30 frontRetentionQ15=16384 hssrController=async … lfeGainQ15=4096` | INFO | full buffered config | `audio_hook.c:2026-2050` |
-| `audio realtime upmix: armed (… retention_q15=16384 bed_delays=1 bed_attack=1)` | WARN | type-100 path armed | `audio_hook.c:3993-4001` |
-| `audio realtime upmix: stop periods=… mean_us=… worst_us=… cold_us=… disables=… revivals=… ms_hist=…` | WARN | the real period-time distribution (9 buckets, last = ≥ 8 ms) | `audio_hook.c:4012-4030` |
-| `audio realtime upmix: DISABLED …` / `back after a … ms break` | WARN | guard tripped / revived | `audio_hook.c:4085-4090`, `:4058-4064` |
+| `SCENE: mask net ready path=/mnt/app/root/hooks/scene_masknet_c.bin bytes=32544` | WARN | the blob passed size, magic and dimensions | `audio_hook.c:1693` |
+| `buffer103: render … stereoUpmix=scene frontGainQ15=31392 sceneMask=worker stereoLfe=assist lfeGainQ15=4096 …` | INFO | the buffered path's configuration (`sceneMask` = `worker`, `sync`, `none` for no blob, `off` for the bypass) | `audio_hook.c:1945-1960` |
+| `buffer103: response committed {type:103,…,arrivalToRenderLatencyMs:11,…}` | WARN | the phone was told the renderer's extra 512 frames | `audio_hook.c:8391` |
+| `audio realtime upmix: armed (backend=scene init=0 period=768 frames, scene_mask=worker)` | WARN | the type-100 path armed | `audio_hook.c:3875` |
+| `audio upmix 103\|rt: scene mask worker stopped rows=A/B skipped=N stale=… superseded=… resets=…` | WARN | at stream stop: B controls handed to the worker, A finished, N refused because both slots were full | `audio_hook.c:1739` |
+| `audio realtime upmix: stop periods=… mean_us=… worst_us=… cold_us=… disables=… revivals=… ms_hist=…` | WARN | the real period-time distribution (9 buckets of 1 ms, last = ≥ 8 ms) | `audio_hook.c:3893` |
+| `audio realtime upmix: DISABLED …` / `back after a … ms break` | WARN | guard tripped / revived | `audio_hook.c:3970`, `:3942` |
 
-If `disables > 0`, check whether the overruns fall in loud passages (our cost) or are scattered (scheduler preemption).
+Read `skipped` and `disables` first. If `disables > 0`, check whether the overruns fall in loud passages (our cost) or are scattered (scheduler preemption).
 
-Whether any of this runs depends on `AUDIO_SPATIAL`. Only B&O external-amp cars have a 6-channel route, so the intended policy is `AUDIO_SPATIAL=0` unless E2P 0xFC reads `02` — but that gate is assigned to the installer and no installer script implements it yet; the startup script hardcodes `AUDIO_SPATIAL=1` for this unit (`carplay_startup.sh:57-60`). See [Landmines](../LANDMINES.md).
+Whether any of this runs depends on `AUDIO_SPATIAL`. Only B&O external-amp cars have a 6-channel route, so the intended policy is `AUDIO_SPATIAL=0` unless E2P 0xFC reads `02` — but that gate is assigned to the installer and no installer script implements it yet; the startup script hardcodes `AUDIO_SPATIAL=1` for this unit (`carplay_startup.sh:66-70`). See [Landmines](../LANDMINES.md).
 
 ## ⚠️ The honest gaps
 
-- **No on-car realtime distribution** — the type-100 upmix cost numbers are QEMU estimates; the per-period histogram exists in code (`hook/audio/audio_hook.c:3898-3900`) but the `stop` line from the 2026-09-22 build has not been collected yet. `[open]`
+- **Nothing heard in the car** — the scene renderer was accepted offline (51 reference checks, the fixture gates, the car kit on headphones) and never in the cabin; the guard histogram and the `skipped` count are the first two numbers to collect. `[open]`
+- **+11 ms reported latency** — the phone sees a changed `arrivalToRenderLatencyMs` for the first time; its effect on A/V alignment is unknown. `[open]`
 - **SoundCheck after the cabin guard** — a positive programme gain is applied after the bus bound; limiter off (see above). `[open]`
-- **Centre focus** — idea from the 19.09 handoff: a vocal head in the protection mask feeding PCM C (C = vocal, subtracted from L/R); model work, not a knob. `[open]`
+- **Amp timing is static RE** — the ~11.8 ms rear-bus lag that variant J relies on and the bleed coefficients behind `AUDIO_SCENE_BLEED_CANCEL` were never measured in the cabin; the one-tone probe of [Upmix Radical Directions](UPMIX_RADICAL_DIRECTIONS_2026-10-07.md) decides J against K. `[model]`
 - **J525 state unreadable** — SSH to the head unit is not a J525 memory transport; `/dev/io-amp` on RCC is the internal TI DSP. Active bank/B/EQ selector are hypotheses in every model number. `[open]`
-- **No Krait full-chain loaded trace** — the release-acceptance TARGET gate is unverified. `[open]`
-- **No blind listening / cabin acoustic evidence** — all tuning is on a conditional electrical model, never SPL. `[open]`
-- **Amp DSP model** — static RE, not bit-exact, bus→speaker binding inferred. `[model]`
-- **Known misses** — processed vocal intros read as keys, wide synth-bass read as keys (semantic, not frequency). `[car]`
+- **No blind listening / cabin acoustic evidence** — all tuning is on a conditional electrical model and headphones, never SPL. `[open]`
+- **Known limits of the method** — mixes with no coherent off-centre place (most modern pop) get only the side layer and the net's instrument stage; two coherent sources at one frequency cannot be separated by any two-channel statistic (spec §12, §14). `[model]`
 
-Runtime code: `hook/audio/{hssr_dsp,hssr_neon,hssr_control_worker,stereo_upmix,soundcheck}.{c,h}`, `hook/audio/rt_upmix_guard.h`, `hook/audio/media_route.h`.
+Runtime code: `hook/audio/{scene_engine,scene_engine_math,scene_clusters,scene_mask,scene_mask_worker,stereo_upmix,soundcheck}.{c,h}`, `hook/audio/scene_fft.h`, `hook/audio/scene_simd.h`, `hook/audio/rt_upmix_guard.h`, `hook/audio/media_route.h`.
+
+## 📜 History
+
+Until 2026-10-09 the stereo renderer was the HSSR **Universal** backend: the q6d routing GRU, the V11 guard and the v21a per-cell mask net on a 512/128 STFT, with the surround / front-bass / retention / bed / vocal-gate / mask-drive knobs and the calibration of [Upmix Calibration and Tuning](UPMIX_CALIBRATION_AND_TUNING.md). It was retired with the SCENE backend's first package; the inventory and the plan are in [Upmix Code Retirement](UPMIX_CODE_RETIREMENT_2026-10-09.md), every iteration with its numbers in [Upmix History and Results](UPMIX_HISTORY_AND_RESULTS_2026-10-09.md), and the last tree that has the code, the models and the Universal tooling is git tag `upmix-universal-last-2026-10-09` (commit `1501fc7d`). [HSSR Model](HSSR_MODEL.md) describes that renderer.
 
 ## 🔗 Related notes
 
-- [Upmix Calibration and Tuning](UPMIX_CALIBRATION_AND_TUNING.md) — how every shipped value was reached, the offline measurement method, the symptom → lever table, the Dolby-principle scene bed.
-- [Upmix Listening and Deploy Log](UPMIX_LISTENING_AND_DEPLOY_LOG.md) — what ran in the car when, file hashes, Luka's verdicts, the live readback.
-- [Upmix Release and Acceptance](UPMIX_RELEASE_AND_ACCEPTANCE.md) — the frozen acceptance protocol, the runtime audit, and the research candidates (G-series, Q2, cabin-first) that never shipped.
-- [HSSR Model](HSSR_MODEL.md) (model, training, guard) · [Virtual Cabin and Amp RE](VIRTUAL_CABIN_AND_AMP_RE.md) (the amp) · [Dolby Atmos](DOLBY_ATMOS.md) · [Discrete 5.1 Routing](DISCRETE_5_1_ROUTING.md) · [Landmines](../LANDMINES.md).
-- Long-form: [UPMIX](../research/UPMIX.md), [VIRTUAL_CABIN](../research/VIRTUAL_CABIN.md), [HSSR_UPMIX_MODEL](../research/HSSR_UPMIX_MODEL.md), [DOLBY_ATMOS_TEARDOWN](../research/DOLBY_ATMOS_TEARDOWN.md).
+- [Stereo-to-Rear Scene Algorithm](UPMIX_SCENE_ALGORITHM_2026-10-08.md) — the algorithm, its offline results, the DEV40 comparison, the semantic stage, the port record (§14–§18).
+- [Scene Backend Deploy](../build-and-deploy/SCENE_BACKEND_DEPLOY.md) — the package, the measured cost, the A/B levers, the rollback, what to read in the logs.
+- [Upmix History and Results](UPMIX_HISTORY_AND_RESULTS_2026-10-09.md) · [Upmix Code Retirement](UPMIX_CODE_RETIREMENT_2026-10-09.md) — what came before and why it left.
+- [Upmix Rework Baseline](UPMIX_REWORK_BASELINE_2026-10-07.md) · [Upmix Rework Proposal](UPMIX_REWORK_PROPOSAL_2026-10-07.md) · [Upmix Radical Directions](UPMIX_RADICAL_DIRECTIONS_2026-10-07.md) — why the rear was faint and unstable, and the redesign that became the scene renderer.
+- [Virtual Cabin and Amp RE](VIRTUAL_CABIN_AND_AMP_RE.md) (the amp) · [Dolby Atmos](DOLBY_ATMOS.md) · [Discrete 5.1 Routing](DISCRETE_5_1_ROUTING.md) · [Landmines](../LANDMINES.md).
 - [Buffered Audio Path](BUFFERED_AUDIO_PATH.md) · [Call and Siri Routing](CALL_AND_SIRI_ROUTING.md) — the type-103 transport the upmix renders into, and what happens when a call or Siri takes the output.
-- [Upmix Training History](UPMIX_TRAINING_HISTORY.md) · [Upmix Compute Budget](UPMIX_COMPUTE_BUDGET.md) — how the model was trained and what it costs on the Krait.
 - [J525 Wiring and Speakers](J525_WIRING_AND_SPEAKERS.md) — the rear doors are mid-bass speakers, which bounds what the rear can carry.
+- Long-form: [UPMIX](../research/UPMIX.md), [VIRTUAL_CABIN](../research/VIRTUAL_CABIN.md), [DOLBY_ATMOS_TEARDOWN](../research/DOLBY_ATMOS_TEARDOWN.md).
 
 ## 📚 Sources
 
-Merged originals were removed from the tree after this note absorbed them; they remain in git history (commit 23972aa).
+Merged originals were removed from the tree after this note absorbed them; they remain in git history (commit 23972aa). They describe the Universal renderer and are history since 2026-10-09:
 
 - `UPMIX_STATUS_2026-09-22` — 22.09 deploy hashes, HF taper, −28.8 % cost work, realtime deadline policy and the five recorded sessions.
-- `STEREO_TO_5_1_UPMIX_DESIGN` — the Universal contract: output order, OFF bypass, fail-closed model load, generation reset, runtime split (its rear 0.25 / V11-only policy is superseded).
-- `UPMIX_STATIC_READINESS_AND_SOUNDCHECK` — SoundCheck math, order and the reproduced headroom failure.
-- `UPMIX_GUARD_RETENTION_2026-09-20` — the corrected guard table and the S16 transfer boundary fixes.
+- `STEREO_TO_5_1_UPMIX_DESIGN` — the Universal contract: output order, OFF bypass, fail-closed model load, generation reset, runtime split.
+- `UPMIX_STATIC_READINESS_AND_SOUNDCHECK` — SoundCheck math, order and the reproduced headroom failure (still the SoundCheck section above).
+- `UPMIX_GUARD_RETENTION_2026-09-20` — the corrected guard table (still the cabin guard above) and the S16 transfer boundary fixes.
 - `UPMIX_AGENT_HANDOFF_2026-09-19` — env knob list, host renderer recipe, the 21.09 "do not tune" decision.
 - `UPMIX_DOLBY_DISTRIBUTION_PLAN_2026-09-21` — the scene-bed flags and the HF taper knob.

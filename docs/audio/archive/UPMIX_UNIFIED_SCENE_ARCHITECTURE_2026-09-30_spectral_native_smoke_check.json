@@ -1,0 +1,1072 @@
+{
+  "complete": true,
+  "train_smoke": true,
+  "protocol_sha256": "8e0a03a0d3322d97e13cfe42749716ef82cd15ccf423d1a5892f6ce57c873a56",
+  "arms": {
+    "float": {
+      "extractions": [
+        {
+          "song": "f4b735de-14b1-4091-a9ba-c8b30c0740a7",
+          "other_nsdr_db": 10.140517387188869,
+          "other_si_sdr_channel_mean_db": 9.706844982688256,
+          "transmission": {
+            "eligible": 0.8931684293404717,
+            "vocal": 0.07665256240722643,
+            "drums": 0.020501654202488395,
+            "bass": 0.07696997667258805
+          },
+          "bands": {
+            "8-14k": {
+              "error_nse": 1.4938015279102503,
+              "eligible_tx": 0.03234039873441913
+            },
+            "14-24k": {
+              "error_nse": 1.8623543886445253,
+              "eligible_tx": 0.33290583316571665
+            }
+          },
+          "parity": {
+            "native_source_replay_nse": 2.3875291805763226e-14,
+            "native_source_replay_max_pcm16_lsb": 0.001220703125,
+            "true_sources_plus_input_residual_closure_nse": 1.7998406833776934e-14,
+            "true_sources_only_closure_nse": 1.7998406833776934e-14,
+            "input_residual_max_pcm16_lsb": 0.0,
+            "original_source_sum_vs_mixture_max_pcm16_lsb": 0.0,
+            "original_source_sum_vs_mixture_nse": 0.0,
+            "input_residual_energy": 0.0,
+            "offline_scoring_alignment_samples": 1536,
+            "native_emitted_samples": 386048,
+            "scope": "Actual PCM16 mixture masks from native float/int8; true labels unchanged, input rounding/sum residual separate; fixed offline array-delay alignment only, actual C remains delayed; no physical-source audibility or device claim",
+            "residual_component_power_relative_to_estimate": 0.0
+          }
+        },
+        {
+          "song": "1fc37390-1769-452d-9bea-19025be4c467",
+          "other_nsdr_db": 12.443328606999486,
+          "other_si_sdr_channel_mean_db": 12.390972915904989,
+          "transmission": {
+            "eligible": 0.9403842716574381,
+            "vocal": 0.04463399939500022,
+            "drums": 0.013092971867455406,
+            "bass": null
+          },
+          "bands": {
+            "8-14k": {
+              "error_nse": 0.18281197189389017,
+              "eligible_tx": 0.7909677048668575
+            },
+            "14-24k": {
+              "error_nse": 0.3384321773118189,
+              "eligible_tx": 0.6107619027062743
+            }
+          },
+          "parity": {
+            "native_source_replay_nse": 2.65650294220506e-14,
+            "native_source_replay_max_pcm16_lsb": 0.0008544921875,
+            "true_sources_plus_input_residual_closure_nse": 1.6711823288459245e-14,
+            "true_sources_only_closure_nse": 1.6711823288459245e-14,
+            "input_residual_max_pcm16_lsb": 0.0,
+            "original_source_sum_vs_mixture_max_pcm16_lsb": 0.0,
+            "original_source_sum_vs_mixture_nse": 0.0,
+            "input_residual_energy": 0.0,
+            "offline_scoring_alignment_samples": 1536,
+            "native_emitted_samples": 386048,
+            "scope": "Actual PCM16 mixture masks from native float/int8; true labels unchanged, input rounding/sum residual separate; fixed offline array-delay alignment only, actual C remains delayed; no physical-source audibility or device claim",
+            "residual_component_power_relative_to_estimate": 0.0
+          }
+        },
+        {
+          "song": "ad6c3742-e517-42eb-9dec-e74ed05387cc",
+          "other_nsdr_db": 5.095052243572821,
+          "other_si_sdr_channel_mean_db": 3.2472787612612715,
+          "transmission": {
+            "eligible": 0.639485555077049,
+            "vocal": 0.03908087231438183,
+            "drums": 0.005727818584945996,
+            "bass": 0.06469618124349953
+          },
+          "bands": {
+            "8-14k": {
+              "error_nse": 0.3487207894284325,
+              "eligible_tx": 0.567207923249104
+            },
+            "14-24k": {
+              "error_nse": 0.3263532220606738,
+              "eligible_tx": 0.5817406663198594
+            }
+          },
+          "parity": {
+            "native_source_replay_nse": 3.772616453135918e-14,
+            "native_source_replay_max_pcm16_lsb": 0.0008544921875,
+            "true_sources_plus_input_residual_closure_nse": 2.410819955262565e-14,
+            "true_sources_only_closure_nse": 2.410819955262565e-14,
+            "input_residual_max_pcm16_lsb": 0.0,
+            "original_source_sum_vs_mixture_max_pcm16_lsb": 0.0,
+            "original_source_sum_vs_mixture_nse": 0.0,
+            "input_residual_energy": 0.0,
+            "offline_scoring_alignment_samples": 1536,
+            "native_emitted_samples": 386048,
+            "scope": "Actual PCM16 mixture masks from native float/int8; true labels unchanged, input rounding/sum residual separate; fixed offline array-delay alignment only, actual C remains delayed; no physical-source audibility or device claim",
+            "residual_component_power_relative_to_estimate": 0.0
+          }
+        },
+        {
+          "song": "fd6e4b4a-f33a-4f3c-aa6e-7c65fd5dc0bc",
+          "other_nsdr_db": 6.497898514742215,
+          "other_si_sdr_channel_mean_db": 5.340150130602753,
+          "transmission": {
+            "eligible": 0.7754915566939528,
+            "vocal": 0.13563048632298835,
+            "drums": 0.013020132562010907,
+            "bass": 0.03794838686711829
+          },
+          "bands": {
+            "8-14k": {
+              "error_nse": 0.46832604085656876,
+              "eligible_tx": 0.4836969371097714
+            },
+            "14-24k": {
+              "error_nse": 0.6770797673111203,
+              "eligible_tx": 0.2917228661763622
+            }
+          },
+          "parity": {
+            "native_source_replay_nse": 3.143316768607418e-14,
+            "native_source_replay_max_pcm16_lsb": 0.00146484375,
+            "true_sources_plus_input_residual_closure_nse": 2.0385535879226163e-14,
+            "true_sources_only_closure_nse": 2.0385535879226163e-14,
+            "input_residual_max_pcm16_lsb": 0.0,
+            "original_source_sum_vs_mixture_max_pcm16_lsb": 0.0,
+            "original_source_sum_vs_mixture_nse": 0.0,
+            "input_residual_energy": 0.0,
+            "offline_scoring_alignment_samples": 1536,
+            "native_emitted_samples": 386048,
+            "scope": "Actual PCM16 mixture masks from native float/int8; true labels unchanged, input rounding/sum residual separate; fixed offline array-delay alignment only, actual C remains delayed; no physical-source audibility or device claim",
+            "residual_component_power_relative_to_estimate": 0.0
+          }
+        }
+      ],
+      "summary": null,
+      "transitions": {
+        "entry": {
+          "count": 3,
+          "song_count": 3,
+          "ret_pre": {
+            "valid": 3,
+            "median": 0.6499914079904556,
+            "p10": 0.5383258432149887,
+            "p90": 0.915139839053154
+          },
+          "ret_post": {
+            "valid": 3,
+            "median": 0.747265225276351,
+            "p10": 0.613644614443183,
+            "p90": 0.7637314137071372
+          },
+          "duck": {
+            "valid": 3,
+            "median": 0.8926878949504684,
+            "p10": 0.8044408829934866,
+            "p90": 1.3497779975479025
+          },
+          "leak_pre": {
+            "valid": 2,
+            "median": 0.30557956639677286,
+            "p10": 0.1609198095276952,
+            "p90": 0.45023932326585053
+          },
+          "leak_0_2": {
+            "valid": 3,
+            "median": 0.286672979593277,
+            "p10": 0.24110045060515403,
+            "p90": 0.41080047488212584
+          },
+          "peak_0_2": {
+            "valid": 3,
+            "median": 0.4394190013408661,
+            "p10": 0.43658012747764585,
+            "p90": 0.5593873918056488
+          },
+          "leak_steady": {
+            "valid": 3,
+            "median": 0.4909298671409488,
+            "p10": 0.3346208205446601,
+            "p90": 0.5772027125582099
+          }
+        },
+        "exit": {
+          "count": 0,
+          "song_count": 0,
+          "ret_pre": {
+            "valid": 0,
+            "median": null,
+            "p10": null,
+            "p90": null
+          },
+          "ret_post": {
+            "valid": 0,
+            "median": null,
+            "p10": null,
+            "p90": null
+          },
+          "duck": {
+            "valid": 0,
+            "median": null,
+            "p10": null,
+            "p90": null
+          },
+          "leak_pre": {
+            "valid": 0,
+            "median": null,
+            "p10": null,
+            "p90": null
+          },
+          "leak_0_2": {
+            "valid": 0,
+            "median": null,
+            "p10": null,
+            "p90": null
+          },
+          "peak_0_2": {
+            "valid": 0,
+            "median": null,
+            "p10": null,
+            "p90": null
+          },
+          "leak_steady": {
+            "valid": 0,
+            "median": null,
+            "p10": null,
+            "p90": null
+          }
+        },
+        "sustained": {
+          "count": 0,
+          "song_count": 0,
+          "ret_pre": {
+            "valid": 0,
+            "median": null,
+            "p10": null,
+            "p90": null
+          },
+          "ret_post": {
+            "valid": 0,
+            "median": null,
+            "p10": null,
+            "p90": null
+          },
+          "duck": {
+            "valid": 0,
+            "median": null,
+            "p10": null,
+            "p90": null
+          },
+          "leak_pre": {
+            "valid": 0,
+            "median": null,
+            "p10": null,
+            "p90": null
+          },
+          "leak_0_2": {
+            "valid": 0,
+            "median": null,
+            "p10": null,
+            "p90": null
+          },
+          "peak_0_2": {
+            "valid": 0,
+            "median": null,
+            "p10": null,
+            "p90": null
+          },
+          "leak_steady": {
+            "valid": 0,
+            "median": null,
+            "p10": null,
+            "p90": null
+          }
+        }
+      },
+      "events": [
+        {
+          "song": "f4b735de-14b1-4091-a9ba-c8b30c0740a7",
+          "kind": "entry",
+          "t": 23.0,
+          "ret_pre": 0.510409452021122,
+          "ret_post": 0.747265225276351,
+          "leak_pre": null,
+          "leak_0_2": 0.286672979593277,
+          "peak_0_2": 0.4394190013408661,
+          "leak_steady": 0.2955435588955879,
+          "parity": {
+            "native_source_replay_nse": 2.5511537640173184e-14,
+            "native_source_replay_max_pcm16_lsb": 0.0029296875,
+            "true_sources_plus_input_residual_closure_nse": 1.7300807703121e-14,
+            "true_sources_only_closure_nse": 1.7300807703121e-14,
+            "input_residual_max_pcm16_lsb": 0.0,
+            "original_source_sum_vs_mixture_max_pcm16_lsb": 0.0,
+            "original_source_sum_vs_mixture_nse": 0.0,
+            "input_residual_energy": 0.0,
+            "offline_scoring_alignment_samples": 1536,
+            "native_emitted_samples": 1058304,
+            "scope": "Actual PCM16 mixture masks from native float/int8; true labels unchanged, input rounding/sum residual separate; fixed offline array-delay alignment only, actual C remains delayed; no physical-source audibility or device claim",
+            "residual_component_power_relative_to_estimate": 0.0
+          },
+          "retention_half_second": [
+            0.3773537874221802,
+            0.4574628174304962,
+            0.3688664734363556,
+            0.5044271349906921,
+            0.5743485689163208,
+            0.599803626537323,
+            0.5787405371665955,
+            0.6222726702690125,
+            0.4756301939487457,
+            0.6524772644042969,
+            0.713731586933136,
+            0.8867136240005493,
+            0.6116259694099426,
+            0.71806401014328,
+            0.6524350643157959,
+            0.731101930141449,
+            0.7096148133277893,
+            0.9308282732963562,
+            0.9229646921157837,
+            0.7075285911560059,
+            0.9361684918403625,
+            0.857589840888977,
+            0.8009628653526306,
+            0.6488063931465149
+          ],
+          "leak_half_second": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            0.4394190013408661,
+            0.2945328652858734,
+            0.29070746898651123,
+            0.12203258275985718,
+            0.47842836380004883,
+            0.34217214584350586,
+            0.0373571515083313,
+            0.14107903838157654,
+            0.30654141306877136,
+            0.5009763240814209,
+            0.3943941593170166,
+            0.16012617945671082,
+            null,
+            null,
+            null,
+            0.11567971855401993
+          ],
+          "duck": 1.4640505231972611,
+          "settle": 0.0
+        },
+        {
+          "song": "1fc37390-1769-452d-9bea-19025be4c467",
+          "kind": "entry",
+          "t": 24.25,
+          "ret_pre": 0.9814269468188286,
+          "ret_post": 0.7678479608148336,
+          "leak_pre": 0.48640426248311996,
+          "leak_0_2": 0.2297073183581233,
+          "peak_0_2": 0.4358704090118408,
+          "leak_steady": 0.4909298671409488,
+          "parity": {
+            "native_source_replay_nse": 2.5185276786365037e-14,
+            "native_source_replay_max_pcm16_lsb": 0.0009765625,
+            "true_sources_plus_input_residual_closure_nse": 1.6582163878232474e-14,
+            "true_sources_only_closure_nse": 1.6582163878232474e-14,
+            "input_residual_max_pcm16_lsb": 0.0,
+            "original_source_sum_vs_mixture_max_pcm16_lsb": 0.0,
+            "original_source_sum_vs_mixture_nse": 0.0,
+            "input_residual_energy": 0.0,
+            "offline_scoring_alignment_samples": 1536,
+            "native_emitted_samples": 1058304,
+            "scope": "Actual PCM16 mixture masks from native float/int8; true labels unchanged, input rounding/sum residual separate; fixed offline array-delay alignment only, actual C remains delayed; no physical-source audibility or device claim",
+            "residual_component_power_relative_to_estimate": 0.0
+          },
+          "retention_half_second": [
+            0.9954473972320557,
+            0.9632322788238525,
+            1.0060455799102783,
+            0.993502676486969,
+            0.9942115545272827,
+            0.9922905564308167,
+            0.9907789826393127,
+            0.915906548500061,
+            0.9288524985313416,
+            0.8744584918022156,
+            0.7110079526901245,
+            0.8782444596290588,
+            0.6266048550605774,
+            0.5285572409629822,
+            0.8888144493103027,
+            0.8622915744781494,
+            0.788616955280304,
+            0.7485543489456177,
+            0.4677673280239105,
+            0.5421971678733826,
+            0.6242241859436035,
+            0.948564350605011,
+            0.9574663043022156,
+            0.9093452095985413
+          ],
+          "leak_half_second": [
+            0.049493178725242615,
+            0.9233153462409973,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            0.39958512783050537,
+            0.4358704090118408,
+            0.04293058440089226,
+            0.04044315218925476,
+            0.40414151549339294,
+            0.32002371549606323,
+            0.22645002603530884,
+            0.49484091997146606,
+            0.1801294982433319,
+            0.31062018871307373,
+            0.10987430810928345,
+            0.12271221727132797,
+            0.36053064465522766,
+            0.9219357967376709,
+            0.9684560298919678,
+            0.9531802535057068
+          ],
+          "duck": 0.7823791300042411,
+          "settle": 0.0
+        },
+        {
+          "song": "fd6e4b4a-f33a-4f3c-aa6e-7c65fd5dc0bc",
+          "kind": "entry",
+          "t": 129.0,
+          "ret_pre": 0.6499914079904556,
+          "ret_post": 0.5802394617348909,
+          "leak_pre": 0.12475487031042576,
+          "leak_0_2": 0.4418323487043381,
+          "peak_0_2": 0.5893794894218445,
+          "leak_steady": 0.5987709239125252,
+          "parity": {
+            "native_source_replay_nse": 2.8176478252135444e-14,
+            "native_source_replay_max_pcm16_lsb": 0.0029296875,
+            "true_sources_plus_input_residual_closure_nse": 1.834148338208728e-14,
+            "true_sources_only_closure_nse": 1.834148338208728e-14,
+            "input_residual_max_pcm16_lsb": 0.0,
+            "original_source_sum_vs_mixture_max_pcm16_lsb": 0.0,
+            "original_source_sum_vs_mixture_nse": 0.0,
+            "input_residual_energy": 0.0,
+            "offline_scoring_alignment_samples": 1536,
+            "native_emitted_samples": 1058304,
+            "scope": "Actual PCM16 mixture masks from native float/int8; true labels unchanged, input rounding/sum residual separate; fixed offline array-delay alignment only, actual C remains delayed; no physical-source audibility or device claim",
+            "residual_component_power_relative_to_estimate": 0.0
+          },
+          "retention_half_second": [
+            0.7580384016036987,
+            0.7788993716239929,
+            0.768613338470459,
+            0.7373791337013245,
+            0.6266533732414246,
+            0.5536386370658875,
+            0.4464786648750305,
+            0.5302303433418274,
+            0.6032066345214844,
+            0.593535840511322,
+            0.6221975088119507,
+            0.5957016348838806,
+            0.5101141929626465,
+            0.5871355533599854,
+            0.6051088571548462,
+            0.4270167052745819,
+            0.5408836007118225,
+            0.59993577003479,
+            0.6876804232597351,
+            0.512137234210968,
+            0.6092948317527771,
+            0.6331346035003662,
+            0.6890799403190613,
+            0.4676680564880371
+          ],
+          "leak_half_second": [
+            0.14395728707313538,
+            0.33832836151123047,
+            0.07096108794212341,
+            0.07459202408790588,
+            0.046621739864349365,
+            0.0971846953034401,
+            0.09132669121026993,
+            0.13506707549095154,
+            0.26050707697868347,
+            0.546431303024292,
+            0.5893794894218445,
+            0.37101152539253235,
+            0.5038456320762634,
+            0.498391717672348,
+            0.5595848560333252,
+            0.49293577671051025,
+            0.5930804014205933,
+            0.6455878615379333,
+            0.6817936301231384,
+            0.6638916730880737,
+            0.5320947170257568,
+            0.5782002806663513,
+            0.6224475502967834,
+            0.47307127714157104
+          ],
+          "duck": 0.8926878949504684,
+          "settle": 0.0
+        }
+      ],
+      "observed_gates": {},
+      "observed_gates_pass": false
+    },
+    "int8": {
+      "extractions": [
+        {
+          "song": "f4b735de-14b1-4091-a9ba-c8b30c0740a7",
+          "other_nsdr_db": 10.066129058590366,
+          "other_si_sdr_channel_mean_db": 9.622186196479998,
+          "transmission": {
+            "eligible": 0.8957482045117261,
+            "vocal": 0.07801018523950075,
+            "drums": 0.021527824490050005,
+            "bass": 0.07921993574201251
+          },
+          "bands": {
+            "8-14k": {
+              "error_nse": 1.6579180729005005,
+              "eligible_tx": 0.03243525631287175
+            },
+            "14-24k": {
+              "error_nse": 1.9666147115345285,
+              "eligible_tx": 0.3305436355313636
+            }
+          },
+          "parity": {
+            "native_source_replay_nse": 2.410254988098437e-14,
+            "native_source_replay_max_pcm16_lsb": 0.001220703125,
+            "true_sources_plus_input_residual_closure_nse": 1.7832654269958075e-14,
+            "true_sources_only_closure_nse": 1.7832654269958075e-14,
+            "input_residual_max_pcm16_lsb": 0.0,
+            "original_source_sum_vs_mixture_max_pcm16_lsb": 0.0,
+            "original_source_sum_vs_mixture_nse": 0.0,
+            "input_residual_energy": 0.0,
+            "offline_scoring_alignment_samples": 1536,
+            "native_emitted_samples": 386048,
+            "scope": "Actual PCM16 mixture masks from native float/int8; true labels unchanged, input rounding/sum residual separate; fixed offline array-delay alignment only, actual C remains delayed; no physical-source audibility or device claim",
+            "residual_component_power_relative_to_estimate": 0.0
+          }
+        },
+        {
+          "song": "1fc37390-1769-452d-9bea-19025be4c467",
+          "other_nsdr_db": 12.40565266728806,
+          "other_si_sdr_channel_mean_db": 12.347873371494565,
+          "transmission": {
+            "eligible": 0.9406705899977917,
+            "vocal": 0.04538533379298697,
+            "drums": 0.013385518704375503,
+            "bass": null
+          },
+          "bands": {
+            "8-14k": {
+              "error_nse": 0.18345885612089974,
+              "eligible_tx": 0.7933887821836897
+            },
+            "14-24k": {
+              "error_nse": 0.33970685992129046,
+              "eligible_tx": 0.6129867033662109
+            }
+          },
+          "parity": {
+            "native_source_replay_nse": 2.6672591819873147e-14,
+            "native_source_replay_max_pcm16_lsb": 0.000732421875,
+            "true_sources_plus_input_residual_closure_nse": 1.6556361542754632e-14,
+            "true_sources_only_closure_nse": 1.6556361542754632e-14,
+            "input_residual_max_pcm16_lsb": 0.0,
+            "original_source_sum_vs_mixture_max_pcm16_lsb": 0.0,
+            "original_source_sum_vs_mixture_nse": 0.0,
+            "input_residual_energy": 0.0,
+            "offline_scoring_alignment_samples": 1536,
+            "native_emitted_samples": 386048,
+            "scope": "Actual PCM16 mixture masks from native float/int8; true labels unchanged, input rounding/sum residual separate; fixed offline array-delay alignment only, actual C remains delayed; no physical-source audibility or device claim",
+            "residual_component_power_relative_to_estimate": 0.0
+          }
+        },
+        {
+          "song": "ad6c3742-e517-42eb-9dec-e74ed05387cc",
+          "other_nsdr_db": 5.012498297768296,
+          "other_si_sdr_channel_mean_db": 3.149074368120977,
+          "transmission": {
+            "eligible": 0.6459045943602063,
+            "vocal": 0.03994441443800388,
+            "drums": 0.0060006061349267325,
+            "bass": 0.0668204729985508
+          },
+          "bands": {
+            "8-14k": {
+              "error_nse": 0.34943742934866867,
+              "eligible_tx": 0.569695720734898
+            },
+            "14-24k": {
+              "error_nse": 0.32763240037076025,
+              "eligible_tx": 0.5834787499829643
+            }
+          },
+          "parity": {
+            "native_source_replay_nse": 3.752045490279746e-14,
+            "native_source_replay_max_pcm16_lsb": 0.0009765625,
+            "true_sources_plus_input_residual_closure_nse": 2.3864784815109304e-14,
+            "true_sources_only_closure_nse": 2.3864784815109304e-14,
+            "input_residual_max_pcm16_lsb": 0.0,
+            "original_source_sum_vs_mixture_max_pcm16_lsb": 0.0,
+            "original_source_sum_vs_mixture_nse": 0.0,
+            "input_residual_energy": 0.0,
+            "offline_scoring_alignment_samples": 1536,
+            "native_emitted_samples": 386048,
+            "scope": "Actual PCM16 mixture masks from native float/int8; true labels unchanged, input rounding/sum residual separate; fixed offline array-delay alignment only, actual C remains delayed; no physical-source audibility or device claim",
+            "residual_component_power_relative_to_estimate": 0.0
+          }
+        },
+        {
+          "song": "fd6e4b4a-f33a-4f3c-aa6e-7c65fd5dc0bc",
+          "other_nsdr_db": 6.462741454805262,
+          "other_si_sdr_channel_mean_db": 5.301611393873552,
+          "transmission": {
+            "eligible": 0.7759609225183819,
+            "vocal": 0.13667315780968686,
+            "drums": 0.013427400093763479,
+            "bass": 0.0384015404299543
+          },
+          "bands": {
+            "8-14k": {
+              "error_nse": 0.46903097859841114,
+              "eligible_tx": 0.4849553335195504
+            },
+            "14-24k": {
+              "error_nse": 0.688430800458728,
+              "eligible_tx": 0.29736539376879684
+            }
+          },
+          "parity": {
+            "native_source_replay_nse": 3.12313310932765e-14,
+            "native_source_replay_max_pcm16_lsb": 0.001953125,
+            "true_sources_plus_input_residual_closure_nse": 2.0385678181663686e-14,
+            "true_sources_only_closure_nse": 2.0385678181663686e-14,
+            "input_residual_max_pcm16_lsb": 0.0,
+            "original_source_sum_vs_mixture_max_pcm16_lsb": 0.0,
+            "original_source_sum_vs_mixture_nse": 0.0,
+            "input_residual_energy": 0.0,
+            "offline_scoring_alignment_samples": 1536,
+            "native_emitted_samples": 386048,
+            "scope": "Actual PCM16 mixture masks from native float/int8; true labels unchanged, input rounding/sum residual separate; fixed offline array-delay alignment only, actual C remains delayed; no physical-source audibility or device claim",
+            "residual_component_power_relative_to_estimate": 0.0
+          }
+        }
+      ],
+      "summary": null,
+      "transitions": {
+        "entry": {
+          "count": 3,
+          "song_count": 3,
+          "ret_pre": {
+            "valid": 3,
+            "median": 0.6485168859362602,
+            "p10": 0.5396981492638588,
+            "p90": 0.9156748577952385
+          },
+          "ret_post": {
+            "valid": 3,
+            "median": 0.7500118277966976,
+            "p10": 0.615342753380537,
+            "p90": 0.7656614385545254
+          },
+          "duck": {
+            "valid": 3,
+            "median": 0.8969319032252109,
+            "p10": 0.8060341287480082,
+            "p90": 1.3501514793282956
+          },
+          "leak_pre": {
+            "valid": 2,
+            "median": 0.3081741575151682,
+            "p10": 0.16372137255966662,
+            "p90": 0.45262694247066976
+          },
+          "leak_0_2": {
+            "valid": 3,
+            "median": 0.2858733795583248,
+            "p10": 0.24436174035072328,
+            "p90": 0.4086673490703106
+          },
+          "peak_0_2": {
+            "valid": 3,
+            "median": 0.4372696280479431,
+            "p10": 0.4306147933006287,
+            "p90": 0.5531370043754578
+          },
+          "leak_steady": {
+            "valid": 3,
+            "median": 0.4938113074749708,
+            "p10": 0.3415647204965353,
+            "p90": 0.5765514489263296
+          }
+        },
+        "exit": {
+          "count": 0,
+          "song_count": 0,
+          "ret_pre": {
+            "valid": 0,
+            "median": null,
+            "p10": null,
+            "p90": null
+          },
+          "ret_post": {
+            "valid": 0,
+            "median": null,
+            "p10": null,
+            "p90": null
+          },
+          "duck": {
+            "valid": 0,
+            "median": null,
+            "p10": null,
+            "p90": null
+          },
+          "leak_pre": {
+            "valid": 0,
+            "median": null,
+            "p10": null,
+            "p90": null
+          },
+          "leak_0_2": {
+            "valid": 0,
+            "median": null,
+            "p10": null,
+            "p90": null
+          },
+          "peak_0_2": {
+            "valid": 0,
+            "median": null,
+            "p10": null,
+            "p90": null
+          },
+          "leak_steady": {
+            "valid": 0,
+            "median": null,
+            "p10": null,
+            "p90": null
+          }
+        },
+        "sustained": {
+          "count": 0,
+          "song_count": 0,
+          "ret_pre": {
+            "valid": 0,
+            "median": null,
+            "p10": null,
+            "p90": null
+          },
+          "ret_post": {
+            "valid": 0,
+            "median": null,
+            "p10": null,
+            "p90": null
+          },
+          "duck": {
+            "valid": 0,
+            "median": null,
+            "p10": null,
+            "p90": null
+          },
+          "leak_pre": {
+            "valid": 0,
+            "median": null,
+            "p10": null,
+            "p90": null
+          },
+          "leak_0_2": {
+            "valid": 0,
+            "median": null,
+            "p10": null,
+            "p90": null
+          },
+          "peak_0_2": {
+            "valid": 0,
+            "median": null,
+            "p10": null,
+            "p90": null
+          },
+          "leak_steady": {
+            "valid": 0,
+            "median": null,
+            "p10": null,
+            "p90": null
+          }
+        }
+      },
+      "events": [
+        {
+          "song": "f4b735de-14b1-4091-a9ba-c8b30c0740a7",
+          "kind": "entry",
+          "t": 23.0,
+          "ret_pre": 0.5124934650957584,
+          "ret_post": 0.7500118277966976,
+          "leak_pre": null,
+          "leak_0_2": 0.2858733795583248,
+          "peak_0_2": 0.42895108461380005,
+          "leak_steady": 0.3035030737519264,
+          "parity": {
+            "native_source_replay_nse": 2.551147445227922e-14,
+            "native_source_replay_max_pcm16_lsb": 0.00390625,
+            "true_sources_plus_input_residual_closure_nse": 1.7278298158368866e-14,
+            "true_sources_only_closure_nse": 1.7278298158368866e-14,
+            "input_residual_max_pcm16_lsb": 0.0,
+            "original_source_sum_vs_mixture_max_pcm16_lsb": 0.0,
+            "original_source_sum_vs_mixture_nse": 0.0,
+            "input_residual_energy": 0.0,
+            "offline_scoring_alignment_samples": 1536,
+            "native_emitted_samples": 1058304,
+            "scope": "Actual PCM16 mixture masks from native float/int8; true labels unchanged, input rounding/sum residual separate; fixed offline array-delay alignment only, actual C remains delayed; no physical-source audibility or device claim",
+            "residual_component_power_relative_to_estimate": 0.0
+          },
+          "retention_half_second": [
+            0.37613826990127563,
+            0.45642516016960144,
+            0.3696249723434448,
+            0.5070933103561401,
+            0.5749651789665222,
+            0.6049008965492249,
+            0.5852455496788025,
+            0.6255543828010559,
+            0.4876199960708618,
+            0.6537285447120667,
+            0.7137765884399414,
+            0.8924089074134827,
+            0.6160399317741394,
+            0.7226210236549377,
+            0.6556573510169983,
+            0.733971357345581,
+            0.7139977216720581,
+            0.928837239742279,
+            0.9220215678215027,
+            0.7131115198135376,
+            0.9347991347312927,
+            0.8516089916229248,
+            0.8016599416732788,
+            0.658329427242279
+          ],
+          "leak_half_second": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            0.42895108461380005,
+            0.3009684383869171,
+            0.29568666219711304,
+            0.11788733303546906,
+            0.4878499507904053,
+            0.346047580242157,
+            0.03793351352214813,
+            0.14219635725021362,
+            0.31182876229286194,
+            0.5044971108436584,
+            0.416102796792984,
+            0.16779455542564392,
+            null,
+            null,
+            null,
+            0.1172921434044838
+          ],
+          "duck": 1.4634563733540666,
+          "settle": 0.0
+        },
+        {
+          "song": "1fc37390-1769-452d-9bea-19025be4c467",
+          "kind": "entry",
+          "t": 24.25,
+          "ret_pre": 0.9824643507599831,
+          "ret_post": 0.7695738412439823,
+          "leak_pre": 0.48874013870954514,
+          "leak_0_2": 0.23398383054882288,
+          "peak_0_2": 0.4372696280479431,
+          "leak_steady": 0.4938113074749708,
+          "parity": {
+            "native_source_replay_nse": 2.520827023651117e-14,
+            "native_source_replay_max_pcm16_lsb": 0.001220703125,
+            "true_sources_plus_input_residual_closure_nse": 1.659110606202289e-14,
+            "true_sources_only_closure_nse": 1.659110606202289e-14,
+            "input_residual_max_pcm16_lsb": 0.0,
+            "original_source_sum_vs_mixture_max_pcm16_lsb": 0.0,
+            "original_source_sum_vs_mixture_nse": 0.0,
+            "input_residual_energy": 0.0,
+            "offline_scoring_alignment_samples": 1536,
+            "native_emitted_samples": 1058304,
+            "scope": "Actual PCM16 mixture masks from native float/int8; true labels unchanged, input rounding/sum residual separate; fixed offline array-delay alignment only, actual C remains delayed; no physical-source audibility or device claim",
+            "residual_component_power_relative_to_estimate": 0.0
+          },
+          "retention_half_second": [
+            1.000144600868225,
+            0.9647318720817566,
+            1.0068199634552002,
+            0.9927407503128052,
+            0.9949021935462952,
+            0.9932651519775391,
+            0.9919731616973877,
+            0.9151371121406555,
+            0.9302720427513123,
+            0.8745545148849487,
+            0.7192044258117676,
+            0.8778358697891235,
+            0.6306850910186768,
+            0.5307763814926147,
+            0.8829861283302307,
+            0.8647869825363159,
+            0.7916628122329712,
+            0.7545817494392395,
+            0.466458797454834,
+            0.5434030294418335,
+            0.6293831467628479,
+            0.9508196115493774,
+            0.9535011649131775,
+            0.9122697114944458
+          ],
+          "leak_half_second": [
+            0.050270065665245056,
+            0.9272102117538452,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            0.4123002290725708,
+            0.4372696280479431,
+            0.04532540962100029,
+            0.04104005545377731,
+            0.41074952483177185,
+            0.3238016664981842,
+            0.22396618127822876,
+            0.49972274899482727,
+            0.1824716329574585,
+            0.3130711317062378,
+            0.11114433407783508,
+            0.12341378629207611,
+            0.3707140386104584,
+            0.9248253703117371,
+            0.9705169200897217,
+            0.9543332457542419
+          ],
+          "duck": 0.7833096851287075,
+          "settle": 0.0
+        },
+        {
+          "song": "fd6e4b4a-f33a-4f3c-aa6e-7c65fd5dc0bc",
+          "kind": "entry",
+          "t": 129.0,
+          "ret_pre": 0.6485168859362602,
+          "ret_post": 0.5816754847764969,
+          "leak_pre": 0.12760817632079124,
+          "leak_0_2": 0.43936584144830704,
+          "peak_0_2": 0.5821038484573364,
+          "leak_steady": 0.5972364842891693,
+          "parity": {
+            "native_source_replay_nse": 2.823182051700534e-14,
+            "native_source_replay_max_pcm16_lsb": 0.00390625,
+            "true_sources_plus_input_residual_closure_nse": 1.834908508148755e-14,
+            "true_sources_only_closure_nse": 1.834908508148755e-14,
+            "input_residual_max_pcm16_lsb": 0.0,
+            "original_source_sum_vs_mixture_max_pcm16_lsb": 0.0,
+            "original_source_sum_vs_mixture_nse": 0.0,
+            "input_residual_energy": 0.0,
+            "offline_scoring_alignment_samples": 1536,
+            "native_emitted_samples": 1058304,
+            "scope": "Actual PCM16 mixture masks from native float/int8; true labels unchanged, input rounding/sum residual separate; fixed offline array-delay alignment only, actual C remains delayed; no physical-source audibility or device claim",
+            "residual_component_power_relative_to_estimate": 0.0
+          },
+          "retention_half_second": [
+            0.75603848695755,
+            0.7776575088500977,
+            0.7648826837539673,
+            0.7315555214881897,
+            0.6257972121238708,
+            0.5572063326835632,
+            0.44446247816085815,
+            0.5305348634719849,
+            0.6028549075126648,
+            0.5964555740356445,
+            0.6217620968818665,
+            0.5971226096153259,
+            0.5106099247932434,
+            0.5900669693946838,
+            0.6083903908729553,
+            0.4268116056919098,
+            0.5399496555328369,
+            0.5983267426490784,
+            0.6846361756324768,
+            0.515038788318634,
+            0.6158913373947144,
+            0.6339134573936462,
+            0.6929334402084351,
+            0.47204408049583435
+          ],
+          "leak_half_second": [
+            0.14960390329360962,
+            0.3484029769897461,
+            0.07167551666498184,
+            0.07627833634614944,
+            0.04684710502624512,
+            0.10193127393722534,
+            0.0917547345161438,
+            0.1343715637922287,
+            0.2613314092159271,
+            0.545520544052124,
+            0.5821038484573364,
+            0.3685075640678406,
+            0.5041221976280212,
+            0.5036452412605286,
+            0.564703106880188,
+            0.4943424165248871,
+            0.5902864933013916,
+            0.6377804279327393,
+            0.6783433556556702,
+            0.6643012166023254,
+            0.5306006073951721,
+            0.5780735015869141,
+            0.6252028346061707,
+            0.4733034372329712
+          ],
+          "duck": 0.8969319032252109,
+          "settle": 0.0
+        }
+      ],
+      "observed_gates": {},
+      "observed_gates_pass": false
+    }
+  },
+  "quantization_gates": {
+    "eligible_median_loss_at_most_03db": true,
+    "no_eligible_crop_over_1db_loss": true
+  },
+  "eligible_paired_sdr_delta_db": [
+    -0.08465878620825862,
+    -0.04309954441042407,
+    -0.0982043931402945,
+    -0.03853873672920116
+  ],
+  "native_acoustic_pass": false,
+  "device_or_product_pass": false,
+  "limits": "source components are conditional operator diagnostics, not literal audible voice; preserved native6 output; fixed delay compensation is offline scoring only; no independent20/device/ears proof"
+}

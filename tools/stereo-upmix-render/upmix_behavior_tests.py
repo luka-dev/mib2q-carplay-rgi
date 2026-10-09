@@ -8,8 +8,8 @@ output energy lands in the rears (Ls+Rs) vs the front (L+R+C).  That share
 over time is what a listener hears as "the sound goes back and front".
 
     python3 tools/stereo-upmix-render/upmix_behavior_tests.py --render BIN \
-        --model models/hssr-q6d-moises-a/hssr_model.bin \
-        --guard models/hssr-selection-v11/hssr_guard.bin --out DIR
+        --out DIR   (--render = the renderer CLI; since 2026-10-09 that is scene_upmix.py, the Universal
+        binary and its models are gone: tag upmix-universal-last-2026-10-09; --model/--guard are passed through)
 """
 import argparse
 import os
@@ -882,7 +882,7 @@ def _heat(out, fname, panels, rows, cols, xlabel, ylabel, extra):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--render", required=True)
-    ap.add_argument("--model", required=True)
+    ap.add_argument("--model", default="", help="passed through to the renderer; unused since the Universal renderer was retired (2026-10-09)")
     ap.add_argument("--guard")
     ap.add_argument("--out", required=True)
     ap.add_argument("--seconds", type=float, default=20.0)
@@ -900,7 +900,7 @@ def main():
     if a.check:
         a.variants = "shipped"
     os.makedirs(a.out, exist_ok=True)
-    model = ["--model", a.model] + (["--guard-model", a.guard] if a.guard else [])
+    model = (["--model", a.model] if a.model else []) + (["--guard-model", a.guard] if a.guard else [])
 
     for flag, fn, label in ((a.sweep, sweep, "sweep.csv / sweep.png"),
                             (a.sweep_time, sweep_time, "sweep_time.csv / sweep_time.png"),

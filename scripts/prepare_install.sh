@@ -8,7 +8,7 @@
 # Takes libcarplay_hook.so (+ libcarplay_apac.so if the build has audio) from the
 # given folder, rebuilds the jar and renderers from the current tree, and stages
 # everything at its on-unit path (docs/build-and-deploy/DEPLOY_AND_RELEASE.md, artifact map).
-# No libcarplay_apac.so (HOOK_AUDIO=0) -> the HSSR models are left out too.
+# No libcarplay_apac.so (HOOK_AUDIO=0) -> the upmix mask net is left out too.
 # Output: build/install_<name>/install_MoreIncredibleBash/ and build/install_<name>.zip
 set -e
 [ "$#" -eq 1 ] || { echo "usage: $0 <build dir with libcarplay_hook.so>" >&2; exit 2; }
@@ -43,13 +43,8 @@ python3 "$PROJECT_DIR/scripts/check_model_settings.py" "$SI/carplay_startup.sh" 
 cp "$IN/libcarplay_hook.so" "$HOOKS/"
 if [ -f "$IN/libcarplay_apac.so" ]; then
   cp "$IN/libcarplay_apac.so" "$HOOKS/"
-  cp "$PROJECT_DIR/models/hssr-q6d-moises-a/hssr_model.bin" "$HOOKS/"
-  cp "$PROJECT_DIR/models/hssr-selection-v11/hssr_guard.bin" "$HOOKS/"
-  # the per-cell rear-eligibility mask net (Phase 1, docs/audio/UPMIX_SOURCE_SEPARATION_PLAN.md);
-  # read beside hssr_model.bin, active only with AUDIO_HSSR_MASK_DRIVE > 0
-  cp "$PROJECT_DIR/models/mask-full-probe-v21a/hssr_mask.bin" "$HOOKS/"
-  # the scene backend's fine mask net (docs/build-and-deploy/SCENE_BACKEND_DEPLOY.md); read only
-  # with AUDIO_SCENE=1 + AUDIO_SCENE_MASK_BLOB, both commented out in carplay_startup.sh
+  # the scene renderer's fine mask net (docs/build-and-deploy/SCENE_BACKEND_DEPLOY.md), read
+  # once at audio init from AUDIO_SCENE_MASK_BLOB (carplay_startup.sh)
   cp "$PROJECT_DIR/models/scene-masknet-c/scene_masknet_c.bin" "$HOOKS/"
   AUDIO=yes
 else

@@ -65,7 +65,7 @@ static const struct spa_scene_mask_provider *handoff_start(void)
     return spa_scene_mask_worker_provider(&g_worker);
 }
 
-/* ---- clock: ClockCycles under the QEMU -icount runner, monotonic time otherwise (stereo_upmix_bench.c) */
+/* ---- clock: ClockCycles under the QEMU -icount runner, monotonic time otherwise (the retired stereo_upmix_bench.c did the same) */
 #if defined(__QNX__)
 static int g_icount;
 static uint64_t now_ticks(void)

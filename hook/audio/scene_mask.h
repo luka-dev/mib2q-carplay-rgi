@@ -15,7 +15,7 @@
  *  - The GRU state per bin persists across calls (the streaming state); scene_mask_reset() clears it.
  *  - Arithmetic: NEON over four bins (ARMv7 -mfpu=neon and the arm64 host) with a scalar fallback that performs
  *    the same operations in the same order (bit-identical on the host). tanh and sigmoid are the clamped
- *    rational of hssr_mask.c (|err| < 1e-4), the two log features a mantissa series (|err| < 1e-6), so the
+ *    rational of the retired hssr_mask.c (tag upmix-universal-last-2026-10-09; |err| < 1e-4), the two log features a mantissa series (|err| < 1e-6), so the
  *    posteriors sit ~1e-4 from torch's; the ARMv7 build takes its reciprocals from VRECPE + two Newton steps.
  */
 #ifndef SCENE_MASK_H

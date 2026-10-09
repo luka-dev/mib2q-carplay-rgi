@@ -1,0 +1,11 @@
+{
+  "checkpoint_sha256": "ff072970aef01749f44afc0c8bc010c542eb7e2384cdf88d8b7473b6a3854da2",
+  "executable_sha256": "090d699dc0681db3483bd1b1390e607e7b6544c74dab58c1fe29a4602cec658d",
+  "fixture_manifest_sha256": "95edc076b2bf10fb0019b440da147d64046dcea16128bb038f4022c6b72bbc99",
+  "asset_manifest_sha256": "3d0336b6bdac32a3c7ac75866e2213e38947631d70453c5b34c35ef2d4efb54c",
+  "script_sha256": "1b5918cb27ce100c0e890dce697e70c2cb1217df5bf9e072ab25bb1c0687544c",
+  "scope": "four exact TRAIN8s crops, C neural graph only; dormant untrained scene still replayed structurally",
+  "float_gates": "all-source waveformNSE<=1e-9; source SI-SDR difference<=.01dB where present; each scene/state field maxabs<=1e-4; exact dense operation count",
+  "int8_screen": "eligible medianSDR>=float-.3dB, no eligiblecrop>-1dB loss; each protected medianSDR>=float-.3dB; source component TX values are diagnostics, not literal audible-leak gates",
+  "limits": "No DEV/C rear, QAT, device NEON validation, loaded deadlines, FFT/DSP latency or live hook. Native Windows scalar/auto-vectorized int8 is not Krait performance."
+}

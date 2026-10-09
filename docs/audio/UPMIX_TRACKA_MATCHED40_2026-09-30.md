@@ -1,5 +1,9 @@
 # Current Track A on the matched full40 harness
 
+> **Retired 2026-10-09 with the Universal backend.** The renderer, models and knobs this note describes left the tree; the last tree that has them is git tag `upmix-universal-last-2026-10-09`.
+> What runs now: [Stereo to 5.1 Upmix](STEREO_TO_5_1_UPMIX.md). Why, and with which numbers: [Upmix History and Results](UPMIX_HISTORY_AND_RESULTS_2026-10-09.md), [Upmix Code Retirement](UPMIX_CODE_RETIREMENT_2026-10-09.md).
+> The LFE, amp and measurement facts below remain valid.
+
 _2026-09-30. CPU host replay of the three deployed models, with current startup settings. Same inspected DEV40×60s as the causal/SIMO comparison; not an independent holdout or live in-car result._
 
 ## 📊 Result
@@ -23,7 +27,7 @@ Coverage: all40expected songs and231expected stem rows. Five of11 observed rende
 
 ## ⚙️ Frozen conditions and evidence
 
-[Complete result](UPMIX_TRACKA_MATCHED40_2026-09-30.json), [protocol](UPMIX_TRACKA_MATCHED40_2026-09-30_protocol.json), [all stem rows](UPMIX_TRACKA_MATCHED40_2026-09-30_stems.csv). Executed tool: [eval_tracka_matched40.py](../../tools/stereo-upmix-render/eval_tracka_matched40.py); PC root `D:\upmix\runs\tracka_matched40_2026_09_30`.
+[Complete result](UPMIX_TRACKA_MATCHED40_2026-09-30.json), [protocol](UPMIX_TRACKA_MATCHED40_2026-09-30_protocol.json), [all stem rows](UPMIX_TRACKA_MATCHED40_2026-09-30_stems.csv). Executed tool: `eval_tracka_matched40.py` (retired 2026-10-09, tag `upmix-universal-last-2026-10-09`); PC root `D:\upmix\runs\tracka_matched40_2026_09_30`.
 
 - Three frozen blobs: q6d, V11 guard, v21a mask; renderer binary SHA256 `cd1025fc080ed066f6c6174c66d39b9622ad95f1e5d3a7e095aab5c8b914236a`. Full blob/helper hashes and CLI are in the protocol.
 - Mask drive1.5, vocal gate.5, rear-air−9dB, surround.40, front retention.5, front bass−3dB, bed delays enabled, attack off, LFE assist0dB, mask treble0/gamma1. These reproduce current repository startup knobs, including−9dB air.

@@ -9,7 +9,7 @@ instrument", so this complements upmix_stem_tests.py (MoisesDB) with volume:
 thousands of real masters, the user's own library.
 
     python upmix_music_tests.py --render upmix_render.exe --ffmpeg ffmpeg.exe \
-        --model hssr_model.bin --guard hssr_guard.bin --music D:\\music \
+        --music D:\\music \
         --songs 200 --out D:\\upmix\\runs\\music-2026-09-25 [--keep 8]
 """
 import argparse
@@ -122,7 +122,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--render", required=True)
     ap.add_argument("--ffmpeg", default="ffmpeg")
-    ap.add_argument("--model", required=True)
+    ap.add_argument("--model", default="", help="passed through to the renderer; unused since the Universal renderer was retired (2026-10-09)")
     ap.add_argument("--guard")
     ap.add_argument("--music", required=True)
     ap.add_argument("--out", required=True)
@@ -136,7 +136,7 @@ def main():
     global VARIANTS
     VARIANTS = {k: VARIANTS[k] for k in a.variants.split(",")}
     os.makedirs(a.out, exist_ok=True)
-    model = ["--model", a.model] + (["--guard-model", a.guard] if a.guard else [])
+    model = (["--model", a.model] if a.model else []) + (["--guard-model", a.guard] if a.guard else [])
     files = [os.path.join(r, f) for r, _, fs in os.walk(a.music) for f in fs
              if f.lower().endswith((".mp3", ".m4a", ".flac", ".wav", ".aac", ".ogg", ".opus", ".wma"))]
     rng = np.random.default_rng(a.seed)

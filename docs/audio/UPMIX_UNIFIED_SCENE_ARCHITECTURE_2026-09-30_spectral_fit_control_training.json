@@ -1,8 +1,0 @@
-{
-  "complete": true,
-  "mode": "control",
-  "smoke": false,
-  "step": 20000,
-  "checkpoint_sha256": "b8c9559ff4d8b334de6e95edd8e418e303bb659247e7c071bc1e5d82359d4488",
-  "protocol_sha256": "99f19ad71f64f0d9dab12ad52c46ecdf0cb37af042336424b0f59bdc727abdbb"
-}

@@ -33,8 +33,7 @@ ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 HOOK = os.path.join(ROOT, "hook", "audio")
 HEADER = os.path.join(HOOK, "scene_engine.h")
 BUILD = os.path.join(ROOT, "build", "scene_port")
-FIXTURES = ("/private/tmp/claude-501/-Users-luka-Desktop-AUDI-2-Patches-mhi2-carplay/"
-            "68989c4d-7e7a-4c32-aa08-b7c2a6c66c89/scratchpad/port_fixtures")
+FIXTURES = "/Users/luka/Desktop/AUDI_2/upmix-data/scene_port_fixtures_2026-10-09"
 SOURCES = ["scene_engine_math.c", "scene_clusters.c", "scene_engine.c"]
 TOL_FRAME, TOL_DB, TOL_PLACE = 1e-4, -60.0, 1e-5
 N, H, F, SR = 1024, 256, 513, 48000

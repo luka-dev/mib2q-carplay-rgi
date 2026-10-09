@@ -19,7 +19,6 @@ printf '%-32s ' stereo_upmix_test
 cc -std=gnu99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
     -DSPA_STEREO_UPMIX_TESTING \
     tests/stereo_upmix_test.c hook/audio/stereo_upmix.c \
-    hook/audio/hssr_dsp.c hook/audio/hssr_neon.c hook/audio/hssr_mask.c \
     hook/audio/scene_engine_math.c hook/audio/scene_clusters.c hook/audio/scene_engine.c hook/audio/scene_mask.c \
     hook/audio/scene_mask_worker.c -lm -lpthread -o "$OUT/upmix"
 "$OUT/upmix"
@@ -29,34 +28,10 @@ cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
     tests/rt_upmix_guard_test.c -o "$OUT/rtguard"
 "$OUT/rtguard"
 
-printf '%-32s ' hssr_neon_test
-cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
-    tests/hssr_neon_test.c hook/audio/hssr_neon.c -o "$OUT/hssr_neon"
-"$OUT/hssr_neon"
-
-printf '%-32s ' hssr_control_worker_test
-cc -std=gnu99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
-    tests/hssr_control_worker_test.c hook/audio/hssr_control_worker.c hook/audio/hssr_mask.c \
-    hook/audio/hssr_neon.c -lpthread -o "$OUT/hssr_control_worker"
-"$OUT/hssr_control_worker"
-
-printf '%-32s ' upmix_behavior_test
-if python3 -c 'import numpy' 2>/dev/null; then
-    cc -std=gnu99 -O2 -ffp-contract=off -Ihook -Ihook/audio \
-        tools/stereo-upmix-render/stereo_upmix_render.c hook/audio/stereo_upmix.c \
-        hook/audio/hssr_dsp.c hook/audio/hssr_neon.c hook/audio/hssr_control_worker.c hook/audio/hssr_mask.c \
-        hook/audio/soundcheck.c hook/audio/scene_engine_math.c hook/audio/scene_clusters.c hook/audio/scene_engine.c hook/audio/scene_mask.c -lm -lpthread -o "$OUT/upmix_render"
-    python3 tools/stereo-upmix-render/upmix_behavior_tests.py --check \
-        --render "$OUT/upmix_render" --model models/hssr-q6d-moises-a/hssr_model.bin \
-        --guard models/hssr-selection-v11/hssr_guard.bin --out "$OUT/upmix_behavior"
-else
-    echo "SKIP (no numpy)"
-fi
-
 printf '%-32s ' buffered_pcm_switch_test
 cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
     tests/buffered_pcm_switch_test.c hook/audio/spatial_downmix.c \
-    hook/audio/stereo_upmix.c hook/audio/hssr_dsp.c hook/audio/hssr_mask.c hook/audio/hssr_neon.c \
+    hook/audio/stereo_upmix.c \
     hook/audio/scene_engine_math.c hook/audio/scene_clusters.c hook/audio/scene_engine.c hook/audio/scene_mask.c \
     -lm -o "$OUT/switch"
 "$OUT/switch"
@@ -284,7 +259,7 @@ printf '%s\n' "$trace_summary" | grep -q \
 printf '%s\n' "$trace_summary" | grep -q \
     "now_playing_retry_actions: \['queued'\]"
 printf '%s\n' "$trace_summary" | grep -q \
-    "'upmix': 'hssr-universal'"
+    "'upmix': 'scene'"
 printf '%s\n' "$trace_summary" | grep -q \
     "qsa_open_actions: \['cold_buffered'\]"
 printf '%s\n' "$trace_summary" | grep -q \

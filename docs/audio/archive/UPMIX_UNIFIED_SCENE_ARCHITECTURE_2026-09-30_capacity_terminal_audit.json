@@ -1,0 +1,179 @@
+{
+  "verified": true,
+  "smoke": false,
+  "arms": {
+    "control": {
+      "checkpoint_sha256": "65c0572774d1fff4150a80c1bcef365f83be701bb09e2c741127384f0e651641",
+      "same_input_waveform_cpu_cuda_nse": {
+        "eligible": 1.2758012262943676e-11,
+        "vocal": 2.2937603428098207e-11,
+        "drums": 6.691601922672755e-12,
+        "bass": 5.881456841056455e-12
+      },
+      "native_input_spectral_nse": 4.816853593530391e-14,
+      "native_end_to_end_errors": {
+        "eligible": {
+          "nse": 3.311469323459669e-11,
+          "max_pcm16_lsb": 0.04833984375,
+          "loss_error": 2.2351741790771484e-08,
+          "sdr_error_db": 2.86102294921875e-06
+        },
+        "vocal": {
+          "nse": 3.101823212135123e-10,
+          "max_pcm16_lsb": 0.148681640625,
+          "loss_error": 1.4901161193847656e-07,
+          "sdr_error_db": 4.1961669921875e-05
+        },
+        "drums": {
+          "nse": 3.0916171229824205e-11,
+          "max_pcm16_lsb": 0.08636474609375,
+          "loss_error": 2.384185791015625e-07,
+          "sdr_error_db": 1.6689300537109375e-05
+        },
+        "bass": {
+          "nse": 1.8193306397178215e-11,
+          "max_pcm16_lsb": 0.073486328125,
+          "loss_error": 5.960464477539063e-08,
+          "sdr_error_db": 1.3589859008789062e-05
+        }
+      },
+      "source_row": {
+        "song": "d4262245-3143-4c05-8423-6cbdc6253042",
+        "loss": {
+          "eligible": 0.09099819511175156,
+          "vocal": 0.08115240931510925,
+          "drums": 0.15841223299503326,
+          "bass": 0.12767764925956726
+        },
+        "sdr_db": {
+          "eligible": -7.56151008605957,
+          "vocal": -3.113495349884033,
+          "drums": 2.21012020111084,
+          "bass": 3.3528895378112793
+        },
+        "source_tx": {
+          "eligible": 0.4517193980002097,
+          "vocal": 0.19539891544507482,
+          "drums": 0.02728946964750493,
+          "bass": 0.032679074957470716
+        },
+        "bands": {
+          "0-300": {
+            "eligible_tx": 0.07459404037932932,
+            "error_nse": 15.880173352180954
+          },
+          "300-8k": {
+            "eligible_tx": 0.4614246715120251,
+            "error_nse": 1.5077038421672944
+          },
+          "8-14k": {
+            "eligible_tx": 0.0026137003154024915,
+            "error_nse": 1.6411620822353428
+          },
+          "14-24k": {
+            "eligible_tx": 0.026012329254875437,
+            "error_nse": 44.110681241252706
+          }
+        },
+        "closure_nse": 2.1670174132231747e-14
+      },
+      "neural_causality": {
+        "future_prefix_nse": 0.0,
+        "chunk_nse": 5.782621424884823e-14,
+        "perturbed_suffix_nse": 9.571836471557617,
+        "scope": "neural STFT interface only; scene dormant; centered waveform transform not certified"
+      },
+      "real_waveform_chunk_nse": 1.0843261781089825e-13,
+      "distinct_train_songs": 156,
+      "sealed_holdout_audio_unread": true
+    },
+    "expanded": {
+      "checkpoint_sha256": "1b0cb33f1b3faac1c0f655a7c0f40cebe55640b7a60a254346edf0a762ce9aa6",
+      "same_input_waveform_cpu_cuda_nse": {
+        "eligible": 1.3557189966466991e-11,
+        "vocal": 2.324973623957386e-11,
+        "drums": 6.3418747560501014e-12,
+        "bass": 6.220732879741392e-12
+      },
+      "native_input_spectral_nse": 4.816853593530391e-14,
+      "native_end_to_end_errors": {
+        "eligible": {
+          "nse": 3.404972155302854e-11,
+          "max_pcm16_lsb": 0.0380859375,
+          "loss_error": 6.705522537231445e-08,
+          "sdr_error_db": 1.430511474609375e-06
+        },
+        "vocal": {
+          "nse": 2.3273039638167654e-10,
+          "max_pcm16_lsb": 0.081939697265625,
+          "loss_error": 1.4901161193847656e-07,
+          "sdr_error_db": 4.029273986816406e-05
+        },
+        "drums": {
+          "nse": 2.950223934355546e-11,
+          "max_pcm16_lsb": 0.1103515625,
+          "loss_error": 1.4901161193847656e-07,
+          "sdr_error_db": 7.271766662597656e-06
+        },
+        "bass": {
+          "nse": 2.3069403269522768e-11,
+          "max_pcm16_lsb": 0.07666015625,
+          "loss_error": 4.470348358154297e-08,
+          "sdr_error_db": 7.3909759521484375e-06
+        }
+      },
+      "source_row": {
+        "song": "d4262245-3143-4c05-8423-6cbdc6253042",
+        "loss": {
+          "eligible": 0.08651897311210632,
+          "vocal": 0.07940651476383209,
+          "drums": 0.16014201939105988,
+          "bass": 0.12990617752075195
+        },
+        "sdr_db": {
+          "eligible": -7.457596302032471,
+          "vocal": -3.1365675926208496,
+          "drums": 1.8965861797332764,
+          "bass": 3.413919687271118
+        },
+        "source_tx": {
+          "eligible": 0.39744508112196486,
+          "vocal": 0.17818183103598617,
+          "drums": 0.022629113632371838,
+          "bass": 0.026316406163952696
+        },
+        "bands": {
+          "0-300": {
+            "eligible_tx": 0.05237746179327308,
+            "error_nse": 13.669668065759225
+          },
+          "300-8k": {
+            "eligible_tx": 0.4063603851164642,
+            "error_nse": 1.3200889412226797
+          },
+          "8-14k": {
+            "eligible_tx": 0.00253783598942761,
+            "error_nse": 1.5393836175626159
+          },
+          "14-24k": {
+            "eligible_tx": 0.02914757067656618,
+            "error_nse": 35.28330234134212
+          }
+        },
+        "closure_nse": 2.2143806157216145e-14
+      },
+      "neural_causality": {
+        "future_prefix_nse": 0.0,
+        "chunk_nse": 6.769258954373789e-14,
+        "perturbed_suffix_nse": 9.706024169921875,
+        "scope": "neural STFT interface only; scene dormant; centered waveform transform not certified"
+      },
+      "real_waveform_chunk_nse": 1.3003796173541304e-13,
+      "distinct_train_songs": 156,
+      "sealed_holdout_audio_unread": true
+    }
+  },
+  "matched_sample_sequence_sha256": "1eb3b3c6cf714f9e50a50f98ceaa77c17aea141d9673e9767be53c6941e09793",
+  "protocol_sha256": "8d00a39e4fdd71cb5225eeb8858b9e3b1d6d1110df85671f2083082f2d814afd",
+  "scope": "saved source models and real past-only PCM audit; no scene/C/device/holdout/car quality promotion"
+}

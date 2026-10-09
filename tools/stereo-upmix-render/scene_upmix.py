@@ -14,7 +14,7 @@ ignored, the last two positionals are the stereo input and the 6-ch output, 48 k
                    [--no-cluster] [--wide-pair] [--duck-mask M.npy] [--dump stats.npz] in.wav out6.wav
 
 Library:  render(x[n,2] float, SceneConfig) -> y[n,6] (L R C LFE Ls Rs), decompose(...) for tests.
-ponytail: offline float64 reference, frame loop in Python; the C port lives in hssr_dsp.c later.
+ponytail: offline float64 reference, frame loop in Python; the C port is hook/audio/scene_engine.c.
 """
 import argparse
 import sys

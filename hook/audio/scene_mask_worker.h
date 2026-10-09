@@ -1,5 +1,6 @@
 /* scene_mask_worker.h — the fine mask net (scene_mask.h) on a persistent thread off the audio thread: the
- * hssr_control_worker.c pattern (spec docs/audio/UPMIX_SCENE_ALGORITHM_2026-10-08.md §18 stage 4 item 4).
+ * pattern of the retired HSSR control worker (hssr_control_worker.c at tag upmix-universal-last-2026-10-09; spec
+ * docs/audio/UPMIX_SCENE_ALGORITHM_2026-10-08.md §18 stage 4 item 4).
  * Two-slot job and result mailboxes, a generation (reset) and a sequence (control) number, stale results
  * discarded, a busy counter; the audio thread never blocks, never allocates, never logs.
  *
@@ -101,7 +102,7 @@ struct spa_scene_mask_worker {
 #define SPA_SCENE_MASK_WORKER_NO_THREAD (-1)
 
 /* Validates the blob (scene_mask_init), starts the thread.  priority <= 0 keeps the platform default;
- * production uses the HSSR controller's bounded SCHED_RR priority (17, below the APAP receive/decode
+ * production uses the retired HSSR controller's bounded SCHED_RR priority (17, below the APAP receive/decode
  * thread).  Returns 0, or -1 on a bad blob or no thread (the worker is then not started). */
 int  spa_scene_mask_worker_start(struct spa_scene_mask_worker *worker,
                                  const struct scene_mask_weights *blob,

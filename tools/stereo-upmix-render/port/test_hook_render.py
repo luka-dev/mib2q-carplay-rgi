@@ -45,13 +45,12 @@ ROOT = os.path.dirname(os.path.dirname(TOOLS))
 HOOK = os.path.join(ROOT, "hook", "audio")
 BUILD = os.path.join(ROOT, "build", "scene_port")
 WAV = "/Users/luka/Desktop/AUDI_2/upmix-data/scene_car_kit_2026-10-08/sources/album01.wav"
-DEFAULT_FIX = ("/private/tmp/claude-501/-Users-luka-Desktop-AUDI-2-Patches-mhi2-carplay/"
-               "68989c4d-7e7a-4c32-aa08-b7c2a6c66c89/scratchpad/port_fixtures")
+DEFAULT_FIX = "/Users/luka/Desktop/AUDI_2/upmix-data/scene_port_fixtures_2026-10-09"
 LATENCY, TOL_DB, FRONT_Q15 = 1024, -60.0, 31392
 MASK_HOP, MASK_BINS, MASK_PREFILL = 512, 257, 256
-LIB_SOURCES = ["stereo_upmix.c", "hssr_dsp.c", "hssr_neon.c", "hssr_mask.c", "scene_engine_math.c",
+LIB_SOURCES = ["stereo_upmix.c", "scene_engine_math.c",
                "scene_clusters.c", "scene_engine.c", "scene_mask.c"]   # the backend too: its test guard
-SOURCES = ["stereo_upmix.c", "hssr_dsp.c", "hssr_neon.c", "hssr_control_worker.c", "hssr_mask.c",
+SOURCES = ["stereo_upmix.c",
            "soundcheck.c", "scene_engine_math.c", "scene_clusters.c", "scene_engine.c", "scene_mask.c"]
 sys.path.insert(0, TOOLS)
 sys.path.insert(0, HERE)

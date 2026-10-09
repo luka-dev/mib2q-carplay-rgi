@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # scene_engine_bench (or --bench mask: scene_mask_bench with its weight blob) under QEMU -icount on real
-# QNX 6.5/ARMv7, the qnx_qemu_bench.sh flow without the HSSR model files: guest ClockCycles is calibrated against two exact instruction loops and the program
+# QNX 6.5/ARMv7 (the retired Universal bench's qnx_qemu_bench.sh flow, no model files): guest ClockCycles is calibrated against two exact instruction loops and the program
 # refuses to call the result an instruction count if that calibration does not agree.
 # BENCH_QEMU_PLUGIN=/path/libl1d.so[,size=..,ways=..,line=..] adds the L1D model (metric=l1d_cache in
 # QEMU_KEEP_LOG); -icount alone counts instructions and models no cache.

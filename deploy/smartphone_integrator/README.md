@@ -21,7 +21,7 @@ Install these executable files under `/mnt/app/root/hooks`:
 - `carplay_processes.sh`
 - `libcarplay_hook.so`
 - `libcarplay_apac.so`
-- `hssr_model.bin` (required when stereo upmix is enabled)
+- `scene_masknet_c.bin` (the upmix mask net; without it the renderer runs spatial-only)
 - `maneuver_render`
 - `altscreen_render`
 - `flag_atlas.rgba`
@@ -35,23 +35,23 @@ AAC-LC/48 kHz/stereo index 23 on the buffered stream. APAP packets carry no
 format index: the decoder that accepts each changed inline cookie and its PCM
 geometry select the render action. Native APAC 5.1 keeps its measured
 six-channel reorder; decoded stereo uses the fixed PCM6 route with
-`AUDIO_STEREO_UPMIX=on`, rear gain `0.25`, and the explicitly enabled
-`AUDIO_STEREO_LFE=assist` Cabin-Aware LFE V2 feed. ON always selects the sole
-`hssr-universal` renderer; there is no build-time profile selector.
-The exact compatibility rollback is `AUDIO_STEREO_UPMIX=off`, followed by a
-`dio_manager`/CarPlay child restart because the toggle is parsed once at
-process start. See
+`AUDIO_STEREO_UPMIX=on` and the explicitly enabled `AUDIO_STEREO_LFE=assist`
+Cabin-Aware LFE V2 feed. ON selects the sole `scene` renderer
+([Scene Backend Deploy](<../../docs/build-and-deploy/SCENE_BACKEND_DEPLOY.md>));
+there is no build-time profile selector. The exact compatibility rollback is
+`AUDIO_STEREO_UPMIX=off`, followed by a `dio_manager`/CarPlay child restart
+because the toggle is parsed once at process start. See
 [`../../docs/audio/STEREO_TO_5_1_UPMIX.md`](<../../docs/audio/STEREO_TO_5_1_UPMIX.md>)
-for the signal equations, SoundAmp row bounds and required stationary A/B.
+for the signal path, SoundAmp row bounds and required stationary A/B.
 
-Universal loads `AUDIO_HSSR_MODEL`, defaulting to
-`/mnt/app/root/hooks/hssr_model.bin`. A missing, corrupt, or dimension-mismatched
-model leaves stereo upmix safely off. Its 512/128 STFT and quantized 2x160 GRU
-controller delay fronts, rears and LFE together by 512 frames. Persistent
-half-plane objects are source-projected and hard-steered; a bounded,
-phase-distinct mid/high coverage path prevents dead rears while semantic
-vocal/bass gates protect the front image. The rear rail remains capped at
-`0.25`, digital C remains zero, and native APAC multichannel bypasses upmix.
+The renderer reads `AUDIO_SCENE_MASK_BLOB` (`/mnt/app/root/hooks/scene_masknet_c.bin`)
+once at audio init; a missing, short or wrong-magic file is logged once and the
+renderer runs spatial-only (no instrument transfer, no duck). Its 1024/256 STFT
+delays fronts, rears and LFE together by 1024 frames (the buffered SETUP response
+reports the extra 512 over the matched latency the car was tuned with). Digital C
+remains zero and native APAC multichannel bypasses the upmix. The HSSR Universal
+renderer and its three model files were retired on 2026-10-09 (git tag
+`upmix-universal-last-2026-10-09`).
 
 Lifecycle semantics:
 

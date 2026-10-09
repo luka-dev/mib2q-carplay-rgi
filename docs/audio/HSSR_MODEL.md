@@ -1,5 +1,9 @@
 # HSSR Model
 
+> **Retired 2026-10-09 with the Universal backend.** The renderer, models and knobs this note describes left the tree; the last tree that has them is git tag `upmix-universal-last-2026-10-09`.
+> What runs now: [Stereo to 5.1 Upmix](STEREO_TO_5_1_UPMIX.md). Why, and with which numbers: [Upmix History and Results](UPMIX_HISTORY_AND_RESULTS_2026-10-09.md), [Upmix Code Retirement](UPMIX_CODE_RETIREMENT_2026-10-09.md).
+> The LFE, amp and measurement facts below remain valid.
+
 *The AI that drives the CarPlay Virtual Cabin upmix: what it is, why 12-class separation failed, the second-scene design, the runtime, every iteration V9→q6d, and the shipped calibration.*
 
 ---
@@ -8,9 +12,9 @@
 
 HSSR = High-Selectivity Semantic Rear-routing. It is a small, causal, quantized GRU **routing controller** — not a source separator. It never splits audio into stems. It listens to a stereo signal 93.75 times a second and emits, per frequency band, a decision: *how much of this belongs behind the listener, and where*. A deterministic DSP then builds a 5.1 field from that decision, on top of the reverse-engineered [J525 Virtual Cabin](VIRTUAL_CABIN_AND_AMP_RE.md).
 
-The early history: ~15 model generations tried to make a network *separate* music into 12 instrument classes on 240 songs, and it never worked — an independent audit found the trained model equalled "mute plus drums". That implementation gave way to a genre-agnostic **second scene**: move the not-protected, spatially-wide part of the stereo image behind the listener, delayed so the front still anchors the sound. Current Track A uses three models: `q6d` routing, `V11` vocal-protection guard and `v21a` per-cell eligibility mask. The [phase 1 report](UPMIX_MASK_PHASE1_REPORT_2026-09-27.md) records its car integration; the [matched40 report](UPMIX_TRACKA_MATCHED40_2026-09-30.md) records the current-setting host baseline.
+The early history: ~15 model generations tried to make a network *separate* music into 12 instrument classes on 240 songs, and it never worked — an independent audit found the trained model equalled "mute plus drums". That implementation gave way to a genre-agnostic **second scene**: move the not-protected, spatially-wide part of the stereo image behind the listener, delayed so the front still anchors the sound. Current Track A uses three models: `q6d` routing, `V11` vocal-protection guard and `v21a` per-cell eligibility mask. The [phase 1 report](archive/UPMIX_MASK_PHASE1_REPORT_2026-09-27.md) records its car integration; the [matched40 report](UPMIX_TRACKA_MATCHED40_2026-09-30.md) records the current-setting host baseline.
 
-Track B subsequently returned to eligible-audio separation with a single causal spectral network and an isolated C float/int8 runtime. Its final spectral40k full40 comparison fails joint acoustic promotion; it has not replaced Track A. See the [domain diagrams](UPMIX_DOMAIN_MODEL.md), [session wrap](UPMIX_SESSION_WRAP_2026-09-30.md) and [complete attempt chronicle](UPMIX_SEPARATOR_CHRONICLE_2026-09-25_TO_2026-09-30.md). Earlier conclusions below describe the named historical implementations, not a proof that source separation is impossible.
+Track B subsequently returned to eligible-audio separation with a single causal spectral network and an isolated C float/int8 runtime. Its final spectral40k full40 comparison fails joint acoustic promotion; it has not replaced Track A. See the [domain diagrams](UPMIX_DOMAIN_MODEL.md), [session wrap](archive/UPMIX_SESSION_WRAP_2026-09-30.md) and [complete attempt chronicle](archive/UPMIX_SEPARATOR_CHRONICLE_2026-09-25_TO_2026-09-30.md). Earlier conclusions below describe the named historical implementations, not a proof that source separation is impossible.
 
 Provenance: [HSSR_UPMIX_MODEL](../research/HSSR_UPMIX_MODEL.md), `hook/audio/hssr_dsp.{c,h}`, `hook/audio/hssr_neon.{c,h}`. See also [Stereo to 5.1 Upmix](STEREO_TO_5_1_UPMIX.md) and [Dolby Atmos](DOLBY_ATMOS.md). Companion notes: [Upmix Training History](UPMIX_TRAINING_HISTORY.md) (every experiment line), [Upmix Datasets and Teachers](UPMIX_DATASETS_AND_TEACHERS.md) (corpora, teachers, role labels), [Upmix Compute Budget](UPMIX_COMPUTE_BUDGET.md) (Krait cost), [Upmix Literature](UPMIX_LITERATURE.md) (prior art).
 
@@ -23,7 +27,7 @@ For roughly fifteen generations (V11…Q2) the model was asked to do supervised 
 - Only 2,352 of 111,132 parameters did per-bin separation; even *oracle* 32-band hints left backing NMSE 0.57–0.89 — the band-power interface structurally cannot separate lead/backing or keys/guitar.
 - A static per-bin 2×2 Wiener filter with zero trainable parameters beat the trained model on every family except drums.
 
-The 2026-09-17 decision was to stop that 12-class implementation and pursue a rear protection/routing mask. Its data and band-power interface had not supported the requested separation. The full ledger (V16, G1–G17, H1, P1, C1/C2, Q1–Q5) with every number is in [Upmix Training History](UPMIX_TRAINING_HISTORY.md). Later Track B audio-separation evidence is tracked separately in the [attempt chronicle](UPMIX_SEPARATOR_CHRONICLE_2026-09-25_TO_2026-09-30.md).
+The 2026-09-17 decision was to stop that 12-class implementation and pursue a rear protection/routing mask. Its data and band-power interface had not supported the requested separation. The full ledger (V16, G1–G17, H1, P1, C1/C2, Q1–Q5) with every number is in [Upmix Training History](UPMIX_TRAINING_HISTORY.md). Later Track B audio-separation evidence is tracked separately in the [attempt chronicle](archive/UPMIX_SEPARATOR_CHRONICLE_2026-09-25_TO_2026-09-30.md).
 
 Sources: `UPMIX_INDEPENDENT_AUDIT_2026-09-17`, `UPMIX_AGENT_HANDOFF_2026-09-17`, `UPMIX_RETROSPECTIVE_AND_STEREO71`.
 

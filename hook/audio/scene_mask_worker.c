@@ -154,8 +154,8 @@ int spa_scene_mask_worker_step(struct spa_scene_mask_worker *w)
     return 1;
 }
 
-/* Same as the HSSR controller's: a bounded SCHED_RR priority, the result not checked
- * (hssr_control_worker.c spa_hssr_worker_set_priority). */
+/* A bounded SCHED_RR priority, the result not checked (as the retired HSSR
+ * control worker did; tag upmix-universal-last-2026-10-09). */
 static void smw_set_priority(int priority)
 {
     struct sched_param parameter;
@@ -177,7 +177,7 @@ static void *smw_main(void *opaque)
 {
     struct spa_scene_mask_worker *w = (struct spa_scene_mask_worker *)opaque;
     /* Busy: poll every 250 us (a job every 512 frames = 10.7 ms).  Parked (no job for ~10 ms: the
-     * other path is playing, or nothing is): back off to 4 ms, like the HSSR worker. */
+     * other path is playing, or nothing is): back off to 4 ms, as the retired HSSR worker did. */
     const struct timespec idle = { 0, 250000 };
     const struct timespec parked = { 0, 4000000 };
     uint32_t idle_polls = 0;

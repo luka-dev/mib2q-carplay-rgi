@@ -869,17 +869,17 @@ int main(void)
     {
         static const char *invalid[] = {"nan", "inf", "-inf", "-0.1", "1.1", "bad", "0.5x"};
         unsigned i;
-        unsetenv(SPA_AUDIO_STEREO_FRONT_RETENTION_ENV);
-        assert(spa_parse_stereo_front_retention_q15() == 0);
-        setenv(SPA_AUDIO_STEREO_FRONT_RETENTION_ENV, "0.75", 1);
-        assert(spa_parse_stereo_front_retention_q15() == 24576);
-        setenv(SPA_AUDIO_STEREO_FRONT_RETENTION_ENV, "1", 1);
-        assert(spa_parse_stereo_front_retention_q15() == 32768);
+        unsetenv(SPA_AUDIO_SCENE_INST_ALPHA_ENV);
+        assert(spa_parse_scene_float(SPA_AUDIO_SCENE_INST_ALPHA_ENV, 0.0, 1.0, 0.9f) == 0.9f);
+        setenv(SPA_AUDIO_SCENE_INST_ALPHA_ENV, "0.75", 1);
+        assert(spa_parse_scene_float(SPA_AUDIO_SCENE_INST_ALPHA_ENV, 0.0, 1.0, 0.9f) == 0.75f);
+        setenv(SPA_AUDIO_SCENE_INST_ALPHA_ENV, "1", 1);
+        assert(spa_parse_scene_float(SPA_AUDIO_SCENE_INST_ALPHA_ENV, 0.0, 1.0, 0.9f) == 1.0f);
         for (i = 0; i < sizeof(invalid)/sizeof(invalid[0]); ++i) {
-            setenv(SPA_AUDIO_STEREO_FRONT_RETENTION_ENV, invalid[i], 1);
-            assert(spa_parse_stereo_front_retention_q15() == 0);
+            setenv(SPA_AUDIO_SCENE_INST_ALPHA_ENV, invalid[i], 1);
+            assert(spa_parse_scene_float(SPA_AUDIO_SCENE_INST_ALPHA_ENV, 0.0, 1.0, 0.9f) == 0.9f);
         }
-        unsetenv(SPA_AUDIO_STEREO_FRONT_RETENTION_ENV);
+        unsetenv(SPA_AUDIO_SCENE_INST_ALPHA_ENV);
     }
     assert(!setenv("AUDIO_SPATIAL", "1", 1));
     assert(!setenv("AUDIO_STEREO_UPMIX", "off", 1));

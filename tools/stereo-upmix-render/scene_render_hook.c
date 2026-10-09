@@ -10,8 +10,7 @@
  * Build (host, no FMA like the unit; the run_tests.sh line plus the scene files):
  *   cc -std=gnu99 -O2 -ffp-contract=off -Wall -Wextra -Werror -Ihook -Ihook/audio \
  *      tools/stereo-upmix-render/scene_render_hook.c hook/audio/stereo_upmix.c \
- *      hook/audio/hssr_dsp.c hook/audio/hssr_neon.c hook/audio/hssr_control_worker.c \
- *      hook/audio/hssr_mask.c hook/audio/soundcheck.c \
+ *      hook/audio/soundcheck.c \
  *      hook/audio/scene_engine_math.c hook/audio/scene_clusters.c hook/audio/scene_engine.c \
  *      hook/audio/scene_mask.c \
  *      -lm -lpthread -o build/scene_port/scene_render_hook
@@ -217,7 +216,6 @@ int main(int argc, char **argv)
     if (config.backend == SPA_STEREO_UPMIX_OFF) {      /* the exact bypass, as audio_hook.c arms it */
         spa_stereo_upmix_config_set_lfe(&config, 0);
         config.front_gain_q15 = 32768u;
-        config.rear_gain_q15 = 0;
     }
 
     in = fopen(paths[0], "rb");

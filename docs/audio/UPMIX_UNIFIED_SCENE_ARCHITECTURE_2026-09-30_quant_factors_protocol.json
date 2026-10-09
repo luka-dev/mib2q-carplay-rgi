@@ -1,7 +1,0 @@
-{
-  "build_sha256": "1bef902eaf797669c8d6b2be407cd8e4bbbb88a7d212fa72db7f3e0108ca2a70",
-  "reference_check_sha256": "ffa82a43f50685042cb75f4e8e6c12efb6628e87c54be8e0481067f28405c6c6",
-  "input_sha256": "2ba8a3532b28e9eba6454a6bdc6b4b8515cbadedc4d2901228acc6a41eaf5e9e",
-  "script_sha256": "5d1633785ea200d6a86bdb2ff92f262787c86f3fb405d18ac5ab4b8893b997b6",
-  "scope": "exact same four TRAIN8s fixtures and saved input spectra; matrices/stream/reset unchanged except one diagnostic rounding factor; no DEV/weights trained/device/quality promotion"
-}

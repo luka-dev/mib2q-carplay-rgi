@@ -1,0 +1,47 @@
+{
+  "input_spectral_nse": 5.251701365235816e-14,
+  "eligible": {
+    "total_wave_nse": 2.574610845615818e-09,
+    "neural_same_input_spectral_nse": 1.9218990009798764e-10,
+    "same_gpu_spectrum_synthesis_nse": 2.6764566712814275e-14,
+    "same_gpu_input_wave_nse": 1.3902669507489383e-10,
+    "first_second_nse": 6.979195268162851e-10,
+    "after_first_second_nse": 3.059211099168102e-09,
+    "rms_error_pcm16_lsb": 0.04022183269262314,
+    "max_error_pcm16_lsb": 0.406097412109375,
+    "quantized_different_fraction": 0.023565104231238365
+  },
+  "vocal": {
+    "total_wave_nse": 2.7401472892242444e-09,
+    "neural_same_input_spectral_nse": 2.1610528336784966e-10,
+    "same_gpu_spectrum_synthesis_nse": 2.4571880670537606e-14,
+    "same_gpu_input_wave_nse": 1.758512188426299e-10,
+    "first_second_nse": 7.57532183430778e-10,
+    "after_first_second_nse": 3.130339209755559e-09,
+    "rms_error_pcm16_lsb": 0.03521375358104706,
+    "max_error_pcm16_lsb": 0.37353515625,
+    "quantized_different_fraction": 0.01811979152262211
+  },
+  "drums": {
+    "total_wave_nse": 8.893585898498236e-09,
+    "neural_same_input_spectral_nse": 6.374882106968618e-10,
+    "same_gpu_spectrum_synthesis_nse": 2.6568929508712392e-14,
+    "same_gpu_input_wave_nse": 5.691451043373276e-10,
+    "first_second_nse": 2.025355664279756e-10,
+    "after_first_second_nse": 1.0916337632397803e-08,
+    "rms_error_pcm16_lsb": 0.09137608110904694,
+    "max_error_pcm16_lsb": 1.26806640625,
+    "quantized_different_fraction": 0.03700000047683716
+  },
+  "bass": {
+    "total_wave_nse": 5.702645793133017e-09,
+    "neural_same_input_spectral_nse": 5.950722345103053e-10,
+    "same_gpu_spectrum_synthesis_nse": 1.850038723523998e-14,
+    "same_gpu_input_wave_nse": 5.149246985063914e-10,
+    "first_second_nse": 1.940535105952951e-09,
+    "after_first_second_nse": 5.7741926153679995e-09,
+    "rms_error_pcm16_lsb": 0.08224177360534668,
+    "max_error_pcm16_lsb": 1.21484375,
+    "quantized_different_fraction": 0.03240624815225601
+  }
+}

@@ -83,7 +83,7 @@ carplay_build_hook() {
       CFLAGS_EXTRA="$CFLAGS_EXTRA -DHOOK_AUDIO=0"
       echo "Type-103 audio module EXCLUDED (stock CarPlay audio, no libcarplay_apac.so)"
   else
-      echo "Stereo upmix renderer: hssr-universal"
+      echo "Stereo upmix renderer: scene"
   fi
   [ "$TRACE_ONLY" == "1" ] && CFLAGS_EXTRA="$CFLAGS_EXTRA -DENABLE_LOGGING=0" && echo "Trace build: normal hook log compiled out"
   [ "$AUDIO_STATE_TRACE" == "1" ] && CFLAGS_EXTRA="$CFLAGS_EXTRA -DENABLE_STATE_TRACE=1" && echo "Compact lifecycle trace ENABLED"

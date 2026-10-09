@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Cross-build scene_engine_bench (or, with --bench mask, scene_mask_bench) the way build_qnx.sh builds the
-# Universal bench: the hook's C flags (scripts/apac_flags.sh, -O2), -mfpu=neon without vfpv4 (no fused
+# Cross-build scene_engine_bench (or, with --bench mask, scene_mask_bench) the way the hook is built:
+# the hook's C flags (scripts/apac_flags.sh, -O2), -mfpu=neon without vfpv4 (no fused
 # multiply-add), softfp, -Werror on every file.
 # SCENE_CFLAGS_EXTRA adds flags (e.g. "-O3 -fno-math-errno" to try the upmix DSP flags).
 set -euo pipefail

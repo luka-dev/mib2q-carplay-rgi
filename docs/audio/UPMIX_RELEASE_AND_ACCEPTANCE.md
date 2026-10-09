@@ -1,5 +1,9 @@
 # Upmix Release and Acceptance
 
+> **Retired 2026-10-09 with the Universal backend.** The renderer, models and knobs this note describes left the tree; the last tree that has them is git tag `upmix-universal-last-2026-10-09`.
+> What runs now: [Stereo to 5.1 Upmix](STEREO_TO_5_1_UPMIX.md). Why, and with which numbers: [Upmix History and Results](UPMIX_HISTORY_AND_RESULTS_2026-10-09.md), [Upmix Code Retirement](UPMIX_CODE_RETIREMENT_2026-10-09.md).
+> The LFE, amp and measurement facts below remain valid.
+
 *The release bar the upmix was meant to clear — the frozen acceptance protocol, the runtime audit, the cabin constraints — and the research candidates (G-series, P1, Q2, cabin-first) that were built against it and never shipped. Records 2026-09-08 → 2026-09-17.*
 
 ---

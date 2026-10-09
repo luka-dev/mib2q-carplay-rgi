@@ -7,7 +7,8 @@
  * the same bits on the host (-ffp-contract=off). Per control (QEMU -icount, GCC 8.5 -O2) the scalar libm port
  * cost 19.4 M instructions; this file is measured by tools/stereo-upmix-render/bench/scene_mask_bench.c.
  *
- * Arithmetic that is not torch's: tanh / sigmoid are hssr_mask.c's clamped [7/6] rational (|err| < 1e-4), the
+ * Arithmetic that is not torch's: tanh / sigmoid are the retired hssr_mask.c's clamped [7/6] rational
+ * (tag upmix-universal-last-2026-10-09; |err| < 1e-4), the
  * log features a mantissa series (|err| < 1e-6 in natural-log units, standardised and clamped to +-6 after), and
  * on ARMv7 every reciprocal is VRECPE refined by two Newton steps (<= 2 ulp; the host divides exactly). The
  * goldens gate the result at 1e-3 per layer (test_mask.py section B).

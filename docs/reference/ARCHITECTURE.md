@@ -59,7 +59,7 @@ flowchart LR
   track_b_research --> archived_verdict["Full40 joint failure<br/>research paused"]
 ```
 
-See [Audio overview](../audio/README.md), [upmix domain and evidence model](../audio/UPMIX_DOMAIN_MODEL.md), [Track A matched40](../audio/UPMIX_TRACKA_MATCHED40_2026-09-30.md), [Track B wrap](../audio/UPMIX_SESSION_WRAP_2026-09-30.md) and the [attempt chronicle](../audio/UPMIX_SEPARATOR_CHRONICLE_2026-09-25_TO_2026-09-30.md).
+See [Audio overview](../audio/README.md), [upmix domain and evidence model](../audio/UPMIX_DOMAIN_MODEL.md), [Track A matched40](../audio/UPMIX_TRACKA_MATCHED40_2026-09-30.md), [Track B wrap](../audio/archive/UPMIX_SESSION_WRAP_2026-09-30.md) and the [attempt chronicle](../audio/archive/UPMIX_SEPARATOR_CHRONICLE_2026-09-25_TO_2026-09-30.md).
 
 ## ⚙️ Native hook: a module table over framework seams
 

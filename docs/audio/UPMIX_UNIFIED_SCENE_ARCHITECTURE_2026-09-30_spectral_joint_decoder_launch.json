@@ -1,8 +1,0 @@
-﻿{
-    "script_sha256":  "dccc8c2542e3894b3e8b9abda807509c5db142afa9753febc06559755174dc14",
-    "scope":  "CPU-only original TRAIN4, no training or shared lease",
-    "started_utc":  "2026-09-30T23:37:40.1960298Z",
-    "wrapper":  "C:\\Users\\LuKa\\AppData\\Local\\Temp\\upmix_spectral_joint_decoder_wrapper_v1.ps1",
-    "return_value":  0,
-    "supervisor_pid":  44116
-}

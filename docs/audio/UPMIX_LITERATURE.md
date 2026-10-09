@@ -1,6 +1,6 @@
 # Upmix Literature
 
-**Latest separator review, 2026-09-29:** [Research review and the next discriminating experiment](UPMIX_RESEARCH_REVIEW_2026-09-29.md) compares 22 research lines and pinned implementation code with Track B's observed fitting gap, failed data/architecture probes, and the Audi compute/latency gates. Its proposed direction is a stronger causal reference encoder followed by measured compression; it establishes no new separation or deployment result.
+**Latest separator review, 2026-09-29:** [Research review and the next discriminating experiment](archive/UPMIX_RESEARCH_REVIEW_2026-09-29.md) compares 22 research lines and pinned implementation code with Track B's observed fitting gap, failed data/architecture probes, and the Audi compute/latency gates. Its proposed direction is a stronger causal reference encoder followed by measured compression; it establishes no new separation or deployment result.
 
 *The papers and published systems the upmix work drew on — classic direct/ambient DSP, ML upmixers, source separation and its evaluation — with what each one actually changed in this project.*
 

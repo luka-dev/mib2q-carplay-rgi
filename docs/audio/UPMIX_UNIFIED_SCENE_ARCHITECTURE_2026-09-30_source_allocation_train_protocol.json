@@ -1,9 +1,0 @@
-{
-  "checkpoint_sha256": "ea4133f8983898d0b728b7aa969875b0574092cdcbe0bce1fbf7df33f3092a48",
-  "script_sha256": "d46ada22293515b1b1ddc9c47850b3a3920dc7b45ec370581795db88a1dcd00d",
-  "manifest_sha256": "63daea1cecbf94441024b3ceafd09294e73da5cd47d27eb99f068419c5578c67",
-  "scope": "original TRAIN12, fixed terminal, actual summed PCM analyzed once; no model/data/DEV/GPU/renderer change",
-  "frames": "only past-only FFT windows entirely inside original scored20s cut; no zero-start or flush edges",
-  "matrix": "row inferred output, column true input source; squared response of frozen inferred mask to each true component / true component spectral power",
-  "limits": "Operator responses are sensitivity and need not sum as energies. Cancellation means not literal audible component content. Actual source reconstruction errors accompany every matrix. No promotion gate."
-}

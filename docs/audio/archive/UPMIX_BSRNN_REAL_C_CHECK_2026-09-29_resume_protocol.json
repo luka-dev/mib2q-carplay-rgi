@@ -1,0 +1,107 @@
+{
+  "source_revision": "94adc8c184ac9b1d2e496fcb6e78cfe3fb78fc9c",
+  "script_sha256": "e5ded4764041d9e5ee65ffcbf60b8fc47f2f782427a9121d8889f628ed409c51",
+  "intake_script_sha256": "1fc41e4451e212fa0ff662d699b000ff8080e06dd9b7956926b2e130e4aaa30b",
+  "checkpoint": {
+    "path": "D:\\upmix\\third_party\\bsrnn_reference\\weights\\simo-bsrnn-opt\\simo-bsrnn-opt\\separator.ckpt",
+    "sha256": "fd23279e43ade16b9c30b466c978d73f879c2cfb8d79917e6d880d8ed8df51e8",
+    "strict": true,
+    "missing_keys": [],
+    "unexpected_keys": [],
+    "state_tensors": 2870,
+    "all_loaded_tensors_exact": true,
+    "parameters": 108727540,
+    "targets": [
+      "vocals",
+      "bass",
+      "drums",
+      "other"
+    ],
+    "saved_hyperparameters": {
+      "cfg_optim": {
+        "max_epochs": 200,
+        "deterministic": false,
+        "algo": "adam",
+        "lr": 0.00025,
+        "grad_clip_norm": 5,
+        "loss_type": "L1",
+        "loss_domain": "t+tf",
+        "monitor_val": "sdr",
+        "patience": 30,
+        "ngpus": null,
+        "sync_bn": true,
+        "acc_grad": 1
+      },
+      "cfg_scheduler": {
+        "name": "step",
+        "gamma": 0.98,
+        "step_size": 2
+      },
+      "cfg_eval": {
+        "device": "cuda",
+        "segment_len": 10.0,
+        "overlap": 0.1,
+        "hop_size": null,
+        "verbose_per_track": true,
+        "sdr_type": "usdr",
+        "win_dur": 1.0,
+        "rec_dir": null
+      },
+      "targets": [
+        "vocals",
+        "bass",
+        "drums",
+        "other"
+      ],
+      "sample_rate": 44100,
+      "n_fft": 2048,
+      "n_hop": 512,
+      "eps": 1e-07,
+      "nb_channels": 2,
+      "feature_dim": 128,
+      "joint_bandsplit": true,
+      "num_repeat": 12,
+      "fac_sep": 2,
+      "time_layer": "lstm",
+      "band_layer": "lstm",
+      "bidirectional": true,
+      "fac_mask": 4,
+      "mask_ctxt": 0,
+      "subtract_last_trgt": false,
+      "n_heads": 1,
+      "group_num": 1,
+      "n_att_head": 2,
+      "attn_enc_dim": 16,
+      "stereo": "tac",
+      "fac_tac": 3,
+      "act_tac": "prelu",
+      "name": "simo-bsrnn-opt",
+      "name_out_dir": "simo-bsrnn-opt",
+      "name_tblog_dir": "simo-bsrnn"
+    },
+    "eval_metadata_patch": "defaults supply sdr_win/sdr_hop",
+    "pickle_mode": "trusted publisher SHA-256 + screened globals; weights_only=False",
+    "origin": {
+      "epoch": 199,
+      "global_step": 1000000,
+      "lightning_version": "2.4.0"
+    }
+  },
+  "manifest_sha256": "c0407503233c3f5e0526f8b88a3617e87e962b3763b966276206abc979dafee4",
+  "binary_hashes": {
+    "control": "f67798d6f254da7f7920ca47643e72e8d0804da0fcda410e71cfc8d13e38a563",
+    "direct_no_bed": "eaf28ccfef2d3fc30f0ac3bb2fce440ed53308d9144da81d89cff377249c26a7"
+  },
+  "harness_hashes": {
+    "upmix_stem_tests": "184cc28b493dde68b0106410515ce578a2719cdeea4558d38976c625a02573fe",
+    "upmix_behavior_tests": "c28574a4642b59feb179f0bbd6adaaeda870d6ffb7f37223bf5726a40e30913d",
+    "diag_transitions": "b2626f320f2e77fdc71e32f547fdd894f7e9e3f1a689f52f8cd714aff65b62c7",
+    "sep_net": "11e0c4fe89c82d3be3814e5d2a421c5fd73c40d4e3fa505904c57ae1d7dba905",
+    "mask_net": "5caae687105ae492f5bbb5de5843593882da43c73e6cf90878bf28af8f54be40"
+  },
+  "injection_gain": 1.0,
+  "chunk_seconds": 11,
+  "hop_seconds": 10,
+  "scope": "previously inspected DEV40; offline noncausal SIMO, no training",
+  "trace_file": "C:\\Users\\LuKa\\AppData\\Local\\Temp\\upmix_bsrnn_trace_1790733427.txt"
+}

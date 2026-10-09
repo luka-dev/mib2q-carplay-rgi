@@ -6,10 +6,10 @@
 
 ## 📦 Builds emit binaries, not releases
 
-Each build script writes its outputs into `build/`. `scripts/prepare_install.sh <hook build dir>` (e.g. `build/protected_<VIN>` or `build/unprotected`) rebuilds the jar and renderers (`SKIP_BUILD=1` reuses them), stages every file below at its on-unit path and writes `build/install_<name>/install_MoreIncredibleBash/` plus `build/install_<name>.zip`. A hook folder without `libcarplay_apac.so` (`HOOK_AUDIO=0`) also leaves out the HSSR models. The old `package_mib.py`, `package_protected.sh` and `deploy_over_ssh.sh` stay deleted. A release comes from three folders:
+Each build script writes its outputs into `build/`. `scripts/prepare_install.sh <hook build dir>` (e.g. `build/protected_<VIN>` or `build/unprotected`) rebuilds the jar and renderers (`SKIP_BUILD=1` reuses them), stages every file below at its on-unit path and writes `build/install_<name>/install_MoreIncredibleBash/` plus `build/install_<name>.zip`. A hook folder without `libcarplay_apac.so` (`HOOK_AUDIO=0`) also leaves out the upmix mask net. The old `package_mib.py`, `package_protected.sh` and `deploy_over_ssh.sh` stay deleted. A release comes from three folders:
 
 - `build/` holds the compiled outputs: `libcarplay_hook.so`, `libcarplay_apac.so`, `maneuver_render`, `altscreen_render` and `carplay_hook.jar`.
-- `models/` holds the HSSR models, `hssr_model.bin` and `hssr_guard.bin`.
+- `models/` holds the scene renderer's mask net, `scene-masknet-c/scene_masknet_c.bin` (the only model since the Universal retirement of 2026-10-09).
 - `deploy/` holds the startup scripts, the patched firmware (`smartphone_integrator` and `deva-ctrl-qc.so`) and the SI child JSON.
 
 `custom.sh` installs whatever it finds under `mod/carplay/root/`. It copies every file in that tree to the same path under `/` (`install_MoreIncredibleBash/mod/custom.sh:30-33`, `:164-182`). You put each file at its on-unit path yourself, using the map below.
@@ -21,7 +21,7 @@ flowchart TB
 
   subgraph repo_side [Repo]
     build_dir["build/ compiled outputs"]
-    models_dir["models/ HSSR model and guard"]
+    models_dir["models/ scene mask net"]
     deploy_dir["deploy/ scripts, firmware, JSON"]
   end
 
@@ -65,10 +65,7 @@ The on-unit column is the path under `/`. On the card, that same file goes at `m
 | `maneuver_render` | `build/` (`build_renderers.sh`) | `/mnt/app/root/hooks/` |
 | `altscreen_render` | `build/` (`build_renderers.sh`) | `/mnt/app/root/hooks/` |
 | `carplay_hook.jar`, `carplay_hook_cn.jar` | `build/` (`build_java.sh`); both ship; `custom.sh` reads the firmware version from E2P (`modifyE2P r 3A0 19`, as M.I.B.), stops on anything but Audi MHI2Q, keeps `carplay_hook.jar` for region US/ER/JP or `carplay_hook_cn.jar` for CN and deletes the other (both for any other region) | `/mnt/app/eso/hmi/lsd/jars/` |
-| `hssr_model.bin` | `models/hssr-q6d-moises-a/`, the main control model | `/mnt/app/root/hooks/` |
-| `hssr_guard.bin` | `models/hssr-selection-v11/`, the V11 vocal guard, loaded from beside the main model (`hook/audio/audio_hook.c:1756`) | `/mnt/app/root/hooks/` |
-| `hssr_mask.bin` | `models/mask-full-probe-v21a/`, the Phase 1 rear-eligibility mask net, read beside the main model | `/mnt/app/root/hooks/` |
-| `scene_masknet_c.bin` | `models/scene-masknet-c/`, the scene backend's fine mask net; read only with `AUDIO_SCENE=1` and `AUDIO_SCENE_MASK_BLOB` set, both commented out in `carplay_startup.sh` ([Scene Backend Deploy](SCENE_BACKEND_DEPLOY.md)) | `/mnt/app/root/hooks/` |
+| `scene_masknet_c.bin` | `models/scene-masknet-c/`, the scene renderer's fine mask net c (`prepare_install.sh:48`), read at audio init because `carplay_startup.sh:92` exports `AUDIO_SCENE_MASK_BLOB` ([Scene Backend Deploy](SCENE_BACKEND_DEPLOY.md)). `hssr_model.bin`, `hssr_guard.bin` and `hssr_mask.bin` are no longer shipped (Universal retired 2026-10-09); the uninstaller still removes them from older installs | `/mnt/app/root/hooks/` |
 | `flag_atlas.rgba` | `maneuver_render/resources/` | `/mnt/app/root/hooks/` (`maneuver_render/main.c:45`) |
 | `carplay_ncm_cleanup.sh` | `deploy/smartphone_integrator/`; SI's `usb.otgStackCleanupScript` points here | `/mnt/app/root/hooks/` |
 | `startncm.sh`, `stopncm.sh`, `usblauncher_otg.lua` | `deploy/experimental/usb_replug_recovery/bundle_mu1316_p5087/{stock,payload}/`, staged as `mod/carplay/ncm/`, not in `root/`; `patch_ncm` installs them only over the exact stock, with a `.carplay-stock` backup | `/mnt/system/etc/scripts/`, `/mnt/system/etc/` |
@@ -90,8 +87,6 @@ Build the compiled outputs first (`build_hook.sh` or `build_hook_protected.sh`, 
 | `deploy/smartphone_integrator/smartphone_integrator` | `606236a81c7c4dafda6fdd08fe6eb27c43252796784da25d9760a7d552ee2af3` | SI re-arm image, read back from the HU on 2026-09-16 (not re-verified on the unit since) |
 | `deploy/deva-ctrl-qc/deva-ctrl-qc.so.patched` | `398e7213be4e966719eed5ff9736fb9142f11e161033f01263f29db640e06355` | final mirror build; three-step chain in `deploy/deva-ctrl-qc/BUILD_CHAIN.md` |
 | `deploy/deva-ctrl-qc/deva-ctrl-qc.so.stock` | `58dddcabaa94c2fecf989855a6f810ec219926f49669a0ed9482ed629fdc64b9` | stock input |
-| `models/hssr-q6d-moises-a/hssr_model.bin` | `96abe57d9ee703f2e39c0231de97580c303ce896ce044b7450c14240002b0a0e` | q6d main model |
-| `models/hssr-selection-v11/hssr_guard.bin` | `ab01463e9359f013c4b40f311d630bd20af48d761ad361563cb5246f6bd686ae` | V11 guard |
 | `models/scene-masknet-c/scene_masknet_c.bin` | `58cdc72f573d4718f6325de8a481ecd904096d8f589372e6de5cb05222d98957` | scene backend fine mask net c, 32,544 B (`SMSKNET1`) |
 
 **PF firewall:** no patch file is installed. `custom.sh` edits the `carplay0` inbound TCP rule in place, widening ` 6030,` (or ` 6030:6031,` / ` 6030:6033,`) to ` 6030:6032,` in each of `pf.conf`, `pf.ecm0.conf`, `pf.mlan0.conf` and `pf.ppp0.conf` (`custom.sh:36`, `:90-112`). Because it does this in the shell, it needs no `patch`, `sed` or Python on the HU. `deploy/pf/patched/` is a reference result, regenerated by `deploy/pf/patch_pf.sh`. See [PF Firewall](../connect-and-usb/PF_FIREWALL.md) and [Landmines](../LANDMINES.md) for the trap where the PF profile is chosen per interface.
@@ -207,12 +202,12 @@ mkdir -p /mnt/app/root/hooks
 | `libcarplay_hook.so`, `libcarplay_apac.so` | `/mnt/app/root/hooks/` | 755 |
 | `maneuver_render`, `altscreen_render` | `/mnt/app/root/hooks/` | 755 |
 | `carplay_startup.sh`, `carplay_monitor.sh`, `carplay_processes.sh`, `carplay_cleanup.sh`, `carplay_ncm_cleanup.sh` | `/mnt/app/root/hooks/` | 755 |
-| `hssr_model.bin`, `hssr_guard.bin`, `flag_atlas.rgba` | `/mnt/app/root/hooks/` | 644 |
+| `scene_masknet_c.bin`, `flag_atlas.rgba` | `/mnt/app/root/hooks/` | 644 |
 | `carplay_hook.jar` | `/mnt/app/eso/hmi/lsd/jars/` | 644 |
 
 ```bash
 cp libcarplay_hook.so libcarplay_apac.so maneuver_render altscreen_render carplay_*.sh /mnt/app/root/hooks/
-cp hssr_model.bin hssr_guard.bin flag_atlas.rgba /mnt/app/root/hooks/
+cp scene_masknet_c.bin flag_atlas.rgba /mnt/app/root/hooks/
 chmod 755 /mnt/app/root/hooks/*.so /mnt/app/root/hooks/*_render /mnt/app/root/hooks/carplay_*.sh
 cp carplay_hook.jar /mnt/app/eso/hmi/lsd/jars/
 ```

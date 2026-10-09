@@ -386,7 +386,6 @@ def summarize_generation(process_id: str, generation: str,
                 "state": event.get("state", "?"),
                 "channels": as_int(event, "output_channels", -1),
                 "upmix": event.get("upmix", "?"),
-                "rear_q15": as_int(event, "rear_q15", -1),
                 "lfe": as_int(event, "lfe", -1),
             }
             for event in render_starts

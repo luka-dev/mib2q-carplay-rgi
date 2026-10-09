@@ -168,3 +168,20 @@ second-scene DSP, not the SCENE backend: it goes too.
 5. Rebuild, `run_tests.sh`, QEMU bench, package; update `LANDMINES.md`, the READMEs and `DEPLOY_AND_RELEASE.md`.
 6. Rollback path if the car rejects SCENE: `git revert` of the removal commits, or the last Track A install zip.
 
+
+## 🏁 Executed (2026-10-09 evening)
+
+| Step | Result |
+| --- | --- |
+| 1. Commit the scene work | `1501fc7d` "audio: add the SCENE upmix renderer"; tag `upmix-universal-last-2026-10-09` on it = the last tree with Universal, its models, tests, bench and the research tools |
+| 2. History document | [Upmix History and Results](UPMIX_HISTORY_AND_RESULTS_2026-10-09.md): six eras, every iteration with its numbers and source, Track A vs SCENE side by side, the surviving lessons, the recovery table |
+| 3. Hook | `hssr_dsp/neon/mask/control_worker` deleted; `stereo_upmix.h` enum OFF=0 / SCENE=1, config down to `sample_rate_hz front_gain_q15 lfe_gain_q15 lfe_enabled backend scene scene_mask_blob scene_mask_provider`; the Universal per-frame loop, shelves, limiter, 576-frame delay and bed glue gone; LFE V2 and the cabin guard kept unchanged; `audio_hook.c` 9,703 → 9,121 lines, `AUDIO_STEREO_UPMIX=on` = SCENE, `AUDIO_SCENE` and the eighteen Universal knobs removed; unprotected hook 2.1 MB → 1.4 MB, zero compiler warnings |
+| 4. Models | only `models/scene-masknet-c/` (blob + manifest + a new `settings.json` for `check_model_settings.py`); the three HSSR model directories deleted and un-whitelisted in `.gitignore` |
+| 5. Tests and scripts | `stereo_upmix_test` reduced to validation, OFF bypass, LFE V2 + cabin guard, SCENE smoke, mask worker; `buffered_pcm_switch_test` runs the SCENE backend; `hssr_*` tests, `upmix_behavior_test` and the Universal link lines removed from `run_tests.sh`, `test_hook_audio.sh`, `test_audio_interposers.sh`, `apac_flags.sh`; trace fixtures say `upmix=scene`; `run_tests.sh` and `test_hook_audio.sh` pass end to end, the port tests (math, clusters, engine, mask, hook render) all pass with their goldens now under `~/Desktop/AUDI_2/upmix-data/scene_port_fixtures_2026-10-09/` |
+| 6. Tools | `tools/stereo-upmix-render/`: 415 files / ~54,000 lines deleted (Universal host renderer and bench, eras C1–C5, `sep_net.py`, `teacher_label.py`), 47 kept (scene family, `port/`, scene bench + QEMU plugins, `bench/results/`, the stem harness with its injection branches stripped and `--model` optional); `test_scene_upmix.py` 51/51 |
+| 7. Deploy | `carplay_startup.sh`: the Universal block replaced by the live variant J block with the blob on (comment the `AUDIO_SCENE_MASK_BLOB` line for the spatial-only A/B); `prepare_install.sh` ships only `scene_masknet_c.bin`; the uninstaller keeps removing `hssr_*.bin` from older installs on purpose |
+| 8. Packages | `build/install_protected_WAUZZZF47HA098927.zip` (SCENE, VIN-locked) and `build/install_scene_j_unprotected.zip`; the Track A rollback kept as `build/install_protected_WAUZZZF47HA098927_trackA_2026-09-28.zip` (the only copy of the hssr model files outside git) |
+| 9. Docs | live docs rewritten for SCENE (`STEREO_TO_5_1_UPMIX.md`, `docs/audio/README.md`, `LANDMINES.md`, `SCENE_BACKEND_DEPLOY.md`, `DEPLOY_AND_RELEASE.md`, root and tools READMEs); Track A reference docs carry a retirement banner; the superseded 09-25 … 10-04 research notes moved to [archive/](archive/README.md) |
+| Not done | the QEMU bench was not re-run (the scene engine and net files did not change in this cleanup); nothing has been heard in the car; `tools/soundamp-virtual-cabin/audit_*` scripts that spawned the Universal host renderer keep their metric functions but their render CLI paths are dead |
+
+Risk accepted: there is no Universal fallback in the tree any more. Rollback = the Track A zip above, or `git checkout upmix-universal-last-2026-10-09` and a rebuild.

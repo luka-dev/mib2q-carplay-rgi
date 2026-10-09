@@ -184,7 +184,7 @@ The preceding tuning step had421 Python tests (121 extraction +300 model/tools),
 AmpChain scenarios, no inference of current vehicle state.
 
 Host-side documentary/static model of the known Audi J525/B&O 9VS signal path
-for evaluating HSSR and authored 5.1 without changing or recording the car.
+for evaluating the upmix and authored 5.1 without changing or recording the car.
 
 Newer research is recorded in
 [`UPMIX_STATIC_READINESS_AND_SOUNDCHECK.md`](<../../docs/audio/STEREO_TO_5_1_UPMIX.md>).
@@ -235,36 +235,37 @@ speaker coordinates are schematic drawing coordinates only. The service
 manual proves the named locations, but it does not provide acoustic distances
 or driver aim angles.
 
-## Run an HSSR file through the proven J525 matrix
+## Run an upmix render through the proven J525 matrix
 
-First create a six-channel render, for example:
+First create a six-channel render with the hook's own scene renderer
+(`tools/stereo-upmix-render/scene_render_hook.c`, the exact `spa_stereo_upmix_process_s16()`
+path in 768-frame periods):
 
 ```sh
-cc -std=c99 -O2 -ffp-contract=off -Wall -Wextra -Werror \
-  -Ihook/audio \
-  tools/stereo-upmix-render/stereo_upmix_render.c \
+cc -std=gnu99 -O2 -ffp-contract=off -Wall -Wextra -Werror -Ihook -Ihook/audio \
+  tools/stereo-upmix-render/scene_render_hook.c hook/audio/stereo_upmix.c \
   hook/audio/soundcheck.c \
-  hook/audio/stereo_upmix.c hook/audio/hssr_dsp.c hook/audio/hssr_neon.c \
-  -lm -o build/stereo_upmix_render
+  hook/audio/scene_engine_math.c hook/audio/scene_clusters.c hook/audio/scene_engine.c \
+  hook/audio/scene_mask.c hook/audio/scene_mask_worker.c \
+  -lm -lpthread -o build/scene_port/scene_render_hook
 
-build/stereo_upmix_render \
-  --mode hssr-universal --model models/hssr-selection-v11/hssr_guard.bin \
-  --lfe assist --surround 0.25 \
-  input-stereo.wav build/hssr-universal.wav
+build/scene_port/scene_render_hook --mode scene --lfe assist \
+  --mask-blob models/scene-masknet-c/scene_masknet_c.bin \
+  input-stereo.wav build/scene.wav
 ```
 
 Then apply the exact amplifier input matrix:
 
 ```sh
 python3 tools/soundamp-virtual-cabin/soundamp_virtual_cabin.py matrix \
-  build/hssr-universal.wav build/hssr-universal-j525-buses.wav
+  build/scene.wav build/scene-j525-buses.wav
 ```
 
 This creates:
 
 - an eight-channel PCM file ordered as
   `Bus_L Bus_R Bus_C Bus_LFE Bus_Ls Bus_Rs Bus_7 Bus_8`;
-- `build/hssr-universal-j525-buses.wav.report.json`, containing pre-clipping peak,
+- `build/scene-j525-buses.wav.report.json`, containing pre-clipping peak,
   RMS, rear energy fraction, rear/front ratio and per-bus clipping counts.
 
 The eight-channel WAV has channel mask zero on purpose: Bus 7/8 have no honest
@@ -274,7 +275,7 @@ standard speaker label in the current 5.1 target.
 
 ```sh
 python3 tools/soundamp-virtual-cabin/soundamp_virtual_cabin.py circuits \
-  build/hssr-universal.wav build/hssr-universal-j525-circuits.wav
+  build/scene.wav build/scene-j525-circuits.wav
 ```
 
 This applies two deliberately separate layers:
@@ -341,7 +342,7 @@ renderer does **not** apply the matrix a second time:
 
 ```sh
 python3 tools/soundamp-virtual-cabin/soundamp_virtual_cabin.py binaural \
-  build/hssr-universal.wav build/hssr-universal-driver-headphones.wav \
+  build/scene.wav build/scene-driver-headphones.wav \
   --brir-manifest build/cabin-driver/responses/brir.json \
   --gain-db -6
 ```
@@ -356,7 +357,7 @@ then convolves all eight logical buses.
 
 ## What the documentary model can and cannot validate
 
-It can inspect `hssr-universal` under the exact input matrix, expose rear-bus level and
+It can inspect the scene render under the exact input matrix, expose rear-bus level and
 headroom, and produce a repeatable headphone audition once measured responses
 exist.
 

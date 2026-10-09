@@ -86,6 +86,6 @@ Record the date, car firmware/build identity, hook and mask hashes, config/healt
 
 ## References
 
-- [Separator handoff](UPMIX_SEPARATOR_HANDOFF.md) — goal, results, and Track A ownership.
+- [Separator handoff](archive/UPMIX_SEPARATOR_HANDOFF.md) — goal, results, and Track A ownership.
 - [Upmix listening and deploy log](UPMIX_LISTENING_AND_DEPLOY_LOG.md) — prior sighted verdicts and live level-check guidance.
 - [Landmines](../LANDMINES.md) — CarPlay playback and `qsa_play` traps.

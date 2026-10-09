@@ -93,13 +93,14 @@ features below follow it automatically.
   - *Spatial input:* Spatial Audio / Dolby Atmos tracks from Apple Music arrive as real 5.1 in
     Apple's APAC codec. The head unit decodes them and plays each channel on its own speaker
     group, with no upmix.
-  - *Stereo input* (most music, and apps such as Spotify): a small model running on the head
-    unit (HSSR) upmixes it. Vocals and lead parts stay anchored in front, secondary parts and
-    room ambience move to the rear speakers with short delays for depth, and the subwoofer gets
-    its own bass feed. Calls and Siri stay plain stereo. It is cheap: measured on the unit
-    (2026-09-05 build), a 21 ms block of audio takes about 5 ms of one CPU core, so it runs roughly 4× faster than
-    real time and uses under a quarter of a core
-    ([measurements](docs/audio/UPMIX_COMPUTE_BUDGET.md#-measured-krait-wall-time)).
+  - *Stereo input* (most music, and apps such as Spotify): the head unit's scene renderer
+    upmixes it. It reads the stereo image itself: instruments the mix places off-centre move to
+    the rear speakers as whole objects, the room ambience goes behind as a wide layer, vocals,
+    bass and drums stay anchored in front, and a small network (the mask net) decides per band
+    which parts may move; the subwoofer gets its own bass feed. Calls and Siri stay plain stereo.
+    Measured under QEMU, the renderer takes about 1-2 ms of each 16 ms audio period on the audio
+    thread and the network runs on its own thread
+    ([details](docs/build-and-deploy/SCENE_BACKEND_DEPLOY.md)); the car has not heard it yet.
   - Built for the B&O amplifier only. The startup script enables it unconditionally for now;
     cars with the internal amplifier have no six-channel route and are untested.
 
@@ -112,7 +113,7 @@ All documentation is one linked Markdown tree in [`docs/`](docs/README.md). Star
 
 | Domain | Entry point |
 | --- | --- |
-| Audio (upmix, HSSR model, J525 amp, codecs, 5.1 routing) | [`docs/audio/README.md`](<docs/audio/README.md>) |
+| Audio (upmix, scene renderer, J525 amp, codecs, 5.1 routing) | [`docs/audio/README.md`](<docs/audio/README.md>) |
 | Cluster and route guidance (contexts, BAP/RGI, HUD renderer, CarPlay telephony) | [`docs/cluster-and-rgi/README.md`](<docs/cluster-and-rgi/README.md>) |
 | AltScreen and video (stream 111, OMX pipeline, loader) | [`docs/altscreen-and-video/README.md`](<docs/altscreen-and-video/README.md>) |
 | Connect and USB (NCM, replug recovery, PF, session lifecycle) | [`docs/connect-and-usb/README.md`](<docs/connect-and-usb/README.md>) |
@@ -135,7 +136,7 @@ are in `docs/research/`; primary evidence (papers, manuals, data files, decompil
 | `altscreen_render/` | OMX/GLES altScreen video renderer and PRISM loader (cluster plane 99) |
 | `apac_decoder/` | APAC decoder port behind the optional `libcarplay_apac.so` |
 | `common/` | Shared QNX Screen surface code |
-| `models/` | HSSR upmix models (q6d main model, V11 guard) |
+| `models/` | The scene renderer's mask net (`scene-masknet-c/`) |
 | `deploy/` | On-unit runtime scripts, SI child config, patched firmware and PF/deva recipes |
 | `scripts/` | Host build and test entry points |
 | `install_MoreIncredibleBash/`, `uninstall_MoreIncredibleBash/`, `logging_MoreIncredibleBash/` | M.I.B. SD install / remove / log-collection scripts |
@@ -193,8 +194,8 @@ build/maneuver_render
 build/altscreen_render
 ```
 
-Models are versioned in `models/`: `hssr-q6d-moises-a/hssr_model.bin` (main) and
-`hssr-selection-v11/hssr_guard.bin` (vocal guard, loaded from beside the main model).
+Models are versioned in `models/`: `scene-masknet-c/scene_masknet_c.bin`, the scene
+renderer's fine mask net c, with its manifest and the knob settings it was measured at.
 
 Tests: `./scripts/run_tests.sh`.
 
