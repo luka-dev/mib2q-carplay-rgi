@@ -84,11 +84,13 @@ static void vcpu_block_exec(unsigned int cpu_index, void *userdata)
         ++g_focus_counts[(block->first_focus + 4u * i - g_focus_start) / 4u];
 }
 
-static void vcpu_tb_trans(qemu_plugin_id_t id, struct qemu_plugin_tb *tb)
+/* QEMU_PLUGIN_VERSION 7 (QEMU 11): the translate and atexit callbacks lost the plugin id and the
+ * registrations take userdata; the older signatures are adapted below. */
+static void vcpu_tb_trans(struct qemu_plugin_tb *tb, void *udata)
 {
     struct block *block = g_new0(struct block, 1);
 
-    (void)id;
+    (void)udata;
     block->instructions = qemu_plugin_tb_n_insns(tb);
     block->symbol = lookup(qemu_plugin_tb_vaddr(tb));
     if (g_focus_counts) {
@@ -107,13 +109,13 @@ static void vcpu_tb_trans(qemu_plugin_id_t id, struct qemu_plugin_tb *tb)
                                          QEMU_PLUGIN_CB_NO_REGS, block);
 }
 
-static void plugin_exit(qemu_plugin_id_t id, void *p)
+static void plugin_exit(void *p)
 {
     GString *report = g_string_new(NULL);
     uint64_t total = g_unknown;
     size_t i;
 
-    (void)id; (void)p;
+    (void)p;
     for (i = 0; i < g_count; ++i) total += g_symbols[i].instructions;
     qsort(g_symbols, g_count, sizeof(*g_symbols), compare_instructions);
     g_string_append_printf(report,
@@ -172,6 +174,11 @@ static int load_symbols(const char *path)
     return g_count > 0;
 }
 
+#if QEMU_PLUGIN_VERSION < 7
+static void vcpu_tb_trans_v1(qemu_plugin_id_t id, struct qemu_plugin_tb *tb) { (void)id; vcpu_tb_trans(tb, NULL); }
+static void plugin_exit_v1(qemu_plugin_id_t id, void *p) { (void)id; plugin_exit(p); }
+#endif
+
 QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
                                            const qemu_info_t *info,
                                            int argc, char **argv)
@@ -204,7 +211,12 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
             return -1;
         }
     }
-    qemu_plugin_register_vcpu_tb_trans_cb(id, vcpu_tb_trans);
+#if QEMU_PLUGIN_VERSION >= 7
+    qemu_plugin_register_vcpu_tb_trans_cb(id, vcpu_tb_trans, NULL);
     qemu_plugin_register_atexit_cb(id, plugin_exit, NULL);
+#else
+    qemu_plugin_register_vcpu_tb_trans_cb(id, vcpu_tb_trans_v1);
+    qemu_plugin_register_atexit_cb(id, plugin_exit_v1, NULL);
+#endif
     return 0;
 }

@@ -92,3 +92,49 @@ python3 tools/stereo-upmix-render/bench/mask_selftest_compare.py /tmp/host_selft
 ```  The final measured results
 are in
 [`results/2026-09-07-hssr-selection-v11.md`](results/2026-09-07-hssr-selection-v11.md).
+
+## Scene engine bench
+
+[`scene_engine_bench.c`](scene_engine_bench.c) measures the C scene upmix
+engine (`hook/audio/scene_engine.c`, spec `docs/audio/UPMIX_SCENE_ALGORITHM_2026-10-08.md`)
+the same way: 60 s of a deterministic synthetic stereo signal (two panned
+decaying plucks over a noise floor) pushed in 768-frame blocks (one QSA period)
+through `scene_engine_push()`, timed per push; `--mask` installs a synthetic
+mask row per 512-sample control period so the semantic stage and the duck run;
+`--mask --handoff` routes that row through the scene mask worker's mailboxes
+(`hook/audio/scene_mask_worker.h`, stepped between pushes with the net stubbed),
+so its difference against `--mask` is the audio thread's cost of handing the net
+off: the 512-frame submit copy, the receive copy and the atomics;
+`--no-push` runs everything but the engine (what to subtract from a whole-run
+plugin count). It prints frames, the S16 checksum and the front/rear RMS.
+
+```sh
+cc -O2 -std=gnu99 -ffp-contract=off -Wall -Wextra -Ihook/audio \
+   tools/stereo-upmix-render/bench/scene_engine_bench.c hook/audio/scene_engine.c \
+   hook/audio/scene_engine_math.c hook/audio/scene_clusters.c \
+   hook/audio/scene_mask.c hook/audio/scene_mask_worker.c -lm -lpthread -o build/scene_port/scene_engine_bench
+build/scene_port/scene_engine_bench --mask                      # host wall time
+
+tools/stereo-upmix-render/bench/scene_build_qnx.sh              # GCC 8.5 (:latest), -O2, NEON, no FMA
+tools/stereo-upmix-render/bench/scene_qnx_qemu_bench.sh --mask  # QEMU -icount instructions per push
+tools/stereo-upmix-render/bench/scene_qnx_qemu_bench.sh --mask --handoff   # + the worker hand-off
+BENCH_QEMU_PLUGIN=/tmp/libl1d.so,size=16384,ways=4,line=64 QEMU_KEEP_LOG=/tmp/qemu.log \
+tools/stereo-upmix-render/bench/scene_qnx_qemu_bench.sh --seconds 10 --mask   # + metric=l1d_cache in the log
+```
+
+[`scene_mask_bench.c`](scene_mask_bench.c) times the fine mask net runtime
+(`hook/audio/scene_mask.c`, `scene_mask_control()` per 512-sample control) on the
+same signal; it needs the SMSKNET1 weight blob
+(`port/export_masknet_weights.py`). `--bench mask` selects it in both scripts
+and ships the blob into the IFS:
+
+```sh
+tools/stereo-upmix-render/bench/scene_qnx_qemu_bench.sh --bench mask \
+    --weights build/scene_port/masknet_c.bin --seconds 30
+```
+
+The L1D plugin counts the whole guest run (boot, signal generation, accounting);
+the engine's own accesses are the difference against the same run with
+`--no-push`. `SCENE_CFLAGS_EXTRA="-O3 -fno-math-errno"` tries the upmix DSP
+flags on the engine files. The plugins build against QEMU 11 (plugin API 7)
+and the older API.

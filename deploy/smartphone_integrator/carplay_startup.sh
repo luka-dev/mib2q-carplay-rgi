@@ -119,6 +119,33 @@ export AUDIO_STEREO_REAR_AIR_DB=-9
 # front sounds too bright (21.09 complaint): -3 lands near the 22.09 front balance without touching
 # the object decisions.  Retention and the taper darken the front too, but they flicker.
 # export AUDIO_STEREO_FRONT_TREBLE_DB=-3
+# Scene backend (2026-10-09, docs/build-and-deploy/SCENE_BACKEND_DEPLOY.md): the scene upmix renderer of
+# docs/audio/UPMIX_SCENE_ALGORITHM_2026-10-08.md (sections 14-18) in place of HSSR Universal, variant J
+# (rear delay 0, full-rear shaping).  OFF while this block is commented out: the chain above then runs
+# exactly as in the Track A package.  AUDIO_SCENE=1 needs AUDIO_STEREO_UPMIX=on (off is the bypass and
+# wins; the flag is then logged once as ignored).  The rears and fronts leave at the engine's own levels:
+# only AUDIO_STEREO_LFE / LFE_GAIN and the cabin guard still apply; SURROUND, FRONT_BASS, FRONT_TREBLE,
+# REAR_AIR, RETENTION and every AUDIO_HSSR_* knob above are Universal-only and ignored.  The blob is the fine mask
+# net c ('SMSKNET1', 32,544 B, models/scene-masknet-c/); unreadable or rejected = spatial only
+# (no instrument transfer, no duck), logged once as "SCENE: mask blob ...".  The seven knobs below
+# are the engine defaults, spelled out so the running config can be read here.
+# First car run: leave AUDIO_SCENE_MASK_BLOB commented (spatial only: engine 0.31 M ARMv7 instructions
+# per 256-frame hop on the QEMU bench).  Second run: the blob too.  The net (1.37 M instructions per
+# 512-frame control, NEON) runs on its own thread (scene_mask_worker.h, SCHED_RR 17 like the HSSR
+# controller): the audio thread pays only the hand-off (~1 k instructions per period), a net slower
+# than realtime skips controls instead of stalling the audio ("scene mask worker stopped rows=A/B
+# skipped=N" at stream stop; N = controls refused, 0 when it keeps up), and its rows apply one control
+# (10.7 ms) late.  AUDIO_SCENE_MASK_SYNC=1 puts the net back on the audio thread (the port tests' exact
+# timing, ~3.1 M instructions per 768-frame period under the 12 ms guard): an A/B lever, not the default.
+# export AUDIO_SCENE=1
+# export AUDIO_SCENE_MASK_BLOB="$H/scene_masknet_c.bin"
+# export AUDIO_SCENE_REAR_DELAY_MS=0
+# export AUDIO_SCENE_INST_GAMMA=1
+# export AUDIO_SCENE_INST_ALPHA=0.9
+# export AUDIO_SCENE_DUCK_DEPTH=0.25
+# export AUDIO_SCENE_ALPHA=0.7
+# export AUDIO_SCENE_SIDE_LP_HZ=7000
+# export AUDIO_SCENE_BLEED_CANCEL=0
 # HSSR upmix also for the stock realtime media stream (type 100, audioType=media: Spotify and
 # every app without buffered type 103). Own DSP state and controller; plain L/R while a
 # phone/Siri/alert stream is tracked or while type 103 owns the rail. off = zero rears as before.

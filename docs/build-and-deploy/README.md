@@ -47,6 +47,7 @@ flowchart TB
 | [Deploy and Release](DEPLOY_AND_RELEASE.md) | Builds emit binaries only; hand-staging `build/` + `models/` + `deploy/` into `mod/carplay/root/`; the source→on-unit map; M.I.B. SD install via `custom.sh` (no SHA gate); manual SSH push and its traps; never reboot the unit / jar deploy = full reboot. |
 | [VIN Protection](VIN_PROTECTION.md) | The protector: VIN-lock via KDF + blind sentinel, compile-time gate (`#ifdef CARPLAY_PROT`, inert unstamped), the two-step protected build into `build/protected_<VIN>/`, per-build `PROT_SECRET`, fail-open honest ceiling. |
 | [RE Artifacts](RE_ARTIFACTS.md) | Where the reverse-engineering assets now live: `assets/soundamp` (SHARC/amp RE) and `assets/vc-fonts` (VC font extraction) — what each is and its provenance. |
+| [Scene Backend Deploy](SCENE_BACKEND_DEPLOY.md) | The scene upmix renderer package (2026-10-09): what `install_scene_unprotected.zip` carries, the commented-out `AUDIO_SCENE` enable block in `carplay_startup.sh`, how to read the hook log on the unit, how to roll back. |
 | [Production Audits](PRODUCTION_AUDITS.md) | Ten release-safety and readiness reviews (Aug–Sep 2026): findings, fixes, status in today's code. |
 
 ## 💡 The one thing to remember

@@ -118,7 +118,7 @@ def build(out, compiler):
     executable = out / 'upmix_unified_audio.exe'
     command = [cc, '-std=c99', '-O2', '-ffp-contract=off', '-DSPA_HSSR_TEST_MASK',
                '-DSPA_HSSR_TEST_DIRECT_NO_BED', '-I', str(audio), '-o', str(executable)]
-    command += [str(out / n) for n in copied] + [str(audio / 'soundcheck.c'), '-lm']
+    command += [str(out / n) for n in copied] + [str(audio / n) for n in ('soundcheck.c', 'scene_engine_math.c', 'scene_clusters.c', 'scene_engine.c', 'scene_mask.c')] + ['-lm']
     subprocess.run(command, check=True)
     after = {str(p.relative_to(root)):sha(p) for p in originals}
     if before != after:

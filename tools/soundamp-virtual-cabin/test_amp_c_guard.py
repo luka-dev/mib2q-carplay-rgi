@@ -16,7 +16,8 @@ class CGuardTests(unittest.TestCase):
         lib = Path(cls.temp.name) / 'guard.so'
         subprocess.run(['cc', '-std=c99', '-O2', '-shared', '-fPIC',
                         '-DSPA_STEREO_UPMIX_TESTING', '-I'+str(ROOT/'hook/audio'),
-                        *[str(ROOT/'hook/audio'/f) for f in ('stereo_upmix.c', 'hssr_dsp.c', 'hssr_neon.c')],
+                        *[str(ROOT/'hook/audio'/f) for f in ('stereo_upmix.c', 'hssr_dsp.c', 'hssr_neon.c', 'hssr_mask.c',
+                                                              'scene_engine_math.c', 'scene_clusters.c', 'scene_engine.c', 'scene_mask.c')],
                         '-lm', '-o', str(lib)], check=True, capture_output=True)
         cls.c = ctypes.CDLL(str(lib))
         cls.c.spa_stereo_upmix_input_matrix.restype = ctypes.POINTER(ctypes.c_float)

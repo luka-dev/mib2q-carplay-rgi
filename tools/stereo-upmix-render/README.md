@@ -45,17 +45,36 @@ QNX/ARMv7 build has no FMA, so without it an offline render is not the
 arithmetic the car performs.
 
 ```sh
-cc -std=c99 -O2 -ffp-contract=off -Wall -Wextra -Werror -Ihook/audio \
+cc -std=gnu99 -O2 -ffp-contract=off -Wall -Wextra -Werror -Ihook -Ihook/audio \
   tools/stereo-upmix-render/stereo_upmix_render.c \
   hook/audio/soundcheck.c \
   hook/audio/stereo_upmix.c hook/audio/hssr_dsp.c hook/audio/hssr_neon.c \
-  -lm -o build/stereo_upmix_render
+  hook/audio/hssr_control_worker.c hook/audio/hssr_mask.c \
+  hook/audio/scene_engine_math.c hook/audio/scene_clusters.c hook/audio/scene_engine.c \
+  hook/audio/scene_mask.c \
+  -lm -lpthread -o build/stereo_upmix_render
 
 build/stereo_upmix_render \
   --mode hssr-universal \
   --model models/hssr-selection-v11/hssr_guard.bin \
   --lfe assist --surround 0.25 input-stereo.wav output-5.1.wav
 ```
+
+`stereo_upmix.c` now links the scene engine (`scene_engine_math.c`,
+`scene_clusters.c`, `scene_engine.c`) and the mask net runtime (`scene_mask.c`):
+every build line that names it takes the four files too.
+
+`scene_render_hook.c` is the same kind of tool for the `SCENE` backend (the C
+port of `scene_upmix.py` inside the hook path, `AUDIO_SCENE=1` on the unit): a
+stereo WAV through `spa_stereo_upmix_process_s16` in 768-frame calls, the
+output 1024 frames late like the hook, `--mask-blob masknet.bin` for the fine
+mask net (`AUDIO_SCENE_MASK_BLOB` on the unit; without it spatial only), the
+`--alpha --inst-alpha --inst-gamma
+--duck-depth --rear-delay-ms --sigma-min --side-lp-hz --bleed-cancel` knobs
+of the environment, `--lfe assist` for the LFE V2 assist.  Its build line is in
+the file header; `port/test_hook_render.py` builds it and checks it against
+`scene_upmix.stream_render` on the car-kit `album01.wav` (-69.6 dB overall with
+the C phase tables, bit-identical across call sizes, 0 LSB from the engine).
 
 Use `--mode off` for the exact bypass; it does not require a model.  Input and
 output may not resolve to the same file.

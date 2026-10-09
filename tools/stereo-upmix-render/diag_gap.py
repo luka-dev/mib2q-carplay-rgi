@@ -9,7 +9,7 @@ of sep_net.evaluate():
   pleak   = transmitted protected energy / protected energy
   band    = transmitted eligible fraction per band group, dB (energy-weighted), beside the cell-weighted bias
   coverage of the dominant-cell supports.  CPU when CUDA_VISIBLE_DEVICES=-1.
-  diag_gap.py CACHE CKPT [CKPT ...]"""
+  diag_gap.py CACHE CKPT [CKPT ...]   (DIAG_SPLIT=train: the same 12-excerpt test on TRAIN songs = the fitting check)"""
 import os, sys
 import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -23,7 +23,7 @@ def main():
     cache, ckpts = sys.argv[1], sys.argv[2:]
     torch = SN._torch()
     split = MN.load_split(cache)
-    paths = [os.path.join(cache, t + ".npy") for t in split["dev"]][:12]
+    paths = [os.path.join(cache, t + ".npy") for t in split[os.environ.get("DIAG_SPLIT", "dev")]][:12]
     for ck in ckpts:
         _, net, dev = SN.load(ck)
         print(f"\n##### {ck}  ({net.macs * SN.FPS / 1e6:.0f} M MAC/s)")

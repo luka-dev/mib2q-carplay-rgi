@@ -20,6 +20,10 @@
 !/models/hssr-q6d-moises-a/hssr_model.bin
 !/models/hssr-q6d-moises-a/manifest.json
 !/models/hssr-q6d-moises-a/settings.json
+!/models/scene-masknet-c/
+/models/scene-masknet-c/*
+!/models/scene-masknet-c/scene_masknet_c.bin
+!/models/scene-masknet-c/manifest.json
 /local_logs/
 
 # Phone-side captures: sysdiagnose tarballs and log archives are hundreds of MB

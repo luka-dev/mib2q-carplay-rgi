@@ -48,6 +48,9 @@ if [ -f "$IN/libcarplay_apac.so" ]; then
   # the per-cell rear-eligibility mask net (Phase 1, docs/audio/UPMIX_SOURCE_SEPARATION_PLAN.md);
   # read beside hssr_model.bin, active only with AUDIO_HSSR_MASK_DRIVE > 0
   cp "$PROJECT_DIR/models/mask-full-probe-v21a/hssr_mask.bin" "$HOOKS/"
+  # the scene backend's fine mask net (docs/build-and-deploy/SCENE_BACKEND_DEPLOY.md); read only
+  # with AUDIO_SCENE=1 + AUDIO_SCENE_MASK_BLOB, both commented out in carplay_startup.sh
+  cp "$PROJECT_DIR/models/scene-masknet-c/scene_masknet_c.bin" "$HOOKS/"
   AUDIO=yes
 else
   AUDIO=no

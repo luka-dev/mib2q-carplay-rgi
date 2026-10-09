@@ -21,7 +21,7 @@ def build(a):
     # traps/dead controller helpers need unused-parameter/function exceptions.
     sources=[(own,False),(runtime/'unified_runtime.c',False),(runtime/'unified_audio_stream.c',False)]
     sources += [(copies/name,True) for name in ('stereo_upmix.c','hssr_dsp.c','hssr_neon.c','hssr_mask.c')]
-    sources += [(audio/'soundcheck.c',False)]
+    sources += [(audio/n,False) for n in ('soundcheck.c','scene_engine_math.c','scene_clusters.c','scene_engine.c','scene_mask.c')]
     common=['-std=c99','-O2','-ffp-contract=off','-Wall','-Wextra','-Werror','-DSPA_HSSR_TEST_MASK','-DSPA_HSSR_TEST_DIRECT_NO_BED','-I',str(audio),'-I',str(runtime)]
     commands=[];objects=[]
     for i,(src,copied) in enumerate(sources):

@@ -54,22 +54,24 @@ static void vcpu_mem(unsigned int vcpu_index, qemu_plugin_meminfo_t info,
     for (l = first; l <= last; ++l) access_line(l, is_store);
 }
 
-static void tb_trans(qemu_plugin_id_t id, struct qemu_plugin_tb *tb)
+/* QEMU_PLUGIN_VERSION 7 (QEMU 11): the translate and atexit callbacks lost the plugin id and the
+ * registrations take userdata; the older signatures are adapted below. */
+static void tb_trans(struct qemu_plugin_tb *tb, void *udata)
 {
     size_t n = qemu_plugin_tb_n_insns(tb), i;
 
-    (void)id;
+    (void)udata;
     for (i = 0; i < n; ++i)
         qemu_plugin_register_vcpu_mem_cb(qemu_plugin_tb_get_insn(tb, i), vcpu_mem,
                                          QEMU_PLUGIN_CB_NO_REGS, QEMU_PLUGIN_MEM_RW, NULL);
 }
 
-static void plugin_exit(qemu_plugin_id_t id, void *p)
+static void plugin_exit(void *p)
 {
     char line[512];
     uint64_t acc = reads + writes, miss = read_miss + write_miss;
 
-    (void)id; (void)p;
+    (void)p;
     snprintf(line, sizeof(line),
         "metric=l1d_cache geometry=%uB/%uway/%uB_line accesses=%" PRIu64
         " misses=%" PRIu64 " miss_rate=%.5f reads=%" PRIu64 " read_misses=%" PRIu64
@@ -78,6 +80,11 @@ static void plugin_exit(qemu_plugin_id_t id, void *p)
         acc ? (double)miss / (double)acc : 0.0, reads, read_miss, writes, write_miss);
     qemu_plugin_outs(line);
 }
+
+#if QEMU_PLUGIN_VERSION < 7
+static void tb_trans_v1(qemu_plugin_id_t id, struct qemu_plugin_tb *tb) { (void)id; tb_trans(tb, NULL); }
+static void plugin_exit_v1(qemu_plugin_id_t id, void *p) { (void)id; plugin_exit(p); }
+#endif
 
 QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id, const qemu_info_t *info,
                                            int argc, char **argv)
@@ -96,7 +103,12 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id, const qemu_info_
     valid = calloc((size_t)n_sets * cfg_ways, 1);
     age = calloc((size_t)n_sets * cfg_ways, sizeof(*age));
     if (!tags || !valid || !age) return -1;
-    qemu_plugin_register_vcpu_tb_trans_cb(id, tb_trans);
+#if QEMU_PLUGIN_VERSION >= 7
+    qemu_plugin_register_vcpu_tb_trans_cb(id, tb_trans, NULL);
     qemu_plugin_register_atexit_cb(id, plugin_exit, NULL);
+#else
+    qemu_plugin_register_vcpu_tb_trans_cb(id, tb_trans_v1);
+    qemu_plugin_register_atexit_cb(id, plugin_exit_v1, NULL);
+#endif
     return 0;
 }

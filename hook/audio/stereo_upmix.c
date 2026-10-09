@@ -17,6 +17,11 @@
 
 #define SPA_STEREO_UPMIX_MAGIC UINT32_C(0x5355504d) /* "SUPM" */
 
+#ifdef SPA_STEREO_UPMIX_TESTING
+void (*spa_stereo_upmix_test_scene_mask_observer)(uint64_t pushed, const float *elig,
+                                                  const float *prot) = NULL;
+#endif
+
 /* One 48-kHz-rate, Q=1/sqrt(2) Butterworth section, cascaded twice below for
  * an LR4 (-24 dB/octave) low-pass.  Scene LFE corner 60 Hz: meets the front bass HP (62 Hz record) and stays
  * under the LFE-bus LP (66 Hz record), closing the 48-62 Hz hole. */
@@ -500,6 +505,65 @@ int16_t spa_stereo_upmix_test_transfer(int16_t front, int16_t rear,
 { return spa_upmix_transfer_front(front, rear, transfer, limit); }
 #endif
 
+/* NaN lands on lo: the comparisons fail and the setter never stores it. */
+static float spa_upmix_clampf(float value, float lo, float hi)
+{
+    return value >= lo ? (value <= hi ? value : hi) : lo;
+}
+
+void spa_stereo_upmix_config_set_scene_alpha(struct spa_stereo_upmix_config *config, float value)
+{ if (config) config->scene.alpha = spa_upmix_clampf(value, 0.0f, 1.0f); }
+void spa_stereo_upmix_config_set_scene_inst_alpha(struct spa_stereo_upmix_config *config, float value)
+{ if (config) config->scene.inst_alpha = spa_upmix_clampf(value, 0.0f, 1.0f); }
+void spa_stereo_upmix_config_set_scene_inst_gamma(struct spa_stereo_upmix_config *config, float value)
+{ if (config) config->scene.inst_gamma = spa_upmix_clampf(value, 0.1f, 4.0f); }
+void spa_stereo_upmix_config_set_scene_duck_depth(struct spa_stereo_upmix_config *config, float value)
+{ if (config) config->scene.duck_depth = spa_upmix_clampf(value, 0.0f, 1.0f); }
+void spa_stereo_upmix_config_set_scene_rear_delay_ms(struct spa_stereo_upmix_config *config, float value)
+{ if (config) config->scene.rear_delay_ms = spa_upmix_clampf(value, -50.0f, 50.0f); }
+void spa_stereo_upmix_config_set_scene_sigma_min(struct spa_stereo_upmix_config *config, float value)
+{ if (config) config->scene.sigma_min = spa_upmix_clampf(value, 0.01f, 1.0f); }
+void spa_stereo_upmix_config_set_scene_side_lp_hz(struct spa_stereo_upmix_config *config, float value)
+{ if (config) config->scene.side_lp_hz = value > 0.0f ? spa_upmix_clampf(value, 1000.0f, 24000.0f) : 0.0f; }
+void spa_stereo_upmix_config_set_scene_bleed_cancel(struct spa_stereo_upmix_config *config, float value)
+{ if (config) config->scene.bleed_cancel = spa_upmix_clampf(value, 0.0f, 0.5f); }
+
+void spa_stereo_upmix_config_set_scene_mask_blob(struct spa_stereo_upmix_config *config,
+                                                 const void *blob, size_t bytes)
+{
+    const struct scene_mask_weights *w = (const struct scene_mask_weights *)blob;
+
+    if (!config) return;
+    /* the same checks scene_mask_init() makes, so init() can never fail on the blob */
+    config->scene_mask_blob = w && bytes == sizeof(*w) &&
+        memcmp(w->magic, SMASK_MAGIC, sizeof(w->magic)) == 0 &&
+        w->ch == SMASK_CH && w->hidden == SMASK_HID && w->n_out == SMASK_OUT ? w : NULL;
+}
+
+void spa_stereo_upmix_config_set_scene_mask_provider(struct spa_stereo_upmix_config *config,
+                                                     const struct spa_scene_mask_provider *provider)
+{
+    if (config) config->scene_mask_provider = provider;
+}
+
+/* A scene config is valid iff the setters leave it unchanged (one place holds
+ * the ranges) and the frame geometry is the engine's. */
+static int spa_scene_config_valid(const struct spa_stereo_upmix_config *config)
+{
+    struct spa_stereo_upmix_config probe = *config;
+
+    spa_stereo_upmix_config_set_scene_alpha(&probe, probe.scene.alpha);
+    spa_stereo_upmix_config_set_scene_inst_alpha(&probe, probe.scene.inst_alpha);
+    spa_stereo_upmix_config_set_scene_inst_gamma(&probe, probe.scene.inst_gamma);
+    spa_stereo_upmix_config_set_scene_duck_depth(&probe, probe.scene.duck_depth);
+    spa_stereo_upmix_config_set_scene_rear_delay_ms(&probe, probe.scene.rear_delay_ms);
+    spa_stereo_upmix_config_set_scene_sigma_min(&probe, probe.scene.sigma_min);
+    spa_stereo_upmix_config_set_scene_side_lp_hz(&probe, probe.scene.side_lp_hz);
+    spa_stereo_upmix_config_set_scene_bleed_cancel(&probe, probe.scene.bleed_cancel);
+    return config->scene.n_fft == SCENE_NFFT && config->scene.hop == SCENE_HOP &&
+           memcmp(&probe.scene, &config->scene, sizeof(probe.scene)) == 0;
+}
+
 static int spa_upmix_config_valid(const struct spa_stereo_upmix_config *config)
 {
     if (!config) return SPA_STEREO_UPMIX_ERROR_ARGUMENT;
@@ -525,10 +589,17 @@ static int spa_upmix_config_valid(const struct spa_stereo_upmix_config *config)
     if (config->backend == SPA_STEREO_UPMIX_HSSR_UNIVERSAL &&
         !spa_hssr_model_ready(config->hssr_model))
         return SPA_STEREO_UPMIX_ERROR_CONFIG;
+    if (config->backend == SPA_STEREO_UPMIX_SCENE && !spa_scene_config_valid(config))
+        return SPA_STEREO_UPMIX_ERROR_CONFIG;
     if (config->hssr_control_provider &&
         (!config->hssr_control_provider->submit ||
          !config->hssr_control_provider->receive ||
          !config->hssr_control_provider->reset))
+        return SPA_STEREO_UPMIX_ERROR_CONFIG;
+    if (config->scene_mask_provider &&
+        (!config->scene_mask_provider->submit ||
+         !config->scene_mask_provider->receive ||
+         !config->scene_mask_provider->reset))
         return SPA_STEREO_UPMIX_ERROR_CONFIG;
 
     /* Config bounds are not a matrix-headroom proof. S16 uses the linked
@@ -607,6 +678,9 @@ void spa_stereo_upmix_default_config(struct spa_stereo_upmix_config *config)
     config->mask_drive_q15 = 0;
     config->mask_treble_db10 = 0;
     config->mask_gamma_pct = 100;
+    scene_config_defaults(&config->scene);
+    config->scene_mask_blob = NULL;
+    config->scene_mask_provider = NULL;
 }
 
 void spa_stereo_upmix_config_set_lfe(
@@ -671,7 +745,78 @@ void spa_stereo_upmix_config_set_hssr_control_provider(
 int spa_stereo_upmix_backend_supported(enum spa_stereo_upmix_backend backend)
 {
     return backend == SPA_STEREO_UPMIX_OFF ||
-           backend == SPA_STEREO_UPMIX_HSSR_UNIVERSAL;
+           backend == SPA_STEREO_UPMIX_HSSR_UNIVERSAL ||
+           backend == SPA_STEREO_UPMIX_SCENE;
+}
+
+int spa_stereo_upmix_scene_set_mask(struct spa_stereo_upmix *state,
+                                    const float *elig, const float *prot,
+                                    int bins)
+{
+    if (!state) return SPA_STEREO_UPMIX_ERROR_ARGUMENT;
+    if (state->_initialized != SPA_STEREO_UPMIX_MAGIC)
+        return SPA_STEREO_UPMIX_ERROR_NOT_INITIALIZED;
+    if (state->config.backend != SPA_STEREO_UPMIX_SCENE)
+        return SPA_STEREO_UPMIX_ERROR_UNSUPPORTED;
+    scene_engine_set_mask(&state->_runtime._scene, elig, prot, bins);
+    return SPA_STEREO_UPMIX_OK;
+}
+
+int spa_stereo_upmix_scene_track_change(struct spa_stereo_upmix *state)
+{
+    if (!state) return SPA_STEREO_UPMIX_ERROR_ARGUMENT;
+    if (state->_initialized != SPA_STEREO_UPMIX_MAGIC)
+        return SPA_STEREO_UPMIX_ERROR_NOT_INITIALIZED;
+    if (state->config.backend != SPA_STEREO_UPMIX_SCENE)
+        return SPA_STEREO_UPMIX_ERROR_UNSUPPORTED;
+    /* The engine only; the net's stream carries on, on the audio thread and
+     * on the worker alike (a reset() is what re-primes it). */
+    scene_engine_reset(&state->_runtime._scene);
+    return SPA_STEREO_UPMIX_OK;
+}
+
+/* SCENE: arm the engine (init(): tables + state; reset(): the state only, the
+ * tables are kept because a reset runs inside the realtime period callback),
+ * the mask net (init from the blob; reset = a fresh stream; with a provider
+ * the worker owns the net and gets the generation instead), the FIFO primed
+ * with the latency of zeros and the accumulator half full of zeros
+ * (SPA_SCENE_MASK_PREFILL_FRAMES).  The engine refuses only what the public
+ * scene fields can still express (erb_pool 0, unmix without cluster): a config
+ * error at init(). */
+static int spa_scene_arm(struct spa_stereo_upmix *state, int first)
+{
+    /* Process-wide, so every init() and reset() of any instance is a generation
+     * the worker has never seen: a worker reused across init() (the realtime
+     * path keeps its one) resets its net and its old rows are never accepted. */
+    static volatile uint32_t generation_counter;
+    struct spa_stereo_upmix_runtime *rt = &state->_runtime;
+    const struct spa_scene_mask_provider *provider = state->config.scene_mask_provider;
+    int status = 0;
+
+    if (first) {
+        status = scene_engine_init(&rt->_scene, &state->config.scene);
+        rt->_scene_mask_on = provider != NULL ||
+            (state->config.scene_mask_blob &&
+             scene_mask_init(&rt->_scene_mask, state->config.scene_mask_blob) == 0);
+    } else {
+        scene_engine_reset_state(&rt->_scene);
+        if (rt->_scene_mask_on && !provider) scene_mask_reset(&rt->_scene_mask);
+    }
+    do {
+        rt->_scene_mask_generation =
+            __atomic_add_fetch(&generation_counter, 1u, __ATOMIC_RELAXED);
+    } while (!rt->_scene_mask_generation);
+    if (provider) provider->reset(provider->context, rt->_scene_mask_generation);
+    rt->_scene_mask_sequence = 0;
+    memset(&rt->_scene_mask_row, 0, sizeof(rt->_scene_mask_row));
+    memset(rt->_scene_fifo, 0, sizeof(rt->_scene_fifo));
+    rt->_scene_fifo_count = SPA_SCENE_LATENCY_FRAMES;
+    memset(rt->_scene_mask_acc, 0, sizeof(rt->_scene_mask_acc));
+    rt->_scene_mask_fill = SPA_SCENE_MASK_PREFILL_FRAMES;
+    rt->_scene_pushed = 0;
+    rt->_scene_lfe_bass = 0.0f;
+    rt->_scene_lfe_drum = 0.0f;
+    return status == 0 ? SPA_STEREO_UPMIX_OK : SPA_STEREO_UPMIX_ERROR_CONFIG;
 }
 
 int spa_stereo_upmix_init(struct spa_stereo_upmix *state,
@@ -684,8 +829,16 @@ int spa_stereo_upmix_init(struct spa_stereo_upmix *state,
     status = spa_upmix_config_valid(config);
     if (status != SPA_STEREO_UPMIX_OK) return status;
     saved = *config;
+    /* SCENE leaves at the engine's levels; front_gain_q15 is only the LFE
+     * assist's paired front headroom. */
+    if (saved.backend == SPA_STEREO_UPMIX_SCENE && !saved.lfe_enabled)
+        saved.front_gain_q15 = 32768u;
     memset(state, 0, sizeof(*state));
     state->config = saved;
+    if (saved.backend == SPA_STEREO_UPMIX_SCENE) {
+        status = spa_scene_arm(state, 1);
+        if (status != SPA_STEREO_UPMIX_OK) return status;
+    }
     if (saved.backend == SPA_STEREO_UPMIX_HSSR_UNIVERSAL) {
         spa_hssr_dsp_prepare(&state->_runtime._hssr);
         spa_upmix_apply_bed_config(&state->_runtime._hssr, &saved);
@@ -719,7 +872,10 @@ int spa_stereo_upmix_reset(struct spa_stereo_upmix *state)
         return SPA_STEREO_UPMIX_ERROR_NOT_INITIALIZED;
     generation = state->_runtime._hssr.control_generation + 1u;
     if (!generation) generation++;
-    memset(&state->_runtime, 0, sizeof(state->_runtime));
+    /* Everything up to the SCENE part; the engine and the mask net keep their
+     * tables and re-arm their state below (a reset runs inside the realtime
+     * period callback: no table build, no 460 KB memset). */
+    memset(&state->_runtime, 0, offsetof(struct spa_stereo_upmix_runtime, _scene));
     memset(state->_input_scratch, 0, sizeof(state->_input_scratch));
     memset(state->_hssr_front_scratch, 0,
            sizeof(state->_hssr_front_scratch));
@@ -727,6 +883,9 @@ int spa_stereo_upmix_reset(struct spa_stereo_upmix *state)
            sizeof(state->_hssr_rear_scratch));
     memset(state->_hssr_lfe_control_scratch, 0,
            sizeof(state->_hssr_lfe_control_scratch));
+    memset(state->_scene_input_scratch, 0, sizeof(state->_scene_input_scratch));
+    if (state->config.backend == SPA_STEREO_UPMIX_SCENE)
+        (void)spa_scene_arm(state, 0);   /* same config init() accepted */
     if (state->config.backend == SPA_STEREO_UPMIX_HSSR_UNIVERSAL) {
         spa_hssr_dsp_prepare(&state->_runtime._hssr);
         spa_upmix_apply_bed_config(&state->_runtime._hssr, &state->config);
@@ -750,6 +909,149 @@ int spa_stereo_upmix_reset(struct spa_stereo_upmix *state)
     state->_runtime._limiter_gain = 1.0f;
     spa_upmix_front_bass_prepare(state);
     return SPA_STEREO_UPMIX_OK;
+}
+
+/* The net's bass (post[2]) and drum-core (post[1]) posteriors -> the LFE V2
+ * confidences (spec §18 item 4).  What Universal feeds the assist is q6d's
+ * bass/drum posteriors of its three lowest bands (0..125 Hz) weighted by the
+ * bands' slow energy, smoothed per 128-frame hop with 0.30 attack / 0.06
+ * release (hssr_dsp.c spa_hssr_update_controls) and delayed to its front.  The
+ * closest equivalent here: the posteriors of the 512-point bins 0..1
+ * (0..141 Hz) weighted by the control's fine-spectrum energy of each bin's
+ * 93.75-Hz band, the same constants over the control's four hops
+ * (1 - 0.70^4, 1 - 0.94^4), held for the control's 512 frames.  The control's
+ * 2048-frame window ends 256 frames past the boundary and the output frames it
+ * steers start 1024 frames behind it, so its centre sits at the start of those
+ * frames: no extra delay line.  The raw pair comes from
+ * spa_scene_mask_lfe_posteriors() (scene_mask_worker.h: the same arithmetic on
+ * the audio thread's net and on the worker's). */
+static void spa_scene_lfe_smooth(struct spa_stereo_upmix_runtime *rt, float bass, float drum)
+{
+    float alpha;
+
+    alpha = bass > rt->_scene_lfe_bass ? 0.7599f : 0.2193f;
+    rt->_scene_lfe_bass += alpha * (bass - rt->_scene_lfe_bass);
+    alpha = drum > rt->_scene_lfe_drum ? 0.7599f : 0.2193f;
+    rt->_scene_lfe_drum += alpha * (drum - rt->_scene_lfe_drum);
+}
+
+/* SCENE mask control boundary: 512 frames are in the accumulator.  Without a
+ * provider the net runs here and its row is installed now (the Python's
+ * timing).  With a provider the newest row the worker finished is installed
+ * first, then these 512 frames are handed over: the worker's row for them
+ * arrives at a later boundary (scene_mask_worker.h).  Returns the installed
+ * row's elig/prot (NULL while priming or when the worker has nothing new). */
+static void spa_scene_mask_boundary(struct spa_stereo_upmix *state,
+                                    const float **elig, const float **prot)
+{
+    struct spa_stereo_upmix_runtime *rt = &state->_runtime;
+    const struct spa_scene_mask_provider *provider = state->config.scene_mask_provider;
+    float bass, drum;
+
+    *elig = *prot = NULL;
+    if (provider) {
+        if (provider->receive(provider->context, rt->_scene_mask_generation,
+                              &rt->_scene_mask_row)) {
+            *elig = rt->_scene_mask_row.elig;
+            *prot = rt->_scene_mask_row.prot;
+            spa_scene_lfe_smooth(rt, rt->_scene_mask_row.lfe_bass, rt->_scene_mask_row.lfe_drum);
+        }
+        if (!++rt->_scene_mask_sequence) rt->_scene_mask_sequence = 1u;
+        /* refused when the worker is behind: these frames are skipped, never waited for */
+        (void)provider->submit(provider->context, rt->_scene_mask_generation,
+                               rt->_scene_mask_sequence, rt->_scene_mask_acc);
+    } else if (scene_mask_control(&rt->_scene_mask, rt->_scene_mask_acc, NULL, NULL)) {
+        *elig = rt->_scene_mask.elig;
+        *prot = rt->_scene_mask.prot;
+        spa_scene_mask_lfe_posteriors(&rt->_scene_mask, &bass, &drum);
+        spa_scene_lfe_smooth(rt, bass, drum);
+    }
+    if (*elig) scene_engine_set_mask(&rt->_scene, *elig, *prot, SMASK_BINS);
+}
+
+/* SCENE: staged int16 stereo -> float -> engine -> FIFO (primed with the
+ * latency of zeros, so a pop of `frames` is never short) -> int16 PCM6 with
+ * the LFE V2 assist, the front headroom and the cabin guard.  The engine's
+ * float output is L R 0 0 Ls Rs at unity scale. */
+static void spa_scene_process(struct spa_stereo_upmix *state, size_t frames,
+                              int16_t *pcm6)
+{
+    struct spa_stereo_upmix_runtime *rt = &state->_runtime;
+    const size_t channels = SPA_STEREO_UPMIX_OUTPUT_CHANNELS;
+    size_t i, frame, pop, done = 0;
+
+    for (i = 0; i < frames * SPA_STEREO_UPMIX_INPUT_CHANNELS; i++)
+        state->_scene_input_scratch[i] =
+            (float)state->_input_scratch[i] * (1.0f / 32768.0f);
+    /* The push is split on the mask cadence (SPA_SCENE_MASK_PREFILL_FRAMES in
+     * the header): whenever 512 frames have accumulated the net runs on them
+     * and its row is installed before the next frame is pushed, so it applies
+     * to the frames 2r, 2r+1 of the Python indexing.  Without a net the block
+     * goes in whole (spatial only, no row ever installed). */
+    while (done < frames) {
+        const float *in = state->_scene_input_scratch +
+            done * SPA_STEREO_UPMIX_INPUT_CHANNELS;
+        size_t n = frames - done;
+
+        if (rt->_scene_mask_on) {
+            size_t room = SCENE_MASK_HOP - rt->_scene_mask_fill;
+
+            if (n > room) n = room;
+            memcpy(rt->_scene_mask_acc +
+                   rt->_scene_mask_fill * SPA_STEREO_UPMIX_INPUT_CHANNELS,
+                   in, n * SPA_STEREO_UPMIX_INPUT_CHANNELS * sizeof(float));
+            rt->_scene_mask_fill += (uint32_t)n;
+        }
+        rt->_scene_fifo_count += (uint32_t)scene_engine_push(
+            &rt->_scene, in, n,
+            rt->_scene_fifo + rt->_scene_fifo_count * channels,
+            SPA_SCENE_FIFO_FRAMES - rt->_scene_fifo_count);
+        rt->_scene_pushed += n;
+        done += n;
+        if (rt->_scene_mask_on && rt->_scene_mask_fill == SCENE_MASK_HOP) {
+            const float *elig, *prot;
+
+            rt->_scene_mask_fill = 0;
+            spa_scene_mask_boundary(state, &elig, &prot);
+#ifdef SPA_STEREO_UPMIX_TESTING
+            if (spa_stereo_upmix_test_scene_mask_observer)
+                spa_stereo_upmix_test_scene_mask_observer(rt->_scene_pushed, elig, prot);
+#endif
+        }
+    }
+    pop = rt->_scene_fifo_count < frames ? rt->_scene_fifo_count : frames;
+
+    for (frame = 0; frame < frames; frame++) {
+        const float *in = rt->_scene_fifo + frame * channels;
+        int16_t *output = pcm6 + frame * channels;
+        int16_t render_l = 0, render_r = 0, rear_l = 0, rear_r = 0, lfe = 0;
+
+        if (frame < pop) {
+            render_l = spa_upmix_float_to_s16(in[0] * 32768.0f);
+            render_r = spa_upmix_float_to_s16(in[1] * 32768.0f);
+            rear_l = spa_upmix_float_to_s16(in[4] * 32768.0f);
+            rear_r = spa_upmix_float_to_s16(in[5] * 32768.0f);
+        }
+        /* Level steering from the net's bass/drum posteriors (0/0 = from the
+         * front alone until the net's first control, or without a net). */
+        if (state->config.lfe_enabled)
+            lfe = spa_upmix_lfe_to_s16(
+                spa_upmix_lfe_v2_normalized(state, render_l, render_r,
+                                            rt->_scene_lfe_bass, rt->_scene_lfe_drum),
+                state->config.lfe_gain_q15);
+        output[SPA_STEREO_UPMIX_CHANNEL_L] =
+            spa_upmix_scale_s16_q15(render_l, state->config.front_gain_q15);
+        output[SPA_STEREO_UPMIX_CHANNEL_R] =
+            spa_upmix_scale_s16_q15(render_r, state->config.front_gain_q15);
+        output[SPA_STEREO_UPMIX_CHANNEL_C] = 0;
+        output[SPA_STEREO_UPMIX_CHANNEL_LFE] = lfe;
+        output[SPA_STEREO_UPMIX_CHANNEL_LS] = rear_l;
+        output[SPA_STEREO_UPMIX_CHANNEL_RS] = rear_r;
+        spa_upmix_cabin_guard_s16(output, state->config.lfe_enabled);
+    }
+    rt->_scene_fifo_count -= (uint32_t)pop;
+    memmove(rt->_scene_fifo, rt->_scene_fifo + pop * channels,
+            rt->_scene_fifo_count * channels * sizeof(float));
 }
 
 static int spa_upmix_process(struct spa_stereo_upmix *state,
@@ -784,6 +1086,10 @@ static int spa_upmix_process(struct spa_stereo_upmix *state,
         return SPA_STEREO_UPMIX_ERROR_STATE_OVERLAP;
     memcpy(state->_input_scratch, pcm2, input_bytes);
 
+    if (state->config.backend == SPA_STEREO_UPMIX_SCENE) {
+        spa_scene_process(state, frames, (int16_t *)pcm6);
+        return SPA_STEREO_UPMIX_OK;
+    }
     if (state->config.backend == SPA_STEREO_UPMIX_HSSR_UNIVERSAL) {
         int hssr_status = spa_hssr_dsp_process_block_sources(
             &state->_runtime._hssr, state->config.hssr_model,

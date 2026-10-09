@@ -16,10 +16,12 @@ cc -std=c99 -O2 -Wall -Wextra -Werror -Ihook \
 "$OUT/downmix" && echo OK
 
 printf '%-32s ' stereo_upmix_test
-cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
+cc -std=gnu99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
     -DSPA_STEREO_UPMIX_TESTING \
     tests/stereo_upmix_test.c hook/audio/stereo_upmix.c \
-    hook/audio/hssr_dsp.c hook/audio/hssr_neon.c hook/audio/hssr_mask.c -lm -o "$OUT/upmix"
+    hook/audio/hssr_dsp.c hook/audio/hssr_neon.c hook/audio/hssr_mask.c \
+    hook/audio/scene_engine_math.c hook/audio/scene_clusters.c hook/audio/scene_engine.c hook/audio/scene_mask.c \
+    hook/audio/scene_mask_worker.c -lm -lpthread -o "$OUT/upmix"
 "$OUT/upmix"
 
 printf '%-32s ' rt_upmix_guard_test
@@ -43,7 +45,7 @@ if python3 -c 'import numpy' 2>/dev/null; then
     cc -std=gnu99 -O2 -ffp-contract=off -Ihook -Ihook/audio \
         tools/stereo-upmix-render/stereo_upmix_render.c hook/audio/stereo_upmix.c \
         hook/audio/hssr_dsp.c hook/audio/hssr_neon.c hook/audio/hssr_control_worker.c hook/audio/hssr_mask.c \
-        hook/audio/soundcheck.c -lm -lpthread -o "$OUT/upmix_render"
+        hook/audio/soundcheck.c hook/audio/scene_engine_math.c hook/audio/scene_clusters.c hook/audio/scene_engine.c hook/audio/scene_mask.c -lm -lpthread -o "$OUT/upmix_render"
     python3 tools/stereo-upmix-render/upmix_behavior_tests.py --check \
         --render "$OUT/upmix_render" --model models/hssr-q6d-moises-a/hssr_model.bin \
         --guard models/hssr-selection-v11/hssr_guard.bin --out "$OUT/upmix_behavior"
@@ -55,6 +57,7 @@ printf '%-32s ' buffered_pcm_switch_test
 cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
     tests/buffered_pcm_switch_test.c hook/audio/spatial_downmix.c \
     hook/audio/stereo_upmix.c hook/audio/hssr_dsp.c hook/audio/hssr_mask.c hook/audio/hssr_neon.c \
+    hook/audio/scene_engine_math.c hook/audio/scene_clusters.c hook/audio/scene_engine.c hook/audio/scene_mask.c \
     -lm -o "$OUT/switch"
 "$OUT/switch"
 

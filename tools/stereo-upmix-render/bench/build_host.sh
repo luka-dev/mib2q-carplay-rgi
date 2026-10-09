@@ -15,6 +15,8 @@ cc -O2 -g -std=gnu99 -ffp-contract=off -Wall -Wextra -Werror \
    "$ROOT/hook/audio/hssr_dsp.c" "$ROOT/hook/audio/hssr_neon.c" "$ROOT/hook/audio/hssr_mask.c" \
    "$ROOT/hook/audio/hssr_control_worker.c" -lpthread -lm \
    "$ROOT/hook/audio/soundcheck.c" \
+   "$ROOT/hook/audio/scene_engine_math.c" "$ROOT/hook/audio/scene_clusters.c" "$ROOT/hook/audio/scene_engine.c" \
+   "$ROOT/hook/audio/scene_mask.c" \
    -o "$OUT"
 
 echo "$OUT"

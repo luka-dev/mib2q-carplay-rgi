@@ -22,6 +22,7 @@
 #include "apap_lifecycle.h"
 #include "feedback_clock.h"
 #include "hssr_control_worker.h"
+#include "scene_mask_worker.h"
 #include "pcm_period.h"
 #include "pcm_io.h"
 #include "receiver_wait.h"
@@ -122,6 +123,10 @@ typedef struct {
     uint32_t hssrRetentionHfHiHz;
     int realtimeUpmix;                /* AUDIO_REALTIME_UPMIX, default off */
     uint32_t stereoLfeGainQ15;     /* assist level, 1..16384, default 4096 */
+    /* SCENE backend knobs (AUDIO_SCENE_*), engine units, range-checked at parse. */
+    float sceneAlpha, sceneInstAlpha, sceneInstGamma, sceneDuckDepth;
+    float sceneRearDelayMs, sceneSigmaMin, sceneSideLpHz, sceneBleedCancel;
+    int sceneMaskSync;                /* AUDIO_SCENE_MASK_SYNC: the net on the audio thread, default off */
     spa_soundcheck_config_t soundCheck;
 } spa_audio_config_t;
 
@@ -423,6 +428,38 @@ static int spa_parse_stereo_lfe(void)
     return 0;
 }
 
+/* AUDIO_SCENE_* knob: a finite float in lo..hi, unset = the engine default. */
+static float spa_parse_scene_float(const char *name, double lo, double hi, float fallback)
+{
+    const char *value = getenv(name);
+    char *end = 0;
+    double v;
+
+    if (!value || !value[0]) return fallback;
+    errno = 0;
+    v = strtod(value, &end);
+    if (errno || end == value || *end || v != v || v < lo || v > hi) {
+        LOG_ERROR(LOG_MODULE, "audio config: invalid %s='%s'; expected %g..%g; using %g",
+                  name, value, lo, hi, (double)fallback);
+        return fallback;
+    }
+    return (float)v;
+}
+
+/* The scene knobs onto an upmix config, through the clamping setters. */
+static void spa_apply_scene_knobs(struct spa_stereo_upmix_config *upmix,
+                                  const spa_audio_config_t *config)
+{
+    spa_stereo_upmix_config_set_scene_alpha(upmix, config->sceneAlpha);
+    spa_stereo_upmix_config_set_scene_inst_alpha(upmix, config->sceneInstAlpha);
+    spa_stereo_upmix_config_set_scene_inst_gamma(upmix, config->sceneInstGamma);
+    spa_stereo_upmix_config_set_scene_duck_depth(upmix, config->sceneDuckDepth);
+    spa_stereo_upmix_config_set_scene_rear_delay_ms(upmix, config->sceneRearDelayMs);
+    spa_stereo_upmix_config_set_scene_sigma_min(upmix, config->sceneSigmaMin);
+    spa_stereo_upmix_config_set_scene_side_lp_hz(upmix, config->sceneSideLpHz);
+    spa_stereo_upmix_config_set_scene_bleed_cancel(upmix, config->sceneBleedCancel);
+}
+
 static int spa_parse_soundcheck_fallback(void)
 {
     const char *value = getenv(SPA_AUDIO_SOUNDCHECK_FALLBACK_ENV);
@@ -457,6 +494,37 @@ static void spa_audio_config_init_once(void)
     memset(&spa_audio_config_value, 0, sizeof(spa_audio_config_value));
     spa_audio_config_value.atmosMode = SPA_ATMOS_DOWNMIX;
     spa_audio_config_value.stereoUpmixBackend = spa_parse_stereo_upmix();
+    {
+        struct scene_config d;
+        int present = 0;
+
+        /* AUDIO_SCENE=1 selects the scene renderer (no model, no controller)
+         * in place of Universal; AUDIO_STEREO_UPMIX off is the safety bypass
+         * and keeps winning. */
+        if (spa_parse_bool(SPA_AUDIO_SCENE_ENV, &present)) {
+            if (spa_audio_config_value.stereoUpmixBackend != SPA_STEREO_UPMIX_OFF)
+                spa_audio_config_value.stereoUpmixBackend = SPA_STEREO_UPMIX_SCENE;
+            else
+                LOG_WARN(LOG_MODULE, "audio config: %s=1 ignored, %s is off (the bypass wins)",
+                         SPA_AUDIO_SCENE_ENV, SPA_AUDIO_STEREO_UPMIX_ENV);
+        }
+        scene_config_defaults(&d);
+        spa_audio_config_value.sceneAlpha = spa_parse_scene_float(SPA_AUDIO_SCENE_ALPHA_ENV, 0.0, 1.0, d.alpha);
+        spa_audio_config_value.sceneInstAlpha = spa_parse_scene_float(SPA_AUDIO_SCENE_INST_ALPHA_ENV, 0.0, 1.0, d.inst_alpha);
+        spa_audio_config_value.sceneInstGamma = spa_parse_scene_float(SPA_AUDIO_SCENE_INST_GAMMA_ENV, 0.1, 4.0, d.inst_gamma);
+        spa_audio_config_value.sceneDuckDepth = spa_parse_scene_float(SPA_AUDIO_SCENE_DUCK_DEPTH_ENV, 0.0, 1.0, d.duck_depth);
+        spa_audio_config_value.sceneRearDelayMs = spa_parse_scene_float(SPA_AUDIO_SCENE_REAR_DELAY_MS_ENV, -50.0, 50.0, d.rear_delay_ms);
+        spa_audio_config_value.sceneSigmaMin = spa_parse_scene_float(SPA_AUDIO_SCENE_SIGMA_MIN_ENV, 0.01, 1.0, d.sigma_min);
+        spa_audio_config_value.sceneSideLpHz = spa_parse_scene_float(SPA_AUDIO_SCENE_SIDE_LP_HZ_ENV, 0.0, 24000.0, d.side_lp_hz);
+        /* the setter's range: 0 = off, else 1000..24000 (it would clamp 1..999 up to 1000 silently) */
+        if (spa_audio_config_value.sceneSideLpHz > 0.0f && spa_audio_config_value.sceneSideLpHz < 1000.0f) {
+            LOG_ERROR(LOG_MODULE, "audio config: invalid %s='%s'; expected 0 (off) or 1000..24000; using %g",
+                      SPA_AUDIO_SCENE_SIDE_LP_HZ_ENV, getenv(SPA_AUDIO_SCENE_SIDE_LP_HZ_ENV), (double)d.side_lp_hz);
+            spa_audio_config_value.sceneSideLpHz = d.side_lp_hz;
+        }
+        spa_audio_config_value.sceneBleedCancel = spa_parse_scene_float(SPA_AUDIO_SCENE_BLEED_CANCEL_ENV, 0.0, 0.5, d.bleed_cancel);
+        spa_audio_config_value.sceneMaskSync = spa_parse_bool(SPA_AUDIO_SCENE_MASK_SYNC_ENV, &present);
+    }
     spa_audio_config_value.stereoSurroundQ15 = spa_parse_stereo_surround_q15();
     spa_audio_config_value.stereoLfeAssist = spa_parse_stereo_lfe();
     spa_audio_config_value.stereoFrontBassDb10 = spa_parse_stereo_front_bass_db10();
@@ -1835,6 +1903,8 @@ typedef struct {
     int atmosMode;
     struct spa_stereo_upmix stereoUpmix;
     struct spa_hssr_control_worker hssrControlWorker;
+    struct spa_scene_mask_worker sceneMaskWorker;
+    int sceneMaskWorkerStarted;
     spa_soundcheck_state_t soundCheck;
 } spa103_render_t;
 
@@ -1980,6 +2050,91 @@ static const struct spa_hssr_model *spa_hssr_runtime_model(void)
         ? &spa_hssr_model_value : NULL;
 }
 
+/* SCENE: the mask net's weight blob, AUDIO_SCENE_MASK_BLOB (default: none =
+ * spatial only).  The file is the memory image of struct scene_mask_weights
+ * (scene_mask.h): exact size and magic here, the dimensions again in the
+ * config setter.  Loaded once from audio_init() with the HSSR models, never
+ * from the sink params path. */
+static struct scene_mask_weights spa_scene_mask_blob_value;
+static int spa_scene_mask_blob_status = -1;
+
+static void spa_scene_mask_blob_init_once(void)
+{
+    const char *path = getenv(SPA_AUDIO_SCENE_MASK_BLOB_ENV);
+    FILE *file;
+    size_t got;
+    int extra;
+
+    if (!path || !path[0]) return;
+    file = fopen(path, "rb");
+    if (!file) {
+        LOG_ERROR(LOG_MODULE, "SCENE: mask blob unreadable path=%s errno=%d; running without a mask",
+                  path, errno);
+        return;
+    }
+    got = fread(&spa_scene_mask_blob_value, 1, sizeof(spa_scene_mask_blob_value), file);
+    extra = fgetc(file);
+    fclose(file);
+    if (got != sizeof(spa_scene_mask_blob_value) || extra != EOF ||
+        memcmp(spa_scene_mask_blob_value.magic, SMASK_MAGIC, sizeof(spa_scene_mask_blob_value.magic)) != 0) {
+        LOG_ERROR(LOG_MODULE, "SCENE: mask blob rejected path=%s bytes=%u%s (expected %u bytes of %s); running without a mask",
+                  path, (unsigned)got, extra != EOF ? "+" : "",
+                  (unsigned)sizeof(spa_scene_mask_blob_value), SMASK_MAGIC);
+        memset(&spa_scene_mask_blob_value, 0, sizeof(spa_scene_mask_blob_value));
+        return;
+    }
+    spa_scene_mask_blob_status = 0;
+    LOG_WARN(LOG_MODULE, "SCENE: mask net ready path=%s bytes=%u", path, (unsigned)got);
+}
+
+static const struct scene_mask_weights *spa_scene_runtime_mask_blob(void)
+{
+    static pthread_once_t once = PTHREAD_ONCE_INIT;
+    pthread_once(&once, spa_scene_mask_blob_init_once);
+    return spa_scene_mask_blob_status == 0 ? &spa_scene_mask_blob_value : NULL;
+}
+
+/* SCENE: the blob onto an upmix config (NULL = no mask); the setter validates. */
+static void spa_apply_scene_mask_blob(struct spa_stereo_upmix_config *upmix)
+{
+    const struct scene_mask_weights *blob = spa_scene_runtime_mask_blob();
+
+    spa_stereo_upmix_config_set_scene_mask_blob(upmix, blob, blob ? sizeof(*blob) : 0u);
+}
+
+/* SCENE: the mask net on its worker (scene_mask_worker.h; priority 17 like the
+ * HSSR controller) unless AUDIO_SCENE_MASK_SYNC=1 or there is no blob.  A
+ * worker already running (the realtime path keeps its one across re-params)
+ * is reused; one that fails to start leaves the net on the audio thread,
+ * logged.  Not on the audio thread (scene_mask_init builds tables). */
+static void spa_scene_mask_worker_attach(struct spa_scene_mask_worker *worker, int *started,
+                                         struct spa_stereo_upmix_config *upmix,
+                                         const spa_audio_config_t *config, const char *path)
+{
+    if (!upmix->scene_mask_blob || config->sceneMaskSync) return;
+    if (!*started) {
+        if (spa_scene_mask_worker_start(worker, upmix->scene_mask_blob, 1u, 17) != 0) {
+            LOG_WARN(LOG_MODULE, "audio upmix %s: scene mask worker failed to start; net on the audio thread",
+                     path);
+            return;
+        }
+        *started = 1;
+    }
+    spa_stereo_upmix_config_set_scene_mask_provider(upmix, spa_scene_mask_worker_provider(worker));
+}
+
+static void spa_scene_mask_worker_log_stop(struct spa_scene_mask_worker *worker, const char *path)
+{
+    struct spa_scene_mask_worker_stats stats;
+
+    spa_scene_mask_worker_get_stats(worker, &stats);
+    if (!stats.submitted && !stats.busy) return;
+    LOG_WARN(LOG_MODULE,
+             "audio upmix %s: scene mask worker stopped rows=%u/%u skipped=%u stale=%u superseded=%u resets=%u",
+             path, (unsigned)stats.completed, (unsigned)stats.submitted, (unsigned)stats.busy,
+             (unsigned)stats.stale_discarded, (unsigned)stats.superseded, (unsigned)stats.resets);
+}
+
 static const char *spa103_render_state_name(int state)
 {
     switch (state) {
@@ -2002,6 +2157,7 @@ static const char *spa_stereo_upmix_backend_name(enum spa_stereo_upmix_backend b
     switch (backend) {
     case SPA_STEREO_UPMIX_OFF:           return "off";
     case SPA_STEREO_UPMIX_HSSR_UNIVERSAL:return "hssr-universal";
+    case SPA_STEREO_UPMIX_SCENE:         return "scene";
     default:                             return "?";
     }
 }
@@ -2043,6 +2199,8 @@ static void spa103_render_start(uint32_t generation, int64_t formatIndex, int ha
     /* SETUP owns one complete render generation.  The preceding receiver is
      * already stopped, so retire its controller before publishing a new one. */
     spa_hssr_control_worker_stop(&spa103_render.hssrControlWorker);
+    spa_scene_mask_worker_stop(&spa103_render.sceneMaskWorker);
+    spa103_render.sceneMaskWorkerStarted = 0;
 
     pthread_mutex_lock(&spa103_render.lock);
     spa103_render_wait_for_read_locked();
@@ -2143,6 +2301,7 @@ static void spa103_render_start(uint32_t generation, int64_t formatIndex, int ha
     upmixConfig.retention_hf_lo_hz = config->hssrRetentionHfLoHz;
     upmixConfig.retention_hf_hi_hz = config->hssrRetentionHfHiHz;
     upmixConfig.lfe_gain_q15 = config->stereoLfeGainQ15;
+    spa_apply_scene_knobs(&upmixConfig, config);
     if (upmixConfig.backend == SPA_STEREO_UPMIX_HSSR_UNIVERSAL) {
         const struct spa_hssr_model *hssrModel = spa_hssr_runtime_model();
 
@@ -2173,6 +2332,11 @@ static void spa103_render_start(uint32_t generation, int64_t formatIndex, int ha
         } else {
             upmixConfig.backend = SPA_STEREO_UPMIX_OFF;
         }
+    } else if (upmixConfig.backend == SPA_STEREO_UPMIX_SCENE) {
+        spa_apply_scene_mask_blob(&upmixConfig);
+        spa_scene_mask_worker_attach(&spa103_render.sceneMaskWorker,
+                                     &spa103_render.sceneMaskWorkerStarted,
+                                     &upmixConfig, config, "103");
     }
     spa_stereo_upmix_config_set_lfe(
         &upmixConfig,
@@ -2187,6 +2351,8 @@ static void spa103_render_start(uint32_t generation, int64_t formatIndex, int ha
                                         &upmixConfig);
     if (upmixStatus != SPA_STEREO_UPMIX_OK) {
         spa_hssr_control_worker_stop(&spa103_render.hssrControlWorker);
+        spa_scene_mask_worker_stop(&spa103_render.sceneMaskWorker);
+        spa103_render.sceneMaskWorkerStarted = 0;
         upmixConfig.backend = SPA_STEREO_UPMIX_OFF;
         spa_stereo_upmix_config_set_lfe(&upmixConfig, 0);
         upmixConfig.front_gain_q15 = 32768u;
@@ -2345,6 +2511,9 @@ static void spa103_render_stop(void)
     spa_hssr_control_worker_stop(&spa103_render.hssrControlWorker);
     spa_hssr_control_worker_get_stats(
         &spa103_render.hssrControlWorker, &hssrWorkerStats);
+    spa_scene_mask_worker_stop(&spa103_render.sceneMaskWorker);
+    spa103_render.sceneMaskWorkerStarted = 0;
+    spa_scene_mask_worker_log_stop(&spa103_render.sceneMaskWorker, "103");
     LOG_INFO(LOG_MODULE,
              "buffer103: render stopped finalFormatIndex=%lld formatAnnouncements=%llu "
              "formatSwitches=%llu soundCheck=%llu/%llu fallback=%llu limited=%llu "
@@ -3100,6 +3269,11 @@ static void spa103_observe_extension_locked(const spa_apap_extension_t *ext)
         if (!spa103_render.haveLastTransitionId ||
             spa103_render.lastTransitionId != ext->transitionId) {
             spa103_render.transitionAnnouncements++;
+            /* A new buffered item: the SCENE renderer's song memory fades
+             * (stereo_upmix.h spa_stereo_upmix_scene_track_change; a no-op
+             * for the other backends).  Same lock and thread as the render. */
+            if (spa103_render.haveLastTransitionId)
+                (void)spa_stereo_upmix_scene_track_change(&spa103_render.stereoUpmix);
             spa103_render.lastTransitionId = ext->transitionId;
             spa103_render.haveLastTransitionId = 1;
             STATE_TRACE("BUFFERED_TRANSITION",
@@ -4094,12 +4268,19 @@ static void spa_pcm_expand_fallback(const int16_t *input, size_t frames,
                                     unsigned sourceChannels, int16_t *output,
                                     unsigned outputChannels);
 /* Deadline policy (budget, warmup grace, backoff) lives in rt_upmix_guard.h. */
+/* Track change for the SCENE renderer on this path: raised by the iAP2
+ * NowPlayingUpdate handler (Cinemo's receive thread, spa_audio_on_message),
+ * consumed by the next realtime period on stock's audio thread, which is the
+ * only thread allowed to touch spa_rt_upmix.upmix. */
+static volatile uint32_t spa_rt_upmix_track_change;
 /* One bucket per millisecond of upmix time; the last one is "8 ms or more". */
 #define SPA_RT_UPMIX_HISTOGRAM_BUCKETS 9u
 static struct {
     struct spa_stereo_upmix upmix;
     struct spa_hssr_control_worker worker;
     int workerStarted;
+    struct spa_scene_mask_worker sceneMaskWorker;   /* SCENE: the net's thread, same lifetime as worker */
+    int sceneMaskWorkerStarted;
     int ready;               /* upmixer initialized for the current sink geometry */
     int lastPeriodUpmixed;   /* reset the DSP after any non-upmixed period */
     spa_rt_upmix_guard_t guard;
@@ -4128,13 +4309,13 @@ static void spa_rt_upmix_start(snd_pcm_t *handle)
 {
     const spa_audio_config_t *config = spa_audio_config();
     struct spa_stereo_upmix_config upmixConfig;
-    const struct spa_hssr_model *model;
+    const struct spa_hssr_model *model = NULL;
     int status = SPA_STEREO_UPMIX_ERROR_CONFIG, workerStatus = SPA_HSSR_ERROR_NOT_READY;
     unsigned sourceChannels, outputChannels;
     int expanded;
 
     if (!config->realtimeUpmix ||
-        config->stereoUpmixBackend != SPA_STEREO_UPMIX_HSSR_UNIVERSAL)
+        config->stereoUpmixBackend == SPA_STEREO_UPMIX_OFF)
         return;
     pthread_mutex_lock(&spa_pcm_sink.lock);
     expanded = handle && handle == spa_pcm_sink.handle && spa_pcm_sink.expandedParams &&
@@ -4149,12 +4330,16 @@ static void spa_rt_upmix_start(snd_pcm_t *handle)
     pthread_mutex_unlock(&spa_pcm_sink.lock);
     if (!expanded || sourceChannels != 2u || outputChannels != SPA_PCM_5_1_CHANNELS) return;
 
-    model = spa_hssr_runtime_model();
-    if (!model) {
-        LOG_WARN(LOG_MODULE, "audio realtime upmix: HSSR model unavailable; rears stay silent");
-        return;
+    if (config->stereoUpmixBackend == SPA_STEREO_UPMIX_HSSR_UNIVERSAL) {
+        model = spa_hssr_runtime_model();
+        if (!model) {
+            LOG_WARN(LOG_MODULE, "audio realtime upmix: HSSR model unavailable; rears stay silent");
+            return;
+        }
     }
-    if (!spa_rt_upmix.workerStarted) {
+    if (!model) {
+        /* SCENE: no model, no controller */
+    } else if (!spa_rt_upmix.workerStarted) {
         workerStatus = spa_hssr_control_worker_start(&spa_rt_upmix.worker, model, 1u, 17);
         if (workerStatus == SPA_HSSR_OK) {
             spa_hssr_control_worker_set_guard(&spa_rt_upmix.worker,
@@ -4167,7 +4352,7 @@ static void spa_rt_upmix_start(snd_pcm_t *handle)
         workerStatus = SPA_HSSR_OK;
     }
     spa_stereo_upmix_default_config(&upmixConfig);
-    upmixConfig.backend = SPA_STEREO_UPMIX_HSSR_UNIVERSAL;
+    upmixConfig.backend = config->stereoUpmixBackend;
     upmixConfig.rear_gain_q15 = config->stereoSurroundQ15;
     upmixConfig.front_bass_db10 = config->stereoFrontBassDb10;
     upmixConfig.front_treble_db10 = config->stereoFrontTrebleDb10;
@@ -4181,11 +4366,20 @@ static void spa_rt_upmix_start(snd_pcm_t *handle)
     upmixConfig.retention_hf_lo_hz = config->hssrRetentionHfLoHz;
     upmixConfig.retention_hf_hi_hz = config->hssrRetentionHfHiHz;
     upmixConfig.lfe_gain_q15 = config->stereoLfeGainQ15;
-    spa_stereo_upmix_config_set_hssr_model(&upmixConfig, model);
-    spa_stereo_upmix_config_set_hssr_guard_model(&upmixConfig, spa_hssr_runtime_guard_model());
-    spa_stereo_upmix_config_set_hssr_mask_model(&upmixConfig, spa_hssr_runtime_mask_model(), spa_parse_hssr_mask_drive_q15());
-                spa_stereo_upmix_config_set_hssr_mask_treble(&upmixConfig, config->hssrMaskTrebleDb10);
-                spa_stereo_upmix_config_set_hssr_mask_gamma(&upmixConfig, config->hssrMaskGammaPct);
+    spa_apply_scene_knobs(&upmixConfig, config);
+    if (model) {
+        /* Universal only: SCENE never touches the HSSR files (all of these
+         * are preloaded by audio_init(), this path must not read files). */
+        spa_stereo_upmix_config_set_hssr_model(&upmixConfig, model);
+        spa_stereo_upmix_config_set_hssr_guard_model(&upmixConfig, spa_hssr_runtime_guard_model());
+        spa_stereo_upmix_config_set_hssr_mask_model(&upmixConfig, spa_hssr_runtime_mask_model(), spa_parse_hssr_mask_drive_q15());
+        spa_stereo_upmix_config_set_hssr_mask_treble(&upmixConfig, config->hssrMaskTrebleDb10);
+        spa_stereo_upmix_config_set_hssr_mask_gamma(&upmixConfig, config->hssrMaskGammaPct);
+    } else {
+        spa_apply_scene_mask_blob(&upmixConfig);
+        spa_scene_mask_worker_attach(&spa_rt_upmix.sceneMaskWorker, &spa_rt_upmix.sceneMaskWorkerStarted,
+                                     &upmixConfig, config, "rt");
+    }
     if (workerStatus == SPA_HSSR_OK)
         spa_stereo_upmix_config_set_hssr_control_provider(
             &upmixConfig, spa_hssr_control_worker_provider(&spa_rt_upmix.worker));
@@ -4199,11 +4393,12 @@ static void spa_rt_upmix_start(snd_pcm_t *handle)
     spa_rt_upmix_guard_arm(&spa_rt_upmix.guard);
     pthread_mutex_unlock(&spa_pcm_sink.lock);
     LOG_WARN(LOG_MODULE,
-             "audio realtime upmix: %s (init=%d controller=%s period=%u frames, "
+             "audio realtime upmix: %s (backend=%s init=%d controller=%s period=%u frames, "
              "surround_q15=%u front_bass_db10=%d front_treble_db10=%d rear_body_db10=%d retention_q15=%u retention_hf=%u:%u "
              "mask_drive_q15=%u mask_treble_db10=%d mask_gamma_pct=%d "
-             "vocal_gate_q15=%u rear_air_q15=%u bed_delays=%u bed_attack=%u)",
-             spa_rt_upmix.ready ? "armed" : "NOT armed", status,
+             "vocal_gate_q15=%u rear_air_q15=%u bed_delays=%u bed_attack=%u scene_mask=%d)",
+             spa_rt_upmix.ready ? "armed" : "NOT armed",
+             spa_stereo_upmix_backend_name(upmixConfig.backend), status,
              workerStatus == SPA_HSSR_OK ? "async" : "sync-fallback",
              (unsigned)SPA_PCM_SINK_PERIOD_FRAMES, (unsigned)upmixConfig.rear_gain_q15,
              (int)upmixConfig.front_bass_db10, (int)upmixConfig.front_treble_db10,
@@ -4212,18 +4407,21 @@ static void spa_rt_upmix_start(snd_pcm_t *handle)
              (unsigned)upmixConfig.retention_hf_lo_hz, (unsigned)upmixConfig.retention_hf_hi_hz,
              (unsigned)upmixConfig.mask_drive_q15, (int)upmixConfig.mask_treble_db10, (int)upmixConfig.mask_gamma_pct,
              (unsigned)upmixConfig.vocal_gate_q15, (unsigned)upmixConfig.rear_air_q15,
-             (unsigned)upmixConfig.bed_delays, (unsigned)upmixConfig.bed_attack);
+             (unsigned)upmixConfig.bed_delays, (unsigned)upmixConfig.bed_attack,
+             upmixConfig.scene_mask_blob != NULL);
 }
 
 /* Sink handle really closed (not kept for type 103).  Sink lock NOT held. */
 static void spa_rt_upmix_stop(void)
 {
-    int started;
+    int started, sceneStarted;
 
     pthread_mutex_lock(&spa_pcm_sink.lock);
     spa_rt_upmix.ready = 0;
     started = spa_rt_upmix.workerStarted;
     spa_rt_upmix.workerStarted = 0;
+    sceneStarted = spa_rt_upmix.sceneMaskWorkerStarted;
+    spa_rt_upmix.sceneMaskWorkerStarted = 0;
     if (spa_rt_upmix.periods)
         LOG_WARN(LOG_MODULE,
                  "audio realtime upmix: stop periods=%llu upmixed=%llu resets=%llu "
@@ -4250,6 +4448,10 @@ static void spa_rt_upmix_stop(void)
     memset(spa_rt_upmix.msHistogram, 0, sizeof(spa_rt_upmix.msHistogram));
     pthread_mutex_unlock(&spa_pcm_sink.lock);
     if (started) spa_hssr_control_worker_stop(&spa_rt_upmix.worker);
+    if (sceneStarted) {
+        spa_scene_mask_worker_stop(&spa_rt_upmix.sceneMaskWorker);
+        spa_scene_mask_worker_log_stop(&spa_rt_upmix.sceneMaskWorker, "rt");
+    }
 }
 
 /* Sink lock held.  One realtime period: HSSR when the route allows it, else the
@@ -4284,6 +4486,8 @@ static int spa_rt_upmix_period_locked(const int16_t *buffer, size_t frames,
         uint64_t start = spa_monotonic_ns(), elapsed;
 
         if (!spa_rt_upmix.lastPeriodUpmixed) spa_rt_upmix_reset_locked();
+        if (__sync_lock_test_and_set(&spa_rt_upmix_track_change, 0u))
+            (void)spa_stereo_upmix_scene_track_change(&spa_rt_upmix.upmix);
         upmixed = spa_stereo_upmix_process_s16(&spa_rt_upmix.upmix, buffer, frames,
                                                spa_pcm_sink.scratch, frames) ==
                   SPA_STEREO_UPMIX_OK;
@@ -8552,6 +8756,25 @@ static int spa103_stop_receiver(void *session, int anySession, uint32_t expected
     return spa103_stop_receiver_checked(session, anySession, expectedGeneration, 0, 0);
 }
 
+/* What the sender's arrivalToRenderLatencyMs must include for the stereo upmix. The SCENE backend emits
+ * every sample SPA_SCENE_LATENCY_FRAMES (1024) late, SPA_HSSR_LATENCY_FRAMES (512) more than Universal's
+ * matched latency. Universal's 512 frames were never reported (the response has carried 0 since the
+ * first build and the car is tuned to it), so OFF and Universal keep reporting 0 and SCENE reports only
+ * the extra 512 frames: 10.7 ms at 48 kHz, rounded to 11 (the 44.1 k AAC formats would be 11.6 ms; the
+ * difference is below the resolution of the field). Read under the render lock: render_start() has
+ * already chosen the backend when the SETUP response is built. */
+static int64_t spa103_upmix_extra_latency_ms(const char **backendName)
+{
+    enum spa_stereo_upmix_backend backend;
+
+    pthread_mutex_lock(&spa103_render.lock);
+    backend = spa103_render.stereoUpmix.config.backend;
+    pthread_mutex_unlock(&spa103_render.lock);
+    *backendName = spa_stereo_upmix_backend_name(backend);
+    if (backend != SPA_STEREO_UPMIX_SCENE) return 0;
+    return ((int64_t)(SPA_SCENE_LATENCY_FRAMES - SPA_HSSR_LATENCY_FRAMES) * 1000 + SCENE_SR / 2) / SCENE_SR;
+}
+
 static int spa_setup_buffered_receiver(void *session, void *request, void *response,
                                 uint32_t sequence)
 {
@@ -8563,6 +8786,8 @@ static int spa_setup_buffered_receiver(void *session, void *request, void *respo
     int haveKey = 0;
     uint64_t streamID = 0;
     int64_t supportsDynamicStreamID = 0;
+    int64_t latencyMs = 0;              /* arrivalToRenderLatencyMs: 0 for OFF/Universal, SCENE's extra 512 frames */
+    const char *upmixName = "off";
     int haveSoundCheckTarget = 0;
     uint8_t soundCheckMediaKind = 0;
     int soundCheckTargetDb = 0;
@@ -8646,6 +8871,7 @@ static int spa_setup_buffered_receiver(void *session, void *request, void *respo
     spa103_render_start(generation, formatIndex, haveKey, (size_t)audioBufferSize,
                         haveSoundCheckTarget, soundCheckMediaKind,
                         soundCheckTargetDb);
+    latencyMs = spa103_upmix_extra_latency_ms(&upmixName);
 
     pthread_mutex_lock(&spa103_lock);
     started = spa103_setup_current_locked(session, sequence) &&
@@ -8673,7 +8899,7 @@ static int spa_setup_buffered_receiver(void *session, void *request, void *respo
     if (spa103_response_set_i64(responseDesc, "type", SPA_103_STREAM_TYPE) != 0 ||
         spa103_response_set_i64(responseDesc, "dataPort", port) != 0 ||
         spa103_response_set_i64(responseDesc, "audioBufferSize", audioBufferSize) != 0 ||
-        spa103_response_set_i64(responseDesc, "arrivalToRenderLatencyMs", 0) != 0) {
+        spa103_response_set_i64(responseDesc, "arrivalToRenderLatencyMs", latencyMs) != 0) {
         err = -6728;
         goto fail;
     }
@@ -8735,8 +8961,10 @@ static int spa_setup_buffered_receiver(void *session, void *request, void *respo
     spa_write_setup103_plist(response, "hook_response", sequence);
     LOG_WARN(LOG_MODULE,
              "buffer103: response committed {type:103,dataPort:%d,audioBufferSize:%d,"
-             "arrivalToRenderLatencyMs:0,streamID:%llu}; APAP receiver/render rail live",
-             port, audioBufferSize, (unsigned long long)streamID);
+             "arrivalToRenderLatencyMs:%lld,streamID:%llu}; APAP receiver/render rail live "
+             "(upmix=%s: latency was 0 for every backend; SCENE adds its extra %d frames over Universal's 512)",
+             port, audioBufferSize, (long long)latencyMs, (unsigned long long)streamID,
+             upmixName, (int)(SPA_SCENE_LATENCY_FRAMES - SPA_HSSR_LATENCY_FRAMES));
     return 0;
 
 fail:
@@ -9386,12 +9614,20 @@ static void audio_init(void)
                  getenv(SPA_APAC_CODEC_PATH_ENV) ?
                  getenv(SPA_APAC_CODEC_PATH_ENV) : SPA_APAC_CODEC_DEFAULT_PATH);
         if (config->realtimeUpmix &&
-            config->stereoUpmixBackend == SPA_STEREO_UPMIX_HSSR_UNIVERSAL) {
-            /* Load the HSSR models now: the sink params path must not read files. */
-            const struct spa_hssr_model *model = spa_hssr_runtime_model();
-            (void)spa_hssr_runtime_guard_model();
-            LOG_WARN(LOG_MODULE, "audio realtime upmix: enabled, model %s",
-                     model ? "loaded" : "MISSING");
+            config->stereoUpmixBackend != SPA_STEREO_UPMIX_OFF) {
+            /* Load the models now: the sink params path must not read files
+             * (Universal: HSSR main, guard and mask net; SCENE: the mask blob). */
+            if (config->stereoUpmixBackend == SPA_STEREO_UPMIX_HSSR_UNIVERSAL) {
+                const struct spa_hssr_model *model = spa_hssr_runtime_model();
+                (void)spa_hssr_runtime_guard_model();
+                (void)spa_hssr_runtime_mask_model();
+                LOG_WARN(LOG_MODULE, "audio realtime upmix: enabled, model %s",
+                         model ? "loaded" : "MISSING");
+            } else {
+                LOG_WARN(LOG_MODULE, "audio realtime upmix: enabled, scene renderer, mask net %s",
+                         !spa_scene_runtime_mask_blob() ? "none (spatial only)" :
+                         config->sceneMaskSync ? "loaded, on the audio thread" : "loaded, on the worker");
+            }
         }
     }
     else
@@ -9399,15 +9635,62 @@ static void audio_init(void)
                  "audio policy OFF (AUDIO_SPATIAL=0, AUDIO_SPATIAL_ATMOS=0) -> stock stereo");
 }
 
+/* iAP2 NowPlayingUpdate (0x5001) from the phone, on Cinemo's receive thread:
+ * a changed MediaItemPersistentIdentifier (group 0 attribute 0, which the
+ * stock StartNowPlayingUpdates subscribes, iap2_protocol.c) is a track change
+ * for the SCENE renderer's song memory.  The realtime upmix state belongs to
+ * stock's audio thread, so only the flag crosses (spa_rt_upmix_track_change);
+ * the type-103 path has its own sample-exact signal (the APAP transition id). */
+static bool spa_audio_on_message(hook_context_t *ctx, const iap2_frame_t *frame)
+{
+    static uint64_t lastItem;           /* Cinemo's receive thread only */
+    static int haveLastItem;
+    iap2_tlv_t group, attribute;
+    size_t offset = 0;
+
+    if (ctx->direction != MSG_DIR_INCOMING || frame->msgid != IAP2_MSG_NOW_PLAYING_UPDATE)
+        return false;
+    while (offset < frame->payload_len &&
+           iap2_parse_tlv(frame->payload + offset, frame->payload_len - offset, &group)) {
+        size_t at = 0;
+
+        offset += group.len;
+        if (group.id != 0u) continue;   /* 0 = MediaItemAttributes */
+        while (at < group.value_len &&
+               iap2_parse_tlv(group.value + at, group.value_len - at, &attribute)) {
+            at += attribute.len;
+            if (attribute.id == 0u && attribute.value_len == 8u) {
+                uint64_t item = 0;
+                unsigned i;
+
+                for (i = 0; i < 8u; i++) item = item << 8 | attribute.value[i];
+                if (!haveLastItem || item != lastItem) {
+                    if (haveLastItem)
+                        (void)__sync_lock_test_and_set(&spa_rt_upmix_track_change, 1u);
+                    lastItem = item;
+                    haveLastItem = 1;
+                }
+            }
+        }
+    }
+    return false;                       /* stock keeps every message */
+}
+
+static const uint16_t spa_audio_msg_filter[] = { IAP2_MSG_NOW_PLAYING_UPDATE };
+
 /* Audio is an AirPlay-side module: it needs the SETUP request before stock sees
  * it, the response after stock and again after every other module has merged
- * into it, the finished /info dictionary, and the session teardown.  It reads
- * no iAP2 message.  AirPlayReceiverServerPlatformCopyProperty and the QSA
- * writers stay interposed in this file — each has exactly one consumer, so they
- * need no framework seam. */
+ * into it, the finished /info dictionary, and the session teardown.  The one
+ * iAP2 message it reads is NowPlayingUpdate, for the SCENE track change above.
+ * AirPlayReceiverServerPlatformCopyProperty and the QSA writers stay
+ * interposed in this file — each has exactly one consumer, so they need no
+ * framework seam. */
 const hook_module_def_t audio_module_def = {
     .name = "audio",
     .priority = HOOK_PRIORITY_HIGH,
+    .msg_filter = spa_audio_msg_filter,
+    .msg_filter_count = sizeof(spa_audio_msg_filter) / sizeof(spa_audio_msg_filter[0]),
+    .on_message = spa_audio_on_message,
     .on_init = audio_init,
     .on_shutdown = audio_shutdown,
     .airplay = {

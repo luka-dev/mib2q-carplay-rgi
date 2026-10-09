@@ -56,7 +56,8 @@
  * buffered stream by itself.  The code default is off; deployment policy may
  * opt in explicitly.
  *
- * AUDIO_STEREO_UPMIX: off | on.  ON always selects HSSR Universal.
+ * AUDIO_STEREO_UPMIX: off | on.  ON selects HSSR Universal, or the scene
+ * renderer with AUDIO_SCENE=1 (below); OFF is the bypass and always wins.
  * AUDIO_STEREO_SURROUND: rear input gain, 0.0 .. 0.5 (default 0.18).
  * HSSR Universal uses persistent half-plane object routing and a bounded,
  * phase-distinct mid/high fallback so difficult or nearly mono masters retain
@@ -93,6 +94,31 @@
  * Corrected BANK1 also feeds the sub from other channels; this is NOT the
  * whole subwoofer level. */
 #define SPA_AUDIO_STEREO_LFE_GAIN_ENV "AUDIO_STEREO_LFE_GAIN"
+/* Scene renderer (stereo_upmix.h SPA_STEREO_UPMIX_SCENE, spec §18 item 6).
+ * With AUDIO_STEREO_UPMIX=on, AUDIO_SCENE=1 selects it in place of HSSR
+ * Universal; AUDIO_STEREO_UPMIX off/unset is the safety bypass and wins (the
+ * scene flag is then ignored, logged once).  The knobs are the engine's
+ * SceneConfig fields in engine units, unset = the variant J default, read
+ * once at start like AUDIO_STEREO_*.  Ranges in stereo_upmix.h.
+ * AUDIO_SCENE_MASK_BLOB: the fine mask net's weights (scene_mask.h
+ * 'SMSKNET1', port/export_masknet_weights.py), read once at init; unset,
+ * unreadable or rejected = spatial only (no instrument transfer, no duck),
+ * logged once.  It also steers the LFE V2 assist (bass/drum posteriors).
+ * AUDIO_SCENE_MASK_SYNC=1 runs the net on the audio thread (the port tests'
+ * exact timing); the default is the scene mask worker (scene_mask_worker.h:
+ * SCHED_RR 17 like the HSSR controller, rows one control late, never
+ * blocking; a worker that fails to start falls back to the audio thread). */
+#define SPA_AUDIO_SCENE_ENV                "AUDIO_SCENE"                /* 0/1 */
+#define SPA_AUDIO_SCENE_MASK_BLOB_ENV      "AUDIO_SCENE_MASK_BLOB"      /* path, default none */
+#define SPA_AUDIO_SCENE_MASK_SYNC_ENV      "AUDIO_SCENE_MASK_SYNC"      /* 0/1, default 0 = worker */
+#define SPA_AUDIO_SCENE_ALPHA_ENV          "AUDIO_SCENE_ALPHA"          /* 0..1, default 0.7 */
+#define SPA_AUDIO_SCENE_INST_ALPHA_ENV     "AUDIO_SCENE_INST_ALPHA"     /* 0..1, default 0.9 */
+#define SPA_AUDIO_SCENE_INST_GAMMA_ENV     "AUDIO_SCENE_INST_GAMMA"     /* 0.1..4, default 1 */
+#define SPA_AUDIO_SCENE_DUCK_DEPTH_ENV     "AUDIO_SCENE_DUCK_DEPTH"     /* 0..1, default 0.25 */
+#define SPA_AUDIO_SCENE_REAR_DELAY_MS_ENV  "AUDIO_SCENE_REAR_DELAY_MS"  /* -50..50, default 0 */
+#define SPA_AUDIO_SCENE_SIGMA_MIN_ENV      "AUDIO_SCENE_SIGMA_MIN"      /* 0.01..1, default 0.08 */
+#define SPA_AUDIO_SCENE_SIDE_LP_HZ_ENV     "AUDIO_SCENE_SIDE_LP_HZ"     /* 0 = off or 1000..24000, default 7000 */
+#define SPA_AUDIO_SCENE_BLEED_CANCEL_ENV   "AUDIO_SCENE_BLEED_CANCEL"   /* 0..0.5, default 0 */
 #define SPA_AUDIO_HSSR_MODEL_ENV       "AUDIO_HSSR_MODEL"
 /* Phase 1 mask net: AUDIO_HSSR_MASK_MODEL (else hssr_mask.bin beside the main
  * model, absent = off) and AUDIO_HSSR_MASK_DRIVE 0..2 (0 = off, 1.0 = the

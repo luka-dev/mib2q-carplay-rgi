@@ -85,7 +85,9 @@ def main():
               "-I", str(audio), "-o"]
     sources = [root / "tools/stereo-upmix-render/stereo_upmix_render.c",
                audio / "soundcheck.c", audio / "stereo_upmix.c", None,
-               audio / "hssr_neon.c", audio / "hssr_mask.c"]
+               audio / "hssr_neon.c", audio / "hssr_mask.c",
+               audio / "scene_engine_math.c", audio / "scene_clusters.c", audio / "scene_engine.c",
+               audio / "scene_mask.c"]
     builds = {}
     for name, macro, dsp in (
         ("control", None, source),
