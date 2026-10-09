@@ -49,8 +49,12 @@ normal `lockdownd` service; its failed handshake is expected in this stage.
 
 ## 📦 Local setup
 
-Generated firmware, clones, binaries, disposable disks, SSH material and logs
-are local under `build/ios-vm-lab/`; none are committed or packaged for the HU.
+Generated firmware, clones, emulator binaries, disposable disks, SSH material and logs
+are local under `build/ios-vm-lab/`; these are not committed or packaged for the HU.
+The public upstream SHSH sample and its derived AP ticket are versioned as
+[emulator ticket fixtures](../../wireless/ios_vm_lab/fixtures/README.md), with
+source revision and hashes. They contain no locally generated SSH private key
+or MFi private identity.
 The existing iOS 26.6/27 IPSWs and original HU firmware remain untouched.
 Only compatible components were initially extracted from Apple CDN using HTTP
 ranges; the complete 5,507,405,643-byte IPSW was later downloaded for restore.

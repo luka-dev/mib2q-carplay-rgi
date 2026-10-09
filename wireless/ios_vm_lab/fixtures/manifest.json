@@ -1,0 +1,22 @@
+{
+  "upstream_repository": "https://github.com/TrungNguyen1909/qemu-t8030-tools",
+  "upstream_commit": "7a2017461ee7c1864330083dc6a781b75d1d0279",
+  "upstream_path": "bootstrap_scripts/ticket.shsh2",
+  "target": {
+    "device_class": "n104ap",
+    "ios_build": "18A5351d"
+  },
+  "files": {
+    "ticket.shsh2": {
+      "bytes": 79421,
+      "sha256": "4380ca55889c4ddd08567496fc573f22ec6f4a66192751eee2f701913419db90"
+    },
+    "root_ticket.der": {
+      "bytes": 8931,
+      "sha256": "f05a1cc90204de78aa6ec5f631033fed41338760d1fb7e72a75eb400d65ebbe2"
+    }
+  },
+  "root_ticket_generation": "upstream bootstrap_scripts/create_apticket.py n104ap BuildManifest.plist ticket.shsh2 root_ticket.der",
+  "contains_local_ssh_private_key": false,
+  "contains_mfi_identity_private_key": false
+}
