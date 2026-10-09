@@ -13,6 +13,7 @@
 #include <sys/uio.h>
 #include <time.h>
 #include <unistd.h>
+#include "software_mfi_fixture.h"
 
 struct i2c_header {
     uint32_t address, format, length, stop;
@@ -35,6 +36,28 @@ static int injected_nack;
 static int injected_short;
 static int fail_first_certificate_state;
 static struct timespec fail_first_started;
+static struct mfiq_fixture software_fixture;
+static int software_active;
+static uint8_t challenge_digest[20], software_signature[128];
+static int challenge_ready;
+
+static int load_software_fixture(const char *path)
+{
+    uint8_t data[MFIQ_MAX_FILE + 1];
+    size_t size;
+    int error;
+    FILE *file = fopen(path, "rb");
+    if (!file) return -1;
+    size = fread(data, 1, sizeof(data), file);
+    error = ferror(file);
+    fclose(file);
+    if (error || mfiq_decode(&software_fixture, data, size)) return -1;
+    software_active = 1;
+    fprintf(stderr, "[mfi-qemu] software fixture loaded certificate=%u cases=%u\n",
+            (unsigned)software_fixture.certificate_length,
+            (unsigned)software_fixture.case_count);
+    return 0;
+}
 
 __attribute__((constructor)) static void stock_mfi_probe_loaded(void)
 {
@@ -82,6 +105,11 @@ int open(const char *path, int flags, ...)
     }
     if (path && (strcmp(path, "/dev/shmem/qemu_mfi") == 0 ||
                  (strcmp(path, "/dev/i2c8") == 0 && getenv("MHI2Q_STOCK_MFI_QEMU")))) {
+        const char *fixture = getenv("MHI2Q_MFI_QEMU_FIXTURE");
+        if (fixture && !software_active && load_software_fixture(fixture)) {
+            errno = EINVAL;
+            return -1; /* Never fall back to dummy authentication. */
+        }
         if (getenv("MHI2Q_STOCK_MFI_QEMU")) {
             static const char marker[] = "[stock-mfi-qemu] intercepted open\n";
             (void)write(2, marker, sizeof(marker) - 1);
@@ -244,9 +272,15 @@ int devctlv(int fd, int command, int send_count, int receive_count,
                 if (send[2].iov_len != 22 || challenge[0] != 0 ||
                     challenge[1] != 20)
                     return EINVAL;
+                memcpy(challenge_digest, challenge + 2, 20);
+                challenge_ready = 1;
+                signed_challenge = 0;
             } else if (selected_register == 0x10) {
                 if (send[2].iov_len != 1 ||
                     *(const uint8_t *)send[2].iov_base != 1)
+                    return EINVAL;
+                if (software_active && (!challenge_ready ||
+                    mfiq_signature(&software_fixture, challenge_digest, software_signature)))
                     return EINVAL;
                 signed_challenge = 1;
             } else {
@@ -264,10 +298,25 @@ int devctlv(int fd, int command, int send_count, int receive_count,
     if (length != header->length)
         return EINVAL;
 read_response:
+    if (software_active && selected_register >= 0x31 && selected_register <= 0x3a) {
+        size_t offset = (size_t)(selected_register - 0x31) * 128u;
+        size_t available;
+        if (offset >= software_fixture.certificate_length) return EINVAL;
+        available = software_fixture.certificate_length - offset;
+        if (available > 128u) available = 128u;
+        if (length != available) return EINVAL;
+        memcpy(out, software_fixture.certificate + offset, length);
+        if (offset + length == software_fixture.certificate_length)
+            fprintf(stderr, "[mfi-qemu] software certificate read=%u\n",
+                    (unsigned)software_fixture.certificate_length);
+        if (transferred) *transferred = (int)length;
+        return 0;
+    }
     switch (selected_register) {
     case 0x30:
         if (length != 2) return EINVAL;
-        out[0] = 0; out[1] = 4;
+        out[0] = software_active ? (uint8_t)(software_fixture.certificate_length >> 8) : 0;
+        out[1] = software_active ? (uint8_t)software_fixture.certificate_length : 4;
         break;
     case 0x31:
         if (length != 4) return EINVAL;
@@ -280,12 +329,18 @@ read_response:
         break;
     case 0x11:
         if (length != 2 || !signed_challenge) return EINVAL;
-        out[0] = 0; out[1] = 20;
+        out[0] = 0; out[1] = software_active ? 128 : 20;
         break;
     case 0x12:
-        if (length != 20 || !signed_challenge) return EINVAL;
-        memset(out, 0x5a, 20);
-        fprintf(stderr, "[mfi-qemu] signature read=20\n");
+        if (length != (software_active ? 128u : 20u) || !signed_challenge) return EINVAL;
+        if (software_active) {
+            memcpy(out, software_signature, 128);
+            if (getenv("MHI2Q_MFI_QEMU_TAMPER")) out[0] ^= 1;
+            fprintf(stderr, "[mfi-qemu] software signature read=128\n");
+        } else {
+            memset(out, 0x5a, 20);
+            fprintf(stderr, "[mfi-qemu] signature read=20\n");
+        }
         break;
     default:
         return EINVAL;

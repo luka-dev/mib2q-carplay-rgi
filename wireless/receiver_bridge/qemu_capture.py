@@ -458,6 +458,8 @@ def main() -> None:
                         help="QEMU only: run the actual QNX/Rust START/STOP client against stock dio")
     parser.add_argument("--daemon-phone-qemu", action="store_true",
                         help="QEMU only: ordinary daemon and synthetic phone drive stock dio receiver")
+    parser.add_argument("--software-mfi-qemu", action="store_true",
+                        help="QEMU only: software MFi public vectors and actual QNX RSA verification")
     parser.add_argument("--daemon-control-qemu", action="store_true",
                         help="QEMU only: also exercise daemon DNS-SD and CarPlay Control HTTP")
     parser.add_argument("--stock-mfi-probe-qemu", action="store_true",
@@ -494,6 +496,8 @@ def main() -> None:
     parser.add_argument("--trace-sigsegv-qemu", action="store_true",
                         help="QEMU only: log ARM registers when dio_manager faults")
     options = parser.parse_args()
+    if options.software_mfi_qemu and not (options.daemon_phone_qemu or options.wireless_lifecycle_qemu):
+        parser.error("--software-mfi-qemu requires --daemon-phone-qemu or --wireless-lifecycle-qemu")
     if options.independent_setup_qemu and not options.independent_srp_qemu:
         parser.error("--independent-setup-qemu requires --independent-srp-qemu")
     if options.independent_screen_setup_qemu and not options.independent_setup_qemu:
@@ -1041,6 +1045,12 @@ def main() -> None:
         if options.wireless_hook_qemu:
             from wireless_hook_fixture import prepare
             prepare(work, media=options.wireless_media_qemu, lifecycle=options.wireless_lifecycle_qemu)
+        software_fixture = None
+        if options.software_mfi_qemu:
+            import sys
+            sys.path.insert(0, str(REPO / "wireless/daemon/probes"))
+            from software_mfi_qemu import prepare as prepare_software_mfi
+            software_fixture = prepare_software_mfi(work, work / "capture.build")
         docker(work, "mkifs", "capture.build", "capture.bin")
         if options.build_only:
             saved = OUT / "qemu_start_debug.bin"
@@ -1103,6 +1113,8 @@ def main() -> None:
             log_name = "qemu_stock210_hook_media.log" if options.wireless_media_qemu else "qemu_stock210_hook_pairing.log"
         if options.wireless_lifecycle_qemu:
             log_name = "qemu_stock210_lifecycle.log"
+        if options.software_mfi_qemu:
+            log_name = log_name.removesuffix(".log") + "_software_mfi.log"
         log = OUT / log_name
         with log.open("w") as stream:
             command = [
@@ -1242,6 +1254,10 @@ def main() -> None:
                 except subprocess.TimeoutExpired:
                     pass  # The IFS returns to an idle QNX shell after dio exits.
         output = log.read_text(errors="replace")
+        if software_fixture is not None:
+            from software_mfi_qemu import validate as validate_software_mfi
+            validate_software_mfi(output, log, software_fixture,
+                                  sessions=3 if options.wireless_lifecycle_qemu else 1)
         if options.wireless_hook_qemu:
             from wireless_hook_fixture import validate
             validate(output, log, media=options.wireless_media_qemu, lifecycle=options.wireless_lifecycle_qemu)
@@ -1480,9 +1496,11 @@ def main() -> None:
                         "[phone-qemu] stock receiver /info ready=1",
                         "[phone-qemu] iap2 normal=1",
                         "[phone-qemu] identification=1",
+                        "[mfi-qemu] software certificate read=" if options.software_mfi_qemu else
                         "[mfi-qemu] certificate read=4",
                         "[mfi-qemu] combined SENDRECV command=0xc0140507",
                         "[phone-qemu] certificate=1",
+                        "[mfi-qemu] software signature read=128" if options.software_mfi_qemu else
                         "[mfi-qemu] signature read=20",
                         "[phone-qemu] signature=1",
                         "[phone-qemu] wifi=1",

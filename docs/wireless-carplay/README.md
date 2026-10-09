@@ -25,6 +25,12 @@ both authentication orders; wireless offers the main display only.
 All work remains **offline only**; no HU connection, process restart, reboot or
 original firmware-file change is part of this milestone.
 
+The optional [software MFi QNX/QEMU tests](TEST_SOFTWARE_MFI.md#-qnx-and-qemu-integration)
+replace fixed mock signature bytes with freshly generated RSA test vectors.
+The QNX phone cryptographically verifies actual iAP2 responses in both the
+bootstrap matrix and the combined stock210 lifecycle. The host private key
+stays outside QEMU; these synthetic identities do not establish Apple trust.
+
 <a id="components-and-ownership"></a>
 
 ## ⚙️ Architecture and ownership
@@ -73,7 +79,7 @@ scoped to wireless owner mode. See [review corrections](IOS210_CODE_REVIEW.md#-c
 | Bluetooth transport | [Graft](BTSTACK_GRAFT.md) · [Channel layout](RFCOMM_CHANNEL_LAYOUT.md) · [Duplex ABI](RFCOMM_DUPLEX.md) · [Discovery](BLUETOOTH_DISCOVERY.md) |
 | Graft construction | [Insertion plan](GRAFT_INSERTION_PLAN.md) · [Factory launcher experiments](GRAFT_LAUNCHER_LIFECYCLE.md) |
 | Pairing and media | [HTTP ABI](STOCK210_HTTP_PAIRING_ABI.md) · [Media crypto ABI](STOCK210_MEDIA_CRYPTO_ABI.md) · [280 source recipe](AIRPLAY280_PAIRING_RECIPE.md) |
-| Bootstrap and ownership | [iAP2 daemon](IAP2_DAEMON.md) · [DIO ownership](DIO_OWNERSHIP.md) · [Vendor provenance](IAP2_VENDOR_PROVENANCE.md) |
+| Bootstrap and ownership | [iAP2 daemon](IAP2_DAEMON.md) · [Software MFi tests](TEST_SOFTWARE_MFI.md) · [iOS VM laboratory](IOS_VM_LAB.md) · [DIO ownership](DIO_OWNERSHIP.md) · [Vendor provenance](IAP2_VENDOR_PROVENANCE.md) |
 | Network and hardware | [Wi-Fi discovery](WIFI_AND_DISCOVERY.md) · [Firewall](FIREWALL.md) · [Hardware and donors](HARDWARE_AND_DONORS.md) |
 | iOS and references | [Authentication selection](IOS_AUTH_SELECTION.md) · [Wireless session gates](IOS_WIRELESS_SESSION_GATES.md) · [Bootstrap comparison](BOOTSTRAP_COMPARISON.md) |
 | Evidence and history | [Pairing/media milestones](STOCK210_VALIDATION.md) · [Historical experiments](history/README.md) · [Migration map](MIGRATION.md) |

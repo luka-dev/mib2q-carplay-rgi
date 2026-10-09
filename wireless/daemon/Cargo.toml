@@ -10,6 +10,7 @@ edition = "2024"
 
 [features]
 qemu-probe = []
+software-mfi-test = []
 
 [[bin]]
 name = "wifi-ie-qemu-probe"
@@ -25,6 +26,11 @@ required-features = ["qemu-probe"]
 name = "phone-qemu-probe"
 path = "probes/phone_qemu_probe.rs"
 required-features = ["qemu-probe"]
+
+[[bin]]
+name = "software-mfi-fixture"
+path = "probes/software_mfi_fixture_main.rs"
+required-features = ["software-mfi-test"]
 
 [dependencies]
 iap2-link = { path = "vendor/iap2-link" }

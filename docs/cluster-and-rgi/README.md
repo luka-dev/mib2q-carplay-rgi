@@ -67,6 +67,8 @@ flowchart TB
 | [VC FPK State Machine](VC_FPK_STATE_MACHINE.md) | The Virtual Cockpit's firmware layers, nav view tree, dp items, signal groups, why side menus can't be blocked. |
 | [Smartphone Tab and Kombi DSI](SMARTPHONE_TAB_AND_KOMBI_DSI.md) | `DSICarKombi`/`DSIKombiSync2`, HU display architecture, the unbuilt VC Smartphone-tab alternative. |
 | [iAP2 Route Guidance TLVs](IAP2_ROUTE_GUIDANCE_TLVS.md) | What iOS sends in 0x5201/0x5202, what the hook parses, angle sentinels, the `SendIAP2` injection fix. |
+| [CarPlay Speed Limits](CARPLAY_SPEED_LIMIT.md) | Which message IDs were checked for a numeric limit, cluster-video speed-limit policy on 26.6 and 27, and the proposed sign-rendering experiment. |
+| [Road Object Detection](IAP2_ROAD_OBJECT_DETECTION.md) | Start/update/stop, subtype Type, detection fields, identification rejection, activation requirements, and the first proposed transport experiment. |
 | [NavSD FctID Matrix](NAVSD_FCTID_MATRIX.md) | All 56 Navigation BAP functions and who owns each while CarPlay drives the cluster. |
 | [Nav Initializing Screen](NAV_INITIALIZING_SCREEN.md) | Why the VC's "Initialising navigation system" NA screen still covers the CarPlay map: NavSD OP_State 3, its five HU inputs, why `7d35b53` misses them, and the tried OP_State clamp (removed 2026-09-24, open). |
 | [Maneuver Mapping](MANEUVER_MAPPING.md) | The 54-type iAP2 → BAP icon → HUD selector → renderer arrow table and the HUD firmware chain. |

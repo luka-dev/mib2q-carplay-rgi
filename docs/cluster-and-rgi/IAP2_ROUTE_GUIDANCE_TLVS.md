@@ -69,7 +69,9 @@ The per-maneuver arrays are parsed for up to `MANEUVER_CACHE_SIZE = 32` maneuver
 
 ## 🔍 Not handled at all
 
-**RoadObjectDetection** (`ACCNavigationRoadObjectDetectionInfo`) is a separate iAP2 message: `0x00` ID, `0x01` Timestamp, `0x02` EgoSpeed, `0x03` EgoYawRate, `0x04` RoadSign, `0x05` RoadLane, `0x06` RoadObject. RoadSign has ID, State, Type, Value, LateralOffset, ForwardOffset, so Type + Value is a detected speed-limit sign. The Ego fields imply the accessory feeds its own speed and yaw and the phone returns detections. It is only live if the HU advertises a detection component, which we do not, so iOS sends none of it. `[decompile]`
+**RoadObjectDetection** (`ACCNavigationRoadObjectDetectionInfo`) is an accessory sensor-input channel. Correction, 2026-09-30: iPhone sends start `0x0D00` and stop `0x0D02`; the car sends update `0x0D01` into iPhone navigation providers. Update fields: `0x00` component ID, `0x01` Timestamp, `0x02` EgoSpeed, `0x03` EgoYawRate, `0x04` RoadSign, `0x05` RoadLane, `0x06` RoadObject. RoadSign has ID, State, Type, Value, LateralOffset, ForwardOffset; these are accessory detections, not exported Maps limits. The earlier inference that the phone returns detections was wrong. Both 26.6 and 27 incoming-message tables and handler/server call chains confirm the direction. See [CarPlay Speed Limits](CARPLAY_SPEED_LIMIT.md) for addresses and artifacts. `[decompile]`
+
+The [Road Object Detection research](IAP2_ROAD_OBJECT_DETECTION.md) also finds explicit rejection of advertised `0x0D00–0x0D02` in both builds' ordinary Navigation identification path. Start categories `1–3` are distinct from sign/object subtype `Type` bytes; their semantic subtype enums remain unresolved. `[decompile]` / `[open]`
 
 `ACCNavigationAccessoryInfo`, `ACCNavigationProviderInfo` and `ACCNavigationUpdateInfo` also exist in accessoryd but were not decompiled. They look like internal plumbing. `[open]`
 
@@ -78,7 +80,7 @@ Opportunities, ranked by value against effort:
 1. **SourceName (0x13):** show which nav app is guiding. Java field only.
 2. **EV fields (0x17, 0x18, 0x1A):** charging stops and battery at arrival. Only worth it with a cluster widget to drive.
 3. **StopType (0x16), destination time zone (0x15):** minor. We render the ETA as an absolute clock in the vehicle's current zone (`convertUtcToLocalMs` = HU UTCOffset DSI, DST-aware). On a cross-zone trip our clock and the iPhone's (destination zone) differ until the car crosses the boundary. 0x15 would close that edge case.
-4. **RoadObjectDetection / speed-limit signs:** needs a detection component and our own EgoSpeed/EgoYawRate feed. Unverified that iOS streams it over wired CarPlay. Research grade.
+4. **Speed-limit display:** Maps cluster URLs accept `showSpeedLimit=yes` on both 26.6 and 27; our hook currently requests `no`. Test the rendered sign on-car. Numeric extraction through RGI is not established, and RoadObjectDetection has the opposite direction. [Evidence](CARPLAY_SPEED_LIMIT.md). `[decompile]` / `[open]`
 
 ## 📊 Every maneuver type maps to something
 

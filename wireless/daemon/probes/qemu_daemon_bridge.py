@@ -23,6 +23,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--phone-probe", action="store_true",
                         help="QEMU-only full iAP2/MFi/availability exchange with fake MFi and receiver")
+    parser.add_argument("--software-mfi-qemu", action="store_true",
+                        help="QEMU-only: host software MFi vectors, actual RSA verification by QNX phone")
+    parser.add_argument("--software-mfi-tamper-qemu", action="store_true",
+                        help="QEMU-only: corrupt AA03 signature and require AA04 with closed session gates")
     parser.add_argument("--reject-once", action="store_true",
                         help="fake receiver rejects one START; phone retries without replacing iAP2 link")
     parser.add_argument("--control-probe", action="store_true",
@@ -38,6 +42,12 @@ def main() -> None:
     parser.add_argument("--ie-lifecycle", action="store_true",
                         help="verify IE absent before graft connect and removed after EOF")
     options = parser.parse_args()
+    if options.software_mfi_qemu and not options.phone_probe:
+        parser.error("--software-mfi-qemu requires --phone-probe")
+    if options.software_mfi_tamper_qemu and not options.software_mfi_qemu:
+        parser.error("--software-mfi-tamper-qemu requires --software-mfi-qemu")
+    if options.software_mfi_tamper_qemu and (options.repeat_phone_qemu or options.reject_once):
+        parser.error("software MFi tamper uses a single rejected session")
     if options.ie_lifecycle and options.phone_probe:
         parser.error("--ie-lifecycle uses the standalone bridge client")
     if options.reject_once and not options.phone_probe:
@@ -191,6 +201,7 @@ def main() -> None:
                 f"{control_probe}"
                 f"{mfi_retry}"
                 f"{mfi_fail_first}"
+                + ("    MHI2Q_MFI_QEMU_TAMPER=1\n" if options.software_mfi_tamper_qemu else "") +
                 "    LD_PRELOAD=/proc/boot/libmock_mfi_qemu.so\n"
                 "    /proc/boot/mhi2q-wireless-daemon &\n"
                 "    LD_PRELOAD=\n"
@@ -244,6 +255,10 @@ def main() -> None:
                 1,
             )
         (work / "daemon_bridge.build").write_text(manifest)
+        software_fixture = None
+        if options.software_mfi_qemu:
+            from software_mfi_qemu import prepare
+            software_fixture = prepare(work, work / "daemon_bridge.build")
         docker(work, "sh", "-c",
                "MKIFS_PATH=/work:/opt/qnx650/target/qnx6/armle-v7/boot/sys "
                "mkifs daemon_bridge.build daemon_bridge.bin")
@@ -255,6 +270,9 @@ def main() -> None:
                      "qemu_daemon_phone_retry.log" if options.reject_once else
                      "qemu_daemon_phone.log" if options.phone_probe
                      else "qemu_daemon_bridge.log")
+        if options.software_mfi_qemu:
+            log = log.with_name(log.stem + ("_software_mfi_tamper" if options.software_mfi_tamper_qemu
+                                           else "_software_mfi") + ".log")
         with log.open("w") as stream:
             process = subprocess.Popen(
                 [str(QEMU), "-M", "virt", "-m", "512", "-cpu", "cortex-a15",
@@ -288,12 +306,17 @@ def main() -> None:
                 r"Process \d+ \(openssl\) exited status=0\.", output
             ):
                 markers.append("factory QNX openssl SHA-256 matches host digest")
-        if options.phone_probe:
+        if options.phone_probe and options.software_mfi_tamper_qemu:
+            markers += ["[phone-qemu] iap2 normal=1", "[phone-qemu] identification=1",
+                        "[phone-qemu] certificate=1", "(phone-qemu-probe) exited status=0"]
+        elif options.phone_probe:
             markers += ["[phone-qemu] iap2 normal=1",
                         "[phone-qemu] identification=1",
+                        "[mfi-qemu] software certificate read=" if options.software_mfi_qemu else
                         "[mfi-qemu] certificate read=4",
                         "[mfi-qemu] combined SENDRECV command=0xc0140507",
                         "[phone-qemu] certificate=1",
+                        "[mfi-qemu] software signature read=128" if options.software_mfi_qemu else
                         "[mfi-qemu] signature read=20",
                         "[phone-qemu] signature=1",
                         "[phone-qemu] wifi=1",
@@ -350,7 +373,14 @@ def main() -> None:
         missing = [marker for marker in markers if marker not in output]
         if missing:
             raise SystemExit(f"QNX daemon bridge failed, missing={missing}; inspect {log}")
-        print(f"QNX daemon {'full synthetic phone path' if options.phone_probe else 'iAP2 marker/SYN'} passed; log: {log}")
+        if software_fixture is not None:
+            from software_mfi_qemu import validate
+            validate(output, log, software_fixture,
+                     sessions=2 if options.repeat_phone_qemu and not options.mfi_timeout_recovery_qemu else 1,
+                     tampered=options.software_mfi_tamper_qemu)
+        scenario = ("software MFi AA04 rejection" if options.software_mfi_tamper_qemu else
+                    "full synthetic phone path" if options.phone_probe else "iAP2 marker/SYN")
+        print(f"QNX daemon {scenario} passed; log: {log}")
 
 
 if __name__ == "__main__":

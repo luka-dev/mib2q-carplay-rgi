@@ -185,9 +185,11 @@ Maps sends `suggestUI{urls}` (stock 210 answers −6714; we ignore it); CarKit s
 | `.../map` | itemType 1 (map only) |
 | `.../instructioncard` | itemType 2 (card only) |
 | `showETA=yes\|1 / no\|0 / user` | enabled 1 / disabled 2 / userPreference 3; other or absent → 2 |
-| `showSpeedLimit=`, `showCompass=` | same values; iOS 27 only, 26.6 ignores them; absent → disabled |
+| `showSpeedLimit=`, `showCompass=` | same values; parsed in the Maps URL branch on both 26.6 and 27; absent → disabled |
 | `maneuverLayout=topAligned / leftAligned / rightAligned` | justification 1 / 2 / 3; anything else (including `no`) → 0 |
 | `mapsPresentation=anycontent / map / instructioncard` | itemType 3 / 1 / 2 (Maps-hosted content) |
+
+Correction (2026-09-30): the earlier "27 only / 26.6 ignores" claim was wrong for Maps URLs. Both binaries contain the query-to-setting path; the separate `nextGenHostedContent` branch has different query handling. This establishes display-policy parsing, not an exported numeric speed or on-car sign rendering. [Speed-limit investigation](CARPLAY_SPEED_LIMIT.md). `[decompile]` / `[open]`
 
 `CarPlay.framework` creates an app's cluster window only for itemType 1 or 3 (`updateSceneForNewItemTypeSetting`). `[decompile]`
 

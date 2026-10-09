@@ -4,6 +4,8 @@
 pub mod carplay_control;
 pub mod control;
 pub mod mfi;
+#[cfg(all(feature = "software-mfi-test", unix, not(target_os = "nto")))]
+pub mod software_mfi_test;
 pub mod receiver_control;
 pub mod wifi_ie;
 

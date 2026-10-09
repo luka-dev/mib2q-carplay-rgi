@@ -146,7 +146,9 @@ def validate_lifecycle(output):
             for key in ('audioInputFormats','audioOutputFormats'):
                 if audio.get(key,0) & ~(((1<<12)-(1<<2))|(1<<14)|(1<<15)):
                     raise RuntimeError('unsupported PCM format advertised')
-    owners=re.findall(r'\[wireless-dio\] generation owner=(\d+) daemon=(\d+)',output)
+    # Concurrent QNX serial writers can split the logging prefix. The unique
+    # generation body still identifies the supervisor's owner/daemon record.
+    owners=re.findall(r'generation owner=(\d+) daemon=(\d+)',output)
     if len(owners)!=3 or len({o for o,_ in owners})!=3:raise RuntimeError('expected three distinct owner PIDs')
     if output.count('[wireless-dio] generation stopped')!=3:raise RuntimeError('supervisor cleanup incomplete')
     print('Stock210 lifecycle: real daemon iAP2/MFi(mock)/WiFi/StartSession, stable pi, two media generations, USB priority and wireless resume passed')

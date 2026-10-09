@@ -26,7 +26,7 @@ The capability names are phone-side flags from carkitd/accessoryd 23G71 (iOS 26.
 
 | Tier | Capability | Phone flag(s) | Note |
 |---|---|---|---|
-| 1 | Road objects / speed-limit signs | `ACCNavigationRoadObjectDetectionInfo` (RoadSign type + value) | Not in the stock allowlist; needs an advertised detection component + ego speed/yaw (GPRMC already supplies speed) |
+| 1 | Speed-limit sign in cluster video | `showSpeedLimit=yes` | Maps URL parser supports 26.6 and 27; hook currently requests `no`; on-car rendering untested. [Evidence](../cluster-and-rgi/CARPLAY_SPEED_LIMIT.md) |
 | 1 | Raw vehicle IMU to phone | `ForwardAccel`, `LateralAccel` | Only if road-object detection needs more than GPRMC |
 | 2 | Now Playing + album art on cluster/HUD | `AccessoryNowPlaying`, `nowPlayingAlbumArt`, `NowPlayingUpdate` | Same lane as the cover-art work |
 | 2 | Dashboard | `Dashboard`, `dashboardRoundedCorners` | A distinct screen mode that could ride the same video path |
@@ -40,6 +40,10 @@ The capability names are phone-side flags from carkitd/accessoryd 23G71 (iOS 26.
 | – | Wireless CarPlay | `supportsWirelessCarPlay` | Offline mod candidate: btstack graft + Rust iAP2 daemon + pairing/media hook around stock210. QEMU lifecycle passes; real iPhone/media/USB validation remains. See [wireless status](../wireless-carplay/README.md) |
 | – | Car Keys | `supportsCarKeys` | Out of scope: UWB/NFC |
 | – | High-fidelity touch on the cluster | `supportsHighFidelityTouch` | The cluster has no touch panel and advertises no `primaryInputDevice` |
+
+Correction (2026-09-30): `ACCNavigationRoadObjectDetectionInfo` is car → phone sensor input, not a phone → car Maps speed-limit feed. It was incorrectly listed as an extractable speed-limit feature. Start/stop (`0x0D00`/`0x0D02`) travel phone → car; updates (`0x0D01`) travel car → phone. [Verified handler evidence](../cluster-and-rgi/CARPLAY_SPEED_LIMIT.md). `[decompile]`
+
+The checked 26.6 and 27 Navigation identification paths explicitly reject advertised road-object messages. The IMU entry above is therefore conditional on finding a working activation path; parser presence does not establish availability. See [Road Object Detection](../cluster-and-rgi/IAP2_ROAD_OBJECT_DETECTION.md) for the negotiation barrier and unresolved subtype `Type` enums. `[decompile]` / `[open]`
 
 Sources: `CARPLAY_FEATURE_SURVEY`
 

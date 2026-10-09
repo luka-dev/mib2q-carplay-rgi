@@ -2462,7 +2462,8 @@ static void alt_kick_viewarea(uint32_t gen)
  *   path  maps:/car/instrumentcluster                 -> itemType 3 (map + system cards)
  *         maps:/car/instrumentcluster/map             -> itemType 1 (map only)
  *         maps:/car/instrumentcluster/instructioncard -> itemType 2 (card only)
- *   query showETA / showSpeedLimit / showCompass (iOS 27; 26.6 only showETA):
+ *   query showETA / showSpeedLimit / showCompass (Maps branch, iOS 26.6 and 27;
+ *           reverified 2026-09-30, docs/cluster-and-rgi/CARPLAY_SPEED_LIMIT.md):
  *           yes|1 -> enabled(1), no|0 -> disabled(2), user -> userPreference(3),
  *           anything else -> disabled; key names are case-sensitive, values are not;
  *           every one defaults to disabled(2) when the key is absent

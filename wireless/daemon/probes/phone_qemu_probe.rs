@@ -1,7 +1,7 @@
 //! QEMU-only synthetic phone driving the ordinary QNX daemon over its bridge.
 use iap2_csm::CsmMessage;
 use iap2_csm::messages::authentication::{
-    AuthenticationCertificate, AuthenticationResponse, AuthenticationSucceeded,
+    AuthenticationCertificate, AuthenticationFailed, AuthenticationResponse, AuthenticationSucceeded,
     RequestAuthenticationCertificate, RequestAuthenticationChallengeResponse,
 };
 use iap2_csm::messages::car_play::{
@@ -21,6 +21,9 @@ use std::net::{Ipv4Addr, SocketAddrV4, TcpListener, TcpStream};
 use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
+mod software_mfi_fixture;
+mod software_mfi_phone;
+use software_mfi_phone::SoftwarePhoneAuth;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Phase {
@@ -31,6 +34,7 @@ enum Phase {
     Wifi,
     CarPlay,
     Done,
+    Rejected,
 }
 
 fn flush_link(stream: &mut TcpStream, engine: &mut LinkEngine) -> io::Result<()> {
@@ -250,6 +254,7 @@ fn handle_csm(
     phase: &mut Phase,
     frame: &[u8],
     now: u64,
+    software_auth: &mut Option<SoftwarePhoneAuth>,
 ) -> io::Result<()> {
     let id = message_id(frame).map_err(io::Error::other)?;
     match (*phase, id) {
@@ -277,14 +282,17 @@ fn handle_csm(
         }
         (Phase::Certificate, 0xaa01) => {
             let cert = AuthenticationCertificate::decode(frame).map_err(io::Error::other)?;
-            if cert.certificate != b"CERT" {
+            if let Some(auth) = software_auth.as_mut() {
+                auth.accept_certificate(&cert.certificate)?;
+            } else if cert.certificate != b"CERT" {
                 return Err(io::Error::other("wrong mock certificate"));
             }
             println!("[phone-qemu] certificate=1");
             engine.send(
                 CONTROL_SESSION_ID,
                 RequestAuthenticationChallengeResponse {
-                    challenge: vec![0x12; 20],
+                    challenge: software_auth.as_ref()
+                        .map_or_else(|| vec![0x12; 20], |auth| auth.challenge()),
                 }
                 .encode(),
                 now,
@@ -293,7 +301,28 @@ fn handle_csm(
         }
         (Phase::Signature, 0xaa03) => {
             let answer = AuthenticationResponse::decode(frame).map_err(io::Error::other)?;
-            if answer.response != [0x5a; 20] {
+            if let Some(auth) = software_auth.as_mut() {
+                match auth.verify_response(&answer.response)? {
+                    None if std::env::var_os("MHI2Q_MFI_QEMU_TAMPER").is_some() => {
+                        println!("[phone-qemu] software signature rejected=1");
+                        engine.send(CONTROL_SESSION_ID, AuthenticationFailed {}.encode(), now);
+                        *phase = Phase::Rejected;
+                        return Ok(());
+                    }
+                    None => return Err(io::Error::other("invalid software MFi AA03 signature")),
+                    Some(true) => {
+                        engine.send(
+                            CONTROL_SESSION_ID,
+                            RequestAuthenticationChallengeResponse {
+                                challenge: auth.challenge(),
+                            }.encode(),
+                            now,
+                        );
+                        return Ok(());
+                    }
+                    Some(false) => {}
+                }
+            } else if answer.response != [0x5a; 20] {
                 return Err(io::Error::other("wrong mock signature"));
             }
             println!("[phone-qemu] signature=1");
@@ -340,6 +369,7 @@ fn handle_csm(
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut software_auth = SoftwarePhoneAuth::from_environment()?;
     let control = if std::env::var_os("MHI2Q_PHONE_QEMU_CONTROL").is_some() {
         Some(fake_control_phone()?)
     } else {
@@ -375,6 +405,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let now = start.elapsed().as_millis() as u64;
         match stream.read(&mut input) {
             Ok(0) => {
+                if phase == Phase::Rejected
+                    && std::env::var_os("MHI2Q_MFI_QEMU_TAMPER").is_some() {
+                    println!("[phone-qemu] software AA04 closed bridge=1");
+                    return Ok(());
+                }
                 if std::env::var("MHI2Q_PHONE_QEMU_EXPECT_MFI_TIMEOUT")
                     .as_deref() == Ok("1") && phase == Phase::Certificate
                 {
@@ -405,7 +440,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         while let Some(event) = engine.poll_event() {
             if let Event::Control(data) = event {
                 for frame in csm.push(&data).map_err(io::Error::other)? {
-                    handle_csm(&mut engine, &mut phase, &frame, now)?;
+                    handle_csm(&mut engine, &mut phase, &frame, now, &mut software_auth)?;
                 }
             }
         }

@@ -33,6 +33,7 @@ __pycache__/
 
 # Live CarPlay session captures. The SETUP plist carries the 32-byte `shk`
 # session key in plaintext — never commit it. Keep captures local, mode 0600.
+/captures/apac_format76_10ch_20260930/
 
 # IDA unpacks its database beside the .i64 while a session is open
 *.id0

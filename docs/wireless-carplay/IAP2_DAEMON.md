@@ -52,6 +52,20 @@ authentication. Tests cover fragmented bridge and CSM frames, generation
 changes, a synthetic iAP2 handshake, a phone Identify request carried through
 the bridge, and the control sequence with a synthetic MFi signer.
 
+The opt-in host-only [software MFi tests](TEST_SOFTWARE_MFI.md) now generate
+synthetic RSA/SHA-1 and P-256/SHA-256 identities and verify the actual control
+responses cryptographically. They exercise both identification/authentication
+orders and rejection paths. The production host daemon still uses
+`UnavailableAuth`; QNX retains its hardware signer.
+
+The same provider now prepares public RSA vectors for the opt-in
+`--software-mfi-qemu` fixtures. The ordinary QNX daemon traverses its real I2C
+register, bridge and iAP2 code; the QNX synthetic phone verifies actual AA03
+responses using factory libcrypto before sending AA05. This also runs in the
+combined stock210 lifecycle fixture. The host private key stays outside QEMU.
+See [QNX/QEMU software MFi integration](TEST_SOFTWARE_MFI.md#-qnx-and-qemu-integration)
+for the repeat/retry/timeout/corruption matrix and the precomputed-fixture boundary.
+
 <a id="qnx-build-and-synthetic-phone-checks"></a>
 
 ## 📦 QNX build and synthetic phone checks
