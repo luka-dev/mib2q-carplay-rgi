@@ -1,13 +1,14 @@
 /*
  * altscreen_render — wire protocol (hook → renderer).
  *
- * The CarPlay hook (c_hook/altscreen/altscreen_av.c) taps the decrypted cluster
+ * The CarPlay hook (hook/altscreen/altscreen_av.c) receives the decrypted cluster
  * (111) stream, converts each frame AVCC→Annex-B, and forwards it here over a
  * localhost TCP connection.  Renderer is the SERVER; the hook is the client and
- * (re)connects once per CarPlay session.
+ * reconnects on stream generation or continuity loss.
  *
- * Message framing (matches altscreen_av.c av_send_locked):
- *     [u32 be payload_len][payload]
+ * Legacy framing is [u32 BE payload_len][payload]; negotiated v2 carries the
+ * 40-byte metadata header from common/alt_video_wire.h. HELLO capability 3
+ * offers an opt-in presentation status channel, enabled by the hook's ACK.
  * payload is raw Annex-B H.264 (00 00 00 01 start codes).  The SPS/PPS header is
  * sent as its own message before the first frame; concatenating every payload in
  * arrival order yields a valid Annex-B elementary stream (feed straight to OMX).
@@ -18,9 +19,8 @@
 #define ALTSCREEN_RENDER_PROTOCOL_H
 
 #define ALTAV_HOST        "127.0.0.1"
-/* ALT stream port.  MUST match the port libairplay screenstream.c forwards the alt (cluster /
- * stream 111) H.264 to — hardcoded 19831 on loopback (no env).  (Main/110 is not forwarded on the
- * unit; it is OMX-decoded in-process.) */
+/* MUST match ALTAV_DEFAULT_PORT in hook/altscreen/altscreen_av.h.
+ * Main/110 remains OMX-decoded in-process by stock libairplay. */
 #define ALTAV_PORT        19831
 
 /* A single cluster frame is a few tens of KB; cap generously and drop the link
@@ -31,7 +31,7 @@
  * DATA (H.264) comes from the libairplay hook into ALTAV_PORT (above).  CONTROL is separate:
  * altscreen_render connects as a CLIENT to Java's control server on ALTCTL_PORT (mirrors how
  * maneuver_render connects to our TCP) and reports when the CarPlay 111 video is flowing, so
- * Java can flip AltScreenModule.setVideoAvailable() and switch the cluster to ctx 82/83.
+ * Java can flip AltScreenModule.setVideoAvailable() and select the video context.
  * Both directions use fixed 4-byte packets. */
 #define ALTCTL_HOST       "127.0.0.1"
 #define ALTCTL_PORT       19832

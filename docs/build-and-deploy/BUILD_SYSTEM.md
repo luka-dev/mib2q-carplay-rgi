@@ -133,6 +133,26 @@ There is one production image; the old `LOG=0` variant was removed on 2026-09-24
 
 ---
 
+## 🎛️ Input runtime knobs and offline checks
+
+`ALTSCREEN_ZOOM_INTERVAL_MS`, `ALTSCREEN_ZOOM_TAIL_MS` and
+`ALTSCREEN_ZOOM_INVERT` are hook-process runtime environment variables, not
+compiler flags. Interval and tail are read once when the command worker starts;
+inversion is read on input. Defaults/ranges and ownership rules are documented
+in [Input commands](../altscreen-and-video/ALTSCREEN_INPUT_COMMANDS.md).
+
+```sh
+FUZZ_SECONDS=15 bash scripts/test_altscreen_pacing.sh --tsan --linux --qnx --regression
+```
+
+The runner writes an atomic source-hashed report and marks unrequested checks
+`not_run`. `FUZZ_SECONDS` is a per-target budget across three fuzz targets, not
+the whole script duration. The current result is 25 C sanitizer suites,
+6 report-contract cases, 10 TSan suites and 8 Linux suites, plus Clang/API checks,
+QNX builds and full regression. These commands perform local validation and
+builds; they do not deploy or restart the head unit. Detailed logs and fixture
+limits: [Pacing Validation](../altscreen-and-video/ALTSCREEN_PACING_VALIDATION.md).
+
 ## 📦 The Java build
 
 `build_java.sh` builds two variants of `java_patch/`, the only Java tree: `carplay_hook.jar` against `java_stock/US_MU1316_lsd.jar` (US MU1316, EU MU1329 and JP MU1017 have byte-identical stock classes for everything we replace) and `carplay_hook_cn.jar`, the same tree with the CN stock delta from `java_patch_cn/` applied strictly (`patch -F0`), against `java_stock/CN_MU1003_lsd.jar`. `scripts/audit_java_variants.sh` (in `run_tests.sh`) requires 0 linkage errors for each jar on its firmwares. Both compile with two OSGi jars, using the bundled Zulu JDK 8 `javac` with `-source 1.4 -target 1.4` (`:17-23`, `:62`). It then copies `java_resources/` into the jar (`:70`). The unit runs IBM J9 **Foundation Profile 1.1** (about J2SE 1.4, `jclfoun11`), so the bytecode is major version 48 and the code cannot use generics, enums, enhanced for-loops or autoboxing. `-target 1.4` matters because it makes `"a"+b` compile to `StringBuffer`; the runtime has no `StringBuilder`.

@@ -124,6 +124,36 @@ cc -std=gnu99 -O2 -Wall -Wextra -Werror \
     tests/altscreen_av_test.c -lpthread -o "$OUT/altscreen_av"
 "$OUT/altscreen_av"
 
+for suite in async wire queue_policy control health_wire negotiation idle_clock control_wire policy; do
+    printf '%-32s ' "altscreen_${suite}_test"
+    cc -std=gnu99 -O1 -Wall -Wextra -Werror -Wno-unused-variable \
+        -Ihook -Icommon "tests/altscreen_${suite}_test.c" altscreen_render/frame_io.c \
+        -lpthread -o "$OUT/alt_$suite"
+    "$OUT/alt_$suite"
+done
+printf '%-32s ' altscreen_command_policy_test
+cc -std=gnu99 -O1 -Wall -Wextra -Werror tests/altscreen_command_policy_test.c -o "$OUT/alt_command_policy"
+"$OUT/alt_command_policy"
+if [ "$(uname)" = Darwin ]; then CMD_STRIP=-Wl,-dead_strip; else CMD_STRIP=-Wl,--gc-sections; fi
+for suite in worker reversal age refresh; do
+    cc -std=gnu99 -O1 -Wall -Wextra -Werror -Wno-unused-variable -Wno-unused-function -Wno-unused-parameter \
+        -Wno-unused-but-set-variable -ffunction-sections -fdata-sections -Ihook -Icommon \
+        "tests/altscreen_command_${suite}_test.c" "$CMD_STRIP" -lpthread -lm -ldl -o "$OUT/alt_command_$suite"
+    "$OUT/alt_command_$suite"
+done
+printf '%-32s ' altscreen_deadline_test
+cc -std=gnu99 -O1 -Wall -Wextra -Werror -Wno-unused-variable -Ihook \
+    tests/altscreen_deadline_test.c -lpthread -o "$OUT/alt_deadline"
+"$OUT/alt_deadline"
+cc -std=gnu99 -O1 -Wall -Wextra -Werror -Ihook tests/altscreen_recovery_test.c -o "$OUT/alt_recovery"
+"$OUT/alt_recovery"
+cc -std=gnu99 -O1 -Wall -Wextra -Werror -Wno-unused-function -Wno-unused-variable -Ihook \
+    tests/altscreen_io_batch_test.c -lpthread -o "$OUT/alt_io_batch"
+"$OUT/alt_io_batch"
+cc -std=gnu99 -O1 -Wall -Wextra -Werror -Wno-unused-function -Wno-unused-variable \
+    -Icommon -Itoolchain/qnx65-abi/include/OMX tests/altscreen_mailbox_test.c -lpthread -o "$OUT/alt_mailbox"
+"$OUT/alt_mailbox"
+
 printf '%-32s ' altscreen_pace_trace_test
 cc -std=c99 -O2 -Wall -Wextra -Werror tests/altscreen_pace_trace_test.c -o "$OUT/alt_pace"
 "$OUT/alt_pace"

@@ -14,6 +14,7 @@
 #define ALTSCREEN_RENDER_SINK_H
 
 #include <stdint.h>
+#include "../common/alt_video_wire.h"
 
 /* Called once at startup.  Returns 0 on success, <0 on fatal init failure. */
 int  av_sink_open(void);
@@ -24,6 +25,8 @@ int  av_sink_open(void);
  * received_ms is local CLOCK_MONOTONIC at socket receipt, before queue/startup
  * delays. Zero means unavailable; it never changes decoder order. */
 int av_sink_frame(const uint8_t *annexb, uint32_t len, uint64_t received_ms);
+int av_sink_frame_ex(const uint8_t *annexb, uint32_t len, uint64_t received_ms,
+                     const alt_frame_meta_t *meta);
 
 /* True only after the current session has produced and successfully presented
  * at least one decoded frame.  A TCP connection or decoder start is not visual

@@ -130,6 +130,7 @@ int main(void) {
      * sampled source until glFinish has completed. Use a fake clock after the
      * real loader join to reproduce the timing blind spot deterministically,
      * without pretending to benchmark the QNX GPU on a host. */
+    presenter.timing_enabled = 1;
     fake_now_ns = 1000000000ULL;
     finish_delay_ns = 50000000ULL;
     swap_delay_ns = 300000ULL;
@@ -148,6 +149,13 @@ int main(void) {
     assert(presenter.pace_arrival_sum_ns == 3 * 50300000ULL);
     assert(presenter.pace_swap_sum_ns == 4 * 300000ULL);
     assert(presenter.pace_swap_max_ns == 300000ULL);
+    assert(presenter.stages[6].samples == 4 && presenter.stages[6].max_us == 50000);
+    assert(presenter.stages[7].samples == 4 && presenter.stages[7].max_us == 300);
+    assert(presenter.stages[9].samples == 4 && presenter.stages[9].max_us == 50300);
+    assert(presenter.stages[9].over_33ms == 4 && !presenter.stages[9].over_66ms);
+    screen_egl_present_reset_timing(&presenter);
+    assert(!presenter.stages[9].samples && presenter.timing_startup_pending);
+    assert(!presenter.pace_work_samples && !presenter.pace_last_entry_ns);
     puts("altscreen_present_test: injected glFinish=50 ms, swap=0.3 ms -> full present=50.3 ms (~19.88 fps), not a hardware measurement");
     fake_now_ns = finish_delay_ns = swap_delay_ns = 0;
     presenter.rgba_surface = (cluster_surface_t *)1;

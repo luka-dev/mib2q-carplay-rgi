@@ -34,6 +34,7 @@
 
 #include "screen_egl_present.h"
 #include "pipeline_timing.h"
+#include "../common/alt_timing_stats.h"
 #include "loader/loader_layout.h"
 #include <pthread.h>
 #include <stdio.h>
@@ -52,6 +53,13 @@
  * is accepted by SetParameter but the Loaded->Idle transition never completes. */
 #define kQOMX_ColorFmt_32m            0x7F000004
 #define kQOMX_ExtIndex_DisplayPicBuf  "OMX.QCOM.index.config.video.DisplayPictureBuffer"
+
+typedef struct {
+    OMX_TICKS stamp;
+    uint64_t submitted_us;
+    alt_frame_meta_t meta;
+} frame_trace_t;
+#define FRAME_TRACE_CAPACITY 128u
 
 typedef struct {
     OMX_HANDLETYPE           decoder;
@@ -79,7 +87,19 @@ typedef struct {
     int                      presentThreadStarted, presentStop, presentExited;
     OMX_U32                 *presentQueue, presentHead, presentCount;
     unsigned char           *presentOwned;
+    uint64_t *presentQueuedUs;
+    frame_trace_t trace[FRAME_TRACE_CAPACITY];
+    unsigned trace_next;
+    uint64_t trace_last_stamp;
+    alt_frame_meta_t incoming_meta;
+    alt_timing_stat_t input_wait_timing, decode_timing, present_queue_timing;
+    alt_timing_stat_t recycle_timing, hook_to_post_timing;
+    uint64_t timing_last_sequence;
+    uint32_t timing_generation;
+    int timing_enabled;
     int                      omxInitialized;
+    int mailbox;
+    unsigned long outputSuperseded;
     int                      started;   /* decoder brought up on first frame */
     int                      sessionEverStarted;
     int                      startFails; /* consecutive _StartDecoder failures; capped to protect OMX pool */
@@ -171,6 +191,16 @@ static OMX_ERRORTYPE _OnEmptyDone(OMX_HANDLETYPE c, OMX_PTR app, OMX_BUFFERHEADE
     return OMX_ErrorNone;
 }
 
+/* Timestamp association is bounded and diagnostic: it never controls decode
+ * order or rejects an old/final picture. Callers hold me->lock. */
+static frame_trace_t *_FindFrameTrace(ScreenSink *me, OMX_TICKS stamp) {
+    unsigned i;
+    for (i = 0; i < FRAME_TRACE_CAPACITY; ++i)
+        if (stamp > 0 && me->trace[i].stamp == stamp)
+            return &me->trace[i];
+    return NULL;
+}
+
 /* The OMX output pointer belongs to a tiled Screen WINDOW buffer.  The GPU
  * external-image draw consumes that exact buffer before the worker recycles it. */
 static int _PresentGpu(ScreenSink *me, OMX_BUFFERHEADERTYPE *b) {
@@ -184,6 +214,32 @@ static int _PresentGpu(ScreenSink *me, OMX_BUFFERHEADERTYPE *b) {
         pthread_mutex_lock(&me->lock);
         if (result == 0) {
             me->outputPosted++;
+            if (me->timing_enabled) {
+                frame_trace_t *t = _FindFrameTrace(me, b->nTimeStamp);
+                uint64_t now = alt_timing_now_us();
+                if (t) {
+                    alt_timing_elapsed(&me->hook_to_post_timing, t->meta.received_us, now);
+                    me->timing_last_sequence = t->meta.sequence;
+                    me->timing_generation = t->meta.generation;
+                }
+                if (me->outputPosted % 300u == 0) {
+                    fprintf(stderr,
+                            "altscreen_render[qnx]: timing owner_gen=%u last_seq=%llu mailbox=%d "
+                            "superseded=%lu\n",
+                            me->timing_generation, (unsigned long long)me->timing_last_sequence,
+                            me->mailbox, me->outputSuperseded);
+                    alt_timing_report(stderr, "altscreen_render[qnx]", "input_wait",
+                                      &me->input_wait_timing);
+                    alt_timing_report(stderr, "altscreen_render[qnx]", "decode",
+                                      &me->decode_timing);
+                    alt_timing_report(stderr, "altscreen_render[qnx]", "present_queue",
+                                      &me->present_queue_timing);
+                    alt_timing_report(stderr, "altscreen_render[qnx]", "recycle",
+                                      &me->recycle_timing);
+                    alt_timing_report(stderr, "altscreen_render[qnx]", "hook_to_post",
+                                      &me->hook_to_post_timing);
+                }
+            }
             me->presentationHealthy = 1;
             me->presentConsecutiveFails = 0;
             me->presentRecoveryPending = 0;
@@ -226,28 +282,74 @@ static void *_PresentThread(void *arg) {
     for (;;) {
         OMX_U32 slot;
         OMX_BUFFERHEADERTYPE *b;
-        int recycle;
+        int recycle, timing;
         OMX_ERRORTYPE err;
         while (!me->presentStop && me->presentCount == 0)
             pthread_cond_wait(&me->cond, &me->lock);
         if (me->presentStop) break;
+        if (me->mailbox && me->presentCount > 1) {
+            OMX_U32 i, keep = me->presentCount - 1, discard;
+            int picture = 0;
+            /* Snapshot only: a synchronous refill cannot postpone the selected
+             * picture forever. Empty outputs never supersede a real picture. */
+            for (i = 0; i < me->presentCount; ++i) {
+                OMX_U32 queued = me->presentQueue[(me->presentHead + i) % me->nOutBufs];
+                if (me->outBufs[queued]->nFilledLen) {
+                    keep = i;
+                    picture = 1;
+                }
+            }
+            discard = picture ? keep : me->presentCount - 1;
+            while (discard && me->presentCount > 1 && !me->presentStop) {
+                OMX_U32 old = me->presentQueue[me->presentHead];
+                OMX_BUFFERHEADERTYPE *unused_picture = me->outBufs[old];
+                me->presentHead = (me->presentHead + 1) % me->nOutBufs;
+                --me->presentCount;
+                --discard;
+                me->presentOwned[old] = 0;
+                ++me->outputSuperseded;
+                pthread_mutex_unlock(&me->lock);
+                /* No GPU has sampled this slot. Ownership returns exactly once;
+                 * the in-flight/selected GPU slot is never in this discard set. */
+                err = OMX_FillThisBuffer(me->decoder, unused_picture);
+                pthread_mutex_lock(&me->lock);
+                if (err != OMX_ErrorNone) {
+                    me->omxError = 1;
+                    me->presentStop = 1;
+                    pthread_cond_broadcast(&me->cond);
+                    break;
+                }
+            }
+            if (me->presentStop)
+                break;
+        }
         slot = me->presentQueue[me->presentHead];
         me->presentHead = (me->presentHead + 1) % me->nOutBufs;
         --me->presentCount;
         b = me->outBufs[slot];
+        if (me->timing_enabled)
+            alt_timing_elapsed(&me->present_queue_timing, me->presentQueuedUs[slot],
+                               alt_timing_now_us());
         pthread_mutex_unlock(&me->lock);
         _PresentGpu(me, b); /* completes all GPU reads, including failure paths */
         pthread_mutex_lock(&me->lock);
         recycle = me->running && me->winReady && !me->presentStop;
+        timing = me->timing_enabled;
         /* Clear before FillThisBuffer: a component may callback synchronously.
          * Teardown joins this thread before any OMX state/free operation. */
         me->presentOwned[slot] = 0;
         pthread_mutex_unlock(&me->lock);
         if (recycle) {
+            uint64_t started = timing ? alt_timing_now_us() : 0;
             err = OMX_FillThisBuffer(me->decoder, b);
+            pthread_mutex_lock(&me->lock);
+            if (started)
+                alt_timing_elapsed(&me->recycle_timing, started, alt_timing_now_us());
+            pthread_mutex_unlock(&me->lock);
             if (err != OMX_ErrorNone) {
                 pthread_mutex_lock(&me->lock);
                 me->omxError = 1;
+                me->presentStop = 1;
                 pthread_cond_broadcast(&me->cond);
                 pthread_mutex_unlock(&me->lock);
                 fprintf(stderr, "altscreen_render[qnx]: output recycle failed 0x%x\n", (unsigned)err);
@@ -268,7 +370,9 @@ static int _StartPresentThread(ScreenSink *me) {
     if (!me->nOutBufs || me->presentThreadStarted) return -1;
     me->presentQueue = (OMX_U32 *)calloc(me->nOutBufs, sizeof(OMX_U32));
     me->presentOwned = (unsigned char *)calloc(me->nOutBufs, 1);
-    if (!me->presentQueue || !me->presentOwned) goto fail;
+    me->presentQueuedUs = (uint64_t *)calloc(me->nOutBufs, sizeof(uint64_t));
+    if (!me->presentQueue || !me->presentOwned || !me->presentQueuedUs)
+        goto fail;
     me->presentHead = me->presentCount = 0;
     me->presentStop = me->presentExited = 0;
     if (pthread_create(&me->presentThread, NULL, _PresentThread, me) != 0) goto fail;
@@ -279,6 +383,8 @@ static int _StartPresentThread(ScreenSink *me) {
 fail:
     free(me->presentQueue); me->presentQueue = NULL;
     free(me->presentOwned); me->presentOwned = NULL;
+    free(me->presentQueuedUs);
+    me->presentQueuedUs = NULL;
     return -1;
 }
 
@@ -297,6 +403,13 @@ static OMX_ERRORTYPE _OnFillDone(OMX_HANDLETYPE c, OMX_PTR app, OMX_BUFFERHEADER
         } else {
             uint64_t pictureMs = b->nTimeStamp > 0 ? (uint64_t)b->nTimeStamp / 1000ULL : 0;
             uint64_t nowMs = _NowMs();
+            me->presentQueuedUs[slot] = me->timing_enabled ? alt_timing_now_us() : 0;
+            if (me->timing_enabled) {
+                frame_trace_t *t = _FindFrameTrace(me, b->nTimeStamp);
+                if (t)
+                    alt_timing_elapsed(&me->decode_timing, t->submitted_us,
+                                       me->presentQueuedUs[slot]);
+            }
             me->presentOwned[slot] = 1;
             me->presentQueue[(me->presentHead + me->presentCount) % me->nOutBufs] = slot;
             ++me->presentCount;
@@ -637,6 +750,8 @@ static void _DrainCallbacksAndPresenter(ScreenSink *me) {
     }
     free(me->presentQueue); me->presentQueue = NULL;
     free(me->presentOwned); me->presentOwned = NULL;
+    free(me->presentQueuedUs);
+    me->presentQueuedUs = NULL;
 }
 
 static void _Teardown(ScreenSink *me, int destroyPresent) {
@@ -664,6 +779,7 @@ static void _Teardown(ScreenSink *me, int destroyPresent) {
     me->stateReached = 0; me->omxError = 0;
     me->inputSubmitted = me->inputReturned = 0;
     me->outputFilled = me->outputPosted = me->outputPostFailed = 0;
+    me->outputSuperseded = 0;
     me->presentationHealthy = 0;
     me->presentConsecutiveFails = 0;
     me->presentRecoveryPending = 0;
@@ -671,7 +787,18 @@ static void _Teardown(ScreenSink *me, int destroyPresent) {
     me->presentNeedsFullRebuild = 0;
     me->presentRecoveryAfterMs = 0;
     me->newestInputMs = 0;
+    memset(me->trace, 0, sizeof(me->trace));
+    me->trace_next = 0;
+    me->trace_last_stamp = 0;
+    me->timing_generation = 0;
+    me->timing_last_sequence = 0;
+    memset(&me->input_wait_timing, 0, sizeof(me->input_wait_timing));
+    memset(&me->decode_timing, 0, sizeof(me->decode_timing));
+    memset(&me->present_queue_timing, 0, sizeof(me->present_queue_timing));
+    memset(&me->recycle_timing, 0, sizeof(me->recycle_timing));
+    memset(&me->hook_to_post_timing, 0, sizeof(me->hook_to_post_timing));
     if (!destroyPresent && me->present) {
+        screen_egl_present_reset_timing(me->present);
         screen_egl_present_set_stream_pending(me->present, 0);
         screen_egl_present_start_loader(me->present);
     }
@@ -747,9 +874,13 @@ static int _FeedInput(ScreenSink *me, const uint8_t *data, uint32_t len, OMX_U32
     OMX_BUFFERHEADERTYPE *b; OMX_U32 idx;
     OMX_ERRORTYPE err;
     uint32_t requestedLen = len;
+    uint64_t wait_started;
     struct timespec deadline;
     _AbsTimeoutMs(&deadline, ALT_INPUT_WAIT_MS);
     pthread_mutex_lock(&me->lock);
+    if (me->inputSubmitted % 300u == 0)
+        me->timing_enabled = log_verbose_marker();
+    wait_started = me->timing_enabled ? alt_timing_now_us() : 0;
     while (me->freeInHead == me->freeInTail && me->running && !me->omxError) {
         int waited = pthread_cond_timedwait(&me->cond, &me->lock, &deadline);
         if (waited == ETIMEDOUT && me->freeInHead == me->freeInTail) {
@@ -761,6 +892,8 @@ static int _FeedInput(ScreenSink *me, const uint8_t *data, uint32_t len, OMX_U32
         }
     }
     if (!me->running || me->omxError) { pthread_mutex_unlock(&me->lock); return -1; }
+    if (wait_started)
+        alt_timing_elapsed(&me->input_wait_timing, wait_started, alt_timing_now_us());
     idx = me->freeIn[me->freeInHead % me->nInBufs]; me->freeInHead++;
     pthread_mutex_unlock(&me->lock);
 
@@ -781,6 +914,23 @@ static int _FeedInput(ScreenSink *me, const uint8_t *data, uint32_t len, OMX_U32
     /* OMX timestamps are microseconds. Preserve socket age through decode;
      * decoder-order mode still determines ordering, never a wall-clock PTS. */
     b->nTimeStamp = (OMX_TICKS)(received_ms * 1000ULL);
+    if (me->incoming_meta.version) {
+        frame_trace_t *t;
+        uint64_t stamp = alt_timing_now_us();
+        if (stamp <= me->trace_last_stamp)
+            stamp = me->trace_last_stamp + 1u;
+        me->trace_last_stamp = stamp;
+        b->nTimeStamp = (OMX_TICKS)stamp;
+        pthread_mutex_lock(&me->lock);
+        t = &me->trace[me->trace_next++ % FRAME_TRACE_CAPACITY];
+        t->stamp = b->nTimeStamp;
+        t->submitted_us = stamp;
+        t->meta = me->incoming_meta;
+        /* Different/invalid monotonic clocks must not become huge durations. */
+        if (t->meta.received_us > stamp)
+            t->meta.received_us = 0;
+        pthread_mutex_unlock(&me->lock);
+    }
     err = OMX_EmptyThisBuffer(me->decoder, b);
     if (err == OMX_ErrorNone) {
         pthread_mutex_lock(&me->lock);
@@ -814,6 +964,10 @@ int av_sink_open(void) {
     uint64_t begin = _NowMs();
     int result;
     memset(&g_ss, 0, sizeof(g_ss));
+    {
+        const char *fifo = getenv("ALTSCREEN_PRESENT_FIFO");
+        g_ss.mailbox = !(fifo && !strcmp(fifo, "1"));
+    }
     pthread_mutex_init(&g_ss.lock, NULL);
     pthread_cond_init(&g_ss.cond, NULL);
     g_ss.width  = ew ? atoi(ew) : 1440;           /* = advertised cluster size = Audi Kombi panel */
@@ -1014,6 +1168,19 @@ void av_sink_set_layout(int mode, int style, int rawSkin) {
             layoutName,
             g_ss.layoutStyle == LOADER_STYLE_CLASSIC ? "classic" : "sport",
             rawSkin);
+}
+
+int av_sink_frame_ex(const uint8_t *annexb, uint32_t len, uint64_t received_ms,
+                     const alt_frame_meta_t *meta) {
+    int rc;
+    /* Only the serialized input worker calls this seam. Callbacks read the
+     * per-picture timestamp table under lock, never this transient value. */
+    memset(&g_ss.incoming_meta, 0, sizeof(g_ss.incoming_meta));
+    if (meta)
+        g_ss.incoming_meta = *meta;
+    rc = av_sink_frame(annexb, len, received_ms);
+    memset(&g_ss.incoming_meta, 0, sizeof(g_ss.incoming_meta));
+    return rc;
 }
 
 void av_sink_session_end(void) {

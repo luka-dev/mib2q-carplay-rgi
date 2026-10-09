@@ -1,5 +1,9 @@
 # MHI2Q CarPlay cluster integration
 
+_Production overview and offline candidate documentation._
+
+---
+
 Production implementation for Audi MHI2Q (MU1316, QNX 6.5 ARMv7):
 
 - stock `libairplay.so` 210.81 inside `dio_manager`;
@@ -17,7 +21,9 @@ configuration on your infotainment unit. The installer keeps a `.carplay-stock` 
 file it replaces, but back up anything you change by hand as well. The authors are not
 responsible for any damage, bricked units or warranty issues resulting from their use.
 
-## Gallery
+<a id="gallery"></a>
+
+## 🎨 Gallery
 
 <p align="center">
   <img src="assets/gallery/maneuver_demo.gif" width="90%" /><br />
@@ -50,7 +56,9 @@ responsible for any damage, bricked units or warranty issues resulting from thei
   <img src="assets/gallery/IMG_0599.jpeg" width="30%" />
 </p>
 
-## Features
+<a id="features"></a>
+
+## 🎯 Features
 
 There is nothing to switch on: plug in the iPhone and CarPlay starts as usual; the cluster
 features below follow it automatically.
@@ -95,7 +103,9 @@ features below follow it automatically.
   - Built for the B&O amplifier only. The startup script enables it unconditionally for now;
     cars with the internal amplifier have no six-channel route and are untested.
 
-## Documentation
+<a id="documentation"></a>
+
+## 📚 Documentation
 
 All documentation is one linked Markdown tree in [`docs/`](docs/README.md). Start at
 [`docs/README.md`](docs/README.md), then the per-domain maps:
@@ -113,7 +123,9 @@ Read [`docs/LANDMINES.md`](docs/LANDMINES.md) before touching a subsystem. Long-
 are in `docs/research/`; primary evidence (papers, manuals, data files, decompiled stock Java) is in
 `docs/sources/`.
 
-## Repository layout
+<a id="repository-layout"></a>
+
+## 🗂️ Repository layout
 
 | Path | Purpose |
 | --- | --- |
@@ -138,7 +150,9 @@ are in `docs/research/`; primary evidence (papers, manuals, data files, decompil
 Build output, raw unit logs and generated class trees are intentionally kept outside Git.
 The cleanup archive is under `/Users/luka/Desktop/AUDI_2/LocalLogs/`.
 
-## Build
+<a id="build"></a>
+
+## 🔧 Build
 
 Native code needs the QNX 6.5 ARMv7 cross-toolchain image from
 [luka-dev/qnx65-armv7-toolchain](https://github.com/luka-dev/qnx65-armv7-toolchain). Build it once:
@@ -184,7 +198,27 @@ Models are versioned in `models/`: `hssr-q6d-moises-a/hssr_model.bin` (main) and
 
 Tests: `./scripts/run_tests.sh`.
 
-## Deployment
+AltScreen pacing offline checks (ASan/UBSan, fault injection, Clang analysis and
+libFuzzer): `bash scripts/test_altscreen_pacing.sh`. The report and reproducer
+corpus are written to `build/altscreen-pacing-validation/`; `FUZZ_SECONDS` changes
+the budget per target (default 30 seconds; three targets). This performs no vehicle operations.
+Static operation comparison: `python3 scripts/compare_altscreen_static.py`.
+The current AltScreen candidate enables decoded-output mailbox selection;
+`ALTSCREEN_PRESENT_FIFO=1` selects the FIFO fallback. See
+[frame pacing contracts](docs/altscreen-and-video/ALTSCREEN_FRAME_RATE.md) for
+recovery, ownership, protocol and validation limits.
+
+The 2026-10-09 input candidate adds paced roller intent, command priority and
+latest pending state, including the pre-commit/CF/expired-selection review fixes.
+[Input commands](docs/altscreen-and-video/ALTSCREEN_INPUT_COMMANDS.md) documents
+configuration and cancellation boundaries;
+[validation](docs/altscreen-and-video/ALTSCREEN_PACING_VALIDATION.md) records the
+source-hashed offline results. Vehicle latency and FPS were not measured for
+these input changes.
+
+<a id="deployment"></a>
+
+## 🚀 Deployment
 
 **Compatibility.** Audi MHI2Q only: the installer reads the firmware version from E2P and stops on
 anything else. The Java part replaces whole stock HMI classes, so it ships per firmware family and
@@ -227,7 +261,9 @@ source-to-unit map, file modes and hashes are in
 Disconnect CarPlay first and reboot the HU manually after installing. Deploying the Java jar always
 means a full unit restart (it is on j9's boot classpath).
 
-## References
+<a id="references"></a>
+
+## 📚 References
 
 Thanks for the prior work and knowledge that helped figure this out:
 

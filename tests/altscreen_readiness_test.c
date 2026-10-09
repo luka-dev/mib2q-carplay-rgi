@@ -9,24 +9,25 @@
 static int test_control_port;
 #define ALTCTL_PORT test_control_port
 #define main renderer_program_main
-#define av_read_frame observed_read_frame
+#define av_read_frame_mode observed_read_frame
 #include "../altscreen_render/main.c"
-#undef av_read_frame
+#undef av_read_frame_mode
 #undef main
 #include "../altscreen_render/altctl.c"
-int av_read_frame(int, uint8_t **, uint32_t *, uint32_t *);
+int av_read_frame_mode(int, uint8_t **, uint32_t *, uint32_t *, alt_frame_meta_t *, unsigned);
 
 static pthread_mutex_t test_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t test_cond = PTHREAD_COND_INITIALIZER;
 static unsigned reads, sink_calls;
 static int allow_picture, ready, hold_reset, reset_entered;
 
-int observed_read_frame(int fd, uint8_t **buf, uint32_t *cap, uint32_t *len) {
+int observed_read_frame(int fd, uint8_t **buf, uint32_t *cap, uint32_t *len, alt_frame_meta_t *meta,
+                        unsigned mode) {
     pthread_mutex_lock(&test_lock);
     ++reads;
     pthread_cond_broadcast(&test_cond);
     pthread_mutex_unlock(&test_lock);
-    return av_read_frame(fd, buf, cap, len);
+    return av_read_frame_mode(fd, buf, cap, len, meta, mode);
 }
 int av_sink_open(void) { return 0; }
 int av_sink_frame(const uint8_t *b, uint32_t n, uint64_t stamp) {
@@ -39,6 +40,10 @@ int av_sink_frame(const uint8_t *b, uint32_t n, uint64_t stamp) {
     pthread_cond_broadcast(&test_cond);
     pthread_mutex_unlock(&test_lock);
     return 0;
+}
+int av_sink_frame_ex(const uint8_t *b, uint32_t n, uint64_t stamp, const alt_frame_meta_t *meta) {
+    (void)meta;
+    return av_sink_frame(b, n, stamp);
 }
 void av_sink_session_end(void) {
     pthread_mutex_lock(&test_lock);

@@ -20,6 +20,35 @@ source code is the ground truth for what the system does.
 
 > 📌 **Before you touch a subsystem, read [Landmines](LANDMINES.md)** — the traps that already cost days.
 
+## 🧪 Current AltScreen pacing candidate
+
+The 2026-10-06 source implements all six follow-up improvements: shared recovery,
+idle EOF/presentation status, owned in-place AU conversion, vector I/O,
+end-to-end compressed backlog age and decoded-output mailbox selection.
+See [frame-rate evidence and validation](altscreen-and-video/ALTSCREEN_FRAME_RATE.md),
+[pipeline, protocol and buffer ownership](altscreen-and-video/VIDEO_PIPELINE.md),
+and [current pacing validation](altscreen-and-video/ALTSCREEN_PACING_VALIDATION.md).
+
+The 2026-10-07 refactor validation passed 20 C sanitizer scenarios, 6 report
+contract tests, 6 TSan suites, 4 Linux suites, Clang analysis, QNX ARM builds and
+the full regression. AVC/state and shared-control fuzz targets completed
+2,452,009 inputs in the final run, with 11,000,993 in the extended run. Captured APAC integration was skipped because its
+capture is absent. The runner now writes atomic, source-hashed reports; queue
+policy/control parsing are shared pure code, and compatibility APIs are test-only.
+Application copies are 3 → 1 on the owned length-size-4 path;
+complete known-v2 record I/O is 5 → 3 calls. These are operation counts, not
+measured vehicle FPS. No candidate deployment occurred. **[code]** / **[model]**
+
+The 2026-10-09 input changes add bounded paced zoom, reserved recovery/layout
+priority and replacement of pending view/night/appearance states. The selected step keeps an immutable input timestamp, and CF
+construction
+errors preserve the previous pending state. The source-hashed final run passed
+25 ASan/UBSan C suites, 6 report contracts, 10 TSan suites, 8 Linux suites and
+5,644,380 fuzz inputs, plus Clang checks, QNX builds and full regression.
+[Input commands](altscreen-and-video/ALTSCREEN_INPUT_COMMANDS.md) is the canonical
+contract/configuration guide; [validation](altscreen-and-video/ALTSCREEN_PACING_VALIDATION.md)
+records the exact evidence and limits.
+
 ---
 
 ## 📚 The domains
@@ -76,6 +105,8 @@ mindmap
     AltScreen and Video
       AltScreen Cluster Video
       AltScreen Frame Rate
+      AltScreen Input Commands
+      AltScreen Pacing Validation
       AltScreen RE History
       CarPlay Feature Survey
       CarPlay Video Playback

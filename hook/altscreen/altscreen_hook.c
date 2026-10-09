@@ -34,7 +34,10 @@
 #include "../framework/bus.h"
 #include "altscreen_hook.h"
 #include "altscreen_av.h"
+#include "../../common/alt_timing_stats.h"
 #include "avcc_config.h"
+#include "command_policy.h"
+#include "../../common/alt_monotonic_condition.h"
 #if ENABLE_LOGGING || ENABLE_ALTSCREEN_PACE_TRACE
 #include "pace_trace.h"
 #endif
@@ -66,7 +69,7 @@ typedef void *(*cf_ret_t)(void *);                                 /* CFRetain  
 typedef void  (*cf_rel_t)(void *);                                 /* CFRelease                  */
 typedef void  (*cf_dictset_t)(void *, const void *, const void *); /* CFDictionarySetValue       */
 typedef void *(*cf_dictm_t)(void *, long, const void *, const void *); /* CFDictionaryCreateMutable */
-typedef void  (*cf_dictseti_t)(void *, const void *, int64_t);     /* CFDictionarySetInt64       */
+typedef int   (*cf_dictseti_t)(void *, const void *, int64_t);     /* CFDictionarySetInt64 -> OSStatus */
 typedef int64_t (*fn_cfdict_geti64_t)(void *, const void *, void *); /* CFDictionaryGetInt64      */
 typedef int64_t (*fn_cf_geti64_t)(void *, void *);                  /* CFGetInt64                 */
 typedef void *(*fn_cfdict_getval_t)(void *, const void *);          /* CFDictionaryGetValue       */
@@ -217,9 +220,9 @@ static int set_str(void *d, const char *key, const char *val)
 static int set_i64(void *d, const char *key, int64_t val)
 {
     void *k = cf_str(0, key, CFENC_UTF8);
-    if (k) cf_dictseti(d, k, val);
+    int rc = k ? cf_dictseti(d, k, val) : -1;
     if (k && cf_rel) cf_rel(k);
-    return k ? 0 : -1;
+    return rc;
 }
 
 /* Audi Kombi (instrument-cluster) panel — from firmware qcdisplaycfg_MMX2.xml
@@ -731,8 +734,11 @@ static int env_on(const char *name)
  * CopyDisplaysInfo ignores its session argument and asks stock ScreenCopyMain,
  * so this is the earliest safe point to prove that the negotiated contract can
  * actually be fulfilled. */
+static int g_forward_available = 1; /* module init clears this on worker failure */
+
 static int advert_preflight(void *session, uint32_t sequence)
 {
+    if (!g_forward_available) return 0;
     void *displays = NULL;
     void *features = NULL;
     if (cp_dio_owner_is_wireless() || !session ||
@@ -953,6 +959,9 @@ static int  alt_show_ui_for_mode(uint32_t gen, int mode, const char *reason);
 static int  alt_send_cluster_night_mode(uint32_t gen, int night, const char *reason);
 static int  alt_request_cluster_idr(uint32_t gen, const char *reason);
 static uint32_t alt_generation_for_session(void *session);
+static void alt_command_revoke(uint32_t gen);
+static void *alt_params_new(int wantUuid);
+static void alt_cmd_done(int status, void *resp, void *ctx);
 static int  alt_generation_is_current(uint32_t gen);
 static fn_derive_aes_t      derive_aes;
 
@@ -992,27 +1001,18 @@ static pthread_cond_t alt_cond = PTHREAD_COND_INITIALIZER;
  * without alt_lock held, calling it from dio's SetNightMode boundary could
  * suppress the SI heartbeat.  Queue entries retain an immutable command and
  * the exact committed stream generation. */
-#define ALT_CMD_QUEUE_CAPACITY 32
 #define ALT_CMD_SHUTDOWN_WAIT_MS 750
-typedef struct {
-    uint32_t gen;
-    void *cmd;
-    void *completion;
-    void *ctx;
-} alt_cmd_item_t;
+#define ALT_CMD_SUPERSEDED (-ECANCELED)
+typedef alt_command_item_t alt_cmd_item_t;
 static pthread_mutex_t g_alt_cmd_lock = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t  g_alt_cmd_cond = PTHREAD_COND_INITIALIZER;
-static pthread_t       g_alt_cmd_thread;
-static alt_cmd_item_t  g_alt_cmd_queue[ALT_CMD_QUEUE_CAPACITY];
-static unsigned int    g_alt_cmd_head;
-static unsigned int    g_alt_cmd_tail;
-static unsigned int    g_alt_cmd_count;
-static int             g_alt_cmd_created;
-static int             g_alt_cmd_shutdown;
-static int             g_alt_cmd_exited;
+static alt_monotonic_condition_t g_alt_cmd_clock = {.fallback = PTHREAD_COND_INITIALIZER,
+                                                    .active = &g_alt_cmd_clock.fallback};
+static pthread_t g_alt_cmd_thread;
+static alt_command_policy_t g_alt_commands = {.zoom_interval_us = ALT_ZOOM_INTERVAL_US,
+                                              .zoom_tail_us = ALT_ZOOM_TAIL_US};
+static int g_alt_cmd_created, g_alt_cmd_shutdown, g_alt_cmd_exited;
 
-static int alt_resolve(void)
-{
+static int alt_resolve(void) {
     pthread_mutex_lock(&alt_lock);   /* no lock-free fast path — see cf_init note */
     /* Retry until ready (!=1), not just once (<0): same startup-race reasoning as
      * cf_init — never latch a transient miss as "altScreen off for this boot". */
@@ -1246,37 +1246,8 @@ static int read_exact(int fd, uint8_t *buf, uint32_t n, volatile int *stop)
     return 0;
 }
 
-/* Return non-zero when any NAL in this AVCC access unit has the requested type.
- * Do not inspect only the first NAL: an IDR access unit may begin with AUD/SEI.
- * Length parsing mirrors avcc_to_annexb and never reads beyond the decrypted body. */
-static int avcc_has_nal_type(const uint8_t *a, uint32_t len, uint8_t ls,
-                             uint8_t wanted)
-{
-    uint32_t i = 0;
-    if (!a || ls < 1 || ls > 4) return 0;
-    while (len - i >= ls) {
-        uint32_t nal = 0, k;
-        for (k = 0; k < ls; ++k) nal = (nal << 8) | a[i + k];
-        i += ls;
-        if (nal == 0 || nal > len - i) return 0;
-        if ((a[i] & 0x1f) == wanted) return 1;
-        i += nal;
-    }
-    return 0;
-}
-
 #define ALT_HDR_SIZE  128
 #define ALT_MAX_BODY  (4u * 1024 * 1024)
-#define ALT_IDR_RETRY_MS       2000ULL
-#define ALT_IDR_MAX_REQUESTS   6U
-
-static uint64_t alt_now_ms(void)
-{
-    struct timespec ts;
-    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) return 0;
-    return ((uint64_t)ts.tv_sec * 1000ULL) + ((uint64_t)ts.tv_nsec / 1000000ULL);
-}
-
 #if ENABLE_LOGGING || ENABLE_ALTSCREEN_PACE_TRACE
 static uint64_t alt_pace_now_us(void)
 {
@@ -1291,7 +1262,7 @@ static void alt_pace_report(alt_pace_trace_t *s, uint32_t generation)
     if (!log_verbose()) { alt_pace_reset_window(s); return; }   /* only with carplay_verbose */
 #endif
     /* Bounded asynchronous writer, one aggregate per 300 video access units.
-     * read includes waiting for network data; work includes decrypt/forward.
+     * read includes network waits; work includes decrypt/command/queue submission.
      * Arrival alone cannot distinguish a slow sender from local backpressure. */
     log_write(LOG_LEVEL_WARN, "altscreen",
         "111 pace gen=%u n=%u fwd=%u arrival_us=%llu/%llu samples=%u zero=%u "
@@ -1319,9 +1290,7 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
     unsigned long nframes = 0;
     int stream_has_idr = 0;
     int renderer_wait_idr = 1;
-    unsigned int idr_requests = 0;
-    int idr_limit_logged = 0;
-    uint64_t last_idr_request_ms = 0;
+
 #if ENABLE_LOGGING || ENABLE_ALTSCREEN_PACE_TRACE
     alt_pace_trace_t pace;
     memset(&pace, 0, sizeof(pace));
@@ -1338,13 +1307,11 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
               (unsigned)av_gen);
 #endif
 
-    /* A decoder cannot start mid-GOP. Ask iOS for a cluster-targeted IDR over
-     * the generic command channel. Retries below are deliberately slow and
-     * bounded: stock 210 owns the asynchronous control queue, so an unbounded
-     * frame-count retry can exhaust dio_manager when iOS never answers. */
+    /* A decoder cannot start mid-GOP. Ask for a cluster-targeted IDR. The
+     * forwarding worker owns generation-scoped retry backoff, including while
+     * this receiver waits for another phone AU. */
     alt_request_cluster_idr(av_gen, "stream-start");
-    idr_requests = 1;
-    last_idr_request_ms = alt_now_ms();
+
 
     for (;;) {
         /* A later receiver (fast reconnect) may have claimed the single renderer
@@ -1410,13 +1377,21 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
                 break;
             }
             ls = (uint8_t)config_ls;
-            altav_set_config(av_gen, cfg, clen);   /* cache; replayed before first safe IDR */
+            if (altav_enqueue_config(av_gen, cfg, clen) != 0) break;
             LOG_INFO(LOG_MODULE,
                      "alt recv: avcC config encoded=%dx%d body=%u lengthSize=%u annexb=%u bytes=%s%s",
                      (int)(cfgWidth + 0.5f), (int)(cfgHeight + 0.5f), bodySize, ls, clen,
                      avccHex, (bodySize > hn) ? "..." : "");
         } else if (opcode == 0) {                         /* encrypted AVCC video access unit */
-            int is_idr;
+            int is_idr,frame_valid;
+            alt_avcc_frame_t prepared;
+            alt_frame_meta_t frame_meta;
+            unsigned meta_i;
+            memset(&frame_meta, 0, sizeof(frame_meta));
+            frame_meta.sequence = nframes + 1;
+            frame_meta.received_us = alt_timing_now_us();
+            for (meta_i = 0; meta_i < 8; ++meta_i)
+                frame_meta.sender_pts |= (uint64_t)hdr[8 + meta_i] << (8 * meta_i);
 #if ENABLE_LOGGING || ENABLE_ALTSCREEN_PACE_TRACE
             uint64_t arrived_us = alt_pace_now_us();
             uint64_t sender_pts = 0;
@@ -1429,7 +1404,9 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
                 LOG_ERROR(LOG_MODULE, "alt recv: AES-CTR update failed");
                 break;
             }
-            is_idr = avcc_has_nal_type(body, bodySize, ls, 5);
+            frame_valid=alt_avcc_prepare(body,bodySize,ls,ls==4,&prepared)==0;
+            is_idr=frame_valid && prepared.idr;
+            if(!frame_valid){altav_note_input_loss(av_gen);renderer_wait_idr=1;alt_request_cluster_idr(av_gen,"invalid-AU");}
             /* Re-check ownership here: the header/body read above can block in poll for
              * up to 500 ms, during which a reconnect may have superseded us.  The control
              * commands below target g_alt_session and must never run for a stale stream. */
@@ -1449,6 +1426,10 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
                 alt_kick_viewarea(av_gen);
             }
 
+            if (altav_take_failure(av_gen)) {
+                renderer_wait_idr = 1;
+
+            }
             if (is_idr && renderer_wait_idr) {
                 renderer_wait_idr = 0;
                 LOG_INFO(LOG_MODULE,
@@ -1465,17 +1446,15 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
              * P-frames until iOS answers the cluster-targeted keyframe request.
              * The first IDR then reconnects, replays cached SPS/PPS, and opens
              * decoding with a valid random-access picture. */
-            if (!renderer_wait_idr) {
-                int forward_rc = altav_forward_avcc_frame(av_gen, body, bodySize, ls);
+            if (frame_valid && !renderer_wait_idr) {
+                int forward_rc = altav_enqueue_owned(av_gen, &body, &bodycap, &prepared, &frame_meta);
 #if ENABLE_LOGGING || ENABLE_ALTSCREEN_PACE_TRACE
                 pace_forwarded = forward_rc >= 0;
 #endif
                 if (forward_rc < 0) {
                     renderer_wait_idr = 1;
                     alt_request_cluster_idr(av_gen, "renderer-link-lost");
-                    idr_requests = 1;
-                    idr_limit_logged = 0;
-                    last_idr_request_ms = alt_now_ms();
+
                     LOG_INFO(LOG_MODULE,
                              "alt recv: renderer link lost — WAIT_IDR gate CLOSED");
                 } else if (forward_rc > 0) {
@@ -1488,22 +1467,8 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
                          nframes, bodySize);
             }
             ++nframes;
-            if (renderer_wait_idr) {
-                uint64_t now_ms = alt_now_ms();
-                if (idr_requests < ALT_IDR_MAX_REQUESTS && now_ms != 0 &&
-                    (last_idr_request_ms == 0 ||
-                     now_ms - last_idr_request_ms >= ALT_IDR_RETRY_MS)) {
-                    alt_request_cluster_idr(av_gen, "WAIT_IDR-retry");
-                    ++idr_requests;
-                    last_idr_request_ms = now_ms;
-                } else if (idr_requests >= ALT_IDR_MAX_REQUESTS &&
-                           !idr_limit_logged) {
-                    idr_limit_logged = 1;
-                    LOG_ERROR(LOG_MODULE,
-                              "alt recv: WAIT_IDR request limit reached (%u); dropping P-frames without flooding control queue",
-                              idr_requests);
-                }
-            }
+            /* Recovery retries are generation-scoped and timer-driven by the
+             * forwarder, including when this phone scene produces no frames. */
 #if ENABLE_LOGGING || ENABLE_ALTSCREEN_PACE_TRACE
             {
                 uint64_t done_us = alt_pace_now_us();
@@ -1609,6 +1574,7 @@ static int alt_setup(void *session, void *streamDesc, void *responseParams)
     void  *rdesc = NULL;
     altthread_arg_t *threadArg = NULL;
     uint32_t av_gen = 0;   /* transport-owner generation for THIS receiver (claimed on success) */
+    uint32_t revokedCommandGen = 0;
 
     int i;
 
@@ -1629,6 +1595,7 @@ static int alt_setup(void *session, void *streamDesc, void *responseParams)
             old->altSock = -1;
         }
         if (alt_slot_is_current_locked(old)) {
+            revokedCommandGen = g_alt_session_gen;
             g_alt_session = NULL;
             g_alt_session_gen = 0;
         }
@@ -1637,6 +1604,7 @@ static int alt_setup(void *session, void *streamDesc, void *responseParams)
             memset(old, 0, sizeof(*old));
     }
     pthread_mutex_unlock(&alt_lock);
+    if (revokedCommandGen) alt_command_revoke(revokedCommandGen);
     for (i = 0; i < retiredCount; ++i) close(retiredListeners[i]);
 
     /* A receiver which was already terminal can now be joined without any
@@ -1779,6 +1747,7 @@ fail:
     if (sock >= 0) { close(sock); sock = -1; }
     pthread_mutex_lock(&alt_lock);
     if (g_alt_session == session && g_alt_session_gen == slot->avGeneration) {
+        revokedCommandGen = g_alt_session_gen;
         g_alt_session = NULL;
         g_alt_session_gen = 0;
     }
@@ -1796,6 +1765,7 @@ fail:
     if (slot->inUse) slot->settingUp = 0;
     pthread_cond_broadcast(&alt_cond);
     pthread_mutex_unlock(&alt_lock);
+    if (revokedCommandGen) alt_command_revoke(revokedCommandGen);
     if (sock >= 0) close(sock);
     LOG_ERROR(LOG_MODULE, "alt-screen setup failed err=%d", err);
     return err;
@@ -1937,6 +1907,7 @@ static void alt_on_setup_response(hook_setup_ctx_t *setup)
  * leaves receiver joins to exited-slot GC. */
 static void alt_on_teardown(void *session, void *request, int reason)
 {
+    uint32_t revokedCommandGen = 0;
     int requestHas111 = 0;
     int tearDownAlt = (request == NULL);
     int setupTimedOut = 0;
@@ -1993,6 +1964,7 @@ static void alt_on_teardown(void *session, void *request, int reason)
         /* Revoke command ownership and wake every generation sharing this
          * possibly-reused session address. */
         if (g_alt_session == session) {
+            revokedCommandGen = g_alt_session_gen;
             g_alt_session = NULL;
             g_alt_session_gen = 0;
         }
@@ -2010,6 +1982,7 @@ static void alt_on_teardown(void *session, void *request, int reason)
         pthread_cond_broadcast(&alt_cond);
     }
     pthread_mutex_unlock(&alt_lock);
+    if (revokedCommandGen) alt_command_revoke(revokedCommandGen);
     for (i = 0; i < listenerCount; ++i) close(listeners[i]);
     if (tearDownAlt) advert_clear_for_session(session);
     if (haveSlot && tearDownAlt) {
@@ -2070,8 +2043,16 @@ static volatile int g_alt_zone_mode = ALT_ZONE_FULLSCREEN;
 /* Java's confirmed RGI presentation (CMD_ALT_RGI); selects the Maps cluster URL. */
 static volatile int g_alt_rgi_active = 0;
 
-static const char *alt_zone_name(int mode)
-{
+static int alt_zone_mode_get(void) { return __atomic_load_n(&g_alt_zone_mode, __ATOMIC_ACQUIRE); }
+static void alt_zone_mode_set(int mode) {
+    __atomic_store_n(&g_alt_zone_mode, mode, __ATOMIC_RELEASE);
+}
+static int alt_rgi_active_get(void) { return __atomic_load_n(&g_alt_rgi_active, __ATOMIC_ACQUIRE); }
+static void alt_rgi_active_set(int active) {
+    __atomic_store_n(&g_alt_rgi_active, active, __ATOMIC_RELEASE);
+}
+
+static const char *alt_zone_name(int mode) {
     if (mode == ALT_ZONE_SPORTSCREEN) return "sportscreen";
     if (mode == ALT_ZONE_CLASSICSCREEN) return "classicscreen";
     return "fullscreen";
@@ -2088,8 +2069,9 @@ static void zone_send_ack(int mode, int status)
     bus_send(CMD_ALT_ZONE_ACK, 0, ack, sizeof(ack));
 }
 
-/* completion for updateViewArea — runs on libairplay's HTTP-client thread.
- * bus_send is mutex-backed/thread-safe, so acking from here is fine. */
+/* SDK completion runs on libairplay's HTTP-client thread; pending cancellation
+ * or synchronous send failure completes on the producer/command worker.
+ * bus_send is mutex-backed/thread-safe for all these callers. */
 static void zone_cmd_done(int status, void *resp, void *ctx)
 {
     uintptr_t packed = (uintptr_t)ctx;
@@ -2108,7 +2090,7 @@ static void zone_cmd_done(int status, void *resp, void *ctx)
     /* Maps scene options are independent of safeArea. Apply the matching URL
      * only after this view area succeeded, and ignore a stale ACK after a rapid
      * second View-button press. */
-    if (status == 0 && mode == g_alt_zone_mode)
+    if (status == 0 && mode == alt_zone_mode_get())
         alt_show_ui_for_mode(gen, mode, "viewArea-accepted");
 }
 
@@ -2132,15 +2114,14 @@ static int alt_generation_is_current(uint32_t gen)
     return gen != 0 && alt_generation_for_session(NULL) == gen;
 }
 
-/* Ship a command against a retained live altScreen session. Stock 210
+/* Acquire a retained live altScreen session. Stock 210
  * AirPlayReceiverSessionSendCommand@0x28460 dereferences session+704 at 0x28468,
  * before its own conditional CFRetain at 0x28548. Retain while holding alt_lock,
  * then DROP the lock for the stock call: a wedged HTTP client can no longer pin
  * TEARDOWN behind alt_lock, while the external retain prevents session UAF.
- * Returns the SendCommand rc, or -6735 if no active session/shipper. */
-static int alt_send_locked_for_gen(uint32_t gen, void *cmd, void *completion, void *ctx)
+ * Returns the retained target, or NULL if no active session/shipper. */
+static void *alt_retain_session_for_gen(uint32_t gen)
 {
-    int rc = -6735;
     void *sess = NULL;
     pthread_mutex_lock(&alt_lock);
     /* gen==0: Java/BAP/dio command — deliberately targets the current session.  gen>0:
@@ -2157,11 +2138,17 @@ static int alt_send_locked_for_gen(uint32_t gen, void *cmd, void *completion, vo
                                                 g_alt_session_gen);
         if (s && s->threadCreated && !s->threadExited &&
             !s->closing && !s->stop) {
-            sess = g_alt_session;
-            cf_ret(sess);
+            sess = cf_ret(g_alt_session);
         }
     }
     pthread_mutex_unlock(&alt_lock);
+    return sess;
+}
+
+static int alt_send_locked_for_gen(uint32_t gen, void *cmd, void *completion, void *ctx)
+{
+    int rc = -6735;
+    void *sess = alt_retain_session_for_gen(gen);
     if (sess) {
         rc = sess_sendcmd(sess, cmd, completion, ctx);
         cf_rel(sess);
@@ -2169,121 +2156,16 @@ static int alt_send_locked_for_gen(uint32_t gen, void *cmd, void *completion, vo
     return rc;
 }
 
-static void *alt_command_worker_main(void *unused)
-{
-    (void)unused;
-    for (;;) {
-        alt_cmd_item_t item;
-        int rc;
-        pthread_mutex_lock(&g_alt_cmd_lock);
-        while (!g_alt_cmd_shutdown && g_alt_cmd_count == 0)
-            pthread_cond_wait(&g_alt_cmd_cond, &g_alt_cmd_lock);
-        if (g_alt_cmd_shutdown) {
-            g_alt_cmd_exited = 1;
-            pthread_cond_broadcast(&g_alt_cmd_cond);
-            pthread_mutex_unlock(&g_alt_cmd_lock);
-            return NULL;
-        }
-        item = g_alt_cmd_queue[g_alt_cmd_head];
-        memset(&g_alt_cmd_queue[g_alt_cmd_head], 0, sizeof(item));
-        g_alt_cmd_head = (g_alt_cmd_head + 1U) % ALT_CMD_QUEUE_CAPACITY;
-        --g_alt_cmd_count;
-        pthread_mutex_unlock(&g_alt_cmd_lock);
-
-        rc = alt_send_locked_for_gen(item.gen, item.cmd,
-                                     item.completion, item.ctx);
-        /* Stock does not invoke the completion when SendCommand fails before
-         * queueing the HTTP message. Preserve zone ACK/error and logging
-         * semantics without making the original caller wait for the result. */
-        if (rc != 0 && item.completion) {
-            void (*done)(int, void *, void *) =
-                (void (*)(int, void *, void *))item.completion;
-            done(rc, NULL, item.ctx);
-        }
-        if (cf_rel) cf_rel(item.cmd);
-    }
-}
-
-/* Queue against a snapshot generation. gen==0 means "the session current at
- * enqueue time", never "whatever session exists when the worker wakes": this
- * prevents a delayed Java/BAP command from leaking across fast reconnect. */
-static int alt_send_async_for_gen(uint32_t gen, void *cmd,
-                                  void *completion, void *ctx)
-{
-    int startRc = 0;
-    if (!cmd || !cf_ret || !cf_rel) return -6735;
-    if (!gen) gen = alt_generation_for_session(NULL);
-    if (!gen) return -6735;
-
-    pthread_mutex_lock(&g_alt_cmd_lock);
-    if (g_alt_cmd_shutdown) {
-        pthread_mutex_unlock(&g_alt_cmd_lock);
-        return -6735;
-    }
-    if (!g_alt_cmd_created) {
-        g_alt_cmd_exited = 0;
-        startRc = pthread_create(&g_alt_cmd_thread, NULL,
-                                 alt_command_worker_main, NULL);
-        if (startRc == 0) g_alt_cmd_created = 1;
-    }
-    if (!g_alt_cmd_created || g_alt_cmd_count == ALT_CMD_QUEUE_CAPACITY) {
-        pthread_mutex_unlock(&g_alt_cmd_lock);
-        return g_alt_cmd_created ? -6729 : -6728;
-    }
-    g_alt_cmd_queue[g_alt_cmd_tail].gen = gen;
-    g_alt_cmd_queue[g_alt_cmd_tail].cmd = cf_ret(cmd);
-    g_alt_cmd_queue[g_alt_cmd_tail].completion = completion;
-    g_alt_cmd_queue[g_alt_cmd_tail].ctx = ctx;
-    g_alt_cmd_tail = (g_alt_cmd_tail + 1U) % ALT_CMD_QUEUE_CAPACITY;
-    ++g_alt_cmd_count;
-    pthread_cond_signal(&g_alt_cmd_cond);
-    pthread_mutex_unlock(&g_alt_cmd_lock);
-    return 0;
-}
-
-static void alt_command_worker_shutdown(void)
-{
-    pthread_t thread;
-    int collect = 0;
-    int waitRc = 0;
-    struct timespec deadline;
-    unsigned int i;
-
-    pthread_mutex_lock(&g_alt_cmd_lock);
-    g_alt_cmd_shutdown = 1;
-    for (i = 0; i < g_alt_cmd_count; ++i) {
-        unsigned int index = (g_alt_cmd_head + i) % ALT_CMD_QUEUE_CAPACITY;
-        if (g_alt_cmd_queue[index].cmd && cf_rel)
-            cf_rel(g_alt_cmd_queue[index].cmd);
-        memset(&g_alt_cmd_queue[index], 0, sizeof(g_alt_cmd_queue[index]));
-    }
-    g_alt_cmd_head = g_alt_cmd_tail = g_alt_cmd_count = 0;
-    pthread_cond_broadcast(&g_alt_cmd_cond);
-    if (g_alt_cmd_created) {
-        thread = g_alt_cmd_thread;
-        alt_deadline_after_ms(&deadline, ALT_CMD_SHUTDOWN_WAIT_MS);
-        while (!g_alt_cmd_exited && waitRc != ETIMEDOUT)
-            waitRc = pthread_cond_timedwait(&g_alt_cmd_cond,
-                                            &g_alt_cmd_lock, &deadline);
-        if (g_alt_cmd_exited) {
-            g_alt_cmd_created = 0;
-            collect = 1;
-        }
-    }
-    pthread_mutex_unlock(&g_alt_cmd_lock);
-
-    if (collect) pthread_join(thread, NULL); /* terminal-only collection */
-    else if (g_alt_cmd_created)
-        LOG_WARN(LOG_MODULE,
-                 "alt command worker did not exit within %d ms; process-exit cleanup will reclaim it",
-                 ALT_CMD_SHUTDOWN_WAIT_MS);
-}
+#include "command_worker.h"
 
 /* Build and ship one of the three predeclared view-area indexes. */
 static int zone_send_mode(uint32_t gen, int mode, int dur, void *completion)
 {
     int index, rc = -6728;
     void *params = NULL, *cmd = NULL, *adj = NULL, *pk = NULL, *ak = NULL;
+
+    if (!gen) gen = alt_generation_for_session(NULL);
+    if (!gen) return -6735; /* callback context and queued command use one snapshot */
 
     if (mode == ALT_ZONE_SPORTSCREEN) index = 1;
     else if (mode == ALT_ZONE_CLASSICSCREEN) index = 2;
@@ -2299,24 +2181,27 @@ static int zone_send_mode(uint32_t gen, int mode, int dur, void *completion)
     cmd = cf_dictm(0, 0, dict_keycb, dict_valcb);
     adj = cf_arrm(0, mode == ALT_ZONE_FULLSCREEN ? 0 : 1, arr_cb);
     if (params && cmd && adj) {
-        set_str(params, "uuid", CLUSTER_DISPLAY_UUID);
-        set_i64(params, "viewAreaIndex", index);
-        set_i64(params, "animationDurationMillis", dur);
-        if (mode != ALT_ZONE_FULLSCREEN) cf_arrappi64(adj, 0);
+        if (set_str(params, "uuid", CLUSTER_DISPLAY_UUID) != 0 ||
+            set_i64(params, "viewAreaIndex", index) != 0 ||
+            set_i64(params, "animationDurationMillis", dur) != 0 ||
+            (mode != ALT_ZONE_FULLSCREEN && cf_arrappi64(adj, 0) != 0)) goto done;
         ak = cf_str(0, "adjacentViewAreas", CFENC_UTF8);
-        if (ak) cf_dictset(params, ak, adj);
-        set_str(cmd, "type", "updateViewArea");
+        if (!ak) goto done;
+        cf_dictset(params, ak, adj);
+        if (set_str(cmd, "type", "updateViewArea") != 0) goto done;
         pk = cf_str(0, "params", CFENC_UTF8);
-        if (pk) cf_dictset(cmd, pk, params);
+        if (!pk) goto done;
+        cf_dictset(cmd, pk, params);
         uintptr_t packed = (((uintptr_t)(gen & 0x3FFFFFFFU)) << 2) |
                            (uintptr_t)(mode & 3);
-        rc = alt_send_async_for_gen(gen, cmd, completion,
-                                    completion ? (void *)packed : NULL);
+        rc = alt_send_async_for_gen_key(gen, cmd, completion,
+                                    completion ? (void *)packed : NULL, ALT_COMMAND_VIEW_AREA);
         LOG_INFO(LOG_MODULE,
                  "updateViewArea ship mode=%s index=%d adjacent=%s dur=%dms rc=%d",
                  alt_zone_name(mode), index,
                  mode == ALT_ZONE_FULLSCREEN ? "[]" : "[0]", dur, rc);
     }
+done:
     if (ak && cf_rel) cf_rel(ak);
     if (pk && cf_rel) cf_rel(pk);
     if (adj && cf_rel) cf_rel(adj);
@@ -2338,10 +2223,10 @@ static void zone_on_cmd(uint16_t type, uint8_t flags, const uint8_t *payload, ui
 
     /* Cache even before the RTSP session exists. The first IDR will apply the
      * latest Audi mode, making fast reconnect and pre-session View presses safe. */
-    g_alt_zone_mode = mode;
+    alt_zone_mode_set(mode);
     gen = alt_generation_for_session(NULL);
     rc = zone_send_mode(gen, mode, dur, (void *)zone_cmd_done);
-    if (rc != 0) zone_send_ack(mode, rc); /* no async completion on sync failure */
+    if (rc != 0 && (!gen || alt_generation_is_current(gen))) zone_send_ack(mode, rc); /* no async completion on sync failure */
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -2389,31 +2274,41 @@ static void *alt_params_new(int wantUuid)
         !cf_dictm || !dict_keycb || !dict_valcb || !cf_dictset || !cf_str || !cf_dictseti)
         return NULL;
     void *p = cf_dictm(0, 0, dict_keycb, dict_valcb);
-    if (p && wantUuid) set_str(p, "uuid", CLUSTER_DISPLAY_UUID);
+    if (p && wantUuid && set_str(p, "uuid", CLUSTER_DISPLAY_UUID) != 0) {
+        if (cf_rel) cf_rel(p);
+        return NULL; /* never send a cluster command with no display address */
+    }
     return p;
 }
 
 /* ship {type, params} with the logging completion; consumes (releases) params. */
-static int alt_ship(uint32_t gen, const char *type, void *params)
-{
-    if (!params) return -6728;
+static int alt_ship(uint32_t gen, const char *type, void *params) {
+    if (!params)
+        return -6728;
     int rc = -6728;
-    void *cmd = cf_dictm(0, 0, dict_keycb, dict_valcb);
+    void *cmd = cf_dictm(0, 0, dict_keycb, dict_valcb), *pk = NULL;
     if (cmd) {
-        set_str(cmd, "type", type);
-        void *pk = cf_str(0, "params", CFENC_UTF8);
-        if (pk) cf_dictset(cmd, pk, params);
-        if (pk && cf_rel) cf_rel(pk);
+        if (set_str(cmd, "type", type) != 0) goto done;
+        pk = cf_str(0, "params", CFENC_UTF8);
+        if (!pk) goto done;
+        cf_dictset(cmd, pk, params);
+        unsigned key = !strcmp(type, "showUI")                ? ALT_COMMAND_SHOW_UI
+                       : !strcmp(type, "setNightMode")        ? ALT_COMMAND_NIGHT_MODE
+                       : !strcmp(type, "mapAppearanceUpdate") ? ALT_COMMAND_MAP_APPEARANCE
+                       : !strcmp(type, "uiAppearanceUpdate")  ? ALT_COMMAND_UI_APPEARANCE
+                                                              : ALT_COMMAND_GENERIC;
         if (!strcmp(type, "showUI"))
-            rc = alt_send_async_for_gen(gen, cmd, (void *)alt_showui_done,
-                                        (void *)(uintptr_t)gen);
+            rc = alt_send_async_for_gen_key(gen, cmd, (void *)alt_showui_done,
+                                            (void *)(uintptr_t)gen, key);
         else
-            rc = alt_send_async_for_gen(gen, cmd, (void *)alt_cmd_done,
-                                        (void *)type);
-        if (cf_rel) cf_rel(cmd);
+            rc = alt_send_async_for_gen_key(gen, cmd, (void *)alt_cmd_done, (void *)type, key);
         LOG_INFO(LOG_MODULE, "session cmd '%s' shipped gen=%u rc=%d", type, (unsigned)gen, rc);
     }
-    if (cf_rel) cf_rel(params);
+done:
+    if (pk && cf_rel) cf_rel(pk);
+    if (cmd && cf_rel) cf_rel(cmd);
+    if (cf_rel)
+        cf_rel(params);
     return rc;
 }
 
@@ -2428,7 +2323,10 @@ static int alt_send_cluster_night_mode(uint32_t gen, int night, const char *reas
     void *p = alt_params_new(1);
     int rc;
     if (!p) return -6728;
-    set_i64(p, "nightMode", night ? 1 : 0);
+    if (set_i64(p, "nightMode", night ? 1 : 0) != 0) {
+        cf_rel(p);
+        return -6728;
+    }
     rc = alt_ship(gen, "setNightMode", p);
     LOG_INFO(LOG_MODULE,
              "alt: cluster nightMode=%d uuid=%s reason=%s rc=%d",
@@ -2486,34 +2384,24 @@ HOOK_EXPORT int AirPlayReceiverSessionSetNightMode(void *session, int night,
  * Keep command id 0x0110 so the Java code already running on the HU continues to
  * work without a Java restart. Old Java sends two bytes [step,0]; the second byte
  * is deliberately ignored. A rare accumulated BAP delta (for example -2) is
- * expanded into individual semantic actions, capped to avoid an abusive burst. */
-static void zoom_on_cmd(uint16_t type, uint8_t flags,
-                        const uint8_t *payload, uint32_t len, void *ctx)
-{
-    int step, count, direction, i, rc = 0;
-    (void)type; (void)flags; (void)ctx;
-    if (!payload || len < 1) return;
-
+ * accumulated as bounded pending intent. The shared worker paces semantic
+ * actions, drops an old unsent direction on reversal, and never replays stale
+ * zoom into a new generation. iOS still owns the actual map animation. */
+static void zoom_on_cmd(uint16_t type, uint8_t flags, const uint8_t *payload, uint32_t len,
+                        void *ctx) {
+    int step, rc;
+    (void)type;
+    (void)flags;
+    (void)ctx;
+    if (!payload || len < 1)
+        return;
     step = (int)(int8_t)payload[0];
-    if (step == 0) return;
-    count = step < 0 ? -step : step;
-    if (count > 8) count = 8;
-
-    /* Audi MapScale increases when zooming out. Keep an on-unit inversion knob
-     * in case a vehicle's steering-wheel BAP polarity is reversed. */
-    direction = step > 0 ? 1 : 0; /* iOS DashBoard: 0=in, 1=out */
-    if (env_on("ALTSCREEN_ZOOM_INVERT")) direction ^= 1;
-
-    for (i = 0; i < count; ++i) {
-        void *p = alt_params_new(1); /* params.uuid = cluster display UUID */
-        if (!p) { rc = -6728; break; }
-        set_i64(p, "zoomDirection", direction);
-        rc = alt_ship(0, "changeMapZoomLevel", p);   /* Java MFL roller → current session */
-        if (rc != 0) break;
-    }
-    LOG_INFO(LOG_MODULE,
-             "cluster zoom step=%d direction=%s sent=%d/%d rc=%d uuid=%s",
-             step, direction ? "out" : "in", i, count, rc,
+    if (!step)
+        return;
+    if (env_on("ALTSCREEN_ZOOM_INVERT"))
+        step = -step;
+    rc = alt_command_zoom(0, step);
+    LOG_INFO(LOG_MODULE, "cluster zoom step=%d scheduled rc=%d uuid=%s", step, rc,
              CLUSTER_DISPLAY_UUID);
 }
 
@@ -2524,7 +2412,7 @@ static void zoom_on_cmd(uint16_t type, uint8_t flags,
  * cluster UUID explicitly. This request intentionally has no completion callback:
  * recovery is proven by observing an actual type-5 NAL, and retaining a callback
  * for every retry would grow stock 210's asynchronous response queue. */
-static int alt_request_cluster_idr(uint32_t gen, const char *reason)
+static int alt_send_cluster_idr_raw(uint32_t gen, const char *reason)
 {
     void *p = alt_params_new(1);
     void *cmd = NULL;
@@ -2533,11 +2421,13 @@ static int alt_request_cluster_idr(uint32_t gen, const char *reason)
     if (!p) return -6728;
     cmd = cf_dictm(0, 0, dict_keycb, dict_valcb);
     if (cmd) {
-        set_str(cmd, "type", "forceKeyFrame");
+        if (set_str(cmd, "type", "forceKeyFrame") != 0) goto done;
         pk = cf_str(0, "params", CFENC_UTF8);
-        if (pk) cf_dictset(cmd, pk, p);
-        rc = alt_send_async_for_gen(gen, cmd, NULL, NULL);
+        if (!pk) goto done;
+        cf_dictset(cmd, pk, p);
+        rc = alt_send_async_for_gen_key(gen, cmd, NULL, NULL, ALT_COMMAND_IDR);
     }
+done:
     if (pk && cf_rel) cf_rel(pk);
     if (cmd && cf_rel) cf_rel(cmd);
     if (cf_rel) cf_rel(p);
@@ -2547,12 +2437,21 @@ static int alt_request_cluster_idr(uint32_t gen, const char *reason)
     return rc;
 }
 
+static int alt_request_cluster_idr(uint32_t gen,const char *reason)
+{
+    unsigned kind=ALT_KEYFRAME_RECOVERY;
+    if(reason && !strcmp(reason,"stream-start"))kind=ALT_KEYFRAME_START;
+    else if(reason && !strcmp(reason,"showUI-accepted"))kind=ALT_KEYFRAME_UI;
+    if(!altav_keyframe_permit(gen,kind))return 0; /* coalesced, not a transport failure */
+    return alt_send_cluster_idr_raw(gen,reason);
+}
+
 /* Apply the latest Audi fullscreen/smallscreen state once the 111 stream is live. The
- * Java command may have arrived before g_alt_session existed; g_alt_zone_mode
+ * Java command may have arrived before g_alt_session existed; alt_zone_mode_get()
  * intentionally preserves it across that window. */
 static void alt_kick_viewarea(uint32_t gen)
 {
-    int mode = g_alt_zone_mode;
+    int mode = alt_zone_mode_get();
     int rc = zone_send_mode(gen, mode, 0, NULL);
     LOG_INFO(LOG_MODULE, "alt: initial updateViewArea mode=%s rc=%d",
              alt_zone_name(mode), rc);
@@ -2587,7 +2486,7 @@ static void alt_kick_viewarea(uint32_t gen)
 
 static const char *alt_cluster_url(void)
 {
-    return g_alt_rgi_active ? ALT_CLUSTER_URL_RGI_ON : ALT_CLUSTER_URL_RGI_OFF;
+    return alt_rgi_active_get() ? ALT_CLUSTER_URL_RGI_ON : ALT_CLUSTER_URL_RGI_OFF;
 }
 
 static int alt_show_ui_for_mode(uint32_t gen, int mode, const char *reason)
@@ -2602,17 +2501,20 @@ static int alt_show_ui_for_mode(uint32_t gen, int mode, const char *reason)
     }
     void *p = alt_params_new(1);                        /* uuid = cluster display */
     if (!p) return -6728;
-    set_str(p, "url", url);
+    if (set_str(p, "url", url) != 0) {
+        cf_rel(p);
+        return -6728;
+    }
     int rc = alt_ship(gen, "showUI", p);
     LOG_INFO(LOG_MODULE, "alt: showUI mode=%s rgi=%d reason=%s uuid=%s url=%s rc=%d",
-             alt_zone_name(mode), (int)g_alt_rgi_active,
+             alt_zone_name(mode), (int)alt_rgi_active_get(),
              reason ? reason : "?", CLUSTER_DISPLAY_UUID, url, rc);
     return rc;
 }
 
 static void alt_kick_show_ui(uint32_t gen)
 {
-    alt_show_ui_for_mode(gen, g_alt_zone_mode, "first-IDR");
+    alt_show_ui_for_mode(gen, alt_zone_mode_get(), "first-IDR");
 }
 
 static void appearance_on_cmd(uint16_t type, uint8_t flags, const uint8_t *payload, uint32_t len, void *ctx)
@@ -2621,8 +2523,11 @@ static void appearance_on_cmd(uint16_t type, uint8_t flags, const uint8_t *paylo
     if (!payload || len < 3) return;                    /* [target][mode][setting] */
     void *p = alt_params_new(1);
     if (!p) return;
-    set_i64(p, "appearanceMode",    (uint8_t)payload[1]);
-    set_i64(p, "appearanceSetting", (uint8_t)payload[2]);
+    if (set_i64(p, "appearanceMode", (uint8_t)payload[1]) != 0 ||
+        set_i64(p, "appearanceSetting", (uint8_t)payload[2]) != 0) {
+        cf_rel(p);
+        return;
+    }
     alt_ship(0, payload[0] ? "mapAppearanceUpdate" : "uiAppearanceUpdate", p);   /* Java → current session */
 }
 
@@ -2636,7 +2541,10 @@ static void uictx_on_cmd(uint16_t type, uint8_t flags, const uint8_t *payload, u
     size_t n = (len < sizeof(url) - 1) ? len : sizeof(url) - 1;
     memcpy(url, payload, n);
     url[n] = 0;
-    set_str(p, "url", url);
+    if (set_str(p, "url", url) != 0) {
+        cf_rel(p);
+        return;
+    }
     alt_ship(0, "changeUIContext", p);   /* Java → current session */
 }
 
@@ -2648,15 +2556,24 @@ static void rgi_on_cmd(uint16_t type, uint8_t flags, const uint8_t *payload, uin
     (void)type; (void)flags; (void)ctx;
     if (!payload || len < 1) return;
     int active = payload[0] ? 1 : 0;
-    if (active == g_alt_rgi_active) return;
-    g_alt_rgi_active = active;
-    int rc = alt_show_ui_for_mode(0, g_alt_zone_mode, "rgi-edge");
+    if (active == alt_rgi_active_get()) return;
+    alt_rgi_active_set(active);
+    int rc = alt_show_ui_for_mode(0, alt_zone_mode_get(), "rgi-edge");
     LOG_WARN(LOG_MODULE, "alt: RGI presentation=%d -> cluster url %s rc=%d",
              active, alt_cluster_url(), rc);
 }
 
+static void alt_forward_failed(uint32_t gen, void *context)
+{
+    (void)context;
+    alt_send_cluster_idr_raw(gen, "coordinated-recovery");
+}
+
 static void altscreen_init(void)
 {
+    g_forward_available = altav_async_start(alt_forward_failed, NULL) == 0;
+    if (!g_forward_available)
+        LOG_ERROR(LOG_MODULE, "AltScreen forwarding worker create failed; advert suppressed");
     bus_on(CMD_ALT_ZOOM, zoom_on_cmd, NULL);
     bus_on(CMD_ALT_ZONE, zone_on_cmd, NULL);
     bus_on(CMD_ALT_APPEARANCE, appearance_on_cmd, NULL);

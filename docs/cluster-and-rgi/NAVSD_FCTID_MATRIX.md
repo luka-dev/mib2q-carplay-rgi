@@ -81,6 +81,10 @@ Variant legend: `S` Std, `H` HighPrem, `M` MMIKombi, `MH` MMIKombiHUD; `All` = a
 
 The FctID 45 SetGet from the cluster carries the steering-wheel roller steps. While CarPlay owns the cluster, `AltScreenCombiBAPListener.setMapScale` turns them into `CMD_ALT_ZOOM` for the phone and ACKs with the unchanged native scale; `setMapScaleSetting` (auto-zoom) is swallowed. `[code]` (`java_patch/de/audi/tghu/navi/app/cluster/AltScreenCombiBAPListener.java:62-79`)
 
+The native [input scheduler](../altscreen-and-video/ALTSCREEN_INPUT_COMMANDS.md)
+paces and bounds the semantic zoom after this BAP reply; command scheduling does
+not replace the required stock status transaction.
+
 Practical reading: FctID 22 variants and richer 21/46 data are safe; 25/40 only with real CarPlay traffic data. **Potentially destructive: 15, 38, 43, 44, 45, 54**, because they drive the stock navigation state or map, not the CarPlay scene. Not useful for visuals: method results 34, 35, 41, 42, 51 and sync 37.
 
 ## 📊 Selectors inside a FctID

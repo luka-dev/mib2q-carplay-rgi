@@ -20,20 +20,20 @@ The chain below was re-derived from the iOS 26.6 (23G71) `AirPlaySender`, `CarKi
 sequenceDiagram
   accTitle: altScreen handshake and stream 111 setup
   accDescr: The phone reads the info advert, negotiates altScreen in the control SETUP response, fetches cluster URLs locally, sends them in a follow-up info request, sets up stream 111, and the head unit selects the cluster scene with showUI at the first IDR.
-  participant P as iPhone (sender)
-  participant H as Head unit (receiver)
-  P->>H: GET /info
-  H-->>P: extendedFeatures + displays and displayPanels [main, cluster]
-  P->>H: control SETUP (request features = proposal)
-  H-->>P: response enabledFeatures [stock..., altScreen, viewAreas]
-  Note over P: endpoint +0x3E set
-  P->>P: CRFetchInstrumentClusterURLs (CarPlayServices)
-  P->>H: follow-up GetInfo with altScreenURLs
-  Note over P: 2+ raw displays, cluster uuid differs from main
-  P->>H: media SETUP with streams [type 111]
-  H-->>P: streams [type 111, dataPort]
-  P->>H: 128-byte header + AES-CTR AVCC access units
-  H->>P: showUI {uuid, url} at first IDR
+  participant phone as iPhone (sender)
+  participant head_unit as Head unit (receiver)
+  phone->>head_unit: GET /info
+  head_unit-->>phone: extendedFeatures + displays and displayPanels [main, cluster]
+  phone->>head_unit: control SETUP (request features = proposal)
+  head_unit-->>phone: response enabledFeatures [stock..., altScreen, viewAreas]
+  Note over phone: endpoint +0x3E set
+  phone->>phone: CRFetchInstrumentClusterURLs (CarPlayServices)
+  phone->>head_unit: follow-up GetInfo with altScreenURLs
+  Note over phone: 2+ raw displays, cluster uuid differs from main
+  phone->>head_unit: media SETUP with streams [type 111]
+  head_unit-->>phone: streams [type 111, dataPort]
+  phone->>head_unit: 128-byte header + AES-CTR AVCC access units
+  head_unit->>phone: showUI {uuid, url} at first IDR
 ```
 
 In words:
@@ -84,12 +84,40 @@ Production uses the **self-contained** receiver design: the hook owns the listen
 | Wire | 128-byte header (`bodySize` LE u32 at 0, `opcode` at 4, `params[15]` u64 from 8) + body. Opcode 1 = unencrypted avcC (width/height as f32 at header 16/20); opcode 0 = AES-CTR video AU; 2/4/5 consumed and ignored; `bodySize` > 4 MiB fails closed (`:1201-1210`, `:1247`, `:1334-1360`). |
 | Decrypt | One continuous AES-CTR context over opcode-0 bodies only, never the header or config, never re-initialised per AU (`AES_CTR_Update` in the loop, `:1394-1405`). |
 | avcC | An opcode-1 record with `bodySize 0` (seen live as flags `0x56` at stream start) keeps the current avcC; a non-empty record must carry whole SPS/PPS (`:1362-1392`, `hook/altscreen/avcc_config.h`). |
-| Forward | AVCC → Annex-B, `[u32 BE len][payload]` to `altscreen_render` on TCP `:19831` (`hook/altscreen/altscreen_av.h:27`). |
+| Forward | Owned AVCC → Annex-B buffers to `altscreen_render` on TCP `:19831`; negotiated v2 metadata or legacy `[u32 BE len][payload]` framing (`hook/altscreen/altscreen_av.h`). |
 | Ownership | Every receiver has a transport generation; a superseded receiver exits before reading, forwarding or commanding (`:1320-1330`, `:1405-1408`). |
 
 ### IDR recovery
 
-Stock `AirPlayReceiverSessionForceKeyFrame` @ `0x28a5c` sends a bare `{type:"forceKeyFrame"}` via `SendCommand` @ `0x28ac4`; iOS 26.6 `carEndpoint_handleEventCreatingReply` (`0x2276d86a4`-`0x2276d86bc`) looks up a screen by `params["uuid"]` (cstring `0x22790cc0b`) and otherwise falls back to the primary screen. The hook sends `forceKeyFrame {params:{uuid: cluster}}` with no completion callback; recovery is confirmed by seeing a real type-5 NAL anywhere in the AU (an IDR AU may start with AUD/SEI). After a localhost send failure a **WAIT_IDR** gate drops P-frames instead of feeding a fresh decoder; only an IDR reopens it, and the forwarder then reconnects and replays SPS/PPS first. Requests are capped at one immediate plus retries at ≥ 2 s intervals, **6 total** (`ALT_IDR_RETRY_MS`, `ALT_IDR_MAX_REQUESTS`, `altscreen_hook.c:1247-1250`, `:1410-1480`). A reconnect may stay black while iOS withholds an IDR, but cannot show green inter-prediction garbage. **[code]** / **[car]**
+Stock `AirPlayReceiverSessionForceKeyFrame` @ `0x28a5c` sends a bare
+`{type:"forceKeyFrame"}` via `SendCommand` @ `0x28ac4`. iOS 26.6's
+`carEndpoint_handleEventCreatingReply` reads `params["uuid"]`, otherwise falling
+back to the primary screen. The hook targets the cluster's `uuid`.
+A type-5 NAL anywhere in a whole valid AU opens the decoder continuity gate;
+an IDR AU can start with AUD/SEI. **[decompile]** / **[code]**
+
+After continuity loss, dependent P-frames are decrypted and drained while the
+forwarder requires a new IDR. That IDR reconnects and follows cached SPS/PPS.
+The current candidate coordinates retry timing in
+[recovery_policy.h](../../hook/altscreen/recovery_policy.h), rather than resetting
+a receiver-local counter on each failed IDR. **[code]**
+
+| Recovery rule | Current source behavior |
+|---|---|
+| Scope | One active episode per producer generation; stale generations cannot issue requests or restore health |
+| IDR retries | Shared monotonic 2/4/8 s backoff, capped at 8 s between retries |
+| Reconnect retries | 250/500/1000 ms backoff, capped at 1000 ms |
+| Idle failure | Forwarder checks EOF/control every 100 ms while idle. QNX/Linux wait on a monotonic condition; macOS uses relative wait. Frame silence remains valid |
+| New-peer success | HELLO capability 3 must complete within its deadline; the hook ACK enables STATUS. Unnegotiated STATUS ends the link. At least 1 s of sustained actual-present readiness clears the episode |
+| Legacy-peer success | Successful transport send clears recovery when no status channel was negotiated |
+| Startup/UI | Stream-start and first UI request have bootstrap exceptions; later healthy UI requests are limited to one per 500 ms |
+
+These follow-up changes passed offline tests and QNX builds on 2026-10-06.
+Earlier WAIT_IDR behavior was verified on the car; the new coordinator and status
+channel have no vehicle measurement yet. A reconnect still depends on the phone
+providing an IDR. See [protocol/readiness sequence](VIDEO_PIPELINE.md#negotiation-and-presentation-readiness),
+[all six changes](ALTSCREEN_FRAME_RATE.md#-six-follow-up-improvements-implemented--2026-10-06),
+and [completed boundary validation](ALTSCREEN_PACING_VALIDATION.md).
 
 ### Per-stream teardown preserves the cluster
 
@@ -112,7 +140,7 @@ Sources: `ALTSCREEN_RECEIVE_VERDICT`, `ALTSCREEN_BLACK_DIAGNOSIS`, `ALTSCREEN_CO
 
 **History.** At audit `9295b04`, `alt_request_cluster_idr` built its IDR request with `alt_params_new(0)` + `set_str("displayUUID", ...)`. iOS 26.6 reads `params["uuid"]` for this command, and `displayUUID` is a **HID** key. Every cluster IDR-recovery request therefore fell back to the **primary** screen, and because the show-UI step waits for the first cluster IDR, the cluster could stay black for good. That was rated P0. See `memory/production_full_audit_9295b04.md`. **[decompile]**
 
-**Current code.** `alt_request_cluster_idr` builds `{type:"forceKeyFrame", params}` with `alt_params_new(1)`, which keys the cluster `uuid`. There is no `displayUUID` in it, and it logs `cluster forceKeyFrame uuid=...` (`hook/altscreen/altscreen_hook.c:2502-2523`). `alt_params_new(1)` presets `uuid` = the cluster display (`:2360-2368`). The other cluster commands use the same key: `showUI` (`:2581`), `setNightMode` (`:2407`), `changeMapZoomLevel {zoomDirection 0=in}` (`:2485-2486`), and `updateViewArea {uuid, viewAreaIndex}` (`:2277-2283`). The generic `SendCommand` @ `0x28460` has no command whitelist and dereferences `session+704`. See [Landmines](../LANDMINES.md). **[code]**
+**Current code.** `alt_request_cluster_idr` applies the shared generation/retry policy; `alt_send_cluster_idr_raw` builds `{type:"forceKeyFrame", params}` with `alt_params_new(1)`, which keys the cluster `uuid`. There is no `displayUUID` in it, and it logs `cluster forceKeyFrame uuid=...` (`hook/altscreen/altscreen_hook.c:2502-2523`). `alt_params_new(1)` presets `uuid` = the cluster display (`:2360-2368`). The other cluster commands use the same key: `showUI` (`:2581`), `setNightMode` (`:2407`), `changeMapZoomLevel {zoomDirection 0=in}` (`:2485-2486`), and `updateViewArea {uuid, viewAreaIndex}` (`:2277-2283`). The generic `SendCommand` @ `0x28460` has no command whitelist and dereferences `session+704`. See [Landmines](../LANDMINES.md). **[code]**
 
 ## 🔧 The cluster delivery sink
 
@@ -140,7 +168,19 @@ Current code reads the real main uuid with `cf_getval(mainDisp, "uuid")` and set
 
 ## 📌 Input path (zoom / knob)
 
-Cluster commands are semantic, not HID. The cluster advertises no `primaryInputDevice` (`altscreen_hook.c:508-509`). Live testing showed that a virtual HID knob moves only the main UI, even with the cluster `displayUUID`. The zoom therefore uses the semantic `changeMapZoomLevel` command, keyed on `uuid` with `zoomDirection` `0` = in (`altscreen_hook.c:2452-2459`, `:2485-2486`). `CMD_ALT_ZOOM` is **live at `0x0110`** (`hook/framework/bus_protocol.h:92`, `java_patch/com/luka/carplay/bus/CarplayBus.java:54`), with handler `zoom_on_cmd` registered at `altscreen_hook.c:2635`. `ALTSCREEN_ZOOM_INVERT` flips the direction (`:2480`). See `memory/altscreen_zoom_vs_hid.md` and [Cluster and RGI overview](../cluster-and-rgi/README.md). **[code]**
+Cluster zoom uses the semantic `changeMapZoomLevel{uuid, zoomDirection}`
+command: `0` zooms in and nonzero zooms out. `CMD_ALT_ZOOM = 0x0110` reaches
+`zoom_on_cmd`; `ALTSCREEN_ZOOM_INVERT` flips the direction. The Java/BAP path
+still returns the native `MapScale_SetGet` status reply. See
+[Cluster and RGI](../cluster-and-rgi/README.md) for the stock status path.[^input]
+
+The native worker stores bounded pending intent and paces one semantic zoom at
+a time. A selected step has immutable input age, so a fresh same-direction input
+cannot revive it after TTL. The worker retains the target before committing
+under its command mutex; recovery/layout selection, state replacement, CF
+failure handling and ACK rules are specified in
+[AltScreen Input Commands](ALTSCREEN_INPUT_COMMANDS.md). The SDK call runs
+outside both mutexes; committed work cannot be preempted.[^input]
 
 ## 🔍 The VC NavStatus bar over altScreen
 
@@ -180,3 +220,5 @@ Merged originals were removed from the tree after this note absorbed them; they 
 - `memory/altscreen_ios26_gate_verified.md`, `memory/cluster_panel_resolution.md`, `memory/production_full_audit_9295b04.md`.
 
 Related: [AltScreen RE History](ALTSCREEN_RE_HISTORY.md), [Video Pipeline](VIDEO_PIPELINE.md), [AltScreen Frame Rate](ALTSCREEN_FRAME_RATE.md), [AltScreen and Video overview](README.md).
+
+[^input]: [Input handler and SDK seam](../../hook/altscreen/altscreen_hook.c), [command policy](../../hook/altscreen/command_policy.h), [command worker](../../hook/altscreen/command_worker.h), [Java roller](../../java_patch/com/luka/carplay/core/AltScreenModule.java).

@@ -40,6 +40,8 @@ unsigned int screen_egl_present_source_capacity(screen_egl_present_t *p,
 int screen_egl_present_frame(screen_egl_present_t *p,
                              unsigned int source_index,
                              unsigned int filled_len);
+/* Called after the presentation worker has stopped, before the next session. */
+void screen_egl_present_reset_timing(screen_egl_present_t *p);
 
 /* Recreate only the managed RGBA8888 plane-99 window and its EGLSurface.
  * Decoder-native WINDOW buffers, pixmap aliases, EGLImages, textures and OMX

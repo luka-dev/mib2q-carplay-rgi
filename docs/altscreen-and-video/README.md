@@ -12,40 +12,47 @@ Read [AltScreen Cluster Video](ALTSCREEN_CLUSTER_VIDEO.md) first for the activat
 
 ## 📊 The whole path
 
+The 2026-10-06 source candidate adds shared recovery, idle EOF/status observation,
+owned in-place conversion, batched I/O, end-to-end compressed age and decoded
+mailbox selection. These changes passed offline tests and QNX builds; their
+vehicle FPS and BSP mailbox behavior remain unmeasured. The stock capture clock,
+`glFinish` and per-frame image refresh remain in place. **[code]**
+
 ```mermaid
 flowchart TB
-  accTitle: AltScreen cluster video delivery path
-  accDescr: The phone reads the car info and negotiates altScreen in the control SETUP, sets up stream 111, the hook forwards Annex-B over TCP 19831 to altscreen_render, which OMX-decodes and draws to cluster displayable 99.
-  info["phone reads car /info"]
-  gate["control SETUP enabledFeatures"]
-  setup["SETUP stream type 111"]
-  hook["hook decrypts, AVCC to Annex-B"]
-  tcp["TCP 19831 with NODELAY"]
-  render["altscreen_render OMX decode"]
-  panel["displayable 99, 1440x542"]
-  info --> gate
-  gate --> setup
-  setup --> hook
-  hook --> tcp
-  tcp --> render
-  render --> panel
-  classDef primary fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
-  classDef success fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
-  classDef warning fill:#fef9c3,stroke:#ca8a04,stroke-width:2px,color:#713f12
-  class info,panel primary
-  class gate,setup warning
-  class hook,tcp,render success
+    accTitle: AltScreen activation and delivery overview
+    accDescr: The phone negotiates stream 111, the hook transfers owned frames through a bounded worker queue, and the renderer decodes and selects mailbox pictures before the stock cluster capture.
+
+    read_info["Phone reads car info"] --> negotiate_alt["Control SETUP enables altScreen"]
+    negotiate_alt --> setup_stream["SETUP creates stream 111"]
+    setup_stream --> prepare_frame["Hook decrypts and prepares owned AU"]
+    prepare_frame --> forward_frame["Bounded worker forwards on 19831"]
+    forward_frame --> decode_frame["Renderer reader queues OMX input"]
+    decode_frame --> select_picture["Mailbox selects decoded picture"]
+    select_picture --> present_picture["glFinish and swap to plane 99"]
+    present_picture --> capture_plane["Stock capture feeds instrument cluster"]
 ```
+
+Read [current pipeline and protocol](VIDEO_PIPELINE.md) for ownership,
+HELLO/ACK/STATUS and FIFO fallback; read
+[all six changes and validation](ALTSCREEN_FRAME_RATE.md#-six-follow-up-improvements-implemented--2026-10-06)
+for operation counts and the test evidence.
+[Input commands](ALTSCREEN_INPUT_COMMANDS.md) covers the separate native command
+worker, roller cadence, immutable selected age, ACK/CF contracts and runtime
+knobs. [Current pacing validation](ALTSCREEN_PACING_VALIDATION.md) collects video
+and input review resolutions, reproducible commands and latest result limits.
 
 ## 🔗 The notes
 
 | Note | What it covers |
 |---|---|
 | [AltScreen Cluster Video](ALTSCREEN_CLUSTER_VIDEO.md) | The activation gate — control-SETUP response `enabledFeatures` ∋ `altScreen` (the `/info` advert is also injected but does not set the flag) — then the hook's own stream-111 receiver. Also the iOS URL model, error codes, the 1440×542 panel, and the forceKeyFrame `uuid` fix (resolved). |
-| [Video Pipeline](VIDEO_PIPELINE.md) | The OMX decode chain (native 32m buffers → EGLImage → RGBA plane 99), the Nagle/`TCP_NODELAY` fix, the load-bearing `glFinish` and per-frame rebind, the presenter worker thread, stream 110 and screen crypto for comparison. |
+| [Video Pipeline](VIDEO_PIPELINE.md) | The OMX decode chain (native 32m buffers → EGLImage → RGBA plane 99), the Nagle/`TCP_NODELAY` fix, the load-bearing `glFinish` and per-frame rebind, owned buffers, v2/status protocol, mailbox/FIFO ownership, stream 110 and screen crypto for comparison. |
 | [Cluster Loader](CLUSTER_LOADER.md) | The PRISM waiting animation: an embedded glass-Apple material shader in `altscreen_render/loader/`, drawn until the first decoded picture takes over. |
 | [Reconnect and Lifecycle](RECONNECT_AND_LIFECYCLE.md) | Lifecycle churn on a fast replug, now absorbed by a 400 ms deactivate debounce. Also covers the advert correction, the main-screen UUID fix, and renderer supervision. |
-| [AltScreen Frame Rate](ALTSCREEN_FRAME_RATE.md) | Why cluster video ran 20–27 fps: iOS sender policy, the stock 30 fps path, the age-filter regression, capture clock. |
+| [AltScreen Input Commands](ALTSCREEN_INPUT_COMMANDS.md) | Canonical input path, paced zoom, reserved priority, state replacement, pre-commit/TTL cancellation, CF faults and runtime knobs. |
+| [AltScreen Pacing Validation](ALTSCREEN_PACING_VALIDATION.md) | Current startup/steady, HELLO/STATUS, clock and input-command contracts; 25 sanitizer scenarios, paced zoom, command priority/coalescing, test commands and hardware limits. |
+| [AltScreen Frame Rate](ALTSCREEN_FRAME_RATE.md) | Saved 20–27 fps evidence, sender/decoder/capture analysis, all six current pacing improvements, operation counts and offline validation limits. |
 | [AltScreen RE History](ALTSCREEN_RE_HISTORY.md) | Every altScreen framing, gate theory, plan and verdict in order — what held and what was refuted. |
 | [Cluster Video Encoder](CLUSTER_VIDEO_ENCODER.md) | DisplayManager, `videoencoderservice` and stock KOMO: how a cluster context becomes the VC's H.264. |
 | [Cover Art Pipeline](COVER_ART_PIPELINE.md) | Stock MH2P cover-art design vs our MHI2Q hook, and the size-only Setup regression. |
@@ -55,4 +62,4 @@ flowchart TB
 
 ## 💡 Truth levels
 
-Claims are tagged **[car]** for confirmed on the unit, **[decompile]** for reverse engineering, **[code]** for verified in the current source, and **[open]** for unverified. The stream 111 path from decode to panel is **[car]**: one session ran 13,056 frames in 5 min. The frame rate actually delivered, and what causes it, is still **[open]**. Provenance is listed in each note's Sources section; merged originals remain in git history.
+Claims are tagged **[car]** for confirmed on the unit, **[decompile]** for reverse engineering, **[code]** for verified in the current source, and **[open]** for unverified. The earlier stream 111 path from decode to panel is **[car]**: one session ran 13,056 frames in 5 min. The 2026-10-06 pacing candidate is verified offline, not on the unit. The frame rate actually delivered, and what causes it, is still **[open]**. Provenance is listed in each note's Sources section; merged originals remain in git history.

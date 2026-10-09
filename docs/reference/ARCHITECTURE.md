@@ -167,6 +167,29 @@ Authority for these tables: stock `libairplay.so` 210.81 (copy at `Patches/carpl
 
 The renderer does not post raw Qualcomm tiled NV12: it requests native 32m output `0x7f000004` (linear NV12 cannot finish Loaded→Idle on this decoder), binds Screen buffers with `OMX_UseBuffer`, imports each decoded buffer as an EGL external image and draws it into a managed RGBA8888 plane-99 window, recycling the OMX buffer only after the synchronous present. A callback-close gate waits for active callbacks before arrays are destroyed; health is asserted only after a successful swap, and three consecutive failures arm output-only recovery. `maneuver_render` creates its Screen context before `eglGetDisplay`, which this Adreno stack requires. Details in [Video Pipeline](../altscreen-and-video/VIDEO_PIPELINE.md). **[code]**
 
+The 2026-10-06 source candidate transfers owned length-size-4 AU buffers through
+a bounded forwarding worker, batches header/payload I/O and carries producer
+metadata across the renderer queue. Recovery is shared per generation; idle EOF
+is observed without another phone frame, and an opt-in presentation-status
+channel confirms readiness. The presenter selects the newest pending nonempty
+decoded picture through a bounded mailbox snapshot; selected/in-flight buffers
+remain owned until GPU completion. `ALTSCREEN_PRESENT_FIFO=1` restores FIFO.
+These changes have offline test and QNX build evidence, with vehicle pacing
+unmeasured. Details: [Video Pipeline](../altscreen-and-video/VIDEO_PIPELINE.md),
+[six improvements](../altscreen-and-video/ALTSCREEN_FRAME_RATE.md), and
+[current boundary validation](../altscreen-and-video/ALTSCREEN_PACING_VALIDATION.md).
+HELLO capability activation is deadline-bound; unsolicited STATUS is rejected.
+Idle observation uses a monotonic QNX/Linux condition or relative Darwin wait.
+Startup promotion requires fresh latest, pending and in-flight input, independently
+of presentation readiness.
+**[code]**
+
+The separate CF-command worker has a pure scheduling policy, reserved urgent
+capacity and bounded zoom intent. Each selected zoom saves its input age, retains
+a generation-matched target, then commits under the command mutex before calling
+the SDK outside both mutexes. State construction must succeed before replacing
+pending state. Contracts and sources: [Input commands](../altscreen-and-video/ALTSCREEN_INPUT_COMMANDS.md).
+
 Sources: `STOCK_INTEGRATION_SEAM_AUDIT`
 
 ## 📦 Java patch

@@ -6,45 +6,144 @@
 
 ## ⚙️ The delivery path
 
-The hook reads stream 111 off the phone socket, decrypts it and converts AVCC to Annex-B ([AltScreen Cluster Video](ALTSCREEN_CLUSTER_VIDEO.md) has the receiver). Each access unit then goes over localhost TCP `:19831` to `altscreen_render` (`hook/altscreen/altscreen_av.c:289-316`, `hook/altscreen/altscreen_av.h:27`, `altscreen_render/protocol.h:24`). The renderer feeds OMX, and a presenter worker draws each decoded buffer into the RGBA plane of displayable `99`, which `videoencoderservice` captures for the VC ([Cluster Video Encoder](CLUSTER_VIDEO_ENCODER.md)). **[car]** / **[code]**
+The current source candidate receives stream 111 in the hook, decrypts each AU,
+validates its complete NAL framing and converts AVCC to Annex-B. With
+`lengthSize = 4`, validation, IDR classification and prefix rewriting share one
+NAL-boundary pass. The receiver transfers its buffer to a bounded forwarder
+queue and receives a spare; localhost I/O runs on another worker. The renderer
+transfers its read buffer to the decode queue, feeds OMX and selects decoded
+pictures through a mailbox presenter. **[code]**[^pacing_source]
 
 ```mermaid
-flowchart LR
-  accTitle: AltScreen video delivery from phone to cluster plane
-  accDescr: Stream 111 enters the hook receiver, is forwarded over TCP 19831 with TCP_NODELAY, read by altscreen_render, decoded by OMX, queued to a presenter worker, drawn with glFinish and swapped to plane 99.
-  phone["phone stream 111 AU"]
-  recv["hook decrypt, Annex-B"]
-  fwd["TCP 19831 NODELAY"]
-  reader["render socket reader"]
-  omx["OMX qcom AVC decode"]
-  worker["presenter worker FIFO"]
-  plane["draw, glFinish, plane 99"]
-  phone --> recv
-  recv --> fwd
-  fwd --> reader
-  reader --> omx
-  omx --> worker
-  worker --> plane
-  classDef primary fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
-  classDef success fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
-  classDef neutral fill:#f3f4f6,stroke:#6b7280,stroke-width:2px,color:#1f2937
-  class phone,plane primary
-  class recv,fwd success
-  class reader,omx,worker neutral
+flowchart TB
+    accTitle: Current AltScreen frame delivery pipeline
+    accDescr: The hook transfers owned buffers to a forwarding worker, the renderer reads and decodes them, and a mailbox presenter draws into plane 99 before the independent stock capture clock samples it.
+
+    phone_stream["Phone stream 111 AU"]
+    prepare_frame["Decrypt and prepare owned AU"]
+    forward_queue["Forward queue: 32 AUs / 8 MiB"]
+    write_record["Worker writes header and payload"]
+    decode_queue["Reader transfers buffer to decode queue"]
+    omx_decode["OMX decodes every dependent AU"]
+    select_picture["Mailbox selects newest queued picture"]
+    present_picture["Refresh image, draw, glFinish, swap"]
+    stock_capture["Stock captures plane 99"]
+
+    phone_stream --> prepare_frame --> forward_queue --> write_record
+    write_record --> decode_queue --> omx_decode --> select_picture
+    select_picture --> present_picture --> stock_capture
 ```
 
-The renderer reports `VIDEO_ON` (`0x81`, the current stream has a successfully presented picture) and `VIDEO_OFF` (`0x82`) to Java as a **client** of `AltscreenControlServer` on `:19832`; Java sends `ALTCMD_VIEW_AREA` (`0x01`, full/compact, style, raw preset) back over the same link (`altscreen_render/protocol.h:32-42`, `java_patch/com/luka/carplay/core/AltscreenControlServer.java:32-34`). Java starts that server unconditionally (`java_patch/com/luka/carplay/core/CarPlayApp.java:73`). The choice of TCP to a separate process (decision **B**, 2026-07-29) keeps one OMX decoder per process and isolates a GL/OMX crash from dio_manager; see [AltScreen RE History](ALTSCREEN_RE_HISTORY.md). **[code]**
+This candidate was verified offline on 2026-10-06. The earlier phone-to-cluster
+path has on-car evidence; the new ownership, control-channel and mailbox
+behavior has host tests and QNX build evidence, with actual vehicle pacing
+still unmeasured. See [AltScreen Frame Rate](ALTSCREEN_FRAME_RATE.md) for all
+six changes and their validation limits.
+
+The renderer reports `VIDEO_ON` (`0x81`) to Java only after a successful present
+in the current generation, and `VIDEO_OFF` (`0x82`) when that readiness is lost.
+It connects as a client to Java's `AltscreenControlServer` on `:19832`; Java
+sends `ALTCMD_VIEW_AREA` (`0x01`, full/compact, style, raw preset) back over that
+same four-byte control protocol. This is separate from hook/renderer status on
+`:19831`. The external renderer continues to isolate OMX/GL from dio_manager.
+**[code]**[^control_source]
+
+The separate [input command worker](ALTSCREEN_INPUT_COMMANDS.md) sends semantic
+roller/view/night/appearance commands through the stock SDK. Its reserved queue,
+CF ownership and immutable selected-input age are independent of this compressed
+AU queue, decoder and Java presentation-readiness channel. Input scheduling
+changes are not a measurement of video frame pacing.
 
 ### The localhost link
 
-| Property | Value |
+| Property | Current source contract |
 |---|---|
-| Framing | `[u32 BE length][Annex-B payload]`, two send records per AU; renderer `frame_io.c` reads exactly 4 bytes then the body; max message 4 MiB (`altscreen_render/protocol.h:28`) |
-| First record per connection | Cached SPS/PPS flagged `CODECCONFIG` (`altscreen_av.c:47-50`, `:223-237`) |
-| Socket | Non-blocking, `SO_SNDBUF` 512 KiB, `SO_SNDTIMEO` 500 ms, `TCP_NODELAY`, connect timeout 250 ms (`altscreen_av.c:35-36`, `:125-142`, `:168-169`) |
-| Short writes | `av_send_all_locked` completes each record, polls `POLLOUT`, gives up after `AV_SEND_STALL_LIMIT_MS = 1000` per call (`altscreen_av.c:183-215`) |
-| Renderer queue | Independent socket reader and decode worker; queue bounded at **1024 items / 24 MiB** as a memory cap (`altscreen_render/main.c:99-100`) |
-| Watchdogs | Screen/EGL startup watchdog 15 s → `_exit(92)`; decode-thread exit wait 1500 ms (`main.c:39-55`, `:361`) |
+| Endpoint | Hook client → renderer server, `127.0.0.1:19831` |
+| Legacy framing | Four-byte BE length followed by Annex-B payload |
+| Negotiated v2 | Forty-byte BE metadata header followed by Annex-B payload; maximum payload 4 MiB |
+| First H.264 record | Cached SPS/PPS marked config, then a verified IDR; status-capable peers exchange an opt-in ACK before config |
+| Socket | Nonblocking, `SO_SNDBUF` 512 KiB, `TCP_NODELAY`; connect wait 250 ms; complete greeting collected within one 40 ms deadline, also capped by the transaction deadline |
+| I/O budget | One 1000 ms monotonic deadline covers connect, greeting, ACK, config replay and AU send |
+| Batched I/O | `writev` handles header + payload without copying; known-v2 reader reads the complete header, then payload. Partial writes, EINTR and EAGAIN retain the same deadline |
+| Hook queue | At most 32 AUs / 8 MiB of buffer capacity; overflow fences the epoch and clears the dependent chain |
+| Renderer queue | At most 1024 items / 24 MiB of buffer capacity; startup retains this budget. A healthy, drained stream uses valid origin age to detect multi-AU backlog over 1000 ms |
+| Idle observation | Hook worker checks control/EOF every 100 ms while idle using a monotonic condition on QNX/Linux and relative wait on macOS. Wall-clock corrections do not postpone the tick. Frame silence is valid; there is no static-scene receive timeout |
+| Watchdogs | Screen/EGL startup: 15 s → `_exit(92)`; decode-worker exit wait: 1500 ms |
+
+Source: [hook forwarder](../../hook/altscreen/altscreen_av.c),
+[renderer reader](../../altscreen_render/frame_io.c) and
+[decode queue](../../altscreen_render/main.c). **[code]**
+
+### Negotiation and presentation readiness
+
+```mermaid
+sequenceDiagram
+    accTitle: AltScreen status negotiation and recovery
+    accDescr: New peers opt into presentation status before config and IDR. Recovery clears after sustained ready status; idle EOF fences continuity and starts bounded keyframe retries without waiting for another phone AU.
+
+    participant phone as Phone
+    participant forward_worker as Hook forwarding worker
+    participant renderer as Renderer process
+    participant present_worker as OMX and presenter
+
+    forward_worker->>renderer: Connect to localhost 19831
+    renderer-->>forward_worker: HELLO capability 3
+    forward_worker->>renderer: ACK: producer generation, capability 1
+    forward_worker->>renderer: v2 config, then verified IDR
+    renderer->>present_worker: Queue config and AU
+    present_worker-->>renderer: First successful present
+    loop Ready status, at least 500 ms apart
+        renderer-->>forward_worker: STATUS: producer generation, ready 1
+    end
+    Note over forward_worker: At least 1 s sustained readiness clears recovery
+    renderer--xforward_worker: Peer EOF during idle scene
+    forward_worker->>forward_worker: Fence epoch and require fresh IDR
+    forward_worker->>phone: forceKeyFrame for cluster uuid
+    Note over forward_worker,phone: Shared recovery retries use 2 / 4 / 8 s backoff
+```
+
+| Peer combination | AU framing | Recovery confirmation |
+|---|---|---|
+| New hook + HELLO capability 3 renderer | v2, with explicit hook ACK | Repeated ready status spanning at least 1 s |
+| New hook + HELLO 2 renderer | v2, without status | Successful transport send |
+| New hook + silent renderer | Legacy | Successful transport send |
+| Older hook + new renderer | Legacy if its HELLO parser does not recognize capability 3 | No status unless the hook opts in |
+
+The hook's ACK enables status traffic; it does not mean a picture has appeared.
+STATUS `ready = 1` follows successful presentation. Status carries the producer's
+generation; stale owners, invalid state values, STATUS without opt-in and
+malformed records end the link. The greeting deadline is checked again after
+`poll` before bytes are read, and again after a full greeting before capabilities
+are enabled. A fully consumed late greeting is cleared before legacy fallback.
+Negotiation accepts fragmented HELLO within its deadline. A timed-out partial
+greeting stays aligned for later idle parsing without upgrading the legacy
+connection. The idle worker accepts fragmented control records and drains at
+most eight per observation. HELLO/ACK and partial I/O add calls beyond the
+steady complete-AU count. **[code]**[^wire_source]
+
+The startup-policy state machine and deadline/fallback sequence are in
+[AltScreen Pacing Validation](ALTSCREEN_PACING_VALIDATION.md).
+
+### V2 AU header
+
+All integers use explicit big-endian byte encoding, without packed ARM structs.
+
+| Offset | Bytes | Field |
+|---|---:|---|
+| 0 | 4 | Magic `0x41563246` (`AV2F`) |
+| 4 | 2 | AU version `2`, even when HELLO advertises capability `3` |
+| 6 | 2 | Flags: config `1`, IDR `2` |
+| 8 | 4 | Payload length |
+| 12 | 4 | Producer generation |
+| 16 | 8 | AU sequence; config uses `0` |
+| 24 | 8 | Phone sender NTP PTS |
+| 32 | 8 | Hook receipt time, monotonic microseconds |
+
+HELLO is eight bytes. ACK and STATUS are twelve bytes each: magic, producer
+generation, and capabilities (`1`) or readiness (`0`/`1`). Future or unavailable
+hook receipt times fall back to local enqueue time for compressed backlog policy.
+Sender PTS remains diagnostic; it does not reorder decode or filter output age.
+**[code]**[^wire_source]
 
 ## 🔍 Stock stream 110 for comparison
 
@@ -102,7 +201,7 @@ Sources: `MH2P_SCREEN_CRYPTO_320_2026_09_16`, `SHOWCASE_AIRPLAY2_REVIEW`
 
 | Aspect | Current implementation |
 |---|---|
-| AVCC → Annex-B | Done in the **hook**, not the renderer. The first record on each connection is the cached SPS/PPS, flagged `CODECCONFIG` (`altscreen_av.c:47-50`, `:223-237`, `sink_omx_qnx.c:7-10`). |
+| AVCC → Annex-B | Done in the hook. Owned length-size-4 buffers are rewritten in place; length sizes 1–3 use expanding conversion. Cached SPS/PPS is the first H.264 record, flagged `CODECCONFIG`; an opt-in ACK may precede it. |
 | Port definition | Native Qualcomm 32m tiled output, OMX `0x7F000004` (`sink_omx_qnx.c:52`). Explicit `xFramerate = 30<<16` on both ports, verified by readback (`sink_omx_qnx.c:427-470`). Linear NV12 `0x27` cannot leave Loaded on MU1316. |
 | Decoder-order mode | `OMX.QCOM.index.config.video.DisplayPictureBuffer` through a **20-byte** `GetParameter` → set `+12`/`+16` → `SetParameter` → readback. This is the OEM ABI; the old 12-byte `SetConfig` was not equivalent (`sink_omx_qnx.c:53`, `:474-515`). Details in [AltScreen Frame Rate](ALTSCREEN_FRAME_RATE.md). |
 | Output buffers | Native Screen WINDOW buffers bound with `OMX_UseBuffer` (`sink_omx_qnx.c:563-598`). After `FillBufferDone`, EGL imports the same buffer through a non-owning pixmap alias (`EGL_NATIVE_PIXMAP_KHR`). The GPU then de-tiles, converts YUV to RGB and draws into the RGBA8888 window of displayable `99` (`altscreen_render/screen_egl_present.c:1-21`). |
@@ -152,17 +251,57 @@ Sources: `SHOWCASE_AIRPLAY2_REVIEW`, `ALTSCREEN_COVERART_LIVE_REGRESSIONS`
 
 Cluster video felt like rubber-banding (2026-09-06). Everything downstream looked innocent: EGL swap took 0.3 ms, there were no drops, and the decode queue never filled. Arrival at presentation was still avg 48 ms / max 204–233 ms against the advertised `maxFPS=30`. **[car]**
 
-The cause: the hook writes each frame as **two** records, `[u32 BE len]` then the access unit, and the socket had no `TCP_NODELAY`. The header ships at once and leaves data unacked. Nagle then holds the sub-MSS access unit until the header is ACKed. The renderer never writes back, so nothing carries the ACK early, and the hold lasts the delayed-ACK timer. The fix sets `TCP_NODELAY` on the renderer link (`hook/altscreen/altscreen_av.c:135-142`, @`cb94115`). Framing is still two records, now sent through the short-write-safe `av_send_all_locked` (`altscreen_av.c:184-251`). After the fix the arrival counters agree at **avg 34 / max 71–99 ms** (29.4 fps). **[car]** / **[code]**
+In the measured build, the hook wrote each frame as **two** writes, `[u32 BE len]` then the access unit, and the socket had no `TCP_NODELAY`. The header ships at once and leaves data unacked. Nagle then holds the sub-MSS access unit until the header is ACKed. That renderer did not write back, so nothing carried the ACK early, and the hold lasts the delayed-ACK timer. The fix sets `TCP_NODELAY` on the renderer link (`hook/altscreen/altscreen_av.c:135-142`, @`cb94115`). That historical fix retained separate header/body sends through `av_send_all_locked`. The current candidate uses `av_write_vectors_locked` to batch header and payload and still keeps `TCP_NODELAY`; it has no new on-car timing measurement. After the fix the arrival counters agree at **avg 34 / max 71–99 ms** (29.4 fps). **[car]** / **[code]**
 
 The attribution is not airtight. The average had already recovered one window earlier, on the old hook, after a stream break. Something builds the 48 ms state during a session and resets it on reconnect, and that trigger is still **[open]**. Three arrival counters are in place to catch it:
 
 | Counter | Where | Cadence | Build |
 |---|---|---|---|
-| Hook pace (arrival/read/work/pts) | `altscreen_hook.c:1267-1283`, `:1490` | every 300 AUs | only when `ENABLE_LOGGING` or `ENABLE_ALTSCREEN_PACE_TRACE` |
-| Render socket arrival | `altscreen_render/main.c:420-434` | every 600 frames | always |
-| Render worker-entry and swap | `altscreen_render/screen_egl_present.c:1014-1030` | every 600 frames | always |
+| Hook pace (arrival/read/work/pts) | `altscreen_hook.c`, `alt_pace_report` | every 300 AUs | bounded summary with verbose logging or pace trace |
+| Render socket arrival | `altscreen_render/main.c`, `serve_client` | detailed summary every 300 video AUs | `carplay_verbose`; separate basic socket probe remains every 600 records |
+| Render worker-entry and swap | `altscreen_render/screen_egl_present.c` | detailed steady summary every 300 successful presents | `carplay_verbose`; startup reported separately |
 
 See `memory/altscreen_delivery_nagle.md`.
+
+## 📦 Decoded-output mailbox ownership
+
+`FillBufferDone` queues an owned native slot; it never performs GPU work.
+The presenter selects the newest nonempty picture from a bounded snapshot and
+returns only earlier slots that no GPU read has begun. A selected or in-flight
+slot remains owned until `glFinish` completes its GPU reads. Synchronous OMX
+refills cannot extend the snapshot and starve the retained picture. A sole old
+picture is still shown, and a trailing empty output does not supersede a real
+picture. **[code]**[^mailbox_source]
+
+```mermaid
+flowchart TB
+    accTitle: Mailbox output selection and ownership
+    accDescr: The presenter either retains the sole queued picture or selects the newest nonempty picture from a bounded snapshot. Only untouched earlier slots return early; the selected slot returns after GPU completion.
+
+    queued_output["Queue owned OMX output"] --> multiple_pending{"Multiple outputs pending?"}
+    multiple_pending -->|No| retain_picture["Retain sole queued output"]
+    multiple_pending -->|Yes| snapshot_queue["Snapshot pending output slots"]
+    snapshot_queue --> select_picture["Select newest nonempty picture"]
+    select_picture --> return_older["Return untouched earlier slots"]
+    return_older --> draw_picture["Refresh external image and draw"]
+    retain_picture --> draw_picture
+    draw_picture --> finish_gpu["glFinish completes GPU reads"]
+    finish_gpu --> swap_and_recycle["Swap and return selected slot"]
+```
+
+| Mode or failure | Behavior |
+|---|---|
+| Default | Mailbox enabled at `av_sink_open` |
+| `ALTSCREEN_PRESENT_FIFO=1` | Presenter retains FIFO selection |
+| All outputs empty | Returns older empty slots without inventing a picture |
+| Recycle error | Latches OMX error and stops the presenter; readiness becomes false |
+| Teardown | Stops and joins presenter before OMX state/free operations; pending slots remain on the client side for teardown |
+
+Mailbox never skips compressed P-frames and never applies a decoded-age cutoff.
+Host tests cover burst selection, empty outputs, sole old frames, synchronous
+refills, GPU overlap, stop and recycle failures. Actual BSP buffer/reference
+behavior remains unverified for this candidate. See
+[frame-rate validation](ALTSCREEN_FRAME_RATE.md).
 
 ## 🔍 Load-bearing operations: do not remove
 
@@ -189,6 +328,8 @@ Recorded input ran at 20–27 fps against `maxFPS = 30`; there is no fixed 20 fp
 
 </details>
 
+---
+
 **Related:** [Archive and History](../reference/ARCHIVE_AND_HISTORY.md) — the earlier video designs and why they were dropped.
 
 
@@ -207,3 +348,8 @@ Merged originals were removed from the tree after this note absorbed them; they 
 - `memory/altscreen_delivery_nagle.md`, `memory/screenstream_omx_parity.md`.
 
 Related: [AltScreen Frame Rate](ALTSCREEN_FRAME_RATE.md), [AltScreen Cluster Video](ALTSCREEN_CLUSTER_VIDEO.md), [Cluster Loader](CLUSTER_LOADER.md), [Cluster Video Encoder](CLUSTER_VIDEO_ENCODER.md), [AltScreen and Video overview](README.md).
+
+[^pacing_source]: Current receiver/forwarder: [altscreen_hook.c](../../hook/altscreen/altscreen_hook.c), [avcc_frame.h](../../hook/altscreen/avcc_frame.h), [altscreen_av.c](../../hook/altscreen/altscreen_av.c); offline result index: [summary.json](../../build/altscreen-pacing-validation/summary.json).
+[^control_source]: [altctl.c](../../altscreen_render/altctl.c), [protocol.h](../../altscreen_render/protocol.h), [AltscreenControlServer.java](../../java_patch/com/luka/carplay/core/AltscreenControlServer.java).
+[^wire_source]: [alt_video_wire.h](../../common/alt_video_wire.h), [frame_io.c](../../altscreen_render/frame_io.c), [control round-trip test](../../tests/altscreen_control_test.c), [fragmented control test](../../tests/altscreen_health_wire_test.c), [greeting negotiation test](../../tests/altscreen_negotiation_test.c).
+[^mailbox_source]: [sink_omx_qnx.c](../../altscreen_render/sink_omx_qnx.c), [mailbox test](../../tests/altscreen_mailbox_test.c).

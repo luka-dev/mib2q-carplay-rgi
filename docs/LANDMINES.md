@@ -345,7 +345,15 @@ Domain: [AltScreen Cluster Video](altscreen-and-video/ALTSCREEN_CLUSTER_VIDEO.md
 
 **forceKeyFrame / cluster IDR must be keyed by `uuid`, NOT `displayUUID`.** iOS 26.6 reads `params["uuid"]` (displayUUID is a HID key) → a mis-keyed cluster IDR falls back to the primary screen → with showUI gated behind the first IDR the cluster stays BLACK. Fixed: `alt_request_cluster_idr()` builds params with `alt_params_new(1)`, which sets `uuid = CLUSTER_DISPLAY_UUID` (`hook/altscreen/altscreen_hook.c:2367,2502-2523`). · audit 9295b04 + decompile · `memory/production_full_audit_9295b04.md`.
 
-**Keep TCP_NODELAY on the hook→renderer socket.** The hook still writes each frame as two records, `[u32 BE len]` then the access unit (`hook/altscreen/altscreen_av.c:222-250`); with Nagle on, the sub-MSS AU waited on the delayed-ACK timer → cluster rubber-banding (48→34 ms after the fix). `TCP_NODELAY` is set at `hook/altscreen/altscreen_av.c:135-142`; dropping it (or it failing) brings the stall back unless the writes are coalesced. Don't probe Nagle on macOS — QNX runs an old NetBSD stack. · on-car · `memory/altscreen_delivery_nagle.md`.
+**Keep TCP_NODELAY on the hook→renderer socket.** The measured older path sent header and AU separately; Nagle/delayed ACK correlated with rubber-banding. The current candidate uses partial-write-safe `writev` for header + payload and retains `TCP_NODELAY`. This does not prove the BSP's ACK behavior is irrelevant: do not remove the setting based on a macOS benchmark. Historical evidence and current framing are separated in [Video Pipeline](altscreen-and-video/VIDEO_PIPELINE.md). · **[car]** historical / **[code]** current.
+
+**Mailbox may return only decoded slots the GPU has never read.** Retain the selected and in-flight slots until `glFinish`; take a bounded snapshot so synchronous OMX refills cannot starve the chosen picture. Do not replace this with a decoded-age cutoff or compressed P-frame dropping. A sole old picture must still show; empty output cannot supersede a real picture. The 2026-10-06 source enables mailbox, with `ALTSCREEN_PRESENT_FIFO=1` fallback; BSP behavior remains unmeasured. · **[code]** / offline tests · [Video Pipeline](altscreen-and-video/VIDEO_PIPELINE.md#-decoded-output-mailbox-ownership).
+
+**Receiving another IDR is not presentation-health confirmation.** Failed IDRs must not reset the generation-scoped recovery backoff. With the new opt-in channel, only sustained ready STATUS clears recovery; the hook's ACK merely enables that channel. Silent/HELLO-2 peers retain the transport-success fallback. Static frame silence is valid; detect EOF while idle without introducing an idle frame timeout. · **[code]** · [AltScreen recovery](altscreen-and-video/ALTSCREEN_CLUSTER_VIDEO.md#idr-recovery).
+
+**Keep idle/recovery waits independent of wall time.** A `CLOCK_REALTIME` deadline can turn the 100 ms idle tick into a long wait after a backward correction. QNX/Linux use a separately initialized monotonic condition; Darwin uses relative timed wait. Keep the default condition valid if initialization fails, and suppress the worker/advert rather than continuing with an invalid condition. The regression models a one-hour correction without changing the host clock. · **[code]** / offline tests · [Pacing validation](altscreen-and-video/ALTSCREEN_PACING_VALIDATION.md#-idle-observation-timebase).
+
+**Do not upgrade capabilities from late HELLO or trust unnegotiated STATUS.** Collect the complete greeting within one capped 40 ms deadline; recheck after `poll` and the final `recv`. Preserve partial bytes on timeout, but clear an already consumed full late HELLO so it cannot become a false EOF. A legacy fallback cannot gain status capabilities midstream; unexpected STATUS ends the link. · **[code]** · [Greeting boundaries](altscreen-and-video/ALTSCREEN_PACING_VALIDATION.md#-hello-and-status-boundaries).
 
 **The altScreen gate is the control-SETUP *response* `enabledFeatures` containing `"altScreen"` (+ `"viewAreas"`) — not `/info` `extendedFeatures`.** iOS 26.6 reads the negotiated set from the response key `enabledFeatures`; `carEndpoint_Activate` sets endpoint `+0x3E` = contains `"altScreen"`, and only then does `setupStreams` create stream 111. `/info` `extendedFeatures` is a separate message and does not set that flag; stock 210 writes no response `enabledFeatures`, so without the hook 111 never negotiates. The hook seeds from the receiver's existing response set and appends only the two contracts it implements; **never echo the phone's `features` proposal** — each string flips a sibling phone flag (`viewAreas` +0x3D, `uiContext` +0x3F, `enhancedSiri` +0x39) and would enable features stock doesn't implement (`hook/altscreen/altscreen_hook.c:1822-1881`). The `/info` interposer on `AirPlayCopyServerInfo` still adds `extendedFeatures` plus the `displays` tree (`:11-18`), but that is the display advert, not the gate. · iOS 26.6 disasm · `memory/altscreen_ios26_gate_verified.md` (its "/info extendedFeatures" wording is stale), [AltScreen Cluster Video](altscreen-and-video/ALTSCREEN_CLUSTER_VIDEO.md), [Session Lifecycle](connect-and-usb/SESSION_LIFECYCLE.md).
 
@@ -368,6 +376,19 @@ Domain: [AltScreen Cluster Video](altscreen-and-video/ALTSCREEN_CLUSTER_VIDEO.md
 **Keep the 3-failure / 30 s cooldown on OMX decoder start.** Each failed `GetHandle` can hold a hardware slot; a starved pool made dio's own decoder fail into a CarPlay crash loop (`altscreen_render/sink_omx_qnx.c:949-968`). · on-car · [Video Pipeline](altscreen-and-video/VIDEO_PIPELINE.md).
 
 **Don't patch libosal or raise `setUpdateRate` to 60 for a smoother cluster.** VC capture is an independent integer 33 ms timer in `videoencoderservice`; the change affects other timers and creates no phone frames. · decision 2026-09-15 · [AltScreen Frame Rate](altscreen-and-video/ALTSCREEN_FRAME_RATE.md).
+
+**Keep immutable selected zoom age.** Pending count may be zero while a selected
+step waits for its target. Fresh same-direction input must not refresh that
+selected timestamp or produce an extra step after TTL. Use the selected stamp's
+`input_us`, and retain the target before the final commit check. · input review,
+2026-10-09 · [Input commands](altscreen-and-video/ALTSCREEN_INPUT_COMMANDS.md).
+
+**Validate CF construction before replacing pending state.** Check required
+keys/values and array append; `CFDictionarySetInt64` returns `OSStatus`, so its
+number-creation error must propagate. A failed new view-area request gets an
+error ACK while the old valid pending command survives; replacement cancellation
+uses `-ECANCELED`, never fake success. · input review, 2026-10-09 ·
+[Input commands](altscreen-and-video/ALTSCREEN_INPUT_COMMANDS.md).
 
 ---
 

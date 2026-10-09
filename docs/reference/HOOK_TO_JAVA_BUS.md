@@ -25,7 +25,8 @@ flowchart LR
   man["maneuver_render"]
   alt["altscreen_render"]
   hook -->|"19810 bus, full-duplex"| java
-  hook -->|"19831 H.264 data"| alt
+  hook -->|"19831 H.264 AUs"| alt
+  alt -.->|"19831 opt-in status"| hook
   alt -->|"19832 ctl, 4-byte packets"| java
   man -->|"19800 cmds, 48-byte packets"| java
   classDef primary fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
@@ -41,7 +42,7 @@ Arrows point from the connecting client to the listening server; traffic on ever
 | Channel | Port | Client → server | Payload | Evidence |
 |---|---|---|---|---|
 | Control bus | `127.0.0.1:19810` | hook → Java | RGI state, cover-art, cluster commands (full-duplex) | `bus_protocol.h:7,59`; `CarplayBus.java:34` **[code]** |
-| AltScreen data | `127.0.0.1:19831` | hook → altscreen_render | Cluster stream-111 H.264, `[u32 BE len][AU]` | `altscreen_av.h:25-27`; `altscreen_render/protocol.h:24` **[code]** |
+| AltScreen data/status | `127.0.0.1:19831` | hook → renderer AUs; renderer → hook negotiated status | Annex-B H.264 with v2 metadata or legacy length framing; HELLO capability 3 + explicit ACK opts into STATUS readiness | [alt_video_wire.h](../../common/alt_video_wire.h); [Video Pipeline](../altscreen-and-video/VIDEO_PIPELINE.md#negotiation-and-presentation-readiness) **[code]** |
 | AltScreen ctl | `127.0.0.1:19832` | altscreen_render → Java | Fixed 4-byte packets: `VIDEO_ON`/`VIDEO_OFF` up, `VIEW_AREA` down | `altscreen_render/protocol.h:30-43`; `AltscreenControlServer.java:32` **[code]** |
 | Maneuver renderer | `127.0.0.1:19800` | maneuver_render → Java | Fixed 48-byte command packets; renderer heartbeat up | `maneuver_render/protocol.h:4,15`; `RendererServer.java:2,44` **[code]** |
 
@@ -71,7 +72,14 @@ Payload defaults to text `key:type:value\n` lines; `BUS_FLAG_BINARY` (0x02) mark
 
 **Keep `write_bus_snapshot_from_cache`.** It builds one `EVT_RGD_UPDATE` carrying route state, the maneuver list and slot data, sent sticky, so Java sees a coherent full state atomically rather than a delta history (`hook/routeguidance/rgd_hook.c:146,464-483,1179`) **[code]**. The old PPS delta-drop problem doesn't exist on TCP; the snapshot exists for coherence and reconnect, not packet loss.
 
-**Cluster commands ride the same bus.** `CMD_ALT_ZOOM` is live at `0x0110` (`bus_protocol.h:92`, `CarplayBus.java:54`, handler `zoom_on_cmd` registered at `hook/altscreen/altscreen_hook.c:2635`); `CMD_ALT_ZONE 0x0111`, `CMD_ALT_ZONE_ACK 0x0112`, `CMD_ALT_APPEARANCE 0x0114`, `CMD_ALT_UICTX 0x0115`, `CMD_ALT_RGI 0x0116` follow. `CMD_ALT_HID` / `CMD_KNOB` do not exist (the old stale `CMD_KNOB` comment in `bus.c` is gone too) — the cluster has no HID path; all cluster commands are BAP/semantic. The July 2026 plan had put `CMD_ALT_HID` at 0x0110; that slot is now `CMD_ALT_ZOOM`. `EVT_DEVICE_STATE 0x0030` is reserved and unused. **[code]**
+**Cluster commands ride the same bus.** `CMD_ALT_ZOOM` is live at `0x0110` (`bus_protocol.h:92`, `CarplayBus.java:54`, handler `zoom_on_cmd` in `hook/altscreen/altscreen_hook.c`); `CMD_ALT_ZONE 0x0111`, `CMD_ALT_ZONE_ACK 0x0112`, `CMD_ALT_APPEARANCE 0x0114`, `CMD_ALT_UICTX 0x0115`, `CMD_ALT_RGI 0x0116` follow. `CMD_ALT_HID` / `CMD_KNOB` do not exist (the old stale `CMD_KNOB` comment in `bus.c` is gone too) — the cluster has no HID path; all cluster commands are BAP/semantic. The July 2026 plan had put `CMD_ALT_HID` at 0x0110; that slot is now `CMD_ALT_ZOOM`. `EVT_DEVICE_STATE 0x0030` is reserved and unused. **[code]**
+
+The hook paces bounded zoom intent and replaces only pending idempotent cluster
+states. A replaced view-area request receives a cancellation status; successful
+ACKs still come from SDK completion. The bus payloads and BAP status reply are
+unchanged. Selected zoom keeps an immutable input timestamp; final validation
+follows retained-session acquisition. CF construction errors do not replace a
+valid queued state. See [Input commands](../altscreen-and-video/ALTSCREEN_INPUT_COMMANDS.md).
 
 **Telephony rides it too.** `EVT_TEL_LISTS 0x0040` is a sticky text frame with CarPlay recents (`r.n`, `r.<i>.a|b|type|ts|occ`) and favorites (`f.n`, `f.<i>.a|b`) from iAP2 ListUpdate; `EVT_TEL_COMM 0x0041` is a sticky text frame with `signal`, `registration`, `airplane` and `carrier` read from the stock CommunicationsUpdate; `CMD_TEL 0x0117` is `[u8 action][u8 on]`: `1` = mic mute (iAP2 0x4160), `2` = hold (0x415F), `3` = accept (AcceptCall 0x415B), `4` = end (EndCall 0x415C), `5` = swap (SwapCalls 0x415D) (`hook/telephony/tel_hook.c`, `GatedPhoneService`). See [CarPlay Telephony](../cluster-and-rgi/CARPLAY_TELEPHONY.md). **[code]**
 
@@ -128,7 +136,7 @@ Until early 2026 the hook wrote QNX PPS objects and Java subscribed in delta mod
 
 ## ⚠️ Framing landmine
 
-**Keep `TCP_NODELAY` on every loopback socket, above all hook → altscreen_render.** The hook writes each video frame as two records, `[u32 BE len]` then the access unit (`hook/altscreen/altscreen_av.c:222-250`). With Nagle on, the sub-MSS access unit waited out the delayed-ACK timer behind the unacked header → cluster rubber-banding (48 → 34 ms after the fix) **[car]**. `TCP_NODELAY` is set at `altscreen_av.c:135-142`, and also on the bus (`bus.c:507`), `altscreen_render/main.c:441`, `altscreen_render/altctl.c:34` and `maneuver_render/server.c:133` **[code]**. Don't probe Nagle behaviour on macOS — QNX runs an old NetBSD stack. · `memory/altscreen_delivery_nagle.md`. See [AltScreen Cluster Video](../altscreen-and-video/ALTSCREEN_CLUSTER_VIDEO.md).
+**Keep `TCP_NODELAY` on every loopback socket, above all hook → altscreen_render.** Historical separate header/AU writes exposed Nagle/delayed-ACK rubber-banding; those measurements belong to the earlier build. The current hook batches header + AU with partial-write-safe `writev`, retains `TCP_NODELAY` and negotiates v2 metadata/status within its greeting deadline. It rejects STATUS without opt-in. The remaining bus and renderer sockets also retain NODELAY. Current framing and historical measurements are separated in [Video Pipeline](../altscreen-and-video/VIDEO_PIPELINE.md); exact review contracts are in [Pacing Validation](../altscreen-and-video/ALTSCREEN_PACING_VALIDATION.md). **[code]** / historical **[car]**.
 
 ---
 

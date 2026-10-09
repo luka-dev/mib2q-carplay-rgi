@@ -21,6 +21,7 @@
  * tiled bytes without YUV->RGBA conversion, producing green/black output.
  */
 #include "screen_egl_present.h"
+#include "../common/alt_timing_stats.h"
 #include "pipeline_timing.h"
 #include "log_stamp.h"
 #include "loader/prism_baked.h"
@@ -129,6 +130,9 @@ struct screen_egl_present {
      * Synchronous presentation can delay the next callback. swap measures only
      * eglSwapBuffers; it excludes loader/lock/context waits, image refresh,
      * draw and glFinish, so a cheap swap does not exclude a GPU bottleneck. */
+    int timing_enabled;
+    int timing_startup_pending;
+    alt_timing_stat_t stages[10];
     uint64_t pace_last_entry_ns;
     uint64_t pace_arrival_sum_ns;
     uint64_t pace_arrival_max_ns;
@@ -667,6 +671,8 @@ screen_egl_present_t *screen_egl_present_create_output(int width, int height,
     cluster_surface_cfg cfg;
     if (width <= 0 || height <= 0) return NULL;
     p = (screen_egl_present_t *)calloc(1, sizeof(*p));
+    if (p)
+        p->timing_startup_pending = 1;
     if (!p) return NULL;
     p->width = width;
     p->height = height;
@@ -969,12 +975,16 @@ int screen_egl_present_frame(screen_egl_present_t *p,
          0.0f, 0.0f,  1.0f, 0.0f
     };
     GLenum gl_error = GL_NO_ERROR;
-    const char *stage = "validate";
+    const char *stage;
     int ok = -1;
-    uint64_t entry_ns, swap_begin_ns;
+    uint64_t entry_ns, swap_begin_ns, phase_us = 0;
+    int trace;
 
     if (!p || source_index >= p->source_count || filled_len == 0) return -1;
 
+    if (p->frames % 300u == 0)
+        p->timing_enabled = log_verbose_marker();
+    trace = p->timing_enabled;
     /* Worker entry spacing includes queue starvation and previous presentation
      * time. It is not the phone receive rate or the OMX callback interval. */
     entry_ns = ep_monotonic_ns();
@@ -987,11 +997,28 @@ int screen_egl_present_frame(screen_egl_present_t *p,
     if (entry_ns) p->pace_last_entry_ns = entry_ns;
     /* The join is the ownership barrier: after it returns no loader draw can
      * race this first decoded frame or any subsequent video swap. */
+    if (trace)
+        phase_us = alt_timing_now_us();
     screen_egl_present_stop_loader(p);
+    if (trace) {
+        uint64_t n = alt_timing_now_us();
+        alt_timing_elapsed(&p->stages[0], phase_us, n);
+        phase_us = n;
+    }
     pthread_mutex_lock(&p->gl_lock);
+    if (trace) {
+        uint64_t n = alt_timing_now_us();
+        alt_timing_elapsed(&p->stages[1], phase_us, n);
+        phase_us = n;
+    }
     stage = "eglMakeCurrent";
     if (!eglMakeCurrent(p->egl_display, p->egl_surface, p->egl_surface,
                         p->egl_context)) goto fail;
+    if (trace) {
+        uint64_t n = alt_timing_now_us();
+        alt_timing_elapsed(&p->stages[2], phase_us, n);
+        phase_us = n;
+    }
 
     /* The EGLImage objects are created before OMX ever writes these buffers.
      * Adreno 320 updates luma through the persistent binding, but on this old
@@ -1000,6 +1027,11 @@ int screen_egl_present_frame(screen_egl_present_t *p,
      * planes are acquired for this frame. No allocation is created here. */
     stage = "refresh external image";
     (void)eglWaitNative(EGL_CORE_NATIVE_ENGINE);
+    if (trace) {
+        uint64_t n = alt_timing_now_us();
+        alt_timing_elapsed(&p->stages[3], phase_us, n);
+        phase_us = n;
+    }
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_EXTERNAL_OES, p->textures[source_index]);
     p->image_target_texture(GL_TEXTURE_EXTERNAL_OES,
@@ -1007,6 +1039,11 @@ int screen_egl_present_frame(screen_egl_present_t *p,
     gl_error = glGetError();
     if (gl_error != GL_NO_ERROR) goto fail;
 
+    if (trace) {
+        uint64_t n = alt_timing_now_us();
+        alt_timing_elapsed(&p->stages[4], phase_us, n);
+        phase_us = n;
+    }
     stage = "draw external image";
     glViewport(0, 0, p->width, p->height);
     glDisable(GL_BLEND);
@@ -1019,13 +1056,28 @@ int screen_egl_present_frame(screen_egl_present_t *p,
     glVertexAttribPointer((GLuint)p->attr_uv, 2, GL_FLOAT, GL_FALSE, 0,
                           texcoords);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    if (trace) {
+        uint64_t n = alt_timing_now_us();
+        alt_timing_elapsed(&p->stages[5], phase_us, n);
+        phase_us = n;
+    }
     glFinish();
+    if (trace) {
+        uint64_t n = alt_timing_now_us();
+        alt_timing_elapsed(&p->stages[6], phase_us, n);
+        phase_us = n;
+    }
     gl_error = glGetError();
     if (gl_error != GL_NO_ERROR) goto fail;
 
     stage = "eglSwapBuffers";
     swap_begin_ns = ep_monotonic_ns();
     if (!eglSwapBuffers(p->egl_display, p->egl_surface)) goto fail;
+    if (trace) {
+        uint64_t n = alt_timing_now_us();
+        alt_timing_elapsed(&p->stages[7], phase_us, n);
+        phase_us = n;
+    }
     {
         uint64_t swap_end_ns = ep_monotonic_ns();
         if (swap_begin_ns && swap_end_ns > swap_begin_ns) {
@@ -1076,8 +1128,26 @@ fail:
 out:
     /* Release ownership for output recovery or the reconnect loader. Only the
      * presenter worker draws video; the OMX callback never binds EGL. */
+    if (trace)
+        phase_us = alt_timing_now_us();
     eglMakeCurrent(p->egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE,
                    EGL_NO_CONTEXT);
+    if (trace) {
+        uint64_t n = alt_timing_now_us();
+        alt_timing_elapsed(&p->stages[8], phase_us, n);
+        alt_timing_elapsed(&p->stages[9], entry_ns / 1000u, n);
+        if ((p->timing_startup_pending && ok == 0) || p->stages[9].samples >= 300u) {
+            static const char *names[] = {
+                "loader_handoff", "gl_lock",    "make_current", "native_wait", "image_refresh",
+                "draw",           "gpu_finish", "swap",         "unbind",      "full_present"};
+            unsigned i;
+            for (i = 0; i < 10; ++i)
+                alt_timing_report(stderr,
+                                  p->timing_startup_pending ? "altscreen_render[egl startup]"
+                                                            : "altscreen_render[egl steady]",
+                                  names[i], &p->stages[i]);
+        }
+    }
     {
         uint64_t end_ns = ep_monotonic_ns();
         if (entry_ns && end_ns >= entry_ns) {
@@ -1094,8 +1164,27 @@ out:
             p->pace_work_sum_ns = p->pace_work_max_ns = p->pace_work_samples = 0;
         }
     }
+    if (ok == 0)
+        p->timing_startup_pending = 0;
     pthread_mutex_unlock(&p->gl_lock);
     return ok;
+}
+
+void screen_egl_present_reset_timing(screen_egl_present_t *p) {
+    if (!p)
+        return;
+    pthread_mutex_lock(&p->gl_lock);
+    memset(p->stages, 0, sizeof(p->stages));
+    p->frames = 0;
+    p->timing_startup_pending = 1;
+    p->pace_last_entry_ns = 0;
+    p->pace_arrival_sum_ns = p->pace_arrival_max_ns = 0;
+    p->pace_samples = 0;
+    p->pace_swap_samples = 0;
+    p->pace_swap_sum_ns = p->pace_swap_max_ns = 0;
+    p->pace_work_samples = 0;
+    p->pace_work_sum_ns = p->pace_work_max_ns = 0;
+    pthread_mutex_unlock(&p->gl_lock);
 }
 
 int screen_egl_present_recover_output(screen_egl_present_t *p) {

@@ -10,6 +10,16 @@ Stock `dio_manager` + libairplay 210.81 provide far more than a screen. The live
 
 > 📌 Correction (2026-08-28): LocationInformation/dead reckoning and NowPlaying metadata were first listed as features to add. Both are already stock-active; only the album-art image render (`DSICarplay` `coverArtUrl`) was ever finicky ([Cover Art Pipeline](COVER_ART_PIPELINE.md)).
 
+## 🎛️ Current input scheduling candidate
+
+The existing cluster zoom path now uses bounded paced intent, reserved
+recovery/layout selection and latest pending view/night/appearance state. The
+input reviews added mandatory CF construction checks, retained-session commit
+validation and immutable selected input age. These changes have offline tests
+and QNX build evidence; vehicle response/FPS were not measured. Configuration,
+ACK semantics and regression sources are in [Input commands](ALTSCREEN_INPUT_COMMANDS.md)
+and [Pacing Validation](ALTSCREEN_PACING_VALIDATION.md).[^input]
+
 ## 🎯 What could still be added
 
 The capability names are phone-side flags from carkitd/accessoryd 23G71 (iOS 26.6). Whether stock already advertises each one on the car side was not checked exhaustively against a live stock `/info`; each item needs its own advertisement and message confirmation before work starts. **[decompile]**
@@ -85,3 +95,5 @@ Merged originals were removed from the tree after this note absorbed them; they 
 - `memory/lodwidgets_liveactivities_re.md`.
 
 Related: [CarPlay Video Playback](CARPLAY_VIDEO_PLAYBACK.md), [AltScreen Cluster Video](ALTSCREEN_CLUSTER_VIDEO.md), [AltScreen and Video overview](README.md).
+
+[^input]: [Command policy](../../hook/altscreen/command_policy.h), [command worker](../../hook/altscreen/command_worker.h), [input/CF integration](../../hook/altscreen/altscreen_hook.c), [latest runner evidence](../../build/altscreen-input-refresh-final/summary.json).

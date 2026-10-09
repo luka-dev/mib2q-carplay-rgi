@@ -114,7 +114,11 @@ So our `changeMapZoomLevel` reaches Waze, is counted, and is discarded. Apple an
 `changeMapZoomLevel` is a semantic command, not HID. `CMD_ALT_ZOOM = 0x0110` is live end to end. `[code]`
 
 - Java: the MFL roller arrives as the NavSD FctID 45 SetGet; `AltScreenCombiBAPListener.setMapScale` hands the steps to `AltScreenModule`, which sends the command (`java_patch/de/audi/tghu/navi/app/cluster/AltScreenCombiBAPListener.java:62-70`, `java_patch/com/luka/carplay/core/AltScreenModule.java:95-101`). The constant is at `java_patch/com/luka/carplay/bus/CarplayBus.java:54`.
-- Hook: `hook/framework/bus_protocol.h:92`, handler `zoom_on_cmd` (`hook/altscreen/altscreen_hook.c:2465-2491`, registered at `:2635`). It expands a signed step (capped at 8) into `changeMapZoomLevel{uuid, zoomDirection}` for the cluster UUID. `ALTSCREEN_ZOOM_INVERT` flips the direction.
+- Hook: `zoom_on_cmd` accepts signed intent, and the native command worker paces
+  `changeMapZoomLevel{uuid, zoomDirection}` for the cluster UUID. A selected step
+  keeps immutable input age; `ALTSCREEN_ZOOM_INVERT` flips direction. See
+  [Input commands](../altscreen-and-video/ALTSCREEN_INPUT_COMMANDS.md) for current
+  bounds, runtime knobs and offline tests.[^input]
 
 `CMD_ALT_HID` and `CMD_KNOB` are not defined in `bus_protocol.h`. The cluster display advertises no `primaryInputDevice` (`altscreen_hook.c:508-510`), so all cluster commands are BAP or semantic. `[code]`
 
@@ -214,3 +218,5 @@ Merged originals were removed from the tree after this note absorbed them; they 
 
 - `RGI_THIRD_PARTY_NAV_APPS`: CarPlay.framework serializer, the metadata gate, Waze and AMap RE, Waze zoom, `updateViewArea`, scene URLs and card layout.
 - Earlier provenance: `MEMORY.md` (Third-party nav apps, zoom vs HID, updateViewArea), `memory/rgi_third_party_maneuvertype.md`, `memory/carplay_updateviewarea_cluster_zoom.md`, `memory/cluster_scene_url_itemtype_layout.md`; source `hook/altscreen/altscreen_hook.c`, `hook/framework/bus_protocol.h`, `java_patch/com/luka/carplay/bus/CarplayBus.java`, `java_patch/com/luka/carplay/core/AltScreenModule.java`.
+
+[^input]: [Native input handler](../../hook/altscreen/altscreen_hook.c), [command policy](../../hook/altscreen/command_policy.h), [command worker](../../hook/altscreen/command_worker.h).

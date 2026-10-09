@@ -8,21 +8,21 @@
 
 The cluster stream (type 111) is advertised with `maxFPS = 30` (`hook/altscreen/altscreen_hook.c:408-412`). Recorded input ran at **20–27 fps**. Static RE of the iOS 26.6 and 27.0 sender found **no fixed 20 fps cap**. Several independent mechanisms can each lower the delivered count, and in the saved windows the lower count was already present **before** our decoder. **[decompile]** / **[car]**
 
-What is in the code today: the OEM-ABI decoder-order setup, explicit `xFramerate = 30<<16`, a presenter worker off the OMX callback thread, swap interval 2, and no output-age filter. **[code]** The live per-stage measurement that would name the cause is still **[open]**.
+The current source keeps OEM-ABI decoder-order setup, explicit `xFramerate = 30<<16`, swap interval 2 and a presenter outside the OMX callback. It adds shared recovery, idle EOF/status, owned conversion, vector I/O, origin-aware compressed backlog and decoded-output mailbox selection. All six changes passed offline validation; no decoded-output age filter was added. **[code]** The live per-stage measurement that would identify the pacing limit remains **[open]**. See [Video Pipeline](VIDEO_PIPELINE.md) for the current protocol and buffer-ownership diagrams.
 
 ```mermaid
 flowchart LR
   accTitle: Where cluster frames can be lost or delayed
   accDescr: The phone scene, encoder and outgoing queue can drop frames; the hook receive thread, the localhost link, the OMX decoder and the presenter can delay them; the VC capture timer samples independently.
   scene["phone scene and encoder"]
-  sinkq["phone outgoing queue, 67 ms"]
-  hook["hook receive, decrypt, forward"]
+  sender_queue["phone outgoing queue, 67 ms"]
+  hook["hook reader and forwarding worker"]
   link["TCP 19831"]
   omx["OMX decode, about 4 pictures deep"]
-  present["presenter, glFinish, swap"]
+  present["mailbox, glFinish, swap"]
   capture["VC capture timer, 33 ms"]
-  scene --> sinkq
-  sinkq --> hook
+  scene --> sender_queue
+  sender_queue --> hook
   hook --> link
   link --> omx
   omx --> present
@@ -30,7 +30,7 @@ flowchart LR
   classDef warning fill:#fef9c3,stroke:#ca8a04,stroke-width:2px,color:#713f12
   classDef primary fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
   classDef neutral fill:#f3f4f6,stroke:#6b7280,stroke-width:2px,color:#1f2937
-  class scene,sinkq warning
+  class scene,sender_queue warning
   class hook,link,omx,present primary
   class capture neutral
 ```
@@ -47,7 +47,7 @@ flowchart LR
 | `eglSwapBuffers` alone | about 0.3 ms | Excludes `glFinish` and everything else in the present, so it does **not** rule out GPU waiting. |
 | Earlier session (1800 posts) | about 64 ms interarrival, 2 ms mean swap | Proves activity, not picture freshness. |
 
-The lower frame count is present before decoding. That still does not separate the phone from the hook: receive, decrypt and forward share one thread, so a blocked forward would also slow reads from the phone socket. **[car]**
+The lower frame count is present before decoding. That still does not separate the phone from the hook: in the measured build, receive, decrypt and forward shared one thread, so a blocked forward could also slow reads from the phone socket. **[car]**
 
 Sources: `ALTSCREEN_FRAME_RATE_INVESTIGATION`, `ALTSCREEN_AGE_FILTER_HU_REGRESSION`, `ALTSCREEN_LATENCY_AUDIT_2026_09_14`
 
@@ -98,7 +98,7 @@ The internal pref `FrameRateLimit` in `com.apple.carplay.internal` can override 
 
 Production `vdsink_ShouldDropFrame` @ `0x250f52e80` compares the **accumulated media duration** of the phone's outgoing queue against a limit and increments an overflow counter; it does not flush. `vdsink_Start` sets the limit to `CMTimeMake(67, 1000)` = **67 ms** (`0x25104f3a0`–`0x25104f3bc`), overridable by `SinkMaxFrameQueueDuration`; stream activation supplies 67 ms for normal screen latency or 5000 ms when a different presentation latency is selected (`0x251176d94`–`0x251176dc4`). Two 33.33 ms samples fit; three do not. The queue is created at stream `+0x68`, passed into `APVirtualDisplaySinkCreate` (`0x2510e1108`–`0x2510e1134`), filled by `vdsink_PushFrame` (`CMBufferQueueEnqueue`, `0x250f525dc`) and drained by `screenstream_dequeueAndProcessSampleBuffer`. The sender tracks `submitSurfaceFPS`, sent rate and `sinkOverflowDropFPS` separately (`0x250f4f274`–`0x250f4f2d8`).
 
-So a short drain stall drops frames even with ample bandwidth. Our possible contribution is indirect: the hook reads, decrypts and forwards synchronously, so a sustained forward stall stops phone-socket reads and eventually back-pressures the sender. That is **[open]** on the HU.
+So a short drain stall drops frames even with ample bandwidth. Our possible contribution was indirect: the former hook read, decrypted and forwarded synchronously, so a sustained forward stall could back-pressure the sender. The offline candidate below separates forwarding from socket draining. That is **[open]** on the HU.
 
 Sources: `ALTSCREEN_FRAME_RATE_INVESTIGATION` (its `output/ios-fps/` evidence files are not preserved)
 
@@ -148,15 +148,19 @@ Sources: `ALTSCREEN_STOCK_30FPS_PATH`, `VC_CAPTURE_CLOCK` (their `output/stock-f
 
 ## ✅ What was implemented (2026-09-15 candidate, now in source)
 
+The decoder setup below dates to the 2026-09-15 candidate. Its presenter used
+FIFO then; the current-source row includes mailbox selection added on
+2026-10-06, with separate offline validation described below.
+
 | Change | Current code |
 |---|---|
 | DisplayPictureBuffer via the 20-byte OEM ABI: version `0x101`, GetExtensionIndex → GetParameter → set `+12`/`+16` → SetParameter → readback; word `+8` preserved from Get; decoder does not start on an unconfirmed mode | `altscreen_render/sink_omx_qnx.c:53`, `:488-515` **[code]** |
 | `xFramerate = 30<<16` on both ports, verified by readback | `sink_omx_qnx.c:427-470` **[code]** |
-| `FillBufferDone` only queues the native output index into a bounded FIFO sized to the actual OMX output pool; one presenter worker draws and returns the buffer after GPU completion; duplicate/foreign callbacks and recycle errors enter recovery | `sink_omx_qnx.c:174-313` **[code]** |
+| `FillBufferDone` queues native output indices in a pool-bounded queue. The current mailbox presenter selects the newest pending nonempty picture; FIFO is available with `ALTSCREEN_PRESENT_FIFO=1`. Selected slots return after GPU completion; skipped untouched slots return earlier | `sink_omx_qnx.c:174-313` **[code]** |
 | Stop closes the callback gate, stops the worker, bounded 1500 ms drain; on hang the isolated renderer exits without freeing live GPU memory | `sink_omx_qnx.c:328`, `:615-630` **[code]** |
 | `maneuver_render`: one helper for first and re-bind, checks MakeCurrent and SwapInterval(2), native interval set before `eglCreateWindowSurface` | `maneuver_render/platform_qnx.c:105-140` **[code]** |
 
-Kept unchanged: native 32m allocation, RGBA plane 99, per-frame UV rebind, `glFinish`, two RGBA buffers, swap interval 2, the simple PRISM loader, recovery in the decode-input worker under `gl_lock`. Input timestamp age is **not** used to drop output. Diagnostics separate worker-entry spacing, swap time and full present cost; worker spacing is not phone packet rate. Host tests covered every vendor-ABI step with readback, 20/25/30 fps decode delays, FIFO, busy-GPU callbacks, empty outputs, stop with queued/live frames, duplicate/foreign outputs and bounded fatal drain, under ASan/UBSan, plus the QNX 6.5 GCC 8.5 ARM build. The candidate was **not** deployed when written; on-unit OMX readback logs and an input/output rate measurement are still **[open]**.
+Kept unchanged: native 32m allocation, RGBA plane 99, per-frame UV rebind, `glFinish`, two RGBA buffers, swap interval 2, the simple PRISM loader, recovery in the decode-input worker under `gl_lock`. Input timestamp age is **not** used to drop output. Diagnostics separate worker-entry spacing, swap time and full present cost; worker spacing is not phone packet rate. The earlier decoder candidate's host tests covered every vendor-ABI step with readback, 20/25/30 fps decode delays, FIFO, busy-GPU callbacks, empty outputs, stop with queued/live frames, duplicate/foreign outputs and bounded fatal drain, under ASan/UBSan, plus the QNX 6.5 GCC 8.5 ARM build. The candidate was **not** deployed when written; on-unit OMX readback logs and an input/output rate measurement are still **[open]**.
 
 Sources: `ALTSCREEN_30FPS_IMPLEMENTATION`
 
@@ -180,21 +184,197 @@ Before the presenter worker, `screen_egl_present_frame` ran inside `_OnFillDone`
 
 Other statistic bugs found: arrival ignored equal timestamps, swap sums were divided by the arrival-interval count, and counters should reset per generation and exclude config records. A separate thread alone cannot make a genuine 50 ms GPU operation deliver 30 fps; it only removes callback coupling.
 
-### Hook send budget is per fragment
+## 🧪 Offline pacing candidate — 2026-10-06
 
-`av_send_all_locked` starts a fresh `AV_SEND_STALL_LIMIT_MS = 1000` deadline on each call (`hook/altscreen/altscreen_av.c:35`, `:183-215`). The length and the payload are separate calls, and a reconnect config replay adds another pair, all under `g_lock` on the phone receiver thread. A back-pressured frame can therefore span almost 2 s (almost 4 s with replay). The socket is non-blocking; `poll` with a monotonic deadline is the effective clock, not `SO_SNDTIMEO`. This is a worst-case bound, not an observed event. **[code]**
+The current source adds transport and diagnostics changes, validated locally only.
+No HU deployment or phone-to-glass frame-rate measurement is part of this work.
+Stock OMX allocation, decoder-order mode, per-frame EGLImage refresh, `glFinish`,
+swap interval 2 and the first-present readiness contract remain in place.
 
-### Prioritised next changes (conditional on measurement)
-
-| Priority | Change | Acceptance check |
+| Change | Current contract | Evidence |
 |---|---|---|
-| 1 | Default-off renderer timing probe: full present, loader handoff, lock, context acquire/release, native wait/image refresh, draw/finish, swap, OMX recycle; startup separate from steady state; own sample count per metric | Pair with the hook pace probe to find which stage eats the 33.33 ms budget. **Not implemented.** |
-| 2 | One monotonic send deadline per forwarded AU/config transaction | Short writes, EINTR/EAGAIN, aggregate expiry, config+IDR recovery |
-| 3 | If hook work is high, separate socket draining from bounded forwarding | Keep AES-CTR advancing for every consumed AU; overflow must trigger continuity recovery, never arbitrary P-frame drops |
-| 4 | If presenter/OMX time is high, fix the costly phase first | Hold native buffers until sampling finishes; do not revive the always-running compositor |
-| 5 | After stable 30 unique decoded pictures/s, check HU→VC capture cadence | Java's 30 fps request and interval 2 are configuration, not proof |
+| Forwarding worker | Phone read/decrypt runs independently of localhost send; the queue holds at most 32 AUs / 8 MiB of buffer capacity | `hook/altscreen/altscreen_av.c`, blocked-writer test |
+| Continuity recovery | Overflow or send failure clears the dependent chain and fences the in-flight epoch; continuation requires cached config plus a new IDR | async transport and stale-generation tests |
+| Aggregate deadline | One 1000 ms monotonic deadline covers connect, capability greeting, config replay, frame header and frame body | fake-clock deadline test, short-write/EAGAIN tests |
+| Metadata protocol | HELLO 2 offers v2; HELLO capability 3 also offers opt-in presentation status. The hook ACK enables status heartbeats. Silent renderers use legacy framing. The 40-byte v2 AU header carries flags, length, generation, sequence, sender NTP and local receipt time | legacy/v2/status transport, truncated-header and state tests |
+| Reused storage | Hook queue buffers and Annex-B scratch are reused; renderer transfers ownership of its read buffer into the decode queue. Pool capacities are separately bounded | sanitizer and ownership tests |
+| Steady backlog | After video is healthy and startup backlog has drained, an accumulating compressed queue with valid hook-origin age (or local enqueue age as fallback) older than 1000 ms triggers config+IDR recovery. Startup, a lone final picture and idle static scenes are not filtered | queue policy and first-frame readiness tests |
+| Renderer diagnostics | Forward-worker queue/send, socket arrival, sender gaps, link delay, decode queue, input wait, decode, presenter queue, loader handoff, GL lock, context binding, native wait, image refresh, draw, GPU finish, swap, unbind, recycle and hook-to-post | deterministic injected GPU delay and OMX timestamp tests |
 
-Sources: `ALTSCREEN_FRAME_RATE_INVESTIGATION`
+Detailed renderer reports follow `carplay_verbose`, with bounded aggregates every
+300 samples. First-present stage timings are reported separately as `egl startup`;
+subsequent windows are `egl steady`. Session teardown resets the timing baseline. Histogram percentiles are power-of-two bucket upper estimates,
+clamped to the observed maximum; they are not exact quantiles. Startup remains
+separate from steady backlog policy. Metadata is diagnostic: sender PTS never
+changes decoder ordering or drops decoded output. Invalid or absent PTS does not
+become a frame-rate measurement. Renderer OMX timestamps identify entries in a
+bounded metadata table; their local values are not the phone's absolute clock.
+
+Run the reproducible offline validation:
+
+```sh
+FUZZ_SECONDS=60 bash scripts/test_altscreen_pacing.sh
+```
+
+Reports, the growing fuzz corpus and failure reproducers live in
+`build/altscreen-pacing-validation/`. The suite runs real transport/queue code
+with hardware fakes under ASan/UBSan, Clang static analysis and libFuzzer. The
+forwarder's `unix.BlockInCriticalSection` checker is excluded because it flags
+`recv` even with explicit `MSG_DONTWAIT` on the tested `O_NONBLOCK` socket;
+memory/lifetime checks remain enabled and I/O deadlines are fault-tested.
+
+Remaining physical checks, outside this offline scope: compare source cadence,
+queue delay, unique decoded pictures and full present timing on the HU. A passing
+host test is not proof of a higher FPS or lower GPU latency on the vehicle.
+
+## 🔬 Six follow-up improvements implemented — 2026-10-06
+
+All six changes below are in the current source candidate. Validation is offline;
+OMX, Screen and GPU behavior use hardware fakes. QNX builds check the target ABI
+and link imports, without running this candidate on the BSP.
+
+| Change | Current behavior | Offline checks |
+|---|---|---|
+| 1. Shared recovery | One generation-scoped episode survives repeated failed IDRs. ForceKeyFrame retries back off by 2/4/8 s; connect retries by 250/500/1000 ms. Stream-start and first UI requests have explicit bootstrap exceptions; healthy subsequent UI requests are limited to one per 500 ms | Pure monotonic policy, repeated-failure and stale-generation cases |
+| 2. Idle EOF and presentation health | Worker checks control/EOF every 100 ms when idle. Frame silence is valid. New peers opt in with ACK; presentation-ready heartbeats, sustained for at least 1 s, reset recovery. Legacy peers retain transport-success recovery semantics | Actual hook writer + renderer reader/queue round trip, idle EOF without another phone AU, legacy peers |
+| 3. Owned in-place conversion | Receiver validates the whole AU, classifies IDR and changes length-size-4 prefixes in one NAL-boundary pass. It transfers the decrypted buffer to the forwarder and receives a spare. Rejected partial rewrites never enter the queue | Differential parser fuzz, ownership and invalid-AU cases |
+| 4. Batched I/O | `writev` sends header + payload; known-v2 reads header + payload. Partial vectors, EINTR and EAGAIN share the transaction's absolute deadline | Exact-byte/call counters, short writes, blocked writer and fake-clock deadline |
+| 5. End-to-end compressed age | Valid past hook receipt time covers both compressed queues. Future/missing origin falls back to renderer enqueue time. Startup, idle static scenes and a lone final picture remain protected | 900 ms local / 1900 ms origin case, startup/readiness cases |
+| 6. Decoded-output mailbox | Presenter selects the newest nonempty picture from a bounded queue snapshot. Earlier slots that the GPU never read return to OMX; in-flight and selected buffers remain owned until GPU completion. Default mailbox can revert to FIFO with `ALTSCREEN_PRESENT_FIFO=1` | Empty last output, synchronous refill, sole old picture, stop with queued/in-flight work and recycle failure |
+
+Stock OMX decoder/allocation, per-frame external-image refresh, `glFinish`, swap
+interval 2 and the stock capture clock remain unchanged. Mailbox selection has
+no decoded-output age cutoff and does not discard compressed dependent frames.
+The existing first-successful-present contract controls VIDEO_ON. Teardown's
+worker-exit flag now uses acquire/release atomics; the end-to-end status test
+exposed its previous plain-volatile race under TSan.
+
+### Static operation comparison
+
+Run `python3 scripts/compare_altscreen_static.py`. It checks shipping paths and
+executes ASan/UBSan contracts. Source hashes and results are in
+`build/altscreen-static-comparison/comparison.json`; the previous prototype
+report is retained as `before-six-comparison.json` when available.
+
+| Operation per AU | HEAD `875c1299` | First pacing patch | Current candidate |
+|---|---:|---:|---:|
+| Full application payload copies through OMX input | 3 | 3 | 1, owned length-size-4 path |
+| Hook NAL-boundary walks, including IDR classification | 3 | 4 | 1, owned length-size-4 path |
+| Allocator calls at stable size with warmed pools | 3 | 0 | 0 |
+| Complete-record I/O calls, send + read | 2 + 2 | 2 + 3, v2 | 1 + 2, known v2 |
+
+Copy accounting excludes kernel, codec and GPU traffic. Length sizes 1–3 retain
+expanding Annex-B conversion. I/O counts assume complete successful syscalls;
+connection setup, control heartbeats and partial/error retries are additional.
+The burst fixture produces 12 decoded pictures: FIFO draws 12, mailbox draws 2,
+and both return all 12 slots. These are operation counts, not vehicle FPS or
+measured GPU time. A presenter taking 50 ms per picture still cannot produce
+30 unique pictures/s; mailbox reduces redundant work and pending latency.
+
+Initial six-change verification: 16 ASan/UBSan scenarios passed, Clang analysis and
+QNX API hostcheck passed, and differential/state fuzz completed 12,511,315 runs
+in 61 s without a sanitizer/assertion failure. Async transport, negotiated
+control and mailbox tests also passed TSan. The full `scripts/run_tests.sh`
+regression passed; captured APAC integration was skipped because its capture is
+absent, and the audio behavior suite reports 13 existing expected failures.
+Hook and renderer built with QNX ARMv7 GCC 8.5; the hook retained its exact
+26-export allowlist and compiler-only constructors, with no emutls. Final
+source/binary hashes from that run are retained in
+`build/altscreen-pacing-validation/before-review-summary.json`; the current
+follow-up run is indexed in `summary.json`.
+
+### Review findings fixed before deployment
+
+Two subsequent source-review findings were reproduced with shipping functions
+under ASan/UBSan and then corrected. They had not been exercised by the initial
+six-change validation above.
+
+| Finding | Corrected behavior | Regression evidence |
+|---|---|---|
+| Startup promoted on local queue age, then immediately rejected old hook-origin frames | Steady promotion requires a fresh end-to-end latest input, every pending startup AU (at most four) within 250 ms, and any in-flight input also fresh. An empty local queue with an old last input remains in startup. Actual presentation readiness is independent of steady-policy activation | Three AUs with local age 0 ms / origin age 1900 ms retain ready state and queue; old middle AU and old in-flight AU defer promotion; fresh busy input can promote |
+| A single `MSG_PEEK` downgraded a fragmented HELLO | `av_negotiate_locked` accumulates eight bytes within the same 40 ms greeting deadline, capped by the total transaction deadline. Timeout retains consumed bytes for the idle parser; silent legacy peers still work | One-byte reads, EINTR/EAGAIN, HELLO 2/3, silence, partial timeout, late remainder alignment and EOF; actual TCP 1+7 bytes at 10 ms negotiates v2/status |
+
+The follow-up run passed 17 ASan/UBSan scenarios, Clang analysis and QNX API
+hostcheck, plus 7,519,071 differential/state fuzz inputs in 31 s. Async transport,
+control, decode worker and negotiation passed TSan. QNX ARM hook/renderer builds
+passed without emutls, and the full `scripts/run_tests.sh` regression passed
+after these fixes (capture-dependent APAC integration skipped). The new
+regressions live in
+[queue policy tests](../../tests/altscreen_queue_policy_test.c) and
+[greeting negotiation tests](../../tests/altscreen_negotiation_test.c).
+Current per-stage timing and source/binary hashes are in the offline result
+index; these fixes have no new vehicle FPS measurement.
+
+### Second review and completed boundary tests
+
+The repeated review added three boundary regressions; each failed before its
+corresponding correction and passes afterward.
+
+| Finding | Correction | Evidence |
+|---|---|---|
+| STATUS could assert health after legacy fallback without opt-in | The idle parser rejects STATUS unless capability 3 was negotiated for this connection | Late HELLO followed by unsolicited STATUS closes the link without changing presentation health |
+| Readable `poll` could return after the HELLO budget had expired | Recheck the monotonic sub-deadline after `poll` and after a complete read, before enabling capabilities; clear a fully consumed late greeting; no capability upgrade after expiry | Injected 50 ms delay during `poll` or final `recv` leaves capabilities off; consumed late HELLO does not become a false EOF |
+| Idle timed wait used wall time, so a backward correction could postpone EOF/recovery | QNX/Linux initialize a condition variable with `CLOCK_MONOTONIC`; macOS uses relative timed wait. Initialization failure suppresses the forwarding worker/advert, retaining a valid default condition for shutdown | Modeled backward one-hour wall-clock step still detects idle EOF promptly; host clock unchanged |
+
+The main repeat run passed 18 ASan/UBSan scenarios and 18,711,574 fuzz inputs in
+61 s. After the final read-completion deadline guard, all 18 scenarios and
+Clang analysis/QNX API hostcheck passed again, with another 4,214,114 fuzz inputs
+in 16 s (22,925,688 inputs across the two runs). Async transport, control, decode
+worker, negotiation, idle-clock recovery and mailbox passed TSan. Idle-clock,
+negotiation, async transport and control also passed Linux ASan/UBSan, exercising
+the monotonic-condition branch separately from Darwin's relative wait. The four
+TSan cases affected by the final greeting check and Linux negotiation/control
+were repeated after that change; worker/mailbox sources were unchanged.
+The full project regression and QNX ARM hook/renderer builds passed; the hook
+was rebuilt after the final greeting check. APAC capture
+integration remains skipped because its fixture is absent. No remaining finding
+was identified in this reviewed scope. Hardware pacing remains unmeasured.
+
+Tests: [negotiation boundaries](../../tests/altscreen_negotiation_test.c),
+[idle clock recovery](../../tests/altscreen_idle_clock_test.c), and
+[protocol control parsing](../../tests/altscreen_health_wire_test.c).
+The current result index is `build/altscreen-pacing-validation/summary.json`;
+repeat-run logs and corpus are in `build/altscreen-review2-validation/`. See
+[AltScreen Pacing Validation](ALTSCREEN_PACING_VALIDATION.md) for the consolidated
+contracts, state/negotiation diagrams, re-run commands and result-artifact rules.
+
+### Findings that motivated this patch
+
+Before these six changes, localhost failure with 20 fresh IDRs generated 20
+recovery callbacks in about 5 s. Idle peer EOF went unnoticed until another
+frame, and a queue could accept 1900 ms of origin age because its local age was
+only 900 ms. These were reproduced in host tests and are now covered by the
+policy, control-channel and queue tests above. Actual BSP recycle/reference
+behavior and phone-to-glass pacing remain physical validation tasks outside
+this offline scope.
+
+## 🧩 Four maintenance refactors — 2026-10-07
+
+| Refactor | Result |
+|---|---|
+| Validation reporting | Python runner writes a fresh atomic result before tool probes; failures replace stale PASS, requested/optional checks are explicit and source changes invalidate the run |
+| Renderer policy | `queue_policy.h` owns pure origin/freshness/startup/backlog predicates; enqueue and readiness use the same backlog rule, including unavailable-clock handling |
+| Control protocol | `alt_control_wire.h` owns HELLO/ACK/STATUS codec and incremental parsing; socket paths and direct control fuzz use the same parser; golden bytes preserve the wire contract |
+| Forwarder state/API | Transport, queue/recovery and short owner snapshot are grouped by their existing mutexes; production exposes owned async enqueue, with synchronous/copying seams isolated in a test fixture |
+
+Post-refactor validation passed 20 ASan/UBSan C scenarios, 6 report-contract
+cases, 6 TSan suites, 4 Linux suites, Clang/API checks, QNX ARM builds and the
+full regression. AVC/state fuzz ran 6,002,705 inputs and control-stream fuzz
+ran 4,998,288 (31 s each); final reporting/error-path checks repeated all
+validation families and both fuzz targets (another 2,452,009 inputs). Historical
+review campaigns above belong to earlier
+source snapshots. Current contracts, re-run commands and report schema are in
+[AltScreen Pacing Validation](ALTSCREEN_PACING_VALIDATION.md).
+
+## 🎛️ Input scheduling follow-up — 2026-10-09
+
+Roller delivery is a separate control path: bounded paced intent, reserved
+recovery/layout priority and latest pending state. The input reviews added
+pre-commit session/age checks, mandatory CF construction checks and immutable
+selected timestamps. These changes do not establish a new video FPS or
+phone-to-glass measurement. See [Input commands](ALTSCREEN_INPUT_COMMANDS.md)
+for the canonical contracts and [Pacing Validation](ALTSCREEN_PACING_VALIDATION.md)
+for the final 25 C / 10 TSan / 8 Linux run and its source-hashed evidence.
 
 ## 🔧 The pace probe
 
@@ -202,11 +382,11 @@ Build-time only: `ALTSCREEN_PACE_TRACE=1 bash scripts/build_hook.sh` (the trace 
 
 | Field | Meaning |
 |---|---|
-| `n`, `fwd` | Received video AUs / successfully forwarded |
+| `n`, `fwd` | Received video AUs / accepted by the forwarding queue (worker `sent` reports actual sends) |
 | `arrival_us` | Mean/max between completed phone reads |
 | `samples`, `zero` | Intervals counted, including same-time bursts |
 | `read_us` | Header+body read time, includes network waits |
-| `work_us` | Local decrypt, commands and forward |
+| `work_us` | Local decrypt, commands and queue submission; worker timings cover socket send |
 | `pts_us`, `pts_n`, `bad` | Mean/max plausible sender NTP deltas (header params at offset 8); missing, repeated, backward or >10 s jumps counted as invalid |
 
 | Pattern | Reading |

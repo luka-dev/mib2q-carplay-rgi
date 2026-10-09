@@ -1,16 +1,31 @@
 /* Real forwarder, localhost sockets, injected send faults. No QNX decoder. */
 #define ENABLE_LOGGING 0
 #include <sys/socket.h>
+#include <sys/uio.h>
 #include <poll.h>
 #include <assert.h>
 #include <errno.h>
 static int send_fault, poll_timeout, send_calls, poll_calls, short_writes;
-static ssize_t test_send(int fd, const void *p, size_t n, int flags)
-{
+static ssize_t test_writev(int fd, const struct iovec *v, int parts) {
+    struct iovec short_v[2];
+    size_t budget = 3;
+    int count = 0;
     ++send_calls;
-    if (send_fault) { errno = send_fault; send_fault = 0; return -1; }
-    if (short_writes && n > 3) n = 3;
-    return send(fd, p, n, flags);
+    if (send_fault) {
+        errno = send_fault;
+        send_fault = 0;
+        return -1;
+    }
+    if (!short_writes)
+        return writev(fd, v, parts);
+    for (int i = 0; i < parts && budget; ++i) {
+        short_v[count] = v[i];
+        if (short_v[count].iov_len > budget)
+            short_v[count].iov_len = budget;
+        budget -= short_v[count].iov_len;
+        ++count;
+    }
+    return writev(fd, short_v, count);
 }
 static int test_poll(struct pollfd *p, nfds_t n, int timeout)
 {
@@ -18,10 +33,11 @@ static int test_poll(struct pollfd *p, nfds_t n, int timeout)
     if (poll_timeout) return 0;
     return poll(p, n, timeout);
 }
-#define send test_send
+#define writev test_writev
 #define poll test_poll
 #include "../hook/altscreen/altscreen_av.c"
-#undef send
+#include "altscreen_forward_compat.h"
+#undef writev
 #undef poll
 #include "../hook/altscreen/avcc_config.h"
 
@@ -101,7 +117,7 @@ int main(void)
     assert(altav_forward_avcc_frame(1, pframe, sizeof(pframe), 4) == -1); no_record(listener);
     short_writes = 1;
     assert(altav_forward_avcc_frame(1, idr, sizeof(idr), 4) == 1);
-    assert((fcntl(g_fd, F_GETFL, 0) & O_NONBLOCK) != 0);
+    assert((fcntl(g_transport.fd, F_GETFL, 0) & O_NONBLOCK) != 0);
     peer = accept(listener, NULL, NULL); assert(peer >= 0);
     record(peer, config, sizeof(config)); record(peer, idr_annexb, sizeof(idr_annexb));
     short_writes = 0;
@@ -113,16 +129,16 @@ int main(void)
     assert(poll_calls == calls + 1); record(peer, p_annexb, sizeof(p_annexb));
     calls = send_calls;
     altav_set_config(1, config, sizeof(config));
-    assert(g_fd >= 0 && send_calls == calls); no_record(peer);
+    assert(g_transport.fd >= 0 && send_calls == calls); no_record(peer);
     send_fault = EPIPE;
     assert(altav_forward_avcc_frame(1, pframe, sizeof(pframe), 4) == -1);
-    assert(g_fd == -1);
+    assert(g_transport.fd == -1);
     assert(altav_forward_avcc_frame(1, pframe, sizeof(pframe), 4) == -1); no_record(listener);
     assert(altav_forward_avcc_frame(1, idr, sizeof(idr), 4) == 1);
     peer2 = accept(listener, NULL, NULL); assert(peer2 >= 0); close(peer);
     record(peer2, config, sizeof(config)); record(peer2, idr_annexb, sizeof(idr_annexb));
     memcpy(changed_config, config, sizeof(config)); changed_config[5] ^= 0x11;
-    altav_set_config(1, changed_config, sizeof(changed_config)); assert(g_fd == -1);
+    altav_set_config(1, changed_config, sizeof(changed_config)); assert(g_transport.fd == -1);
     assert(altav_forward_avcc_frame(1, pframe, sizeof(pframe), 4) == -1); no_record(listener);
     assert(altav_forward_avcc_frame(1, idr, sizeof(idr), 4) == 1);
     peer3 = accept(listener, NULL, NULL); assert(peer3 >= 0); close(peer2);
@@ -130,7 +146,7 @@ int main(void)
     record(peer3, idr_annexb, sizeof(idr_annexb));
     send_fault = EAGAIN; poll_timeout = 1; calls = send_calls;
     assert(altav_forward_avcc_frame(1, pframe, sizeof(pframe), 4) == -1);
-    assert(send_calls == calls + 1 && g_fd == -1); poll_timeout = 0;
+    assert(send_calls == calls + 1 && g_transport.fd == -1); poll_timeout = 0;
     close(peer3);
     altav_set_enabled(0); assert(!altav_is_enabled());
     assert(altav_forward_avcc_frame(1, idr, sizeof(idr), 4) == -1);

@@ -92,6 +92,33 @@ Recovery took about 3 s because SI (Smartphone Integrator) serialises stop → r
 
 Physical USB replug recovery is kept out of these scripts on purpose (`deploy/smartphone_integrator/README.md:95-97`). The shipping SI image carries the re-arm patch; the NCM generation fence stays experimental. See [USB Replug Recovery](../connect-and-usb/USB_REPLUG_RECOVERY.md) and [SI Stack and Replug Race](../connect-and-usb/SI_STACK_AND_REPLUG_RACE.md). The session-level (RTSP, port, advert, transport-generation) side of reconnects is in [Session Lifecycle](../connect-and-usb/SESSION_LIFECYCLE.md); why the cluster can appear before main 110 is in [HMI Startup and Identity](../connect-and-usb/HMI_STARTUP_AND_IDENTITY.md).
 
+## 🎛️ Input command lifetime across reconnect
+
+Pending commands and zoom are generation-bound. Retirement clears unsent work;
+selected zoom retains its target before the final generation/revision/age/stop
+check. A committed call may finish on its retained old session, while stale
+view-area callbacks are suppressed. Reconnect does not turn the command worker
+into an interruptible SDK sender. See [Input commands](ALTSCREEN_INPUT_COMMANDS.md)
+for the ownership and ACK contracts.
+
+## 🔄 AltScreen transport recovery in the current candidate
+
+The 2026-10-06 changes affect stream continuity inside the persistent hook and
+renderer; the SI stop/relaunch timings above remain the existing lifecycle
+settings. The forwarder now detects renderer EOF while no phone AU arrives,
+fences the producer epoch and shares a generation-scoped IDR/reconnect backoff.
+New peers opt into actual-presentation STATUS before it can clear recovery;
+older peers keep transport-success confirmation. STATUS without negotiated
+capability is rejected. The 100 ms idle wait uses a monotonic QNX/Linux condition
+or relative Darwin wait, so wall-clock correction does not postpone EOF
+observation. Frame silence alone is valid.
+**[code]**
+
+See [IDR recovery rules](ALTSCREEN_CLUSTER_VIDEO.md#idr-recovery),
+[negotiation/readiness sequence](VIDEO_PIPELINE.md#negotiation-and-presentation-readiness)
+and [current offline validation](ALTSCREEN_PACING_VALIDATION.md). The current pacing candidate
+was not deployed or measured on the car during this work.
+
 ---
 
 ## 📌 Deploy notes

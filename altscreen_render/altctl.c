@@ -71,6 +71,8 @@ static void *ctl_loop(void *arg) {
     unsigned char rx[ALTCTL_PKT_SIZE];
     unsigned int rx_used = 0;
     while (g_run) {
+        /* Sample/publish hook health even while the Java control peer is absent. */
+        int state = g_video_ready && g_video_ready();
         if (fd < 0) {
             fd = ctl_connect();
             last_sent = -1;                       /* force resend of the current state on (re)connect */
@@ -85,7 +87,6 @@ static void *ctl_loop(void *arg) {
 
         /* Decode/presentation can complete after the last socket record. Never
          * require another compressed frame to notice ON/OFF or replay readiness. */
-        int state = g_video_ready && g_video_ready();
         if (state != last_sent) {
             unsigned char pkt[ALTCTL_PKT_SIZE];
             memset(pkt, 0, sizeof(pkt));

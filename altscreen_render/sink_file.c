@@ -59,6 +59,12 @@ int av_sink_frame(const uint8_t *annexb, uint32_t len, uint64_t received_ms) {
     return 0;
 }
 
+int av_sink_frame_ex(const uint8_t *annexb, uint32_t len, uint64_t received_ms,
+                     const alt_frame_meta_t *meta) {
+    (void)meta;
+    return av_sink_frame(annexb, len, received_ms);
+}
+
 void av_sink_set_layout(int mode, int style, int rawSkin) {
     (void)mode; (void)style; (void)rawSkin;
 }

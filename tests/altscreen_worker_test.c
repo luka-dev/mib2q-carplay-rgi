@@ -26,6 +26,10 @@ int av_sink_frame(const uint8_t *bytes, uint32_t len, uint64_t received_ms) {
     pthread_mutex_unlock(&test_lock);
     return result;
 }
+int av_sink_frame_ex(const uint8_t *b, uint32_t n, uint64_t stamp, const alt_frame_meta_t *meta) {
+    (void)meta;
+    return av_sink_frame(b, n, stamp);
+}
 void av_sink_session_end(void) { }
 int av_sink_video_ready(void) { return 0; }
 void av_sink_close(void) { }
