@@ -2142,8 +2142,14 @@ static void spa103_note_authenticated_sequence(const uint8_t *packet)
     pthread_mutex_lock(&spa103_render.lock);
     if (spa103_render.haveLastSequence) {
         expected = (spa103_render.lastSequence + 1u) & 0x00ffffffu;
-        if (sequence != expected)
+        if (sequence != expected) {
             gaps = ++spa103_render.sequenceGaps;
+            /* The decoded stream breaks here (seek through a bounded FLUSH, or
+             * a lost packet): the renderer must not splice the 21 ms it still
+             * holds of the old position onto the new one.  Same lock as the
+             * render, same reset a prefix FLUSH or a cookie change does. */
+            (void)spa_stereo_upmix_reset(&spa103_render.stereoUpmix);
+        }
     }
     spa103_render.lastSequence = sequence;
     spa103_render.haveLastSequence = 1;
@@ -2387,9 +2393,16 @@ static int spa103_render_set_rate(uint32_t generation, int64_t rate)
         return 0;
     }
     previous = spa_apap_lifecycle_playing(&spa103_render.lifecycle);
-    if (previous && rate != 1) {
-        (void)spa_stereo_upmix_reset(&spa103_render.stereoUpmix);
-    }
+    /* A pause is not a discontinuity in the decoded stream: the phone resumes
+     * from the anchor it stopped at, so the renderer stays warm and the frames
+     * it still holds (the SCENE FIFO's last 1024 = 21 ms before the pause
+     * point) play first at resume, seamlessly into the re-sent packets.  Until
+     * 2026-10-09 the state was reset here, which replaced those frames with
+     * 1024 zeros and put a 21 ms hole between the pre-pause tail and the
+     * resumed audio.  A real break (prefix FLUSH, cookie change, a sequence
+     * gap = seek or loss) still resets: spa103_render_flush(),
+     * spa103_render_decode_locked(), spa103_note_authenticated_sequence(). */
+    (void)previous;
     spa_apap_lifecycle_set_rate(&spa103_render.lifecycle, rate);
     packets = spa103_render.lifecycle.queued_packets;
     bytes = spa103_render.lifecycle.queued_bytes;
@@ -4365,6 +4378,20 @@ static ssize_t spa_pcm_write_bounded(spa_snd_write_t real, snd_pcm_t *handle,
     return (ssize_t)rc;
 }
 
+/* One period of digital silence written right after a prepare, before the first
+ * real period: the device (re)starts its DMA on zeros, so whatever the restart
+ * does to the first fragment happens on silence.  Not committed to the ring
+ * and not counted as a write; at a resume the audio before it stopped seconds
+ * ago, so the extra 16 ms of silence is inaudible.  Covers up to 8 channels. */
+static void spa_pcm_sink_preroll_silence(spa_snd_write_t realWrite, snd_pcm_t *handle,
+                                         size_t bytes, unsigned channels)
+{
+    static const int16_t zeros[SPA_PCM_SINK_PERIOD_FRAMES * 8];
+
+    if (!realWrite || bytes > sizeof(zeros)) return;
+    (void)spa_pcm_write_bounded(realWrite, handle, zeros, bytes, channels, 1, 1);
+}
+
 /* EAGAIN/zero is normal nonblocking backpressure, not a reason to reset QSA.
  * Recover only a confirmed underrun, and never after voice/stop cancellation. */
 static int spa_pcm_recover_underrun(snd_pcm_t *handle, int detached)
@@ -4853,6 +4880,9 @@ static void spa_pcm_sink_write_one_detached_period(void)
                     spa_pcm_sink.detachedRecoveries++;
             }
             pthread_mutex_unlock(&spa_pcm_sink.lock);
+            if (!realWrite)
+                realWrite = (spa_snd_write_t)dlsym(RTLD_NEXT, "snd_pcm_plugin_write");
+            spa_pcm_sink_preroll_silence(realWrite, handle, bytes, channels);
         }
         got = spa_buffered_pcm_peek(spa_pcm_sink.scratch,
                                     SPA_PCM_SINK_PERIOD_FRAMES, channels);
@@ -4867,6 +4897,7 @@ static void spa_pcm_sink_write_one_detached_period(void)
         if ((written == -EIO || written == -ETIMEDOUT) &&
             spa_pcm_recover_underrun(handle, 1)) {
             autoRecovery = 1;
+            spa_pcm_sink_preroll_silence(realWrite, handle, bytes, channels);
             written = spa_pcm_write_bounded(realWrite, handle,
                 spa_pcm_sink.scratch, bytes, channels, 1, 1);
         }
