@@ -256,10 +256,17 @@ add_ids() {   # $1 = line holding one list, rest = IDs; prints the new line
     printf '%s\n' "$l"
 }
 # iAP2 messages the hook needs Cinemo to declare in Identify: route guidance
-# (0x52xx) and telephony (0x415B/0x415C/0x415D AcceptCall/EndCall/SwapCalls, 0x415F/0x4160
-# Hold/MuteStatusUpdate, 0x4170/0x4171 ListUpdates).
-DIO_SENT_IDS="0x5200 0x5203 0x415B 0x415C 0x415D 0x415F 0x4160 0x4170"
-DIO_RECV_IDS="0x5201 0x5202 0x5204 0x4171"
+# (0x52xx), telephony (0x415B/0x415C/0x415D AcceptCall/EndCall/SwapCalls, 0x415F/0x4160
+# Hold/MuteStatusUpdate, 0x4170/0x4171 ListUpdates) and vehicle status (0xA100/0xA102
+# Start/StopVehicleStatusUpdates from the phone, 0xA101 VehicleStatusUpdate from the hook).
+DIO_SENT_IDS="0x5200 0x5203 0x415B 0x415C 0x415D 0x415F 0x4160 0x4170 0xA101"
+DIO_RECV_IDS="0x5201 0x5202 0x5204 0x4171 0xA100 0xA102"
+# "nmea":"0xNNNN" is the NMEA bitmask dio advertises in Identify (LocationInformationComponent).
+# Bit 0x08 = PASCD (VehicleSpeedData): the hook supplies the wheel-speed sentences.
+add_nmea_speed() {   # $1 = line; prints the new line
+    l=$1; pre=${l%%\"nmea\":\"*}; v=${l#*\"nmea\":\"}; rest=${v#*\"}; v=${v%%\"*}
+    case $v in 0x[0-9A-Fa-f]*) printf '%s"nmea":"0x%04X"%s\n' "$pre" $((v | 8)) "$rest" ;; *) printf '%s\n' "$l" ;; esac
+}
 patch_dio() {
     [ -f "$DIO" ] || { echo "  WARN no $DIO - route guidance will not arrive"; return 0; }
     tmp=$DIO.carplay-new.$$; : > "$tmp" || { echo "FAILED create $tmp"; return 1; }
@@ -271,6 +278,8 @@ patch_dio() {
                 sent=$((sent+1)); new=$(add_ids "$line" $DIO_SENT_IDS) ;;
             *'"MessagesReceivedFromDevice":['*']'*)
                 recv=$((recv+1)); new=$(add_ids "$line" $DIO_RECV_IDS) ;;
+            *'"nmea":"0x'*)
+                new=$(add_nmea_speed "$line") ;;
             *) new=$line ;;
         esac
         [ "$new" = "$line" ] || { line=$new; changed=1; }
@@ -284,7 +293,7 @@ patch_dio() {
     [ "$n" = "$want" ] || { echo "  WARN dio_manager.json: only $n/$want IDs after edit; left as-is"; rm -f "$tmp"; return 1; }
     if [ "$changed" = 0 ]; then echo "  dio_manager.json IDs already registered"; rm -f "$tmp"; return 0; fi
     backup_once "$DIO" "$DIO.carplay-stock" || { rm -f "$tmp"; return 1; }
-    chmod 644 "$tmp"; mv -f "$tmp" "$DIO" && echo "  dio_manager.json route-guidance and telephony IDs registered"
+    chmod 644 "$tmp"; mv -f "$tmp" "$DIO" && echo "  dio_manager.json route-guidance, telephony and vehicle IDs registered (nmea +PASCD)"
 }
 
 echo "custom.sh: CarPlay $ACTION"

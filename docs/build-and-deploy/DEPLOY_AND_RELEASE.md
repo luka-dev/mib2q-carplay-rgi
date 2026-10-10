@@ -317,6 +317,9 @@ Stock MU1316 P5087 lists none of them (checked against the firmware copy of `dio
 | `MessagesReceivedFromDevice` | `0x5201`, `0x5202`, `0x5204` | RouteGuidanceUpdate, RouteGuidanceManeuverUpdate, LaneGuidanceInformation |
 | `MessagesSentByAccessory` | `0x415B`, `0x415C`, `0x415D`, `0x415F`, `0x4160`, `0x4170` | AcceptCall, EndCall, SwapCalls, HoldStatusUpdate, MuteStatusUpdate, StartListUpdates ([CarPlay Telephony](../cluster-and-rgi/CARPLAY_TELEPHONY.md)) |
 | `MessagesReceivedFromDevice` | `0x4171` | ListUpdate (recents and favorites) |
+| `MessagesSentByAccessory` | `0xA101` | VehicleStatusUpdate ([Vehicle Data To Phone](../connect-and-usb/VEHICLE_DATA_TO_PHONE.md)) |
+| `MessagesReceivedFromDevice` | `0xA100`, `0xA102` | Start/StopVehicleStatusUpdates |
+| `"nmea"` | bit `0x08` ORed in (`0x0003` → `0x000B`) | PASCD / VehicleSpeedData advertised; the hook sends the sentences |
 
 Without the telephony IDs the call screen still works (it comes from stock `DSICarplay`); only the cluster's recents/favorites lists, hold/resume and mic mute are missing. If iOS rejects the telephony IDs in Identify, Cinemo removes them from its identification pool by itself and continues (`OnIdentificationRejected`, `libNmeVfs.so@0xE438C`). **[decompile]**
 
@@ -339,14 +342,16 @@ python3 - dio_manager.json <<'PY'
 import re, sys
 path = sys.argv[1]
 text = open(path).read()
-add = {"MessagesSentByAccessory": ["0x5200", "0x5203", "0x415B", "0x415C", "0x415D", "0x415F", "0x4160", "0x4170"],
-       "MessagesReceivedFromDevice": ["0x5201", "0x5202", "0x5204", "0x4171"]}
+add = {"MessagesSentByAccessory": ["0x5200", "0x5203", "0x415B", "0x415C", "0x415D", "0x415F", "0x4160", "0x4170", "0xA101"],
+       "MessagesReceivedFromDevice": ["0x5201", "0x5202", "0x5204", "0x4171", "0xA100", "0xA102"]}
 for key, ids in add.items():
     m = re.search(r'"%s"\s*:\s*\[([^\]]*)\]' % key, text)
     have = [h.upper() for h in re.findall(r'"(0x[0-9A-Fa-f]+)"', m.group(1))]
     new = [i for i in ids if i.upper() not in have]
     if new:
         text = text[:m.end(1)] + "".join(', "%s"' % i for i in new) + text[m.end(1):]
+# NMEA bitmask: add PASCD (0x08) so dio advertises VehicleSpeedData.
+text = re.sub(r'"nmea":"(0x[0-9A-Fa-f]+)"', lambda m: '"nmea":"0x%04X"' % (int(m.group(1), 16) | 8), text)
 open(path, "w").write(text)
 PY
 

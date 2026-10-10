@@ -171,6 +171,10 @@ Domains: [USB Replug Recovery](connect-and-usb/USB_REPLUG_RECOVERY.md), [PF Fire
 
 **Never let two listeners share the negative preferred port `-6030`.** Stock `ServerSocketOpen` treats a negative port as "preferred, fall back to dynamic"; two listeners race, one silently falls back, and main 110 hits the stock 10 s accept timeout → teardown. Type 111 opens `-6031` (`hook/altscreen/altscreen_hook.c:1659-1661`). · decompile + on-car · [Session Lifecycle](connect-and-usb/SESSION_LIFECYCLE.md).
 
+**iAP2 `0x1D03` is IdentificationRejected, not "Identify end".** MFi R32 95.2.4 names `0x1D03` the device's rejection (with the rejected params and message IDs); `0x1D02` is IdentificationAccepted. The framework constant `IAP2_MSG_IDENTIFY_END` and `HOOK_EVENT_IDENTIFY_END` carry the old name, so a route-guidance retry tied to that event fires on a rejection. Any new Identify addition must handle `0x1D03` as a refusal: `hook/vehicle` stops adding its components for the process when the rejection names them. · spec 2026-10-10 · [Vehicle Data To Phone](connect-and-usb/VEHICLE_DATA_TO_PHONE.md) · 
+
+**PASCD must come from a wheel-speed sensor, never from GNSS, and go out about once per second.** MFi R32 41.1.2: one NUL-terminated sentence per `NMEASentence`, sample count 1–50, `R` if reverse was engaged at any time in the interval. Stock advertises it only if `dio_manager.json` `"nmea"` has bit `0x08`. · spec 2026-10-10 · `hook/vehicle/vehicle_hook.c` · 
+
 **A `0x5001` now-playing update with an unchanged media item is invisible to the HMI.** Cinemo calls the listener only when `MediaItem::compare` reports a change; a fresh `0x5000` is what rebuilds the phone-side state. · decompile · [Now Playing Cold Start](connect-and-usb/NOW_PLAYING_COLD_START.md).
 
 ---

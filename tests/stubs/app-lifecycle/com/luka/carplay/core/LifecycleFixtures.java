@@ -13,7 +13,7 @@ abstract class LifecycleTestModule implements Module {
         } catch (Exception e) { throw new AssertionError(e); }
     }
     static final Object gate = new Object();
-    static final int[] starts = new int[3], stops = new int[3];
+    static final int[] starts = new int[4], stops = new int[4];
     static int blockIndex = -1, entered = -1;
     static boolean released;
     static volatile boolean badLockOrder;
@@ -51,6 +51,7 @@ abstract class LifecycleTestModule implements Module {
 final class AltScreenModule extends LifecycleTestModule { AltScreenModule() { super(0); } }
 final class RgdModule extends LifecycleTestModule { RgdModule() { super(1); } }
 final class SteeringWheelInputModule extends LifecycleTestModule { SteeringWheelInputModule() { super(2); } }
+final class VehicleDataModule extends LifecycleTestModule { VehicleDataModule() { super(3); } }
 final class AltscreenControlServer { static void start() { } }
 final class FrameworkRef {
     static volatile boolean failNext;

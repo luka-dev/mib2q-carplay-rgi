@@ -71,4 +71,20 @@ bool tel_parse_comm_update(const uint8_t* payload, size_t len, tel_comm_t* out);
 /* Updates only the params present in upd. */
 void tel_merge_comm(tel_comm_t* last, const tel_comm_t* upd);
 
+/* PowerUpdate 0xAE01 (MFi R32 95.15.2): BatteryChargingState param 5 (enum: 0 disabled,
+ * 1 charging, 2 charged) and BatteryChargeLevel param 6 (uint16, 0-100).  Read-only. */
+typedef struct {
+    bool has_level, has_state;
+    uint16_t level;
+    uint8_t state;
+} tel_power_t;
+
+bool tel_parse_power_update(const uint8_t* payload, size_t len, tel_power_t* out);
+void tel_merge_power(tel_power_t* last, const tel_power_t* upd);
+
+/* Stock's StartPowerUpdates 0xAE00 payload plus the BatteryChargingState (5) and
+ * BatteryChargeLevel (6) requests it lacks, every stock param kept.  Returns 0 when
+ * stock already asks for both (nothing to add), on a malformed payload or overflow. */
+size_t tel_build_power_union(const uint8_t* stock, size_t stock_len, uint8_t* out, size_t out_max);
+
 #endif /* TEL_HOOK_H */

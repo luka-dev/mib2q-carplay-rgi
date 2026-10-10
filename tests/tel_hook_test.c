@@ -187,6 +187,74 @@ int main(void) {
         assert(!tel_parse_comm_update(cap_comm + 6, sizeof(cap_comm) - 1 - 6 - 2, &c));
     }
 
+    /* PowerUpdate (MFi R32 95.15.2): level u16 param 6, charging state enum param 5,
+     * other params (MaximumCurrentDrawn 0) skipped; level clamped to 100. */
+    {
+        static const uint8_t pu[] = { 0x00, 0x06, 0x00, 0x00, 0x05, 0xDC,   /* 1500 mA */
+                                      0x00, 0x05, 0x00, 0x05, 0x01,         /* charging */
+                                      0x00, 0x06, 0x00, 0x06, 0x00, 0x4D }; /* 77 % */
+        static const uint8_t over[] = { 0x00, 0x06, 0x00, 0x06, 0x01, 0x2C };   /* 300 */
+        tel_power_t pw, last;
+        memset(&last, 0, sizeof(last));
+        assert(tel_parse_power_update(pu, sizeof(pu), &pw));
+        assert(pw.has_level && pw.level == 77 && pw.has_state && pw.state == 1);
+        tel_merge_power(&last, &pw);
+        assert(tel_parse_power_update(over, sizeof(over), &pw) && pw.level == 100 && !pw.has_state);
+        tel_merge_power(&last, &pw);
+        assert(last.level == 100 && last.has_state && last.state == 1);
+        assert(!tel_parse_power_update(pu, sizeof(pu) - 1, &pw));
+    }
+    /* StartPowerUpdates union: stock params kept in order, 5 and 6 appended as voids;
+     * nothing to send when stock already asks for both. */
+    {
+        static const uint8_t stock[] = { 0x00, 0x04, 0x00, 0x00, 0x00, 0x04, 0x00, 0x01, 0x00, 0x04, 0x00, 0x04 };
+        static const uint8_t want[] = { 0x00, 0x04, 0x00, 0x00, 0x00, 0x04, 0x00, 0x01, 0x00, 0x04, 0x00, 0x04,
+                                        0x00, 0x04, 0x00, 0x05, 0x00, 0x04, 0x00, 0x06 };
+        static const uint8_t both[] = { 0x00, 0x04, 0x00, 0x06, 0x00, 0x04, 0x00, 0x05 };
+        static const uint8_t level_only[] = { 0x00, 0x04, 0x00, 0x06 };
+        uint8_t out[64];
+        size_t n = tel_build_power_union(stock, sizeof(stock), out, sizeof(out));
+        assert(n == sizeof(want) && memcmp(out, want, n) == 0);
+        assert(tel_build_power_union(both, sizeof(both), out, sizeof(out)) == 0);
+        n = tel_build_power_union(level_only, sizeof(level_only), out, sizeof(out));
+        assert(n == 8 && out[7] == 0x05);
+        assert(tel_build_power_union(NULL, 0, out, sizeof(out)) == 8);
+        assert(tel_build_power_union(stock, sizeof(stock) - 1, out, sizeof(out)) == 0);
+        assert(tel_build_power_union(stock, sizeof(stock), out, 15) == 0);
+    }
+
+    /* Ordering: stock's StartPowerUpdates (Encode, not yet on the wire) only arms the
+     * extension; it goes out after the phone's first PowerUpdate, exactly once per Identify. */
+    {
+        static const uint8_t stock[] = { 0x00, 0x04, 0x00, 0x00, 0x00, 0x04, 0x00, 0x04 };
+        static const uint8_t pu[] = { 0x00, 0x06, 0x00, 0x06, 0x00, 0x32 };
+        hook_context_t ctx;
+        iap2_frame_t f;
+        int before;
+        memset(&ctx, 0, sizeof(ctx));
+        memset(&f, 0, sizeof(f));
+        tel_module_def.on_init();                       /* IAP2_PHONE_BATTERY unset = on */
+        before = sent_count;
+        ctx.direction = MSG_DIR_OUTGOING; f.msgid = 0xAE00; f.payload = stock; f.payload_len = sizeof(stock);
+        tel_module_def.on_message(&ctx, &f);
+        assert(sent_count == before);
+        ctx.direction = MSG_DIR_INCOMING; f.msgid = 0xAE01; f.payload = pu; f.payload_len = sizeof(pu);
+        tel_module_def.on_message(&ctx, &f);
+        assert(sent_count == before + 1 && sent_msg == 0xAE00 && sent_len == sizeof(stock) + 8);
+        tel_module_def.on_message(&ctx, &f);
+        ctx.direction = MSG_DIR_OUTGOING; f.msgid = 0xAE00; f.payload = stock; f.payload_len = sizeof(stock);
+        tel_module_def.on_message(&ctx, &f);           /* stock repeats: once per Identify */
+        ctx.direction = MSG_DIR_INCOMING; f.msgid = 0xAE01; f.payload = pu; f.payload_len = sizeof(pu);
+        tel_module_def.on_message(&ctx, &f);
+        assert(sent_count == before + 1);
+        tel_module_def.on_state(&ctx, HOOK_EVENT_IDENTIFY_START, NULL);
+        ctx.direction = MSG_DIR_OUTGOING; f.msgid = 0xAE00; f.payload = stock; f.payload_len = sizeof(stock);
+        tel_module_def.on_message(&ctx, &f);
+        ctx.direction = MSG_DIR_INCOMING; f.msgid = 0xAE01; f.payload = pu; f.payload_len = sizeof(pu);
+        tel_module_def.on_message(&ctx, &f);
+        assert(sent_count == before + 2);
+    }
+
     /* Truncated / garbage: never reads past len, reports failure. */
     assert(!tel_parse_list_update(cap_entries + 6, sizeof(cap_entries) - 1 - 6 - 3, &l));
     srand(7);
@@ -196,9 +264,11 @@ int main(void) {
         (void)tel_parse_list_update(buf, len, &l);
         tel_merge_lists(&last, &l);
         { tel_comm_t c; (void)tel_parse_comm_update(buf, len, &c); assert(strlen(c.carrier) < TEL_TEXT_MAX); }
+        { tel_power_t pw; (void)tel_parse_power_update(buf, len, &pw); assert(pw.level <= 100); }
+        { uint8_t o[80]; size_t n = tel_build_power_union(buf, len, o, sizeof(o)); assert(n <= sizeof(o)); }
         assert(l.recents.n <= TEL_LIST_MAX && l.favorites.n <= TEL_LIST_MAX);
         assert(last.recents.n <= TEL_LIST_MAX && last.favorites.n <= TEL_LIST_MAX);
     }
-    puts("tel_hook_test: verified 0x4170 bytes, R29 hold/mute, AcceptCall/EndCall/SwapCalls commands, 3 captured 0x4171 frames, split/shrink merge, captured 0x4158, 100000 malformed inputs PASS");
+    puts("tel_hook_test: verified 0x4170 bytes, R29 hold/mute, AcceptCall/EndCall/SwapCalls commands, 3 captured 0x4171 frames, split/shrink merge, captured 0x4158, PowerUpdate battery + StartPowerUpdates union, 100000 malformed inputs PASS");
     return 0;
 }

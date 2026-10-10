@@ -57,6 +57,7 @@ public final class CarplayBus {
     public static final int CMD_ALT_ZONE_ACK   = 0x0112;   /* hook->Java [u8 mode][i32 LE status]       */
     public static final int CMD_ALT_RGI        = 0x0116;   /* [u8 0=off 1=on] confirmed RGI presentation */
     public static final int CMD_TEL            = 0x0117;   /* [u8 action][u8 on]: 1 = mute, 2 = hold */
+    public static final int CMD_VEHICLE        = 0x0118;   /* LE [u8 ver=1][u8 valid][u16 speed cm/s][u8 gear][u16 range km][i16 temp 0.1C][u8 warn][u32 ms] */
 
     public interface Listener {
         void onFrame(int type, int flags, byte[] payload, int len);

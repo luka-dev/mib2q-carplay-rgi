@@ -170,7 +170,7 @@ Stock sends support `(true, true, true)` itself when it binds the service (`Comb
 | 4 | Recents and favorites, dial from a list | Implemented |
 | 5 | Mic mute, missed-call indication, signal, register state, carrier | Implemented |
 | 6 | Directory shows "no phonebook" instead of an empty list | Implemented, not verified on the car |
-| 7 | HU phone app (TEL key, menu) goes straight to CarPlay: the stock "Your iPhone is in Apple CarPlay mode" popup is skipped by pressing its "Switch to Apple CarPlay" for the user: TEL key via `CarPlaySystemSMM` (system transition 833, patched system `Activator`), in-app entries via `CarPlayPhoneSMM` (patched phone-SM `Activator`) | First version (phone SM only) did not skip on TEL on the car; system-SM fix implemented, not yet verified on the car |
+| 7 | HU phone app (TEL key, menu) goes straight to CarPlay: the stock "Your iPhone is in Apple CarPlay mode" popup is skipped by pressing its "Switch to Apple CarPlay" for the user: TEL key via `CarPlaySystemSMM` (system transition 833, patched system `Activator`), in-app entries via `CarPlayPhoneSMM` (patched phone-SM `Activator`) | First version (phone SM only) did not skip on TEL on the car; the system-SM fix was confirmed by the owner on 2026-10-10: TEL goes straight to CarPlay **[car]** |
 | – | Caller picture | Not possible over iAP2 |
 
 On 2026-09-23 the owner confirmed on the car that it works on the first try. The logs from that session (`logs/telephony-20260923-102339/`, not in git) show the gate switching on at CarPlay connect and iOS sending 12 recents (the CarPlay cap) and 4 favorites within 21 s of the hook starting. `[car]`

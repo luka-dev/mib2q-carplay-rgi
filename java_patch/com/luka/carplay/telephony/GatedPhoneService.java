@@ -13,7 +13,8 @@
  * GatedPhoneListener and go to hook/telephony (iAP2 AcceptCall, EndCall,
  * SwapCalls, Hold/MuteStatusUpdate) and to callNumber (dial).  Recents/favorites come from hook/telephony (iAP2
  * ListUpdate, EVT_TEL_LISTS), with the missed-call indication derived from them;
- * signal and carrier come from the stock CommunicationsUpdate (EVT_TEL_COMM).
+ * signal and carrier come from the stock CommunicationsUpdate (EVT_TEL_COMM), the iPhone's
+ * battery from PowerUpdate (EVT_TEL_COMM battery/charging, hook/telephony).
  *
  * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
@@ -110,11 +111,14 @@ public class GatedPhoneService implements CombiBAPServicePhone {
     private int stockSignal = -1, stockRegState, stockNetType, stockDataType;
     private boolean haveStockRegState, haveStockProvider, haveStockMissed;
     private int stockProvNameValid, stockProvIdValid, stockMissedCalls, stockMissedNumbers;
+    private CombiBAPhoneMobileBatteryLevel stockBattery;
     private String stockProvName, stockProvId;
 
     /* CarPlay signal/carrier from the stock CommunicationsUpdate (hook EVT_TEL_COMM). */
     private int signalPct, regState;
     private String carrier = "";
+    /* iPhone battery 0..100 from PowerUpdate, -1 = not reported. */
+    private int batteryPct = -1;
     /* Missed-call indication: unreturned missed calls newer than the last VC reset. */
     private long missedResetTs, newestRecentTs;   /* phone clock, s */
     private int missedCalls, missedNumbers;
@@ -376,7 +380,23 @@ public class GatedPhoneService implements CombiBAPServicePhone {
         signalPct = sig < 0 ? 0 : Math.min(sig, 5) * 20;
         regState = bapRegisterState(reg, d.bool("airplane", false));
         carrier = d.str("carrier", "");
+        batteryPct = d.num("battery", -1);
         if (gated) publishComm();
+    }
+
+    /* BAP charge level buckets, as stock BAPPropertyTelMobileBatteryLevel maps HFP bars;
+     * the lowest bucket (below 20 %) is critical there too. */
+    public static CombiBAPhoneMobileBatteryLevel batteryLevel(int pct) {
+        int level;
+        if (pct < 0) level = CombiBAPhoneMobileBatteryLevel.BATTERY_LEVEL_UNKNOWN_LEVEL_NOT_RECEIVED;
+        else if (pct == 0) level = CombiBAPhoneMobileBatteryLevel.BATTERY_LEVEL_CHARGE_LEVEL_0;
+        else if (pct < 20) level = CombiBAPhoneMobileBatteryLevel.BATTERY_LEVEL_CHARGE_LEVEL_0_19;
+        else if (pct < 40) level = CombiBAPhoneMobileBatteryLevel.BATTERY_LEVEL_CHARGE_LEVEL_20_39;
+        else if (pct < 60) level = CombiBAPhoneMobileBatteryLevel.BATTERY_LEVEL_CHARGE_LEVEL_40_59;
+        else if (pct < 80) level = CombiBAPhoneMobileBatteryLevel.BATTERY_LEVEL_CHARGE_LEVEL_60_79;
+        else level = CombiBAPhoneMobileBatteryLevel.BATTERY_LEVEL_CHARGE_LEVEL_80_100;
+        return CombiBAPhoneMobileBatteryLevel.createOnlyMobileChargeLevel1(
+            new CombiBAPhoneMobileBatteryLevel.ChargeLevel(level, pct >= 0 && pct < 20));
     }
 
     private void publishComm() {
@@ -384,6 +404,7 @@ public class GatedPhoneService implements CombiBAPServicePhone {
         real.updateRegisterState(regState, 0, 0);
         int valid = carrier.length() > 0 ? 1 : 0;
         real.updateNetworkProvider(valid, carrier, valid, carrier);
+        real.updateMobileBatteryLevel(batteryLevel(batteryPct));
     }
 
     /* iAP2 RegistrationStatus (0 unknown, 1 not registered, 2 searching, 3 denied,
@@ -461,6 +482,7 @@ public class GatedPhoneService implements CombiBAPServicePhone {
         support[MOBILE_SERVICE_SUPPORT_REGISTER_STATE] = true;
         support[MOBILE_SERVICE_SUPPORT_NETWORK_PROVIDER] = true;
         support[MOBILE_SERVICE_SUPPORT_SIGNAL_QUALITY] = true;
+        support[MOBILE_SERVICE_SUPPORT_MOBILE_BATTERY_LEVEL] = true;
         real.updateMobileServiceSupport(support);
         muted = false;
         real.updateMicMuteState(false);
@@ -486,6 +508,9 @@ public class GatedPhoneService implements CombiBAPServicePhone {
         else real.updateNetworkProvider(0, "", 0, "");
         if (haveStockMissed) real.updateMissedCallIndication(stockMissedCalls, stockMissedNumbers);
         else real.updateMissedCallIndication(0, 0);
+        real.updateMobileBatteryLevel(stockBattery != null ? stockBattery
+            : CombiBAPhoneMobileBatteryLevel.createOnlyMobileChargeLevel1(new CombiBAPhoneMobileBatteryLevel.ChargeLevel(
+                CombiBAPhoneMobileBatteryLevel.BATTERY_LEVEL_UNKNOWN_DEVICE_NOT_CONNECTED, false)));
     }
 
     private void publishCalls() {
@@ -567,7 +592,10 @@ public class GatedPhoneService implements CombiBAPServicePhone {
     public void setWaitingCallOnHoldResult(int i) { real.setWaitingCallOnHoldResult(i); }
     public void joinCallsResult(int i) { real.joinCallsResult(i); }
     public void splitCallResult(int i) { real.splitCallResult(i); }
-    public void updateMobileBatteryLevel(CombiBAPhoneMobileBatteryLevel combibaphonemobilebatterylevel) { real.updateMobileBatteryLevel(combibaphonemobilebatterylevel); }
+    public synchronized void updateMobileBatteryLevel(CombiBAPhoneMobileBatteryLevel b) {
+        stockBattery = b;
+        if (!gated) real.updateMobileBatteryLevel(b);
+    }
     public void updateMissedCalls(CombiBAPCallStackEntry[] acombibapcallstackentry) { real.updateMissedCalls(acombibapcallstackentry); }
     public void updateReceivedCalls(CombiBAPCallStackEntry[] acombibapcallstackentry) { real.updateReceivedCalls(acombibapcallstackentry); }
     public void updateDialedNumbers(CombiBAPCallStackEntry[] acombibapcallstackentry) { real.updateDialedNumbers(acombibapcallstackentry); }

@@ -81,7 +81,9 @@ unchanged. Selected zoom keeps an immutable input timestamp; final validation
 follows retained-session acquisition. CF construction errors do not replace a
 valid queued state. See [Input commands](../altscreen-and-video/ALTSCREEN_INPUT_COMMANDS.md).
 
-**Telephony rides it too.** `EVT_TEL_LISTS 0x0040` is a sticky text frame with CarPlay recents (`r.n`, `r.<i>.a|b|type|ts|occ`) and favorites (`f.n`, `f.<i>.a|b`) from iAP2 ListUpdate; `EVT_TEL_COMM 0x0041` is a sticky text frame with `signal`, `registration`, `airplane` and `carrier` read from the stock CommunicationsUpdate; `CMD_TEL 0x0117` is `[u8 action][u8 on]`: `1` = mic mute (iAP2 0x4160), `2` = hold (0x415F), `3` = accept (AcceptCall 0x415B), `4` = end (EndCall 0x415C), `5` = swap (SwapCalls 0x415D) (`hook/telephony/tel_hook.c`, `GatedPhoneService`). See [CarPlay Telephony](../cluster-and-rgi/CARPLAY_TELEPHONY.md). **[code]**
+**Telephony rides it too.** `EVT_TEL_LISTS 0x0040` is a sticky text frame with CarPlay recents (`r.n`, `r.<i>.a|b|type|ts|occ`) and favorites (`f.n`, `f.<i>.a|b`) from iAP2 ListUpdate; `EVT_TEL_COMM 0x0041` is a sticky text frame with `signal`, `registration`, `airplane` and `carrier` read from the stock CommunicationsUpdate, plus `battery` (0–100) and `charging` (0/1/2) from PowerUpdate 0xAE01 (−1 = not reported); `CMD_TEL 0x0117` is `[u8 action][u8 on]`: `1` = mic mute (iAP2 0x4160), `2` = hold (0x415F), `3` = accept (AcceptCall 0x415B), `4` = end (EndCall 0x415C), `5` = swap (SwapCalls 0x415D) (`hook/telephony/tel_hook.c`, `GatedPhoneService`). See [CarPlay Telephony](../cluster-and-rgi/CARPLAY_TELEPHONY.md). **[code]**
+
+**Vehicle data goes the other way.** `CMD_VEHICLE 0x0118` (Java → hook, binary, little-endian, 14 bytes) is `[u8 version 1][u8 valid bits: speed, gear, range, temperature, warning][u16 speed cm/s][u8 gear 0 unknown / 1 D / 2 R / 3 N / 4 P][u16 range km][i16 outside temperature 0.1 °C][u8 range warning][u32 Java ms]`, sent every 200 ms by `VehicleDataModule`; `hook/vehicle` turns it into `$PASCD` and VehicleStatusUpdate. See [Vehicle Data To Phone](../connect-and-usb/VEHICLE_DATA_TO_PHONE.md). **[code]**
 
 ---
 

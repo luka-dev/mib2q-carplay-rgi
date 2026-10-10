@@ -63,6 +63,19 @@ export LD_PRELOAD="$H/libcarplay_hook.so"
 export ALTSCREEN_HANDLE_ALT=1
 export ALTSCREEN_ADVERT_DISPLAYS=1
 
+# Vehicle data to the phone and phone data to the cluster over iAP2 (docs/connect-and-usb/VEHICLE_DATA_TO_PHONE.md).
+# IAP2_VEHICLE_STATUS: VehicleStatusUpdate 0xA101 (range, outside temperature, low-range warning) plus the Identify
+#   components VehicleInformation (20) and VehicleStatus (21); needs the 0xA100-0xA102 IDs in dio_manager.json (installer).
+# IAP2_VEHICLE_ENGINE: engine type advertised in VehicleInformationComponent: gasoline | diesel | electric | cng.
+# IAP2_VEHICLE_SPEED: $PASCD wheel-speed sentences (0xFFFB) once the phone asks for them; needs "nmea":"0x000B"
+#   in dio_manager.json (installer) so dio advertises VehicleSpeedData.
+# IAP2_PHONE_BATTERY: iPhone battery and charging state (PowerUpdate 0xAE01) to the cluster phone tab.
+# Values are read by value (on/off), never by presence.
+export IAP2_VEHICLE_STATUS=on
+export IAP2_VEHICLE_ENGINE=gasoline
+export IAP2_VEHICLE_SPEED=on
+export IAP2_PHONE_BATTERY=on
+
 # Buffered CarPlay audio policy.
 # 1 = this unit (external J525 amp, 6-channel MOST route). The internal-amp thread's policy is
 # AUDIO_SPATIAL=0 unless E2P 0xFC reads 02 (docs/audio/DISCRETE_5_1_ROUTING.md); that gate belongs to the

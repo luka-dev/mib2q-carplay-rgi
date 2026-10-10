@@ -1,6 +1,6 @@
 # Scene Backend Deploy
 
-*The scene upmix renderer is the only stereo renderer of the hook since 2026-10-09: the startup block is live (variant J, fine mask net c loaded), there is no selector flag, and the Universal backend with its three models is gone from the tree. This page is the package, the measured cost, the two A/B levers, the rollback, and what to read in the log after the first car session. Not yet listened to in the car.*
+*The scene upmix renderer is the only stereo renderer of the hook since 2026-10-09: the startup block is live (variant J, fine mask net c loaded), there is no selector flag, and the Universal backend with its three models is gone from the tree. This page is the package, the measured cost, the two A/B levers, the rollback, and what to read in the log after the first car session. First car session 2026-10-09; the owner's verdict of 2026-10-10 accepts the sound (one sighted listener, no blind test). The resume fix and the cluster fix of the follow-up package are still to be checked in the car.*
 
 ---
 
@@ -11,13 +11,24 @@
 | Artifact | Bytes | SHA-256 |
 |---|---:|---|
 | `build/install_scene_j_unprotected.zip` (2026-10-09 18:42) | 2,253,177 | `74fbad0aa801fff78d4f155a1aeeb1c9f8a45758fbfc9d2a64b3d391faef54b1` |
-| `libcarplay_hook.so` (`build/unprotected/`) | 1,441,797 | `33b6ee9beb3d385dfe16249544540084740092250de1df344bd0784695fff348` |
+| `libcarplay_hook.so` (`build/unprotected/` of 18:42; the hook heard in the car on 2026-10-09, shipped there in `install_unprotected_scene_j_2026-10-09_2107.zip`) | 1,441,797 | `33b6ee9beb3d385dfe16249544540084740092250de1df344bd0784695fff348` |
 | `libcarplay_apac.so` (unchanged since 2026-09-22) | 696,491 | `1c25799f4dd47549335cbc22cc9a059efab030d4e489937fc4d8460e341e09ce` |
 | `scene_masknet_c.bin` (`models/scene-masknet-c/`) | 32,544 | `58cdc72f573d4718f6325de8a481ecd904096d8f589372e6de5cb05222d98957` |
 
 - **Hook:** `scripts/build_hook.sh` (Docker `qnx65-armv7-toolchain:latest`, GCC 8.5, `-mfpu=neon -mfloat-abi=softfp`, the upmix DSP files at `-O3 -fno-math-errno`, `scripts/apac_flags.sh`). The renderer is `hook/audio/scene_engine.c/.h`, `scene_engine_math.c`, `scene_simd.h`, `scene_fft.h`, `scene_clusters.c/.h`, `scene_mask.c/.h`, `scene_mask_worker.c/.h` behind the `SCENE` backend of `stereo_upmix.c/.h` (`enum spa_stereo_upmix_backend`: `OFF = 0`, `SCENE = 1`); `audio_hook.c/.h` parse the knobs. The file is 1.4 MB: the type-103 render state `spa103_render` (801,520 B: engine, net and the worker's own copy of the net) is a static initializer in `.data`, the realtime instance `spa_rt_upmix` (801,408 B) is in `.bss` and costs nothing on disk (`llvm-nm -S`). The 2.1 MB build of the same morning still carried the Universal backend. `strings libcarplay_hook.so | grep -c '^AUDIO_SCENE'` prints 10 (the ten knob names), `grep -c '^AUDIO_HSSR'` prints 0.
 - **Mask blob:** `tools/stereo-upmix-render/port/export_masknet_weights.py` over the fixtures' `masknet_oracle.npz` (the fine net c weights, [spec section 16](../audio/UPMIX_SCENE_ALGORITHM_2026-10-08.md)); `SMSKNET1`, u32 24/12/4, 8131 float32, the file image of `struct scene_mask_weights`; the NEON runtime re-lays the weights in tile order at `scene_mask_init()`. Provenance and the hook-vs-torch numbers in `models/scene-masknet-c/manifest.json`. On the unit: `/mnt/app/root/hooks/scene_masknet_c.bin`, read once at audio init because `AUDIO_SCENE_MASK_BLOB` names it.
 - **Everything else** is what every package ships: both jars, both renderers, `flag_atlas.rgba`, the SI image, `deva-ctrl-qc.so`, the NCM fence, the five `carplay_*.sh`. `scripts/check_model_settings.py` compares `models/scene-masknet-c/settings.json` (the four knob values the net's operating point was measured at) with the startup file.
+
+### Follow-up package (2026-10-10 00:19)
+
+The same tree plus the resume fix `a00959cc` (no upmix reset on a buffered pause, reset on APAP sequence gaps, one period of silence pre-rolled after every QSA prepare; [Buffered Audio Path](../audio/BUFFERED_AUDIO_PATH.md)) and the cluster fix `9305604d` (a steady compressed backlog keeps the picture, renderer at priority 15, monotonic 3 s input wait, 250 ms greeting window; [Video Pipeline](../altscreen-and-video/VIDEO_PIPELINE.md)). This is the package for the next drive. The hook takes effect at the next `dio_manager` start and the renderer at the next reboot or monitor respawn; both are the owner's to trigger.
+
+| Artifact | Bytes | SHA-256 |
+|---|---:|---|
+| `build/install_unprotected.zip` | 2,254,035 | `e91df62536c9a315bc3b41e9caddeccfd35b10b3294cb863ddc92f0c3abde884` |
+| `libcarplay_hook.so` in it | 1,454,289 | `da7a4ae283f51994e73a0a833a39167796a98bbd3588bae0458c9748152fc6da` |
+| `altscreen_render` in it | 314,546 | `9a033ffbe71987db8063233cb98f94131d7d538b0c9852b9e46428b4ea1bba48` |
+| `maneuver_render` in it (unchanged) | 176,559 | `6fb8316adced07a5cf90cbb96de5aa489b2a550ec351719d32403cb88e701ac7` |
 
 ## 📊 Measured cost (QEMU, not the car)
 
@@ -73,6 +84,36 @@ What still applies on top of the engine's own levels: `AUDIO_STEREO_LFE=assist` 
 2. **Net on the audio thread** — `export AUDIO_SCENE_MASK_SYNC=1`. The exact timing of the port tests (rows not one control late), 3.0 M instructions per period; an A/B against the worker's lag, not the default.
 
 The listening order and the kit letters are in [spec sections 15 and 18](../audio/UPMIX_SCENE_ALGORITHM_2026-10-08.md): the car first (I / H / scene without a net), then the knobs one at a time. `tools/stereo-upmix-render/scene_car_kit.py` renders the blinded 6-channel files for `qsa_play`.
+
+## 🚗 The first car session and the owner's verdict
+
+Drive of 2026-10-09, 22:40–23:30, hook `33b6ee9b…` deployed over SSH (the jar of the same package was not active: it loads only after a reboot, which the owner does). `[car]`
+
+| Path | What the log showed |
+|---|---|
+| realtime type 100 (Spotify-class apps), 19 min | mean 2.0 ms / worst 6.0 ms per 16 ms period, guard never tripped (`disables=0`); worker rows 106,490, `skipped=1`, about one row in three superseded by the next (the 768-vs-512 cadence) |
+| buffered type 103, AAC index 23 | `stereoUpmix=scene sceneMask=worker`, centre silent, LFE assist about −29 dBFS, Ls/Rs at 60–80 % of the front on mid-heavy content, `drop=0` |
+| Atmos tracks (index 65) | bypass the upmix as designed |
+| pause → resume on type 103 | a small "rip" heard by the owner, one `prepare+retry` per resume in the log; root cause and fix in [Buffered Audio Path](../audio/BUFFERED_AUDIO_PATH.md), shipped in the follow-up package above, not yet heard |
+
+The owner's verdict on 2026-10-10, after that drive: **the SCENE upmix sounds good, "really good"**. One sighted listener, no blind test, no level-matched A/B against `AUDIO_STEREO_UPMIX=off`; the blinded six-condition car kit was not played. This replaces the 2026-09-22 Track A acceptance as the current acceptance source. `[car]`
+
+_Timeline of the scene renderer's path into the car: from the first wired package through the first drive, the two static fixes and the owner's verdict, to the checks still due on the next drive. Timelines carry no accTitle/accDescr._
+
+```mermaid
+timeline
+    title 🚗 Scene renderer in the car
+    section 2026-10-09
+        18:42 : 📦 first SCENE package : hook 33b6ee9b
+        21:07 : 🚀 deployed over SSH : jar waits for a reboot
+        22:40 : 🎧 first drive : realtime worst 6 ms : 103 resume rip
+        23:43 : 🔧 resume fix a00959cc
+    section 2026-10-10
+        00:19 : 📦 package e91df625 : cluster fix 9305604d
+        verdict : ✅ owner : sounds good, really good
+    section next drive
+        checks : ▶️ play and pause without a rip : 🖥️ cluster without a blink : 🔊 upmix on and off A/B
+```
 
 ## 🔍 What to read in the log after the first car session
 

@@ -47,6 +47,7 @@ flowchart TB
 | [SI Stack and Replug Race](SI_STACK_AND_REPLUG_RACE.md) | Stock `smartphone_integrator` RE: the stack-restart rule and the two race windows behind `start_stack::none`. |
 | [Session Lifecycle](SESSION_LIFECYCLE.md) | One session from control SETUP to teardown: healthy timeline, the −6030 port collision, generation rules. |
 | [HMI Startup and Identity](HMI_STARTUP_AND_IDENTITY.md) | Context 78 / displayable 59 start chains and the "Apple CarPlay" main-menu identity. |
+| [Vehicle Data To Phone](VEHICLE_DATA_TO_PHONE.md) | Wheel speed (PASCD) and vehicle status (range, outside temperature, low-range warning) to the iPhone, the iPhone battery on the cluster phone tab, Siri on a short voice-key press (2026-10-10, not yet in the car). |
 | [Now Playing Cold Start](NOW_PLAYING_COLD_START.md) | The three start-up rails and the bounded cold-connect path for silent-and-blank connects. |
 | [Wireless CarPlay and Wi-Fi](../wireless-carplay/WIFI_AND_DISCOVERY.md) | Why iOS has no 5 GHz gate, what the Apple vendor IE actually requires, the phone-side eligibility reason strings, and why this unit is 2.4 GHz only with no wireless transport. |
 | [Wireless CarPlay on the Head Unit](../wireless-carplay/HARDWARE_AND_DONORS.md) | Factory MH2p behavior, same-chip MU1439 donor, and the Bluetooth plus pairing/media gaps filled by the offline mod. |

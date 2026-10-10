@@ -1502,47 +1502,6 @@ static void rgd_transport_handler(hook_context_t* ctx, uint16_t msgid) {
     }
 }
 
-/* Grow the Cinemo NmeArray identify buffer so the RGD component TLV fits.  The NmeArray struct at
- * ctx->_priv is { uint8_t* base@+0; uint32 len@+4; uint32 cap@+8 }.
- *
- * SAFETY: this reallocs a buffer Cinemo owns, which is sound BY CONSTRUCTION on this platform —
- * NmeIAP2Message::Encode (libNmeBaseClasses 0x11ffe8) grows this same base@+0 with libc realloc, so
- * the storage is the process libc heap and we call the same allocator from the same process.  We also
- * run inside the Encode interpose before returning to Cinemo, so Cinemo holds no stale base pointer.
- * The one residual risk is a firmware variant where the array is NOT libc-backed or the fields are
- * unexpected; guard against it below and SKIP the append (identify goes out unpatched → no RGI this
- * cycle, retried next identify) rather than corrupt the heap.  An identify is small, so any plausible
- * size stays well under RGD_IDENTIFY_MAX. */
-#define RGD_IDENTIFY_MAX 8192u
-static uint8_t* rgd_resize_identify_buffer(hook_context_t* ctx, size_t len, size_t new_len, size_t* out_cap) {
-    if (!ctx || !ctx->_priv) return NULL;
-    void* out_array = ctx->_priv;
-    uint8_t* base = *(uint8_t**)((char*)out_array + 0);
-    unsigned int arr_len = *(unsigned int*)((char*)out_array + 4);
-    unsigned int cap = *(unsigned int*)((char*)out_array + 8);
-    /* Invariant check before touching a Cinemo-owned buffer: a sane NmeArray has a non-NULL base,
-     * len<=cap, and identify-plausible sizes.  Anything else → skip (fail-safe, never realloc). */
-    if (!base || cap == 0 || cap > RGD_IDENTIFY_MAX || arr_len > cap || new_len > RGD_IDENTIFY_MAX) {
-        LOG_WARN(LOG_MODULE,
-                 "identify NmeArray failed invariant (base=%p len=%u cap=%u need=%zu) — skip append, no heap touch",
-                 (void*)base, arr_len, cap, new_len);
-        return NULL;
-    }
-    if (cap >= new_len) { if (out_cap) *out_cap = cap; return base; }
-    size_t alloc = new_len + 64;
-    uint8_t* new_buf = (uint8_t*)realloc(base, alloc);
-    if (!new_buf) {
-        new_buf = (uint8_t*)malloc(alloc);
-        if (!new_buf) return NULL;
-        if (base && len > 0) memcpy(new_buf, base, len);
-        if (base) free(base);
-    }
-    *(uint8_t**)((char*)out_array + 0) = new_buf;
-    *(unsigned int*)((char*)out_array + 8) = (unsigned int)alloc;
-    if (out_cap) *out_cap = alloc;
-    return new_buf;
-}
-
 /* Identify patcher */
 static size_t rgd_identify_patcher(hook_context_t* ctx, uint8_t* buf, size_t len, size_t max_len) {
     rgd_lazy_init();  /* Ensure initialized */
@@ -1578,7 +1537,7 @@ static size_t rgd_identify_patcher(hook_context_t* ctx, uint8_t* buf, size_t len
          * The old prod impl reallocated this buffer without the feared heap corruption, so on this
          * platform the array's storage is malloc-compatible.  Grow, then patch into the new buffer. */
         size_t new_cap = 0;
-        uint8_t* grown = rgd_resize_identify_buffer(ctx, len, new_len, &new_cap);
+        uint8_t* grown = hook_identify_grow(ctx, len, new_len, &new_cap);
         if (!grown) {
             LOG_WARN(LOG_MODULE, "Identify patch skipped: resize failed (need %zu > cap %zu)",
                      new_len, max_len);

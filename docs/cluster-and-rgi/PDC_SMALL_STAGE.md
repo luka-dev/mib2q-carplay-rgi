@@ -14,12 +14,13 @@
 | 2026-09-17 | `b0653c6` (includes `2e536a6-ops-aps-drawer-r2`) | "Check surroundings!" drawer gone; stock status line (clock/LTE, black bar over CarPlay's bottom buttons) remained **[car]** |
 | 2026-09-17 | `b0653c6-ops-statusline-r3` | hides status-line popup 62 during pure OPS |
 | 2026-09-22 | r3 on HU | clock/LTE line gone; a black block remained centred at the bottom (entertainment-drawer glass plate) **[car]** |
-| 2026-09-22 | r4 (drawer follows 62) | hides the entertainment drawer under the same guard — built and host-tested, not yet on HU **[open]** |
+| 2026-09-22 | r4 (drawer follows 62) | hides the entertainment drawer under the same guard — built and host-tested |
+| 2026-10-10 | r4 on HU | owner: the right-hand OPS popup beside CarPlay "works great", no bottom strips **[car]** |
 
 > [!IMPORTANT]
 > Intended presentation (owner, 2026-09-22): with a partial popup beside CarPlay there are **no** bottom strips at all: no status line, no APS warning drawer, no entertainment drawer. This is deliberate; do not restore the stock footer or warning while the guard holds. Reverse gear still opens the full-screen camera (stock takeover).
 
-The installed-runtime build ID was not captured; installation and restart are known only from the owner's report. The separate alarm/teardown report no longer reproduces (owner, 2026-09-22).
+The installed-runtime build ID was not captured; installation and restart are known only from the owner's report, as is the 2026-10-10 confirmation. The reverse-camera and HOME-footer regression checks were not separately reported. The separate alarm/teardown report no longer reproduces (owner, 2026-09-22).
 
 ## 🔍 Root cause — a policy clash, not a drawing bug
 

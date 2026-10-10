@@ -1797,6 +1797,46 @@ static void *alt_find_111(void *request)
     return alt_find_stream_type(request, ALT_STREAM_TYPE);
 }
 
+/* Enhanced Siri probe, step 1 of docs/altscreen-and-video/ENHANCED_SIRI_CONTRACT.md: log
+ * the phone's control-SETUP feature proposal.  Behaviour is unchanged; the line only tells
+ * whether this phone would ever propose "enhancedSiri" to this car (WARN, so it reaches the
+ * default log). */
+static void alt_log_phone_features(void *request)
+{
+    typedef unsigned long (*fn_typeof_t)(const void *);
+    typedef unsigned long (*fn_typeid_t)(void);
+    typedef int (*fn_getcstr_t)(const void *, char *, long, uint32_t);
+    fn_typeof_t typeOf = (fn_typeof_t)dlsym(RTLD_DEFAULT, "CFGetTypeID");
+    fn_typeid_t arrayType = (fn_typeid_t)dlsym(RTLD_DEFAULT, "CFArrayGetTypeID");
+    fn_typeid_t stringType = (fn_typeid_t)dlsym(RTLD_DEFAULT, "CFStringGetTypeID");
+    fn_getcstr_t getCStr = (fn_getcstr_t)dlsym(RTLD_DEFAULT, "CFStringGetCString");
+    char list[320];
+    size_t w = 0;
+    int siri = 0;
+    long n, i;
+    void *k, *arr;
+    if (!typeOf || !arrayType || !stringType || !getCStr) return;
+    k = cf_str(0, "features", CFENC_UTF8);
+    arr = k ? cf_getval(request, k) : NULL;
+    if (k && cf_rel) cf_rel(k);
+    if (!arr || typeOf(arr) != arrayType()) return;
+    list[0] = 0;
+    n = cf_arrcount(arr);
+    for (i = 0; i < n; i++) {
+        void *e = cf_arridx(arr, i);
+        char name[48];
+        int r;
+        if (!e || typeOf(e) != stringType()) continue;
+        if (!getCStr(e, name, sizeof(name), CFENC_UTF8)) continue;
+        if (!strcmp(name, "enhancedSiri")) siri = 1;
+        r = snprintf(list + w, sizeof(list) - w, "%s%s", w ? "," : "", name);
+        if (r < 0 || (size_t)r >= sizeof(list) - w) break;
+        w += (size_t)r;
+    }
+    LOG_WARN(LOG_MODULE, "control SETUP: phone proposes %ld features [%s]; enhancedSiri %s",
+             n, list, siri ? "PROPOSED" : "not proposed");
+}
+
 /* SETUP seam (module def's on_setup_response).  The framework owns
  * AirPlayReceiverSessionSetup; stock handles 100/101/110 and skips 111, then we
  * negotiate altScreen and bring 111 up ourselves, appending its descriptor to
@@ -1834,6 +1874,7 @@ static void alt_on_setup_response(hook_setup_ctx_t *setup)
         int isControlSetup = (kReq && cf_getval(request, kReq) != 0);
         setupIsControl = isControlSetup;
         if (kReq && cf_rel) cf_rel(kReq);
+        if (isControlSetup) alt_log_phone_features(request);
         if (isControlSetup && advert_preflight(session, setupSequence)) {
             int featureEnabled = 0;
             void *kEnab = cf_str(0, "enabledFeatures", CFENC_UTF8);

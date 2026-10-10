@@ -23,6 +23,7 @@
 
 #include <pthread.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 DEFINE_LOG_MODULE(TELEPHONY);
@@ -36,6 +37,10 @@ DEFINE_LOG_MODULE(TELEPHONY);
 #define MSG_MUTE_STATUS_UPDATE  0x4160
 #define MSG_START_LIST_UPDATES  0x4170
 #define MSG_LIST_UPDATE         0x4171
+#define MSG_START_POWER_UPDATES 0xAE00  /* stock subscription, extended once */
+#define MSG_POWER_UPDATE        0xAE01  /* stock receives it, read-only here */
+#define POWER_CHARGING_STATE    5
+#define POWER_CHARGE_LEVEL      6
 
 /* CMD_TEL actions (Java -> hook), payload [u8 action][args]. */
 #define TEL_CMD_MUTE            1       /* [u8 on] */
@@ -44,10 +49,23 @@ DEFINE_LOG_MODULE(TELEPHONY);
 #define TEL_CMD_END             4       /* [u8 action]: 0 end, 1 end all */
 #define TEL_CMD_SWAP            5       /* [u8 ignored]: SwapCalls has no params */
 
-static const uint16_t tel_msg_filter[] = { MSG_START_CALL_STATE, MSG_COMM_UPDATE, MSG_LIST_UPDATE };
+static const uint16_t tel_msg_filter[] = { MSG_START_CALL_STATE, MSG_COMM_UPDATE, MSG_LIST_UPDATE,
+                                           MSG_START_POWER_UPDATES, MSG_POWER_UPDATE };
 
 static pthread_mutex_t tel_lock = PTHREAD_MUTEX_INITIALIZER;
 static bool tel_lists_requested;        /* once per Identify cycle */
+static bool tel_power_requested;        /* once per Identify cycle */
+/* Extended StartPowerUpdates waiting for the phone's first PowerUpdate after stock's own. */
+static uint8_t tel_power_union[96];
+static size_t tel_power_union_len;
+static bool tel_battery_enabled;        /* IAP2_PHONE_BATTERY, read at init */
+
+/* On by value: unset, "", 0, off, false, no = off (an exported "0" means off). */
+static bool tel_env_on(const char* name, bool def) {
+    const char* v = getenv(name);
+    if (!v) return def;
+    return !(!*v || !strcmp(v, "0") || !strcmp(v, "off") || !strcmp(v, "false") || !strcmp(v, "no"));
+}
 
 /* ---------------- builders ---------------- */
 
@@ -192,6 +210,47 @@ void tel_merge_comm(tel_comm_t* last, const tel_comm_t* upd) {
     if (upd->has_carrier) { last->has_carrier = true; memcpy(last->carrier, upd->carrier, sizeof(last->carrier)); }
 }
 
+bool tel_parse_power_update(const uint8_t* payload, size_t len, tel_power_t* out) {
+    iap2_tlv_t t;
+    size_t off = 0;
+    memset(out, 0, sizeof(*out));
+    if (!payload) return false;
+    while (off < len && iap2_parse_tlv(payload + off, len - off, &t)) {
+        if (t.id == POWER_CHARGE_LEVEL && t.value_len == 2) {
+            uint16_t v = (uint16_t)be_n(t.value, 2);
+            out->has_level = true;
+            out->level = v > 100 ? 100 : v;
+        } else if (t.id == POWER_CHARGING_STATE && t.value_len == 1) {
+            out->has_state = true;
+            out->state = t.value[0];
+        }
+        off += t.len;
+    }
+    return off == len;
+}
+
+void tel_merge_power(tel_power_t* last, const tel_power_t* upd) {
+    if (upd->has_level) { last->has_level = true; last->level = upd->level; }
+    if (upd->has_state) { last->has_state = true; last->state = upd->state; }
+}
+
+size_t tel_build_power_union(const uint8_t* stock, size_t stock_len, uint8_t* out, size_t out_max) {
+    iap2_tlv_t t;
+    size_t off = 0;
+    bool has_state = false, has_level = false;
+    while (stock && off < stock_len && iap2_parse_tlv(stock + off, stock_len - off, &t)) {
+        if (t.id == POWER_CHARGING_STATE) has_state = true;
+        if (t.id == POWER_CHARGE_LEVEL) has_level = true;
+        off += t.len;
+    }
+    if (off != stock_len || (has_state && has_level) || stock_len > out_max) return 0;
+    if (stock_len) memcpy(out, stock, stock_len);
+    off = stock_len;
+    if (!has_state && !(off = put_tlv(out, out_max, off, POWER_CHARGING_STATE, NULL, 0))) return 0;
+    if (!has_level && !(off = put_tlv(out, out_max, off, POWER_CHARGE_LEVEL, NULL, 0))) return 0;
+    return off;
+}
+
 /* ---------------- bus ---------------- */
 
 static void add_list(bus_text_builder_t* b, const char* p, const tel_entry_t* e, size_t n,
@@ -229,19 +288,27 @@ static void publish_lists(const tel_lists_t* upd) {
     pthread_mutex_unlock(&tel_lock);
 }
 
-/* Running CommunicationsUpdate state; -1 = not reported yet. */
+/* Running CommunicationsUpdate and PowerUpdate state; -1 = not reported yet. */
 static tel_comm_t tel_comm;
+static tel_power_t tel_power;
 
-static void publish_comm(const tel_comm_t* upd) {
+/* upd == NULL and pwr == NULL resets both (new Identify, disconnect, init). */
+static void publish_comm(const tel_comm_t* upd, const tel_power_t* pwr) {
     bus_text_builder_t b;
     pthread_mutex_lock(&tel_lock);
-    if (!upd) memset(&tel_comm, 0, sizeof(tel_comm));
-    else tel_merge_comm(&tel_comm, upd);
+    if (!upd && !pwr) {
+        memset(&tel_comm, 0, sizeof(tel_comm));
+        memset(&tel_power, 0, sizeof(tel_power));
+    }
+    if (upd) tel_merge_comm(&tel_comm, upd);
+    if (pwr) tel_merge_power(&tel_power, pwr);
     if (bus_text_begin_heap(&b, "telephony_comm", BUS_TEXT_BUILDER_DEFAULT_CAP) == HOOK_OK) {
         bus_text_int(&b, "signal", tel_comm.has_signal ? tel_comm.signal : -1);
         bus_text_int(&b, "registration", tel_comm.has_registration ? tel_comm.registration : -1);
         bus_text_bool(&b, "airplane", tel_comm.airplane);
         bus_text_str(&b, "carrier", tel_comm.carrier);
+        bus_text_int(&b, "battery", tel_power.has_level ? tel_power.level : -1);
+        bus_text_int(&b, "charging", tel_power.has_state ? tel_power.state : -1);
         bus_send_text(EVT_TEL_COMM, BUS_FLAG_STICKY, &b);
     }
     pthread_mutex_unlock(&tel_lock);
@@ -296,8 +363,49 @@ static bool tel_on_message(hook_context_t* ctx, const iap2_frame_t* f) {
         }
     } else if (ctx->direction == MSG_DIR_INCOMING && f->msgid == MSG_COMM_UPDATE) {
         tel_comm_t upd;
-        if (tel_parse_comm_update(f->payload, f->payload_len, &upd)) publish_comm(&upd);
+        if (tel_parse_comm_update(f->payload, f->payload_len, &upd)) publish_comm(&upd, NULL);
         else LOG_WARN(LOG_MODULE, "malformed CommunicationsUpdate len=%u", (unsigned)f->payload_len);
+    } else if (ctx->direction == MSG_DIR_OUTGOING && f->msgid == MSG_START_POWER_UPDATES) {
+        /* Stock subscribes to PowerUpdate for its own charging logic.  If it does not ask
+         * for the battery, its request is repeated once with the battery params added: every
+         * stock param stays in, so iOS keeps sending what stock asked for whether a second
+         * StartPowerUpdates replaces or extends the first.  This runs in Encode, before stock's
+         * message is on the wire, and the injection worker could overtake it; the extended
+         * request therefore waits for the phone's first PowerUpdate, which proves stock's own
+         * request has arrived. */
+        size_t n;
+        if (!tel_battery_enabled) return false;
+        n = tel_build_power_union(f->payload, f->payload_len, tel_power_union, sizeof(tel_power_union));
+        pthread_mutex_lock(&tel_lock);
+        tel_power_union_len = tel_power_requested ? 0 : n;
+        pthread_mutex_unlock(&tel_lock);
+        if (!n) LOG_INFO(LOG_MODULE, "StartPowerUpdates: nothing to add (len=%u)", (unsigned)f->payload_len);
+    } else if (ctx->direction == MSG_DIR_INCOMING && f->msgid == MSG_POWER_UPDATE) {
+        tel_power_t pwr;
+        uint8_t payload[sizeof(tel_power_union)];
+        size_t n;
+        if (!tel_battery_enabled) return false;
+        pthread_mutex_lock(&tel_lock);
+        n = tel_power_union_len;
+        if (n) memcpy(payload, tel_power_union, n);
+        tel_power_union_len = 0;
+        if (n) tel_power_requested = true;
+        pthread_mutex_unlock(&tel_lock);
+        if (n) {
+            if (hook_inject_message(MSG_START_POWER_UPDATES, payload, n) == HOOK_OK) {
+                LOG_WARN(LOG_MODULE, "StartPowerUpdates extended with battery level/state (%u bytes)", (unsigned)n);
+            } else {
+                LOG_WARN(LOG_MODULE, "StartPowerUpdates extension not queued");
+                pthread_mutex_lock(&tel_lock);
+                tel_power_requested = false;    /* the next stock 0xAE00 retries */
+                pthread_mutex_unlock(&tel_lock);
+            }
+        }
+        if (tel_parse_power_update(f->payload, f->payload_len, &pwr)) {
+            if (pwr.has_level || pwr.has_state) publish_comm(NULL, &pwr);
+        } else {
+            LOG_WARN(LOG_MODULE, "malformed PowerUpdate len=%u", (unsigned)f->payload_len);
+        }
     } else if (ctx->direction == MSG_DIR_INCOMING && f->msgid == MSG_LIST_UPDATE) {
         static tel_lists_t upd;                 /* Cinemo's receive thread only */
         if (tel_parse_list_update(f->payload, f->payload_len, &upd)) publish_lists(&upd);
@@ -311,9 +419,11 @@ static void tel_on_state(hook_context_t* ctx, int event, void* data) {
     if (event == HOOK_EVENT_IDENTIFY_START || event == HOOK_EVENT_DISCONNECT) {
         pthread_mutex_lock(&tel_lock);
         tel_lists_requested = false;
+        tel_power_requested = false;
+        tel_power_union_len = 0;
         pthread_mutex_unlock(&tel_lock);
         publish_lists(NULL);
-        publish_comm(NULL);
+        publish_comm(NULL, NULL);
     }
 }
 
@@ -321,8 +431,9 @@ static void tel_init(void) {
     bus_set_sticky(EVT_TEL_LISTS, true);
     bus_set_sticky(EVT_TEL_COMM, true);
     bus_on(CMD_TEL, tel_on_cmd, NULL);
+    tel_battery_enabled = tel_env_on("IAP2_PHONE_BATTERY", true);
     publish_lists(NULL);                        /* known baseline for Java */
-    publish_comm(NULL);
+    publish_comm(NULL, NULL);
 }
 
 static void tel_shutdown(void) {

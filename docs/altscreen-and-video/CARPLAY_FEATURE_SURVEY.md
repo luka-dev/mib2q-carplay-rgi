@@ -27,11 +27,11 @@ The capability names are phone-side flags from carkitd/accessoryd 23G71 (iOS 26.
 | Tier | Capability | Phone flag(s) | Note |
 |---|---|---|---|
 | 1 | Speed-limit sign in cluster video | `showSpeedLimit=yes` | Maps URL parser supports 26.6 and 27; hook currently requests `no`; on-car rendering untested. [Evidence](../cluster-and-rgi/CARPLAY_SPEED_LIMIT.md) |
-| 1 | Raw vehicle IMU to phone | `ForwardAccel`, `LateralAccel` | Only if road-object detection needs more than GPRMC |
+| 1 | Raw vehicle IMU to phone | `ForwardAccel`, `LateralAccel` | Only if road-object detection needs more than GPRMC. Wheel speed (`PASCD`) and vehicle status (range, outside temperature, warning) were built on 2026-10-10: [Vehicle Data To Phone](../connect-and-usb/VEHICLE_DATA_TO_PHONE.md) |
 | 2 | Now Playing + album art on cluster/HUD | `AccessoryNowPlaying`, `nowPlayingAlbumArt`, `NowPlayingUpdate` | Same lane as the cover-art work |
 | 2 | Dashboard | `Dashboard`, `dashboardRoundedCorners` | A distinct screen mode that could ride the same video path |
 | 2 | Mixable audio | `supportsMixableAudio`, `supportsSiriMixable` | Prompts mix instead of hard-ducking |
-| 2 | Siri hardware button + enhanced voice | `supportsSiriZLLButton`, `supportsEnhancedSiriVoice` | Steering-wheel Siri routing |
+| 2 | Siri hardware button + enhanced voice | `supportsSiriZLLButton`, `supportsEnhancedSiriVoice` | Decoded 2026-10-10, not built: [Enhanced Siri Contract](ENHANCED_SIRI_CONTRACT.md). A short press of the voice key now starts plain Siri ([Vehicle Data To Phone](../connect-and-usb/VEHICLE_DATA_TO_PHONE.md)) |
 | 3 | Destination / route sharing | `SupportsDestinationSharing`, `supportsRouteSharing` | Route sharing is read via `CAFASCTree` `CAFServiceTypeRouteSharing` |
 | 3 | Electronic toll collection | `supportsElectronicTollCollection` | |
 | 3 | Dolby Atmos / spatial audio | `supportsDolbyAtmos`, `supportsSpatialAudio` | See the Audio domain |

@@ -1,6 +1,23 @@
 # TODO
 
-## Current status — 2026-09-17
+## Current status — 2026-10-10
+
+October 10, the owner after the first SCENE drive of October 9: the SCENE upmix
+"sounds good, really good"; the TEL key goes straight into CarPlay and the OPS popup
+beside CarPlay "work great" (r4 accepted); the MMI touchpad moves the CarPlay focus
+like a D-pad, and Apple Music crashes when driven from it (open, iOS beta suspected).
+Still to check on the next drive: the resume "rip" fix and the cluster-blink fix, both
+in `build/install_unprotected.zip` (SHA-256 `e91df625…`), which must be installed first
+([Scene Backend Deploy](docs/build-and-deploy/SCENE_BACKEND_DEPLOY.md)).
+
+Built on October 10, not yet in the car ([Vehicle Data To Phone](docs/connect-and-usb/VEHICLE_DATA_TO_PHONE.md)):
+wheel speed (`$PASCD`) and vehicle status (range, outside temperature, low-range warning) to the
+iPhone, the iPhone battery on the cluster phone tab, and Siri on a short voice-key press. Package
+`build/install_unprotected.zip` (SHA-256 `bff31c5c…`); the previous one is kept as
+`install_unprotected_scene_fixes_2026-10-10_0019.zip`. Enhanced Siri was decoded, not built; only a
+log probe ships ([Enhanced Siri Contract](docs/altscreen-and-video/ENHANCED_SIRI_CONTRACT.md)).
+
+### Status of 2026-09-17
 
 The owner confirmed that connection/reconnection stability and transitions
 between music, calls/Siri and the stock/parking UI are **closed** for the current
@@ -14,15 +31,16 @@ September 22: the owner no longer sees the alarm-associated interruption
 Closed as not reproducing; the cause was never captured. If it returns, see the
 capture checklist in git history (`TODO.md` at `8814f22`).
 
-Keeping CarPlay visible beside OPS is fixed. On September 22 the owner's photo
-with r3 shows the APS warning and the clock/LTE footer gone, but a black block
-left centred at the bottom (the entertainment-drawer glass plate). Fix r4 is
-built, not yet on HU. Intended presentation (owner): with a partial popup beside
-CarPlay there are **no** bottom strips at all.
+Keeping CarPlay visible beside OPS is fixed and accepted. On September 22 the owner's photo
+with r3 showed the APS warning and the clock/LTE footer gone, but a black block
+left centred at the bottom (the entertainment-drawer glass plate); r4 removed it and
+the owner confirmed on October 10 that OPS beside CarPlay works. Intended presentation
+(owner): with a partial popup beside CarPlay there are **no** bottom strips at all.
 
 Implemented and accepted feature set: maneuver graphics, lane guidance, HUD,
-altScreen projection and audio. Cover art, metadata and steering-wheel input
-are also implemented. The September 17 rebuild uses the repaired GCC 8.5
+altScreen projection and audio (since October 9 the SCENE upmix, accepted by ear on
+October 10). Cover art, metadata, steering-wheel input, CarPlay telephony on the
+cluster and the TEL-key disclaimer skip are also implemented. The September 17 rebuild uses the repaired GCC 8.5
 toolchain; rebuilding artifacts alone does not change what is installed on HU.
 
 ### Open: "Navigation is initializing" over the CarPlay cluster map
@@ -38,13 +56,25 @@ boot until then. Open: needs an earlier "CarPlay will own the cluster" signal.
 Check: cold boot with CarPlay shows the CarPlay cluster map and no NA screen; without CarPlay stock
 navigation still shows its own "Initialising" screen. [Details](docs/cluster-and-rgi/NAV_INITIALIZING_SCREEN.md).
 
+### Open: Apple Music crashes when driven from the MMI touchpad
+
+Owner, 2026-10-10: with the native trackpad focus mode of 2026-09-23 (`features | 0x10`,
+`primaryInputDevice = 2`) a pad swipe moves the CarPlay focus like a D-pad, the expected
+shape of CarPlay's pointer-less trackpad mode; but Apple Music crashes when it is
+controlled from the pad. The phone runs an iOS beta, so the crash may be iOS's own;
+whether the knob triggers it too was not reported and no phone crash log exists yet.
+Next: reproduce on a release iOS and collect the phone's crash log; if it reproduces,
+log the trackpad reports (`HIDSingleTrackPadFillReport`) before changing the descriptor.
+[Details](docs/reference/ARCHITECTURE.md#mmi-touchpad).
+
 ### Closed: CarPlay telephony on the cluster tab
 
 Working on the car, confirmed by the owner on 2026-09-23 on the first try:
 [design and status](docs/cluster-and-rgi/CARPLAY_TELEPHONY.md). The cluster phone tab shows
 CarPlay calls (state, name, number, timer) with accept/hangup/hold/dial, mic mute, recents and
 favorites, the missed-call indication, signal, register state and carrier. Caller picture: not
-possible, iAP2 CallStateUpdate carries no image.
+possible, iAP2 CallStateUpdate carries no image. The TEL-key disclaimer skip
+(`CarPlaySystemSMM`) was confirmed by the owner on 2026-10-10.
 
 ### Closed: connections and recovery
 
@@ -80,19 +110,23 @@ setup/teardown races. Commands: `scripts/test_supervisor_lifecycle.sh`,
 
 ### Remaining work / optional extensions
 
-- OPS lower strip: **r4 built, HU acceptance pending**. On HU, APS masking
+- OPS lower strip: **closed 2026-10-10** (owner: OPS beside CarPlay works great). On HU, APS masking
   (model 538) removed the warning and r3 removed status line 62; the remaining
   black block is the entertainment drawer, which stock toggles together with 62
   (parking choice 3915=1 -> TerminalMode `0x30D400` stub `renderStyle 0` ->
   `showPopup(62)` + drawer visible). r4 hides the drawer under the same guard:
   `PartialPopupManagerEvoHigh.hideFooter()` when OPS opens, and the patched
   `StatusBarStubController` turns a guarded drawer-visible request into hidden.
-  Check on car: side OPS leaves nothing at the bottom; reverse still opens the
-  full-screen camera; HOME/camera show the stock footer.
+  Confirmed on car 2026-10-10: side OPS leaves nothing at the bottom. Not separately
+  reported: reverse still opens the full-screen camera; HOME/camera show the stock footer.
   [Details](<docs/cluster-and-rgi/PDC_SMALL_STAGE.md>).
-- Upmix: **accepted by the owner on 2026-09-22** ("everything was great") with the
-  shipped calibration in `carplay_startup.sh`. The retention r* grid and other
-  ideas in `docs/audio/UPMIX_CALIBRATION_AND_TUNING.md` are optional, not debt.
+- Upmix: the SCENE renderer (variant J, mask net c) **accepted by ear on 2026-10-10**
+  after the first drive of 2026-10-09; the 2026-09-22 Track A acceptance is history
+  (tag `upmix-universal-last-2026-10-09`). Pending on the next drive: the resume "rip"
+  fix (`a00959cc`) and the cluster-blink fix (`9305604d`), both in
+  `build/install_unprotected.zip` (SHA-256 `e91df625…`); the hook needs a `dio_manager`
+  restart and the renderer a reboot after install.
+  [Package and log lines](docs/build-and-deploy/SCENE_BACKEND_DEPLOY.md).
 - CarPlay Video: receiver/player integration remains unimplemented; optional
   next feature. [Research](<docs/altscreen-and-video/CARPLAY_VIDEO_PLAYBACK.md>).
 - Partial 360-camera beside CarPlay: deliberately deferred by the owner on

@@ -125,6 +125,7 @@ mindmap
       SI Stack and Replug Race
       USB and NCM Connect
       USB Replug Recovery
+      Vehicle Data To Phone
     Wireless CarPlay
       Stock210 Architecture and Lifecycle
       Bluetooth Graft and RFCOMM ABI
@@ -249,6 +250,7 @@ Every curated note, alphabetical:
 - [Discrete 5.1 Routing](audio/DISCRETE_5_1_ROUTING.md)
 - [Distance Bargraph](cluster-and-rgi/DISTANCE_BARGRAPH.md)
 - [Dolby Atmos](audio/DOLBY_ATMOS.md)
+- [Enhanced Siri Contract](altscreen-and-video/ENHANCED_SIRI_CONTRACT.md)
 - [HMI Startup and Identity](connect-and-usb/HMI_STARTUP_AND_IDENTITY.md)
 - [Hook to Java Bus](reference/HOOK_TO_JAVA_BUS.md)
 - [HSSR Model](audio/HSSR_MODEL.md)
@@ -311,6 +313,7 @@ Every curated note, alphabetical:
 - [VC FPK State Machine](cluster-and-rgi/VC_FPK_STATE_MACHINE.md)
 - [VC Layout and Fonts](cluster-and-rgi/VC_LAYOUT_AND_FONTS.md)
 - [VC Telephone Tab](cluster-and-rgi/VC_TELEPHONE_TAB.md)
+- [Vehicle Data To Phone](connect-and-usb/VEHICLE_DATA_TO_PHONE.md)
 - [Vendored LIVI iAP2 crates](wireless-carplay/IAP2_VENDOR_PROVENANCE.md)
 - [Video Pipeline](altscreen-and-video/VIDEO_PIPELINE.md)
 - [VIN Protection](build-and-deploy/VIN_PROTECTION.md)

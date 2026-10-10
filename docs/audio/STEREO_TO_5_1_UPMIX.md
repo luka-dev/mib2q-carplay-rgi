@@ -296,7 +296,7 @@ Whether any of this runs depends on `AUDIO_SPATIAL`. Only B&O external-amp cars 
 
 ## ⚠️ The honest gaps
 
-- **Nothing heard in the car** — the scene renderer was accepted offline (51 reference checks, the fixture gates, the car kit on headphones) and never in the cabin; the guard histogram and the `skipped` count are the first two numbers to collect. `[open]`
+- **One sighted listener, no blind test** — the scene renderer was accepted offline (51 reference checks, the fixture gates, the car kit on headphones), then driven on 2026-10-09 (realtime 19 min: mean 2.0 ms / worst 6.0 ms per 16 ms period, guard never tripped; worker `skipped=1` of 106,490 rows; type 103 `sceneMask=worker`, `drop=0`) and accepted by the owner on 2026-10-10: "sounds good, really good" `[car]`. No level-matched A/B against `AUDIO_STEREO_UPMIX=off`, the blinded car kit was not played, and the resume fix `a00959cc` is still to be heard ([Scene Backend Deploy](../build-and-deploy/SCENE_BACKEND_DEPLOY.md)). `[open]`
 - **+11 ms reported latency** — the phone sees a changed `arrivalToRenderLatencyMs` for the first time; its effect on A/V alignment is unknown. `[open]`
 - **SoundCheck after the cabin guard** — a positive programme gain is applied after the bus bound; limiter off (see above). `[open]`
 - **Amp timing is static RE** — the ~11.8 ms rear-bus lag that variant J relies on and the bleed coefficients behind `AUDIO_SCENE_BLEED_CANCEL` were never measured in the cabin; the one-tone probe of [Upmix Radical Directions](UPMIX_RADICAL_DIRECTIONS_2026-10-07.md) decides J against K. `[model]`

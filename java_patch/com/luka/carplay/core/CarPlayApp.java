@@ -31,7 +31,7 @@ public final class CarPlayApp {
 
     /* Modules, in start order. */
     private static final Module[] MODULES = new Module[] {
-        new AltScreenModule(), new RgdModule(), new SteeringWheelInputModule()
+        new AltScreenModule(), new RgdModule(), new SteeringWheelInputModule(), new VehicleDataModule()
     };
 
     private static final Object lock = new Object();

@@ -67,6 +67,7 @@ and input review resolutions, reproducible commands and latest result limits.
 | [AltScreen RE History](ALTSCREEN_RE_HISTORY.md) | Every altScreen framing, gate theory, plan and verdict in order — what held and what was refuted. |
 | [Cluster Video Encoder](CLUSTER_VIDEO_ENCODER.md) | DisplayManager, `videoencoderservice` and stock KOMO: how a cluster context becomes the VC's H.264. |
 | [Cover Art Pipeline](COVER_ART_PIPELINE.md) | Stock MH2P cover-art design vs our MHI2Q hook, and the size-only Setup regression. |
+| [Enhanced Siri Contract](ENHANCED_SIRI_CONTRACT.md) | What iOS 26.6 needs for zero-latency Siri and voice trigger: the negotiation gate, `/info` keys, the `'zll '` parameters message, the timestamped `requestSiri`. Verdict: button-only possible in principle, not built; voice trigger not practical. Probe: the control SETUP logs the phone's feature proposal. |
 | [CarPlay Video Playback](CARPLAY_VIDEO_PLAYBACK.md) | iOS 27 "Video in Car" (stream 130, URL playback). **Not planned:** only a partial build is possible (clear H.264); DRM needs Apple's receiver FairPlay module, and camera clips are HEVC. |
 | [CarPlay Feature Survey](CARPLAY_FEATURE_SURVEY.md) | Stock baseline, features we added, tiered list of addable ones, the LOD widgets / Live Activities chain. |
 | [Partial 360 Camera Preflight](PARTIAL_360_CAMERA_PREFLIGHT.md) | Deferred: CarPlay beside the top-view camera — contexts, crops, camera ownership, coordinator design. |

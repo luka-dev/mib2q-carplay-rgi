@@ -15,6 +15,7 @@
 #include "coverart/coverart_hook.h"
 #include "altscreen/altscreen_hook.h"
 #include "telephony/tel_hook.h"
+#include "vehicle/vehicle_hook.h"
 #if HOOK_WIRELESS
 #include "wireless/wireless_hook.h"
 #endif
@@ -36,6 +37,7 @@ const hook_module_def_t* const hook_module_table[] = {
     &coverart_module_def,
     &altscreen_module_def,
     &tel_module_def,
+    &vehicle_module_def,
 #if HOOK_AUDIO
     &audio_module_def,
 #endif

@@ -192,6 +192,12 @@ cc -std=c99 -O1 -Wall -Wextra -Werror -Wno-unused-function \
     hook/framework/iap2_protocol.c -o "$OUT/tel_hook"
 "$OUT/tel_hook"
 
+printf '%-32s ' vehicle_hook_test
+cc -std=c99 -O1 -Wall -Wextra -Werror -Wno-unused-function \
+    -DENABLE_LOGGING=0 -DVEHICLE_HOOK_TESTING -Ihook tests/vehicle_hook_test.c hook/vehicle/vehicle_hook.c \
+    hook/framework/iap2_protocol.c -o "$OUT/vehicle_hook"
+"$OUT/vehicle_hook"
+
 printf '%-32s ' inject_generation_test
 cc -std=c99 -O1 -Wall -Wextra -Werror -Wno-unused-function \
     -DENABLE_LOGGING=0 -Ihook -Ihook/framework tests/inject_generation_test.c -o "$OUT/inject_generation"

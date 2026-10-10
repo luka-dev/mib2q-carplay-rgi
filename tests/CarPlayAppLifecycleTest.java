@@ -106,7 +106,7 @@ public final class CarPlayAppLifecycleTest {
         } else if (scenario.equals("bounce")) {
             CarPlayApp.onActivate(context); settled();
             CarPlayApp.onDeactivate(); Thread.sleep(25); CarPlayApp.onActivate(context); settled();
-            for (int i = 0; i < 3; ++i)
+            for (int i = 0; i < 4; ++i)
                 check(LifecycleTestModule.count(i) == 2, "existing debounce restart behavior changed");
         } else throw new AssertionError("unknown scenario");
         CarPlayApp.onDeactivateAndWait(); settled();

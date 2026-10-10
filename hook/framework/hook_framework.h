@@ -204,6 +204,11 @@ const hook_module_def_t* hook_framework_module_at(size_t index);
 hook_result_t hook_inject_frame(const uint8_t* frame, size_t len);
 hook_result_t hook_inject_message(uint16_t msgid, const uint8_t* payload, size_t payload_len);
 
+/* Identify patchers only (ctx->_priv is the outgoing NmeArray): make room for new_len bytes.
+ * Returns the (possibly moved) buffer with *out_cap set, or NULL when the array fails its
+ * sanity checks, in which case the caller must skip its append.  Never call it elsewhere. */
+uint8_t* hook_identify_grow(hook_context_t* ctx, size_t len, size_t new_len, size_t* out_cap);
+
 /* State Query */
 bool hook_is_ready(void);
 bool hook_is_active(void);
