@@ -4,8 +4,14 @@
 #include <stdint.h>
 
 #define ALT_LOADER_STOP_WAIT_MS 750
-/* First FillDone joins the waiting loader before direct video takes over. */
-#define ALT_INPUT_WAIT_MS (ALT_LOADER_STOP_WAIT_MS + 250)
+/* How long _FeedInput waits for a free OMX input buffer before it declares the
+ * decoder dead.  The decoder returns an input buffer only after consuming it,
+ * and it cannot consume without a free output; the outputs belong to the
+ * presenter, so a presenter pause of ~570 ms (12 buffers at 21 fps) starves
+ * the inputs about 150 ms later.  1000 ms turned every such pause into a
+ * teardown (car, 2026-10-09); 3000 ms leaves the 20 s worker watchdog and the
+ * state waits as the real fault detectors.  Measured on CLOCK_MONOTONIC. */
+#define ALT_INPUT_WAIT_MS 3000
 #define ALT_FRAME_PERIOD_NS 33333333ULL
 #define ALT_LOADER_DECODE_PERIOD_NS 66666667ULL
 

@@ -86,7 +86,7 @@ int main(void) {
     recv_again = 1;
     assert(av_negotiate_locked(fd, fake_us + 1000000u) == 1);
     assert(g_transport.wire_v2 && g_transport.status_supported && g_transport.ack_pending && !g_transport.control.used);
-    assert(fake_us < 1040000u);
+    assert(fake_us < 1250000u);
     close(fd);
     close(peer);
     fd = install_peer(2, ALT_WIRE_VERSION, 8, &peer);
@@ -96,13 +96,13 @@ int main(void) {
     close(peer);
     fd = install_peer(3, ALT_HELLO_STATUS_CAPABILITY, 0, &peer);
     assert(!av_negotiate_locked(fd, fake_us + 1000000u));
-    assert(fake_us == 1040000u && !g_transport.wire_v2 && !g_transport.control.used);
+    assert(fake_us == 1250000u && !g_transport.wire_v2 && !g_transport.control.used);
     close(fd);
     close(peer);
 
     fd = install_peer(4, ALT_HELLO_STATUS_CAPABILITY, 1, &peer);
     assert(!av_negotiate_locked(fd, fake_us + 1000000u));
-    assert(!g_transport.wire_v2 && g_transport.control.used == 1 && fake_us <= 1041000u);
+    assert(!g_transport.wire_v2 && g_transport.control.used == 1 && fake_us <= 1251000u);
     uint8_t hello[8];
     alt_wire_put32(hello, ALT_WIRE_HELLO);
     alt_wire_put32(hello + 4, ALT_HELLO_STATUS_CAPABILITY);
@@ -138,7 +138,7 @@ int main(void) {
     close(fd);
     close(peer);
     fd = install_peer(8, ALT_HELLO_STATUS_CAPABILITY, 8, &peer);
-    poll_ready_step_us = 50000;
+    poll_ready_step_us = 300000; /* a sender descheduled 300 ms before its first byte misses the 250 ms greeting window */
     fragment_limit = 8;
     assert(!av_negotiate_locked(fd, fake_us + 1000000u));
     assert(!g_transport.wire_v2 && !g_transport.status_supported && !g_transport.ack_pending && !g_transport.control.used);
@@ -146,7 +146,7 @@ int main(void) {
     close(peer);
     fd = install_peer(9, ALT_HELLO_STATUS_CAPABILITY, 8, &peer);
     fragment_limit = 8;
-    read_step_us = 50000; /* Descheduled during the final read, not only during poll. */
+    read_step_us = 300000; /* Descheduled during the final read, not only during poll. */
     assert(!av_negotiate_locked(fd, fake_us + 1000000u));
     assert(!g_transport.wire_v2 && !g_transport.status_supported && !g_transport.ack_pending && !g_transport.control.used);
     g_transport.fd = fd;

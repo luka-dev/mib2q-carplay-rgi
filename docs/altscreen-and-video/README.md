@@ -14,9 +14,20 @@ Read [AltScreen Cluster Video](ALTSCREEN_CLUSTER_VIDEO.md) first for the activat
 
 The 2026-10-06 source candidate adds shared recovery, idle EOF/status observation,
 owned in-place conversion, batched I/O, end-to-end compressed age and decoded
-mailbox selection. These changes passed offline tests and QNX builds; their
-vehicle FPS and BSP mailbox behavior remain unmeasured. The stock capture clock,
-`glFinish` and per-frame image refresh remain in place. **[code]**
+mailbox selection. The stock capture clock, `glFinish` and per-frame image
+refresh remain in place. **[code]**
+
+First drive with that build (2026-10-09): the phone delivered a steady ~21 fps
+and the hook forwarded every frame, but the cluster went black twice for
+1.6–1.8 s. Both were the renderer's own steady-backlog rule turning a ≥1 s
+stall of its threads (process starvation at default priority) into a
+generation restart with a decoder teardown. Since 2026-10-09 a backlog keeps the
+picture, reports `STATUS 0` so the hook requests an IDR, and drops the queued
+frames when that IDR arrives; `altscreen_render` runs at priority 15 like
+`maneuver_render`, the OMX input wait is 3 s on a monotonic clock, and the
+hook's greeting window is 250 ms so a late `accept()` no longer degrades the
+link to legacy framing. Details: [Video Pipeline](VIDEO_PIPELINE.md),
+[Landmines](../LANDMINES.md). **[car + code]**
 
 ```mermaid
 flowchart TB

@@ -441,8 +441,30 @@ static OMX_CALLBACKTYPE kCallbacks = { _OnEvent, _OnEmptyDone, _OnFillDone };
 #define kOmxStopWaitMs         900L  /* two stop edges fit the supervisor grace */
 #define kCallbackDrainWaitMs  1500L
 
+/* Every timed wait on me->cond uses this deadline, so the condition variable
+ * and the deadline share one clock: CLOCK_MONOTONIC where the platform
+ * supports it (QNX, Linux), the unit's wall clock jumps from 1970 to the
+ * phone's time during a session.  macOS (host tests) keeps CLOCK_REALTIME. */
+#if defined(__APPLE__)
+#define ALT_SINK_COND_CLOCK CLOCK_REALTIME
+#else
+#define ALT_SINK_COND_CLOCK CLOCK_MONOTONIC
+#endif
+static void _CondInit(pthread_cond_t *c) {
+#if defined(__APPLE__)
+    pthread_cond_init(c, NULL);
+#else
+    pthread_condattr_t attr;
+    pthread_condattr_init(&attr);
+    if (pthread_condattr_setclock(&attr, CLOCK_MONOTONIC) != 0)
+        fprintf(stderr, "altscreen_render[qnx]: monotonic condition unavailable; wall clock waits\n");
+    pthread_cond_init(c, &attr);
+    pthread_condattr_destroy(&attr);
+#endif
+}
+
 static void _AbsTimeoutMs(struct timespec *ts, long ms) {
-    clock_gettime(CLOCK_REALTIME, ts);
+    clock_gettime(ALT_SINK_COND_CLOCK, ts);
     ts->tv_sec  += ms / 1000;
     ts->tv_nsec += (ms % 1000) * 1000000L;
     if (ts->tv_nsec >= 1000000000L) { ts->tv_sec++; ts->tv_nsec -= 1000000000L; }
@@ -455,11 +477,15 @@ static unsigned long long _NowMs(void) {
         + (unsigned long long)ts.tv_nsec / 1000000ULL;
 }
 
-static int _WaitState(ScreenSink *me, OMX_STATETYPE want, long timeoutMs) {
+/* ignoreError: a teardown must still wait for the state edge after an error
+ * was latched, otherwise StateLoaded and FreeBuffer land on a component that
+ * is still leaving Executing (OMX_ErrorIncorrectStateTransition 0x80001017,
+ * OMX_ErrorPortUnpopulated 0x8000101C in the 2026-10-09 car log). */
+static int _WaitStateEx(ScreenSink *me, OMX_STATETYPE want, long timeoutMs, int ignoreError) {
     struct timespec ts; int err = 0;
     _AbsTimeoutMs(&ts, timeoutMs);
     pthread_mutex_lock(&me->lock);
-    while (!(me->stateReached && me->state == want) && !me->omxError) {
+    while (!(me->stateReached && me->state == want) && (ignoreError || !me->omxError)) {
         if (pthread_cond_timedwait(&me->cond, &me->lock, &ts) == ETIMEDOUT) {
             fprintf(stderr, "altscreen_render[qnx]: _WaitState TIMEOUT (want=%d)\n", (int)want);
             me->omxError = 1; break;
@@ -469,6 +495,9 @@ static int _WaitState(ScreenSink *me, OMX_STATETYPE want, long timeoutMs) {
     me->stateReached = 0;
     pthread_mutex_unlock(&me->lock);
     return err;
+}
+static int _WaitState(ScreenSink *me, OMX_STATETYPE want, long timeoutMs) {
+    return _WaitStateEx(me, want, timeoutMs, 0);
 }
 
 static void _DestroyPresent(ScreenSink *me) {
@@ -760,11 +789,11 @@ static void _Teardown(ScreenSink *me, int destroyPresent) {
     _DrainCallbacksAndPresenter(me);
     if (me->decoder) {
         OMX_SendCommand(me->decoder, OMX_CommandStateSet, OMX_StateIdle, NULL);
-        _WaitState(me, OMX_StateIdle, kOmxStopWaitMs);
+        _WaitStateEx(me, OMX_StateIdle, kOmxStopWaitMs, 1);
         OMX_SendCommand(me->decoder, OMX_CommandStateSet, OMX_StateLoaded, NULL);
         for (i = 0; i < me->nInBufs;  ++i) OMX_FreeBuffer(me->decoder, kInPortIndex,  me->inBufs[i]);
         for (i = 0; i < me->nOutBufs; ++i) OMX_FreeBuffer(me->decoder, kOutPortIndex, me->outBufs[i]);
-        _WaitState(me, OMX_StateLoaded, kOmxStopWaitMs);
+        _WaitStateEx(me, OMX_StateLoaded, kOmxStopWaitMs, 1);
         OMX_FreeHandle(me->decoder); me->decoder = NULL;
     }
     if (me->omxInitialized) {
@@ -969,7 +998,7 @@ int av_sink_open(void) {
         g_ss.mailbox = !(fifo && !strcmp(fifo, "1"));
     }
     pthread_mutex_init(&g_ss.lock, NULL);
-    pthread_cond_init(&g_ss.cond, NULL);
+    _CondInit(&g_ss.cond);
     g_ss.width  = ew ? atoi(ew) : 1440;           /* = advertised cluster size = Audi Kombi panel */
     g_ss.height = eh ? atoi(eh) : 542;            /* qcdisplaycfg_MMX2.xml: "Audi 1440x542 Kombi panel" */
     fprintf(stderr, "altscreen_render[qnx]: sink open (%dx%d, OMX 32m Screen buffer -> EGL GPU RGBA)\n",

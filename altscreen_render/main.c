@@ -27,6 +27,9 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <pthread.h>
+#if defined(__QNX__)
+#include <sys/neutrino.h>   /* setprio() */
+#endif
 #include <stdint.h>
 #include <time.h>
 #include <sys/socket.h>
@@ -402,27 +405,68 @@ static uint64_t decode_origin_ms(const decode_item_t *item, uint64_t now) {
     return alt_queue_origin_ms(&item->meta, item->received_ms, now);
 }
 
+/* Drop every compressed frame still waiting in the queue (an IDR is about to
+ * be pushed, so nothing before it will ever be referenced); BEGIN/END items and
+ * the item the worker already popped are untouched.  Caller holds g_decode_lock. */
+static unsigned decode_queue_drop_frames_locked(void) {
+    decode_item_t *keep_head = NULL, *keep_tail = NULL, *p = g_decode_head;
+    unsigned dropped = 0;
+    while (p) {
+        decode_item_t *next = p->next;
+        if (p->type == DECODE_FRAME) {
+            if (g_decode_items) g_decode_items--;
+            if (g_decode_bytes >= p->cap) g_decode_bytes -= p->cap; else g_decode_bytes = 0;
+            decode_item_recycle_locked(p);
+            ++dropped;
+        } else {
+            p->next = NULL;
+            if (keep_tail) keep_tail->next = p; else keep_head = p;
+            keep_tail = p;
+        }
+        p = next;
+    }
+    g_decode_head = keep_head;
+    g_decode_tail = keep_tail;
+    return dropped;
+}
+
+static int g_decode_backlog_reported;
+
 static int decode_queue_frame_ex(uint32_t generation, const uint8_t *data, uint32_t len,
                                  const alt_frame_meta_t *meta, uint8_t **owned,
                                  uint32_t *owned_cap) {
-    int result, backlogged = 0;
+    int result, backlogged = 0, report = 0;
     int workerStuck = 0;
+    unsigned dropped = 0;
     unsigned long long nowMs = decode_now_ms();
     pthread_mutex_lock(&g_decode_lock);
     if (generation != g_decode_generation || g_decode_failed)
         result = -1;
     else {
-        /* Startup keeps its large buffer budget. After a healthy, drained stream,
-         * only an accumulating compressed queue may trigger continuity recovery.
-         * Never filter decoded output age, a final frame, or an idle static scene. */
+        /* Startup keeps its large buffer budget.  After a healthy, drained
+         * stream an accumulating compressed queue is a LATENCY condition, not a
+         * decoder fault: the picture stays on screen, the 100 ms tick reports
+         * STATUS 0 so the hook asks the phone for an IDR, and when that IDR
+         * arrives everything still queued before it is dropped (an IDR resets
+         * the reference chain) so the picture jumps to the present instead of
+         * replaying the backlog.  Until 2026-10-09 this path failed the
+         * generation (socket shutdown, decoder teardown, PRISM loader): every
+         * stall of a second became a 1.7 s black cluster in the car.  Never
+         * filter decoded output age, a final frame, or an idle static scene. */
         backlogged = alt_queue_has_backlog(
             g_decode_steady, g_decode_items,
             g_decode_head ? decode_origin_ms(g_decode_head, nowMs) : 0, nowMs);
-        result = backlogged ? -1
-                            : decode_queue_push_ex_locked(DECODE_FRAME, generation, data, len, meta,
-                                                          owned, owned_cap);
+        if (backlogged && meta && (meta->flags & ALT_WIRE_IDR))
+            dropped = decode_queue_drop_frames_locked();
+        result = decode_queue_push_ex_locked(DECODE_FRAME, generation, data, len, meta,
+                                             owned, owned_cap);
         if (result == 0 && len)
             g_decode_latest_input_ms = decode_origin_ms(g_decode_tail, nowMs);
+        if (backlogged && !g_decode_backlog_reported) {
+            g_decode_backlog_reported = 1;
+            report = 1;
+        } else if (!backlogged && !dropped)
+            g_decode_backlog_reported = 0;
     }
     nowMs = decode_now_ms();
     if (result == 0 && g_decode_items > 2 && nowMs != 0 &&
@@ -430,13 +474,16 @@ static int decode_queue_frame_ex(uint32_t generation, const uint8_t *data, uint3
         nowMs - g_decode_last_progress_ms > 20000ULL)
         workerStuck = 1;
     pthread_mutex_unlock(&g_decode_lock);
-    if (result < 0) {
-        if (backlogged)
-            fprintf(stderr,
-                    "altscreen_render: steady compressed backlog >%u ms; config+IDR recovery\n",
-                    DECODE_STEADY_BACKLOG_MS);
+    if (report)
+        fprintf(stderr,
+                "altscreen_render: steady compressed backlog >%u ms; keeping the picture, IDR requested\n",
+                DECODE_STEADY_BACKLOG_MS);
+    if (dropped)
+        fprintf(stderr,
+                "altscreen_render: backlog IDR arrived; dropped %u stale frames, picture jumps to the present\n",
+                dropped);
+    if (result < 0)
         decode_queue_fail(generation);
-    }
     if (workerStuck) {
         fprintf(stderr,
                 "altscreen_render: decoder worker made no progress for 20s; exiting isolated renderer\n");
@@ -524,12 +571,12 @@ static int decode_video_ready(void) {
             alt_queue_has_backlog(g_decode_steady, g_decode_items,
                                   g_decode_head ? decode_origin_ms(g_decode_head, now) : 0, now);
     }
+    /* STATUS 0 while backlogged makes the hook request an IDR (its recovery
+     * policy, no link change); the video stays ON and the generation stays
+     * valid: see decode_queue_frame_ex. */
     decode_health_send_locked(backlogged ? 0 : ready);
     pthread_mutex_unlock(&g_decode_lock);
-    if (backlogged) {
-        decode_queue_fail(generation);
-        return 0;
-    }
+    (void)generation;
     return ready;
 }
 
@@ -742,6 +789,17 @@ int main(void) {
 
     open_runtime_log("/tmp/altscreen_render.log", "/tmp/altscreen_render.log.1");
     fprintf(stderr, "%s altscreen_render: process start\n", log_stamp());
+#if defined(__QNX__)
+    /* The compositor's workers starve a default-priority renderer on this unit:
+     * on 2026-10-09 every thread of this process (socket, OMX callback,
+     * presenter, main) lost 300-650 ms at once several times per minute, which
+     * the backlog policy then turned into a restart.  maneuver_render runs at
+     * 15 for the same reason (maneuver_render/main.c); the hook's audio
+     * receiver is SCHED_RR 18 and must stay above both renderers. */
+    if (setprio(0, 15) < 0)
+        fprintf(stderr, "altscreen_render: setprio(15) failed: %s; running at default\n",
+                strerror(errno));
+#endif
 
     {
         pthread_t watchdog;

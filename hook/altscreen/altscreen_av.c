@@ -161,7 +161,11 @@ static int av_negotiate_locked(int fd, uint64_t transaction_deadline) {
     alt_control_reset(&g_transport.control);
     if (!now || now >= transaction_deadline)
         return 0;
-    greeting_deadline = now + UINT64_C(40000);
+    /* 250 ms, not 40: on 2026-10-09 the renderer's main thread was 27 ms late
+     * to accept() during a recovery and both reconnects fell to legacy framing
+     * for the rest of the session (no status channel, no origin stamps).  The
+     * forwarder thread is the only one waiting here; frames queue meanwhile. */
+    greeting_deadline = now + UINT64_C(250000);
     if (greeting_deadline > transaction_deadline)
         greeting_deadline = transaction_deadline;
     while (g_transport.control.used < ALT_WIRE_HELLO_SIZE) {

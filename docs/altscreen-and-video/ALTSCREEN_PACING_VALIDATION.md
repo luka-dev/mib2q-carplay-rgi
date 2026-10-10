@@ -166,21 +166,21 @@ with an old last input stays in startup.[^startup]
 ```mermaid
 stateDiagram-v2
     accTitle: Renderer compressed backlog policy states
-    accDescr: Startup buffers old input; steady policy activates only after fresh end-to-end input and detects accumulating multi-AU backlog. Presentation readiness is independent of this policy.
+    accDescr: Startup buffers old input; steady policy activates only after fresh end-to-end input and reports an accumulating multi-AU backlog as latency until the hook's IDR clears it. Presentation readiness is independent of this policy.
 
     state "Startup buffering" as startup_buffering
     state "Steady backlog policy" as steady_policy
-    state "Continuity recovery" as continuity_recovery
+    state "Backlog latency" as backlog_latency
     state "Session ended" as session_ended
 
     [*] --> startup_buffering: Renderer connection begins
     startup_buffering --> startup_buffering: Input still old or startup queue large
     startup_buffering --> steady_policy: Ready and input fresh
-    steady_policy --> continuity_recovery: Multiple pending AUs older than 1000 ms
-    continuity_recovery --> startup_buffering: Reconnect with config and IDR
+    steady_policy --> backlog_latency: Multiple pending AUs older than 1000 ms
+    backlog_latency --> steady_policy: IDR drops every compressed frame queued before it
     startup_buffering --> session_ended: Session ends
     steady_policy --> session_ended: Session ends
-    continuity_recovery --> session_ended: Session ends
+    backlog_latency --> session_ended: Session ends
     session_ended --> [*]
 
     note right of startup_buffering
@@ -191,17 +191,30 @@ stateDiagram-v2
         A lone old/final picture remains protected.
         Decoded output has no age cutoff.
     end note
+    note right of backlog_latency
+        Picture stays, frames stay queued, STATUS 0 asks the hook for an IDR.
+        Generation and link unchanged.
+    end note
 ```
 
 The transition regression covers three AUs with local age 0 ms and hook-origin
 age 1900 ms, an old middle AU, an old in-flight AU, an empty local queue and fresh
-busy input. Once steady, genuinely accumulating old input still ends continuity
-and requires config plus IDR; it never drops arbitrary dependent P-frames.
+busy input. Once steady, genuinely accumulating old input is a latency condition
+(since 2026-10-09): the frames stay queued, the condition is logged once per
+episode, the 100 ms tick reports STATUS 0 until the hook's IDR arrives, and that
+IDR drops every compressed frame queued before it (`altscreen_render/main.c:411-486`,
+`:556-581`). It never fails the generation and never drops arbitrary dependent
+P-frames. Until 2026-10-09 this path ended continuity and reconnected with
+config plus IDR, which cost a 1.6–1.8 s black cluster per ≥1 s stall on the
+first car run of `ac992616`; see [Video Pipeline](VIDEO_PIPELINE.md#negotiation-and-presentation-readiness).
 
 ## 🔌 HELLO and status boundaries
 
-The hook collects the complete eight-byte HELLO within one 40 ms monotonic
-window, capped by the aggregate 1000 ms transaction deadline. It checks time
+The hook collects the complete eight-byte HELLO within one 250 ms monotonic
+window (`hook/altscreen/altscreen_av.c:168`; 40 ms until 2026-10-09, when a
+renderer main thread late to `accept()` dropped both reconnects to legacy
+framing for the rest of the session), capped by the aggregate 1000 ms
+transaction deadline. It checks time
 again after `poll` and after the complete read before enabling capabilities.
 A timed-out partial greeting remains aligned for idle parsing; a fully consumed
 late greeting is cleared. Neither case upgrades a legacy connection later.[^wire]
@@ -215,7 +228,7 @@ sequenceDiagram
     participant render_peer as Renderer peer
 
     forward_worker->>render_peer: Connect to localhost 19831
-    Note over forward_worker: Deadline is min of now plus 40 ms and transaction end
+    Note over forward_worker: Deadline is min of now plus 250 ms and transaction end
     render_peer-->>forward_worker: HELLO fragments
     forward_worker->>forward_worker: Check time after poll and complete read
     alt Complete valid HELLO before expiry

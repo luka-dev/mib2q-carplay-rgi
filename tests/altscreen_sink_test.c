@@ -97,7 +97,7 @@ int main(void) {
     assert(!pthread_create(&returning_input, NULL, spurious_wakes, NULL));
     assert(av_sink_frame(pframe, sizeof(pframe), 1300) < 0 && g_ss.omxError);
     uint64_t waited = _NowMs() - wait_begin;
-    assert(waited >= 900 && waited < 1800);
+    assert(waited >= 2900 && waited < 3800); /* ALT_INPUT_WAIT_MS = 3000 */
     pthread_join(returning_input, NULL);
 
     /* Failed starts report loss of continuity and preserve the bounded retry

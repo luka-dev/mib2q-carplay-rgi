@@ -66,12 +66,25 @@ static void startup_origin_transition(void) {
     g_decode_busy_origin_ms = 0;
     assert(decode_video_ready() && g_decode_steady);
 
-    /* Once steady, actual new accumulating backlog still triggers recovery. */
+    /* Once steady, an accumulating backlog is a latency condition: the frames
+     * are still queued (no generation failure, video stays ready), the tick
+     * reports STATUS 0 so the hook asks for an IDR, and the IDR that arrives
+     * while backlogged drops everything queued before it (2026-10-09). */
     meta.received_us = (decode_now_ms() - 1900u) * 1000u;
     assert(!decode_queue_frame_ex(gen, &data, 1, &meta, NULL, NULL));
     assert(decode_video_ready()); /* A lone old/final picture remains protected. */
     assert(!decode_queue_frame_ex(gen, &data, 1, &meta, NULL, NULL));
-    assert(!decode_video_ready() && g_decode_failed && !g_decode_head);
+    assert(decode_video_ready() && !g_decode_failed && g_decode_items == 2);
+    g_health_owner = gen;  /* a status-capable hook: the tick must report STATUS 0 while backlogged */
+    g_health_last = -1;
+    assert(decode_video_ready() && !g_decode_failed);
+    assert(g_health_last == 0 && alt_wire_u32(g_health_packet + 8) == 0);
+    g_health_owner = 0;
+    meta.flags = ALT_WIRE_IDR;
+    assert(!decode_queue_frame_ex(gen, &data, 1, &meta, NULL, NULL));
+    assert(!g_decode_failed && g_decode_items == 1 && g_decode_head == g_decode_tail &&
+           (g_decode_head->meta.flags & ALT_WIRE_IDR)); /* only the IDR remains */
+    meta.flags = 0;
     close(fd[0]);
     close(fd[1]);
 
@@ -122,11 +135,11 @@ int main(void) {
     assert(!decode_queue_frame(gen, &data, 1));
     g_decode_head->received_ms = decode_now_ms() - 5000u;
     assert(!decode_queue_frame(gen, &data, 1)); /* never reject a lone/final old picture */
-    assert(decode_queue_frame(gen, &data, 1) == -1 && g_decode_failed && !g_decode_head);
-    {
-        uint8_t b;
-        assert(read(fd[1], &b, 1) == 0);
-    } /* continuity recovery wakes the reader */
+    /* A steady backlog no longer fails the generation (2026-10-09): the frame is
+     * queued, the link stays up, the IDR the hook requests will drop the stale
+     * ones (covered above in the metadata path). */
+    assert(!decode_queue_frame(gen, &data, 1) && !g_decode_failed && g_decode_items == 3 &&
+           g_decode_client_fd >= 0);
     close(fd[0]);
     close(fd[1]);
     assert(!socketpair(AF_UNIX, SOCK_STREAM, 0, fd));
@@ -166,7 +179,12 @@ int main(void) {
     assert(!decode_queue_frame_ex(gen, &data, 1, &meta, NULL, NULL));
     assert(!decode_queue_frame_ex(gen, &data, 1, &meta, NULL, NULL));
     g_decode_head->received_ms = decode_now_ms() - 900u;
-    assert(decode_queue_frame_ex(gen, &data, 1, &meta, NULL, NULL) == -1 && g_decode_failed);
+    g_decode_backlog_reported = 0;
+    /* 900 ms of renderer residence but 1900 ms since the hook received it: the
+     * origin age decides, the frame is still queued (no failure) and the
+     * backlog is reported once. */
+    assert(!decode_queue_frame_ex(gen, &data, 1, &meta, NULL, NULL) && !g_decode_failed &&
+           g_decode_backlog_reported);
     pthread_mutex_lock(&g_decode_lock);
     decode_pool_clear_locked();
     pthread_mutex_unlock(&g_decode_lock);
@@ -174,7 +192,7 @@ int main(void) {
     close(fd[1]);
     startup_origin_transition();
     puts("altscreen_queue_policy_test: origin-aware startup transition/static-frame survival, "
-         "steady backlog recovery, "
+         "steady backlog keeps the picture and jumps to the IDR, "
          "owned buffer transfer and pool bounds PASS");
     return 0;
 }

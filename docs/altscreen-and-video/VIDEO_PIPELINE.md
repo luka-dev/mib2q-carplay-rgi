@@ -62,13 +62,14 @@ changes are not a measurement of video frame pacing.
 | Legacy framing | Four-byte BE length followed by Annex-B payload |
 | Negotiated v2 | Forty-byte BE metadata header followed by Annex-B payload; maximum payload 4 MiB |
 | First H.264 record | Cached SPS/PPS marked config, then a verified IDR; status-capable peers exchange an opt-in ACK before config |
-| Socket | Nonblocking, `SO_SNDBUF` 512 KiB, `TCP_NODELAY`; connect wait 250 ms; complete greeting collected within one 40 ms deadline, also capped by the transaction deadline |
+| Socket | Nonblocking, `SO_SNDBUF` 512 KiB, `TCP_NODELAY`; connect wait 250 ms; complete greeting collected within one 250 ms deadline (`hook/altscreen/altscreen_av.c:168`; 40 ms until 2026-10-09), also capped by the transaction deadline |
 | I/O budget | One 1000 ms monotonic deadline covers connect, greeting, ACK, config replay and AU send |
 | Batched I/O | `writev` handles header + payload without copying; known-v2 reader reads the complete header, then payload. Partial writes, EINTR and EAGAIN retain the same deadline |
 | Hook queue | At most 32 AUs / 8 MiB of buffer capacity; overflow fences the epoch and clears the dependent chain |
-| Renderer queue | At most 1024 items / 24 MiB of buffer capacity; startup retains this budget. A healthy, drained stream uses valid origin age to detect multi-AU backlog over 1000 ms |
+| Renderer queue | At most 1024 items / 24 MiB of buffer capacity; startup retains this budget. A healthy, drained stream uses valid origin age to detect a multi-AU backlog over 1000 ms; that backlog is a latency condition, not a decoder fault: the frame is still queued, the picture stays, the 100 ms control tick reports STATUS 0 so the hook requests an IDR, and the IDR drops every compressed frame queued before it (`altscreen_render/main.c:435-486`, `:556-581`) |
 | Idle observation | Hook worker checks control/EOF every 100 ms while idle using a monotonic condition on QNX/Linux and relative wait on macOS. Wall-clock corrections do not postpone the tick. Frame silence is valid; there is no static-scene receive timeout |
-| Watchdogs | Screen/EGL startup: 15 s → `_exit(92)`; decode-worker exit wait: 1500 ms |
+| Watchdogs | Screen/EGL startup: 15 s → `_exit(92)`; decode-worker exit wait: 1500 ms; OMX input-buffer wait 3000 ms on `CLOCK_MONOTONIC` (`ALT_INPUT_WAIT_MS`, `altscreen_render/pipeline_timing.h:14`, `sink_omx_qnx.c:453-472`); a stuck decoder worker is caught by the 20 s no-progress exit, not by the input wait |
+| Process priority | `setprio(0, 15)` on QNX (`altscreen_render/main.c:799`), the same value as `maneuver_render`; below the hook's audio receiver at SCHED_RR 18, above the default that let the compositor starve every renderer thread at once |
 
 Source: [hook forwarder](../../hook/altscreen/altscreen_av.c),
 [renderer reader](../../altscreen_render/frame_io.c) and
@@ -79,7 +80,7 @@ Source: [hook forwarder](../../hook/altscreen/altscreen_av.c),
 ```mermaid
 sequenceDiagram
     accTitle: AltScreen status negotiation and recovery
-    accDescr: New peers opt into presentation status before config and IDR. Recovery clears after sustained ready status; idle EOF fences continuity and starts bounded keyframe retries without waiting for another phone AU.
+    accDescr: New peers opt into presentation status before config and IDR. Recovery clears after sustained ready status; a steady compressed backlog reports ready 0 and is cleared by the next IDR without a link change; idle EOF fences continuity and starts bounded keyframe retries without waiting for another phone AU.
 
     participant phone as Phone
     participant forward_worker as Hook forwarding worker
@@ -96,6 +97,10 @@ sequenceDiagram
         renderer-->>forward_worker: STATUS: producer generation, ready 1
     end
     Note over forward_worker: At least 1 s sustained readiness clears recovery
+    renderer-->>forward_worker: STATUS ready 0 while a steady backlog is queued
+    forward_worker->>phone: forceKeyFrame coordinated-recovery, link unchanged
+    renderer->>renderer: IDR drops every compressed frame queued before it
+    renderer-->>forward_worker: STATUS ready 1
     renderer--xforward_worker: Peer EOF during idle scene
     forward_worker->>forward_worker: Fence epoch and require fresh IDR
     forward_worker->>phone: forceKeyFrame for cluster uuid
@@ -123,6 +128,8 @@ steady complete-AU count. **[code]**[^wire_source]
 
 The startup-policy state machine and deadline/fallback sequence are in
 [AltScreen Pacing Validation](ALTSCREEN_PACING_VALIDATION.md).
+
+**2026-10-09, first car run of `ac992616`: two cluster blinks, both the steady-backlog rule.** The cluster went black at unit time 00:04:45 (1.8 s) and 00:06:25 (1.6 s). The phone and the hook were steady (hook `111 pace` ≈ 47 ms arrival, ≈ 21 fps, every AU forwarded); the renderer's own windows show all of its threads losing 285–624 ms at once (`full_present max_us=285034`, `present_queue p99_us=624456`, `input_wait max_us=368631`), process starvation of a default-priority renderer. The rule then turned that latency into a generation restart. Blink 1: `steady compressed backlog >1000 ms; config+IDR recovery` → `decoder lost frame continuity; reconnect generation=1` → `-> VIDEO_OFF` → hook `forceKeyFrame reason=coordinated-recovery`, 250 ms reconnect backoff → `hook connected generation=2` → PRISM loader → `-> VIDEO_ON`. Blink 2 took the control-tick path (same `lost frame continuity` line without the backlog line) and also hit `input-buffer wait TIMEOUT (1000 ms); marking decoder unhealthy` (a presenter pause of ~570 ms holds all 12 outputs, so the inputs run dry ~150 ms later, `pipeline_timing.h:7-13`), followed by `OMX_EventError 0x80001017` / `0x8000101c` because `_Teardown` stopped waiting for the Idle edge once an error was latched. The fix keeps latency apart from decoder faults: a steady backlog stays queued and is logged once per episode as `steady compressed backlog >1000 ms; keeping the picture, IDR requested` (`altscreen_render/main.c:435-486`); the 100 ms tick keeps reporting STATUS 0 while backlogged (`main.c:556-581`), which makes the hook's recovery policy request the IDR with no link change (`hook/altscreen/recovery_policy.h:67-84` → `alt_forward_failed`, `altscreen_hook.c:2567-2571`, 2/4/8 s backoff); when that IDR arrives, every compressed frame still queued before it is dropped and logged as `backlog IDR arrived; dropped N stale frames, picture jumps to the present` (`decode_queue_drop_frames_locked`, `main.c:411-431`); the video stays ON and the last picture stays on the panel. Hardening in the same change: renderer priority 15 (`main.c:799`), `ALT_INPUT_WAIT_MS` 3000 ms on `CLOCK_MONOTONIC` (`pipeline_timing.h:14`, `sink_omx_qnx.c:453-472`), `_Teardown` waits for the Idle and Loaded edges even with an error latched (`_WaitStateEx(..., ignoreError=1)`, `sink_omx_qnx.c:484-499`, `:792-796`), and the hook's greeting window is 250 ms instead of 40 ms (`altscreen_av.c:164-168`: the renderer's main thread was late to `accept()` during a recovery and both reconnects fell to legacy framing for the rest of the session). Logs: `local_logs/unit_altscreen_render_20261009_2235.log:394-434`, `:576-618`; `unit_hook_20261009_2256.log:939-944`, `:1391-1399`. Host regressions: [queue policy](../../tests/altscreen_queue_policy_test.c), [negotiation](../../tests/altscreen_negotiation_test.c), [sink](../../tests/altscreen_sink_test.c). The fix has not been driven yet. **[car]** / **[code]**
 
 ### V2 AU header
 

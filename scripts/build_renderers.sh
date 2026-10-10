@@ -20,7 +20,7 @@ set -e
 [ "$#" -le 1 ] || { echo "usage: ./scripts/build_renderers.sh [grid]"; exit 2; }
 [ "$#" -eq 0 ] || [ "$1" = "grid" ] || { echo "usage: ./scripts/build_renderers.sh [grid]"; exit 2; }
 
-IMG=qnx65-armv7-toolchain:latest
+IMG="qnx65-armv7-toolchain:${QNX_TOOLCHAIN_VARIANT:-latest}"   # QNX_TOOLCHAIN_VARIANT as in build_hook_common.sh
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 GRID=""

@@ -111,6 +111,27 @@ After priming, the sender asks the **receiver** to start via four RTSP methods t
 
 **Pause and resume (2026-10-09).** The live pause is `FLUSHBUFFERED` (bounded, usually removing nothing we hold) then `SETRATEANCHORTIME rate=0`; resume is `SETRATEANCHORTIME`/`SETRATE rate=1` and the sender re-sends from the anchor it stopped at. The decoded stream is continuous across that, so the renderer is **not** reset on a rate change any more: the 1024 frames the SCENE FIFO still holds (the last 21 ms before the pause point) play first at resume and run seamlessly into the re-sent packets. The renderer resets only where the decoded stream really breaks: a prefix `FLUSHBUFFERED` (new timeline), a cookie or decoder change, and an APAP sequence gap (`spa103_note_authenticated_sequence`), which is how a seek through a bounded flush or a lost packet is seen. During the pause the ring drains and QSA underruns, so the first write after resume returns `-EIO`; the writer prepares the channel, writes one period of digital silence (pre-roll, not committed to the ring) and then retries the real period — `audio sink: detached confirmed underrun; prepare+retry recovery=N` once per resume is the expected trace, `recoveries` and `underruns=0` in the same line are the two different counters. Before 2026-10-09 the pause reset the renderer (a 21 ms hole between the pre-pause tail and the resumed audio, 10.7 ms with the retired Universal renderer) and the retried period started the DMA directly on music. **[code]**
 
+```mermaid
+sequenceDiagram
+    accTitle: Buffered pause and resume on the type-103 path
+    accDescr: The phone flushes and sets rate zero, the hook keeps the scene renderer warm while the ring drains and QSA underruns; on resume the phone re-sends from its anchor, the writer prepares QSA, pre-rolls one period of silence and the frames the renderer still held run seamlessly into the new packets.
+    participant phone as iPhone AirPlaySender
+    participant hook as Hook type-103 path
+    participant render as Scene renderer state
+    participant qsa as QSA device
+    phone->>hook: FLUSHBUFFERED fromSeq..untilSeq (bounded)
+    hook->>hook: prune the flushed range, lifecycle paused
+    phone->>hook: SETRATEANCHORTIME rate 0
+    Note over render: kept warm since 2026-10-09: the 1024 held frames stay
+    hook->>qsa: ring drains, writes stop
+    qsa-->>hook: UNDERRUN after the last period
+    phone->>hook: SETRATEANCHORTIME and SETRATE rate 1, packets from the anchor
+    hook->>render: decode and upmix continue, no reset
+    hook->>qsa: first write returns EIO
+    hook->>qsa: prepare, one period of silence, then the real period
+    Note over qsa: detached confirmed underrun; prepare+retry recovery=N (once per resume)
+```
+
 Without them the sender retries the anchor 50 times (`hoseDescriptor+172 < 0x32`, `@0x25112F12C`) then `bufferedAudioEngine_handleTerminalSetRateError@0x251059A94` → session failure: the fixed **~4.5–5 s teardown** independent of how many APAP bytes were accepted (1,596,597 B unpaced and 63,598 B paced both died at the same wall time). The next wall is the network-clock lock: `networkClockLockTimeoutMs` default **10,000 ms** (`APAudioEngineBufferedCreate@0x250F72884`); errors `-71974` "Network clock failed to lock", `-71976` "Could not agree on grandmaster". We declare no PTP, so the session is NTP (`endpoint_getPreferredNetworkClockType`, log "Receiver supports PTP: %s, NTP forced: %s"); the accessory-visible clock levers, if the clock ever blocks, are `kAPEndpointDescriptionProperty_IsThirdPartyReceiver` and `…_SupportsSharedReceiverClock`, read by `APSenderSessionShouldPerformNetworkClockSETPEERS@0x2510FA2BC`. Diagnostic without protocol code: 210 still carries CoreUtils log categories — `gLogCategory_HTTPRequests` (`0xBA6D0`) and `gLogCategory_HTTPResponses` (`0xBA690`), layout `+00 level (-1 uninit) / +04 initialLevel / +10 name`, stride `0x40`, both `0xFF` (off) while `gLogCategory_AudioStream` (`0xBA490`) is 30; writing 30 into `+00/+04` of the HTTP pair yields a full RTSP transcript. **[decompile]**
 
 Every answer uses one seam: an exported `AirTunesServer_EnsureCreated` interposer swaps the private request callback (`0x302e0`, table `+0x24`, copied to `HTTPServer+0x64`; outer global at image VA `0xbabcc`) **before the first accept** — a later swap missed the already-accepted connection. It handles only its exact methods and delegates everything else unchanged. **[code]** · **[car]**
