@@ -88,6 +88,12 @@ reproduce the native control experiment once those prerequisites exist.
 
 Generated firmware, clones, emulator binaries, disposable disks, SSH material and logs
 are local under `build/ios-vm-lab/`; these are not committed or packaged for the HU.
+After the 2026-10-10 cleanup, two operational disk sets remain:
+`combined-usb/disks/` for the current native CarPlay experiment and
+`sep-real/fresh-headless-disks/` for the normal/recovery launch profiles and
+clone provisioning. Older offline experiments and restore checkpoints were
+deleted. The original `ios14.ipsw`, SEP firmware, toolchain/source artifacts and
+latest native-session logs, packet capture and crash report remain local.
 The public upstream SHSH sample and its derived AP ticket are versioned as
 [emulator ticket fixtures](../../wireless/ios_vm_lab/fixtures/README.md), with
 source revision and hashes. They contain no locally generated SSH private key
@@ -163,9 +169,11 @@ Data mount, FIPS, keybag initialization and later launchd boot tasks without the
 diagnostic property. `DevicePublicKey` was available, pairing and subsequent
 pairing validation succeeded, and paired Lockdown returned `Activated`.
 
-The complete restore is preserved before filesystem cache patching in
-`sep-real/disks-after-complete-restore/`. Normal iOS and the companion were
-restarted; pairing still validated afterward. Runtime evidence is in
+The complete restore was initially saved before filesystem cache patching in
+`sep-real/disks-after-complete-restore/`; that historical backup was removed
+during the 2026-10-10 cleanup. The two operational disk sets above remain.
+Normal iOS and the companion were restarted; pairing still validated afterward.
+Runtime evidence is in
 `sep-real/restore-exit.json`, `normal-device-info.json`,
 `normal-reboot-validation.json`, and `normal-serial.log`.
 An early normal framebuffer showed the Apple logo and boot progress;
