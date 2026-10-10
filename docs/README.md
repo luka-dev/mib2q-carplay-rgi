@@ -20,6 +20,9 @@ source code is the ground truth for what the system does.
 
 > 📌 **Before you touch a subsystem, read [Landmines](LANDMINES.md)** — the traps that already cost days.
 
+External implementation comparison: [mhi2q-evo vs our complete CarPlay stack](reference/REPOSITORY_COMPARISON_MHI2Q_EVO_2026-10-10.md)
+records the video, cluster/HUD, input, wireless, audio, build and deployment differences, selected host checks and proposed transfers.
+
 ## 🧪 Current AltScreen pacing candidate
 
 The 2026-10-06 source implements all six follow-up improvements: shared recovery,
