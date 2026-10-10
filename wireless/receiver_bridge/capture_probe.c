@@ -41,14 +41,130 @@ static volatile unsigned int capture_enabled;
 static volatile uintptr_t captured_manager;
 extern char *__progname;
 
+#ifdef MHI2Q_CAPTURE_HTTP_HEADER_QEMU
+/* Pinned stock210 ABI, QEMU only: trace the request line after decryption.
+ * Never log pairing keys, HTTP fields or request bodies. */
+int HTTPHeader_Parse(void *header)
+{
+    static int (*next)(void *);
+    const unsigned char *bytes = header;
+    char line[256];
+    size_t length = 0;
+    int result, used;
+    if (!next) next = (int (*)(void *))dlsym(RTLD_NEXT, "HTTPHeader_Parse");
+    if (!next) return -6740;
+    result = next(header);
+    if (header) {
+        while (length < 160 && bytes[length] >= 32 && bytes[length] < 127) ++length;
+        used = snprintf(line, sizeof(line), "[native-http-qemu] parse=%d %.*s\n",
+                        result, (int)length, (const char *)header);
+        if (used > 0 && (size_t)used < sizeof(line)) (void)write(2, line, (size_t)used);
+    }
+    return result;
+}
+#endif
+
 #ifdef MHI2Q_CAPTURE_HTTP_DELEGATE_QEMU
 /* Diagnostic only: verify whether stock 210's own HTTPServerCreate PLT call
  * can be interposed before any pairing-route work is attempted. */
 static int (*stock_http_handle)(void *, void *, void *);
+#ifdef MHI2Q_CAPTURE_SOFTWARE_MFI_QEMU
+static uint32_t sap_word(const void *message, size_t offset)
+{
+    uint32_t value;
+    memcpy(&value, (const uint8_t *)message + offset, sizeof(value));
+    return value;
+}
+
+static int sap_transfer(int fd, void *buffer, size_t length, int sending)
+{
+    uint8_t *bytes = buffer;
+    while (length) {
+        ssize_t count = sending ? send(fd, bytes, length, 0) : recv(fd, bytes, length, 0);
+        if (count < 0 && errno == EINTR) continue;
+        if (count <= 0) return -6753;
+        bytes += count;
+        length -= (size_t)count;
+    }
+    return 0;
+}
+
+/* A real live-signing exchange, isolated to the QEMU build. The public fixture
+ * private key remains in the host responder; stock production MFi is unchanged. */
+static int sap_request(void *http, void *message, int *result)
+{
+    typedef int (*init_fn)(void *, const char *, int, const char *);
+    typedef int (*body_fn)(void *, const char *, const void *, size_t);
+    typedef int (*field_fn)(void *, const char *, const char *, ...);
+    typedef int (*scan_fn)(const void *, size_t, const char *, const char *, ...);
+    typedef int (*send_fn)(void *);
+    const char *path = (const char *)(uintptr_t)sap_word(message, 8268);
+    const char *method = (const char *)(uintptr_t)sap_word(message, 8220);
+    uint8_t *body = (uint8_t *)(uintptr_t)sap_word(message, 8348);
+    uint8_t response[4096];
+    uint32_t network_length;
+    unsigned seq;
+    size_t length = 0;
+    int status = 500, fd = -1, err;
+    struct sockaddr_in address;
+    struct timeval timeout = {5, 0};
+    init_fn init;
+    body_fn set_body;
+    field_fn field;
+    scan_fn scan;
+    send_fn send_response;
+    void *reply;
+    if (sap_word(message, 8272) != 11 || !path || memcmp(path, "/auth-setup", 11)) return 0;
+    if (sap_word(message, 8224) != 4 || !method || memcmp(method, "POST", 4) ||
+        sap_word(message, 8352) != 33 || sap_word(message, 8360) != 33 || !body || body[0] != 1) {
+        status = 400;
+        goto reply;
+    }
+    fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) goto reply;
+    (void)setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+    (void)setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+    memset(&address, 0, sizeof(address));
+    address.sin_family = AF_INET;
+    address.sin_port = htons(32502);
+    address.sin_addr.s_addr = inet_addr("10.0.3.2");
+    if (connect(fd, (struct sockaddr *)&address, sizeof(address)) ||
+        sap_transfer(fd, body, 33, 1) || sap_transfer(fd, &network_length, 4, 0)) goto reply;
+    length = ntohl(network_length);
+    if (length != 711 || sap_transfer(fd, response, length, 0)) { length = 0; goto reply; }
+    status = 200;
+reply:
+    if (fd >= 0) close(fd);
+    init = (init_fn)dlsym(RTLD_NEXT, "HTTPHeader_InitResponse");
+    set_body = (body_fn)dlsym(RTLD_NEXT, "HTTPMessageSetBody");
+    field = (field_fn)dlsym(RTLD_NEXT, "HTTPHeader_SetField");
+    scan = (scan_fn)dlsym(RTLD_NEXT, "HTTPScanFHeaderValue");
+    send_response = (send_fn)dlsym(RTLD_NEXT, "HTTPConnectionSendResponse");
+    reply = (void *)(uintptr_t)sap_word(http, 200);
+    if (!init || !set_body || !field || !scan || !send_response || !reply) { *result = -6740; return 1; }
+    err = init((uint8_t *)reply + 16, "RTSP/1.0", status, NULL);
+    if (!err) err = set_body(reply, "application/octet-stream", response, length);
+    if (!err) err = field((uint8_t *)reply + 16, "Server", "%s", "AirTunes/210.81");
+    if (!err && scan((uint8_t *)message + 16, sap_word(message, 8208), "CSeq", "%u", &seq) == 1)
+        err = field((uint8_t *)reply + 16, "CSeq", "%u", seq);
+    *result = err ? err : send_response(http);
+    {
+        char line[128];
+        int n = snprintf(line, sizeof(line), "[native-mfi-sap-qemu] status=%d bytes=%u result=%d\n",
+                         status, (unsigned)length, *result);
+        if (n > 0 && (size_t)n < sizeof(line)) (void)write(2, line, (size_t)n);
+    }
+    return 1;
+}
+#endif
 static int trace_http_handle(void *connection, void *message, void *context)
 {
     static const char marker[] = "[http-delegate-qemu] route-called\n";
     (void)write(2, marker, sizeof(marker) - 1);
+#ifdef MHI2Q_CAPTURE_SOFTWARE_MFI_QEMU
+    int result;
+    if (sap_request(connection, message, &result)) return result;
+#endif
     return stock_http_handle(connection, message, context);
 }
 
@@ -69,8 +185,23 @@ int HTTPServerCreate(void **out_server, const void *delegate)
                         delegate ? (void *)slots[9] : NULL);
     if (used > 0 && used < (int)sizeof(line))
         (void)write(2, line, (size_t)used);
-    uintptr_t copied[11];
     Dl_info owner = {0};
+#ifdef MHI2Q_CAPTURE_SOFTWARE_MFI_QEMU
+    /* This preload must precede libcarplay_hook. Let its guarded Create see
+     * the original stock delegate, then wrap the copied request slot only. */
+    int result = next(out_server, delegate);
+    if (!result && out_server && *out_server && delegate &&
+        dladdr((void *)slots[9], &owner) && owner.dli_fbase &&
+        slots[9] - (uintptr_t)owner.dli_fbase == 0x302e0u) {
+        uintptr_t *installed_slots = (uintptr_t *)((uint8_t *)*out_server + 64);
+        stock_http_handle = (int (*)(void *, void *, void *))installed_slots[9];
+        installed_slots[9] = (uintptr_t)trace_http_handle;
+        static const char marker[] = "[native-mfi-sap-qemu] guarded request slot wrapped\n";
+        (void)write(2, marker, sizeof(marker) - 1);
+    }
+    return result;
+#else
+    uintptr_t copied[11];
     if (delegate && dladdr((void *)slots[9], &owner) && owner.dli_fbase &&
         slots[9] - (uintptr_t)owner.dli_fbase == 0x302e0u) {
         memcpy(copied, delegate, sizeof(copied));
@@ -81,6 +212,7 @@ int HTTPServerCreate(void **out_server, const void *delegate)
         (void)write(2, installed, sizeof(installed) - 1);
     }
     return next(out_server, delegate);
+#endif
 }
 #endif
 
@@ -793,6 +925,30 @@ static void probe_info_listener(void)
                         else
                             CAPTURE_TRACE("[dio-capture] GET /info 5000 HTTP 200\n");
                     }
+#ifdef MHI2Q_CAPTURE_PAIRING_IDENTITY_QEMU
+                    {
+                        int (*copy)(char *, size_t, uint8_t *) =
+                            (int (*)(char *, size_t, uint8_t *))dlsym(RTLD_DEFAULT,
+                                "carplay_wireless_copy_pairing_identity");
+                        char identity[65], line[256];
+                        uint8_t public_key[32];
+                        int copied = copy ? copy(identity, sizeof(identity), public_key) : -1;
+                        int size = snprintf(line, sizeof(line),
+                            "[dio-capture] native-qnx pairing identity=%d\n", copied);
+                        if (size > 0 && (size_t)size < sizeof(line)) (void)write(2, line, (size_t)size);
+                        if (!copied) {
+                            size_t pos;
+                            static const char hex[] = "0123456789abcdef";
+                            memcpy(line, "[dio-capture] receiver-edpk=", 28);
+                            for (pos = 0; pos < sizeof(public_key); pos++) {
+                                line[28 + pos * 2] = hex[public_key[pos] >> 4];
+                                line[29 + pos * 2] = hex[public_key[pos] & 15];
+                            }
+                            line[92] = '\n';
+                            (void)write(2, line, 93);
+                        }
+                    }
+#endif
 #ifdef MHI2Q_CAPTURE_DUMP_INFO_QEMU
                     while (used < sizeof(reply)) {
                         count = read(fd, reply + used, sizeof(reply) - used);

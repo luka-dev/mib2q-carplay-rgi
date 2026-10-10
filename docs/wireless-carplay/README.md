@@ -18,6 +18,14 @@ the factory receiver. [Architecture](STOCK210_ARCHITECTURE.md) and
 Combined QNX/QEMU validation passed three DIO owner generations and two media
 sessions, including wired-priority drain and wireless resume. Real iPhone,
 MFi chip, radio, decoded media and physical USB behavior remain unverified.
+The separate [iOS/QEMU laboratory](IOS_VM_LAB.md) has now negotiated actual
+iAP2 with emulated iOS 14 and verified live software MFi authentication:
+valid signatures receive `AA05`, while corrupted response/certificate
+signatures receive `AA04`. Native identification and CarPlay approval passed;
+a direct Ethernet bridge connects to the QNX receiver. Native Pair Setup/Verify
+and the QEMU-only live MFi-SAP responder established a real CarPlay session.
+Screen negotiation reached 800×480 / 30 FPS; iOS then crashed in encoder
+initialization. Encoded/decoded media and sustained playback remain pending.
 The subsequent [iOS/stock210 code review and corrections](IOS210_CODE_REVIEW.md)
 fixed authentication-first iAP2 handling, unsupported stream 111 negotiation
 and wired SETUP with inherited wireless flags. The combined QEMU rerun covers

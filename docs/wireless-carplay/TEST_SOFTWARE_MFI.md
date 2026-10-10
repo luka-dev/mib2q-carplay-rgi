@@ -30,6 +30,21 @@ APK, with pinned provenance and hashes. Its key consistency was checked locally.
 The provider and QNX daemon do not load this fixture; the automated tests
 described here continue to use freshly generated synthetic identities.
 
+The separate [iOS VM laboratory](IOS_VM_LAB.md) now uses that pinned public
+fixture in an opt-in host signer. Emulated iOS `18A5351d` negotiated a native
+iAP2 control session, issued a fresh 32-byte challenge, and accepted the 64-byte
+P-256 response with `AA05`. Corrupted response and certificate signatures
+produced `AA04`; the certificate rejection happened before a challenge.
+Positive/negative response checks passed after restarting the guest. Native
+identification returned `1D02`, wired availability returned `4300`, and the
+actual UI accepted CarPlay approval. A direct NCM/QNX Ethernet link exchanges
+native frames. Native Pair Setup/Verify and the lab-only live MFi-SAP responder
+subsequently established a real CarPlay control session with QNX. Screen setup
+reached 800×480 / 30 FPS before an iOS codec-initialization crash; decoded media
+remains unverified. These
+results do not add a live backend to the QNX preloader or production daemon,
+and do not establish physical iPhone or CarPlay media behavior.
+
 ## 🔐 Test profiles
 
 | Profile | Input to `sign` | Signature bytes | Independent prehash check |

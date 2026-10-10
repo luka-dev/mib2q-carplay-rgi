@@ -28,13 +28,28 @@ specific pair here.
 Local validation confirmed that the certificate public key matches the private
 key, ECDSA signs and verifies a prehashed 32-byte SHA-256 digest, and DER/raw
 64-byte signature conversion preserves the signature. Changed digests and
-changed signatures failed verification. These checks establish key consistency;
-they do not establish iPhone acceptance in this project.
+changed signatures failed verification.
+
+On 2026-10-10 the [iOS VM laboratory](../../../docs/wireless-carplay/IOS_VM_LAB.md)
+completed native iAP2 authentication on emulated iOS `14.0 / 18A5351d`: the phone
+issued a fresh 32-byte challenge and accepted the host's 64-byte response with
+`AA05`. A changed response produced `AA04`; changing a byte of the accessory
+certificate's signature produced `AA04` before any challenge. Positive and
+negative response checks passed again after restarting the guest. The separate
+live MFi-SAP responder subsequently passed native AirPlay authentication and
+established a QNX CarPlay control session. Physical iPhone acceptance and decoded
+CarPlay media remain unverified.
 
 ## 🧪 Integration status
 
 This directory stores an experimental fixture. The host `TestSoftwareMfi`
 provider still generates its own marked synthetic identity; neither that
 provider nor the default QNX daemon loads these files. Existing QEMU tests still
-use generated, challenge-bound vectors. See
+use generated, challenge-bound vectors. The opt-in
+[host probe](../../ios_vm_lab/mfi_probe.py) loads this pinned fixture for native
+iAP2 authentication against the synthetic iPhone. The separate
+[MFi-SAP responder](../../ios_vm_lab/mfi_sap.py) supplies live authentication
+responses to the explicitly enabled QNX laboratory adapter. Both keep the
+private key on the host. The held iAP2 session and NCM Ethernet bridge are
+separate laboratory tools; the default production daemon remains unchanged. See
 [software MFi test documentation](../../../docs/wireless-carplay/TEST_SOFTWARE_MFI.md).

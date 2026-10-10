@@ -32,7 +32,21 @@
     "raw_signature_bytes": 64,
     "changed_digest_rejected": true,
     "changed_signature_rejected": true,
-    "iphone_acceptance_tested_here": false
+    "iphone_acceptance_tested_here": false,
+    "iphone_acceptance_scope": "Physical devices remain untested; see separate iOS VM validation.",
+    "ios_vm_authentication": {
+      "date": "2026-10-10",
+      "build": "18A5351d",
+      "device": "n104ap / iPhone12,1 emulated by Inferno",
+      "profile": "real SEP/keybag, virtual dock, native USB device test mode",
+      "live_challenge_bytes": 32,
+      "raw_signature_bytes": 64,
+      "native_iap2_success": "AA05",
+      "corrupted_response_rejected": "AA04",
+      "corrupted_certificate_signature_rejected_before_challenge": "AA04",
+      "repeat_after_guest_restart": true,
+      "physical_device_tested": false
+    }
   },
-  "runtime_integration": "None; stored fixture only. Synthetic TestSoftwareMfi and QNX MfiChip behavior unchanged."
+  "runtime_integration": "The opt-in ios_vm_lab/mfi_probe.py and mfi_sap.py host signers read this fixture; the QEMU-only capture adapter receives public MFi-SAP response bytes over bounded RPC. Private key remains on the host. TestSoftwareMfi, default daemon and production QNX preloader remain unchanged."
 }
