@@ -18,9 +18,15 @@ set -e
 [ "$#" -le 1 ] || { echo "usage: ./scripts/build_renderers.sh [grid]"; exit 2; }
 [ "$#" -eq 0 ] || [ "$1" = "grid" ] || { echo "usage: ./scripts/build_renderers.sh [grid]"; exit 2; }
 
-IMG=qnx65-armv7-toolchain:latest
+IMG=${QNX_TOOLCHAIN_IMAGE:-qnx65-armv7-toolchain:latest}
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+# under Git for Windows hand Docker a Windows path (MSYS maps /tmp to the user's
+# temp directory, which Docker would read as its own /tmp) and stop MSYS rewriting the
+# container paths in docker's arguments.
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*) PROJECT_DIR="$(cygpath -m "$PROJECT_DIR")"; export MSYS_NO_PATHCONV=1 ;;
+esac
 GRID=""
 [ "$1" = "grid" ] && GRID="-DCR_DEBUG_GRID"
 
@@ -32,10 +38,13 @@ fi
 
 echo "=== Cluster Renderer Build (Docker $IMG) ==="
 
-docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
+docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/host "$IMG" bash -c '
   set -e
   export PATH=/opt/qnx650/host/linux/x86/usr/bin:$PATH
   export QNX_HOST=/opt/qnx650/host/linux/x86 QNX_TARGET=/opt/qnx650/target/qnx6
+  # build inside the container at the same /src paths.  A Docker Desktop (Windows)
+  # bind mount reports 64-bit inode numbers that the 32-bit QNX binutils reject (EOVERFLOW).
+  mkdir -p /src && cp -a /host/common /host/maneuver_render /host/toolchain /src/
   CC=arm-unknown-nto-qnx6.5.0eabi-gcc
   CXX=arm-unknown-nto-qnx6.5.0eabi-g++
   AR=arm-unknown-nto-qnx6.5.0eabi-ar
@@ -83,6 +92,7 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
     echo "  $b: machine=$m emutls=$e"
     [ "$m" = ARM ] && [ "$e" = 0 ] || exit 1
   done
+  mkdir -p /host/build && cp /src/build/maneuver_render /src/build/libmaneuver_scene.a /host/build/
 '
 
 echo ""

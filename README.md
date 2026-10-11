@@ -112,10 +112,21 @@ Then run from this repository's root:
 ./scripts/build_renderers.sh   # → build/maneuver_render
 ```
 
-All three build in Docker - no host toolchain required. The Java patch compiles in a pinned
-`eclipse-temurin:8` container (against the stock jar + OSGi libs under `../../Tools/jxe2jar`; the
-scripts expect the author's `out/MU1316-final.jar`, so if your own stock jar is named or located
-differently, adjust the path in `scripts/build_java.sh` and the test scripts); the two
+All three build in Docker - no host JDK is required. The Java patch compiles in
+`eclipse-temurin:8-jdk-jammy` against the stock JAR and OSGi libraries. The default
+layout remains `../../Tools/jxe2jar`; set `CARPLAY_TOOLS_DIR` to relocate it, or
+set `STOCK_JAR` and `CARPLAY_DEPENDENCIES` for explicit external inputs. Separate
+bootstrap/runtime libraries can be supplied with `STOCK_BOOT_JAR` and
+`STOCK_RUNTIME_JAR`. The car's class library (`libs/jcl/.../jcl.jar` in the default
+layout) is optional for the build: when present, the patch compiles against it, which
+catches APIs the unit lacks; otherwise it compiles against JDK 8, as before. The stock
+linkage audit requires it. `ASM_JAR` and `ASM_TREE_JAR` override linkage-audit inputs;
+`JAVA_OUTPUT` selects the output directory. No script editing is necessary.
+`CARPLAY_JAVA_IMAGE` and `QNX_TOOLCHAIN_IMAGE` accept immutable image IDs; the
+Java launcher records the resolved ID in `java-image-id.txt`. Java compilation
+and tests share `scripts/java/`, including resource/version checks and stable
+JAR ordering/timestamps. Windows uses Git Bash path conversion; POSIX hosts
+retain their user identity for Java output. The two
 native builds use the `qnx65-armv7-toolchain` image and synthesize their import stubs, so the resulting
 ELF binds the unit's real Screen/EGL/GLES libraries at runtime. The renderer's C++ scene engine is
 built with that image's `g++` and must not pull in the C++ runtime; the hook build rejects any dynamic
@@ -140,7 +151,13 @@ Host-only, no unit needed:
 ./scripts/test_maneuver_native.sh # renderer engine + lanes (macOS, ASan/UBSan)
 ```
 
-The Java suites need the stock MU1316 jar and JDK under `../../Tools/jxe2jar`. Full toolchain,
+The Java suites use Docker and the same configurable stock/dependency inputs as
+the compiler. They run two JVMs at a time by default; `JAVA_TEST_JOBS` overrides
+that limit. `./scripts/check_java.sh` runs all groups plus stock linkage;
+the native contract probe also needs Python 3 and a host C compiler.
+`./scripts/test_java_build.sh` checks reproducible builds, resource failures and
+the original macOS input conventions. The latter uses a simulated Darwin
+launcher, so actual macOS/Apple Silicon execution still needs validation. Full toolchain,
 threading, boot and the complete test list live in the knowledge base - see
 [`docs/architecture.md`](docs/architecture.md).
 

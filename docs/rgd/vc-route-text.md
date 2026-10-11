@@ -73,7 +73,7 @@ Text that does not fit is split into fragments, and only FctID 19 is rewritten o
 of the VC fonts plus pinned **Unicode 17** property, decomposition and composition tables, packed as
 three 21-bit fields per `long`. `VCUnicode` implements NFC and grapheme segmentation on those tables,
 independent of the HU's old `Character`/`BreakIterator` data - no fonts, AWT, ICU or native shaper on the
-unit. `scripts/build_java.sh` copies `java_resources/` into the class tree before `jar cf`, so the table
+unit. `scripts/build_java.sh` copies `java_resources/` into the class tree before assembling the JAR, so the table
 (and `META-INF/UNICODE-LICENSE.txt`) ship inside `carplay_hook.jar`.
 
 ## 🤔 Open
