@@ -20,7 +20,7 @@ they do not demonstrate our CarPlay sender, encoder, MFi or AltScreen path.[^1]
 | Host | Apple M3 Max, macOS 26.5.1 |
 | Launchpad | Notarized 2.9.2 installed; archive SHA-256 verified |
 | Core Bundle | 2.9.2 downloaded and hash-verified; installation pending Host Setup |
-| Research Guests | Disabled; owner must enable it in Recovery |
+| Research Guests | Enabled; verified after the owner's Recovery step |
 | Developer Tools / helper | Access not granted; helper not installed |
 | Dedicated guest | Not created; no vphone CarPlay frames observed |
 | QNX receiver | Fresh build passed ABI checks; native `/info` verified in the new directory |
@@ -110,14 +110,15 @@ scripts/carplay_lab.sh doctor
 ```
 
 The remaining host steps belong to the Mac's owner, as required by the upstream
-skill.[^5] Research Guests is currently the Recovery blocker:
+skill.[^5] Research Guests has passed on this Mac. For a new host, enable it in
+Recovery before continuing:
 
 ```sh
 # In macOS Recovery, Terminal:
 csrutil allow-research-guests enable
 ```
 
-Restart into macOS, open `/Applications/vphone-launchpad.app`, and complete
+On this Mac, open `/Applications/vphone-launchpad.app` and complete
 **Host Setup**: grant Developer Tools access and install its helper using the
 administrator prompt. Then install the explicitly pinned Core Bundle through
 the official client. The helper may request administrator authorization.[^5]
