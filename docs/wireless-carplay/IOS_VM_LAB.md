@@ -104,6 +104,17 @@ The existing iOS 26.6/27 IPSWs and original HU firmware remain untouched.
 Only compatible components were initially extracted from Apple CDN using HTTP
 ranges; the complete 5,507,405,643-byte IPSW was later downloaded for restore.
 
+The 2026-10-11 cleanup removed obsolete structured log archives and their TAR
+duplicates, raw PPM screenshots with retained PNG equivalents, and regenerable
+compiler outputs from earlier validation iterations. It freed approximately
+3.4 GiB. Plain reports, crash files and fuzz corpora remain, together with the
+verified native CarPlay H.264/PNG/PCAP/JSON evidence. Both disk sets, original
+IPSW, firmware, patched cache and symbol map, current emulator/toolchain and
+QNX build inputs were preserved. The exact local removal manifest is
+`build/cleanup-result-20261011.json`. The old x86 companion and its tunnel were
+stopped; the current ARM companion remains available. Main iOS/QNX guests were
+stopped after the native mode guard confirmed preference restoration.
+
 The laboratory uses iOS `18A5351d` and Alpine virt `3.24.2`, whose ISO SHA-256
 was checked against the distribution's published checksum. Apple's firmware URL
 and member hashes are recorded in `firmware/components.json`.
