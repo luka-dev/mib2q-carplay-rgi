@@ -41,6 +41,115 @@ static volatile unsigned int capture_enabled;
 static volatile uintptr_t captured_manager;
 extern char *__progname;
 
+#ifdef MHI2Q_CAPTURE_VIDEO_QEMU
+#include <stddef.h>
+#include "video_capture_bounds.h"
+/* Read-only tap immediately before the fake hardware decoder. Capture only
+ * the first AVC handle and bounded plaintext bytes; never alter the buffer.
+ * The QNX SDK's OMX_BUFFERHEADERTYPE begins with these six ARM32 fields.
+ */
+struct video_omx_prefix {
+    uint32_t size, version;
+    uint8_t *buffer;
+    uint32_t allocated, filled, offset;
+};
+typedef char video_omx_arm32_prefix[(sizeof(void *) == 4 && sizeof(struct video_omx_prefix) == 24) ? 1 : -1];
+struct video_omx_component_prefix {
+    uint32_t size, version;
+    void *private_data, *app_data;
+    void *methods[12];
+    uint32_t (*empty)(void *, void *);
+};
+typedef char video_omx_empty_slot[(offsetof(struct video_omx_component_prefix, empty) == 64) ? 1 : -1];
+static uint32_t (*video_omx_get_handle)(void **, char *, void *, void *);
+static uint32_t (*video_omx_empty)(void *, void *);
+static pthread_once_t video_omx_once = PTHREAD_ONCE_INIT;
+static pthread_mutex_t video_capture_lock = PTHREAD_MUTEX_INITIALIZER;
+static void *video_capture_handle;
+static unsigned video_capture_records;
+static size_t video_capture_bytes;
+static uint32_t video_omx_empty_tap(void *, void *);
+
+static void video_omx_resolve(void)
+{
+    video_omx_get_handle = (uint32_t (*)(void **, char *, void *, void *))dlsym(RTLD_NEXT, "OMX_GetHandle");
+}
+
+static int video_capture_write(const char *data, size_t length)
+{
+    while (length) {
+        ssize_t count = write(2, data, length);
+        if (count <= 0) return 1;
+        data += count; length -= (size_t)count;
+    }
+    return 0;
+}
+
+uint32_t OMX_GetHandle(void **handle, char *name, void *context, void *callbacks)
+{
+    uint32_t result;
+    pthread_once(&video_omx_once, video_omx_resolve);
+    if (!video_omx_get_handle) return 0x80001001u;
+    result = video_omx_get_handle(handle, name, context, callbacks);
+    if (!result && handle && *handle && name && !strcmp(name, "OMX.qcom.video.decoder.avc")) {
+        pthread_mutex_lock(&video_capture_lock);
+        if (!video_capture_handle) {
+            struct video_omx_component_prefix *component = *handle;
+            /* OMX_EmptyThisBuffer is an SDK macro dispatching through this
+             * per-instance slot, not an ELF symbol. Preserve its real method.
+             */
+            if (component->size >= sizeof(*component) && component->size <= 256 && component->empty) {
+                video_omx_empty = component->empty;
+                video_capture_handle = *handle;
+                component->empty = video_omx_empty_tap;
+            }
+        }
+        pthread_mutex_unlock(&video_capture_lock);
+    }
+    return result;
+}
+
+static uint32_t video_omx_empty_tap(void *handle, void *header)
+{
+    const struct video_omx_prefix *prefix = header;
+    pthread_once(&video_omx_once, video_omx_resolve);
+    if (!video_omx_empty) return 0x80001001u;
+    pthread_mutex_lock(&video_capture_lock);
+    if (handle == video_capture_handle && handle && prefix && prefix->size >= sizeof(*prefix) &&
+            prefix->buffer && video_capture_records < 32 &&
+            video_capture_bounds(prefix->allocated, prefix->filled, prefix->offset) &&
+            video_capture_bytes <= 2097152-prefix->filled) {
+        static const char hex[] = "0123456789abcdef";
+        char line[640];
+        unsigned record = ++video_capture_records;
+        uint32_t offset;
+        int used, failed = 0;
+        used = snprintf(line, sizeof(line), "[native-video-qemu] begin=%u bytes=%u\n", record, prefix->filled);
+        if (used <= 0 || (size_t)used >= sizeof(line) || video_capture_write(line, (size_t)used)) failed = 1;
+        for (offset = 0; !failed && offset < prefix->filled; ) {
+            uint32_t count = prefix->filled-offset;
+            uint32_t i;
+            if (count > 256) count = 256;
+            used = snprintf(line, sizeof(line), "[native-video-qemu] record=%u offset=%u hex=", record, offset);
+            if (used <= 0 || (size_t)used + count*2 + 1 >= sizeof(line)) { failed = 1; break; }
+            for (i = 0; i < count; ++i) {
+                uint8_t byte = prefix->buffer[prefix->offset+offset+i];
+                line[used++] = hex[byte >> 4]; line[used++] = hex[byte & 15];
+            }
+            line[used++] = '\n';
+            if (video_capture_write(line, (size_t)used)) { failed = 1; break; }
+            offset += count;
+        }
+        used = snprintf(line, sizeof(line), "[native-video-qemu] end=%u complete=%d\n", record, !failed);
+        if (used > 0 && (size_t)used < sizeof(line)) (void)video_capture_write(line, (size_t)used);
+        video_capture_bytes += prefix->filled;
+        if (failed) video_capture_records = 32;
+    }
+    pthread_mutex_unlock(&video_capture_lock);
+    return video_omx_empty(handle, header);
+}
+#endif
+
 #ifdef MHI2Q_CAPTURE_HTTP_HEADER_QEMU
 /* Pinned stock210 ABI, QEMU only: trace the request line after decryption.
  * Never log pairing keys, HTTP fields or request bodies. */
@@ -157,6 +266,83 @@ reply:
     return 1;
 }
 #endif
+#ifdef MHI2Q_CAPTURE_NATIVE_UI_QEMU
+#ifndef MHI2Q_CAPTURE_SOFTWARE_MFI_QEMU
+#error Native UI experiment requires the isolated software MFi QEMU adapter
+#endif
+static volatile unsigned int native_ui_requested;
+static void native_ui_completed(int status, const void *response, void *context)
+{
+    char line[128];
+    int used;
+    (void)response;
+    used = snprintf(line, sizeof(line), "[native-ui-qemu] completion=%s status=%d\n",
+                    (const char *)context, status);
+    if (used > 0 && (size_t)used < sizeof(line)) (void)write(2, line, (size_t)used);
+}
+static void *native_ui_worker(void *session)
+{
+    typedef int (*request_fn)(void *, const void *, void *, void *);
+    typedef int (*resource_fn)(void *, int, int, int, int, int, const void *, void *, void *);
+    request_fn request = (request_fn)dlsym(RTLD_NEXT, "AirPlayReceiverSessionRequestUI");
+    resource_fn resource = (resource_fn)dlsym(RTLD_NEXT, "AirPlayReceiverSessionChangeResourceMode");
+    void (*release)(const void *) = (void (*)(const void *))dlsym(RTLD_NEXT, "CFRelease");
+    const void *ui_url = NULL;
+    unsigned attempt;
+#ifdef MHI2Q_CAPTURE_REQUEST_MUSIC_UI_QEMU
+    typedef const void *(*string_fn)(void *, const char *, unsigned int);
+    string_fn create_string = (string_fn)dlsym(RTLD_NEXT, "CFStringCreateWithCString");
+    if (!create_string || !(ui_url = create_string(NULL, "music://", 0x08000100u))) {
+        static const char failed[] = "[native-ui-qemu] music URL creation failed; request skipped\n";
+        (void)write(2, failed, sizeof(failed) - 1);
+        if (release) release(session);
+        return NULL;
+    }
+    (void)write(2, "[native-ui-qemu] requesting music:// UI\n",
+                sizeof("[native-ui-qemu] requesting music:// UI\n") - 1);
+#endif
+    for (attempt = 0; attempt < 3; ++attempt) {
+        char line[128];
+        int result, used;
+        sleep(2);
+        /* Stock AirPlayReceiverSessionUntakeScreen macro: resource 1,
+         * transfer Untake=2, all constraints/priority NotApplicable=0. */
+        result = resource ? resource(session, 1, 2, 0, 0, 0, NULL,
+            (void *)native_ui_completed, (void *)"untakeScreen") : -6740;
+        used = snprintf(line, sizeof(line), "[native-ui-qemu] untakeScreen attempt=%u result=%d\n", attempt + 1, result);
+        if (used > 0 && (size_t)used < sizeof(line)) (void)write(2, line, (size_t)used);
+        result = request ? request(session, ui_url, (void *)native_ui_completed,
+            (void *)"requestUI") : -6740;
+        used = snprintf(line, sizeof(line), "[native-ui-qemu] requestUI attempt=%u result=%d\n", attempt + 1, result);
+        if (used > 0 && (size_t)used < sizeof(line)) (void)write(2, line, (size_t)used);
+        if (!result) break;
+    }
+    if (ui_url && release) release(ui_url);
+    if (release) release(session);
+    return NULL;
+}
+static void native_ui_after_record(void *connection, void *message, int result)
+{
+    const char *method = (const char *)(uintptr_t)sap_word(message, 8220);
+    void *context, *session;
+    void *(*retain)(const void *);
+    void (*release)(const void *);
+    pthread_t thread;
+    if (result || !method || sap_word(message, 8224) != 6 || memcmp(method, "RECORD", 6)) return;
+    context = (void *)(uintptr_t)sap_word(connection, 8);
+    session = context ? (void *)(uintptr_t)sap_word(context, 244) : NULL;
+    retain = (void *(*)(const void *))dlsym(RTLD_NEXT, "CFRetain");
+    release = (void (*)(const void *))dlsym(RTLD_NEXT, "CFRelease");
+    if (!session || !retain || !release || !__sync_bool_compare_and_swap(&native_ui_requested, 0, 1)) return;
+    retain(session);
+    if (pthread_create(&thread, NULL, native_ui_worker, session)) {
+        release(session);
+        __sync_lock_test_and_set(&native_ui_requested, 0);
+        return;
+    }
+    pthread_detach(thread);
+}
+#endif
 static int trace_http_handle(void *connection, void *message, void *context)
 {
     static const char marker[] = "[http-delegate-qemu] route-called\n";
@@ -165,7 +351,11 @@ static int trace_http_handle(void *connection, void *message, void *context)
     int result;
     if (sap_request(connection, message, &result)) return result;
 #endif
-    return stock_http_handle(connection, message, context);
+    int stock_result = stock_http_handle(connection, message, context);
+#ifdef MHI2Q_CAPTURE_NATIVE_UI_QEMU
+    native_ui_after_record(connection, message, stock_result);
+#endif
+    return stock_result;
 }
 
 int HTTPServerCreate(void **out_server, const void *delegate)

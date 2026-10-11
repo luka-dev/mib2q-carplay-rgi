@@ -1,6 +1,6 @@
 # iOS virtual machine laboratory
 
-_Local bring-up evidence · 2026-10-10 · Native iAP2/MFi, MFi-SAP and a real QNX CarPlay control session verified; decoded media pending._
+_Local bring-up evidence · 2026-10-11 · Native iAP2/MFi, MFi-SAP and QNX control verified; real CarPlay video independently decoded through the VM software surface adapter._
 
 ---
 
@@ -34,6 +34,7 @@ These are runtime guest responses, not replies from our synthetic phone fixture.
 | Normal iOS / Data / keybag | Real SEP, Data mount and keybag initialization succeeded; diagnostic bypass disabled |
 | USB pairing and restart | Pairing and validation succeeded; normal reboot and ARM companion cold boot verified |
 | Activation / UI | `Activated`; Setup wizard completed through native UI; Home unlocked and computer trust accepted |
+| Native CarPlay render tree | Real 800×480 UI captured through QuartzCore and visually verified |
 | USB accessory interfaces | HID/NCM selection verified; virtual dock profile receives actual iAP2 detect echo |
 | Actual iOS iAP2 | SYN/ACK and control session `10` negotiated; iOS requested certificate/challenge |
 | Software MFi against iOS | Live 32-byte challenge / 64-byte P-256 response; `AA05` accepted, corrupted signature rejected with `AA04` |
@@ -43,7 +44,8 @@ These are runtime guest responses, not replies from our synthetic phone fixture.
 | CarPlay approval | Native alert accepted; saved vehicle policy changed to `enabled state 1` |
 | Native Pair Setup / Verify | iOS completed both exchanges and switched to encrypted control |
 | Native MFi-SAP | Live P-256 response accepted; `Endpoint_AuthenticationSucceeded` and authorization confirmed |
-| CarPlay session / media | QNX logged an actual 20-second session, screen 800×480 / 30 FPS; no decoded video proved |
+| Codec properties | Opt-in conditional workaround: native `ftvc`, `avc1`, `ftvh` probes return `0` / 51 properties; unpatched control fails |
+| CarPlay session / media | Native control, 15 actual framebuffer submissions, encrypted delivery to stock QNX and 31 independently decoded 800×480 frames; sustained 30 FPS not measured |
 | QNX receiver endpoint | Native QNX `ecm0`, source `210.81`; direct Ethernet bridge, native pairing and iOS TCP sessions verified |
 
 ## 🔄 Current transport
@@ -51,7 +53,7 @@ These are runtime guest responses, not replies from our synthetic phone fixture.
 ```mermaid
 flowchart TD
     accTitle: Virtual iOS Transport Bring Up
-    accDescr: Restored iOS with real SEP connects through combined virtual USB to separate management, iAP2 and NCM channels. MFi, identification and IP traffic are verified. A direct Ethernet socket bridge reaches the native QNX receiver and its IP stack. Native control and screen transport connections are verified; decoded video remains pending.
+    accDescr: Restored iOS with real SEP connects through combined virtual USB to separate management, iAP2 and NCM channels. MFi, identification and IP traffic are verified. A direct Ethernet socket bridge reaches the native QNX receiver and its IP stack. Native video through the VM software surface adapter has been independently decoded.
     normal_ios["Normal iOS 14<br/>real SEP and keybag"]
     normal_ios --> usb_socket["Virtual USB<br/>Unix socket"]
     usb_socket --> linux_guest["ARM Alpine QEMU / HVF<br/>usbmuxd"]
@@ -84,7 +86,7 @@ reproduce the native control experiment once those prerequisites exist.
 | Inferno | Pinned revision and source patch; sanitizer tests | Build dependencies, Apple firmware and initial launch records must be prepared separately |
 | Restored iOS | Cloned-image provisioning and controlled normal boot | Initial restore/SEP preparation remains recorded local work, not one versioned automation command |
 | QNX receiver | Versioned IFS builder, pairing/media flags and virtual networking | Pinned stock firmware, existing mesh harness, hook binary, custom QEMU and local QNX toolchain required |
-| Native CarPlay | Live iAP2 MFi, Pair Setup/Verify, MFi-SAP and session startup | Decoded video blocked by the iOS codec crash; physical HU operation unverified |
+| Native CarPlay | Live authentication and native UI video; 31 independently decoded frames through the software surface adapter | Maps/Metal, audio, AltScreen, continuous pacing and real radio behavior remain unverified |
 
 Generated firmware, clones, emulator binaries, disposable disks, SSH material and logs
 are local under `build/ios-vm-lab/`; these are not committed or packaged for the HU.
@@ -421,20 +423,228 @@ native CarPlay approval alert was then accepted; `carkitd` logged
 `approval alert accepted`, a keychain update and `enabled state 1`.
 Evidence includes `combined-usb/home-trusted.png`,
 `carplay-unlocked-prompt-two.png` and `approved-airplay-messages.txt`.
-The later DirectLink/MFi-SAP run established native control and screen sockets;
-decoded media remains unverified.
+The earlier DirectLink/MFi-SAP run established native control and screen
+sockets without decoded media. The later software-surface run in
+[NATIVE_SCREEN_TEST.md](NATIVE_SCREEN_TEST.md) verifies actual UI video.
 
 Touch velocity had been rounded to zero by dividing displacement by nanoseconds
 before scaling. The opt-in input model now scales first, with bounded saturation.
 Swipes hold their starting position before movement so the native model samples
-the initial touch. The default is 150 ms; after a heavily loaded cold boot,
-600 ms initial dwell and 50 ms movement steps unlocked Home reliably. Power key `f5` toggles the screen; send it only
-when the recorded backlight state is off.
+the initial touch. The helper defaults to a 600 ms initial dwell and 50 ms
+movement steps (1000 ms over 20 steps), which unlocked Home reliably after a
+loaded boot. Taps default to a 200 ms contact to avoid opening a long-press menu.
+`--hold-ms` and `--duration-ms` allow bounded timing adjustments. Power key `f5`
+toggles the screen; send it only when the recorded backlight state is off.
+Explicit wake waits for resume and refreshes headless scanout before the
+gesture. This ordering was verified with a live sleep/wake/unlock cycle;
+without the refresh the headless screen could remain at its previous frame.
+
+QMP coordinates follow the screenshot: `(0, 0)` is the top-left corner and Y
+increases downward. The raw range is `0..32767` on each axis. Inferno converts Y
+internally for the touch sensor; do not invert it in the caller. The earlier
+failed unlock attempts inverted Y and sent downward gestures. On 2026-10-11 an
+upward gesture unlocked Home, a short tap opened Settings, and an in-app swipe
+scrolled the list despite the existing `AIDReporter` diagnostics.
+
+```sh
+# Send an upward unlock gesture; add --wake only when the display is off.
+python3 wireless/ios_vm_lab/input_control.py unlock
+
+# Use the actual screenshot dimensions for pixel coordinates.
+python3 wireless/ios_vm_lab/input_control.py tap 510 1055 --screen-size 828 1792
+python3 wireless/ios_vm_lab/input_control.py swipe 414 1400 414 650 --screen-size 828 1792
+```
+
+`unlock` sends a gesture and does not verify lock state or bypass a passcode.
+Check a fresh screenshot before sending the next action. Gestures release their
+contact at the final position. After a movement error, the helper attempts to
+release at the last acknowledged position. Regression tests cover
+screen-coordinate boundaries and 10,000 random conversions, upward unlock,
+explicit wake, short taps, invalid CLI input, and release after a QMP failure:
+
+```sh
+python3 -m unittest discover -s wireless/ios_vm_lab -p 'test_input_control.py'
+```
 
 Local evidence is in `sep-real/accessory-transport-findings.json`,
 `normal-accessory-archive.txt`, `normal-pidlist.txt`,
 `versioned-usb-iap2-detect.json`, and `probes/accessory/`.
 These record the kernel hash, DT data and targeted disassembly.
+
+### Codec-property recursion experiment
+
+The original `mediaserverd` crash repeats VideoProcessing's supported-property
+getter through one `dispatch_once` initializer. The initializer selects another
+encoder and asks it for a property dictionary; with a software fallback that
+query can return to the same getter while the initializer is in progress.
+Targeted disassembly and the original crash stack identify the two indirect
+query sites at `0x1a9fec8d8` and `0x1a9fec91c`.
+
+The opt-in [codec patch](../../wireless/ios_vm_lab/codec_patch.py) replaces those
+calls with a small thunk in verified RX segment padding. It compares the
+authenticated, stripped callback with `0x1a9fec5d8`: a self query returns
+`-12782`; a different callback receives its original authenticated tail call.
+`dispatch_once`, codec creation and frame encoding are unchanged. This is an
+experimental VM compatibility workaround, not a production firmware patch.
+
+| Guard / validation | Evidence |
+|---|---|
+| Input cache | Size `2052489216`, SHA-256 `af1001abe5b075afd337bf110562746c3e006e9d93951e163fc5daae062aeab8` |
+| Patched cache | SHA-256 `86f1dd01fc9331e7fcc3c3ce8a91a85be37ca1060146ef746f60b04ea98032b6` |
+| Changes | Two 4-byte calls and 28 bytes of unused RX padding at `0x1aa1e53b8` |
+| Apply/revert | Exact bytes and full hashes checked; failure restores the original byte ranges |
+| Native probe, patched | `ftvc`, `avc1`, `ftvh`: status `0`, 51 properties each; repeated after reverting and reapplying |
+| Native control, unpatched | First `ftvc` query returned `-12912`; subsequent query did not finish in the bounded probe |
+| Actual video | Not proved by the property probe; status traffic alone is insufficient |
+
+Run only with the owned guest stopped:
+
+```sh
+python3 wireless/ios_vm_lab/lab.py stop
+python3 wireless/ios_vm_lab/prepare_combined_usb.py --codec-properties-experiment --codec-info
+python3 wireless/ios_vm_lab/lab.py start --boot normal --virtual-dock --combined-usb --input-control --ncm-visible
+```
+
+`--codec-info` installs a read-only native VideoToolbox probe with a 30-second
+process alarm. It prints start/result markers to the UART and releases returned
+CF objects. The helper still checks the synthetic USB identity. For exact
+rollback, stop the guest and run `prepare_combined_usb.py --revert-codec-properties`.
+The two retained disk sets are not copied again for this experiment.
+
+The later transport capture contained 96 screen packets of opcode `5`, totaling
+30,899 TCP payload bytes, over about 94.5 host seconds. Their binary plist
+telemetry reported `sentFramesAvg=0`. These are status packets, not H.264 access
+units. The capture does not establish decoded output or a frame-pacing result.
+
+`qnx_network.py build --pairing --media --software-mfi --request-ui` additionally
+enables an isolated HMI action: after a successful native `RECORD`, it retains
+the actual receiver session, releases the test HU's screen ownership and calls
+stock `AirPlayReceiverSessionRequestUI`. The bounded worker logs both queueing
+and the phone's completion status; both commands completed with status `0`.
+Later native logs confirm `ModeChange:iOSHasScreen`, virtual framebuffer resume
+and `ftvc` encoder property configuration while `mediaserverd` stays alive.
+Maps repeatedly terminates; collected reports show `EXC_BAD_ACCESS` in VectorKit
+at address `0x88`. This is a new application/rendering failure, distinct from
+the original property-query recursion. No H.264 access units or decoded output
+have been proved. Evidence includes `codec-current-media-findings.txt`,
+`codec-single-live-syslog.txt`, `codec-final-screen-summary.json`, and
+`render-crashes/Maps-2026-10-10-191509.ips`.
+
+A later bounded session held `UnifiedEncoderMode=0` through native CarPlay.
+Authentication, NCM transport and both UI callbacks succeeded; iOS selected
+`ftvc` with `EncoderUsage=38`, and the guard restored the prior setting after
+300 guest seconds. The screen socket carried 110 iPhone-to-QNX status packets
+(35,407 bytes over 107.3 seconds), all reporting `sentFramesAvg=0`; there were
+no screen access units. See the [native screen runbook](NATIVE_SCREEN_TEST.md)
+for the measured result and next trace points.
+
+A follow-up requested `music://`. The local CarPlay SDK declares and
+implements `AirPlayReceiverSessionRequestUI` with a `CFStringRef` URL, matching
+the probe. The first filtered syslog logged `scene:(null)` and omitted the
+CarPlay process; it did not establish whether the scene activated. The
+193.8-second capture recorded 198 status packets with zero sent/queued frames
+despite a reported 30 FPS encoder rate. Later full syslogs confirm successful
+Music CarPlay scene activation, and a QuartzCore/IOSurface probe captured the
+real 800×480 UI, retrieved it through AFC and verified it visually. Native
+framebuffer submission now passes through the VM-only NV12 adapter: 15
+successful submissions feed the stock encoder, and the QNX receiver's decrypted
+AVC input independently decodes into 31 frames with 26 distinct image hashes.
+The last decoded image shows the native Dashboard; its map area remains blank.
+See the
+[alternate UI result](NATIVE_SCREEN_TEST.md#-alternate-native-ui-probe).
+
+This does not inject video or change production HMI behavior. Restart the QNX
+guest before each new NCM socket run: reconnect alone produced 76 RX / 0 TX
+frames in one trial; a fresh QNX boot restored native bidirectional traffic.
+
+Evidence remains local under `combined-usb/`: `codec-properties-experiment.json`,
+`codec-probe-patched-positive.log`, `codec-probe-unpatched-control.log`,
+`codec-conditional-complete.pcap`, `codec-screen-stream.bin`, and the codec
+disassembly artifacts. QNX build/serial logs record the native UI callbacks.
+
+### Native rendering and pixel encode probes
+
+The Maps fault is now resolved to `ggl::MetalResourceManager::newTexture`,
+static address `0x1910229c4`. Its `x20` resource-manager argument is null;
+the failing instruction reads `[x20 + 0x88]` before sending
+`newTextureWithDescriptor:` to the Metal device. The native
+[pixel probe](../../wireless/ios_vm_lab/video_probe.c) independently returned
+`metal_device=0`. The pinned VectorKit symbol inventory exposes a Metal device
+backend; no software backend was found in that inventory. Returning a dummy
+texture or ignoring the null dereference would not establish rendered output.
+
+The probe feeds three CPU-generated 800×480 NV12 frames to VideoToolbox outside
+CarPlay. It checks asynchronous callback status and writes bounded Annex-B
+outputs under the synthetic guest's Media directory. Its native results are
+separate from a CarPlay stream or a frame-pacing measurement.
+
+| Probe configuration | Native result | Interpretation |
+|---|---|---|
+| No `EncoderUsage`, software requested | Session and preparation succeed; first frame returns `-12912`; `mediaserverd` reaches its stack guard | The encode callback at `0x1a9feca44` delegates recursively at `0x1a9fecb7c`; this control does not match CarPlay configuration |
+| `EncoderUsage=38`, software requested | Properties and preparation return `0`; all three callbacks return `-108`; zero output bytes | CarPlay's legacy `ftvc` path is selected, but it still tries to create an internal hardware encoder |
+| `EncoderUsage=38`, default selection | Same three callback failures, zero output bytes; `mediaserverd` remains PID `33` | Successful synchronous `EncodeFrame` return alone is insufficient |
+| `EncoderUsage=38`, `UnifiedEncoderMode=0`, both selections | Three successful callbacks per session, 4602 bytes each; independent decoding yields three 800×480 frames | Native software H.264 works for the isolated CPU-pixel probe |
+
+The native log identifies the allocation failure precisely:
+`Failed to allocate libCmpPtr->cmpPtr->hwEncoder`, followed by
+`JVTLibCompNew failed` and `H.264: failed to init video encoder, err = -108`.
+This evidence does not establish a shortage of guest RAM. The source pixels
+were allocated and filled successfully. Evidence is retained in
+`video-probe-native.txt`, `video-probe-usage38-native.txt`,
+`video-usage38-encoder-log.txt`, and
+`video-crashes/mediaserverd-2026-10-10-200555.ips` under the ignored lab directory.
+
+Targeted disassembly also found the existing CFPreferences override
+`UnifiedEncoderMode` in domain `com.apple.VideoProcessing`. Its accepted values
+are `0..3`; the mode-0 branch clears the flags set by mode 3. The opt-in
+`--video-info-software` probe temporarily sets the all-user preference to zero,
+checks its readback, and runs a fresh bounded child process. The parent restores
+the previous value after normal exit, a child alarm or a crash. Terminating the
+entire VM during this experiment can interrupt restoration; retain the UART
+`software-mode restored=1` marker as part of validation. The native run logged
+`synced=1 present=1 value=0`, six successful frame callbacks and
+`child-status=0x0`; restoration also succeeded. Both fetched files have SHA-256
+`7f42985b4e2a90e124f36dc472f48c06a1789a1f5c10580f28d97bffb6af662b`.
+FFprobe found H.264, 800×480, yuv420p and exactly three frames in each. FFmpeg's
+decoded luma means were `32.0`, `96.0006667`, `160.0`, matching the changing
+source pixels. This confirms the native encoder without supplying a CarPlay
+video stream. It does not establish real-time performance or frame pacing.
+Evidence: `video-probe-software-native.txt` and `video-software-validation.json`.
+
+```sh
+python3 wireless/ios_vm_lab/lab.py stop
+python3 wireless/ios_vm_lab/prepare_combined_usb.py --video-info-software
+python3 wireless/ios_vm_lab/lab.py start --boot normal --virtual-dock --combined-usb --input-control --ncm-visible
+
+clang -O2 -Wall -Wextra -Werror $(pkg-config --cflags libimobiledevice-1.0) \
+  wireless/ios_vm_lab/fetch_video_probe.c $(pkg-config --libs libimobiledevice-1.0) \
+  -o build/ios-vm-lab/combined-usb/fetch-video-probe
+USBMUXD_SOCKET_ADDRESS=127.0.0.1:32229 build/ios-vm-lab/combined-usb/fetch-video-probe
+```
+
+The [fetcher](../../wireless/ios_vm_lab/fetch_video_probe.c) reads only the two
+probe files, requires the loopback tunnel and targets the synthetic UDID.
+Successful transfer of an empty file is not successful encoding. Accept output
+only after an independent decoder finds exactly three 800×480 frames with
+changing luma. The AVCC conversion has positive/negative checks and 20,000
+deterministic fuzz inputs under AddressSanitizer and UndefinedBehaviorSanitizer:
+
+```sh
+clang -O1 -g -Wall -Wextra -Werror -ffunction-sections -fdata-sections \
+  -fsanitize=address,undefined -Wl,-dead_strip wireless/ios_vm_lab/test_video_probe.c \
+  -o build/ios-vm-lab/combined-usb/test-video-probe
+build/ios-vm-lab/combined-usb/test-video-probe
+```
+
+The next integration check is to keep the same native preference active for a
+bounded actual CarPlay session, verify virtual-display source frames, then
+capture screen opcodes `0` and `1` and decode their output independently. The
+existing QNX fake screen/decoder buffers do not prove hardware MMI rendering.
+Wireless 2.4 GHz behavior also remains outside this USB/Ethernet emulation.
+The dedicated [native screen runbook](NATIVE_SCREEN_TEST.md) records this
+sequence. `prepare_combined_usb.py --software-encoder-session` installs a
+300-second native preference hold with restoration by the parent process;
+this branch does not generate or inject probe pixels.
 
 ### ARM companion
 
@@ -552,7 +762,7 @@ the certificate signature after checking the original fixture hash and expects
 rejection before any signing request. Each invocation ends its short-lived iAP2
 session; it is not a persistent CarPlay transport.
 
-The laboratory suite passes `50` tests: controller/profile guards, actual HID
+The laboratory suite passes `54` tests: controller/profile guards, actual HID
 descriptor parsing, link/control checksums and lengths, fragmentation, cleanup
 after USB errors and fixture signing/mutation rejection. Fuzzing covers
 `25,000` descriptor inputs, `25,000` link/control inputs and `1,000` structured
@@ -622,14 +832,23 @@ DirectLink, Pair Setup/Verify, live MFi-SAP and a real QNX CarPlay session are
 verified. The native phone opened control `5000`, event `5001` and screen `6030`
 TCP sockets. No screen payload appeared in the captured stream.
 
-The iOS crash report identifies the immediate blocker: `mediaserverd` exited
+The original unpatched iOS crash report identified the first blocker: `mediaserverd` exited
 with `EXC_BREAKPOINT`, `BUG IN CLIENT OF LIBDISPATCH: trying to lock recursively`
 on `com.apple.coremedia.vdprocessor.workq`, while initializing the `ftvc` encoder
 at 800×480. Its stack repeats VideoProcessing through a dispatch-once path.
 QNX simultaneously reports unavailable fake screen buffers. These are separate
 media-stage limitations; neither invalidates the earlier authentication proof.
-Next trace codec registration/fallback and repair the VM media path, then verify
-actual H.264, audio and input. Do not skip the recursive-lock check or claim
+The conditional workaround above improves the native codec-property probes.
+Older screen captures reported zero sent frames. Screen ownership and
+resume are confirmed. The Maps fault reaches a null Metal resource manager;
+the isolated pixel probe finds an internal hardware-encoder allocation failure
+under the default mode. The native mode-0 override now passes isolated encoding
+and independent decoding. Bounded CarPlay sessions now confirm Music scene
+activation, and a native render-tree capture shows the actual CarPlay UI.
+The NV12 surface adapter now connects those pixels to the stock framebuffer;
+31 real 800×480 H.264 frames were received by QNX and independently decoded.
+Next verify continuous pacing, audio, accessory input and additional displays.
+Do not skip the recursive-lock check or claim
 decoded video from `Decoder started successfully` alone.
 
 Evidence: `combined-usb/native-sap-session.pcap`, `mfi-sap-live.log`,
@@ -640,7 +859,9 @@ The existing QNX software-MFi fixture still uses precomputed challenges. The
 new host probe demonstrates live P-256 signing and acceptance of the public
 fixture by this emulated iOS build; it is not yet the QNX daemon's live backend.
 The standard MFi flow checks Apple's accessory certificate.[^3]
-Full CarPlay video, audio, input and radio behavior remain unverified.
+Bounded main-display video is verified through independent decode. Continuous
+video performance, audio, accessory input, AltScreen and real radio behavior
+remain unverified.
 
 [^1]: ChefKiss Inferno, [Companion VM setup](https://github.com/ChefKissInc/Inferno/wiki/3.-Companion-VM-Setup).
 [^2]: ChefKiss Inferno, [Emulator file setup](https://github.com/ChefKissInc/Inferno/wiki/2.-Emulator-File-Setup) and [Running and restoring](https://github.com/ChefKissInc/Inferno/wiki/4.-Running-&-Restoring).

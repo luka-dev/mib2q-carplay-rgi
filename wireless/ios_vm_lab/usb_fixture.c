@@ -4,6 +4,7 @@ typedef unsigned int uint32_t;
 #define NULL ((void *)0)
 extern int printf(const char *, ...);
 extern unsigned int sleep(unsigned int);
+extern unsigned int alarm(unsigned int);
 extern int strcmp(const char *, const char *);
 extern unsigned int getuid(void);
 extern int setuid(unsigned int);
@@ -17,6 +18,10 @@ extern int notify_register_check(const char *, int *);
 extern int notify_set_state(int, unsigned long long);
 extern int notify_post(const char *);
 extern int notify_cancel(int);
+#ifdef MHI2_IOS_VM_SCREEN_RENDER_PROBE
+extern int mhi2_screen_render_probe(void);
+extern int mhi2_screen_framebuffer_probe(void);
+#endif
 
 typedef const void *CFTypeRef;
 typedef const void *CFStringRef;
@@ -37,6 +42,11 @@ extern void CFDictionarySetValue(CFMutableDictionaryRef, const void *, const voi
 extern CFArrayRef CFArrayCreate(void *, const void **, CFIndex, const void *);
 extern unsigned char CFEqual(CFTypeRef, CFTypeRef);
 extern void CFRelease(CFTypeRef);
+extern CFIndex CFDictionaryGetCount(CFDictionaryRef);
+extern unsigned char CFStringGetCString(CFStringRef, char *, CFIndex, uint32_t);
+extern int VTCopySupportedPropertyDictionaryForEncoder(int, int, uint32_t,
+    CFDictionaryRef, CFStringRef *, CFDictionaryRef *);
+extern int mhi2_video_probe(int);
 extern void CFPreferencesSetAppValue(CFStringRef, CFTypeRef, CFStringRef);
 extern unsigned char CFPreferencesAppSynchronize(CFStringRef);
 extern void *IOServiceMatching(const char *);
@@ -92,6 +102,70 @@ int main(int argc, char **argv)
     if (!identity || !CFEqual(identity, expected)) return 3;
     CFRelease(key);
     CFRelease(expected);
+
+#ifdef MHI2_IOS_VM_SCREEN_RENDER_PROBE
+    if (argc == 2 && (!strcmp(argv[1], "--screen-render-probe") ||
+                     !strcmp(argv[1], "--screen-framebuffer-probe"))) {
+        if (getuid() != 0) return 4;
+        int result = !strcmp(argv[1], "--screen-framebuffer-probe") ?
+            mhi2_screen_framebuffer_probe() : mhi2_screen_render_probe();
+        CFRelease(original);
+        IOObjectRelease(service);
+        return result;
+    }
+#endif
+    if (argc == 2 && !strcmp(argv[1], "--encoder-mode-hold")) {
+        if (getuid() != 0) return 4;
+        alarm(310);
+        printf("[mhi2-encoder-session] native mode held for 300 seconds; no probe pixels\n");
+        fflush(NULL);
+        for (unsigned seconds = 0; seconds < 300; ++seconds) {
+            sleep(1);
+            if ((seconds + 1) % 30 == 0) {
+                printf("[mhi2-encoder-session] elapsed=%u\n", seconds + 1);
+                fflush(NULL);
+            }
+        }
+        alarm(0);
+        CFRelease(original);
+        IOObjectRelease(service);
+        return 0;
+    }
+    if (argc == 2 && (!strcmp(argv[1], "--video-info") || !strcmp(argv[1], "--video-info-software") ||
+            !strcmp(argv[1], "--software-encoder-session"))) {
+        if (getuid() != 0) return 4;
+        int result = mhi2_video_probe(!strcmp(argv[1], "--software-encoder-session") ? 2 :
+            !strcmp(argv[1], "--video-info-software"));
+        CFRelease(original);
+        IOObjectRelease(service);
+        return result;
+    }
+    if (argc == 2 && !strcmp(argv[1], "--codec-info")) {
+        const uint32_t codecs[] = {0x66747663, 0x61766331, 0x66747668};
+        unsigned failures = 0;
+        if (getuid() != 0) return 4;
+        alarm(30); /* Bound even a native library deadlock in this probe process. */
+        for (unsigned i = 0; i < 3; i++) {
+            CFStringRef encoder = NULL;
+            CFDictionaryRef properties = NULL;
+            char identifier[256] = {0};
+            printf("[mhi2-codec-info] begin codec=0x%x\n", codecs[i]);
+            fflush(NULL);
+            int result = VTCopySupportedPropertyDictionaryForEncoder(800, 480,
+                codecs[i], NULL, &encoder, &properties);
+            if (result) ++failures;
+            if (encoder) CFStringGetCString(encoder, identifier, sizeof(identifier), 0x08000100);
+            printf("[mhi2-codec-info] result=%d codec=0x%x id=%s properties=%ld\n",
+                result, codecs[i], identifier, properties ? CFDictionaryGetCount(properties) : -1L);
+            fflush(NULL);
+            if (encoder) CFRelease(encoder);
+            if (properties) CFRelease(properties);
+        }
+        alarm(0);
+        CFRelease(original);
+        IOObjectRelease(service);
+        return failures ? 7 : 0;
+    }
 
     if (argc == 2 && !strcmp(argv[1], "--network-info")) {
         if (getuid() != 0) return 4;

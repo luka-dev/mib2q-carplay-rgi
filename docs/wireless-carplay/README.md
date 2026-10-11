@@ -16,16 +16,27 @@ the factory receiver. [Architecture](STOCK210_ARCHITECTURE.md) and
 [lifecycle evidence](STOCK210_RECEIVER_LIFECYCLE.md) describe the current path.
 
 Combined QNX/QEMU validation passed three DIO owner generations and two media
-sessions, including wired-priority drain and wireless resume. Real iPhone,
-MFi chip, radio, decoded media and physical USB behavior remain unverified.
+sessions, including wired-priority drain and wireless resume. Physical iPhone,
+MFi chip, radio, USB and on-unit media rendering remain unverified.
 The separate [iOS/QEMU laboratory](IOS_VM_LAB.md) has now negotiated actual
 iAP2 with emulated iOS 14 and verified live software MFi authentication:
 valid signatures receive `AA05`, while corrupted response/certificate
 signatures receive `AA04`. Native identification and CarPlay approval passed;
 a direct Ethernet bridge connects to the QNX receiver. Native Pair Setup/Verify
 and the QEMU-only live MFi-SAP responder established a real CarPlay session.
-Screen negotiation reached 800×480 / 30 FPS; iOS then crashed in encoder
-initialization. Encoded/decoded media and sustained playback remain pending.
+Screen negotiation reached 800×480 / 30 FPS. An opt-in codec-property workaround
+passes native A/B probes and lets `mediaserverd` reach encoder configuration.
+The earlier screen payload was status telemetry with zero sent frames; Maps crashes
+in VectorKit with no native Metal device. A separate CPU-pixel probe selects
+CarPlay's encoder usage; the default mode fails to allocate its internal
+hardware encoder. The native `UnifiedEncoderMode=0` override produced three
+800×480 H.264 frames per probe, verified by independent decoding. The VM-only
+software surface adapter now sends actual native UI through the stock encoder
+and receiver: 31 real 800×480 frames independently decoded, with 26 distinct
+image hashes and a visible Dashboard. Maps, continuous pacing, audio,
+AltScreen and a physical radio link remain separate checks.
+The [native screen test](NATIVE_SCREEN_TEST.md) describes the bounded software
+mode hold, native surface adapter, live session sequence and independent decode.
 The subsequent [iOS/stock210 code review and corrections](IOS210_CODE_REVIEW.md)
 fixed authentication-first iAP2 handling, unsupported stream 111 negotiation
 and wired SETUP with inherited wireless flags. The combined QEMU rerun covers

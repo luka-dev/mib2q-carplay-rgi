@@ -40,9 +40,17 @@ identification returned `1D02`, wired availability returned `4300`, and the
 actual UI accepted CarPlay approval. A direct NCM/QNX Ethernet link exchanges
 native frames. Native Pair Setup/Verify and the lab-only live MFi-SAP responder
 subsequently established a real CarPlay control session with QNX. Screen setup
-reached 800×480 / 30 FPS before an iOS codec-initialization crash; decoded media
-remains unverified. These
-results do not add a live backend to the QNX preloader or production daemon,
+reached 800×480 / 30 FPS. The lab-only codec-property workaround now passes
+native A/B probes; the earlier screen traffic reported zero sent frames and Maps
+crashes in VectorKit. A separate pixel probe finds an internal hardware-encoder
+allocation failure under the default mode. Native `UnifiedEncoderMode=0` then
+produced independently decoded 800×480 test frames. The VM-only native UI
+surface adapter subsequently delivered actual CarPlay video to stock QNX;
+independent decoding verified 31 frames and the Dashboard. Physical hardware,
+continuous pacing, audio and additional displays remain unverified. The
+bounded native screen result and recipe are
+in the [native screen runbook](NATIVE_SCREEN_TEST.md). The software MFi results
+do not add a live backend to the QNX preloader or production daemon,
 and do not establish physical iPhone or CarPlay media behavior.
 
 ## 🔐 Test profiles
@@ -177,7 +185,9 @@ timeout followed by a fresh successful session, actual signature corruption,
 and the combined stock210 lifecycle with three owner generations. The combined
 fixture separately validates CU pairing, encrypted media adapters, wired
 takeover and wireless resume. It uses synthetic peripherals and input-only
-fake OMX; decoded frames and physical radio timing remain unverified.
+fake OMX; this synthetic fixture does not prove decoded frames or physical
+radio timing. Independent native-iOS video decoding is covered by the separate
+[native screen test](NATIVE_SCREEN_TEST.md).
 
 For a single bootstrap exchange:
 

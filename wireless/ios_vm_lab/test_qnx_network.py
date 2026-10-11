@@ -1,4 +1,7 @@
 import unittest
+import sys
+import tempfile
+from types import SimpleNamespace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -6,6 +9,30 @@ import qnx_network
 
 
 class QNXNetworkTests(unittest.TestCase):
+    def test_ui_request_requires_isolated_software_mfi_build(self):
+        with self.assertRaisesRegex(ValueError, "requires software MFi"):
+            qnx_network.build("unused", request_ui=True)
+
+    def test_plaintext_video_capture_requires_isolated_software_mfi_build(self):
+        with self.assertRaisesRegex(ValueError, "capture requires software MFi"):
+            qnx_network.build("unused", capture_video=True)
+
+    def test_host_diagnostics_are_separate_from_guest_uart(self):
+        captured = {}
+        def popen(command, **kwargs):
+            captured["stdout"] = kwargs["stdout"].name
+            captured["stderr"] = kwargs["stderr"].name
+            return SimpleNamespace(pid=31415)
+        with tempfile.TemporaryDirectory() as directory:
+            out = Path(directory)
+            (out/"qemu_start_debug.bin").write_bytes(b"fixture")
+            with patch.object(qnx_network, "OUT", out), patch.object(qnx_network, "running", return_value=None), \
+                    patch.object(sys, "argv", ["qnx_network.py", "start", "--transport", "socket"]), \
+                    patch.object(qnx_network.subprocess, "Popen", side_effect=popen):
+                qnx_network.main()
+            self.assertEqual(captured["stdout"], str(out/"serial.log"))
+            self.assertEqual(captured["stderr"], str(out/"qemu-host.log"))
+
     def test_software_mfi_preserves_hook_guard_and_separate_rpc_interface(self):
         source = "    reopen /dev/ser1\n" + \
             "    /proc/boot/ifconfig lo0 alias 10.0.0.16\n" + \

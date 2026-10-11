@@ -108,7 +108,14 @@ def running() -> int | None:
     return pid if check.returncode == 0 and check.stdout.strip() == " ".join(command(transport)) else None
 
 
-def build(image: str, pairing: bool = False, media: bool = False, software_mfi: bool = False) -> None:
+def build(image: str, pairing: bool = False, media: bool = False, software_mfi: bool = False,
+          request_ui: bool = False, request_ui_music: bool = False, capture_video: bool = False) -> None:
+    if request_ui and not software_mfi:
+        raise ValueError("native UI requires software MFi")
+    if request_ui_music and not request_ui:
+        raise ValueError("Music UI requires the native UI request")
+    if capture_video and not software_mfi:
+        raise ValueError("native video capture requires software MFi")
     if running():
         raise RuntimeError("stop the owned QNX guest before rebuilding")
     base = capture.CARPLAY / "dio_mesh_provider_twin.bin"
@@ -131,6 +138,12 @@ def build(image: str, pairing: bool = False, media: bool = False, software_mfi: 
                      "-DMHI2Q_CAPTURE_HTTP_HEADER_QEMU")
         if software_mfi and "/work/libdio_capture_probe.so" in args:
             args += ("-DMHI2Q_CAPTURE_HTTP_DELEGATE_QEMU", "-DMHI2Q_CAPTURE_SOFTWARE_MFI_QEMU")
+        if request_ui and "/work/libdio_capture_probe.so" in args:
+            args += ("-DMHI2Q_CAPTURE_NATIVE_UI_QEMU",)
+        if request_ui_music and "/work/libdio_capture_probe.so" in args:
+            args += ("-DMHI2Q_CAPTURE_REQUEST_MUSIC_UI_QEMU",)
+        if capture_video and "/work/libdio_capture_probe.so" in args:
+            args += ("-DMHI2Q_CAPTURE_VIDEO_QEMU",)
         return original_docker(work, *args, **kwargs)
     capture.make_manifest, capture.docker = manifest, docker
     sys.argv = ["qemu_capture.py", "--mesh", "--start-experiment", "--mdnsd",
@@ -141,7 +154,9 @@ def build(image: str, pairing: bool = False, media: bool = False, software_mfi: 
         capture.make_manifest, capture.docker = original_manifest, original_docker
     (OUT / "build-record.json").write_text(json.dumps({"base_ifs_sha256": IMAGE_HASH,
         "output_sha256": hashlib.sha256((OUT / "qemu_start_debug.bin").read_bytes()).hexdigest(),
-        "toolchain": image, "interface": "ecm0", "pairing_hook": pairing, "native_media": media, "software_mfi": software_mfi,
+        "toolchain": image, "interface": "ecm0", "pairing_hook": pairing, "native_media": media, "software_mfi": software_mfi, "request_ui": request_ui,
+        "request_ui_music": request_ui_music,
+        "capture_video": capture_video,
         "pairing_hook_sha256": hashlib.sha256((ROOT / "build/wireless/libcarplay_hook.so").read_bytes()).hexdigest() if pairing else None,
         "synthetic_phone": False}, indent=2) + "\n")
 
@@ -154,22 +169,34 @@ def main() -> None:
     parser.add_argument("--pairing", action="store_true", help="build with the existing stock210 pairing hook and writable test store")
     parser.add_argument("--media", action="store_true", help="enable the existing paired media adapters; requires --pairing")
     parser.add_argument("--software-mfi", action="store_true", help="enable the QEMU-only host MFi-SAP responder; requires --pairing --media")
+    parser.add_argument("--request-ui", action="store_true", help="request the native CarPlay UI after RECORD; requires --software-mfi")
+    parser.add_argument("--request-ui-music", action="store_true", help="request the Music CarPlay UI URL instead of allowing the phone to choose Maps")
+    parser.add_argument("--capture-video", action="store_true", help="capture bounded plaintext AVC at the mock decoder; requires --software-mfi")
     args = parser.parse_args()
+    if args.request_ui_music and not args.request_ui:
+        parser.error("--request-ui-music requires --request-ui")
+    if args.capture_video and not args.software_mfi:
+        parser.error("--capture-video requires --software-mfi")
+    if args.request_ui and not args.software_mfi:
+        parser.error("--request-ui requires --software-mfi")
     if args.software_mfi and not args.media:
         parser.error("--software-mfi requires --media")
     if args.media and not args.pairing:
         parser.error("--media requires --pairing")
     OUT.mkdir(parents=True, exist_ok=True)
     if args.action == "build":
-        build(args.image, args.pairing, args.media, args.software_mfi)
+        build(args.image, args.pairing, args.media, args.software_mfi, args.request_ui,
+              args.request_ui_music, args.capture_video)
     elif args.action == "start":
         if running():
             raise RuntimeError("owned QNX receiver is already running")
         if not (OUT / "qemu_start_debug.bin").is_file():
             raise RuntimeError("build the QNX receiver first")
-        with (OUT / "serial.log").open("w") as stream:
+        # Host USB diagnostics can interrupt individual UART characters when
+        # merged into the same file. Keep decoder-input capture intact.
+        with (OUT / "serial.log").open("w") as stream, (OUT / "qemu-host.log").open("w") as host_log:
             child = subprocess.Popen(command(args.transport), stdin=subprocess.DEVNULL, stdout=stream,
-                                     stderr=subprocess.STDOUT, start_new_session=True)
+                                     stderr=host_log, start_new_session=True)
         (OUT / "qnx.pid").write_text(str(child.pid) + "\n")
         (OUT / "transport.txt").write_text(args.transport + "\n")
         print(json.dumps({"qnx_pid": child.pid, "transport": args.transport}))
