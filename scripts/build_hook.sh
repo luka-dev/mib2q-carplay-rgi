@@ -14,9 +14,12 @@ set -e
 
 [ "$#" -eq 0 ] || { echo "usage: ./scripts/build_hook.sh"; exit 2; }
 
-IMG=qnx65-armv7-toolchain:latest
+IMG=${QNX_TOOLCHAIN_IMAGE:-qnx65-armv7-toolchain:latest}
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*) PROJECT_DIR="$(cygpath -m "$PROJECT_DIR")"; export MSYS_NO_PATHCONV=1 ;;
+esac
 OUT="$PROJECT_DIR/build/libcarplay_hook.so"
 mkdir -p "$(dirname "$OUT")"
 
@@ -37,13 +40,16 @@ fi
 
 echo "=== CarPlay Hook Build (Docker $IMG) ==="
 
-docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
+docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/host "$IMG" bash -c '
   set -e
   export PATH=/opt/qnx650/host/linux/x86/usr/bin:$PATH
   export QNX_HOST=/opt/qnx650/host/linux/x86 QNX_TARGET=/opt/qnx650/target/qnx6
   CC=arm-unknown-nto-qnx6.5.0eabi-gcc
   NM=arm-unknown-nto-qnx6.5.0eabi-nm
   READELF=arm-unknown-nto-qnx6.5.0eabi-readelf
+  # The 32-bit QNX binutils cannot read Docker Desktop bind-mount inode numbers.
+  mkdir -p /src/build
+  cp -a /host/hook /src/
   cd /src/hook
   SRCS="framework/logging.c framework/state_trace.c framework/signal_guard.c framework/bus.c \
         framework/iap2_protocol.c framework/hook_framework.c \
@@ -65,6 +71,8 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
   [ "$init_size" = "000004" ] || { echo "REJECTED: .init_array size=$init_size (expected compiler-only 000004)"; exit 1; }
   n=$($NM -an /src/build/libcarplay_hook.so | grep -cE "rgd_module_(init|fini)" || true)
   [ "$n" = "0" ] || { echo "REJECTED: $n eager RGD constructor/destructor symbols"; exit 1; }
+  mkdir -p /host/build
+  cp /src/build/libcarplay_hook.so /host/build/
   echo "  built build/libcarplay_hook.so (emutls=0 init_array=compiler-only)"
 '
 
