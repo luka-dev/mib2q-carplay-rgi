@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "backend": "vphone",
+  "machine": "mhi2-carplay",
+  "bundle": "2.9.2",
+  "device": "iPhone17,3",
+  "ios": "26.6.2",
+  "ios_build": "23G90",
+  "cloudos": "26.4",
+  "cloudos_build": "23E5207q",
+  "iphone_source": "https://updates.cdn-apple.com/2026SummerFCS/29d685ce-f70d-45a0-9823-b1cd115f3927/iPhone17,3_26.6.2_23G90_Restore.ipsw",
+  "cloudos_source": "https://updates.cdn-apple.com/private-cloud-compute/c0ecdb4b310cf5239ab2b248dd3098eec297dc5aa3bbe6ada27273262b0b8b64",
+  "cpu": 6,
+  "memory_mb": 6144,
+  "disk_gb": 64,
+  "minimum_free_gb": 90,
+  "network": "nat",
+  "slim": "off",
+  "source_commit": "0da1bea0e58199a1888581135b94a69063d71779",
+  "launchpad_sha256": "9b6fb0fbfa76f87f7cf5ded526c996757732ebf78f548a1145ea88952785dcd4",
+  "bundle_sha256": "0af6dfa9706a80b4103a773c1b7fa809b036fb79dd4cd5bf64f2e680710bc3db"
+}

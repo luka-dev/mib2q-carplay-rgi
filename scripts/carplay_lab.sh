@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Active guest platform: vphone. The retained Inferno entry points are explicit.
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+action="${1:-doctor}"
+if (( $# )); then shift; fi
+qnx_dir="build/vphone-lab/qnx-network"
+case "$action" in
+    bootstrap)
+        exec python3 -m wireless.vphone_lab.bootstrap "$@" ;;
+    doctor|plan|create|start|stop|status|snapshot|diagnose|unlock|screenshot)
+        exec python3 -m wireless.vphone_lab.lab "$action" "$@" ;;
+    qnx-build)
+        source scripts/build_hook_common.sh
+        OUTDIR_REL=build/wireless-alt-qemu HOOK_WIRELESS=1 HOOK_AUDIO=0 \
+            WIRELESS_ALT_QEMU=1 QNX_TOOLCHAIN_VARIANT=8.5 carplay_build_hook
+        exec env QNX_TOOLCHAIN_VARIANT=8.5 python3 -m wireless.lab_common.qnx_receiver \
+            build --lab-dir "$qnx_dir" --pairing --media --software-mfi \
+            --request-ui --capture-video --paired-altscreen "$@" ;;
+    qnx-start|qnx-stop|qnx-status|qnx-info)
+        exec python3 -m wireless.lab_common.qnx_receiver "${action#qnx-}" \
+            --lab-dir "$qnx_dir" --transport socket "$@" ;;
+    mfi)
+        exec python3 -m wireless.lab_common.mfi_sap --qnx-dir "$qnx_dir" "$@" ;;
+    extract)
+        exec python3 -m wireless.lab_common.extract_native_video "$@" ;;
+    pacing)
+        exec python3 -m wireless.lab_common.frame_pacing "$@" ;;
+    wire-pacing)
+        exec python3 -m wireless.lab_common.screen_wire_pacing "$@" ;;
+    *)
+        printf 'Unknown action: %s\n' "$action" >&2
+        exit 2 ;;
+esac

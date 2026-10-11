@@ -6,6 +6,11 @@ _Prepared iOS/QNX laboratory · 2026-10-11 · Native CarPlay video independently
 
 [Lab setup and evidence](IOS_VM_LAB.md) · [Software MFi tests](TEST_SOFTWARE_MFI.md) · [Wireless overview](README.md)
 
+The [vphone migration](VPHONE_LAB.md) is now the active guest bring-up. The frame
+counts and decoder evidence below belong to retained Inferno/iOS 14 runs;
+they do not establish video from vphone. QNX capture and pacing tools have moved
+to `wireless/lab_common/`, with compatible legacy command entry points.
+
 ## 📋 Verified baseline
 
 The isolated iOS guest boots with real SEP and keybag state, accepts live

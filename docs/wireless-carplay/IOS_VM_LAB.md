@@ -6,6 +6,11 @@ _Local bring-up evidence · 2026-10-11 · Native iAP2/MFi, MFi-SAP and QNX contr
 
 [Wireless overview](README.md) · [Software MFi tests](TEST_SOFTWARE_MFI.md)
 
+The active guest platform has moved to [vphone](VPHONE_LAB.md) on
+`feat/vphone-carplay-lab`. This document preserves the Inferno/iOS 14 recipe and
+measured evidence. Its fixed-identity USB and address-pinned helpers remain for
+historical reproduction and are not installed into the vphone guest.
+
 ## 📋 Verified state
 
 A native Apple Silicon build of ChefKiss Inferno boots Apple's iOS 14.0 beta 5

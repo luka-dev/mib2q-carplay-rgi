@@ -6,6 +6,11 @@ _Host crypto and iAP2 control validation · 2026-10-09._
 
 [Wireless overview](README.md) · [iAP2 daemon](IAP2_DAEMON.md)
 
+The active [vphone laboratory](VPHONE_LAB.md) uses the shared, integrity-checked
+fixture and MFi-SAP service in `wireless/lab_common/`. Existing Inferno/iOS 14
+authentication evidence below is historical; native iAP2 on vphone still needs
+guest-specific transport validation.
+
 ## 🎯 Purpose and boundary
 
 The optional `software-mfi-test` Cargo feature supplies `TestSoftwareMfi`, an

@@ -8,6 +8,12 @@ _Stock210 mod architecture, implementation evidence and offline validation — 2
 
 ## 📋 Current status
 
+The active iOS laboratory is migrating to [vphone](VPHONE_LAB.md) on branch
+`feat/vphone-carplay-lab`: pinned iOS 26.6.2, paravirtual graphics and the shared
+stock-210 QNX receiver. Launchpad is installed; Research Guests and Host Setup
+still block creation. Native vphone CarPlay/MFi and stream-111 video remain
+unverified. The Inferno results below are retained historical evidence.
+
 The MU1316 / P5087 candidate retains factory AirPlay **210.81** on QNX 6.5 ARM.
 The C wireless hook supplies pairing and modern control/event/media security;
 the Rust daemon handles iAP2, MFi and Wi-Fi bootstrap. The private280 SDK code
