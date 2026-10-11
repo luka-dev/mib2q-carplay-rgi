@@ -19,17 +19,20 @@ they do not demonstrate our CarPlay sender, encoder, MFi or AltScreen path.[^1]
 |---|---|
 | Host | Apple M3 Max, macOS 26.5.1 |
 | Launchpad | Notarized 2.9.2 installed; archive SHA-256 verified |
-| Core Bundle | 2.9.2 downloaded and hash-verified; installation pending Host Setup |
+| Core Bundle | 2.9.2 installed; SHA-256, policy and host preflight passed |
 | Research Guests | Enabled; verified after the owner's Recovery step |
-| Developer Tools / helper | Access not granted; helper not installed |
-| Dedicated guest | Not created; no vphone CarPlay frames observed |
+| Developer Tools / helper | Access allowed; signed helper `ready (16)` |
+| Dedicated guest | Creation in progress through template `template-65ac465f`; no vphone CarPlay frames observed |
 | QNX receiver | Fresh build passed ABI checks; native `/info` verified in the new directory |
 | Shared signer | Loopback runtime returned a bounded 711-byte MFi-SAP response; host crypto tests passed |
 | iAP2 and Ethernet attachment | Integration and live acceptance pending a running vphone guest |
 
 `scripts/carplay_lab.sh doctor` writes the actual host report to
-`build/vphone-lab/doctor.json` and exits nonzero until its checks pass. No code
-changes SIP, boot arguments, AMFI policy or Research Guests.
+`build/vphone-lab/doctor.json` and exits nonzero until its checks pass. Host Setup
+now passes. At the user's explicit request, the agent used local sudo to enable
+Developer Mode and install the exact signed helper; its client-signature and
+administrator-authorization checks remain intact. No credential was saved in
+files or Git. The installer does not change SIP, boot arguments or Research Guests.
 
 ## 📦 Reproducible guest profile
 
@@ -101,7 +104,9 @@ No physical 2.4 GHz radio behavior is measured by this virtual stand.
 
 The verified release archives are cached locally. `bootstrap` can reproduce
 their verification and install Launchpad without replacing an unrelated existing
-installation:
+installation. Extraction is temporary so a second persistent app with the same
+bundle ID cannot confuse LaunchServices or UI automation. Existing executables
+must match the verified release even when their version strings match.
 
 ```sh
 scripts/carplay_lab.sh bootstrap
@@ -109,16 +114,16 @@ scripts/carplay_lab.sh plan
 scripts/carplay_lab.sh doctor
 ```
 
-The remaining host steps belong to the Mac's owner, as required by the upstream
-skill.[^5] Research Guests has passed on this Mac. For a new host, enable it in
-Recovery before continuing:
+Host Setup has passed on this Mac; the steps below describe a new host. Its owner
+authorizes the security and helper changes, as required by the upstream skill.[^5]
+Enable Research Guests in Recovery before continuing:
 
 ```sh
 # In macOS Recovery, Terminal:
 csrutil allow-research-guests enable
 ```
 
-On this Mac, open `/Applications/vphone-launchpad.app` and complete
+On a new host, open `/Applications/vphone-launchpad.app` and complete
 **Host Setup**: grant Developer Tools access and install its helper using the
 administrator prompt. Then install the explicitly pinned Core Bundle through
 the official client. The helper may request administrator authorization.[^5]
@@ -141,7 +146,7 @@ existing operation rather than starting another restore.[^5]
 
 ## 🧪 Shared receiver and evidence tools
 
-Migration validation passed 15 guest/bootstrap ownership tests and the 88 retained
+Migration validation passed 16 guest/bootstrap ownership tests and the 88 retained
 laboratory regression tests. A fresh QNX build, native `/info` and the shared
 signer's loopback response were checked. These results establish the migrated
 tools; they do not establish a vphone sender session.

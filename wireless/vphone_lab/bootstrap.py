@@ -9,6 +9,7 @@ from pathlib import Path
 import plistlib
 import subprocess
 import sys
+import tempfile
 import urllib.request
 
 if __package__:
@@ -53,6 +54,29 @@ def download(name: str, digest: str, version: str, destination: Path) -> Path:
     return destination
 
 
+def install_launchpad(archive: Path, directory: Path, version: str) -> None:
+    # A second persistent .app with the same bundle ID makes LaunchServices
+    # and computer-use app lookup ambiguous. Keep only the installed copy.
+    with tempfile.TemporaryDirectory(dir=directory, prefix=".launchpad-extract-") as unpacked:
+        subprocess.run(["ditto", "-x", "-k", str(archive), unpacked], check=True)
+        source = Path(unpacked) / "vphone-launchpad.app"
+        subprocess.run(["codesign", "--verify", "--deep", "--strict", str(source)], check=True)
+        subprocess.run(["spctl", "--assess", "--type", "execute", str(source)], check=True)
+        target = CLI.parents[2]
+        if target.exists():
+            installed = plistlib.loads((target / "Contents/Info.plist").read_bytes())
+            if installed["CFBundleShortVersionString"] != version:
+                raise RuntimeError("another Launchpad version is installed; replacement requires review")
+            subprocess.run(["codesign", "--verify", "--deep", "--strict", str(target)], check=True)
+            for relative in ("Contents/MacOS/vphone-launchpad", "Contents/MacOS/vphone-launchpad-cli",
+                             "Contents/Library/LaunchServices/com.vphone.launchpad.helper"):
+                if hashlib.sha256((target / relative).read_bytes()).digest() != \
+                        hashlib.sha256((source / relative).read_bytes()).digest():
+                    raise RuntimeError("installed Launchpad executables differ from the verified release")
+        else:
+            subprocess.run(["ditto", str(source), str(target)], check=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--download-only", action="store_true")
@@ -66,19 +90,7 @@ def main():
                          (f"VPhone-{version}.zip", settings["bundle_sha256"])):
         archives.append(download(name, digest, version, base / name))
     if not args.download_only:
-        unpacked = base / "unpacked"
-        for archive in archives:
-            subprocess.run(["ditto", "-x", "-k", str(archive), str(unpacked)], check=True)
-        source = unpacked / "vphone-launchpad.app"
-        subprocess.run(["codesign", "--verify", "--deep", "--strict", str(source)], check=True)
-        subprocess.run(["spctl", "--assess", "--type", "execute", str(source)], check=True)
-        target = CLI.parents[2]
-        if target.exists():
-            installed = plistlib.loads((target / "Contents/Info.plist").read_bytes())
-            if installed["CFBundleShortVersionString"] != version:
-                raise RuntimeError("another Launchpad version is installed; replacement requires review")
-        else:
-            subprocess.run(["ditto", str(source), str(target)], check=True)
+        install_launchpad(archives[0], base, version)
         directory = Path.home() / ".local/bin"
         directory.mkdir(parents=True, exist_ok=True)
         link = directory / "vphone-launchpad-cli"

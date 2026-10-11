@@ -1,6 +1,8 @@
 import hashlib
 import io
 from pathlib import Path
+import plistlib
+import shutil
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -45,6 +47,32 @@ class BootstrapIntegrityTests(unittest.TestCase):
                 self.assertEqual(bootstrap.download("release.zip", digest, "2.9.2", target), target)
                 self.assertEqual(bootstrap.download("release.zip", digest, "2.9.2", target), target)
             network.assert_called_once()
+
+    def test_app_extraction_is_temporary_and_existing_binaries_must_match(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            target = base / "Applications/vphone-launchpad.app"
+            cli = target / "Contents/MacOS/vphone-launchpad-cli"
+            def make_app(app):
+                for relative in ("Contents/MacOS/vphone-launchpad", "Contents/MacOS/vphone-launchpad-cli",
+                                 "Contents/Library/LaunchServices/com.vphone.launchpad.helper"):
+                    path = app / relative
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_bytes(b"verified executable")
+                (app / "Contents/Info.plist").write_bytes(plistlib.dumps({"CFBundleShortVersionString": "2.9.2"}))
+            def run(arguments, **kwargs):
+                if arguments[:3] == ["ditto", "-x", "-k"]:
+                    make_app(Path(arguments[4]) / "vphone-launchpad.app")
+                elif arguments[0] == "ditto":
+                    shutil.copytree(arguments[1], arguments[2])
+            with patch.object(bootstrap, "CLI", cli), patch.object(bootstrap.subprocess, "run", side_effect=run):
+                bootstrap.install_launchpad(base / "release.zip", base, "2.9.2")
+                bootstrap.install_launchpad(base / "release.zip", base, "2.9.2")
+                cli.write_bytes(b"another build using the same version")
+                with self.assertRaisesRegex(RuntimeError, "differ"):
+                    bootstrap.install_launchpad(base / "release.zip", base, "2.9.2")
+            self.assertEqual(cli.read_bytes(), b"another build using the same version")
+            self.assertFalse(list(base.glob(".launchpad-extract-*")))
 
 
 if __name__ == "__main__":
