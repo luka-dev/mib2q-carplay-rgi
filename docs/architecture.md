@@ -117,7 +117,8 @@ Screen/EGL/GLES libs at runtime. `build_hook.sh` also enforces the 5-symbol expo
 python3 tests/test_rgd_native_contract.py   # after build_java.sh: real C parser + slot writer -> Java -> stock BAP sender
 ```
 
-The Java suites need the MU1316 stock jar and JDK under `../../Tools/jxe2jar`.
+The Java suites run in Docker (no host JDK) against the MU1316 stock jar and OSGi libraries under
+`../../Tools/jxe2jar`; the README lists the variables that point them elsewhere.
 
 Deploy by copying the runtime files to `/mnt/app/root/hooks/`, pointing `smartphone_integrator.json`
 at `carplay_child.json`, and dropping `carplay_hook.jar` into `/mnt/app/eso/hmi/lsd/jars/`.

@@ -4,12 +4,22 @@
 Extract source functions verbatim for the host: only time, slot assignment and
 linked-lane lookup are fixtures. Does not emulate QNX services or HUD hardware.
 Run after scripts/build_java.sh; generated sources/frames stay under build/.
+
+The Java half (tests/RgdNativeContractProbe.java) uses scripts/java/docker.sh and
+its stock/dependency overrides; CARPLAY_HOOK_JAR defaults to build/carplay_hook.jar.
+RGD_CONTRACT_STAGE=native stops after writing the frames, so the C and Java halves
+can run separately (for example in different Docker images). No host JDK is used.
+RGD_CONTRACT_OUT moves the output; RGD_CONTRACT_SANITIZE replaces address,undefined
+(ASan hangs at random in Docker on kernels with high mmap ASLR entropy).
 """
 from pathlib import Path
+import os
 import subprocess
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-BUILD = ROOT / 'build/rgd-native-contract'
+BUILD = Path(os.environ.get('RGD_CONTRACT_OUT') or ROOT / 'build/rgd-native-contract')
+SANITIZE = os.environ.get('RGD_CONTRACT_SANITIZE') or 'address,undefined'
 BUILD.mkdir(parents=True, exist_ok=True)
 hook = (ROOT / 'hook/routeguidance/rgd_hook.c').read_text()
 bus = (ROOT / 'hook/framework/bus.c').read_text()
@@ -68,53 +78,15 @@ int main(int argc,char **argv) {
 }
 '''
 (BUILD / 'native_input.c').write_text(c)
-subprocess.run(['cc','-std=c99','-O1','-fsanitize=address,undefined','-fno-omit-frame-pointer','-DENABLE_LOGGING=0','-I'+str(ROOT/'hook'),str(BUILD/'native_input.c'),str(ROOT/'hook/routeguidance/rgd_tlv.c'),'-o',str(BUILD/'native_input')],check=True)
+subprocess.run(['cc','-std=c99','-O1','-fsanitize=' + SANITIZE,'-fno-omit-frame-pointer','-DENABLE_LOGGING=0','-I'+str(ROOT/'hook'),str(BUILD/'native_input.c'),str(ROOT/'hook/routeguidance/rgd_tlv.c'),'-o',str(BUILD/'native_input')],check=True)
 frames = [BUILD / name for name in ('old-slot.txt','new-no-angle.txt','new-known-angle.txt','new-generation.txt')]
 subprocess.run([str(BUILD/'native_input'),*map(str,frames)],check=True)
-java = r'''
-import com.luka.carplay.rgd.*;
-import com.luka.carplay.bus.CarplayBus;
-import com.luka.carplay.framework.Log;
-import java.nio.file.*;
-import java.lang.reflect.*;
-import java.util.Arrays;
-public class NativeInputProbe {
-    static void parse(RouteGuidance rg,String file) throws Exception {
-        byte[] bytes=Files.readAllBytes(Paths.get(file));
-        Method m=RouteGuidance.class.getDeclaredMethod("parse",CarplayBus.Data.class);m.setAccessible(true);
-        m.invoke(rg,CarplayBus.parseText(bytes,bytes.length));
-    }
-    static RouteGuidance.State state(RouteGuidance rg) throws Exception {return (RouteGuidance.State)ManeuverChainAudit.get(rg,"state");}
-    static byte[] hud(ManeuverChainAudit audit,RouteGuidance rg) throws Exception {
-        audit.sendBap.invoke(audit.bridge,state(rg));return audit.sender.input[0].sideStreets;
-    }
-    public static void main(String[] args) throws Exception {
-        Log.setLevel(-1);ManeuverChainAudit audit=new ManeuverChainAudit();
-        RouteGuidance old=new RouteGuidance();parse(old,args[0]);parse(old,args[1]);
-        RouteGuidance.State s=state(old);
-        System.out.println("ACTUAL C -> JAVA, missing angle: angle="+s.mTurnAngle[0]+", exit="+s.mExitAngle[0]+", HUD roads="+Arrays.toString(hud(audit,old)));
-        if(s.mTurnAngle[0]!=1000 || s.mExitAngle[0]!=1000)throw new AssertionError("C sentinel lost");
-        parse(old,args[2]);RouteGuidance fresh=new RouteGuidance();parse(fresh,args[2]);
-        byte[] inherited=hud(audit,old),clean=hud(audit,fresh);
-        System.out.println("ACTUAL C -> JAVA, known new angle: angle="+s.mTurnAngle[0]+", inherited roads="+Arrays.toString(s.mJunctionAngles[0])+", road="+s.mAfterRoad[0]+", step="+s.mDistance[0]);
-        System.out.println("ACTUAL JAVA -> BAP, same new input: reused-slot sideStreets="+Arrays.toString(inherited)+", fresh-slot sideStreets="+Arrays.toString(clean));
-        if(!Arrays.equals(inherited,clean) || s.mJunctionAngles[0]!=null || s.mAfterRoad[0]!=null || s.mDistance[0]!=-1)
-            throw new AssertionError("new native slot inherited omitted fields");
-        RouteGuidance direct=new RouteGuidance();parse(direct,args[0]);parse(direct,args[2]);
-        if(!Arrays.equals(hud(audit,direct),clean))throw new AssertionError("known-angle slot reassignment differs from a fresh slot");
-        RouteGuidance reset=new RouteGuidance();parse(reset,args[0]);parse(reset,args[3]);
-        if(state(reset).routeGeneration!=101 || state(reset).mVer[0]!=2
-                || state(reset).mAfterRoad[0]!=null || state(reset).mJunctionAngles[0]!=null)
-            throw new AssertionError("native reset generation not received");
-        System.out.println("Native RGI contract: source sentinel, slot replacement, same-clock route reset and identical clean HUD descriptors PASS");
-    }
-}
-'''
-(BUILD/'NativeInputProbe.java').write_text(java)
-tools = ROOT.parent.parent/'Tools/jxe2jar'
-jdk=tools/'jvms/zulu8.78.0.19-ca-jdk8.0.412-macosx_aarch64/zulu-8.jdk/Contents/Home'
-cp=':'.join(map(str,[ROOT/'build/carplay_hook.jar',tools/'out/MU1316-final.jar',tools/'libs/org.osgi.framework-1.10.0.jar',tools/'libs/org.osgi.util.tracker-1.5.4.jar']))
-subprocess.run([str(jdk/'bin/javac'),'-encoding','UTF-8','-cp',cp,'-d',str(BUILD),str(ROOT/'tests/ManeuverChainAudit.java'),str(BUILD/'NativeInputProbe.java')],check=True)
-result=subprocess.run([str(jdk/'bin/java'),'-Xverify:none','-cp',str(BUILD)+':'+cp,'NativeInputProbe',*map(str,frames)],check=True,text=True,capture_output=True)
+if os.environ.get('RGD_CONTRACT_STAGE') == 'native':
+    print('Native RGI contract frames: ' + ' '.join(frame.name for frame in frames))
+    sys.exit(0)
+
+environment = dict(os.environ, JAVA_SKIP_BUILD='1', RGD_CONTRACT_FRAMES=str(BUILD.resolve()))
+result = subprocess.run(['bash', str(ROOT / 'scripts/java/docker.sh'), 'test', 'contract'],
+                        env=environment, check=True, text=True, capture_output=True)
 (BUILD/'native-input-result.txt').write_text(result.stdout)
 print(result.stdout,end='')
