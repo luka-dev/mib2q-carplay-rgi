@@ -11,6 +11,13 @@ def record(number, data):
 
 
 class ExtractVideoTests(unittest.TestCase):
+    def test_primary_and_cluster_records_are_kept_separate(self):
+        primary = b"\0\0\0\1\x67main"
+        cluster = b"\0\0\0\1\x67cluster"
+        log = record(1,primary)+record(1,cluster).replace("native-video-qemu","native-cluster-qemu")
+        self.assertEqual(extract(log),(primary,1))
+        self.assertEqual(extract(log,"[native-cluster-qemu] "),(cluster,1))
+        with self.assertRaises(ValueError): extract(log,"untrusted")
     def test_uart_prefixes_and_crlf_preserve_exact_buffers(self):
         a, b = b"\0\0\0\1\x67abc", b"\0\0\0\1\x65def"
         log = "unrelated\n"+record(1, a)+record(2, b)
@@ -30,9 +37,17 @@ class ExtractVideoTests(unittest.TestCase):
 
     def test_declared_sizes_and_chunk_lengths_are_bounded(self):
         for log in ("[native-video-qemu] begin=1 bytes=262145\n",
-                    "[native-video-qemu] begin=33 bytes=8\n",
+                    "[native-video-qemu] begin=4097 bytes=8\n",
                     "[native-video-qemu] begin=1 bytes=300\n[native-video-qemu] record=1 offset=0 hex="+"00"*257):
             with self.assertRaises(ValueError): extract(log)
+
+    def test_long_capture_and_timestamp_validation(self):
+        data = b"\0\0\0\1\x65abc"
+        log = "".join(record(i, data).replace(f"bytes={len(data)}", f"bytes={len(data)} mono_ns={i*100000000}")
+                      for i in range(1, 101))
+        self.assertEqual(extract(log), (data*100, 100))
+        with self.assertRaises(ValueError):
+            extract(record(1, data).replace("bytes=8", f"bytes=8 mono_ns={2**64}"))
 
     def test_random_chunk_boundaries_round_trip_and_missing_chunk_fails(self):
         rng = random.Random(8030)

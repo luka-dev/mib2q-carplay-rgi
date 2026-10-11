@@ -61,6 +61,7 @@ carplay_build_hook() {
   # audio; no QSA/AirPlay audio interposers, no libcarplay_apac.so).
   local HOOK_AUDIO="${HOOK_AUDIO:-1}"
   local HOOK_WIRELESS="${HOOK_WIRELESS:-0}"
+  local WIRELESS_ALT_QEMU="${WIRELESS_ALT_QEMU:-0}"
   # There is one production image: logging compiled in, WARN only, and every runtime
   # diagnostic behind carplay_verbose (log_verbose()).  The old LOG=0 variant is gone.
   [ "${LOG:-}" = 0 ] && { echo "LOG=0 is gone: the hook always logs WARN; touch carplay_verbose for diagnostics"; return 1; }
@@ -69,6 +70,11 @@ carplay_build_hook() {
   [[ "$ALTSCREEN_PACE_TRACE" == "0" || "$ALTSCREEN_PACE_TRACE" == "1" ]] || { echo "Invalid ALTSCREEN_PACE_TRACE=$ALTSCREEN_PACE_TRACE (0|1)"; return 1; }
   [[ "$HOOK_AUDIO" == "0" || "$HOOK_AUDIO" == "1" ]] || { echo "Invalid HOOK_AUDIO=$HOOK_AUDIO (0|1)"; return 1; }
   [[ "$HOOK_WIRELESS" == "0" || "$HOOK_WIRELESS" == "1" ]] || { echo "Invalid HOOK_WIRELESS=$HOOK_WIRELESS (0|1)"; return 1; }
+  [[ "$WIRELESS_ALT_QEMU" == "0" || "$WIRELESS_ALT_QEMU" == "1" ]] || { echo "Invalid WIRELESS_ALT_QEMU (0|1)"; return 1; }
+  if [ "$WIRELESS_ALT_QEMU" = "1" ]; then
+      [ "$HOOK_WIRELESS" = "1" ] || { echo "WIRELESS_ALT_QEMU requires HOOK_WIRELESS=1"; return 1; }
+      case "$OUTDIR_REL" in build/wireless-alt-qemu) ;; *) echo "WIRELESS_ALT_QEMU must use build/wireless-alt-qemu"; return 1 ;; esac
+  fi
   # A trace build writes only its compact ledger, so the normal hook log is compiled out.
   local TRACE_ONLY=0
   [[ "$AUDIO_STATE_TRACE" == "1" || "$ALTSCREEN_PACE_TRACE" == "1" ]] && TRACE_ONLY=1
@@ -76,8 +82,9 @@ carplay_build_hook() {
 
   local CFLAGS_EXTRA="-D__QNX__ -mfpu=neon -mfloat-abi=softfp"
   CFLAGS_EXTRA="$CFLAGS_EXTRA -DHOOK_WIRELESS=$HOOK_WIRELESS"
+  [ "$WIRELESS_ALT_QEMU" = "1" ] && CFLAGS_EXTRA="$CFLAGS_EXTRA -DMHI2Q_WIRELESS_ALT_QEMU=1"
   if [ "$HOOK_WIRELESS" = "1" ]; then
-      python3 "$PROJECT_DIR/hook/wireless/build_pairing.py" || return 1
+      QNX_TOOLCHAIN_VARIANT="$QNX_TOOLCHAIN_VARIANT" python3 "$PROJECT_DIR/hook/wireless/build_pairing.py" || return 1
   fi
   if [ "$HOOK_AUDIO" == "0" ]; then
       CFLAGS_EXTRA="$CFLAGS_EXTRA -DHOOK_AUDIO=0"
@@ -289,7 +296,7 @@ carplay_build_hook() {
     echo "  undefined:$($NM -D --undefined-only $SO | sed "s/^ *//" | awk "\$1 == \"U\" { printf \" %s\", \$2 }" | head -c 400)"
     echo "  built $OUTDIR_REL/libcarplay_apac.so (ABI v1, emutls=0 exceptions=0 rtti=0 stl=0 libstdc++=0)"
     echo "  built $OUTDIR_REL/libcarplay_hook.so (APAC=dlopen, emutls=0 init_array=compiler-only)"
-  '
+  ' || return 1
 
   if [ "$AUDIO_STATE_TRACE" = "1" ]; then
       strings "$OUT" | grep -q "IAP_NOW_PLAYING_START" || {

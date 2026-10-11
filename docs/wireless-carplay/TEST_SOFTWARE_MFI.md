@@ -46,9 +46,14 @@ crashes in VectorKit. A separate pixel probe finds an internal hardware-encoder
 allocation failure under the default mode. Native `UnifiedEncoderMode=0` then
 produced independently decoded 800×480 test frames. The VM-only native UI
 surface adapter subsequently delivered actual CarPlay video to stock QNX;
-independent decoding verified 31 frames and the Dashboard. Physical hardware,
-continuous pacing, audio and additional displays remain unverified. The
-bounded native screen result and recipe are
+independent decoding verified 31 frames and the Dashboard. The longer
+60 guest-second run independently decoded 519 frames and measured screen
+packet intervals in PCAP (10.84 access units/s over 47.78 host seconds).
+This does not prove sustained 30 FPS, physical RF, audio or second-display
+pixels. The QEMU-only paired AltScreen build negotiated a native 1440×542
+CarInstruments display and stream 111, but no cluster video units arrived.
+The legacy attempt stopped during control setup. The bounded native screen
+result and recipe are
 in the [native screen runbook](NATIVE_SCREEN_TEST.md). The software MFi results
 do not add a live backend to the QNX preloader or production daemon,
 and do not establish physical iPhone or CarPlay media behavior.

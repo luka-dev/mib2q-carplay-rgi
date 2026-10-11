@@ -12,6 +12,7 @@ import shutil
 import struct
 import subprocess
 import tempfile
+import time
 import zlib
 
 from lab import DEFAULT_LAB, running_pid, check_guest_disks
@@ -147,9 +148,75 @@ def gpt_view(head: bytes, tail: bytes, size: int) -> tuple[list[tuple[int, bytes
             ((sectors - 1) * 512, header(sectors - 1, 1, sectors - 1 - slots))], start, end
 
 
+def detach_owned_image(device: str) -> None:
+    """Called only for the device returned by attaching the validated clone."""
+    for _ in range(3):
+        result = subprocess.run(["hdiutil", "detach", device], capture_output=True, text=True)
+        if not result.returncode:
+            return
+        time.sleep(1)
+    # All provisioning writes have finished; the remaining busy users may be
+    # host indexers. Force detachment is restricted to this owned attachment.
+    subprocess.run(["hdiutil", "detach", device, "-force"], check=True)
+
+
+def save_gpt_recovery(base: Path, image: Path, head: bytes, tail: bytes, start: int, end: int) -> None:
+    size = image.stat().st_size
+    prefix, suffix = head[:start], tail[-(size-end):]
+    (base / "native-gpt-head.bin").write_bytes(prefix)
+    (base / "native-gpt-tail.bin").write_bytes(suffix)
+    record = {"pending": True, "image": str(image.resolve()), "size": size,
+              "head_sha256": hashlib.sha256(prefix).hexdigest(), "tail_sha256": hashlib.sha256(suffix).hexdigest()}
+    (base / "native-gpt-recovery.json").write_text(json.dumps(record, indent=2)+"\n")
+
+
+def recover_gpt(base: Path, image: Path) -> None:
+    record_path = base / "native-gpt-recovery.json"
+    if not record_path.exists():
+        return
+    if record_path.stat().st_size > 4096:
+        raise ValueError("invalid GPT recovery record")
+    record = json.loads(record_path.read_text())
+    if not record.get("pending"):
+        return
+    if record["image"] != str(image.resolve()) or record["size"] != image.stat().st_size:
+        raise ValueError("GPT recovery image mismatch")
+    edges = []
+    for name in ("head", "tail"):
+        path = base / f"native-gpt-{name}.bin"
+        if path.is_symlink() or path.stat().st_size > 1048576:
+            raise ValueError("invalid GPT recovery edge")
+        data = path.read_bytes()
+        if hashlib.sha256(data).hexdigest() != record[f"{name}_sha256"]:
+            raise ValueError("GPT recovery checksum mismatch")
+        edges.append(data)
+    head, tail = edges
+    writes, start, end = gpt_view(head, tail, record["size"])
+    if len(head) != start or len(tail) != record["size"]-end:
+        raise ValueError("GPT recovery bounds mismatch")
+    with image.open("rb") as f:
+        f.seek(0); current_head = f.read(start)
+        f.seek(end); current_tail = f.read(len(tail))
+    if (current_head, current_tail) != (head, tail):
+        with image.open("rb") as f:
+            for offset, data in writes:
+                f.seek(offset)
+                if f.read(len(data)) != data:
+                    raise ValueError("current GPT view differs from the saved recovery contract")
+        with image.open("r+b") as f:
+            f.write(head); f.seek(end); f.write(tail); f.flush(); os.fsync(f.fileno())
+    record["pending"] = False
+    record_path.write_text(json.dumps(record, indent=2)+"\n")
+
+
 def build_helper(base: Path, screen_render_probe: bool = False,
-                 screen_framebuffer_probe: bool = False) -> str:
-    capture_enabled = screen_render_probe or screen_framebuffer_probe
+                 screen_framebuffer_probe: bool = False, screen_seconds: int = 0,
+                 screen_fps: int = 30, cluster_framebuffer_probe: bool = False) -> str:
+    if cluster_framebuffer_probe and screen_render_probe:
+        raise ValueError("cluster framebuffer cannot use the capture-only helper role")
+    if not 0 <= screen_seconds <= 120 or not 1 <= screen_fps <= 30 or screen_seconds and not (screen_framebuffer_probe or cluster_framebuffer_probe):
+        raise ValueError("bounded screen duration requires the framebuffer probe; duration 0..120, FPS 1..30")
+    capture_enabled = screen_render_probe or screen_framebuffer_probe or cluster_framebuffer_probe
     libraries = {
         "libSystem": ("/usr/lib/libSystem.B.dylib", ["_printf", "_puts", "_snprintf", "_sleep", "_alarm", "_strcmp", "_getuid", "_setuid", "_setgid", "_fflush",
             "_notify_register_check", "_notify_set_state", "_notify_post", "_notify_cancel",
@@ -183,13 +250,15 @@ def build_helper(base: Path, screen_render_probe: bool = False,
     extra_objects = []
     defines = []
     if capture_enabled:
-        libraries["libSystem"][1].extend(["_unlink", "_bzero", "_mach_task_self_", "_mach_absolute_time",
+        libraries["libSystem"][1].extend(["_unlink", "_bzero", "_mach_task_self_", "_mach_absolute_time", "_mach_timebase_info",
             "_memcmp", "_dlopen", "__dyld_image_count", "__dyld_get_image_name", "__dyld_get_image_header",
             "__dyld_get_image_vmaddr_slide"])
         libraries["IOKit"][1].extend(["_IOServiceOpen", "_IOServiceClose"])
         libraries["CoreFoundation"][1].append("_CFRetain")
         libraries["CoreFoundation"][1].extend(["_CFRunLoopGetCurrent", "_CFRunLoopAddSource",
-            "_CFRunLoopRemoveSource", "_CFRunLoopRunInMode", "_kCFRunLoopDefaultMode"])
+            "_CFRunLoopRemoveSource", "_CFRunLoopRunInMode", "_kCFRunLoopDefaultMode",
+            "_CFGetTypeID", "_CFArrayGetTypeID", "_CFDictionaryGetTypeID", "_CFNumberGetTypeID",
+            "_CFArrayGetCount", "_CFArrayGetValueAtIndex", "_CFNumberGetValue", "_CFShow"])
         libraries["CoreVideo"][1].extend(["_CVPixelBufferGetIOSurface", "_kCVPixelBufferIOSurfacePropertiesKey"])
         libraries.update({
             "QuartzCore": ("/System/Library/Frameworks/QuartzCore.framework/QuartzCore", ["_CARenderServerRenderDisplay"]),
@@ -203,6 +272,8 @@ def build_helper(base: Path, screen_render_probe: bool = False,
                 "_kIOSurfaceAllocSize", "_kIOSurfacePixelFormat", "_kIOSurfaceIsGlobal"])})
         extra_objects = [str(base / "screen_render_probe.o")]
         defines = ["-DMHI2_IOS_VM_SCREEN_RENDER_PROBE"]
+        if cluster_framebuffer_probe:
+            defines.append("-DMHI2_IOS_VM_CLUSTER_PROBE")
     for name, (install, symbols) in libraries.items():
         (base / f"{name}.tbd").write_text("--- !tapi-tbd-v3\narchs: [ arm64 ]\nplatform: ios\ninstall-name: " +
             install + "\nexports:\n  - archs: [ arm64 ]\n    symbols: [ " + ", ".join(symbols) + " ]\n...\n")
@@ -214,10 +285,13 @@ def build_helper(base: Path, screen_render_probe: bool = False,
     if capture_enabled:
         subprocess.run(["clang", "-target", "arm64-apple-ios14.0", "-isysroot", str(base / "empty-sysroot"),
                         "-O2", "-Wall", "-Wextra", "-Werror", "-c", str(Path(__file__).with_name("screen_render_probe.c")),
+                        f"-DMHI2_SCREEN_SECONDS={screen_seconds}", f"-DMHI2_SCREEN_FPS={screen_fps}",
                         "-o", str(base / "screen_render_probe.o")], check=True,
                        env={k: v for k, v in os.environ.items() if k != "SDKROOT"})
     subprocess.run(["clang", "-target", "arm64-apple-ios14.0", "-isysroot", str(base / "empty-sysroot"),
-                    "-O2", "-Wall", "-Wextra", "-Werror", *defines, "-c", str(Path(__file__).with_name("usb_fixture.c")),
+                    "-O2", "-Wall", "-Wextra", "-Werror", *defines,
+                    f"-DMHI2_ENCODER_HOLD_SECONDS={600 if screen_seconds else 300}",
+                    "-c", str(Path(__file__).with_name("usb_fixture.c")),
                     "-o", str(base / "usb_fixture.o")], check=True,
                    env={k: v for k, v in os.environ.items() if k != "SDKROOT"})
     subprocess.run(["ld", "-ld_classic", "-arch", "arm64", "-platform_version", "ios", "14.0", "14.0",
@@ -230,7 +304,7 @@ def build_helper(base: Path, screen_render_probe: bool = False,
             "com.apple.security.iokit-user-client-class": ["IOSurfaceRootUserClient"],
             "com.apple.QuartzCore.global-capture": True,
             "com.apple.QuartzCore.get-client-port": True})
-    if screen_framebuffer_probe:
+    if screen_framebuffer_probe or cluster_framebuffer_probe:
         # vfbserv_verifyConnection in the pinned iOS checks this exact right.
         # Keep it out of capture-only and default USB helper builds.
         rights["com.apple.backboardd"] = True
@@ -266,6 +340,12 @@ def main() -> None:
         help="capture the actual CarPlay Wireless display tree through the native software renderer")
     screen.add_argument("--screen-framebuffer-probe", action="store_true",
         help="capture real CarPlay UI and submit at most 15 frames through native framebuffer 1")
+    parser.add_argument("--cluster-framebuffer-probe", action="store_true",
+        help="install a separate bounded 1440x542 native framebuffer-2 producer; requires --software-encoder-session")
+    parser.add_argument("--screen-seconds", type=int, default=0,
+        help="opt into a timed framebuffer run (1..120 guest seconds; default uses 15 frames)")
+    parser.add_argument("--screen-fps", type=int, default=30,
+        help="maximum native UI sampling rate for a timed run (1..30; actual FPS must be measured)")
     video = parser.add_mutually_exclusive_group()
     video.add_argument("--no-video-probe", action="store_true",
         help="remove the bounded video/encoder-mode launch job for a readback-only boot")
@@ -280,6 +360,12 @@ def main() -> None:
     codec.add_argument("--revert-codec-properties", action="store_true",
         help="restore the exact pre-experiment codec instruction and cache hash")
     args = parser.parse_args()
+    if not 0 <= args.screen_seconds <= 120 or not 1 <= args.screen_fps <= 30:
+        parser.error("screen seconds must be 0..120 and FPS 1..30")
+    if args.cluster_framebuffer_probe and (args.screen_render_probe or not args.software_encoder_session):
+        parser.error("cluster framebuffer requires --software-encoder-session and excludes --screen-render-probe")
+    if args.screen_seconds and (not (args.screen_framebuffer_probe or args.cluster_framebuffer_probe) or not args.software_encoder_session):
+        parser.error("--screen-seconds requires a framebuffer probe and --software-encoder-session")
     lab = DEFAULT_LAB.resolve()
     if running_pid(lab):
         raise RuntimeError("stop the owned iOS guest before provisioning its clone")
@@ -289,18 +375,21 @@ def main() -> None:
         initialize(lab, base)
     if not (base / "trustcache.raw").is_file() or not (base / "disks/root").is_file():
         raise RuntimeError("initial cloned disks/trustcache must exist")
-    digest = build_helper(base, args.screen_render_probe, args.screen_framebuffer_probe)
+    digest = build_helper(base, args.screen_render_probe, args.screen_framebuffer_probe,
+                          args.screen_seconds, args.screen_fps, args.cluster_framebuffer_probe)
     image = base / "disks/root"
     if image.is_symlink() or not image.resolve().is_relative_to(lab):
         raise RuntimeError("clone must be a regular image inside the lab")
     info = plistlib.loads(subprocess.check_output(["hdiutil", "info", "-plist"]))
     if any(Path(i.get("image-path", "/")).resolve() == image for i in info.get("images", [])):
         raise RuntimeError("clone is already attached")
+    recover_gpt(base, image)
     with image.open("rb") as f:
         head = f.read(1024 * 1024)
         f.seek(-1024 * 1024, 2)
         tail = f.read(1024 * 1024)
     writes, start, end = gpt_view(head, tail, image.stat().st_size)
+    save_gpt_recovery(base, image, head, tail, start, end)
     device = None
     try:
         with image.open("r+b") as f:
@@ -370,16 +459,69 @@ def main() -> None:
                 "StandardOutPath": "/dev/console", "StandardErrorPath": "/dev/console"}
         else:
             launch["LaunchDaemons"].pop("/System/Library/LaunchDaemons/com.luka.ios-vm.screenrender.plist", None)
+        cluster_job = "/System/Library/LaunchDaemons/com.luka.ios-vm.clusterrender.plist"
+        if args.cluster_framebuffer_probe:
+            launch["LaunchDaemons"][cluster_job] = {
+                "Label": "com.luka.ios-vm.clusterrender",
+                "ProgramArguments": ["/usr/libexec/mhi2-usb-fixture", "--cluster-framebuffer-probe"],
+                "RunAtLoad": True, "LaunchOnlyOnce": True, "UserName": "root",
+                "StandardOutPath": "/dev/console", "StandardErrorPath": "/dev/console"}
+        else:
+            launch["LaunchDaemons"].pop(cluster_job, None)
+        log_job = "/System/Library/LaunchDaemons/com.luka.ios-vm.clusterlog.plist"
+        for path,job in launch["LaunchDaemons"].items():
+            if not path.endswith("/com.apple.mediaserverd.plist"):
+                continue
+            saved_logging=base/"mediaserverd-log-original.plist"
+            if args.cluster_framebuffer_probe:
+                if not saved_logging.exists():
+                    saved_logging.write_bytes(plistlib.dumps({
+                        "environment_present":"EnvironmentVariables" in job,
+                        "environment":job.get("EnvironmentVariables",{}),
+                        "stderr_present":"StandardErrorPath" in job,
+                        "stderr":job.get("StandardErrorPath","")}))
+                env=job.setdefault("EnvironmentVariables",{})
+                # Present in this pinned cache's libtrace; local diagnostics
+                # only, no logging/transport change on the head unit.
+                env["ACTIVITY_LOG_STDERR"]="1"
+                env["CFLOG_FORCE_STDERR"]="1"
+                env["OS_ACTIVITY_DT_MODE"]="YES"
+                job["StandardErrorPath"]="/dev/console"
+            elif saved_logging.exists():
+                original=plistlib.loads(saved_logging.read_bytes())
+                for field,present,key in (("EnvironmentVariables","environment_present","environment"),
+                        ("StandardErrorPath","stderr_present","stderr")):
+                    if original[present]: job[field]=original[key]
+                    else: job.pop(field,None)
+        if args.cluster_framebuffer_probe and (system / "usr/bin/log").is_file():
+            launch["LaunchDaemons"][log_job] = {
+                "Label": "com.luka.ios-vm.clusterlog",
+                "ProgramArguments": ["/usr/bin/log", "stream", "--style", "syslog", "--level", "debug",
+                    "--predicate", 'process == "mediaserverd" AND (eventMessage CONTAINS "fvdp_" OR eventMessage CONTAINS "vfblocal_")',
+                    "--timeout", "280"],
+                "RunAtLoad": True, "LaunchOnlyOnce": True, "UserName": "root",
+                "StandardOutPath": "/dev/console", "StandardErrorPath": "/dev/console"}
+        else:
+            launch["LaunchDaemons"].pop(log_job, None)
+            if args.cluster_framebuffer_probe:
+                print("Native log CLI absent; bounded host syslog capture required")
         launch_path.write_bytes(plistlib.dumps(launch, fmt=plistlib.FMT_BINARY))
         setup_fixture = "/System/Library/LaunchDaemons/com.luka.ios-vm.setupfixture.plist" in launch["LaunchDaemons"]
     finally:
         if device:
-            subprocess.run(["hdiutil", "detach", device], check=True)
+            detach_owned_image(device)
+        else:
+            current_info = plistlib.loads(subprocess.check_output(["hdiutil", "info", "-plist"]))
+            if any(Path(i.get("image-path", "/")).resolve() == image for i in current_info.get("images", [])):
+                raise RuntimeError("partial attachment remains; native GPT recovery saved, do not boot this image")
         with image.open("r+b") as f:
             f.seek(0)
             f.write(head[:start])
             f.seek(end)
             f.write(tail[-(image.stat().st_size - end):])
+            f.flush()
+            os.fsync(f.fileno())
+        recover_gpt(base, image)
     cache = base / "trustcache.raw"
     cache.write_bytes(trustcache(cache.read_bytes(), digest))
     (base / "helper-provision.json").write_text(json.dumps({"cdhash": digest,
@@ -387,6 +529,9 @@ def main() -> None:
         "entitlement": "com.apple.private.usbdevice.setdescription", "setup_state_fixture": setup_fixture,
         "screen_render_probe": args.screen_render_probe,
         "screen_framebuffer_probe": args.screen_framebuffer_probe,
+        "cluster_framebuffer_probe": args.cluster_framebuffer_probe,
+        "screen_seconds": args.screen_seconds, "screen_fps": args.screen_fps,
+        "encoder_hold_seconds": 600 if args.screen_seconds else 300,
         "native_GPT_restored": True}, indent=2) + "\n")
     print("Native helper rebuilt and installed in owned clone", digest)
 

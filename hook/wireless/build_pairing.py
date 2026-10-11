@@ -34,7 +34,10 @@ def main():
         fcntl.flock(build_lock, fcntl.LOCK_EX)
         # Hash sources AND headers; never reuse a stale archive after a private
         # wrapper, SDK header or build-flag change. Pin the actual Docker image.
-        image = 'qnx65-armv7-toolchain:latest'
+        variant = os.getenv('QNX_TOOLCHAIN_VARIANT', 'latest')
+        if variant not in ('latest', '4.9', '8.5'):
+            raise SystemExit('Invalid QNX_TOOLCHAIN_VARIANT (latest|4.9|8.5)')
+        image = f'qnx65-armv7-toolchain:{variant}'
         image_id = run('docker', 'image', 'inspect', '--format={{.Id}}', image,
                        capture_output=True).stdout.strip()
         inputs = sorted(p for root in (SDK,

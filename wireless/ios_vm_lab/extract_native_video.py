@@ -9,27 +9,34 @@ from pathlib import Path
 import re
 
 MARKER = "[native-video-qemu] "
-LIMIT = 2097152
+LIMIT = 16777216
+RECORD_LIMIT = 4096
 
 
-def extract(text: str) -> tuple[bytes, int]:
+def parse_records(text: str, marker: str = MARKER) -> list[tuple[bytes, int | None]]:
+    if marker not in (MARKER,"[native-cluster-qemu] "):
+        raise ValueError("unknown capture stream")
     output = bytearray()
     pending = None
     records = 0
+    complete_records = []
     for line in text.replace("\r", "").splitlines():
-        if MARKER not in line:
+        if marker not in line:
             continue
-        message = line.split(MARKER, 1)[1]
-        begin = re.fullmatch(r"begin=(\d+) bytes=(\d+)", message)
+        message = line.split(marker, 1)[1]
+        begin = re.fullmatch(r"begin=(\d+) bytes=(\d+)(?: mono_ns=(\d+))?", message)
         chunk = re.fullmatch(r"record=(\d+) offset=(\d+) hex=([0-9a-f]+)", message)
         end = re.fullmatch(r"end=(\d+) complete=([01])", message)
         if begin:
-            record, size = map(int, begin.groups())
-            if pending is not None or record != records+1 or not 1 <= record <= 32 or not 1 <= size <= 262144:
+            record, size = map(int, begin.groups()[:2])
+            timestamp = int(begin[3]) if begin[3] is not None else None
+            if timestamp is not None and not 0 <= timestamp <= 2**64-1:
+                raise ValueError("invalid monotonic timestamp")
+            if pending is not None or record != records+1 or not 1 <= record <= RECORD_LIMIT or not 1 <= size <= 262144:
                 raise ValueError("invalid native video record start")
             if len(output)+size > LIMIT:
                 raise ValueError("native video capture exceeds its byte bound")
-            pending = (record, size, bytearray())
+            pending = (record, size, bytearray(), timestamp)
         elif chunk:
             record, offset = map(int, chunk.groups()[:2])
             hex_bytes = chunk[3]
@@ -46,6 +53,7 @@ def extract(text: str) -> tuple[bytes, int]:
             if pending is None or record != pending[0] or not complete or len(pending[2]) != pending[1]:
                 raise ValueError("incomplete native video record")
             output.extend(pending[2])
+            complete_records.append((bytes(pending[2]), pending[3]))
             pending = None
             records += 1
         else:
@@ -54,22 +62,29 @@ def extract(text: str) -> tuple[bytes, int]:
         raise ValueError("native video capture is missing complete records")
     if not output.startswith((b"\0\0\0\1", b"\0\0\1")):
         raise ValueError("expected Annex B decoder input")
-    return bytes(output), records
+    return complete_records
+
+
+def extract(text: str, marker: str = MARKER) -> tuple[bytes, int]:
+    records = parse_records(text,marker)
+    return b"".join(data for data, _ in records), len(records)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("log", type=Path)
+    parser.add_argument("--cluster", action="store_true", help="extract authenticated stream-111 Annex B records")
     parser.add_argument("--output", type=Path, default=Path("build/ios-vm-lab/combined-usb/native-carplay.h264"))
     args = parser.parse_args()
-    if args.log.stat().st_size > 33554432:
-        parser.error("QNX trace exceeds 32 MiB")
+    if args.log.stat().st_size > 67108864:
+        parser.error("QNX trace exceeds 64 MiB")
     lab = Path(__file__).resolve().parents[2]/"build/ios-vm-lab"
     target = args.output.resolve()
     if not target.is_relative_to(lab.resolve()) or target.suffix != ".h264":
         parser.error("output must be an .h264 file inside the owned laboratory")
     try:
-        data, records = extract(args.log.read_text(errors="replace"))
+        data, records = extract(args.log.read_text(errors="replace"),
+                                "[native-cluster-qemu] " if args.cluster else MARKER)
     except ValueError as error:
         target.unlink(missing_ok=True)
         parser.error(str(error))

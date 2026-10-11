@@ -43,7 +43,15 @@ extern char *__progname;
 
 #ifdef MHI2Q_CAPTURE_VIDEO_QEMU
 #include <stddef.h>
+#include <time.h>
 #include "video_capture_bounds.h"
+#ifdef MHI2Q_CAPTURE_VIDEO_LONG_QEMU
+#define VIDEO_CAPTURE_RECORDS 4096
+#define VIDEO_CAPTURE_BYTES 16777216
+#else
+#define VIDEO_CAPTURE_RECORDS 32
+#define VIDEO_CAPTURE_BYTES 2097152
+#endif
 /* Read-only tap immediately before the fake hardware decoder. Capture only
  * the first AVC handle and bounded plaintext bytes; never alter the buffer.
  * The QNX SDK's OMX_BUFFERHEADERTYPE begins with these six ARM32 fields.
@@ -85,6 +93,52 @@ static int video_capture_write(const char *data, size_t length)
     return 0;
 }
 
+static void video_capture_record(const char *marker, const uint8_t *data, uint32_t length,
+                                 unsigned *records, size_t *bytes)
+{
+    if (!data || !length || length > 262144 || *records >= VIDEO_CAPTURE_RECORDS ||
+        *bytes > VIDEO_CAPTURE_BYTES-length) return;
+    static const char hex[] = "0123456789abcdef";
+    char line[640];
+    unsigned record = ++*records;
+    uint32_t offset;
+    int used, failed = 0;
+    struct timespec stamp;
+    unsigned long long ns = clock_gettime(CLOCK_MONOTONIC, &stamp) ? 0 :
+        (unsigned long long)stamp.tv_sec*1000000000ULL + (unsigned long long)stamp.tv_nsec;
+    used = snprintf(line, sizeof(line), "[%s] begin=%u bytes=%u mono_ns=%llu\n", marker, record, length, ns);
+    if (used <= 0 || (size_t)used >= sizeof(line) || video_capture_write(line, (size_t)used)) failed = 1;
+    for (offset = 0; !failed && offset < length; ) {
+        uint32_t count = length-offset;
+        uint32_t i;
+        if (count > 256) count = 256;
+        used = snprintf(line, sizeof(line), "[%s] record=%u offset=%u hex=", marker, record, offset);
+        if (used <= 0 || (size_t)used + count*2 + 1 >= sizeof(line)) { failed = 1; break; }
+        for (i = 0; i < count; ++i) {
+            uint8_t byte = data[offset+i];
+            line[used++] = hex[byte >> 4]; line[used++] = hex[byte & 15];
+        }
+        line[used++] = '\n';
+        if (video_capture_write(line, (size_t)used)) { failed = 1; break; }
+        offset += count;
+    }
+    used = snprintf(line, sizeof(line), "[%s] end=%u complete=%d\n", marker, record, !failed);
+    if (used > 0 && (size_t)used < sizeof(line)) (void)video_capture_write(line, (size_t)used);
+    *bytes += length;
+    if (failed) *records = VIDEO_CAPTURE_RECORDS;
+}
+
+/* Called only by the explicitly compiled QEMU paired-111 receiver after
+ * authentication and whole-AU validation/conversion. No production export. */
+void mhi2q_probe_alt_video(const void *data, uint32_t length)
+{
+    static unsigned records;
+    static size_t bytes;
+    pthread_mutex_lock(&video_capture_lock);
+    video_capture_record("native-cluster-qemu", data, length, &records, &bytes);
+    pthread_mutex_unlock(&video_capture_lock);
+}
+
 uint32_t OMX_GetHandle(void **handle, char *name, void *context, void *callbacks)
 {
     uint32_t result;
@@ -116,34 +170,11 @@ static uint32_t video_omx_empty_tap(void *handle, void *header)
     if (!video_omx_empty) return 0x80001001u;
     pthread_mutex_lock(&video_capture_lock);
     if (handle == video_capture_handle && handle && prefix && prefix->size >= sizeof(*prefix) &&
-            prefix->buffer && video_capture_records < 32 &&
+            prefix->buffer && video_capture_records < VIDEO_CAPTURE_RECORDS &&
             video_capture_bounds(prefix->allocated, prefix->filled, prefix->offset) &&
-            video_capture_bytes <= 2097152-prefix->filled) {
-        static const char hex[] = "0123456789abcdef";
-        char line[640];
-        unsigned record = ++video_capture_records;
-        uint32_t offset;
-        int used, failed = 0;
-        used = snprintf(line, sizeof(line), "[native-video-qemu] begin=%u bytes=%u\n", record, prefix->filled);
-        if (used <= 0 || (size_t)used >= sizeof(line) || video_capture_write(line, (size_t)used)) failed = 1;
-        for (offset = 0; !failed && offset < prefix->filled; ) {
-            uint32_t count = prefix->filled-offset;
-            uint32_t i;
-            if (count > 256) count = 256;
-            used = snprintf(line, sizeof(line), "[native-video-qemu] record=%u offset=%u hex=", record, offset);
-            if (used <= 0 || (size_t)used + count*2 + 1 >= sizeof(line)) { failed = 1; break; }
-            for (i = 0; i < count; ++i) {
-                uint8_t byte = prefix->buffer[prefix->offset+offset+i];
-                line[used++] = hex[byte >> 4]; line[used++] = hex[byte & 15];
-            }
-            line[used++] = '\n';
-            if (video_capture_write(line, (size_t)used)) { failed = 1; break; }
-            offset += count;
-        }
-        used = snprintf(line, sizeof(line), "[native-video-qemu] end=%u complete=%d\n", record, !failed);
-        if (used > 0 && (size_t)used < sizeof(line)) (void)video_capture_write(line, (size_t)used);
-        video_capture_bytes += prefix->filled;
-        if (failed) video_capture_records = 32;
+            video_capture_bytes <= VIDEO_CAPTURE_BYTES-prefix->filled) {
+        video_capture_record("native-video-qemu", prefix->buffer+prefix->offset, prefix->filled,
+                             &video_capture_records, &video_capture_bytes);
     }
     pthread_mutex_unlock(&video_capture_lock);
     return video_omx_empty(handle, header);
@@ -1070,8 +1101,14 @@ static void probe_info_listener(void)
     static const char request[] = "GET /info HTTP/1.1\r\nHost: 127.0.0.1\r\n"
                                   "Connection: close\r\n\r\n";
     struct sockaddr_in address;
+#ifdef MHI2Q_CAPTURE_WIRELESS_HOOK_QEMU
+    /* The first native /info initializes CoreFoundation and the display hook.
+     * A one-second guest timeout can close it before that initialization ends. */
+    struct timeval timeout = { 10, 0 };
+#else
     struct timeval timeout = { 1, 0 };
-    char reply[1024];
+#endif
+    char reply[8192];
     int attempt;
     memset(&address, 0, sizeof(address));
     address.sin_family = AF_INET;
@@ -1081,6 +1118,7 @@ static void probe_info_listener(void)
         sleep(1);
         for (port_index = 0; port_index < 2; ++port_index) {
             int fd;
+            int got_reply = 0;
             ssize_t count;
             address.sin_port = htons(port_index == 0 ? 7000 : 5000);
             fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -1107,6 +1145,7 @@ static void probe_info_listener(void)
                 (ssize_t)(sizeof(request) - 1)) {
                 count = read(fd, reply, sizeof(reply) - 1);
                 if (count > 0) {
+                    got_reply = 1;
                     size_t used = (size_t)count;
                     reply[used] = '\0';
                     if (strstr(reply, " 200 ")) {
@@ -1168,6 +1207,9 @@ static void probe_info_listener(void)
                 }
             }
             close(fd);
+            /* A TCP accept alone does not establish receiver readiness. */
+            if (!got_reply)
+                continue;
 #ifdef MHI2Q_CAPTURE_WIRELESS_HOOK_QEMU
             {
                 int marker = open("/dev/shmem/independent_srp_ready",

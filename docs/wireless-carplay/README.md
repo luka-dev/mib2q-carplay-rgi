@@ -33,14 +33,26 @@ hardware encoder. The native `UnifiedEncoderMode=0` override produced three
 800×480 H.264 frames per probe, verified by independent decoding. The VM-only
 software surface adapter now sends actual native UI through the stock encoder
 and receiver: 31 real 800×480 frames independently decoded, with 26 distinct
-image hashes and a visible Dashboard. Maps, continuous pacing, audio,
-AltScreen and a physical radio link remain separate checks.
+image hashes and a visible Dashboard. A longer 60 guest-second run now
+independently decodes 519 frames; PCAP measures 10.84 access units/s over
+47.78 host seconds. Guest clocks differ, so the runbook reports each stage
+separately. Maps, audio, actual AltScreen pixels and a physical radio link
+remain separate checks. The QEMU-only paired AltScreen profile now negotiates
+stream 111 and creates the native 1440×542 CarInstruments display, while the
+ordinary hook keeps its paired-session guard. Port 6031 carries state and
+telemetry only: no cluster video frames have been observed. The separate
+legacy attempt stopped during control setup.
+The opt-in native framebuffer-2 producer now selects its own advertised
+1440×542 mode and validated NV12 surfaces. Pool access is confirmed; live
+stream-111 video has not yet been independently decoded.
 The [native screen test](NATIVE_SCREEN_TEST.md) describes the bounded software
 mode hold, native surface adapter, live session sequence and independent decode.
 The subsequent [iOS/stock210 code review and corrections](IOS210_CODE_REVIEW.md)
 fixed authentication-first iAP2 handling, unsupported stream 111 negotiation
 and wired SETUP with inherited wireless flags. The combined QEMU rerun covers
-both authentication orders; wireless offers the main display only.
+both authentication orders; production wireless offers the main display only.
+The opt-in QEMU paired-111 experiment is documented separately in the native
+screen runbook and is not a deployment profile.
 All work remains **offline only**; no HU connection, process restart, reboot or
 original firmware-file change is part of this milestone.
 

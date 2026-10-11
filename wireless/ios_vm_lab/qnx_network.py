@@ -23,7 +23,12 @@ sys.path.insert(0, str(ROOT / "wireless/receiver_bridge"))
 import qemu_capture as capture
 
 
-def network_manifest(source: str, pairing: bool = False, media: bool = False, software_mfi: bool = False) -> str:
+def network_manifest(source: str, pairing: bool = False, media: bool = False, software_mfi: bool = False,
+                     legacy_altscreen: bool = False, paired_altscreen: bool = False) -> str:
+    if paired_altscreen and (legacy_altscreen or not software_mfi):
+        raise ValueError("paired AltScreen requires software MFi and excludes the legacy profile")
+    if legacy_altscreen and not software_mfi:
+        raise ValueError("legacy AltScreen requires the isolated software MFi build")
     if software_mfi and not media:
         raise ValueError("software MFi requires native media")
     if media and not pairing:
@@ -59,6 +64,16 @@ def network_manifest(source: str, pairing: bool = False, media: bool = False, so
             + ("    MHI2Q_CP_WIRELESS_MEDIA=1\n" if media else "") +
             "    MHI2Q_CP_PAIRING_DIR=/mnt/pairing/store\n"
             "    LD_PRELOAD=/proc/boot/libcarplay_hook.so:/proc/boot/libdio_capture_probe.so:/proc/boot/libdioprobe.so\n")
+        if legacy_altscreen:
+            # This is a separate legacy MFi-SAP session. Never enable the AES
+            # stream-111 receiver on paired ChaCha media or remove its guard.
+            source = source.replace("    MHI2Q_DIO_OWNER_MODE=wireless\n", "    MHI2Q_DIO_OWNER_MODE=wired\n")
+            source = source.replace("    MHI2Q_CP_WIRELESS_PAIRING=1\n", "    MHI2Q_CP_WIRELESS_PAIRING=0\n")
+            source = source.replace("    MHI2Q_CP_WIRELESS_MEDIA=1\n", "    MHI2Q_CP_WIRELESS_MEDIA=0\n"
+                "    ALTSCREEN_HANDLE_ALT=1\n    ALTSCREEN_ADVERT_DISPLAYS=1\n")
+        if paired_altscreen:
+            source = source.replace("    MHI2Q_CP_WIRELESS_MEDIA=1\n", "    MHI2Q_CP_WIRELESS_MEDIA=1\n"
+                "    MHI2Q_CP_WIRELESS_ALT_QEMU=1\n    ALTSCREEN_HANDLE_ALT=1\n    ALTSCREEN_ADVERT_DISPLAYS=1\n")
         source = source.replace("    reopen /dev/ser1\n", "    reopen /dev/ser1\n"
             "    CACHE_NOP=1 /proc/boot/devb-ram ram capacity=8192 blk cache=256k\n"
             "    waitfor /dev/hd0t77 8\n"
@@ -75,6 +90,10 @@ def network_manifest(source: str, pairing: bool = False, media: bool = False, so
     if software_mfi:
         source = source.replace("LD_PRELOAD=/proc/boot/libcarplay_hook.so:/proc/boot/libdio_capture_probe.so:",
             "LD_PRELOAD=/proc/boot/libdio_capture_probe.so:/proc/boot/libcarplay_hook.so:")
+    if legacy_altscreen or paired_altscreen:
+        source = source.replace("    reopen /dev/ser1\n", "    reopen /dev/ser1\n"
+            "    procmgr_symlink /dev/ser1 /dev/shmem/carplay_hook.log\n"
+            "    procmgr_symlink /dev/null /dev/shmem/carplay_verbose\n")
     # Late ELFs cannot map in this bootstrap after the large factory block.
     index = source.index("/eso/lib/factories/")
     extra = ("\n[type=dir] /mnt/pairing\n" if pairing else "\n") + "".join(f"[type=file perms=0755 data=copy] /proc/boot/{name}={path}\n"
@@ -109,7 +128,15 @@ def running() -> int | None:
 
 
 def build(image: str, pairing: bool = False, media: bool = False, software_mfi: bool = False,
-          request_ui: bool = False, request_ui_music: bool = False, capture_video: bool = False) -> None:
+          request_ui: bool = False, request_ui_music: bool = False, capture_video: bool = False,
+          capture_video_long: bool = False, legacy_altscreen: bool = False,
+          paired_altscreen: bool = False) -> None:
+    if paired_altscreen and (legacy_altscreen or not software_mfi):
+        raise ValueError("paired AltScreen requires software MFi and excludes the legacy profile")
+    if capture_video_long and not capture_video:
+        raise ValueError("long video capture requires --capture-video")
+    if legacy_altscreen and not software_mfi:
+        raise ValueError("legacy AltScreen requires the isolated software MFi build")
     if request_ui and not software_mfi:
         raise ValueError("native UI requires software MFi")
     if request_ui_music and not request_ui:
@@ -121,14 +148,18 @@ def build(image: str, pairing: bool = False, media: bool = False, software_mfi: 
     base = capture.CARPLAY / "dio_mesh_provider_twin.bin"
     if hashlib.sha256(base.read_bytes()).hexdigest() != IMAGE_HASH:
         raise RuntimeError("base QNX image hash changed")
+    hook = ROOT / ("build/wireless-alt-qemu/libcarplay_hook.so" if paired_altscreen else "build/wireless/libcarplay_hook.so")
+    if paired_altscreen and (not hook.is_file() or
+            b"paired stream 111 QEMU: fresh authenticated key claimed" not in hook.read_bytes()):
+        raise ValueError("build the dedicated WIRELESS_ALT_QEMU hook before enabling paired AltScreen")
     capture.IMAGE, capture.OUT = image, OUT
     original_manifest, original_docker = capture.make_manifest, capture.docker
     def manifest(*args, **kwargs):
         original_manifest(*args, **kwargs)
         path = args[0] / "capture.build"
         if pairing:
-            shutil.copy2(ROOT / "build/wireless/libcarplay_hook.so", args[0] / "libcarplay_hook.so")
-        path.write_text(network_manifest(path.read_text(), pairing, media, software_mfi))
+            shutil.copy2(hook, args[0] / "libcarplay_hook.so")
+        path.write_text(network_manifest(path.read_text(), pairing, media, software_mfi, legacy_altscreen, paired_altscreen))
         shutil.copy2(path, OUT / "network.build")
     def docker(work, *args, **kwargs):
         args = tuple('-DMHI2Q_CAPTURE_INTERFACE_NAME="ecm0"' if
@@ -144,6 +175,8 @@ def build(image: str, pairing: bool = False, media: bool = False, software_mfi: 
             args += ("-DMHI2Q_CAPTURE_REQUEST_MUSIC_UI_QEMU",)
         if capture_video and "/work/libdio_capture_probe.so" in args:
             args += ("-DMHI2Q_CAPTURE_VIDEO_QEMU",)
+        if capture_video_long and "/work/libdio_capture_probe.so" in args:
+            args += ("-DMHI2Q_CAPTURE_VIDEO_LONG_QEMU",)
         return original_docker(work, *args, **kwargs)
     capture.make_manifest, capture.docker = manifest, docker
     sys.argv = ["qemu_capture.py", "--mesh", "--start-experiment", "--mdnsd",
@@ -154,10 +187,14 @@ def build(image: str, pairing: bool = False, media: bool = False, software_mfi: 
         capture.make_manifest, capture.docker = original_manifest, original_docker
     (OUT / "build-record.json").write_text(json.dumps({"base_ifs_sha256": IMAGE_HASH,
         "output_sha256": hashlib.sha256((OUT / "qemu_start_debug.bin").read_bytes()).hexdigest(),
-        "toolchain": image, "interface": "ecm0", "pairing_hook": pairing, "native_media": media, "software_mfi": software_mfi, "request_ui": request_ui,
+        "toolchain": image, "interface": "ecm0", "pairing_hook": pairing,
+        "paired_pairing": pairing and not legacy_altscreen,
+        "native_media": media and not legacy_altscreen, "software_mfi": software_mfi, "request_ui": request_ui,
         "request_ui_music": request_ui_music,
         "capture_video": capture_video,
-        "pairing_hook_sha256": hashlib.sha256((ROOT / "build/wireless/libcarplay_hook.so").read_bytes()).hexdigest() if pairing else None,
+        "capture_video_long": capture_video_long, "legacy_altscreen": legacy_altscreen,
+        "paired_altscreen": paired_altscreen,
+        "pairing_hook_sha256": hashlib.sha256(hook.read_bytes()).hexdigest() if pairing else None,
         "synthetic_phone": False}, indent=2) + "\n")
 
 
@@ -172,7 +209,16 @@ def main() -> None:
     parser.add_argument("--request-ui", action="store_true", help="request the native CarPlay UI after RECORD; requires --software-mfi")
     parser.add_argument("--request-ui-music", action="store_true", help="request the Music CarPlay UI URL instead of allowing the phone to choose Maps")
     parser.add_argument("--capture-video", action="store_true", help="capture bounded plaintext AVC at the mock decoder; requires --software-mfi")
+    parser.add_argument("--capture-video-long", action="store_true", help="increase decoder capture bound to 4096 records/16 MiB; requires --capture-video")
+    parser.add_argument("--legacy-altscreen", action="store_true", help="isolated legacy AES AltScreen negotiation; disables paired wireless media")
+    parser.add_argument("--paired-altscreen", action="store_true", help="QEMU-only authenticated paired stream 111; requires the dedicated hook and --software-mfi")
     args = parser.parse_args()
+    if args.paired_altscreen and (args.legacy_altscreen or not args.software_mfi):
+        parser.error("--paired-altscreen requires --software-mfi and excludes --legacy-altscreen")
+    if args.capture_video_long and not args.capture_video:
+        parser.error("--capture-video-long requires --capture-video")
+    if args.legacy_altscreen and not args.software_mfi:
+        parser.error("--legacy-altscreen requires --software-mfi")
     if args.request_ui_music and not args.request_ui:
         parser.error("--request-ui-music requires --request-ui")
     if args.capture_video and not args.software_mfi:
@@ -186,7 +232,7 @@ def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     if args.action == "build":
         build(args.image, args.pairing, args.media, args.software_mfi, args.request_ui,
-              args.request_ui_music, args.capture_video)
+              args.request_ui_music, args.capture_video, args.capture_video_long, args.legacy_altscreen, args.paired_altscreen)
     elif args.action == "start":
         if running():
             raise RuntimeError("owned QNX receiver is already running")
@@ -235,7 +281,9 @@ def main() -> None:
             if keys:
                 value["pk"] = bytes.fromhex(keys[-1])
         print(json.dumps({key: item.hex() if isinstance(item, bytes) else item
-            for key, item in value.items() if key in ("pk", "deviceID", "features", "sourceVersion", "model")}))
+            for key, item in value.items() if key in ("pk", "deviceID", "features", "sourceVersion", "model",
+                "extendedFeatures", "displays", "displayPanels")},
+                default=lambda obj: obj.hex() if isinstance(obj, bytes) else str(obj)))
 
 
 if __name__ == "__main__":

@@ -21,6 +21,9 @@ extern int notify_cancel(int);
 #ifdef MHI2_IOS_VM_SCREEN_RENDER_PROBE
 extern int mhi2_screen_render_probe(void);
 extern int mhi2_screen_framebuffer_probe(void);
+#ifdef MHI2_IOS_VM_CLUSTER_PROBE
+extern int mhi2_screen_cluster_probe(void);
+#endif
 #endif
 
 typedef const void *CFTypeRef;
@@ -104,6 +107,15 @@ int main(int argc, char **argv)
     CFRelease(expected);
 
 #ifdef MHI2_IOS_VM_SCREEN_RENDER_PROBE
+#ifdef MHI2_IOS_VM_CLUSTER_PROBE
+    if (argc == 2 && !strcmp(argv[1], "--cluster-framebuffer-probe")) {
+        if (getuid() != 0) return 4;
+        int result = mhi2_screen_cluster_probe();
+        CFRelease(original);
+        IOObjectRelease(service);
+        return result;
+    }
+#endif
     if (argc == 2 && (!strcmp(argv[1], "--screen-render-probe") ||
                      !strcmp(argv[1], "--screen-framebuffer-probe"))) {
         if (getuid() != 0) return 4;
@@ -116,10 +128,16 @@ int main(int argc, char **argv)
 #endif
     if (argc == 2 && !strcmp(argv[1], "--encoder-mode-hold")) {
         if (getuid() != 0) return 4;
-        alarm(310);
-        printf("[mhi2-encoder-session] native mode held for 300 seconds; no probe pixels\n");
+#ifndef MHI2_ENCODER_HOLD_SECONDS
+#define MHI2_ENCODER_HOLD_SECONDS 300
+#endif
+#if MHI2_ENCODER_HOLD_SECONDS != 300 && MHI2_ENCODER_HOLD_SECONDS != 600
+#error Invalid bounded encoder hold
+#endif
+        alarm(MHI2_ENCODER_HOLD_SECONDS + 10);
+        printf("[mhi2-encoder-session] native mode held for %u seconds; no probe pixels\n", MHI2_ENCODER_HOLD_SECONDS);
         fflush(NULL);
-        for (unsigned seconds = 0; seconds < 300; ++seconds) {
+        for (unsigned seconds = 0; seconds < MHI2_ENCODER_HOLD_SECONDS; ++seconds) {
             sleep(1);
             if ((seconds + 1) % 30 == 0) {
                 printf("[mhi2-encoder-session] elapsed=%u\n", seconds + 1);

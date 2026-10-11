@@ -19,7 +19,7 @@ int main(void)
     assert(count_rgb(pixels, 2, 2, 12, 23, &count));
     assert(count_rgb(pixels, 2, 2, 7, sizeof(pixels), &count));
     assert(count_rgb(pixels, 801, 2, 4096, sizeof(pixels), &count));
-    assert(count_rgb(pixels, 1, 481, 4, sizeof(pixels), &count));
+    assert(count_rgb(pixels, 1, 543, 4, sizeof(pixels), &count));
     assert(count_rgb(pixels, 0, 2, 0, 0, &count));
     assert(count_rgb(0, 2, 2, 12, 24, &count));
     assert(count_rgb(pixels, 2, 2, 12, 24, 0));

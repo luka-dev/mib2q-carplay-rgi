@@ -11,6 +11,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class WirelessHookContract(unittest.TestCase):
     def test_callbacks(self):
+        self.check_callbacks(False)
+
+    def test_qemu_paired111_callbacks(self):
+        self.check_callbacks(True)
+
+    def check_callbacks(self, paired_alt):
         with tempfile.TemporaryDirectory(prefix="wireless-contract-") as directory:
             binary = Path(directory) / "contract"
             flags = ["-Wl,-dead_strip"] if platform.system() == "Darwin" else [
@@ -20,6 +26,8 @@ class WirelessHookContract(unittest.TestCase):
                        "tests/wireless_owner_setup_test.c", "tests/wireless_media_contract_test.c",
                        "tests/wireless_altscreen_policy_test.c", "hook/altscreen/altscreen_av.c",
                        *flags, "-o", str(binary)]
+            if paired_alt:
+                command.insert(1,"-DMHI2Q_WIRELESS_ALT_QEMU=1")
             subprocess.run(command, cwd=ROOT, check=True)
             for suite in ("media", "altscreen", "owner"):
                 with self.subTest(suite=suite):

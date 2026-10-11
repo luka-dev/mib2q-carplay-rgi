@@ -4,6 +4,10 @@
 #include "../framework/hook_framework.h"
 int cp_media_enabled(void);
 int cp_media_available(void);
+#ifdef MHI2Q_WIRELESS_ALT_QEMU
+int cp_media_alt_available(void);
+int cp_media_alt_claim(void *session, uint64_t connection_id, uint8_t key[32]);
+#endif
 int cp_media_normalize_setup(void *message);
 int cp_media_prepare(void *owner, void *session, void *request, cp_pair_connection *pair);
 void cp_media_setup_response(hook_setup_ctx_t *setup);

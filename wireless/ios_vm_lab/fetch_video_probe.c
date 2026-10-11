@@ -44,8 +44,9 @@ static int copy_probe(afc_client_t client, const char *name, size_t limit)
 int main(int argc, char **argv)
 {
     int screen = argc == 2 && !strcmp(argv[1], "--screen");
-    if (argc != 1 && !screen) {
-        fprintf(stderr, "Usage: fetch-video-probe [--screen]\n");
+    int cluster = argc == 2 && !strcmp(argv[1], "--cluster");
+    if (argc != 1 && !screen && !cluster) {
+        fprintf(stderr, "Usage: fetch-video-probe [--screen|--cluster]\n");
         return 1;
     }
     const char *address = getenv("USBMUXD_SOCKET_ADDRESS");
@@ -79,7 +80,10 @@ int main(int argc, char **argv)
         fprintf(stderr, "AFC connection failed: %d\n", afc_result);
         goto done;
     }
-    if (screen) {
+    if (cluster) {
+        failed = copy_probe(client, "mhi2-carplay-cluster.json", 4096);
+        if (!failed) failed |= copy_probe(client, "mhi2-carplay-cluster.bgra", 8388608);
+    } else if (screen) {
         failed = copy_probe(client, "mhi2-carplay-screen.json", 4096);
         if (!failed) failed |= copy_probe(client, "mhi2-carplay-screen.bgra", 8388608);
     } else {
@@ -87,6 +91,10 @@ int main(int argc, char **argv)
         failed |= copy_probe(client, "mhi2-video-probe-avc1-default.h264", 1048576);
     }
 done:
+    if (cluster && failed) {
+        unlink("build/ios-vm-lab/combined-usb/mhi2-carplay-cluster.json");
+        unlink("build/ios-vm-lab/combined-usb/mhi2-carplay-cluster.bgra");
+    }
     if (screen && failed) {
         /* A failed handshake must not leave an old frame looking freshly fetched. */
         unlink("build/ios-vm-lab/combined-usb/mhi2-carplay-screen.json");

@@ -12,6 +12,11 @@ struct object { uint32_t kind; int type; uint64_t id, format; };
 static struct object request={1}, array={2}, descriptions[4];
 static long stream_count;
 static int streams_present=1, encrypted=1, derive_error, derive_calls, derive_fail_call;
+#ifdef MHI2Q_WIRELESS_ALT_QEMU
+/* Contract suites do not feed ciphertext; never stand in for real crypto. */
+int cp_pair_open(const uint8_t *k,const uint8_t *n,const void *a,size_t al,const void *c,size_t l,const uint8_t *t,void *p)
+{(void)k;(void)n;(void)a;(void)al;(void)c;(void)l;(void)t;(void)p;assert(!"unexpected crypto call in admission fixture");return ERR_AUTH;}
+#endif
 static void once_done(void) {}
 static void *str(void *a,const char *s,unsigned enc) { (void)a;(void)enc;return (void *)s; }
 static void release(const void *p) { (void)p; }
@@ -69,7 +74,7 @@ int run_media_contract_tests(void) {
     assert(cp_media_prepare((void *)1,(void *)2,&request,(void *)3)==ERR_PARAM);
     reset();descriptions[0].id=0;
     assert(cp_media_prepare((void *)1,(void *)2,&request,(void *)3)==ERR_PARAM);
-    reset();stream_count=4;
+    reset();stream_count=STREAMS+1;
     assert(cp_media_prepare((void *)1,(void *)2,&request,(void *)3)==ERR_UNSUPPORTED);
     for(int invalid=0;invalid<3;++invalid) {
         reset();descriptions[0].type=100;
@@ -118,6 +123,40 @@ int run_media_contract_tests(void) {
     for(uintptr_t i=1;i<=SESSIONS;++i)
         assert(cp_media_prepare((void *)i,(void *)(i+SESSIONS),&request,(void *)30)==0);
     assert(cp_media_prepare((void *)31,(void *)32,&request,(void *)33)==ERR_STATE);
+#ifdef MHI2Q_WIRELESS_ALT_QEMU
+    setenv("MHI2Q_DIO_OWNER_MODE","wireless",1);
+    setenv("MHI2Q_CP_WIRELESS_MEDIA","1",1);
+    setenv("MHI2Q_CP_WIRELESS_ALT_QEMU","1",1);
+    assert(cp_media_alt_available());
+    reset();descriptions[0].type=111;
+    assert(!cp_media_prepare((void *)1,(void *)2,&request,(void *)3));
+    uint8_t claimed[32];memset(claimed,0xa5,sizeof(claimed));
+    assert(cp_media_alt_claim((void *)2,2,claimed)==ERR_STATE);
+    for(unsigned i=0;i<32;++i)assert(!claimed[i]);
+    memset(sessions[0].streams[3].read_key,0x5a,32);
+    assert(!cp_media_alt_claim((void *)2,1,claimed));
+    for(unsigned i=0;i<32;++i)assert(claimed[i]==0x5a);
+    assert(cp_media_alt_claim((void *)2,1,claimed)==ERR_STATE);
+    for(unsigned i=0;i<32;++i)assert(!claimed[i]);
+    cp_media_teardown((void *)2,&request,0);
+    assert(cp_media_prepare((void *)1,(void *)2,&request,(void *)3)==ERR_STATE);
+    descriptions[0].id=2;
+    assert(!cp_media_prepare((void *)1,(void *)2,&request,(void *)3));
+    cp_media_teardown((void *)2,NULL,0);
+    assert(cp_media_alt_claim((void *)2,2,claimed)==ERR_STATE);
+    reset();descriptions[0].type=111;encrypted=0;
+    assert(cp_media_prepare((void *)1,(void *)2,&request,(void *)3)==ERR_STATE);
+    reset();descriptions[0].type=111;derive_fail_call=3;
+    assert(cp_media_prepare((void *)1,(void *)2,&request,(void *)3)==ERR_AUTH);
+    assert(!sessions[0].owner);
+    setenv("MHI2Q_DIO_OWNER_MODE","wired",1);
+    assert(!cp_media_alt_available());
+    reset();descriptions[0].type=111;
+    assert(cp_media_prepare((void *)1,(void *)2,&request,(void *)3)==ERR_UNSUPPORTED);
+    unsetenv("MHI2Q_CP_WIRELESS_ALT_QEMU");unsetenv("MHI2Q_DIO_OWNER_MODE");
+    unsetenv("MHI2Q_CP_WIRELESS_MEDIA");
+    puts("QEMU paired111: authenticated admission, one key claim, rollback and nonce reuse rejection PASS");
+#endif
     puts("wireless media contract: types, authentication, formats, rollback, nonce reuse and teardown PASS");
     return 0;
 }

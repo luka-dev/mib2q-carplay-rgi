@@ -45,8 +45,10 @@ These are runtime guest responses, not replies from our synthetic phone fixture.
 | Native Pair Setup / Verify | iOS completed both exchanges and switched to encrypted control |
 | Native MFi-SAP | Live P-256 response accepted; `Endpoint_AuthenticationSucceeded` and authorization confirmed |
 | Codec properties | Opt-in conditional workaround: native `ftvc`, `avc1`, `ftvh` probes return `0` / 51 properties; unpatched control fails |
-| CarPlay session / media | Native control, 15 actual framebuffer submissions, encrypted delivery to stock QNX and 31 independently decoded 800×480 frames; sustained 30 FPS not measured |
+| CarPlay session / media | Native control and encrypted video; 31-frame baseline plus 519-frame longer run; PCAP 10.84 access units/s over 47.78 host seconds; sustained 30 FPS not proved |
 | QNX receiver endpoint | Native QNX `ecm0`, source `210.81`; direct Ethernet bridge, native pairing and iOS TCP sessions verified |
+| QEMU paired AltScreen | Separate opt-in hook negotiated 1440×542 CarInstruments / stream 111 on port 6031; only state/telemetry received, cluster video and crypto interoperability unproved |
+| Native framebuffer 2 | Opt-in separate producer, validated 1440×542 NV12 pool and three submissions after session teardown; active stream-111 video remains unproved |
 
 ## 🔄 Current transport
 
@@ -86,7 +88,7 @@ reproduce the native control experiment once those prerequisites exist.
 | Inferno | Pinned revision and source patch; sanitizer tests | Build dependencies, Apple firmware and initial launch records must be prepared separately |
 | Restored iOS | Cloned-image provisioning and controlled normal boot | Initial restore/SEP preparation remains recorded local work, not one versioned automation command |
 | QNX receiver | Versioned IFS builder, pairing/media flags and virtual networking | Pinned stock firmware, existing mesh harness, hook binary, custom QEMU and local QNX toolchain required |
-| Native CarPlay | Live authentication and native UI video; 31 independently decoded frames through the software surface adapter | Maps/Metal, audio, AltScreen, continuous pacing and real radio behavior remain unverified |
+| Native CarPlay | Live authentication, 519 independently decoded frames in the longer test and PCAP intervals through the software surface adapter | Maps/Metal, audio, AltScreen pixels, sustained 30 FPS and real radio behavior remain unverified |
 
 Generated firmware, clones, emulator binaries, disposable disks, SSH material and logs
 are local under `build/ios-vm-lab/`; these are not committed or packaged for the HU.
@@ -858,7 +860,12 @@ and independent decoding. Bounded CarPlay sessions now confirm Music scene
 activation, and a native render-tree capture shows the actual CarPlay UI.
 The NV12 surface adapter now connects those pixels to the stock framebuffer;
 31 real 800×480 H.264 frames were received by QNX and independently decoded.
-Next verify continuous pacing, audio, accessory input and additional displays.
+The later 60 guest-second test decoded 519 frames and measured PCAP intervals:
+10.84 access units/s over 47.78 host seconds. QNX's clock spans 247.23 seconds
+for the same picture count; do not infer latency by subtracting guest clocks.
+See [the longer native-video run](NATIVE_SCREEN_TEST.md#longer-native-video-measurement)
+for evidence and the separate legacy AltScreen profile. Next verify longer
+wall-clock stability, audio, accessory input and additional-display pixels.
 Do not skip the recursive-lock check or claim
 decoded video from `Decoder started successfully` alone.
 
@@ -870,9 +877,14 @@ The existing QNX software-MFi fixture still uses precomputed challenges. The
 new host probe demonstrates live P-256 signing and acceptance of the public
 fixture by this emulated iOS build; it is not yet the QNX daemon's live backend.
 The standard MFi flow checks Apple's accessory certificate.[^3]
-Bounded main-display video is verified through independent decode. Continuous
-video performance, audio, accessory input, AltScreen and real radio behavior
-remain unverified.
+Bounded main-display video and measured packet intervals are verified through
+independent decode and PCAP. Sustained 30 FPS, audio, accessory input,
+AltScreen pixels and real radio behavior remain unverified.
+The QEMU-only paired-111 experiment did complete two-display negotiation:
+iOS created the native CarInstruments scene, and QNX accepted stream 111 on
+port 6031. PCAP contains 238 opcode-5 telemetry records and 153 opcode-1
+state records, but no opcode-0 video. The production wireless guard remains
+in place; see [the paired AltScreen experiment](NATIVE_SCREEN_TEST.md#qemu-only-paired-altscreen).
 
 [^1]: ChefKiss Inferno, [Companion VM setup](https://github.com/ChefKissInc/Inferno/wiki/3.-Companion-VM-Setup).
 [^2]: ChefKiss Inferno, [Emulator file setup](https://github.com/ChefKissInc/Inferno/wiki/2.-Emulator-File-Setup) and [Running and restoring](https://github.com/ChefKissInc/Inferno/wiki/4.-Running-&-Restoring).

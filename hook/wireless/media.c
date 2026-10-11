@@ -9,7 +9,11 @@
 
 DEFINE_LOG_MODULE(WMEDIA);
 #define SESSIONS 8
+#ifdef MHI2Q_WIRELESS_ALT_QEMU
+#define STREAMS 4
+#else
 #define STREAMS 3
+#endif
 #define HISTORY 32
 #define FRAME_LIMIT (16u * 1024u * 1024u)
 #define ERR_STATE (-6709)
@@ -91,6 +95,13 @@ int cp_media_enabled(void)
 { const char *s=getenv("MHI2Q_CP_WIRELESS_MEDIA"); return s && !strcmp(s,"1"); }
 int cp_media_available(void)
 { pthread_once(&cf_once,resolve_cf); return cp_media_enabled() && cf.ready; }
+#ifdef MHI2Q_WIRELESS_ALT_QEMU
+int cp_media_alt_available(void)
+{
+    const char *flag=getenv("MHI2Q_CP_WIRELESS_ALT_QEMU");
+    return cp_dio_owner_is_wireless() && flag && !strcmp(flag,"1") && cp_media_available();
+}
+#endif
 
 int cp_media_normalize_setup(void *message)
 {
@@ -127,7 +138,33 @@ int cp_media_normalize_setup(void *message)
 }
 static struct media_session *find_session(void *session)
 { unsigned i;for(i=0;i<SESSIONS;++i)if(sessions[i].owner && sessions[i].session==session)return &sessions[i];return NULL; }
-static int slot_for(int type) { return type==100?0:type==101?1:type==110?2:-1; }
+static int slot_for(int type) {
+#ifdef MHI2Q_WIRELESS_ALT_QEMU
+    if(type==111 && cp_media_alt_available())return 3;
+#endif
+    return type==100?0:type==101?1:type==110?2:-1;
+}
+#ifdef MHI2Q_WIRELESS_ALT_QEMU
+int cp_media_alt_claim(void *session, uint64_t connection_id, uint8_t key[32])
+{
+    int err=ERR_STATE;
+    struct media_session *m;
+    if(!key)return ERR_PARAM;
+    erase(key,32);
+    if(!cp_media_alt_available())return ERR_UNSUPPORTED;
+    pthread_mutex_lock(&media_lock);
+    m=find_session(session);
+    if(m && !m->retired && m->streams[3].active && !m->streams[3].failed &&
+       connection_id && m->streams[3].id==connection_id) {
+        memcpy(key,m->streams[3].read_key,32);
+        /* Claim exactly once, even if the following socket setup fails. */
+        m->streams[3].failed=1;
+        err=0;
+    }
+    pthread_mutex_unlock(&media_lock);
+    return err;
+}
+#endif
 static int derive_stream(cp_pair_connection *pair,struct media_stream *stream)
 {
     char salt[64];
@@ -171,7 +208,7 @@ int cp_media_prepare(void *owner,void *session,void *request,cp_pair_connection 
         uint64_t id=(uint64_t)number(desc,"streamConnectionID",&err);
         if(err || !id){err=ERR_PARAM;goto exit;}
         for(j=0;j<pending.used_count;++j)if(pending.used[j]==id){err=ERR_STATE;goto exit;}
-        if(type!=110){
+        if(type!=110 && type!=111){
             uint64_t format=(uint64_t)number(desc,"audioFormat",&err);
             /* Target worker always swaps 16-bit PCM. No compressed or 24-bit paths. */
             uint64_t pcm16=0;

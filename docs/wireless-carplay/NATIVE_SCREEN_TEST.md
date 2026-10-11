@@ -1,6 +1,6 @@
 # Native CarPlay screen test
 
-_Prepared iOS/QNX laboratory · 2026-10-11 · Native CarPlay video received by stock QNX and independently decoded; 31 real 800×480 frames verified._
+_Prepared iOS/QNX laboratory · 2026-10-11 · Native CarPlay video independently decoded: 31-frame baseline and 519-frame longer run with PCAP timing._
 
 ---
 
@@ -40,7 +40,8 @@ enter CarPlay.
 | Native framebuffer submission | 15 real UI submissions and relinquishes; probe result `0` |
 | CarPlay AVC configuration / access units | 32 complete decoder-input records: one configuration and 31 frames |
 | Independent native UI decode | H.264, 800×480, yuv420p; 31 frames, 26 distinct decoded hashes; Dashboard visually inspected |
-| AltScreen / sustained frame pacing | Not exercised by this primary-screen probe |
+| Longer primary-screen pacing | 60 guest-second adapter run; 519 independently decoded frames; PCAP measurement below |
+| AltScreen | QEMU-only paired profile negotiated 1440×542 / stream 111; no cluster video access units yet |
 | Actual MMI display / 2.4 GHz radio | Outside this USB/Ethernet test |
 
 The earlier live session also confirmed the receiver's `untakeScreen` and `requestUI`
@@ -138,6 +139,246 @@ inactive. The server also requires `com.apple.backboardd`; otherwise it rejects
 the connection with `kFigXPCError_MessageSendFailed` (`-16155`). This right is
 present only in the explicit framebuffer-probe helper build, not in default
 USB or capture-only helpers.
+
+The optional `--screen-seconds 60` or `120` switches the framebuffer helper
+to a timed run, with `--screen-fps 1..30` limiting UI sampling. Its monotonic
+deadline begins at the first successful submission. The helper captures the
+current native display at each opportunity, skips missed sampling slots,
+and never creates a catch-up burst. The native encoder and receiver still
+decide which frames to transmit and display. The timed build holds software
+encoder mode for at most 600 guest seconds; the default remains 300. Wait
+for `software-mode restored=1` before stopping the guest.
+
+```sh
+python3 wireless/ios_vm_lab/prepare_combined_usb.py \
+  --software-encoder-session --screen-framebuffer-probe \
+  --screen-seconds 120 --screen-fps 30
+python3 wireless/ios_vm_lab/qnx_network.py build \
+  --pairing --media --software-mfi --request-ui --request-ui-music \
+  --capture-video --capture-video-long
+```
+
+Use the authentication/NCM recipe below. `--capture-video-long` raises the
+first AVC handle's diagnostic budget from 32 records / 2 MiB to 4096 records
+/ 16 MiB. Each buffer is still limited to 256 KiB. The strict extractor accepts
+both old and timestamped records, with a 64 MiB UART-log bound. UART capture
+adds work before decoder dispatch, so it affects the timing being measured.
+
+### Longer native-video measurement
+
+The 2026-10-11 run selected **60 guest seconds**, not 60 host seconds. The
+adapter completed with result `0` and 113 successful native surface submissions.
+The complete QNX capture contains 520 records: one configuration and 519
+picture buffers, totalling 201,678 bytes. FFmpeg independently decoded all
+519 frames at 800×480/yuv420p without errors; 121 decoded hashes differ.
+Visual inspection shows native Music content and the sidebar.
+
+| Measurement | Result |
+|---|---|
+| PCAP video span | 47.780 seconds on the companion capture clock |
+| PCAP observed video rate | 10.841 access units/s |
+| PCAP interarrival median / p95 / max | 70.264 / 183.018 / 2178.084 ms |
+| Repeated TCP payload / unresolved sequence gap | 0 / 0 bytes in this capture |
+| Native adapter interval median | 490.718 ms on the iOS guest clock |
+| Native render/conversion cost median / max | 361.860 / 980.325 ms on the iOS guest clock |
+| QNX picture-buffer span | 247.235 seconds on the QNX monotonic clock |
+| H.264 SHA-256 | `94cc37a8c56451412ab02b8dafe506b531bce0769db55423b8d93d8f98605374` |
+
+The QNX/PCAP span ratio is about 5.174; the clocks are not aligned. Their
+intervals must not be subtracted to estimate end-to-end latency, nor should
+the QNX-derived rate be treated as wall-clock FPS. The adapter submission
+count is also not the encoder's output count: the native display pipeline
+emitted more pictures than the helper submitted. Report each stage separately.
+Zero repeated bytes does not prove zero RF packet loss. Telemetry still
+reports configured `encoderCurrentFPS=30`, which is not observed FPS.
+
+The read-only PCAP analyzer reassembles screen TCP in sequence, validates
+overlaps, ignores exact duplicates for first-arrival timing, and reads only
+the clear 128-byte screen headers and opcode-5 telemetry. It needs the SYN;
+it neither decrypts nor changes video. A capture gap is reported rather than
+filled. IPv6 extension headers and fragmented IPv4 are outside its parser.
+
+```sh
+python3 wireless/ios_vm_lab/frame_pacing.py \
+  build/ios-vm-lab/combined-usb/pacing-60-qnx-serial.log \
+  --source-log build/ios-vm-lab/combined-usb/pacing-60-ios-serial.log \
+  --output build/ios-vm-lab/combined-usb/pacing-60-timing.json
+python3 wireless/ios_vm_lab/screen_wire_pacing.py \
+  build/ios-vm-lab/combined-usb/pacing-60.pcap \
+  --output build/ios-vm-lab/combined-usb/pacing-60-wire.json
+```
+
+Evidence is retained under `build/ios-vm-lab/combined-usb/pacing-60*`.
+The full-range NV12 conversion, native encoder and stream ordering are unchanged.
+
+### Separate legacy AltScreen experiment
+
+The working paired session uses authenticated ChaCha media. The existing
+production stream-111 receiver uses legacy AES-CTR, so the production wireless-owner
+guard intentionally suppresses its advert and negotiation. Enabling wrapper
+flags cannot make that combination work. Do not remove the guard.
+
+`qnx_network.py build --legacy-altscreen` is an isolated alternative: it uses
+the existing hook in wired-owner mode, disables paired pairing/media, and
+enables the existing two-display/stream-111 contract. It still requires the
+lab's software MFi build and real MFi-SAP authentication. Start iAP **without**
+`--receiver-public-key` for this experiment; the paired recipe includes that
+key and is a different session. Diagnostic hook logs go to guest UART in
+this profile only. A successful build or advert is not proof of stream 111.
+
+```sh
+python3 wireless/ios_vm_lab/qnx_network.py build \
+  --pairing --media --software-mfi --request-ui --request-ui-music \
+  --capture-video --legacy-altscreen
+python3 wireless/ios_vm_lab/mfi_probe.py --start-carplay --hold-seconds 180 \
+  --receiver-ipv6 fe80::4254:ff:fe12:3456
+```
+
+Stop the preceding session, restart QNX, and obtain fresh iOS/NCM/MFi state
+using the recipe below before running this variant. The default software
+surface adapter targets framebuffer 1 / 800×480; the opt-in framebuffer-2
+producer below adds 1440×542. Maps also still requires an unavailable Metal
+device. Actual second-display negotiation, pixels, and decode need separate
+evidence. NCM Ethernet validates transport/control integration, not Bluetooth
+discovery, Wi-Fi association or 2.4 GHz airtime.
+
+The legacy run on 2026-10-11 authenticated iAP2 and resolved the stock display
+primitives, but iOS then sent `POST /pair-setup RTSP/1.0` (`X-Apple-HKP: 0`).
+This profile did not finish control setup; iOS logged endpoint activation
+error `200404`. No stream 111 was negotiated. Evidence is retained under
+`combined-usb/legacy-altscreen*`. Omitting the iAP public key is therefore not
+enough to establish a working legacy session on this prepared iOS build.
+
+### QEMU-only paired AltScreen
+
+The separate `WIRELESS_ALT_QEMU=1` build adds an authenticated stream-111
+receiver to the working paired path. The build script allows it only with
+`HOOK_WIRELESS=1` and output directory `build/wireless-alt-qemu`. The default
+and shipping hook retain their wireless AltScreen suppression. This is an
+experiment, not a deployment configuration.
+
+```sh
+bash -c 'source scripts/build_hook_common.sh; \
+  OUTDIR_REL=build/wireless-alt-qemu HOOK_WIRELESS=1 HOOK_AUDIO=0 \
+  WIRELESS_ALT_QEMU=1 QNX_TOOLCHAIN_VARIANT=8.5 carplay_build_hook'
+python3 wireless/ios_vm_lab/qnx_network.py build \
+  --pairing --media --software-mfi --request-ui --request-ui-music \
+  --capture-video --paired-altscreen
+```
+
+Use the ordinary paired authentication/NCM recipe, including the **current**
+receiver public key. `--paired-altscreen` rejects the legacy profile and checks
+that the selected hook contains the QEMU-only receiver. The profile explicitly
+sets its runtime gate; a normal hook cannot opt in by an environment flag alone.
+
+For stream 111, media admission derives the same `DataStream-Salt<connectionID>`
+read key as stream 110. The receiver claims that key exactly once, starts with
+nonce zero, authenticates the original 128-byte header and ciphertext using
+the existing SDK ChaCha primitive, and removes the 16-byte tag only after
+successful authentication. Bad framing, tag failure, nonce exhaustion and a
+second claim fail closed. Session teardown retains connection-ID history;
+the failed transport cannot resume with reset nonces. Legacy AES is selected
+only for the legacy owner. No pairing or certificate check is disabled.
+
+| Live check on 2026-10-11 | Evidence |
+|---|---|
+| Control feature negotiation | `enabledFeatures` accepted `altScreen` and `viewAreas` |
+| Display contract | Preflight retained the real main UUID plus a distinct cluster UUID |
+| Native second display | iOS reported 1440×542, 292×110 mm and created `CarInstruments` / `CARInstrumentCluster` |
+| Stream 111 setup | iOS offered 111; QNX claimed the fresh paired key and opened port 6031; SETUP returned `0` |
+| Main display regression | 32 complete records independently decode into 31 native 800×480 frames |
+| Cluster video | PCAP: 238 opcode-5 telemetry and 153 opcode-1 state records; zero opcode-0 video access units |
+
+Evidence is local under `combined-usb/paired-altscreen*`. The clear-header
+PCAP analyzer can inspect port 6031 with `--port 6031`. This run confirms
+negotiation and transport startup, **not native interoperability of encrypted
+111 video payloads**: the second framebuffer has not supplied pictures.
+The next requirement is a verified native cluster producer and independent
+decode. Maps' missing Metal device remains a separate rendering limitation.
+
+The host contract tests cover authenticated admission, single key claims,
+rollback, teardown and connection-ID reuse. ASan/UBSan framing tests exercise
+10,000 bounded inputs; an independent OpenSSL ChaCha AEAD oracle rejects
+replay and 1,000 header/key/ciphertext/tag mutations. Those tests verify the
+wrapper's behavior, not native 111 video delivery. Native SDK interoperability
+for actual cluster access units still requires live evidence.
+
+### Native framebuffer-2 producer
+
+`--cluster-framebuffer-probe` installs a second root launch job in its own
+process. MediaToolbox caches the requested framebuffer capacity on the first
+call per process: this job requests two borrowed objects and selects object
+2, while the main-screen job retains its single-object contract. Missing or
+aliased objects stop the cluster probe before acquisition.
+
+```sh
+python3 wireless/ios_vm_lab/prepare_combined_usb.py \
+  --software-encoder-session --screen-framebuffer-probe \
+  --cluster-framebuffer-probe
+```
+
+The cluster display names `Wireless-1` / `wireless1` come from the native
+CADisplay log. BGRA capture is 1440×542, 5760 bytes/row, 3,121,920 bytes total.
+The producer validates both NV12 planes, preserves their independent strides
+and converts full-range BT.601 just like the main-screen adapter. Every acquired
+surface is relinquished. A correctly sized, active native display may render
+black before scene selection; that case is recorded as zero nonzero RGB pixels
+and must not be described as visible UI.
+
+The pinned MediaToolbox UUID/instruction check now covers eleven entry points,
+including supported digital modes, mode selection and timing-mode size. The
+producer selects only an advertised mode whose dimensions match 1440×542.
+The verified native list used color ID `0` and timing ID `0`; selection returned
+`0`. A later acquired `420f` surface was 1440×542, aggregate row 2220 and
+allocation 1,203,304 bytes. Aggregate row remains unsuitable for planar writes.
+
+The initial live experiment acquired and submitted three such surfaces **after
+the CarPlay session ended**; no cluster AVC records reached QNX. This proves
+pool access, not active stream-111 video. Active acquisition returned busy;
+an earlier syslog showed attempted encoder size 0×0 / `kVTParameterErr`.
+The current experiment waits after mode selection, requests the default acquire
+flags, and selects the native scene after the committed stream socket connects.
+Actual encrypted 111 delivery and independent decode remain acceptance checks.
+
+Guest captures have separate names `mhi2-carplay-cluster.{json,bgra}`.
+The owned AFC fetcher supports `--cluster`; failed fetches delete those local
+outputs without touching the main-screen capture. The QEMU receiver provides
+a separate bounded Annex B tap after successful 111 authentication and
+whole-access-unit validation/conversion. It has its own record/byte budget.
+
+```sh
+USBMUXD_SOCKET_ADDRESS=127.0.0.1:32229 \
+  build/ios-vm-lab/combined-usb/fetch-video-probe --cluster
+python3 wireless/ios_vm_lab/extract_native_video.py \
+  build/ios-vm-lab/qnx-network/serial.log --cluster \
+  --output build/ios-vm-lab/combined-usb/native-cluster.h264
+```
+
+Host syslog/AFC needs a valid pairing with the synthetic guest, independent of
+iAP2 MFi. After companion cold boot that pairing may require the native trust
+dialog again. Only one USB probe may own each interface. A `ncm_ready` marker
+alone does not prove Ethernet traffic; archive packet counts and PCAP before
+calling a transport test successful. Repeated boots exposed an EHCI/MMIO state
+failure in the long-lived companion; restarting that owned VM restored traffic.
+
+Provisioning saves checksummed native GPT metadata before applying the temporary
+512-byte view. A busy owned attachment is retried, then detached before native
+metadata restoration; pending recovery never writes inside a filesystem.
+Hook builds now propagate Docker compilation failures instead of reporting an
+old output as newly compiled. Diagnostic video logging is scoped to the cloned
+media-server job and its prior environment is retained for restoration.
+
+```mermaid
+flowchart LR
+    accTitle: Separate native video and AltScreen tests
+    accDescr: Paired media validates the main display and the QEMU-only paired AltScreen build negotiates the cluster. The legacy attempt stopped before control setup. Physical RF and a native cluster producer remain separate requirements.
+    paired[Paired media] --> primary[Main display and PCAP timing]
+    paired --> experimental[QEMU paired stream 111]
+    experimental --> cluster[AltScreen negotiation verified]
+    legacy[Legacy attempt] --> stopped[Control setup incomplete]
+    cluster --> producer[Native cluster producer required]
+    radio[Physical radio] --> rf[Wi-Fi and 2.4 GHz measurements]
+```
 
 The acquired surface uses `420f` with two planes. Its aggregate row value
 was 1,252 bytes and allocation 601,024 bytes, so it must not be treated as a

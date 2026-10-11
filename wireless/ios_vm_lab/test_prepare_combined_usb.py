@@ -7,7 +7,7 @@ import shutil
 import tempfile
 from unittest import mock
 
-from prepare_combined_usb import gpt_view, trustcache, decode_trustcache, initialize
+from prepare_combined_usb import gpt_view, trustcache, decode_trustcache, initialize, save_gpt_recovery, recover_gpt, detach_owned_image
 
 
 def im4p(payload):
@@ -34,6 +34,33 @@ def fixture():
 
 
 class ProvisionTests(unittest.TestCase):
+    def test_failed_mount_metadata_can_be_recovered_without_touching_filesystems(self):
+        head, tail, size = fixture()
+        writes, start, end = gpt_view(head, tail, size)
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp); image = base / 'root'
+            original = bytearray(b'X'*size)
+            original[:start] = head[:start]; original[end:] = tail[-(size-end):]
+            image.write_bytes(original)
+            save_gpt_recovery(base,image,head,tail,start,end)
+            with image.open('r+b') as stream:
+                for offset,data in writes: stream.seek(offset); stream.write(data)
+            recover_gpt(base,image)
+            self.assertEqual(image.read_bytes(),original)
+            self.assertFalse(json.loads((base/'native-gpt-recovery.json').read_text())['pending'])
+            save_gpt_recovery(base,image,head,tail,start,end)
+            (base/'native-gpt-head.bin').write_bytes(b'damaged')
+            with self.assertRaisesRegex(ValueError,'checksum'): recover_gpt(base,image)
+            self.assertEqual(image.read_bytes(),original)
+
+    def test_busy_owned_mount_retries_before_force_and_reports_failure(self):
+        with mock.patch('prepare_combined_usb.subprocess.run') as run, mock.patch('prepare_combined_usb.time.sleep'):
+            run.side_effect=[mock.Mock(returncode=16)]*3+[mock.Mock(returncode=0)]
+            detach_owned_image('/dev/disk-owned')
+            self.assertEqual(run.call_args.args[0],['hdiutil','detach','/dev/disk-owned','-force'])
+        with mock.patch('prepare_combined_usb.subprocess.run') as run, mock.patch('prepare_combined_usb.time.sleep'):
+            run.side_effect=[mock.Mock(returncode=16)]*3+[__import__('subprocess').CalledProcessError(16,'detach')]
+            with self.assertRaises(__import__('subprocess').CalledProcessError): detach_owned_image('/dev/disk-owned')
     def test_bounded_im4p_decode_rejects_wrong_types_and_lengths(self):
         payload = struct.pack("<I", 1) + bytes(20)
         container = im4p(payload)

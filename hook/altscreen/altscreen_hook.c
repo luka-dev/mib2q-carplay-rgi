@@ -38,6 +38,10 @@
 #include "avcc_config.h"
 #include "command_policy.h"
 #include "../../common/alt_monotonic_condition.h"
+#ifdef MHI2Q_WIRELESS_ALT_QEMU
+#include "../wireless/media.h"
+#include "../wireless/paired_screen_crypto.h"
+#endif
 #if ENABLE_LOGGING || ENABLE_ALTSCREEN_PACE_TRACE
 #include "pace_trace.h"
 #endif
@@ -735,13 +739,33 @@ static int env_on(const char *name)
  * so this is the earliest safe point to prove that the negotiated contract can
  * actually be fulfilled. */
 static int g_forward_available = 1; /* module init clears this on worker failure */
+static int alt_wireless_blocked(void)
+{
+    if (!cp_dio_owner_is_wireless()) return 0;
+#ifdef MHI2Q_WIRELESS_ALT_QEMU
+    return !cp_media_alt_available();
+#else
+    return 1;
+#endif
+}
+#ifdef MHI2Q_WIRELESS_ALT_QEMU
+static pthread_once_t cluster_capture_once = PTHREAD_ONCE_INIT;
+static void (*cluster_capture)(const void *, uint32_t);
+static void cluster_capture_resolve(void)
+{ *(void **)(&cluster_capture) = dlsym(RTLD_DEFAULT,"mhi2q_probe_alt_video"); }
+static void cluster_capture_native(const void *data, uint32_t length)
+{
+    pthread_once(&cluster_capture_once,cluster_capture_resolve);
+    if (cluster_capture) cluster_capture(data,length);
+}
+#endif
 
 static int advert_preflight(void *session, uint32_t sequence)
 {
     if (!g_forward_available) return 0;
     void *displays = NULL;
     void *features = NULL;
-    if (cp_dio_owner_is_wireless() || !session ||
+    if (alt_wireless_blocked() || !session ||
         !env_on("ALTSCREEN_ADVERT_DISPLAYS") || disp_ok != 1)
         goto fail;
     displays = build_displays(g_alt_night_mode ? 1 : 0);
@@ -813,9 +837,9 @@ static int advert_ready_for_session(void *session)
  * stock receiver cannot satisfy and can restart the whole CarPlay session. */
 static void alt_on_server_info(void *session, void *info)
 {
-    /* This receiver's stream111 uses legacy AES. Paired wireless media
-     * currently supports the main display only, regardless of wrapper flags. */
-    if (cp_dio_owner_is_wireless()) return;
+    /* Production stream111 uses legacy AES and stays blocked for paired
+     * media. Only the explicit QEMU build adds an authenticated alternative. */
+    if (alt_wireless_blocked()) return;
     if (cf_init() == 1 && env_on("ALTSCREEN_HANDLE_ALT") &&
         alt_resolve() == 1 && advert_ready_for_session(session)) {
         /* Hold the retained contract stable until BOTH extendedFeatures and
@@ -955,6 +979,7 @@ static fn_sess_sendcmd_t    sess_sendcmd;   /* session-level {type,params} comma
  * before any command whose completion can trigger follow-up work. */
 static void alt_kick_viewarea(uint32_t gen);
 static void alt_kick_show_ui(uint32_t gen);
+static int alt_zone_mode_get(void);
 static int  alt_show_ui_for_mode(uint32_t gen, int mode, const char *reason);
 static int  alt_send_cluster_night_mode(uint32_t gen, int night, const char *reason);
 static int  alt_request_cluster_idr(uint32_t gen, const char *reason);
@@ -1056,6 +1081,10 @@ typedef struct {
     int         inUse;
     uint8_t     key[16];     /* self-contained receiver: AES-CTR key ...  */
     uint8_t     iv[16];      /* ... + iv (derived in alt_setup)           */
+#ifdef MHI2Q_WIRELESS_ALT_QEMU
+    int paired;
+    uint8_t paired_key[32];
+#endif
     volatile int stop;       /* teardown sets =1 → recv poll-loop exits (unblocks join) */
 } altslot_t;
 typedef struct {
@@ -1296,12 +1325,17 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
     memset(&pace, 0, sizeof(pace));
 #endif
 
-    if (!aes_ctr_init || !aes_ctr_update ||
-        aes_ctr_init(aesctx, slot->key, slot->iv) != 0) {
+    int use_aes = 1;
+#ifdef MHI2Q_WIRELESS_ALT_QEMU
+    cp_screen_crypto paired_crypto = {0,0};
+    use_aes = !slot->paired;
+#endif
+    if (use_aes && (!aes_ctr_init || !aes_ctr_update ||
+        aes_ctr_init(aesctx, slot->key, slot->iv) != 0)) {
         LOG_ERROR(LOG_MODULE, "alt recv: AES-CTR initialization failed");
         return;
     }
-    aes_ready = 1;
+    aes_ready = use_aes;
 #if ENABLE_LOGGING || ENABLE_ALTSCREEN_PACE_TRACE
     log_write(LOG_LEVEL_WARN, "altscreen", "111 pace begin gen=%u maxFPS=30; times are mean/max microseconds",
               (unsigned)av_gen);
@@ -1377,6 +1411,9 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
                 break;
             }
             ls = (uint8_t)config_ls;
+#ifdef MHI2Q_WIRELESS_ALT_QEMU
+            if (slot->paired) cluster_capture_native(cfg,clen);
+#endif
             if (altav_enqueue_config(av_gen, cfg, clen) != 0) break;
             LOG_INFO(LOG_MODULE,
                      "alt recv: avcC config encoded=%dx%d body=%u lengthSize=%u annexb=%u bytes=%s%s",
@@ -1400,8 +1437,15 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
             for (pace_i = 0; pace_i < 8; pace_i++)
                 sender_pts |= (uint64_t)hdr[8 + pace_i] << (8 * pace_i);
 #endif
-            if (aes_ctr_update(aesctx, body, bodySize, body) != 0) {
-                LOG_ERROR(LOG_MODULE, "alt recv: AES-CTR update failed");
+            int crypto_error;
+#ifdef MHI2Q_WIRELESS_ALT_QEMU
+            if (slot->paired)
+                crypto_error=cp_screen_open(&paired_crypto,slot->paired_key,hdr,body,&bodySize,cp_pair_open);
+            else
+#endif
+                crypto_error=aes_ctr_update(aesctx, body, bodySize, body);
+            if (crypto_error != 0) {
+                LOG_ERROR(LOG_MODULE, "alt recv: screen authentication/decryption failed rc=%d", crypto_error);
                 break;
             }
             frame_valid=alt_avcc_prepare(body,bodySize,ls,ls==4,&prepared)==0;
@@ -1411,6 +1455,10 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
              * up to 500 ms, during which a reconnect may have superseded us.  The control
              * commands below target g_alt_session and must never run for a stale stream. */
             if (!altav_is_owner(av_gen)) break;
+#ifdef MHI2Q_WIRELESS_ALT_QEMU
+            if (slot->paired && frame_valid && prepared.annexb)
+                cluster_capture_native(body,prepared.annexb_len);
+#endif
             if (is_idr && !stream_has_idr) {
                 stream_has_idr = 1;
                 LOG_INFO(LOG_MODULE,
@@ -1537,6 +1585,11 @@ static void *alt_thread_main(void *arg)
     if (ls >= 0) close(ls);
 
     LOG_INFO(LOG_MODULE, "alt-screen receiver started (self-contained)");
+#ifdef MHI2Q_WIRELESS_ALT_QEMU
+    /* The instrument scene may be empty until selected. Wait for the actual
+     * stream socket, after committed SETUP, before selecting that native UI. */
+    if (slot->paired) alt_show_ui_for_mode(av_gen,alt_zone_mode_get(),"qemu-stream-connected");
+#endif
     alt_recv_loop(slot, fd, av_gen);
 
 done:
@@ -1545,6 +1598,14 @@ done:
      * exit must not tear down the new owner's connection (that caused black 111 on
      * fast reconnect). */
     altav_shutdown_if_owner(av_gen);
+#ifdef MHI2Q_WIRELESS_ALT_QEMU
+    /* No reaper may reuse this slot until threadExited is published below. */
+    {
+        volatile uint8_t *key_bytes = slot->paired_key;
+        unsigned key_index;
+        for (key_index=0; key_index<sizeof(slot->paired_key); ++key_index) key_bytes[key_index]=0;
+    }
+#endif
     /* This log is intentionally before threadExited.  Once the terminal flag
      * is published, the reaper may call pthread_join and must not wait behind
      * a potentially blocking logger write. */
@@ -1632,13 +1693,24 @@ static int alt_setup(void *session, void *streamDesc, void *responseParams)
     if (!connID) { LOG_ERROR(LOG_MODULE, "alt_setup: connID missing (streamConnectionID absent)"); err = -6715; goto fail; }
     LOG_INFO(LOG_MODULE, "alt_setup: connID=%llu", (unsigned long long)connID);
 
-    derive_aes((const uint8_t *)((char *)session + OFF_AESKEY), 16, (uint64_t)connID, key, iv);
-    /* self-contained receiver decrypts the opcode-0 bodies itself (no stock ScreenStream — see
-     * alt_recv_loop); stash the derived key/iv in the slot for the receiver thread's AES-CTR. */
-    memcpy(slot->key, key, 16);
-    memcpy(slot->iv,  iv,  16);
-    memset(key, 0, sizeof(key));
-    memset(iv, 0, sizeof(iv));
+    int use_legacy = 1;
+#ifdef MHI2Q_WIRELESS_ALT_QEMU
+    if (cp_dio_owner_is_wireless()) {
+        err=cp_media_alt_claim(session,(uint64_t)connID,slot->paired_key);
+        if(err)goto fail;
+        slot->paired=1;
+        use_legacy=0;
+        LOG_INFO(LOG_MODULE,"paired stream 111 QEMU: fresh authenticated key claimed");
+    }
+#endif
+    if (use_legacy) {
+        derive_aes((const uint8_t *)((char *)session + OFF_AESKEY), 16, (uint64_t)connID, key, iv);
+        /* Self-contained receiver; no stock ScreenStream. */
+        memcpy(slot->key, key, 16);
+        memcpy(slot->iv,  iv,  16);
+        memset(key, 0, sizeof(key));
+        memset(iv, 0, sizeof(iv));
+    }
 
     family = *(uint8_t *)((char *)session + OFF_FAMILY);
     /* Snapshot every remaining stock-session field before ServerSocketOpen.
@@ -1671,6 +1743,9 @@ static int alt_setup(void *session, void *streamDesc, void *responseParams)
     if (!rdesc) { err = -6728; goto fail; }
     set_i64(rdesc, "type", ALT_STREAM_TYPE);
     set_i64(rdesc, "dataPort", port);
+#ifdef MHI2Q_WIRELESS_ALT_QEMU
+    if (slot->paired) set_i64(rdesc,"streamConnectionID",connID);
+#endif
     /* Start the acceptor before publishing its descriptor into the response.
      * This keeps failure transactional: a pthread failure cannot leave a dead
      * type-111/dataPort entry in an otherwise-successful stock SETUP response. */
@@ -1843,7 +1918,7 @@ static void alt_log_phone_features(void *request)
  * the response. */
 static void alt_on_setup_response(hook_setup_ctx_t *setup)
 {
-    if (cp_dio_owner_is_wireless()) return;
+    if (alt_wireless_blocked()) return;
     void *session = setup->session;
     void *request = setup->request;
     void *respOut = setup->response;

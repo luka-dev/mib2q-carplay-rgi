@@ -17,6 +17,17 @@ class QNXNetworkTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "capture requires software MFi"):
             qnx_network.build("unused", capture_video=True)
 
+    def test_long_capture_and_legacy_altscreen_require_explicit_lab_modes(self):
+        with self.assertRaisesRegex(ValueError, "requires --capture-video"):
+            qnx_network.build("unused", capture_video_long=True)
+        with self.assertRaisesRegex(ValueError, "isolated software MFi"):
+            qnx_network.build("unused", legacy_altscreen=True)
+        with self.assertRaisesRegex(ValueError, "isolated software MFi"):
+            qnx_network.network_manifest("", legacy_altscreen=True)
+        for legacy, mfi in ((False, False), (True, True)):
+            with self.assertRaisesRegex(ValueError, "paired AltScreen requires"):
+                qnx_network.build("unused", legacy_altscreen=legacy, software_mfi=mfi, paired_altscreen=True)
+
     def test_host_diagnostics_are_separate_from_guest_uart(self):
         captured = {}
         def popen(command, **kwargs):
@@ -46,6 +57,22 @@ class QNXNetworkTests(unittest.TestCase):
         self.assertIn("MHI2Q_CP_WIRELESS_MEDIA=1", result)
         self.assertIn("LD_PRELOAD=/proc/boot/libdio_capture_probe.so:/proc/boot/libcarplay_hook.so:", result)
         self.assertIn("/mnt/pairing/store", result)
+        with patch.object(Path, "read_bytes", return_value=b"stock fixture"), \
+                patch.object(qnx_network.hashlib, "sha256") as digest:
+            digest.return_value.hexdigest.return_value = "01c116b1674215daa0602d556a6d9b2eb48c2113ca294ea1f5d58787e3f656f2"
+            legacy = qnx_network.network_manifest(source, True, True, True, True)
+        self.assertIn("MHI2Q_DIO_OWNER_MODE=wired", legacy)
+        self.assertIn("MHI2Q_CP_WIRELESS_MEDIA=0", legacy)
+        self.assertNotIn("MHI2Q_CP_WIRELESS_MEDIA=1", legacy)
+        self.assertIn("ALTSCREEN_HANDLE_ALT=1", legacy)
+        self.assertIn("ALTSCREEN_ADVERT_DISPLAYS=1", legacy)
+        with patch.object(Path, "read_bytes", return_value=b"stock fixture"), \
+                patch.object(qnx_network.hashlib, "sha256") as digest:
+            digest.return_value.hexdigest.return_value = "01c116b1674215daa0602d556a6d9b2eb48c2113ca294ea1f5d58787e3f656f2"
+            paired = qnx_network.network_manifest(source, True, True, True, False, True)
+        self.assertIn("MHI2Q_CP_WIRELESS_ALT_QEMU=1", paired)
+        self.assertIn("MHI2Q_DIO_OWNER_MODE=wireless", paired)
+        self.assertIn("MHI2Q_CP_WIRELESS_MEDIA=1", paired)
 
     def test_manifest_orders_drivers_and_preserves_reusable_tools(self):
         source = "    /proc/boot/ifconfig lo0 alias 10.0.0.16\n" + \

@@ -115,7 +115,7 @@ def run(seconds: int, prepare: bool, qnx_socket: bool = False) -> dict:
     peer = None
     stop = threading.Event()
     result = {"configuration": configuration.bConfigurationValue, "rx_frames": 0, "tx_frames": 0,
-              "errors": [], "sample_headers": []}
+              "traffic_observed": False, "errors": [], "sample_headers": []}
     pcap = None
     lock = threading.Lock()
     def capture(frame, direction):
@@ -124,6 +124,9 @@ def run(seconds: int, prepare: bool, qnx_socket: bool = False) -> dict:
             pcap.write(struct.pack("<IIII", int(now), int((now % 1) * 1000000), len(frame), len(frame)) + frame)
             pcap.flush()
             result[f"{direction}_frames"] += 1
+            if not result["traffic_observed"]:
+                result["traffic_observed"] = True
+                print(json.dumps({"ncm_traffic_observed": True, "direction": direction}), flush=True)
             if len(result["sample_headers"]) < 16:
                 result["sample_headers"].append({"direction": direction, "ethernet": frame[:14].hex(), "bytes": len(frame)})
     try:
@@ -163,6 +166,7 @@ def run(seconds: int, prepare: bool, qnx_socket: bool = False) -> dict:
             fd = peer.fileno()
             result["transport"] = "qnx-ethernet"
             print(json.dumps({"ncm_ready": True, "transport": "qnx-ethernet",
+                              "traffic_observed": False,
                               "receiver_ipv6": "fe80::4254:ff:fe12:3456"}), flush=True)
         else:
             fd = os.open("/dev/net/tun", os.O_RDWR | os.O_NONBLOCK)
@@ -171,7 +175,8 @@ def run(seconds: int, prepare: bool, qnx_socket: bool = False) -> dict:
             subprocess.run(["ip", "link", "set", "mhi2ncm0", "up"], check=True)
             subprocess.run(["ip", "-6", "address", "add", "fe80::2/64", "dev", "mhi2ncm0"], check=True)
             result["transport"] = "tap"
-            print(json.dumps({"ncm_ready": True, "interface": "mhi2ncm0", "ipv6": "fe80::2"}), flush=True)
+            print(json.dumps({"ncm_ready": True, "traffic_observed": False,
+                              "interface": "mhi2ncm0", "ipv6": "fe80::2"}), flush=True)
         def receive():
             while not stop.is_set():
                 try:
@@ -190,8 +195,14 @@ def run(seconds: int, prepare: bool, qnx_socket: bool = False) -> dict:
         reader = threading.Thread(target=receive)
         reader.start()
         end = time.monotonic() + seconds
+        report_at = time.monotonic() + 10
         sequence = 0
         while time.monotonic() < end and not stop.is_set():
+            if time.monotonic() >= report_at:
+                with lock:
+                    print(json.dumps({"ncm_progress": True, "rx_frames": result["rx_frames"],
+                                      "tx_frames": result["tx_frames"]}), flush=True)
+                report_at = time.monotonic() + 10
             if not select.select([fd], [], [], .1)[0]:
                 continue
             frame = receive_ethernet(peer) if peer is not None else os.read(fd, 1514)

@@ -15,7 +15,7 @@ static int bgra_to_nv12(const unsigned char *src, size_t src_row, size_t src_byt
                        size_t width, size_t height)
 {
     if (!src || !y_plane || !uv_plane || !width || !height ||
-            width > 800 || height > 480 || width % 2 || height % 2 ||
+            width > 1440 || height > 542 || width % 2 || height % 2 ||
             src_row < width*4 || y_row < width || uv_row < width ||
             src_row > 16384 || y_row > 16384 || uv_row > 16384 ||
             height > src_bytes/src_row || height > y_bytes/y_row ||
