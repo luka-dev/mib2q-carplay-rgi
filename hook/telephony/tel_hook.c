@@ -379,7 +379,14 @@ static bool tel_on_message(hook_context_t* ctx, const iap2_frame_t* f) {
         pthread_mutex_lock(&tel_lock);
         tel_power_union_len = tel_power_requested ? 0 : n;
         pthread_mutex_unlock(&tel_lock);
-        if (!n) LOG_INFO(LOG_MODULE, "StartPowerUpdates: nothing to add (len=%u)", (unsigned)f->payload_len);
+        {
+            char hex[3 * 24 + 1];
+            size_t i;
+            for (i = 0; i < f->payload_len && i < 24; i++) snprintf(hex + 3 * i, 4, "%02X ", f->payload[i]);
+            hex[3 * i] = 0;
+            LOG_WARN(LOG_MODULE, "stock StartPowerUpdates [%s] -> %s", hex,
+                     n ? "battery params added after the first PowerUpdate" : "already asks for the battery");
+        }
     } else if (ctx->direction == MSG_DIR_INCOMING && f->msgid == MSG_POWER_UPDATE) {
         tel_power_t pwr;
         uint8_t payload[sizeof(tel_power_union)];
@@ -402,6 +409,21 @@ static bool tel_on_message(hook_context_t* ctx, const iap2_frame_t* f) {
             }
         }
         if (tel_parse_power_update(f->payload, f->payload_len, &pwr)) {
+            static int last_level = -1, last_state = -1;    /* Cinemo's receive thread only */
+            static unsigned seen;
+            if (seen++ < 5) {
+                char hex[3 * 24 + 1];
+                size_t i;
+                for (i = 0; i < f->payload_len && i < 24; i++) snprintf(hex + 3 * i, 4, "%02X ", f->payload[i]);
+                hex[3 * i] = 0;
+                LOG_WARN(LOG_MODULE, "PowerUpdate [%s]", hex);
+            }
+            if ((pwr.has_level && pwr.level != last_level) || (pwr.has_state && pwr.state != last_state)) {
+                if (pwr.has_level) last_level = pwr.level;
+                if (pwr.has_state) last_state = pwr.state;
+                LOG_WARN(LOG_MODULE, "iPhone battery %d%% charging=%d (PowerUpdate len=%u)",
+                         last_level, last_state, (unsigned)f->payload_len);
+            }
             if (pwr.has_level || pwr.has_state) publish_comm(NULL, &pwr);
         } else {
             LOG_WARN(LOG_MODULE, "malformed PowerUpdate len=%u", (unsigned)f->payload_len);

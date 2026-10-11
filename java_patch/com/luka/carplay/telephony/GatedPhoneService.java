@@ -118,7 +118,7 @@ public class GatedPhoneService implements CombiBAPServicePhone {
     private int signalPct, regState;
     private String carrier = "";
     /* iPhone battery 0..100 from PowerUpdate, -1 = not reported. */
-    private int batteryPct = -1;
+    private int batteryPct = -1, loggedBatteryPct = -2;
     /* Missed-call indication: unreturned missed calls newer than the last VC reset. */
     private long missedResetTs, newestRecentTs;   /* phone clock, s */
     private int missedCalls, missedNumbers;
@@ -405,6 +405,11 @@ public class GatedPhoneService implements CombiBAPServicePhone {
         int valid = carrier.length() > 0 ? 1 : 0;
         real.updateNetworkProvider(valid, carrier, valid, carrier);
         real.updateMobileBatteryLevel(batteryLevel(batteryPct));
+        if (batteryPct != loggedBatteryPct) {
+            loggedBatteryPct = batteryPct;
+            Log.i(TAG, "iPhone battery " + batteryPct + "% -> VC level "
+                + batteryLevel(batteryPct).getMobileChargeLevel1().getChargeLevelPercent());
+        }
     }
 
     /* iAP2 RegistrationStatus (0 unknown, 1 not registered, 2 searching, 3 denied,

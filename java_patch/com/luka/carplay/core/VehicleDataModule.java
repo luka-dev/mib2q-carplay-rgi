@@ -24,9 +24,6 @@ package com.luka.carplay.core;
 import com.luka.carplay.bus.CarplayBus;
 import com.luka.carplay.framework.Log;
 
-import de.audi.app.terminalmode.dsi.DefaultDSIGeneralVehicleStatesListener;
-import de.audi.remotehmi.util.dsi.DSICarKombiListenerAdapter;
-
 import org.dsi.ifc.base.DSIListener;
 import org.dsi.ifc.carkombi.DSICarKombi;
 import org.dsi.ifc.carkombi.DSICarKombiListener;
@@ -83,15 +80,13 @@ public final class VehicleDataModule implements Module {
     private int tempDc = Integer.MIN_VALUE;
     private int fuelWarning = -1;
 
-    private final Binding kombi = new Binding("DSICarKombi", DSICarKombi.class,
-        DSICarKombiListener.class, new KombiListener(),
-        new int[] { ATTR_BCCURRENTRANGE1, ATTR_BCOUTSIDETEMPERATURE, ATTR_BCTOTALCURRENTRANGE });
-    private final Binding general = new Binding("DSIGeneralVehicleStates", DSIGeneralVehicleStates.class,
-        DSIGeneralVehicleStatesListener.class, new GeneralListener(),
-        new int[] { ATTR_TANKINFO, ATTR_REVERSEGEAR, ATTR_VEHICLESTANDSTILL });
-    private final Binding dynamic = new Binding("DSICarVehicleStates", DSICarVehicleStates.class,
-        DSICarVehicleStatesListener.class, new DynamicListener(),
-        new int[] { ATTR_DYNAMICVEHICLEINFOHIGHFREQUENT });
+    /* Built in start(), never in the constructor: CarPlayApp creates every module in its static
+     * initializer, and a class that fails to link there (2026-10-10: a stock adapter missing at
+     * runtime) took the whole TerminalMode and Navi bundles down.  Here it only disables this
+     * module. */
+    private Binding kombi, general, dynamic;
+    private boolean linkFailureLogged;
+    private volatile boolean tempLogged;
 
     private Thread sender;
     private volatile boolean running;
@@ -101,6 +96,23 @@ public final class VehicleDataModule implements Module {
     public synchronized boolean start(FrameworkRef fw) {
         if (running) return true;
         if (fw == null || !fw.isReady() || fw.serviceManager() == null) return false;
+        try {
+            if (kombi == null) {
+                kombi = new Binding("DSICarKombi", DSICarKombi.class, DSICarKombiListener.class,
+                    new KombiListener(),
+                    new int[] { ATTR_BCCURRENTRANGE1, ATTR_BCOUTSIDETEMPERATURE, ATTR_BCTOTALCURRENTRANGE });
+                general = new Binding("DSIGeneralVehicleStates", DSIGeneralVehicleStates.class,
+                    DSIGeneralVehicleStatesListener.class, new GeneralListener(),
+                    new int[] { ATTR_TANKINFO, ATTR_REVERSEGEAR, ATTR_VEHICLESTANDSTILL });
+                dynamic = new Binding("DSICarVehicleStates", DSICarVehicleStates.class,
+                    DSICarVehicleStatesListener.class, new DynamicListener(),
+                    new int[] { ATTR_DYNAMICVEHICLEINFOHIGHFREQUENT });
+            }
+        } catch (Throwable t) {
+            kombi = general = dynamic = null;
+            if (!linkFailureLogged) { linkFailureLogged = true; Log.w(TAG, "vehicle data disabled: " + t); }
+            return true;                                    /* never block the modules before it */
+        }
         int bound = 0;
         if (kombi.bind(fw)) bound++;
         if (general.bind(fw)) bound++;
@@ -122,9 +134,9 @@ public final class VehicleDataModule implements Module {
         Thread t = sender;
         sender = null;
         if (t != null) t.interrupt();
-        kombi.release();
-        general.release();
-        dynamic.release();
+        if (kombi != null) kombi.release();
+        if (general != null) general.release();
+        if (dynamic != null) dynamic.release();
         synchronized (state) {
             speedCms = -1; reverse = -1; standstill = false; rangeKmTotal = -1; rangeKm1 = -1;
             tempDc = Integer.MIN_VALUE; fuelWarning = -1;
@@ -132,12 +144,25 @@ public final class VehicleDataModule implements Module {
     }
 
     private void sendLoop() {
+        int loggedValid = -1;
+        long nextLog = 0;
         while (running) {
             try { Thread.sleep(PERIOD_MS); }
             catch (InterruptedException e) { return; }
             if (!running) return;
-            byte[] p = snapshot(System.currentTimeMillis());
-            CarplayBus.getInstance().sendBinary(CarplayBus.CMD_VEHICLE, p);
+            long now = System.currentTimeMillis();
+            byte[] p = snapshot(now);
+            /* Log what is valid when that changes, else once a minute (speed cm/s, range km, 0.1 C). */
+            if (p[1] != loggedValid || now >= nextLog) {
+                loggedValid = p[1];
+                nextLog = now + 60000L;
+                Log.i(TAG, "snapshot valid=0x" + Integer.toHexString(p[1] & 0xFF)
+                    + " speed=" + ((p[2] & 0xFF) | (p[3] & 0xFF) << 8) + " gear=" + p[4]
+                    + " range=" + ((p[5] & 0xFF) | (p[6] & 0xFF) << 8)
+                    + " temp=" + (short)((p[7] & 0xFF) | (p[8] & 0xFF) << 8) + " warn=" + p[9]);
+            }
+            CarplayBus bus = CarplayBus.getInstance();
+            if (bus.isConnected()) bus.sendBinary(CarplayBus.CMD_VEHICLE, p);
         }
     }
 
@@ -252,7 +277,7 @@ public final class VehicleDataModule implements Module {
 
     /* ---------------- listeners ---------------- */
 
-    private final class KombiListener extends DSICarKombiListenerAdapter {
+    private final class KombiListener extends KombiListenerBase {
         public void updateBCTotalCurrentRange(CarBCDistance d, int valid) {
             synchronized (state) {
                 rangeKmTotal = valid == ATTR_VALID && d != null && d.distanceValueState == BC_VALID
@@ -267,15 +292,22 @@ public final class VehicleDataModule implements Module {
             }
         }
 
+        /* Stock AbstractBCComponent trusts the DSI valid flag alone here: the kombi leaves
+         * CarBCTemperature.state unset on this car (2026-10-10 log: no temperature with the
+         * state check). */
         public void updateBCOutsideTemperature(CarBCTemperature t, int valid) {
             synchronized (state) {
-                tempDc = valid == ATTR_VALID && t != null && t.state == BC_VALID
+                tempDc = valid == ATTR_VALID && t != null
                     ? tempToDc(t.temperatureValue, t.temperatureUnit) : Integer.MIN_VALUE;
+            }
+            if (!tempLogged) {
+                tempLogged = true;
+                Log.i(TAG, "outside temperature from DSI: valid=" + valid + " " + t);
             }
         }
     }
 
-    private final class GeneralListener extends DefaultDSIGeneralVehicleStatesListener {
+    private final class GeneralListener extends GeneralVehicleStatesListenerBase {
         public void updateReverseGear(boolean on, int valid) {
             synchronized (state) { reverse = valid == ATTR_VALID ? (on ? 1 : 0) : -1; }
         }

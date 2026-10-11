@@ -14,7 +14,14 @@
 | Siri on a short press | With CarPlay connected, a short press of the wheel voice key starts Siri instead of the car's voice control; a second one ends it; the long press is unchanged | `TerminalModeSDSHandler`, `CarPlaySpeechRequestHandler` (replaced stock classes) | none | built, linkage-audited **[code]** |
 | Enhanced Siri | Zero-latency listening on the key; voice trigger | probe only | none | decoded, not built: [Enhanced Siri Contract](../altscreen-and-video/ENHANCED_SIRI_CONTRACT.md) **[open]** |
 
-None of these has run in the car yet. The hook takes effect at the next `dio_manager` start, the jar at the next HU reboot, and the `dio_manager.json` change (installer) at the next `dio_manager` start.
+Car session 2026-10-10 (iOS beta phone, wired) **[car]**:
+
+- The first jar broke HMI start: `VehicleDataModule$KombiListener` extended a RemoteHMI adapter that the unit does not load, `CarPlayApp`'s static init failed and took `AppTerminalMode` and `AppNavi` down ("Initialising navigation" forever). Fixed with listener bases generated from the `org.dsi` interfaces and guarded lazy creation; see [Landmines](../LANDMINES.md).
+- Identify with the VehicleStatus component accepted; the phone started VehicleStatus updates (range, temperature, warning) and asked for `VehicleSpeedData`.
+- PASCD: one sentence per second; on pulling away `0.88 → 1.74 m/s` from CAN wheel speed, 0 at standstill.
+- VehicleStatus: range 595 km and the warning went out; the outside temperature did not, because the code demanded `CarBCTemperature.state == 1`, which this kombi leaves unset. Stock `AbstractBCComponent` checks only the DSI valid flag; the code now does the same (not yet re-checked in the car).
+- iPhone battery: stock's `StartPowerUpdates` already asks for the battery (`nothing to add`), but the first `PowerUpdate` carried only the charging state, no level; the VC therefore showed nothing. The hook now logs stock's request bytes and the first five `PowerUpdate`s to tell "level only on change" from a wrong parse. **[open]**
+- The phone proposes `enhancedSiri` (and `vehicleStateProtocol`, `videoPlayback`) in the control SETUP. The hook takes effect at the next `dio_manager` start, the jar at the next HU reboot, and the `dio_manager.json` change (installer) at the next `dio_manager` start.
 
 ## 🔄 Data flow
 

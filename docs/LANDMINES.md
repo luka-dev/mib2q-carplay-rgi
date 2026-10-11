@@ -424,6 +424,8 @@ Domains: [Build System](build-and-deploy/BUILD_SYSTEM.md), [Deploy and Release](
 
 **`IMMICombiScreenChangeManager` must not be a required service.** MU1316 has no implementation, so requiring it means a silent infinite retry; `SteeringWheelInputModule` treats it as optional (`java_patch/com/luka/carplay/core/SteeringWheelInputModule.java:59`). · decompile · [Smartphone Tab and Kombi DSI](cluster-and-rgi/SMARTPHONE_TAB_AND_KOMBI_DSI.md).
 
+**Never subclass a stock helper class outside `org.dsi` / the classes the jar already uses, and never build a module's listeners in `CarPlayApp`'s static init.** On 2026-10-10 `VehicleDataModule$KombiListener extends de.audi.remotehmi.util.dsi.DSICarKombiListenerAdapter` compiled and passed the offline linkage audit, but on the car it threw `NoClassDefFoundError`; `CarPlayApp.<clinit>` failed with it and took `AppTerminalMode` and `AppNavi` down: "Initialising navigation" forever, no CarPlay. The audit cannot see which jar a stock class lives in on the unit. Fix: listener bases generated from the `org.dsi` interfaces (`KombiListenerBase`, `GeneralVehicleStatesListenerBase`, CN patch `java_patch_cn/kombi_listener_base.patch`), listeners created in `start()` under a `Throwable` guard. Triage: `/mnt/ota/system/logs/error_*.zip` holds the stack trace. · on-car 2026-10-10 · `java_patch/com/luka/carplay/core/VehicleDataModule.java` · 
+
 ---
 
 ## 🔍 RE methodology

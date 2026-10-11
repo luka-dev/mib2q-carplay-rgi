@@ -273,8 +273,16 @@ static size_t status_due_locked(uint64_t now, uint8_t* out, size_t out_max) {
 }
 
 static void send_status(const uint8_t* p, size_t n) {
-    if (n && hook_inject_message(MSG_VEHICLE_STATUS_UPDATE, p, n) != HOOK_OK)
+    char hex[3 * 32 + 1];
+    size_t i;
+    if (!n) return;
+    if (hook_inject_message(MSG_VEHICLE_STATUS_UPDATE, p, n) != HOOK_OK) {
         LOG_WARN(LOG_MODULE, "VehicleStatusUpdate not queued");
+        return;
+    }
+    for (i = 0; i < n && i < 32; i++) snprintf(hex + 3 * i, 4, "%02X ", p[i]);
+    hex[3 * (i ? i : 0)] = 0;
+    LOG_WARN(LOG_MODULE, "VehicleStatusUpdate sent: %s", hex);
 }
 
 /* Under veh_lock: append one speed sample, return the sentence length to send (0 = none). */
@@ -310,6 +318,7 @@ static void send_pascd(const char* s, size_t n) {
         return;
     }
     if (++veh_pascd_sent == 1) LOG_WARN(LOG_MODULE, "first PASCD sent: %s", s);
+    else if (veh_pascd_sent % 60 == 0) LOG_WARN(LOG_MODULE, "PASCD #%u: %s", veh_pascd_sent, s);
 }
 
 static void veh_on_cmd(uint16_t type, uint8_t flags, const uint8_t* p, uint32_t len, void* ctx) {
