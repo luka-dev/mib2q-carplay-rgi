@@ -143,9 +143,29 @@ def create(settings: dict):
         raise RuntimeError("another machine operation is active; creation must be serial")
     result = client(*creation_arguments(settings), timeout=None)
     save("creation.json", result)
+    return finish_creation(settings, result)
+
+
+def finish_creation(settings: dict, result: dict):
+    if (result.get("name") != settings["machine"] or result.get("bundle") != settings["bundle"] or
+            result.get("libraryRoot") != str(LIBRARY)):
+        raise RuntimeError("creation report does not match the dedicated guest profile")
+    steps = result.get("steps")
+    if not isinstance(steps, list) or not steps or any(
+            not isinstance(step, dict) or step.get("status") != "passed" for step in steps) or not any(
+            step.get("step") == "firstBoot" for step in steps):
+        raise RuntimeError("creation report has no successful first boot")
     machine = owned_machine(settings, client("vm", "list"))
-    if machine is None or machine.get("state") != "stopped" or machine.get("bundle") != settings["bundle"]:
-        raise RuntimeError("creation did not leave the expected stopped machine")
+    # Launchpad 2.9.2 keeps its verified first boot running. The standalone
+    # CLI's stopped-at-return convention is not the app's lifecycle contract.
+    if machine is None or machine.get("state") not in ("stopped", "running") or \
+            machine.get("bundle") != settings["bundle"]:
+        raise RuntimeError("creation did not leave the expected available guest")
+    ledger = OUT / "machine.json"
+    if ledger.exists():
+        recorded = json.loads(ledger.read_text())
+        if any(recorded.get(field) != machine.get(field) for field in ("name", "libraryRoot", "bundle", "udid")):
+            raise RuntimeError("creation recovery cannot replace a different guest ownership record")
     save("machine.json", machine)
     return machine
 
@@ -178,7 +198,7 @@ def rpc(settings: dict, method: str, parameters: dict | None = None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("doctor", "plan", "create", "start", "stop",
+    parser.add_argument("action", choices=("doctor", "plan", "create", "recover-create", "start", "stop",
                                           "status", "snapshot", "diagnose", "unlock", "screenshot"))
     parser.add_argument("--headless", action="store_true")
     args = parser.parse_args()
@@ -189,6 +209,8 @@ def main():
         result = doctor(settings)
     elif args.action == "create":
         result = create(settings)
+    elif args.action == "recover-create":
+        result = finish_creation(settings, json.loads((OUT / "creation.json").read_text()))
     elif args.action == "status":
         status = client("status")
         machines = [] if status.get("machines") == 0 else client("vm", "list")

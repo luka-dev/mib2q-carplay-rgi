@@ -8,8 +8,12 @@ qnx_dir="build/vphone-lab/qnx-network"
 case "$action" in
     bootstrap)
         exec python3 -m wireless.vphone_lab.bootstrap "$@" ;;
-    doctor|plan|create|start|stop|status|snapshot|diagnose|unlock|screenshot)
+    doctor|plan|create|recover-create|start|stop|status|snapshot|diagnose|unlock|screenshot)
         exec python3 -m wireless.vphone_lab.lab "$action" "$@" ;;
+    usb)
+        exec python3 -m wireless.vphone_lab.usb "$@" ;;
+    ethernet)
+        exec python3 -m wireless.vphone_lab.ethernet "$@" ;;
     qnx-build)
         source scripts/build_hook_common.sh
         OUTDIR_REL=build/wireless-alt-qemu HOOK_WIRELESS=1 HOOK_AUDIO=0 \

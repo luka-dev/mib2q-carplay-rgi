@@ -13,6 +13,11 @@ from wireless.lab_common import qnx_receiver
 
 class VPhoneLabTests(unittest.TestCase):
     def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        out = patch.object(lab, "OUT", Path(directory.name))
+        out.start()
+        self.addCleanup(out.stop)
         self.settings = lab.profile()
         self.machine = {"name": self.settings["machine"], "libraryRoot": str(lab.LIBRARY),
                         "bundle": self.settings["bundle"], "state": "stopped"}
@@ -69,19 +74,42 @@ class VPhoneLabTests(unittest.TestCase):
                 lab.create(self.settings)
             client.assert_called_once_with("vm", "list")
 
-    def test_success_requires_stopped_guest_and_correct_bundle(self):
+    def test_success_requires_available_guest_and_correct_bundle(self):
         report = {"machine": None, "ready": True, "blockers": [], "free_gb": 100}
+        created = {"name": self.settings["machine"], "libraryRoot": str(lab.LIBRARY),
+                   "bundle": self.settings["bundle"], "steps": [{"step": "firstBoot", "status": "passed"}]}
         for final in (self.machine, dict(self.machine, state="running"),
-                      dict(self.machine, bundle="2.8.0")):
+                      dict(self.machine, bundle="2.8.0"), dict(self.machine, state="busy: restore")):
             with patch.object(lab, "doctor", return_value=report), \
-                    patch.object(lab, "client", side_effect=[[], {"created": True}, [final]]) as client, \
+                    patch.object(lab, "client", side_effect=[[], created, [final]]) as client, \
                     patch.object(lab, "save"):
-                if final == self.machine:
+                if final.get("state") in ("stopped", "running") and final.get("bundle") == self.settings["bundle"]:
                     self.assertEqual(lab.create(self.settings), final)
                 else:
                     with self.assertRaises(RuntimeError):
                         lab.create(self.settings)
                 self.assertEqual(client.call_args_list[1].kwargs, {"timeout": None})
+
+    def test_recovery_requires_matching_successful_first_boot_report(self):
+        report = {"name": self.settings["machine"], "libraryRoot": str(lab.LIBRARY),
+                  "bundle": self.settings["bundle"], "steps": [{"step": "firstBoot", "status": "passed"}]}
+        for change in ({"name": "other"}, {"bundle": "2.8.0"}, {"steps": []},
+                       {"steps": [{"step": "firstBoot", "status": "failed"}]},
+                       {"steps": [{"step": "restore", "status": "passed"}]}):
+            with patch.object(lab, "client") as client, patch.object(lab, "save") as save:
+                with self.assertRaises(RuntimeError):
+                    lab.finish_creation(self.settings, dict(report, **change))
+                client.assert_not_called()
+                save.assert_not_called()
+
+    def test_recovery_cannot_overwrite_changed_guest_identity(self):
+        report = {"name": self.settings["machine"], "libraryRoot": str(lab.LIBRARY),
+                  "bundle": self.settings["bundle"], "steps": [{"step": "firstBoot", "status": "passed"}]}
+        lab.save("machine.json", dict(self.machine, udid="original"))
+        with patch.object(lab, "client", return_value=[dict(self.machine, udid="replacement")]), patch.object(lab, "save") as save:
+            with self.assertRaisesRegex(RuntimeError, "ownership record"):
+                lab.finish_creation(self.settings, report)
+            save.assert_not_called()
 
     def test_rpc_requires_the_owned_running_guest(self):
         with patch.object(lab, "client", return_value=[self.machine]) as client:
