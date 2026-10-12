@@ -8,10 +8,12 @@ qnx_dir="build/vphone-lab/qnx-network"
 case "$action" in
     bootstrap)
         exec python3 -m wireless.vphone_lab.bootstrap "$@" ;;
-    doctor|plan|create|recover-create|start|stop|status|snapshot|diagnose|unlock|screenshot)
+    doctor|plan|create|recover-create|start|debug-start|stop|status|snapshot|diagnose|unlock|screenshot)
         exec python3 -m wireless.vphone_lab.lab "$action" "$@" ;;
     usb)
         exec python3 -m wireless.vphone_lab.usb "$@" ;;
+    usb-kernel)
+        exec python3 -m wireless.vphone_lab.usb_kernel "$@" ;;
     ethernet)
         exec python3 -m wireless.vphone_lab.ethernet "$@" ;;
     qnx-build)

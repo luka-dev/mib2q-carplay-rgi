@@ -11,6 +11,14 @@ extern unsigned int sleep(unsigned int);
 extern int fflush(void *);
 extern void *dlopen(const char *, int), *dlsym(void *, const char *);
 extern const char *dlerror(void);
+extern void *objc_getClass(const char *), *sel_registerName(const char *);
+extern void *objc_msgSend(void *, void *, ...);
+extern void *xpc_connection_create_mach_service(const char *, void *, unsigned long long);
+extern void xpc_connection_set_event_handler(void *, void (^)(void *));
+extern void xpc_connection_activate(void *);
+extern void *xpc_dictionary_create(const char **, const void **, size_t);
+extern void xpc_connection_send_message(void *, void *);
+extern void xpc_connection_cancel(void *), xpc_release(void *);
 typedef struct __sFILE FILE;
 extern FILE *fopen(const char *, const char *);
 extern size_t fread(void *, size_t, size_t, FILE *);
@@ -76,7 +84,7 @@ static int dump(CFRef d) {
 
 int main(int argc, char **argv) {
     alarm(20);
-    if (argc != 3 || getuid() != 0 || (strcmp(argv[1], "probe") && strcmp(argv[1], "apply") && strcmp(argv[1], "restore") && strcmp(argv[1], "reconnect") && strcmp(argv[1], "network") && strcmp(argv[1], "apply-destroy"))) return 2;
+    if (argc != 3 || getuid() != 0 || (strcmp(argv[1], "probe") && strcmp(argv[1], "apply") && strcmp(argv[1], "restore") && strcmp(argv[1], "reconnect") && strcmp(argv[1], "network") && strcmp(argv[1], "apply-destroy") && strcmp(argv[1], "iap-list") && strcmp(argv[1], "iap-wake"))) return 2;
     /* Reject physical controllers before loading any mutating SPI. */
     u32 service = IOServiceGetMatchingService(0, IOServiceMatching("AppleVirtIOUSBDeviceController"));
     if (!service) return 3;
@@ -92,6 +100,24 @@ int main(int argc, char **argv) {
     printf("owned research USB description verified\n"); fflush(0);
     if (!strcmp(argv[1], "probe")) return dump(original);
     if (!strcmp(argv[1], "network")) return network_probe();
+    if (!strcmp(argv[1], "iap-wake")) {
+        void *connection = xpc_connection_create_mach_service("com.apple.iap2d.xpc", 0, 2);
+        if (!connection) return 27;
+        xpc_connection_set_event_handler(connection, ^(void *event) { (void)event; printf("native accessory XPC event\n"); fflush(0); });
+        xpc_connection_activate(connection);
+        void *message = xpc_dictionary_create(0, 0, 0);
+        xpc_connection_send_message(connection, message); xpc_release(message);
+        sleep(10); xpc_connection_cancel(connection); xpc_release(connection); return 0;
+    }
+    if (!strcmp(argv[1], "iap-list")) {
+        if (!dlopen("/System/Library/Frameworks/ExternalAccessory.framework/ExternalAccessory", 2)) return 25;
+        void *type = objc_getClass("EAAccessoryManager");
+        if (!type) return 26;
+        void *manager = objc_msgSend(type, sel_registerName("sharedAccessoryManager"));
+        void *accessories = objc_msgSend(manager, sel_registerName("connectedAccessories"));
+        printf("native ExternalAccessory count=%lu\n", (unsigned long)objc_msgSend(accessories, sel_registerName("count")));
+        fflush(0); sleep(10); return 0;
+    }
 
     CFRef backup = 0;
     if (!strcmp(argv[1], "restore")) {

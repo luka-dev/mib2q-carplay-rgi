@@ -21,7 +21,7 @@ def build() -> Path:
     out = lab.OUT / "usb"
     out.mkdir(parents=True, exist_ok=True)
     libraries = {
-        "libSystem": ("/usr/lib/libSystem.B.dylib", ["printf", "puts", "strcmp", "getuid", "sleep", "alarm", "fflush", "dlopen", "dlsym", "dlerror", "fopen", "fread", "fclose", "socket", "connect", "close", "send", "recv", "setsockopt", "inet_pton", "if_nametoindex", "htons", "memcmp", "__chkstk_darwin", "__stack_chk_guard", "__stack_chk_fail"]),
+        "libSystem": ("/usr/lib/libSystem.B.dylib", ["printf", "puts", "strcmp", "getuid", "sleep", "alarm", "fflush", "dlopen", "dlsym", "dlerror", "fopen", "fread", "fclose", "socket", "connect", "close", "send", "recv", "setsockopt", "inet_pton", "if_nametoindex", "htons", "memcmp", "xpc_connection_create_mach_service", "xpc_connection_set_event_handler", "xpc_connection_activate", "xpc_dictionary_create", "xpc_connection_send_message", "xpc_connection_cancel", "xpc_release", "_NSConcreteGlobalBlock", "__chkstk_darwin", "__stack_chk_guard", "__stack_chk_fail"]),
         "CoreFoundation": ("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation", [
             "kCFTypeDictionaryKeyCallBacks", "kCFTypeDictionaryValueCallBacks", "kCFTypeArrayCallBacks", "kCFBooleanTrue",
             "CFStringCreateWithCString", "CFDictionaryCreateMutable", "CFDictionaryGetValue", "CFDictionarySetValue",
@@ -29,6 +29,7 @@ def build() -> Path:
             "CFDataCreate", "CFPropertyListCreateWithData", "CFGetTypeID", "CFDictionaryGetTypeID", "CFDataGetTypeID", "CFStringGetTypeID"]),
         "IOKit": ("/System/Library/Frameworks/IOKit.framework/IOKit", ["IOServiceGetMatchingService", "IOServiceMatching",
             "IORegistryEntryCreateCFProperty", "IORegistryEntryFromPath", "IORegistryEntrySetCFProperties", "IOObjectRelease"]),
+        "objc": ("/usr/lib/libobjc.A.dylib", ["objc_getClass", "sel_registerName", "objc_msgSend"]),
     }
     for name, (install, symbols) in libraries.items():
         (out / f"{name}.tbd").write_text(
@@ -38,7 +39,7 @@ def build() -> Path:
     sysroot.mkdir(exist_ok=True)
     env = {k: v for k, v in os.environ.items() if k != "SDKROOT"}
     subprocess.run(["clang", "-target", "arm64-apple-ios18.0", "-isysroot", str(sysroot),
-                    "-O2", "-Wall", "-Wextra", "-Werror", "-c", str(Path(__file__).with_name("usb_description.c")),
+                    "-O2", "-Wall", "-Wextra", "-Werror", "-fblocks", "-c", str(Path(__file__).with_name("usb_description.c")),
                     "-o", str(out / "usb.o")], env=env, check=True)
     binary = out / "usb-description"
     subprocess.run(["ld", "-ld_classic", "-arch", "arm64", "-platform_version", "ios", "18.0", "18.0",
@@ -53,7 +54,7 @@ def _run(mode: str) -> dict:
     settings = lab.profile()
     machine = lab.require_machine(settings, "running")
     udid = machine.get("udid", "")
-    if mode not in ("probe", "apply", "apply-destroy", "restore", "reconnect", "network") or not re.fullmatch(r"0000FE01-[0-9A-F]{16}", udid):
+    if mode not in ("probe", "apply", "apply-destroy", "restore", "reconnect", "network", "iap-list", "iap-wake") or not re.fullmatch(r"0000FE01-[0-9A-F]{16}", udid):
         raise ValueError("expected the owned research VM identity and an explicit USB action")
     info = lab.rpc(settings, "device.info").get("result", {})
     if info.get("model") != "iPhone99,11" or info.get("ios_version") != "26.6.2":
@@ -122,10 +123,10 @@ def run(mode: str) -> dict:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("probe", "apply", "apply-destroy", "restore", "reconnect", "network"))
+    parser.add_argument("mode", choices=("probe", "apply", "apply-destroy", "restore", "reconnect", "network", "iap-list", "iap-wake"))
     parser.add_argument("--experimental", action="store_true",
                         help="run a live USB replacement experiment; may stop this VM")
     args = parser.parse_args()
-    if args.mode not in ("probe", "network") and not args.experimental:
+    if args.mode not in ("probe", "network", "iap-list", "iap-wake") and not args.experimental:
         parser.error("live USB replacement is experimental and requires --experimental")
     print(json.dumps(run(args.mode), indent=2))

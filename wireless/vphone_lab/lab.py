@@ -198,7 +198,7 @@ def rpc(settings: dict, method: str, parameters: dict | None = None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("doctor", "plan", "create", "recover-create", "start", "stop",
+    parser.add_argument("action", choices=("doctor", "plan", "create", "recover-create", "start", "debug-start", "stop",
                                           "status", "snapshot", "diagnose", "unlock", "screenshot"))
     parser.add_argument("--headless", action="store_true")
     args = parser.parse_args()
@@ -215,6 +215,11 @@ def main():
         status = client("status")
         machines = [] if status.get("machines") == 0 else client("vm", "list")
         result = {"backend": "vphone", "host": status, "machine": owned_machine(settings, machines)}
+    elif args.action == "debug-start":
+        require_machine(settings, "stopped")
+        result = client("exec", "--bundle", settings['bundle'], "vm", "launch",
+                        "--library-root", str(LIBRARY), settings['machine'],
+                        "--kernel-debug-port", "60321", "--headless", timeout=None)
     elif args.action == "start":
         require_machine(settings, "stopped")
         arguments = ["vm", "start", *machine_arguments(settings), "--wait", "--timeout", "300"]

@@ -1,6 +1,6 @@
 # vphone CarPlay laboratory
 
-_Active guest platform · 2026-10-11 · Branch `feat/vphone-carplay-lab`._
+_Active guest platform · 2026-10-12 · Branch `feat/vphone-carplay-lab`._
 
 [Wireless overview](README.md) · [Retained Inferno evidence](IOS_VM_LAB.md) · [Software MFi](TEST_SOFTWARE_MFI.md)
 
@@ -27,7 +27,7 @@ they do not demonstrate our CarPlay sender, encoder, MFi or AltScreen path.[^1]
 | Shared signer | Loopback runtime returned a bounded 711-byte MFi-SAP response; host crypto tests passed |
 | USB trust | Native pairing accepted by the dedicated guest |
 | Ethernet attachment | Original NCM primary interface exchanges IPv6 with QNX; native `/info` returns HTTP 200 / 210.81 |
-| iAP2 attachment | HID registration reaches the guest driver; live USB replacement stops VZ before acceptance |
+| iAP2 attachment | Guest vendor bulk adapter enumerates and survives; report descriptor/control write verified; detect and authentication pending |
 
 `scripts/carplay_lab.sh doctor` writes the actual host report to
 `build/vphone-lab/doctor.json` and exits nonzero until its checks pass. Host Setup
@@ -77,12 +77,12 @@ the guest. They never select a physical phone or fall back to Inferno.
 ```mermaid
 flowchart LR
     accTitle: vphone CarPlay Laboratory Migration
-    accDescr: vphone renders native applications and reaches QNX through its original NCM link. iAP2 attachment remains blocked by USB reinitialization, so MFi and video acceptance are pending.
+    accDescr: vphone renders native applications and reaches QNX through its original NCM link. The vendor bulk iAP adapter enumerates, but accessory-manager discovery and native authentication remain pending.
 
     launchpad["Launchpad guest control"] --> ios_guest["iOS guest with Metal"]
     ios_guest --> ethernet_adapter["Owned NCM Ethernet adapter"]
     ethernet_adapter --> qnx_receiver["Native stock210 QNX receiver"]
-    ios_guest -.-> iap_adapter["iAP2 USB initialization blocker"]
+    ios_guest -.-> iap_adapter["Vendor bulk iAP adapter; discovery pending"]
     iap_adapter -.-> qnx_receiver
     mfi_signer["Public fixture MFi signer"] --> qnx_receiver
     qnx_receiver --> video_capture["Authenticated AVC capture"]
@@ -106,34 +106,81 @@ response. Independent parsing of the captured binary plist returned
 `sourceVersion=210.81` and `model=AirPlayGeneric1,1`. This establishes bidirectional
 Ethernet and native receiver discovery; it does not establish CarPlay or MFi.
 
-## 🔌 USB initialization blocker
+## 🔌 Native USB adapter and discovery boundary
 
-A bounded, guest-only helper verifies the recorded UDID, the research product
-string, controller class and chosen chip `FE01` before using native USB SPI.
-It saves the original description and runs as a one-shot launchd job through
-Launchpad RPC. Read-only `probe` is the normal action. Live replacement actions
-require `--experimental` and are excluded from startup.
+The original diagnostic, an AVP available-buffer log, was not the fatal cause.
+Static arm64e analysis shows that handler logging and returning. Reordering the
+guest's buffer posting and `DRIVER_OK` did not cure the stop and remains a failed
+experiment, not the active adapter.
 
-Three live descriptor experiments stopped the VM with `VZErrorDomain` code 1:
-the four-interface combined layout, adding HID while preserving both original
-NCM channels, and adding HID without an extra `GoOffAndOnBus` call. The guest
-registered `IapOverUsbHid`, but this is not evidence of a usable host HID endpoint.
-The host's `com.apple.VirtualizationCore` / `avp.usb-device-controller` log reports:
+An attached debugger on the owned VZ service caught the actual crash: a
+`Security Assertion Hit` in the configuration-descriptor validator. On this
+macOS build, that validator accepts a specific set of USB interface classes and
+bulk/control endpoints; native HID class 3 and interrupt endpoints are excluded.
+The live buffer contained the new six-interface configuration descriptor. The
+host executable, its checks and host security settings are unchanged.
 
-> Guest sent an available buffer notification without completing the device initialization first.
+The guest adapter retains the native `IOAccessoryPortUSB` protocol driver but
+constructs its virtual wire interface as `FF/FF/FF` with a bulk input pipe. HID
+report framing, native iAP handling and MFi checks are not replaced. This is a
+virtual vendor bulk transport and does not establish physical USB HID behavior.
 
-Restarts recovered the original USB description, native UI and NCM. Removing the
-extra bus cycle did not fix the ordering failure. The next investigation is
-native AVP queue initialization and reset ordering; no kernel patch has been
-applied. Static triage found the controller and completion-queue code in the
-pristine research kernel's `AppleVirtualPlatform` component. Host errors and
-disassembly remain ignored evidence under `build/vphone-lab/`.
+| Unslid research-kernel address | Original | Adapter |
+|---|---|---|
+| `0xfffffe000859148c` | Interface class 3 | Vendor class 255 |
+| `0xfffffe0008591490` | Subclass 0 | Subclass 255 |
+| `0xfffffe0008591494` | Protocol 0 | Protocol 255 |
+| `0xfffffe000859151c` | Interrupt pipe type 3 | Bulk pipe type 2 |
 
-A separate `DeviceDestroy` experiment returned `0xe0000001`; the VM remained
-running but its USB description was no longer available. An error return does
-not imply that teardown had no side effects. The helper now attempts rollback
-on that failure as well. Recovery uses a clean Launchpad stop/start, then reads
-the original description again. This is not a working iAP2 reset recipe.
+The adapter verifies pristine kernel SHA-256
+`86895a2eebeb7fcfb68bcd60f2d7e685687faea07ee31166fb58c872b38e0d92`,
+the live PC against a unique reference-code location, ASLR and all original
+instruction bytes. GDB access must belong to the VZ service holding this
+machine's disk and listen only on `127.0.0.1:60321`. All guest CPUs are paused for
+the small write; readback is checked before detaching. The patch is in guest RAM
+and disappears at restart. Partially patched or changed code is rejected.
+
+Measured enumeration has vendor interface 5, input endpoint `0x84`, bulk type 2,
+64-byte packets. Its genuine 208-byte report descriptor was read and a 10-byte
+control report was written. The VM stayed running; original USBMUX and both NCM
+channels remained available. Native `/info` over NCM still returned HTTP 200.
+These are USB and Ethernet results, not an iAP2 or MFi acceptance result.
+
+A cold-start test of stock `DeviceModeCarplay2` also hit the descriptor validator.
+It was reverted using the official disk/SEP/NVRAM snapshot
+`usb-cold-before-20261012`; the guest's defaults file is original. The earlier
+`DeviceDestroy` experiment partly tore down USB despite returning an error, so
+it is not a working reset recipe.
+
+Native `IOAccessoryPortUSB` is published, but the measured registry has no
+`IOAccessoryManager`. The iOS 26 device transport is the
+`IOAccessoryManager.transport` plugin; `accessoryd` owns the iAP2 XPC service.
+The native XPC helper activated that daemon without changing launchd jobs or
+claiming authentication. Repeated detect reads still timed out. The next step is
+to establish native manager/transport discovery and obtain detect, SYN/ACK and
+actual MFi acceptance before requesting CarPlay video.
+
+For the RAM adapter, run the official debug launch in one terminal:
+
+```sh
+scripts/carplay_lab.sh stop
+scripts/carplay_lab.sh debug-start
+```
+
+Then operate the owned guest from another terminal:
+
+```sh
+scripts/carplay_lab.sh usb-kernel --apply
+scripts/carplay_lab.sh usb apply --experimental
+scripts/carplay_lab.sh usb iap-wake
+scripts/carplay_lab.sh usb iap-list
+```
+
+`debug-start` stays attached to its launch command. It is not a firmware restore.
+The bounded guest helper verifies the recorded UDID, research product string,
+controller and chosen chip `FE01`. Live USB changes remain opt-in; ordinary
+startup never applies them. Reports, native descriptors, debugger evidence and
+pristine reference extraction stay ignored under `build/vphone-lab/`.
 
 The shared QNX image retains pairing, native MFi-SAP, media authentication and
 the explicit QEMU-only paired AltScreen gate. Hardware decoder output still
@@ -200,7 +247,7 @@ existing operation rather than starting another restore.[^5]
 
 ## 🧪 Shared receiver and evidence tools
 
-Migration validation passed 26 guest/bootstrap/transport tests and the 88 retained
+Migration validation passed 35 guest/bootstrap/transport tests and the 88 retained
 laboratory regression tests. A fresh QNX build, native `/info` and the shared
 signer's loopback response were checked. These results establish the migrated
 tools; they do not establish a vphone sender session.
