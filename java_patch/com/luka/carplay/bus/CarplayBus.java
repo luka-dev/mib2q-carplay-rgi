@@ -49,7 +49,6 @@ public final class CarplayBus {
     public static final int EVT_RGD_UPDATE  = 0x0020;
     public static final int EVT_TEL_LISTS   = 0x0040;   /* sticky text: r.* recents, f.* favorites */
     public static final int EVT_TEL_COMM    = 0x0041;   /* sticky text: signal, registration, airplane, carrier */
-    public static final int EVT_UPMIX_LEVEL = 0x0050;   /* sticky binary [u8 level 0 off..4 aggressive] */
 
     /* commands Java -> hook (mirror bus_protocol.h) */
     public static final int CMD_SYNC_REQ       = 0x0100;   /* replay all sticky state       */
@@ -59,7 +58,7 @@ public final class CarplayBus {
     public static final int CMD_ALT_RGI        = 0x0116;   /* [u8 0=off 1=on] confirmed RGI presentation */
     public static final int CMD_TEL            = 0x0117;   /* [u8 action][u8 on]: 1 = mute, 2 = hold */
     public static final int CMD_VEHICLE        = 0x0118;   /* LE [u8 ver=1][u8 valid][u16 speed cm/s][u8 gear][u16 range km][i16 temp 0.1C][u8 warn][u32 ms] */
-    public static final int CMD_UPMIX          = 0x0119;   /* [u8 level 0 off..4 aggressive], MMI Sound effects "UpMix" */
+    public static final int CMD_UPMIX          = 0x0119;   /* [u8 level 0 off..4 aggressive], MMI Sound effects "CarPlay UpMix" */
 
     public interface Listener {
         void onFrame(int type, int flags, byte[] payload, int len);

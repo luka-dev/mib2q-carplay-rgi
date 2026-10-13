@@ -177,6 +177,12 @@ struct spa_stereo_upmix {
     volatile int _level_req;
     int _level_applied;
     float _wet;
+    /* the engine tuning (alpha, inst_alpha, duck_depth, side_lp_hz) now and the
+     * level's target: a change glides over SPA_UPMIX_LEVEL_FADE_MS, not a step */
+    float _tune[4];
+    float _tune_from[4];
+    float _tune_target[4];
+    float _tune_t;                   /* 0..1 through the glide */
 
     /* A complete 1024-frame stereo packet is staged before output starts.
      * This makes widening safe even when the PCM2 and PCM6 ranges overlap. */
@@ -190,11 +196,12 @@ struct spa_stereo_upmix {
  * defaults; production selects SCENE. */
 void spa_stereo_upmix_default_config(struct spa_stereo_upmix_config *config);
 
-/* SCENE upmix level, the MMI "UpMix" choice.  OFF is the bypass ([L, R, 0, 0, 0, 0],
- * still SPA_SCENE_LATENCY_FRAMES late so the switch never jumps in time); NORMAL is
- * the configured scene (the AUDIO_SCENE_* knobs); the others are fixed tunings, rear
- * delay always as configured.  Any level change fades over SPA_UPMIX_LEVEL_FADE_MS
- * (ease in/out); the tuning itself switches at the next process call. */
+/* SCENE upmix level, the MMI "CarPlay UpMix" choice.  OFF is the bypass ([L, R, 0, 0,
+ * 0, 0], still SPA_SCENE_LATENCY_FRAMES late so the switch never jumps in time); NORMAL
+ * is the configured scene (the AUDIO_SCENE_* knobs); the others are fixed tunings, rear
+ * delay always as configured.  Every change takes SPA_UPMIX_LEVEL_FADE_MS: to and from
+ * OFF an ease in/out crossfade with the plain stereo, between the others a linear glide
+ * of the tuning.  A new stream (init/reset) starts at its level directly. */
 enum spa_upmix_level {
     SPA_UPMIX_LEVEL_OFF = 0,
     SPA_UPMIX_LEVEL_MODERATE = 1,

@@ -296,26 +296,28 @@ patch_dio() {
     chmod 644 "$tmp"; mv -f "$tmp" "$DIO" && echo "  dio_manager.json route-guidance, telephony and vehicle IDs registered (nmea +PASCD)"
 }
 
-# ---- lang_data.zip: the Sound effects "UpMix" row texts --------------------------
-# carplay/upmix_lang.py (with our ldzip.py) appends the label and the five levels to
+# ---- lang_data.zip: the Sound effects "CarPlay UpMix" row texts --------------------------
+# carplay/upmix_lang.py (with our ldzip.py) puts the label and the five levels into slots 1000..1005 of
 # every HMIToneEvoHigh locale; idempotent, atomic.  It needs M.I.B.'s micropython
-# (apps/sbin/beta on the SD, or one installed by M.I.B. tools).  Without it the row
-# shows the texts built into the jar, so a skip is never broken.  The zip is shared
-# with other patches (e.g. luka-collection), so uninstall does not restore it: our
-# appended strings stay, unused.  The first install keeps a copy (.carplay-stock).
+# (apps/sbin/beta on the SD, or one installed by M.I.B. tools).  The jar has no copy of
+# the texts: without this step the row has empty labels, so a failure is loud.  The first
+# install keeps the zip as .carplay-stock (an upgrade keeps that first copy) and uninstall
+# puts it back - which also drops any OTHER patch's text edits made after our install
+# (e.g. luka-collection): re-apply those after an uninstall.
 LANG_ZIP=/mnt/app/eso/hmi/lsd/jars/lang_data.zip
 patch_lang() {
     mp=
     for c in "$D/../apps/sbin/beta/micropython" "$(command -v micropython 2>/dev/null)"; do
         [ -n "$c" ] && [ -f "$c" ] && { mp=$c; break; }
     done
-    [ -n "$mp" ] || { echo "  WARN no M.I.B. micropython - UpMix row keeps the jar's texts"; return 0; }
-    [ -f "$LANG_ZIP" ] || { echo "  WARN no $LANG_ZIP - UpMix row keeps the jar's texts"; return 0; }
+    [ -n "$mp" ] || { echo "  WARN no M.I.B. micropython - CarPlay UpMix row will have NO labels"; return 0; }
+    [ -f "$LANG_ZIP" ] || { echo "  WARN no $LANG_ZIP - CarPlay UpMix row will have NO labels"; return 0; }
     backup_once "$LANG_ZIP" "$LANG_ZIP.carplay-stock" || return 0
     rm -f "$LANG_ZIP.carplay-new"
-    # the zip is rebuilt in memory (~0.5 MB, 4 MB heap measured); default heaps are smaller
-    "$mp" -X heapsize=16M "$RES/upmix_lang.py" "$LANG_ZIP" ||
-        { rm -f "$LANG_ZIP.carplay-new"; echo "  WARN UpMix texts not added - the row keeps the jar's texts"; }
+    # the zip is read whole (US 0.5 MB, EU 4.2 MB, 16 MB heap measured); default micropython
+    # heaps are smaller.  A build without -X support gets one plain try.
+    "$mp" -X heapsize=32M "$RES/upmix_lang.py" "$LANG_ZIP" || "$mp" "$RES/upmix_lang.py" "$LANG_ZIP" ||
+        { rm -f "$LANG_ZIP.carplay-new"; echo "  WARN CarPlay UpMix texts not added - the row will have NO labels"; }
 }
 
 echo "custom.sh: CarPlay $ACTION"
@@ -406,6 +408,7 @@ uninstall)
     # restore in-place patched configs
     [ -e "$CFG.carplay-stock" ] && mv -f "$CFG.carplay-stock" "$CFG"
     [ -e "$DIO.carplay-stock" ] && mv -f "$DIO.carplay-stock" "$DIO"
+    [ -e "$LANG_ZIP.carplay-stock" ] && mv -f "$LANG_ZIP.carplay-stock" "$LANG_ZIP" && echo "  restored $LANG_ZIP"
     for f in $NCM_FILES; do
         [ -e "$f.carplay-stock" ] && mv -f "$f.carplay-stock" "$f"
     done

@@ -608,8 +608,9 @@ static void test_scene_mask_worker(void)
     g_worker_sleep_ms = 0;
 }
 
-/* MMI levels: OFF is the bypass, input SPA_SCENE_LATENCY_FRAMES late; a level change
- * fades over SPA_UPMIX_LEVEL_FADE_MS and retunes the engine; a reset lands on the level. */
+/* MMI levels: OFF is the bypass, input SPA_SCENE_LATENCY_FRAMES late; to/from OFF
+ * crossfades and between levels the tuning glides, both over SPA_UPMIX_LEVEL_FADE_MS;
+ * init and reset land on the level. */
 static void test_scene_levels(void)
 {
     enum { N = 48000, BLOCK = 768 };
@@ -666,9 +667,22 @@ static void test_scene_levels(void)
     assert(state._wet == 1.0f && state._runtime._scene.cfg.alpha == 0.9f);
     config.level = SPA_UPMIX_LEVEL_NORMAL;
 
+    /* NORMAL -> FULL glides (one block in: between), then lands on FULL */
+    assert(spa_stereo_upmix_init(&state, &config) == SPA_STEREO_UPMIX_OK);
+    spa_stereo_upmix_set_level(&state, SPA_UPMIX_LEVEL_FULL);
+    assert(spa_stereo_upmix_process_s16(&state, in, BLOCK, out, N) == SPA_STEREO_UPMIX_OK);
+    assert(state._runtime._scene.cfg.alpha > config.scene.alpha && state._runtime._scene.cfg.alpha < 0.9f);
+    assert(state._runtime._scene.cfg.side_lp_hz > 7000.0f && state._runtime._scene.cfg.side_lp_hz < 11000.0f);
+    for (f = 0; f < N; f += BLOCK)
+        assert(spa_stereo_upmix_process_s16(&state, in + f * 2, BLOCK < N - f ? BLOCK : N - f,
+                                            out + f * TEST_CHANNELS, N) == SPA_STEREO_UPMIX_OK);
+    assert(state._runtime._scene.cfg.alpha == 0.9f && state._runtime._scene.cfg.side_lp_hz == 11000.0f);
+
     /* NORMAL restores the configured scene */
     spa_stereo_upmix_set_level(&state, SPA_UPMIX_LEVEL_NORMAL);
-    assert(spa_stereo_upmix_process_s16(&state, in, BLOCK, out, N) == SPA_STEREO_UPMIX_OK);
+    for (f = 0; f < N; f += BLOCK)
+        assert(spa_stereo_upmix_process_s16(&state, in + f * 2, BLOCK < N - f ? BLOCK : N - f,
+                                            out + f * TEST_CHANNELS, N) == SPA_STEREO_UPMIX_OK);
     assert(state._runtime._scene.cfg.alpha == config.scene.alpha &&
            state._runtime._scene.cfg.side_lp_hz == config.scene.side_lp_hz &&
            state._runtime._scene.cfg.duck_depth == config.scene.duck_depth);

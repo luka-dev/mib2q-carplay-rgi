@@ -74,6 +74,8 @@ public final class CarPlayApp {
                 if (fwRef == null) fwRef = new FrameworkRef((IContext) context);
                 ensureLifecycleWorkerLocked();
             }
+            /* the class itself may fail to link on an odd firmware: guard at the call */
+            try { UpmixSetting.boot(fwRef.framework()); } catch (Throwable t) { Log.w(TAG, "upmix level: " + t); }
         }
         Log.i(TAG, "transport up (bus always-on) build=" + BUILD_ID);
     }

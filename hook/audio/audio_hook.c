@@ -51,10 +51,25 @@
 #include <sys/asoundlib.h>
 #include <sys/socket.h>
 
-/* MMI "UpMix" level (enum spa_upmix_level): written by upmix_level.c from
- * CMD_UPMIX and the persisted value, read by both scene instances at init and
- * on every period (an int store/load; the instance applies it on its thread). */
+/* MMI "CarPlay UpMix" level (enum spa_upmix_level): Java's file (reloaded here
+ * at hook init and at every stream start, so a hook that came up before Java
+ * wrote it still catches up), then CMD_UPMIX (upmix_level.c).  Both scene
+ * instances read it at init and on every period (an int store/load; the
+ * instance applies it on its own thread). */
 volatile int spa_upmix_level = SPA_UPMIX_LEVEL_NORMAL;
+
+/* 1 = read from the file, 0 = no file or a bad one (the level is left as is) */
+int spa_upmix_level_reload(void)
+{
+    FILE *f = fopen(SPA_UPMIX_LEVEL_FILE, "r");
+    int level = -1, ok;
+
+    if (!f) return 0;
+    ok = fscanf(f, "%d", &level) == 1 && level >= 0 && level < SPA_UPMIX_LEVEL_COUNT;
+    fclose(f);
+    if (ok) spa_upmix_level = level;
+    return ok;
+}
 
 DEFINE_LOG_MODULE(audio);
 
@@ -1898,6 +1913,7 @@ static void spa103_render_start(uint32_t generation, int64_t formatIndex, int ha
     upmixConfig.backend = config->stereoUpmixBackend;
     upmixConfig.lfe_gain_q15 = config->stereoLfeGainQ15;
     spa_apply_scene_knobs(&upmixConfig, config);
+    (void)spa_upmix_level_reload();
     upmixConfig.level = spa_upmix_level;
     if (upmixConfig.backend == SPA_STEREO_UPMIX_SCENE) {
         spa_apply_scene_mask_blob(&upmixConfig);
@@ -3879,6 +3895,7 @@ static void spa_rt_upmix_start(snd_pcm_t *handle)
     upmixConfig.backend = config->stereoUpmixBackend;
     upmixConfig.lfe_gain_q15 = config->stereoLfeGainQ15;
     spa_apply_scene_knobs(&upmixConfig, config);
+    (void)spa_upmix_level_reload();
     upmixConfig.level = spa_upmix_level;
     spa_apply_scene_mask_blob(&upmixConfig);
     spa_scene_mask_worker_attach(&spa_rt_upmix.sceneMaskWorker, &spa_rt_upmix.sceneMaskWorkerStarted,

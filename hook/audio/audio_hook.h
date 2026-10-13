@@ -188,8 +188,12 @@ static inline int spa_type103_audio_buffer_size_for_offer(int64_t selectedIndex,
  * the hook may inspect files, initialise logging or create a writer thread. */
 extern const hook_module_def_t audio_module_def;
 
-/* MMI "UpMix" level, enum spa_upmix_level (stereo_upmix.h); upmix_level.c owns it. */
+/* MMI "CarPlay UpMix" level, enum spa_upmix_level (stereo_upmix.h).  Java owns it
+ * (UpmixSetting.java) and writes SPA_UPMIX_LEVEL_FILE at HMI boot and on a change;
+ * spa_upmix_level_reload() reads it (1 = read), CMD_UPMIX sets it live. */
+#define SPA_UPMIX_LEVEL_FILE "/tmp/carplay_upmix_level"   /* UpmixSetting.TMP_FILE */
 extern volatile int spa_upmix_level;
+int spa_upmix_level_reload(void);
 extern const hook_module_def_t upmix_level_module_def;
 
 /* ---- the decoded type-103 PCM6 rail ----------------------------------------------------------

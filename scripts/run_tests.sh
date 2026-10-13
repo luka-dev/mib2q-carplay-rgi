@@ -345,6 +345,10 @@ c++ -std=c++11 -O2 -w -fno-exceptions -fno-rtti \
 "$OUT/integration"
 
 
+printf '%-32s ' upmix_lang_test
+out=$(python3 -I tests/upmix_lang_test.py) || { echo "$out"; exit 1; }
+printf '%s\n' "$out" | tail -1
+
 printf '%-32s ' install_dio_test
 sh scripts/test_install_dio.sh
 

@@ -536,6 +536,7 @@ int spa_stereo_upmix_scene_track_change(struct spa_stereo_upmix *state)
  * scene fields can still express (erb_pool 0, unmix without cluster): a config
  * error at init(). */
 static void spa_upmix_apply_level(struct spa_stereo_upmix *state);
+static void spa_upmix_glide_tuning(struct spa_stereo_upmix *state, size_t frames, int land);
 
 static int spa_scene_arm(struct spa_stereo_upmix *state, int first)
 {
@@ -599,9 +600,16 @@ int spa_stereo_upmix_init(struct spa_stereo_upmix *state,
     state->_runtime._lfe_target_polarity = 1.0f;
     state->_runtime._lfe_dynamic_gain = 0.96f;
     /* start at the configured level, tuned and without a fade */
+    state->_tune[0] = state->_tune_target[0] = saved.scene.alpha;
+    state->_tune[1] = state->_tune_target[1] = saved.scene.inst_alpha;
+    state->_tune[2] = state->_tune_target[2] = saved.scene.duck_depth;
+    state->_tune[3] = state->_tune_target[3] = saved.scene.side_lp_hz;
     state->_level_applied = SPA_UPMIX_LEVEL_NORMAL;
     state->_level_req = saved.level;
-    if (saved.backend == SPA_STEREO_UPMIX_SCENE) spa_upmix_apply_level(state);
+    if (saved.backend == SPA_STEREO_UPMIX_SCENE) {
+        spa_upmix_apply_level(state);
+        spa_upmix_glide_tuning(state, 0, 1);
+    }
     state->_wet = state->_level_req != SPA_UPMIX_LEVEL_OFF ? 1.0f : 0.0f;
     state->_initialized = SPA_STEREO_UPMIX_MAGIC;
     return SPA_STEREO_UPMIX_OK;
@@ -621,6 +629,7 @@ int spa_stereo_upmix_reset(struct spa_stereo_upmix *state)
     if (state->config.backend == SPA_STEREO_UPMIX_SCENE)
         (void)spa_scene_arm(state, 0);   /* same config init() accepted */
     state->_wet = state->_level_applied != SPA_UPMIX_LEVEL_OFF ? 1.0f : 0.0f;   /* a new stream starts at its level */
+    if (state->config.backend == SPA_STEREO_UPMIX_SCENE) spa_upmix_glide_tuning(state, 0, 1);
     state->_runtime._lfe_polarity = 1.0f;
     state->_runtime._lfe_target_polarity = 1.0f;
     state->_runtime._lfe_dynamic_gain = 0.96f;
@@ -645,19 +654,45 @@ void spa_stereo_upmix_set_level(struct spa_stereo_upmix *state, int level)
     if (state && level >= 0 && level < SPA_UPMIX_LEVEL_COUNT) state->_level_req = level;
 }
 
+/* the level's tuning target; OFF keeps the current one running under the fade-out */
 static void spa_upmix_apply_level(struct spa_stereo_upmix *state)
 {
     const int level = state->_level_req;
     const struct scene_config *c = &state->config.scene;
+    int k;
 
     if (level == state->_level_applied) return;
     state->_level_applied = level;
-    if (level == SPA_UPMIX_LEVEL_OFF) return;       /* keep the tuning running under the fade-out */
-    if (level == SPA_UPMIX_LEVEL_NORMAL)
-        scene_engine_set_tuning(&state->_runtime._scene, c->alpha, c->inst_alpha, c->duck_depth, c->side_lp_hz);
-    else
-        scene_engine_set_tuning(&state->_runtime._scene, kUpmixLevels[level][0], kUpmixLevels[level][1],
-                                kUpmixLevels[level][2], kUpmixLevels[level][3]);
+    if (level == SPA_UPMIX_LEVEL_OFF) return;
+    for (k = 0; k < 4; k++) state->_tune_from[k] = state->_tune[k];
+    state->_tune_t = 0.0f;
+    if (level == SPA_UPMIX_LEVEL_NORMAL) {
+        state->_tune_target[0] = c->alpha;
+        state->_tune_target[1] = c->inst_alpha;
+        state->_tune_target[2] = c->duck_depth;
+        state->_tune_target[3] = c->side_lp_hz;
+    } else {
+        for (k = 0; k < 4; k++) state->_tune_target[k] = kUpmixLevels[level][k];
+    }
+}
+
+/* the tuning from where it was toward the level's target, linear over SPA_UPMIX_LEVEL_FADE_MS
+ * in this block's frames (all four knobs arrive together); land = jump to the target */
+static void spa_upmix_glide_tuning(struct spa_stereo_upmix *state, size_t frames, int land)
+{
+    float *cur = state->_tune;
+    float t;
+    int k;
+
+    if (state->_tune_t >= 1.0f && !land) return;
+    t = land ? 1.0f : state->_tune_t + (float)frames * 1000.0f /
+                                        ((float)SPA_UPMIX_LEVEL_FADE_MS * (float)SCENE_SR);
+    if (t > 1.0f) t = 1.0f;
+    state->_tune_t = t;
+    for (k = 0; k < 4; k++)
+        cur[k] = t >= 1.0f ? state->_tune_target[k]
+                           : state->_tune_from[k] + (state->_tune_target[k] - state->_tune_from[k]) * t;
+    scene_engine_set_tuning(&state->_runtime._scene, cur[0], cur[1], cur[2], cur[3]);
 }
 
 /* The net's bass (post[2]) and drum-core (post[1]) posteriors -> the LFE V2
@@ -863,6 +898,7 @@ static int spa_upmix_process(struct spa_stereo_upmix *state,
 
     if (state->config.backend == SPA_STEREO_UPMIX_SCENE) {
         spa_upmix_apply_level(state);
+        spa_upmix_glide_tuning(state, frames, 0);
         spa_scene_process(state, frames, (int16_t *)pcm6);
         return SPA_STEREO_UPMIX_OK;
     }
