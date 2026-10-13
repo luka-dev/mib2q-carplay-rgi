@@ -46,6 +46,7 @@ extern CFIndex CFDataGetLength(CFRef);
 extern u32 IOServiceGetMatchingService(u32, void *), IORegistryEntryFromPath(u32, const char *);
 extern void *IOServiceMatching(const char *);
 extern CFRef IORegistryEntryCreateCFProperty(u32, CFRef, void *, u32);
+extern CFRef IORegistryEntrySearchCFProperty(u32, const char *, CFRef, void *, u32);
 extern int IOObjectRelease(u32), IOObjectIsEqualTo(u32, u32), IOObjectConformsTo(u32, const char *);
 extern int IORegistryEntryGetParentEntry(u32, const char *, u32 *);
 extern int IORegistryEntryGetChildIterator(u32, const char *, u32 *);
@@ -221,7 +222,14 @@ static int iap_registry(u32 controller) {
         u32 service = IOServiceGetMatchingService(0, IOServiceMatching(classes[i]));
         printf("registry-class=%s present=%d", classes[i], service != 0);
         if (service && i < 2) printf(" accessory-plane=%u", IORegistryEntryInPlane(service, "IOAccessory"));
-        if (service && i == 1) { u32 parent = upstream(service); printf(" upstream-service=0x%x", parent); if (parent) IOObjectRelease(parent); }
+        if (service && i == 1) {
+            u32 parent = upstream(service); printf(" upstream-service=0x%x", parent); if (parent) IOObjectRelease(parent);
+            CFRef key = str("function-dock_parent");
+            CFRef link = IORegistryEntrySearchCFProperty(service, "IOService", key, 0, 3); CFRelease(key);
+            printf(" dock-parent-property=%d", link != 0);
+            if (link && CFGetTypeID(link) == CFDataGetTypeID()) printf(" dock-parent-bytes=%ld", CFDataGetLength(link));
+            if (link) CFRelease(link);
+        }
         printf("\n");
         if (service && i < 2) incomplete |= client_children(service, i ? "IOAccessoryPortUserClient" : "IOAccessoryManagerUserClient");
         if (service) IOObjectRelease(service);

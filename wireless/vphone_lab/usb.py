@@ -31,7 +31,7 @@ def build(*, catalogue: bool = False) -> Path:
             "CFArrayCreate", "CFRelease", "CFStringGetCString", "CFPropertyListCreateData", "CFDataGetBytePtr", "CFDataGetLength",
             "CFDataCreate", "CFPropertyListCreateWithData", "CFGetTypeID", "CFDictionaryGetTypeID", "CFDataGetTypeID", "CFStringGetTypeID", "CFNumberGetTypeID", "CFNumberGetValue"]),
         "IOKit": ("/System/Library/Frameworks/IOKit.framework/IOKit", ["IOServiceGetMatchingService", "IOServiceMatching",
-            "IORegistryEntryCreateCFProperty", "IORegistryEntryFromPath", "IORegistryEntrySetCFProperties", "IOObjectRelease", "IOObjectIsEqualTo", "IOObjectConformsTo", "IORegistryEntryGetParentEntry", "IORegistryEntryGetChildIterator", "IOIteratorNext", "IORegistryEntryInPlane"]),
+            "IORegistryEntryCreateCFProperty", "IORegistryEntrySearchCFProperty", "IORegistryEntryFromPath", "IORegistryEntrySetCFProperties", "IOObjectRelease", "IOObjectIsEqualTo", "IOObjectConformsTo", "IORegistryEntryGetParentEntry", "IORegistryEntryGetChildIterator", "IOIteratorNext", "IORegistryEntryInPlane"]),
         "objc": ("/usr/lib/libobjc.A.dylib", ["objc_getClass", "sel_registerName", "objc_msgSend", "class_copyMethodList", "method_getName", "sel_getName", "class_getName", "objc_copyClassList", "class_getImageName"]),
     }
     for name, (install, symbols) in libraries.items():

@@ -177,6 +177,7 @@ No Apple daemon job, authentication result or host security setting is changed.
 | `accessoryd` | Opens the manager's genuine `IOAccessoryManagerUserClient` |
 | Manager and USB port in `IOAccessory` plane | Both present |
 | USB port's `IOAccessoryManagerGetUpstreamService()` | `0`, no upstream manager |
+| `function-dock_parent` in port/provider ancestry | Absent |
 | USB port user client | No direct child found |
 | iAP2 detect | Control write succeeds; input read times out |
 | MFi / primary AVC / AltScreen AVC | Not reached |
@@ -198,15 +199,17 @@ flowchart LR
 ```
 
 The userland upstream lookup follows registry ancestry. The kernel transport
-also searches its provider ancestry for a manager. Publishing a sibling manager
-does not establish that relationship. Recreating the USB interface after
+searches provider ancestry for the `function-dock_parent` platform link using
+AppleARMPlatform's resolver (`0xfffffe0007b25980` in the pinned kernel), then caches
+its result. Publishing a sibling manager does not supply this platform link.
+Recreating the USB interface after
 manager creation did not solve it. A direct RAM write to the transport's cached
 manager field made USB reconfiguration and RPC time out; the VM subsequently
 stopped during debugger recovery. A normal official debug launch restored RPC
 and the unmodified USB defaults. This field write is excluded from the recipe.
 
-The remaining work is a proper virtual port relationship and connection-event
-path, followed by detect, SYN/ACK and genuine MFi acceptance. Guest software
+The remaining work is the native `function-dock_parent` relationship and
+connection-event path, followed by detect, SYN/ACK and genuine MFi acceptance. Guest software
 breakpoints (`Z0`) were observed at the native control-request and catalogue
 handlers. Accepted `Z1` requests did not yield the expected stop; absence of such
 a stop was not treated as proof that a function was not called.
