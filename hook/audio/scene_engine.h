@@ -187,6 +187,10 @@ int  scene_engine_init(struct scene_state *s, const struct scene_config *cfg);
  * build, no mask row: cheap enough for the hook's realtime period callback, where a reset runs). */
 void scene_engine_reset_state(struct scene_state *s);
 
+/* Live level change between pushes (the audio thread only): the transfer fractions, the duck depth and
+ * the side-layer low-pass (its per-bin table is rebuilt, 513 bins, no trig).  Everything else stays. */
+void scene_engine_set_tuning(struct scene_state *s, float alpha, float inst_alpha, float duck_depth, float side_lp_hz);
+
 /* Track change (Now Playing): the next frame fades every place (1.5 s), clears the histogram, the
  * song memory and the long gate; statistics and holds are untouched (they release by themselves). */
 void scene_engine_reset(struct scene_state *s);

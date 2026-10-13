@@ -114,6 +114,9 @@ struct spa_stereo_upmix_config {
      * With a provider the blob is the worker's business and may be NULL here.
      * Set through spa_stereo_upmix_config_set_scene_mask_provider(). */
     const struct spa_scene_mask_provider *scene_mask_provider;
+    /* SCENE: the starting level (enum spa_upmix_level, below), NORMAL by default;
+     * spa_stereo_upmix_set_level() changes it on the running state. */
+    int level;
 };
 
 /* Runtime details are public only so callers can embed the complete state and
@@ -144,6 +147,9 @@ struct spa_stereo_upmix_runtime {
     struct scene_state _scene;
     float _scene_fifo[SPA_SCENE_FIFO_FRAMES * SPA_STEREO_UPMIX_OUTPUT_CHANNELS];
     uint32_t _scene_fifo_count;
+    /* the stereo input SPA_SCENE_LATENCY_FRAMES late: the bypass side of the level fade */
+    int16_t _dry_ring[SPA_SCENE_LATENCY_FRAMES * SPA_STEREO_UPMIX_INPUT_CHANNELS];
+    uint32_t _dry_pos;
     /* SCENE mask runtime (193 KB) and its 512-frame accumulator; _scene_mask_on
      * only when a blob was configured and accepted.  The LFE V2 confidences of
      * the current control are held for its frames. */
@@ -166,6 +172,11 @@ struct spa_stereo_upmix {
     struct spa_stereo_upmix_config config;
     uint32_t _initialized;
     struct spa_stereo_upmix_runtime _runtime;
+    /* SCENE level (spa_stereo_upmix_set_level): requested by any thread, applied
+     * by the audio thread at the next process call; _wet fades 0 (bypass) .. 1. */
+    volatile int _level_req;
+    int _level_applied;
+    float _wet;
 
     /* A complete 1024-frame stereo packet is staged before output starts.
      * This makes widening safe even when the PCM2 and PCM6 ranges overlap. */
@@ -178,6 +189,23 @@ struct spa_stereo_upmix {
 /* The reusable default is the exact OFF bypass with the variant J scene
  * defaults; production selects SCENE. */
 void spa_stereo_upmix_default_config(struct spa_stereo_upmix_config *config);
+
+/* SCENE upmix level, the MMI "UpMix" choice.  OFF is the bypass ([L, R, 0, 0, 0, 0],
+ * still SPA_SCENE_LATENCY_FRAMES late so the switch never jumps in time); NORMAL is
+ * the configured scene (the AUDIO_SCENE_* knobs); the others are fixed tunings, rear
+ * delay always as configured.  Any level change fades over SPA_UPMIX_LEVEL_FADE_MS
+ * (ease in/out); the tuning itself switches at the next process call. */
+enum spa_upmix_level {
+    SPA_UPMIX_LEVEL_OFF = 0,
+    SPA_UPMIX_LEVEL_MODERATE = 1,
+    SPA_UPMIX_LEVEL_NORMAL = 2,
+    SPA_UPMIX_LEVEL_FULL = 3,
+    SPA_UPMIX_LEVEL_AGGRESSIVE = 4,
+    SPA_UPMIX_LEVEL_COUNT = 5
+};
+#define SPA_UPMIX_LEVEL_FADE_MS 300
+/* Safe from any thread (one int store); out of range is ignored. */
+void spa_stereo_upmix_set_level(struct spa_stereo_upmix *state, int level);
 
 /* Front ~=0.958 with LFE V2, otherwise ~=0.997; the dynamic limiter still bounds output. */
 void spa_stereo_upmix_config_set_lfe(

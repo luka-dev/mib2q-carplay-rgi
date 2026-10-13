@@ -201,6 +201,20 @@ Read once per `dio_manager` start (a change applies at the next HU boot of the C
 
 What the renderer no longer has: `AUDIO_STEREO_SURROUND`, `FRONT_BASS_DB`, `FRONT_TREBLE_DB`, `REAR_BODY_DB`, `REAR_AIR_DB`, `FRONT_RETENTION` and every `AUDIO_HSSR_*` knob left with the Universal backend; the fronts and rears leave at the engine's own levels (unity scale, as the car kit renders) and only the LFE assist and the cabin guard apply on top (`hook/audio/stereo_upmix.h:72-83`).
 
+### MMI level
+
+**Sound → Sound effects → UpMix** is a row added to the stock screen (`java_patch/com/luka/carplay/tone/UpmixToneUi.java`, wired by the replaced tone `Activator`; any failure there falls back to the stock bank and screen, so the worst case is no row). It takes its texts from the tone string table, where the installer puts them at the fixed slots 9900..9905, far past the stock ~900 (`deploy/lang/upmix_lang.py` with our `ldzip.py`, run by M.I.B.'s micropython; English, Spanish, French; a slot holding someone else's text is never overwritten), and falls back to the same texts built into the jar; it sends `CMD_UPMIX` to `hook/audio/upmix_level.c`, which saves the level in `/mnt/persist/mhi2q-carplay/upmix_level` and answers with the sticky `EVT_UPMIX_LEVEL`, so the row shows what the hook applies. Both scene instances take the level on their own thread at init and on every period (`spa_stereo_upmix_set_level`). **[code]**
+
+| Level | `alpha` | `inst_alpha` | `duck_depth` | `side_lp_hz` |
+|---|---|---|---|---|
+| Off | bypass: `L, R, 0, 0, 0, 0`, still 1024 frames late | | | |
+| Moderate | 0.5 | 0.7 | 0.35 | 7000 |
+| Normal (default) | the `AUDIO_SCENE_*` knobs above | | | |
+| Full | 0.9 | 1.0 | 0.15 | 11000 |
+| Aggressive | 1.0 | 1.0 | 0.10 | 12000 |
+
+A change fades over 300 ms with an ease in/out curve between the scene and the plain stereo, and the engine keeps running under Off so it comes back warm; the tuning itself switches at the next period. The rear delay never changes with the level. Full was chosen from a 2026-10-13 simulation through the hook renderer and the J525 electronic model (`tools/soundamp-virtual-cabin/amp_dsp_chain.py`): in the rear doors our rear rises above the amp's own front copy by +1.8 dB above 7 kHz (4.7 → 6.5 dB) with the vocal still about 9 dB under the front. Not yet heard in the car. **[sim]**
+
 ### The mask worker and its timing
 
 The net costs 1.37 M ARMv7 instructions per 512-frame control on the QEMU bench (`models/scene-masknet-c/manifest.json`), so by default it runs on the **scene mask worker** (`hook/audio/scene_mask_worker.c`, SCHED_RR priority 17, started per SETUP on the type-103 path and kept across re-params on the realtime path; `audio_hook.c:1720-1724`): two job slots of 512 frames, two result slots, generation and sequence numbers, stale results dropped. The audio thread pays only the hand-off (about 1.1 k instructions per 768-frame period on the bench) and installs the newest finished row at every 512-frame control boundary (256, 768, 1280 … pushed frames, `hook/audio/stereo_upmix.h:42-60`), so a row applies **one control (10.7 ms) later** than on the audio thread, one more per control the net needs beyond its period — the engine's slow instrument attack absorbs that. A control that arrives while both slots are full is refused, never waited for: the engine keeps its last row and the net's 2048-sample history gets a 512-frame splice. The count is `skipped=N` in the stop line below; 0 is the only healthy value. If the worker thread cannot start, the net runs on the audio thread (`AUDIO_SCENE_MASK_SYNC=1` chooses that on purpose).

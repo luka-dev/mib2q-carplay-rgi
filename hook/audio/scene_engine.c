@@ -48,6 +48,32 @@ static int round_half_even(float x)                                             
 }
 
 /* ----------------------------------------------------------------------------- init */
+/* side-layer gain per bin (ambient gain, high-pass, optional low-pass): from init() and set_tuning() */
+static void scene_side_shape(struct scene_state *s)
+{
+    const struct scene_config *cfg = &s->cfg;
+    int k;
+
+    for (k = 0; k < SCENE_BINS; k++) {
+        float f = s->freqs[k];
+        int lowmid = f >= 250.0f && f < 680.0f;
+        s->GA[k] = (lowmid ? cfg->ambient_gain_lowmid : cfg->ambient_gain) * s->hp[k];
+        if (cfg->side_lp_hz > 0.0f)
+            s->GA[k] = s->GA[k] * (1.0f - scene_smoothstep(f, cfg->side_lp_hz, 1.4f * cfg->side_lp_hz));
+    }
+}
+
+void scene_engine_set_tuning(struct scene_state *s, float alpha, float inst_alpha, float duck_depth, float side_lp_hz)
+{
+    s->cfg.alpha = alpha;
+    s->cfg.inst_alpha = inst_alpha;
+    s->cfg.duck_depth = duck_depth;
+    if (s->cfg.side_lp_hz != side_lp_hz) {
+        s->cfg.side_lp_hz = side_lp_hz;
+        scene_side_shape(s);
+    }
+}
+
 int scene_engine_init(struct scene_state *s, const struct scene_config *cfg)
 {
     const int N = SCENE_NFFT, H = SCENE_HOP;
@@ -84,17 +110,14 @@ int scene_engine_init(struct scene_state *s, const struct scene_config *cfg)
     air_lin = expf((cfg->air_db / 20.0f) * 2.302585092994046f);                /* 10 ** (air_db / 20); the C has no "None" = off, air_db <= -200 is off enough */
     for (k = 0; k < SCENE_BINS; k++) {
         float f = s->freqs[k];
-        int lowmid = f >= 250.0f && f < 680.0f;
         s->hp[k] = scene_smoothstep(f, cfg->hp_hz, cfg->hp_hz + 60.0f);
-        s->GA[k] = (lowmid ? cfg->ambient_gain_lowmid : cfg->ambient_gain) * s->hp[k];
-        if (cfg->side_lp_hz > 0.0f)
-            s->GA[k] = s->GA[k] * (1.0f - scene_smoothstep(f, cfg->side_lp_hz, 1.4f * cfg->side_lp_hz));
         s->air[k] = air_lin * scene_smoothstep(f, 2000.0f, 2500.0f);
         s->same_sign[k] = f <= cfg->same_sign_below_hz;
         /* per-bin eligibility exponent: gamma_lo below the split when > 0, else gamma (1 = no sharpening) */
         s->gamma_vec[k] = cfg->inst_gamma_lo > 0.0f ? (f < cfg->inst_gamma_split_hz ? cfg->inst_gamma_lo : cfg->inst_gamma)
                                                     : cfg->inst_gamma;
     }
+    scene_side_shape(s);
     if (cfg->decorrelate_ambient) {
         scene_phase_table(SCENE_BINS, (uint32_t)cfg->seed, +1.0f, s->phL);
         scene_phase_table(SCENE_BINS, (uint32_t)cfg->seed, -1.0f, s->phR);

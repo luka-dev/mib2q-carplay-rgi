@@ -40,6 +40,7 @@ const hook_module_def_t* const hook_module_table[] = {
     &vehicle_module_def,
 #if HOOK_AUDIO
     &audio_module_def,
+    &upmix_level_module_def,
 #endif
 };
 

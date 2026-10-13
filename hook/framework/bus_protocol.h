@@ -86,6 +86,9 @@
                                         /* battery (0-100, -1 unknown) and    */
                                         /* charging (0 off/1 charging/2 full, */
                                         /* -1 unknown) from PowerUpdate 0xAE01 */
+#define EVT_UPMIX_LEVEL         0x0050  /* sticky binary [u8 level]: the MMI     */
+                                        /* "UpMix" level, 0 off 1 moderate 2   */
+                                        /* normal 3 full 4 aggressive          */
 
 /* ============================================================
  * Command types (Java -> Hook)
@@ -128,6 +131,9 @@
                                         /* Speed at most 10 Hz, slow fields on */
                                         /* change. Hook: $PASCD (0xFFFB) and   */
                                         /* VehicleStatusUpdate (0xA101).       */
+#define CMD_UPMIX               0x0119  /* binary [u8 level 0..4], the MMI      */
+                                        /* "UpMix" row; hook saves it and     */
+                                        /* answers with EVT_UPMIX_LEVEL        */
 /* NOTE: dispatchable inbound types must be < MAX_TYPES in bus.c (grown to      */
 /* cover this 0x11x block).                                                     */
 

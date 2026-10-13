@@ -188,6 +188,10 @@ static inline int spa_type103_audio_buffer_size_for_offer(int64_t selectedIndex,
  * the hook may inspect files, initialise logging or create a writer thread. */
 extern const hook_module_def_t audio_module_def;
 
+/* MMI "UpMix" level, enum spa_upmix_level (stereo_upmix.h); upmix_level.c owns it. */
+extern volatile int spa_upmix_level;
+extern const hook_module_def_t upmix_level_module_def;
+
 /* ---- the decoded type-103 PCM6 rail ----------------------------------------------------------
  * While type 103 carries buffered media, the receiver follows the inline cookie,
  * decodes APAC 5.1 or AAC stereo, applies the corresponding reorder/upmix action
