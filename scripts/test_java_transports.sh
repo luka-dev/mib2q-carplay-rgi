@@ -9,7 +9,9 @@ trap 'rm -rf "$TEST_DIR"' EXIT
 "$TEST_JDK/bin/javac" -encoding UTF-8 -cp "$PROJECT_DIR/build/carplay_hook.jar" -d "$TEST_DIR" \
     "$PROJECT_DIR/tests/CarplayBusTransportTest.java" \
     "$PROJECT_DIR/tests/RendererServerTransportTest.java" \
-    "$PROJECT_DIR/tests/RendererRerouteTransportTest.java"
+    "$PROJECT_DIR/tests/RendererRerouteTransportTest.java" \
+    "$PROJECT_DIR/tests/TouchpadControllerTest.java"
+"$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar" TouchpadControllerTest
 "$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar" com.luka.carplay.bus.CarplayBusTransportTest
 "$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar" com.luka.carplay.rgd.RendererServerTransportTest
 "$TEST_JDK/bin/javac" -encoding UTF-8 -cp "$PROJECT_DIR/build/carplay_hook.jar:$PROJECT_DIR/java_stock/US_MU1316_lsd.jar" \

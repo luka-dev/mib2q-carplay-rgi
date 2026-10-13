@@ -618,7 +618,12 @@ static int main_disp_modernize(void *mainDisp, int night)
      * recognizer: a pad touch only highlights the focused item.  Trackpad focus mode
      * (_UIFocusBehavior_CarPlayTouchpad) needs features & 0x10 and primaryInputDevice 2
      * (CarKit CARScreenInfo: 1 touch, 2 trackpad, 3/4 knob; 0 = pick touch > knob > trackpad).
-     * See docs/reference/ARCHITECTURE.md, "MMI touchpad". */
+     * See docs/reference/ARCHITECTURE.md, "MMI touchpad".
+     * DISABLED 2026-10-13: in trackpad mode Apple Music on iOS 27.2 beta aborts on any pad
+     * input (UIKit NSAssert "pan-gesture-based focus movement without a touchpad"; every
+     * other app is fine).  The pad goes through the Java DPAD bridge (TouchpadController)
+     * in knob focus mode again.  Flip to #if 1 once iOS is fixed. */
+#if 0
     {
         int64_t features = 0;
         void *k = cf_str(0, "features", CFENC_UTF8);
@@ -631,6 +636,11 @@ static int main_disp_modernize(void *mainDisp, int night)
     /* complete the main dict like a real HU (MHI3 set) — see build_cluster_dict note.
      * MHI2Q has no touchscreen hardware, so the pad is always the primary input. */
     set_i64(mainDisp, "primaryInputDevice", 2);
+#else
+    /* complete the main dict like a real HU (MHI3 set) — see build_cluster_dict note.
+     * 0 = iOS picks (touch > knob > trackpad): knob focus mode, stock features. */
+    set_i64(mainDisp, "primaryInputDevice", 0);
+#endif
     set_i64(mainDisp, "cornerMasks",        0);
     set_i64(mainDisp, "nightMode",          night ? 1 : 0);
     set_i64(mainDisp, "limitedUI",          0);

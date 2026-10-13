@@ -200,19 +200,50 @@ The tree has 47 sources: 29 new classes under `com/luka/carplay/` and 18 files t
 
 ### MMI touchpad
 
-CarPlay has no pointer: the MMI touchpad moves CarPlay's focus. Rotary, knob press and softkeys reach CarPlay through stock DSI and are not touched. It uses iOS's native trackpad focus mode. `[code]`
+CarPlay has no pointer: the MMI touchpad moves CarPlay's focus. Rotary, knob press and softkeys reach CarPlay through stock DSI and are not touched. Since 2026-10-13 the pad runs through the Java DPAD bridge again; iOS's native trackpad focus mode is built but disabled, because it crashes Apple Music on iOS 27.2 beta. `[code]`
+
+```mermaid
+flowchart TB
+  accTitle: MMI touchpad input paths
+  accDescr: The shipped path turns pad touches into DPAD button events in Java while the main display stays in knob focus mode. The disabled path sends raw pad coordinates to the dio_manager HID trackpad and advertises trackpad focus mode, which crashes Apple Music on iOS 27.2 beta.
+
+  pad["MMI touchpad (DSI touch events)"]
+  split["updateTouchEvents: split per event"]
+  screen["Touchscreen events: DSI input 1"]
+  tpc["TouchpadController: speed-adaptive ticks"]
+  dpad["postButtonEvent 5/6/7/8 (DPAD)"]
+  knob_mode["iOS knob focus mode (primaryInputDevice 0, stock features)"]
+  raw["Raw pad events: DSI input 0"]
+  hid["dio_manager HID Eso_TrackPad"]
+  pad_mode["iOS trackpad focus mode (features | 0x10, primaryInputDevice 2)"]
+  crash["Apple Music NSAssert on iOS 27.2 beta"]
+
+  pad --> split
+  split --> screen
+  split -->|shipped| tpc --> dpad --> knob_mode
+  split -.->|disabled| raw -.-> hid -.-> pad_mode -.-> crash
+
+  classDef shipped fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
+  classDef disabled fill:#fee2e2,stroke:#dc2626,stroke-width:2px,color:#7f1d1d
+  class tpc,dpad,knob_mode shipped
+  class raw,hid,pad_mode,crash disabled
+```
+
+**What ships (2026-10-13).**
+
+- `CarplayDSILifecycleController.updateTouchEvents` splits each batch by event, where stock routes the whole batch by element 0: touchscreen events go to DSI input 1 with the screen offset removed; a single active pad finger goes to `com.luka.carplay.input.TouchpadController`, which emits speed-adaptive DPAD ticks through `postButtonEvent` 5/6/7/8 (west/east/north/south, press then release). The sink is installed in `init()` and cleared in `deinit()`, so no gesture reaches a torn-down DSI proxy. Test: `tests/TouchpadControllerTest.java`, run by `scripts/test_java_transports.sh`.
+- The hook's `main_disp_modernize` keeps the stock main display `features` and sends `primaryInputDevice = 0`, so iOS picks knob focus mode. The trackpad advert (`features | 0x10`, `primaryInputDevice = 2`) stays in the source under `#if 0` (`hook/altscreen/altscreen_hook.c`); flip it to `#if 1` and drop the Java bridge to return to native trackpad focus.
 
 **Why the stock trackpad only highlighted.** Stock MHI2Q already declares a touchpad: `EvoTMConfiguration.hasTouchpad()` is true, so DSI `inputFeatures` = 9 (knob + touchpad), stock posts pad events on DSI input 0 (touchscreen on 1), and `dio_manager` registers a real HID trackpad `Eso_TrackPad` (`libairplay` `HIDSingleTrackPadCreateDescriptor`: Digitizer/TouchPad, one finger, absolute X/Y, no physical units). On the car a pad touch only highlighted the focused item; focus never moved. `[car]` The cause is the display advert, not the pad: `dio_manager` `createMainDisplay` builds the main display's `features` from the knob (0x02) and touchscreen (0x04/0x08) flags only, never the trackpad bit 0x10, and sends no `primaryInputDevice`. iOS (CarKit `CARScreenInfo`: `primaryInputDevice` 1 touch, 2 trackpad, 3/4 knob; missing or 0 picks touch, then knob, then trackpad) therefore runs CarPlay in knob focus mode. Only the trackpad mode `_UIFocusBehavior_CarPlayTouchpad` enables `supportsIndirectPanningMovement` and focus-on-select, which make `_UIFocusEventRecognizer` attach its pan recognizer; knob mode has none, so swipes do nothing. Missing physical units are not the cause: iOS falls back to a 4×4 cm surface at sensitivity 0.5, which only sets the gain. `[decompile]` (iOS 26.1 pseudo-source, iOS 27 `UIKitCore`, stock `dio_manager` / `libairplay`)
 
-**What ships, and what the car showed (2026-10-10).**
+**Native trackpad focus mode (2026-09-23 to 2026-10-13, now disabled).**
 
-- The hook's `main_disp_modernize` ORs 0x10 into the stock main display `features` and sets `primaryInputDevice = 2` (`hook/altscreen/altscreen_hook.c`). MHI2Q has no touchscreen hardware, so the value is unconditional. It runs on the altScreen advert path, which production always takes. The INFO log line `main display: features 0x… -> 0x…` shows it went out.
-- `CarplayDSILifecycleController.updateTouchEvents` splits each batch by event, where stock routes the whole batch by element 0: touchscreen events on DSI input 1 with the screen offset removed, touchpad events on DSI input 0 with raw pad coordinates, each sorted left to right with its active-finger count. `dio_manager` turns input 0 into the trackpad report (`sendTouchScreenHIDReport` → `HIDSingleTrackPadFillReport`: tip plus the first finger's X/Y).
-- On the car (owner, 2026-10-10): a pad swipe moves the CarPlay focus in discrete steps, "like a D-pad" in the owner's words, not as a pointer. That is the expected shape of CarPlay's pointer-less trackpad focus mode, so the advert and the input split work; the default 4 cm gain was not judged. `[car]`
-- **Open: Apple Music crashes when it is driven from the pad** (owner, 2026-10-10). The phone runs an iOS beta, so the crash may be iOS's own; whether the knob triggers it too was not reported and no phone crash log exists yet. Next: reproduce on a release iOS and collect the phone's crash log; if it reproduces, log the trackpad reports (`HIDSingleTrackPadFillReport`) to see whether a report shape triggers it before changing the descriptor. `[open]`
-- Open: whether the knob behaves the same in trackpad focus mode (the knob class differs only by the index-bar flag, so it should), and whether the default 4 cm gain feels right. If not, `HIDSingleTrackPadCreateDescriptor` can be interposed to add physical units.
+- The hook ORed 0x10 into the main display `features` and set `primaryInputDevice = 2`; `updateTouchEvents` posted raw pad events on DSI input 0, which `dio_manager` turns into the trackpad report (`sendTouchScreenHIDReport` → `HIDSingleTrackPadFillReport`: tip plus the first finger's X/Y).
+- On the car (owner, 2026-10-10): a pad swipe moved the CarPlay focus in discrete steps, "like a D-pad", the expected shape of CarPlay's pointer-less trackpad focus mode. `[car]`
+- **Apple Music crashed on any pad input** (owner, 2026-10-10/12); the knob and every other app were fine. The crash (iOS 27.2 beta 24B5099f) is a UIKit NSAssert in `-[_UIFocusEventRecognizer _panGestureStart:]`, "Attempted a pan-gesture-based focus movement without a touchpad.": on CarPlay the method looks the touch's `_senderID` up in `windowScene.carPlaySession touchpadForSenderID:` (the list DashBoard's `-[DBScreenController _UISceneTouchpads]` copies from its `CARInputDeviceManager`, unfiltered) and in `CARInputDeviceManager touchpadWithSenderID:`, and asserts when both are nil. CarKit makes a touchpad from an IOHID service whose `displayUUID` is a session screen ID and whose primary usage is Digitizer/TouchPad; stock `dio_manager` (MU1316 `fcn.00158ef8`) gives every HID `displayUUID` `e5f7a68d-7b0f-4305-984b-974f677a150b`, the registered main screen, so the HU side is consistent, and other apps find the pad. Read as an iOS beta bug in Music. `[decompile]` (iOS 27 dsc 24A5418b, stock `dio_manager`)
+- To re-enable: recheck Music on a newer iOS build first. The default 4 cm gain was never judged; `HIDSingleTrackPadCreateDescriptor` can be interposed to add physical units.
 
-**History.** Until 2026-09-23 the pad was turned into DPAD focus ticks by a Java `TouchpadController` (speed-adaptive thresholds, `postButtonEvent` 5/6/7/8), a workaround for the knob-mode behaviour above. It was removed once the root cause was found; see git history before `feature/native-touchpad`.
+**History.** The DPAD bridge first shipped before 2026-09-14 as a workaround for knob-mode highlighting. Commit `8c78e282` (2026-09-23) replaced it with native trackpad focus mode; it was restored on 2026-10-13 after the Music crash.
 
 ### Cluster composition
 
