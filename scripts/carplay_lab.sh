@@ -14,6 +14,10 @@ case "$action" in
         exec python3 -m wireless.vphone_lab.usb "$@" ;;
     usb-kernel)
         exec python3 -m wireless.vphone_lab.usb_kernel "$@" ;;
+    iap-smoke)
+        exec python3 -m wireless.vphone_lab.iap "$@" ;;
+    mfi-probe)
+        exec build/vphone-lab/venv/bin/python -m wireless.vphone_lab.mfi_probe "$@" ;;
     ethernet)
         exec python3 -m wireless.vphone_lab.ethernet "$@" ;;
     qnx-build)

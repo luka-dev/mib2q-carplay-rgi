@@ -1,4 +1,4 @@
-"""Bridge only the owned vphone USB NCM primary link to the owned QNX netdev."""
+"""Bridge a selected owned vphone USB NCM link to the owned QNX netdev."""
 from __future__ import annotations
 
 import argparse
@@ -20,7 +20,9 @@ from wireless.lab_common import qnx_receiver
 MAX_FRAME = 2048
 
 
-def owned_interface(tree: list, udid: str) -> dict:
+def owned_interface(tree: list, udid: str, channel: str = "primary") -> dict:
+    if channel not in ("primary", "auxiliary"):
+        raise ValueError("expected an explicit owned NCM channel")
     if not re.fullmatch(r"0000FE01-[0-9A-F]{16}", udid):
         raise ValueError("expected research VM identity")
     matches = [d for d in tree if d.get("USB Serial Number", "").rstrip("\0") == udid.replace("-", "")]
@@ -29,9 +31,9 @@ def owned_interface(tree: list, udid: str) -> dict:
         raise RuntimeError("expected exactly one owned virtual USB device")
     device = matches[0]
     data = [i for i in device.get("IORegistryEntryChildren", []) if i.get("IOObjectClass") == "IOUSBHostInterface"
-            and i.get("IORegistryEntryName") == "NCM Data" and i.get("IORegistryEntryLocation") == "2"]
+            and i.get("IORegistryEntryName") == "NCM Data" and i.get("IORegistryEntryLocation") == ("2" if channel == "primary" else "4")]
     if len(data) != 1:
-        raise RuntimeError("original primary NCM interface 2 is not available")
+        raise RuntimeError("selected owned NCM interface is not available")
     def interfaces(node):
         found = [node] if node.get("IOObjectClass") == "IOEthernetInterface" else []
         for child in node.get("IORegistryEntryChildren", []):
@@ -39,15 +41,15 @@ def owned_interface(tree: list, udid: str) -> dict:
         return found
     rows = interfaces(data[0])
     if len(rows) != 1 or not re.fullmatch(r"en[0-9]+", rows[0].get("IORegistryEntryName", "")):
-        raise RuntimeError("owned primary NCM has no unique Ethernet interface")
-    return {"udid": udid, "interface": rows[0]["IORegistryEntryName"],
+        raise RuntimeError("selected owned NCM has no unique Ethernet interface")
+    return {"udid": udid, "channel": channel, "interface": rows[0]["IORegistryEntryName"],
             "usb_registry_id": device["IORegistryEntryID"], "interface_registry_id": rows[0]["IORegistryEntryID"]}
 
 
-def discovery(udid: str) -> dict:
+def discovery(udid: str, channel: str = "primary") -> dict:
     tree = plistlib.loads(subprocess.run(["ioreg", "-a", "-r", "-c", "IOUSBHostDevice"],
                                         capture_output=True, check=True, timeout=10).stdout)
-    return owned_interface(tree, udid)
+    return owned_interface(tree, udid, channel)
 
 
 def frames(buffer: bytearray) -> list[bytes]:
@@ -127,8 +129,8 @@ class Capture:
             self.lib.pcap_close(self.handle); self.handle = None
 
 
-def _run(seconds: int) -> dict:
-    if not 1 <= seconds <= 120:
+def _run(seconds: int, channel: str = "primary") -> dict:
+    if type(seconds) is not int or not 1 <= seconds <= 120 or channel not in ("primary", "auxiliary"):
         raise ValueError("bounded link duration is 1..120 seconds")
     # Root is needed for BPF only. No Launchpad command is run as root.
     recorded = json.loads((lab.OUT / "machine.json").read_text())
@@ -136,7 +138,7 @@ def _run(seconds: int) -> dict:
         raise RuntimeError("machine ledger does not match the laboratory profile")
     if os.geteuid() != 0:
         lab.require_machine(lab.profile(), "running")
-    owned = discovery(recorded["udid"])
+    owned = discovery(recorded["udid"], channel)
     qnx_receiver.set_output(lab.OUT / "qnx-network")
     pid = qnx_receiver.running()
     if not pid or (qnx_receiver.OUT / "transport.txt").read_text().strip() != "socket":
@@ -160,7 +162,7 @@ def _run(seconds: int) -> dict:
             buffered_capture = False
             while time.monotonic() < end:
                 if time.monotonic() >= check:
-                    if discovery(recorded["udid"]) != owned or qnx_receiver.running() != pid:
+                    if discovery(recorded["udid"], channel) != owned or qnx_receiver.running() != pid:
                         raise RuntimeError("owned endpoints changed during capture")
                     print(json.dumps(result), flush=True); check = time.monotonic() + 5
                 ready = select.select([capture.fd, peer], [], [], 0 if buffered_capture else .1)[0]
@@ -202,19 +204,20 @@ def _run(seconds: int) -> dict:
     return result
 
 
-def run(seconds: int) -> dict:
+def run(seconds: int, channel: str = "primary") -> dict:
     with open(os.open(lab.OUT / ".ethernet.lock", os.O_RDWR | os.O_CREAT, 0o600), "r+") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        return _run(seconds)
+        return _run(seconds, channel)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--seconds", type=int, default=30)
     parser.add_argument("--inspect", action="store_true")
+    parser.add_argument("--channel", choices=("primary", "auxiliary"), default="primary")
     args = parser.parse_args()
     if args.inspect:
         machine = lab.require_machine(lab.profile(), "running")
-        print(json.dumps(discovery(machine["udid"]), indent=2))
+        print(json.dumps(discovery(machine["udid"], args.channel), indent=2))
     else:
-        print(json.dumps(run(args.seconds), indent=2))
+        print(json.dumps(run(args.seconds, args.channel), indent=2))

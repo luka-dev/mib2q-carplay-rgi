@@ -28,6 +28,20 @@ class EthernetTests(unittest.TestCase):
         tree[0]["IORegistryEntryChildren"].insert(0, aux)
         self.assertEqual(ethernet.owned_interface([{"USB Serial Number": "other"}] + tree, self.udid)["interface"], "en22")
 
+    def test_auxiliary_requires_explicit_selection_and_same_owned_identity(self):
+        tree = self.tree()
+        aux = copy.deepcopy(tree[0]["IORegistryEntryChildren"][0]); aux["IORegistryEntryLocation"] = "4"
+        node = aux["IORegistryEntryChildren"][0]["IORegistryEntryChildren"][0]
+        node["IORegistryEntryName"] = "en21"; node["IORegistryEntryID"] = 21
+        tree[0]["IORegistryEntryChildren"].insert(0, aux)
+        self.assertEqual(ethernet.owned_interface(tree, self.udid, "auxiliary")["interface"], "en21")
+        self.assertEqual(ethernet.owned_interface(tree, self.udid)["interface"], "en22")
+        with self.assertRaises(ValueError):
+            ethernet.owned_interface(tree, self.udid, "other")
+        tree[0]["IORegistryEntryChildren"].insert(0, copy.deepcopy(aux))
+        with self.assertRaises(RuntimeError):
+            ethernet.owned_interface(tree, self.udid, "auxiliary")
+
     def test_ambiguous_or_unexpected_usb_identity_rejected(self):
         for key, value in (("USB Product Name", "iPhone"), ("idVendor", 1), ("idProduct", 1),
                            ("USB Serial Number", "0000FE01-OTHER")):

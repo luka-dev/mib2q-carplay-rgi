@@ -16,7 +16,7 @@ from . import lab
 
 GUEST_DIR = "/private/var/tmp/mhi2-vphone-lab"
 ACTIONS = ("probe", "apply", "apply-destroy", "restore", "reconnect", "network",
-           "iap-list", "iap-wake", "iap-inspect", "iap-registry", "manager-apply", "manager-remove", "port-prepare")
+           "iap-list", "iap-wake", "iap-inspect", "iap-registry", "iap-smoke", "iap-peer", "manager-apply", "manager-remove", "port-prepare")
 READ_ONLY_ACTIONS = ("probe", "network", "iap-list", "iap-wake", "iap-inspect", "iap-registry")
 
 
@@ -24,7 +24,7 @@ def build(*, catalogue: bool = False) -> Path:
     out = lab.OUT / "usb"
     out.mkdir(parents=True, exist_ok=True)
     libraries = {
-        "libSystem": ("/usr/lib/libSystem.B.dylib", ["putchar", "strstr", "free", "printf", "puts", "strcmp", "getuid", "sleep", "alarm", "fflush", "dlopen", "dlsym", "dlerror", "fopen", "fread", "fclose", "socket", "connect", "close", "send", "recv", "setsockopt", "inet_pton", "if_nametoindex", "htons", "memcmp", "xpc_connection_create_mach_service", "xpc_connection_set_event_handler", "xpc_connection_activate", "xpc_dictionary_create", "xpc_connection_send_message", "xpc_connection_cancel", "xpc_release", "_NSConcreteGlobalBlock", "__chkstk_darwin", "__stack_chk_guard", "__stack_chk_fail"]),
+        "libSystem": ("/usr/lib/libSystem.B.dylib", ["putchar", "snprintf", "strstr", "free", "printf", "puts", "strcmp", "getuid", "sleep", "alarm", "fflush", "dlopen", "dlsym", "dlerror", "fopen", "fread", "fclose", "socket", "connect", "close", "send", "recv", "setsockopt", "inet_pton", "if_nametoindex", "htons", "memcmp", "xpc_connection_create_mach_service", "xpc_connection_set_event_handler", "xpc_connection_activate", "xpc_dictionary_create", "xpc_connection_send_message", "xpc_connection_cancel", "xpc_release", "_NSConcreteGlobalBlock", "__chkstk_darwin", "__stack_chk_guard", "__stack_chk_fail"]),
         "CoreFoundation": ("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation", [
             "kCFTypeDictionaryKeyCallBacks", "kCFTypeDictionaryValueCallBacks", "kCFTypeArrayCallBacks", "kCFBooleanTrue",
             "CFStringCreateWithCString", "CFDictionaryCreateMutable", "CFDictionaryGetValue", "CFDictionarySetValue",
@@ -42,7 +42,7 @@ def build(*, catalogue: bool = False) -> Path:
     sysroot.mkdir(exist_ok=True)
     env = {k: v for k, v in os.environ.items() if k != "SDKROOT"}
     subprocess.run(["clang", "-target", "arm64-apple-ios18.0", "-isysroot", str(sysroot),
-                    "-O2", "-Wall", "-Wextra", "-Werror", "-fblocks", "-c", str(Path(__file__).with_name("usb_description.c")),
+                    "-O2", "-Wall", "-Wextra", "-Werror", "-fblocks", "-I", str(Path(__file__).parent), "-c", str(Path(__file__).with_name("usb_description.c")),
                     "-o", str(out / "usb.o")], env=env, check=True)
     binary = out / "usb-description"
     subprocess.run(["ld", "-ld_classic", "-arch", "arm64", "-platform_version", "ios", "18.0", "18.0",
@@ -56,7 +56,8 @@ def build(*, catalogue: bool = False) -> Path:
     return binary
 
 
-def _run(mode: str, inspect_class: str | None = None, stream_type: int | None = None) -> dict:
+def _run(mode: str, inspect_class: str | None = None, stream_type: int | None = None,
+         *, peer_nonce: str | None = None, on_launch=None) -> dict:
     if mode not in ACTIONS:
         raise ValueError("unknown native USB action")
     if inspect_class is not None and (mode != "iap-inspect" or not re.fullmatch(r"ACCTransport[A-Za-z]{1,80}", inspect_class)):
@@ -66,6 +67,11 @@ def _run(mode: str, inspect_class: str | None = None, stream_type: int | None = 
             raise ValueError("port metadata experiments require an explicit reviewed stream type: 1, 4 or 5")
     elif stream_type is not None:
         raise ValueError("stream type applies only to a port metadata experiment")
+    if mode == "iap-peer":
+        if not isinstance(peer_nonce, str) or not re.fullmatch(r"[0-9a-f]{16}", peer_nonce) or not callable(on_launch):
+            raise ValueError("native API peer requires a scoped nonce and launch observer")
+    elif peer_nonce is not None or on_launch is not None:
+        raise ValueError("peer options apply only to iap-peer")
     settings = lab.profile()
     machine = lab.require_machine(settings, "running")
     udid = machine.get("udid", "")
@@ -101,13 +107,15 @@ def _run(mode: str, inspect_class: str | None = None, stream_type: int | None = 
     label = "com.mhi2.vphone." + name
     log = GUEST_DIR + "/" + name + ".log"
     path = GUEST_DIR + "/" + name + ".plist"
-    arguments = [remote, mode, udid] + ([inspect_class] if inspect_class else []) + ([str(stream_type)] if stream_type is not None else [])
+    arguments = [remote, mode, udid] + ([inspect_class] if inspect_class else []) + ([str(stream_type)] if stream_type is not None else []) + ([peer_nonce] if peer_nonce else [])
     job = {"Label": label, "ProgramArguments": arguments, "RunAtLoad": True,
            "StandardOutPath": log, "StandardErrorPath": log}
     lab.rpc(settings, "files.write", {"path": path, "content": plistlib.dumps(job).decode()})
     loaded = lab.rpc(settings, "services.load", {"paths": [path]})
-    deadline = time.monotonic() + 30
+    deadline = time.monotonic() + (75 if mode == "iap-peer" else 30)
     try:
+        if on_launch:
+            on_launch(log)
         while True:
             status = lab.rpc(settings, "services.status", {"label": label}).get("result", {})
             if not status.get("running"):
@@ -133,16 +141,16 @@ def _run(mode: str, inspect_class: str | None = None, stream_type: int | None = 
     return result
 
 
-def run(mode: str, inspect_class: str | None = None, stream_type: int | None = None) -> dict:
+def run(mode: str, inspect_class: str | None = None, stream_type: int | None = None, *, peer_nonce: str | None = None, on_launch=None) -> dict:
     lab.OUT.mkdir(parents=True, exist_ok=True)
     with open(os.open(lab.OUT / ".usb.lock", os.O_RDWR | os.O_CREAT, 0o600), "r+") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        return _run(mode, inspect_class, stream_type)
+        return _run(mode, inspect_class, stream_type, peer_nonce=peer_nonce, on_launch=on_launch)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=ACTIONS)
+    parser.add_argument("mode", choices=[mode for mode in ACTIONS if mode != "iap-peer"])
     parser.add_argument("--experimental", action="store_true",
                         help="run a live USB or accessory-manager experiment; may stop this VM")
     parser.add_argument("--inspect-class", help="inspect metadata of a class from the native iAP transport image")

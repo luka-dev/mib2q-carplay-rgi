@@ -16,8 +16,12 @@ been created, boots and renders native UI and Maps. Its original NCM link reache
 QNX and receives native `/info` over IPv6. A guest vendor bulk adapter now preserves
 USB enumeration. A scoped runtime personality now starts a native accessory
 manager and an upstream USB-port link that `accessoryd` opens. Native packets
-arrive in explicit stream-type experiments; iAP2 protocol dispatch is still
-unresolved. CarPlay/MFi and stream-111 video remain unverified. The Inferno results below are retained
+arrive in explicit stream-type experiments, which select other protocols.
+A separate native CoreAccessories API peer now completes iAP2 and software MFi:
+valid signatures receive `AA05`; corrupted response and certificate signatures
+receive `AA04`. Native identification passes and iOS announces CarPlay availability.
+USB forwarding, the vphone-to-QNX CarPlay session and its video remain unverified.
+The Inferno results below are retained
 historical evidence.
 
 The MU1316 / P5087 candidate retains factory AirPlay **210.81** on QNX 6.5 ARM.

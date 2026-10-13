@@ -46,7 +46,24 @@
       "corrupted_certificate_signature_rejected_before_challenge": "AA04",
       "repeat_after_guest_restart": true,
       "physical_device_tested": false
+    },
+    "vphone_native_api_authentication": {
+      "date": "2026-10-13",
+      "build": "23G90",
+      "ios": "26.6.2",
+      "model": "iPhone99,11 research guest",
+      "transport": "Native CoreAccessories API endpoint; nonce-scoped RPC packet queue",
+      "live_challenge_bytes": 32,
+      "raw_signature_bytes": 64,
+      "native_iap2_success": "AA05",
+      "corrupted_response_rejected": "AA04",
+      "corrupted_certificate_signature_rejected_before_challenge": "AA04",
+      "identification_accepted": "1D02",
+      "carplay_availability": "4300",
+      "physical_device_tested": false,
+      "usb_forwarding_verified": false,
+      "carplay_video_verified": false
     }
   },
-  "runtime_integration": "The opt-in ios_vm_lab/mfi_probe.py and mfi_sap.py host signers read this fixture; the QEMU-only capture adapter receives public MFi-SAP response bytes over bounded RPC. Private key remains on the host. TestSoftwareMfi, default daemon and production QNX preloader remain unchanged."
+  "runtime_integration": "The opt-in ios_vm_lab/mfi_probe.py and mfi_sap.py host signers read this fixture; the QEMU-only capture adapter receives public MFi-SAP response bytes over bounded RPC. Private key remains on the host. TestSoftwareMfi, default daemon and production QNX preloader remain unchanged. The opt-in vphone_lab/mfi_probe.py uses the same host fixture against a native CoreAccessories API endpoint, with bounded RPC queues and native connection cleanup."
 }

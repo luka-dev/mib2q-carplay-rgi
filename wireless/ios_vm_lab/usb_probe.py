@@ -191,7 +191,8 @@ def handshake(phone, reports: list[tuple[int, int]], certificate: bytes | None =
               progress: dict | None = None, identify: bool = False, start_carplay: bool = False,
               hid_interface: int = 2, hid_endpoint: int = 0x83,
               hold_seconds: int = 2, public_key: bytes | None = None,
-              receiver_ipv6: str = "fe80::2", carplay_interface: int = 2) -> dict:
+              receiver_ipv6: str = "fe80::2", carplay_interface: int = 2,
+              signer=None) -> dict:
     def send(packet):
         for report in hid_reports(packet, reports):
             count = phone.ctrl_transfer(0x21, 9, 0x0200 | report[0], hid_interface, report, timeout=3000)
@@ -258,7 +259,7 @@ def handshake(phone, reports: list[tuple[int, int]], certificate: bytes | None =
             if message == 0xAA02:
                 digest = parameters.get(0, b"")
                 result["challenge_bytes"] = len(digest)
-                signature = sign_via_stdio(digest)
+                signature = (signer or sign_via_stdio)(digest)
                 sequence += 1
                 send(link_frame(0x40, sequence, frame["sequence"], 10,
                                 control_message(0xAA03, signature)))
@@ -308,7 +309,7 @@ def handshake(phone, reports: list[tuple[int, int]], certificate: bytes | None =
                                     while time.monotonic() < hold_end:
                                         try:
                                             follow = receive(min(1, hold_end - time.monotonic()))
-                                        except usb.core.USBTimeoutError:
+                                        except (usb.core.USBTimeoutError, TimeoutError):
                                             continue
                                         if follow["payload"]:
                                             send(link_frame(0x40, sequence, follow["sequence"]))

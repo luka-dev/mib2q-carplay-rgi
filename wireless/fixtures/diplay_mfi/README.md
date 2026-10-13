@@ -38,7 +38,15 @@ certificate's signature produced `AA04` before any challenge. Positive and
 negative response checks passed again after restarting the guest. The separate
 live MFi-SAP responder subsequently passed native AirPlay authentication and
 established a QNX CarPlay control session. Physical iPhone acceptance and decoded
-CarPlay media remain unverified.
+CarPlay media on physical devices remain unverified.
+
+On 2026-10-13 the [vphone lab](../../../docs/wireless-carplay/VPHONE_LAB.md)
+repeated native iAP2 authentication on iOS `26.6.2 / 23G90` through a
+CoreAccessories API test connection. The valid fixture received `AA05`;
+changed response and certificate signatures received `AA04`, with certificate
+rejection before the challenge. Native identification received `1D02` and the
+guest announced CarPlay availability. This verifies native authentication,
+not a physical USB connection or a vphone CarPlay video stream.
 
 ## 🧪 Integration status
 
@@ -50,6 +58,8 @@ use generated, challenge-bound vectors. The opt-in
 iAP2 authentication against the synthetic iPhone. The separate
 [MFi-SAP responder](../../ios_vm_lab/mfi_sap.py) supplies live authentication
 responses to the explicitly enabled QNX laboratory adapter. Both keep the
-private key on the host. The held iAP2 session and NCM Ethernet bridge are
+private key on the host. The [vphone API peer](../../vphone_lab/mfi_probe.py)
+uses the same fixture and signer with bounded, nonce-scoped RPC packet queues;
+it also keeps the key on the host. The held iAP2 session and NCM Ethernet bridge are
 separate laboratory tools; the default production daemon remains unchanged. See
 [software MFi test documentation](../../../docs/wireless-carplay/TEST_SOFTWARE_MFI.md).

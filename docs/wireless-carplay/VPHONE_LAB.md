@@ -77,15 +77,18 @@ the guest. They never select a physical phone or fall back to Inferno.
 ```mermaid
 flowchart LR
     accTitle: vphone CarPlay Laboratory Migration
-    accDescr: vphone renders native applications and reaches QNX through its original NCM link. The vendor bulk iAP adapter enumerates and accessoryd opens a native manager, the USB port has a native upstream link, and authentication remains pending.
+    accDescr: vphone renders native applications and reaches QNX through NCM. A native CoreAccessories API test peer completes iAP2 authentication and identification; the USB binding and QNX CarPlay session remain separate checks.
 
     launchpad["Launchpad guest control"] --> ios_guest["iOS guest with Metal"]
     ios_guest --> ethernet_adapter["Owned NCM Ethernet adapter"]
     ethernet_adapter --> qnx_receiver["Native stock210 QNX receiver"]
-    ios_guest -.-> iap_adapter["Vendor bulk iAP adapter; protocol dispatch pending"]
+    ios_guest --> api_peer["Native CoreAccessories API test peer"]
+    api_peer --> native_iap["Verified iAP2 and MFi authentication"]
+    mfi_signer["Public fixture MFi signer"] --> api_peer
+    ios_guest -.-> iap_adapter["Vendor bulk iAP adapter; binding pending"]
     iap_adapter -.-> qnx_receiver
-    mfi_signer["Public fixture MFi signer"] --> qnx_receiver
-    qnx_receiver --> video_capture["Authenticated AVC capture"]
+    mfi_signer --> qnx_receiver
+    qnx_receiver -.-> video_capture["Authenticated AVC capture"]
     video_capture --> independent_decode["Independent FFmpeg decoding"]
 ```
 
@@ -197,7 +200,7 @@ Apple executable or authentication result is edited.
 | `accessoryd` clients | Genuine manager and USB-port user clients |
 | Default `IOAccessoryPortGetStreamType()` | `0`; no stream metadata published |
 | Native NCM `/info` | HTTP 200, 775 bytes after these changes |
-| iAP2 SYN/ACK / MFi / primary AVC / AltScreen AVC | Not reached |
+| USB-port iAP2 / primary AVC / AltScreen AVC | Not reached through this port |
 
 `iap-registry` uses matching, plane queries and child iteration. User clients
 can be unregistered; matching only their class can miss an active client. The
@@ -207,14 +210,14 @@ also reports the native stream-type getter and the platform-link data size.
 ```mermaid
 flowchart LR
     accTitle: Native accessory platform relationship
-    accDescr: Runtime provider metadata lets Apple's resolver build an IOFunction and locate the native manager. Accessoryd opens the USB port, but protocol selection and native iAP2 authentication remain unverified.
+    accDescr: Runtime provider metadata lets Apple's resolver locate the native manager. Accessoryd opens the USB port; forwarding its bytes to an iAP2 endpoint remains unresolved. Separate API tests verify native iAP2 authentication.
 
     metadata["Provider metadata"] --> manager["IOAccessoryDockUSB_UFP"]
     metadata --> function["Native IOFunction resolver"]
     usb_port["IOAccessoryPortUSB"] --> function
     function --> manager
     manager --> daemon["accessoryd and native user clients"]
-    daemon -.->|"Protocol dispatch still under test"| iap["iAP2, MFi and CarPlay video"]
+    daemon -.->|"USB binding still under test"| iap["iAP2 endpoint"]
 ```
 
 The previous direct RAM write put a manager pointer into a field that actually
@@ -223,6 +226,94 @@ stopped during debugger recovery. This pointer shortcut is excluded. The stock
 platform-function construction above replaces it and survived fresh starts.
 Guest `Z0` software breakpoints were observed at native handlers; accepted `Z1`
 requests did not yield the expected stop and were not used as negative evidence.
+
+### Native iAP2 and MFi API tests
+
+The owned research guest accepts a normal `ACCTransportClient` connection with
+connection type `6` (`USB`), endpoint transport `0` (`USB Device Mode`) and
+protocol `4` (`iAP2`). These names were read from CoreAccessories' exported
+constant tables and checked against `accessoryd`'s native protocol dispatch.
+This test path needs a normally running VM; the USB RAM adapter and a dock
+manager are unnecessary for this API check.
+
+```sh
+scripts/carplay_lab.sh iap-smoke --experimental
+scripts/carplay_lab.sh mfi-probe --experimental
+scripts/carplay_lab.sh mfi-probe --experimental --negative signature
+scripts/carplay_lab.sh mfi-probe --experimental --negative certificate
+scripts/carplay_lab.sh mfi-probe --experimental --identify
+```
+
+The MFi command uses `build/vphone-lab/venv/bin/python`, including cryptography
+and the wire-codec dependencies installed during lab bootstrap. It signs only
+on the host with the integrity-checked public fixture. Packet records travel
+through a nonce-scoped RPC file queue; the helper bounds input, runs at most
+60 seconds and destroys its own connection and endpoint. Both sides preserve
+the ordinary native authentication checks. No authentication state is assigned.
+Fixed Objective-C call prototypes are required on arm64; C varargs do not use
+the method argument ABI.
+
+| Native iOS 26.6.2 API observation | Result |
+|---|---|
+| Detect packet | `ff550200ee10` |
+| SYN/ACK and ACK | Valid checksums; control session `10` negotiated |
+| Certificate request | `0xAA00` |
+| Valid fixture response | 32-byte challenge, 64-byte signature, `0xAA05` |
+| Changed response signature | `0xAA04` |
+| Changed certificate signature | `0xAA04` before any challenge |
+| Identification | `0x1D00` request followed by `0x1D02` acceptance |
+| CarPlay availability | Native `0x4300` received |
+
+Reports are saved as `iap-smoke.json` and `mfi-api-{valid,signature,certificate,identify}.json`
+under `build/vphone-lab/`. Offline tests check capture completeness, checksums,
+session and sequence handling, malformed report fuzzing, queue bounds and nonce
+ownership. The native test peer keeps the default production daemon unchanged.
+
+This proves native iAP2/MFi and identification through the API test connection.
+It does not prove forwarding through `IOAccessoryPortUSB`, a QNX CarPlay session,
+primary AVC or AltScreen AVC. Those boundaries remain explicit in the reports.
+
+### CarPlay start and NCM classification
+
+The native CoreUtils query reports primary `en2` as type `0x8` (ordinary
+Ethernet), with extended flags `0x8c1`. Auxiliary `anpi0` reports type `0x10`
+and `IFEF_DIRECTLINK` (`0x20000080`), which matches APTransport's direct-link
+classification. The bridge can explicitly select the original auxiliary NCM
+data interface `4`; primary interface `2` remains its default. USB descriptors
+and interface flags are unchanged by channel selection.
+
+After starting QNX, obtain its current public key with `qnx-info`. A QNX restart
+changes that volatile key. In separate terminals, the controlled start probe is:
+
+```sh
+scripts/carplay_lab.sh qnx-start
+scripts/carplay_lab.sh qnx-info
+scripts/carplay_lab.sh ethernet --channel auxiliary --seconds 65
+build/vphone-lab/venv/bin/python -m wireless.lab_common.mfi_sap \
+  --qnx-dir build/vphone-lab/qnx-network --seconds 65
+scripts/carplay_lab.sh mfi-probe --experimental --start-carplay \
+  --carplay-interface 4 --hold-seconds 30 --receiver-public-key CURRENT_64_HEX_KEY
+```
+
+The probe publishes its native connection and sends `CarPlayStartSession`
+(`0x4301`) after authenticated identification and availability. Successful
+request transmission is not session creation: initial primary and auxiliary
+runs received a link ACK but no native TCP connection to QNX or MFi-SAP request.
+Unlocking the guest and publishing the connection did not complete that handoff.
+The native path goes through `ACCCarPlayService` and CarKit's
+`CRHandleCarPlayConnectionRequest`; those service and interface associations are
+the next trace targets. A longer native `carkitd` capture confirms accessory
+arrival, parsed certificate data, the start request and a host-session request.
+Its first-pairing flow waits at `allow while locked`, activates
+`com.apple.CarPlaySetupApp`, then dismisses the presenter after its timer and
+cancels the flow with required steps still remaining. The presenter connection
+logs Cocoa error `4099`. The capture was capped at 150 entries, so it is partial;
+these observed events do not prove an absence of later messages. Opening that
+app directly produced a blank view with no accessibility controls, rather than
+a completed permission step. The setup presentation is the current concrete
+blocker to investigate; no approval state was fabricated.
+`mfi-api-carplay.json` keeps QNX-session and video
+verification false until independent receiver evidence exists.
 
 ### Stream metadata and protocol experiments
 
@@ -236,9 +327,15 @@ metadata was published, not that iAP2 accepted it.
 
 | Experimental stream type | Native endpoint protocol branch | Measured result |
 |---|---|---|
-| `1` | `10` | No detect echo; investigated legacy `iapd` separately |
-| `4` | `15` | Genuine input report containing `01 30 23 ...`; not the expected iAP2 detect marker |
-| `5` | `16` | Genuine input report `01 00 19 01 00 00`; not the expected iAP2 detect marker |
+| `1` | `10`, `ACCAuthProtocol` | No iAP2 detect echo |
+| `4` | `15`, `SNTPTimeSync` | Genuine input report containing `01 30 23 ...` |
+| `5` | `16`, `QiAuth` | Genuine input report `01 00 19 01 00 00` |
+
+None of these branches selects iAP2. Protocol `4` dispatches to the native
+`iap2_endpoint_create`; protocol `3` dispatches to the legacy `iapd` bridge.
+The legacy daemon crash below therefore does not prevent the API endpoint from
+completing native MFi authentication. Further stream-type guessing is not an
+iAP2 bring-up recipe.
 
 There is no default stream choice. Reboot between different values, recreate
 the platform/USB setup, then use `port-prepare --stream-type 1|4|5 --experimental`.
@@ -263,10 +360,10 @@ only `accessoryd` through `com.apple.iap2d.xpc` and does not repeatedly start a
 crashing legacy service. This Radio database is Apple media state, not a
 measurement of a Wi-Fi radio.
 
-Next: identify the native protocol dispatch needed for iAP2 and resolve any
-required daemon startup dependency, then validate detect, SYN/ACK and real MFi
-acceptance before requesting video. No captured packet above is an authenticated
-CarPlay frame.
+Next: connect the authenticated native API test peer to the QNX CarPlay
+receiver, then validate the session and independently decode its video.
+USB-port forwarding remains a separate transport task. No captured packet
+above is a CarPlay video frame.
 
 For the RAM adapter, run the official debug launch in one terminal:
 

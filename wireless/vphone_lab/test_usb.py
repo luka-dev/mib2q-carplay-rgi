@@ -106,6 +106,25 @@ class NativeUSBTests(unittest.TestCase):
                     if m == "files.write" and p["path"].endswith(".plist")]
             self.assertEqual(jobs[0]["ProgramArguments"][-1], str(stream))
 
+    def test_peer_nonce_and_observer_are_required_before_rpc(self):
+        for nonce in (None, True, "", "0" * 15, "A" * 16, "0" * 17, "../" + "0" * 13):
+            with self.subTest(nonce=nonce), self.assertRaises(ValueError):
+                usb._run("iap-peer", peer_nonce=nonce, on_launch=lambda path: None)
+        with self.assertRaises(ValueError):
+            usb._run("iap-peer", peer_nonce="a" * 16)
+        with self.assertRaises(ValueError):
+            usb._run("iap-smoke", peer_nonce="a" * 16)
+        self.assertEqual(self.calls, [])
+
+    def test_peer_job_observer_and_literal_nonce_do_not_add_privileges(self):
+        observed = []
+        usb._run("iap-peer", peer_nonce="0123456789abcdef", on_launch=observed.append)
+        self.mocks[3].assert_called_with(catalogue=False)
+        jobs = [plistlib.loads(p["content"].encode()) for m, p in self.calls
+                if m == "files.write" and p["path"].endswith(".plist")]
+        self.assertEqual(jobs[0]["ProgramArguments"][-1], "0123456789abcdef")
+        self.assertEqual(observed, [jobs[0]["StandardOutPath"]])
+
     def test_native_class_selection_is_a_literal_program_argument(self):
         selected = "ACCTransportIOAccessorySharedManager"
         usb._run("iap-inspect", selected)

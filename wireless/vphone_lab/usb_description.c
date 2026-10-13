@@ -6,6 +6,7 @@ typedef const void *CFRef;
 typedef void *CFMutableRef;
 typedef struct { CFIndex location, length; } CFRange;
 extern int printf(const char *, ...), strcmp(const char *, const char *);
+extern int snprintf(char *, size_t, const char *, ...);
 extern unsigned int getuid(void), alarm(unsigned int);
 extern unsigned int sleep(unsigned int);
 extern int fflush(void *);
@@ -342,10 +343,17 @@ static int iap_inspect(const char *selected, int list_classes) {
     return 0;
 }
 
+#include "iap_smoke.h"
+
 int main(int argc, char **argv) {
-    alarm(20);
-    if ((argc != 3 && !(argc == 4 && (!strcmp(argv[1], "iap-inspect") || !strcmp(argv[1], "port-prepare")))) || getuid() != 0 || (strcmp(argv[1], "probe") && strcmp(argv[1], "apply") && strcmp(argv[1], "restore") && strcmp(argv[1], "reconnect") && strcmp(argv[1], "network") && strcmp(argv[1], "apply-destroy") && strcmp(argv[1], "iap-list") && strcmp(argv[1], "iap-wake") && strcmp(argv[1], "iap-inspect") && strcmp(argv[1], "iap-registry") && strcmp(argv[1], "manager-apply") && strcmp(argv[1], "manager-remove") && strcmp(argv[1], "port-prepare"))) return 2;
+    alarm(argc == 4 && !strcmp(argv[1], "iap-peer") ? 70 : 20);
+    if ((argc != 3 && !(argc == 4 && (!strcmp(argv[1], "iap-inspect") || !strcmp(argv[1], "port-prepare") || !strcmp(argv[1], "iap-peer")))) || getuid() != 0 || (strcmp(argv[1], "probe") && strcmp(argv[1], "apply") && strcmp(argv[1], "restore") && strcmp(argv[1], "reconnect") && strcmp(argv[1], "network") && strcmp(argv[1], "apply-destroy") && strcmp(argv[1], "iap-list") && strcmp(argv[1], "iap-wake") && strcmp(argv[1], "iap-inspect") && strcmp(argv[1], "iap-registry") && strcmp(argv[1], "iap-smoke") && strcmp(argv[1], "iap-peer") && strcmp(argv[1], "manager-apply") && strcmp(argv[1], "manager-remove") && strcmp(argv[1], "port-prepare"))) return 2;
     if (!strcmp(argv[1], "port-prepare") && (argc != 4 || (strcmp(argv[3], "1") && strcmp(argv[3], "4") && strcmp(argv[3], "5")))) return 2;
+    if (!strcmp(argv[1], "iap-peer")) {
+        if (argc != 4) return 2;
+        for (unsigned i=0;i<16;i++) if (!argv[3][i] || !((argv[3][i]>='0' && argv[3][i]<='9') || (argv[3][i]>='a' && argv[3][i]<='f'))) return 2;
+        if (argv[3][16]) return 2;
+    }
     /* Reject physical controllers before loading any mutating SPI. */
     u32 service = IOServiceGetMatchingService(0, IOServiceMatching("AppleVirtIOUSBDeviceController"));
     if (!service) return 3;
@@ -364,6 +372,8 @@ int main(int argc, char **argv) {
     if (!strcmp(argv[1], "manager-apply") || !strcmp(argv[1], "manager-remove")) return manager_configure(service, !strcmp(argv[1], "manager-remove"));
     if (!strcmp(argv[1], "port-prepare")) return port_prepare(service, argv[3][0] - '0');
     if (!strcmp(argv[1], "iap-registry")) return iap_registry(service);
+    if (!strcmp(argv[1], "iap-smoke")) return iap_smoke(0);
+    if (!strcmp(argv[1], "iap-peer")) return iap_smoke(argv[3]);
     if (!strcmp(argv[1], "iap-inspect")) return iap_inspect(argc == 4 ? argv[3] : "ACCTransportPluginIOAccessoryManager", argc == 3);
     if (!strcmp(argv[1], "iap-wake")) {
         void *connection = xpc_connection_create_mach_service("com.apple.iap2d.xpc", 0, 2);
