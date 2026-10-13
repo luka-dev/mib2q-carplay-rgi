@@ -34,7 +34,10 @@ def set_output(directory: Path) -> None:
 
 
 def network_manifest(source: str, pairing: bool = False, media: bool = False, software_mfi: bool = False,
-                     legacy_altscreen: bool = False, paired_altscreen: bool = False) -> str:
+                     legacy_altscreen: bool = False, paired_altscreen: bool = False,
+                     pacing_only: bool = False) -> str:
+    if pacing_only and not software_mfi:
+        raise ValueError("pacing-only requires software MFi")
     if paired_altscreen and (legacy_altscreen or not software_mfi):
         raise ValueError("paired AltScreen requires software MFi and excludes the legacy profile")
     if legacy_altscreen and not software_mfi:
@@ -100,6 +103,8 @@ def network_manifest(source: str, pairing: bool = False, media: bool = False, so
     if software_mfi:
         source = source.replace("LD_PRELOAD=/proc/boot/libcarplay_hook.so:/proc/boot/libdio_capture_probe.so:",
             "LD_PRELOAD=/proc/boot/libdio_capture_probe.so:/proc/boot/libcarplay_hook.so:")
+    if pacing_only:
+        source = source.replace("    MHI2Q_DIO_OWNER_MODE=", "    PROBE_LOG=/dev/null\n    PROBE_IO_CAP=1\n    MHI2Q_DIO_OWNER_MODE=", 1)
     if legacy_altscreen or paired_altscreen:
         source = source.replace("    reopen /dev/ser1\n", "    reopen /dev/ser1\n"
             "    procmgr_symlink /dev/ser1 /dev/shmem/carplay_hook.log\n"
@@ -122,7 +127,10 @@ def command(transport: str = "user") -> list[str]:
                         "user,id=n0,hostfwd=tcp:127.0.0.1:32500-:5000"), "-device", "usb-net,netdev=n0"]
     record = OUT / "build-record.json"
     if record.exists() and json.loads(record.read_text()).get("software_mfi"):
-        result += ["-netdev", "user,id=mfi,net=10.0.3.0/24", "-device",
+        mfi_network = "user,id=mfi,net=10.0.3.0/24"
+        if json.loads(record.read_text()).get("input_control"):
+            mfi_network += ",hostfwd=tcp:127.0.0.1:32503-10.0.3.15:32503"
+        result += ["-netdev", mfi_network, "-device",
                    "usb-net,netdev=mfi,mac=52:54:00:12:34:57"]
     return result
 
@@ -140,7 +148,17 @@ def running() -> int | None:
 def build(image: str, pairing: bool = False, media: bool = False, software_mfi: bool = False,
           request_ui: bool = False, request_ui_music: bool = False, capture_video: bool = False,
           capture_video_long: bool = False, legacy_altscreen: bool = False,
-          paired_altscreen: bool = False) -> None:
+          paired_altscreen: bool = False, request_ui_maps: bool = False,
+          pacing_only: bool = False, input_control: bool = False,
+          capture_memory: bool = False) -> None:
+    if capture_memory and (not input_control or not software_mfi or capture_video):
+        raise ValueError("memory capture requires input control/software MFi and excludes UART video capture")
+    if input_control and not software_mfi:
+        raise ValueError("input control requires isolated software MFi network")
+    if request_ui_maps and (not request_ui or request_ui_music):
+        raise ValueError("Maps UI requires --request-ui and excludes Music UI")
+    if pacing_only and (not software_mfi or capture_video):
+        raise ValueError("pacing-only requires software MFi and excludes video payload capture")
     if paired_altscreen and (legacy_altscreen or not software_mfi):
         raise ValueError("paired AltScreen requires software MFi and excludes the legacy profile")
     if capture_video_long and not capture_video:
@@ -169,7 +187,7 @@ def build(image: str, pairing: bool = False, media: bool = False, software_mfi: 
         path = args[0] / "capture.build"
         if pairing:
             shutil.copy2(hook, args[0] / "libcarplay_hook.so")
-        path.write_text(network_manifest(path.read_text(), pairing, media, software_mfi, legacy_altscreen, paired_altscreen))
+        path.write_text(network_manifest(path.read_text(), pairing, media, software_mfi, legacy_altscreen, paired_altscreen, pacing_only))
         shutil.copy2(path, OUT / "network.build")
     def docker(work, *args, **kwargs):
         args = tuple('-DMHI2Q_CAPTURE_INTERFACE_NAME="ecm0"' if
@@ -183,6 +201,12 @@ def build(image: str, pairing: bool = False, media: bool = False, software_mfi: 
             args += ("-DMHI2Q_CAPTURE_NATIVE_UI_QEMU",)
         if request_ui_music and "/work/libdio_capture_probe.so" in args:
             args += ("-DMHI2Q_CAPTURE_REQUEST_MUSIC_UI_QEMU",)
+        if request_ui_maps and "/work/libdio_capture_probe.so" in args:
+            args += ("-DMHI2Q_CAPTURE_REQUEST_MAPS_UI_QEMU",)
+        if input_control and "/work/libdio_capture_probe.so" in args:
+            args += ("-DMHI2Q_CAPTURE_INPUT_QEMU",)
+        if capture_memory and "/work/libdio_capture_probe.so" in args:
+            args += ("-DMHI2Q_CAPTURE_VIDEO_QEMU", "-DMHI2Q_CAPTURE_VIDEO_MEMORY_QEMU")
         if capture_video and "/work/libdio_capture_probe.so" in args:
             args += ("-DMHI2Q_CAPTURE_VIDEO_QEMU",)
         if capture_video_long and "/work/libdio_capture_probe.so" in args:
@@ -201,6 +225,10 @@ def build(image: str, pairing: bool = False, media: bool = False, software_mfi: 
         "paired_pairing": pairing and not legacy_altscreen,
         "native_media": media and not legacy_altscreen, "software_mfi": software_mfi, "request_ui": request_ui,
         "request_ui_music": request_ui_music,
+        "request_ui_maps": request_ui_maps, "pacing_only": pacing_only,
+        "input_control": input_control,
+        "capture_memory": capture_memory,
+        "probe_trace_sink": "/dev/null" if pacing_only else "UART",
         "capture_video": capture_video,
         "capture_video_long": capture_video_long, "legacy_altscreen": legacy_altscreen,
         "paired_altscreen": paired_altscreen,
@@ -219,6 +247,10 @@ def main() -> None:
     parser.add_argument("--software-mfi", action="store_true", help="enable the QEMU-only host MFi-SAP responder; requires --pairing --media")
     parser.add_argument("--request-ui", action="store_true", help="request the native CarPlay UI after RECORD; requires --software-mfi")
     parser.add_argument("--request-ui-music", action="store_true", help="request the Music CarPlay UI URL instead of allowing the phone to choose Maps")
+    parser.add_argument("--request-ui-maps", action="store_true", help="request the native Maps CarPlay UI URL")
+    parser.add_argument("--pacing-only", action="store_true", help="disable AVC payload capture and sink socket probe traces to /dev/null; preserves authentication")
+    parser.add_argument("--input-control", action="store_true", help="register virtual primary touch HID and expose its bounded test endpoint on loopback")
+    parser.add_argument("--capture-memory", action="store_true", help="retain a bounded AVC GOP per screen in RAM and retrieve through the owned loopback endpoint")
     parser.add_argument("--capture-video", action="store_true", help="capture bounded plaintext AVC at the mock decoder; requires --software-mfi")
     parser.add_argument("--capture-video-long", action="store_true", help="increase decoder capture bound to 4096 records/16 MiB; requires --capture-video")
     parser.add_argument("--legacy-altscreen", action="store_true", help="isolated legacy AES AltScreen negotiation; disables paired wireless media")
@@ -245,7 +277,8 @@ def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     if args.action == "build":
         build(args.image, args.pairing, args.media, args.software_mfi, args.request_ui,
-              args.request_ui_music, args.capture_video, args.capture_video_long, args.legacy_altscreen, args.paired_altscreen)
+              args.request_ui_music, args.capture_video, args.capture_video_long, args.legacy_altscreen, args.paired_altscreen,
+              args.request_ui_maps, args.pacing_only, args.input_control, args.capture_memory)
     elif args.action == "start":
         if running():
             raise RuntimeError("owned QNX receiver is already running")

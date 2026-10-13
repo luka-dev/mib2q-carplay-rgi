@@ -126,6 +126,18 @@ class NativeUSBTests(unittest.TestCase):
         self.assertEqual(jobs[0]["ProgramArguments"][-1], "0123456789abcdef")
         self.assertEqual(observed, [jobs[0]["StandardOutPath"]])
 
+    def test_extended_peer_lifetime_is_bounded_and_scoped_before_rpc(self):
+        for seconds in (None, True, 59, 181, "120"):
+            with self.subTest(seconds=seconds), self.assertRaises(ValueError):
+                usb._run("iap-peer", peer_nonce="a" * 16, peer_seconds=seconds, on_launch=lambda path: None)
+        with self.assertRaises(ValueError):
+            usb._run("iap-smoke", peer_seconds=120)
+        self.assertEqual(self.calls, [])
+        usb._run("iap-peer", peer_nonce="a" * 16, peer_seconds=150, on_launch=lambda path: None)
+        jobs = [plistlib.loads(p["content"].encode()) for m, p in self.calls
+                if m == "files.write" and p["path"].endswith(".plist")]
+        self.assertEqual(jobs[0]["ProgramArguments"][-2:], ["a" * 16, "150"])
+
     def test_native_class_selection_is_a_literal_program_argument(self):
         selected = "ACCTransportIOAccessorySharedManager"
         usb._run("iap-inspect", selected)

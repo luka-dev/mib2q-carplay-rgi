@@ -13,11 +13,14 @@ carries genuine iOS 26.6.2 CarPlay video to the stock-210 QNX receiver. The nati
 CoreAccessories API peer passes valid/invalid software MFi controls, identifies
 the accessory and starts CarPlay through primary Direct NCM. Native pairing,
 MFi-SAP, encrypted control and both screen SETUPs complete. FFmpeg independently
-decoded 31 primary frames at 800×480 showing the CarPlay app launcher, and 22
-stream-111 frames at 1440×542 showing a black image. Siri was enabled through
-native Settings after rebuilding a stale MobileGestalt cache. Cluster map
-content, sustained pacing, input/reconnect and USB-port forwarding still need
-validation. The Inferno results below are retained historical evidence.
+decoded the primary Maps UI at 800×480 and actual map tiles on stream 111
+at 1440×542. A native virtual HID tap on GO changed the cluster location dot
+to a navigation arrow. Siri was enabled through native Settings after rebuilding
+a stale MobileGestalt cache. A longer run without UART video payloads measured
+33.42/33.82 ms median
+main/cluster delivery intervals, with substantial long gaps still present.
+Moving-route, roller/button and reconnect coverage, and USB-port forwarding
+still need validation. The Inferno results below are retained historical evidence.
 
 The MU1316 / P5087 candidate retains factory AirPlay **210.81** on QNX 6.5 ARM.
 The C wireless hook supplies pairing and modern control/event/media security;

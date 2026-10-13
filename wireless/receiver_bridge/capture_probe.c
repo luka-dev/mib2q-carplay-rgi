@@ -45,6 +45,9 @@ extern char *__progname;
 #include <stddef.h>
 #include <time.h>
 #include "video_capture_bounds.h"
+#ifdef MHI2Q_CAPTURE_VIDEO_MEMORY_QEMU
+static void lab_avc_store(const char *, const uint8_t *, uint32_t);
+#endif
 #ifdef MHI2Q_CAPTURE_VIDEO_LONG_QEMU
 #define VIDEO_CAPTURE_RECORDS 4096
 #define VIDEO_CAPTURE_BYTES 16777216
@@ -96,6 +99,10 @@ static int video_capture_write(const char *data, size_t length)
 static void video_capture_record(const char *marker, const uint8_t *data, uint32_t length,
                                  unsigned *records, size_t *bytes)
 {
+#ifdef MHI2Q_CAPTURE_VIDEO_MEMORY_QEMU
+    lab_avc_store(marker, data, length);
+    return;
+#endif
     if (!data || !length || length > 262144 || *records >= VIDEO_CAPTURE_RECORDS ||
         *bytes > VIDEO_CAPTURE_BYTES-length) return;
     static const char hex[] = "0123456789abcdef";
@@ -320,17 +327,28 @@ static void *native_ui_worker(void *session)
     void (*release)(const void *) = (void (*)(const void *))dlsym(RTLD_NEXT, "CFRelease");
     const void *ui_url = NULL;
     unsigned attempt;
-#ifdef MHI2Q_CAPTURE_REQUEST_MUSIC_UI_QEMU
+#if defined(MHI2Q_CAPTURE_REQUEST_MUSIC_UI_QEMU) && defined(MHI2Q_CAPTURE_REQUEST_MAPS_UI_QEMU)
+#error "Select only one native CarPlay UI URL"
+#endif
+#if defined(MHI2Q_CAPTURE_REQUEST_MUSIC_UI_QEMU) || defined(MHI2Q_CAPTURE_REQUEST_MAPS_UI_QEMU)
     typedef const void *(*string_fn)(void *, const char *, unsigned int);
     string_fn create_string = (string_fn)dlsym(RTLD_NEXT, "CFStringCreateWithCString");
-    if (!create_string || !(ui_url = create_string(NULL, "music://", 0x08000100u))) {
-        static const char failed[] = "[native-ui-qemu] music URL creation failed; request skipped\n";
+#ifdef MHI2Q_CAPTURE_REQUEST_MAPS_UI_QEMU
+    const char *requested_url = "maps://";
+#else
+    const char *requested_url = "music://";
+#endif
+    if (!create_string || !(ui_url = create_string(NULL, requested_url, 0x08000100u))) {
+        static const char failed[] = "[native-ui-qemu] URL creation failed; request skipped\n";
         (void)write(2, failed, sizeof(failed) - 1);
         if (release) release(session);
         return NULL;
     }
-    (void)write(2, "[native-ui-qemu] requesting music:// UI\n",
-                sizeof("[native-ui-qemu] requesting music:// UI\n") - 1);
+    {
+        char line[96];
+        int used = snprintf(line, sizeof(line), "[native-ui-qemu] requesting %s UI\n", requested_url);
+        if (used > 0 && (size_t)used < sizeof(line)) (void)write(2, line, (size_t)used);
+    }
 #endif
     for (attempt = 0; attempt < 3; ++attempt) {
         char line[128];
@@ -1365,8 +1383,9 @@ int connect(int fd, const struct sockaddr *address, socklen_t length)
 }
 #endif
 
-typedef int (*hid_create_fn)(void *);
+typedef int (*hid_create_fn)(void *, const void *);
 typedef int (*hid_register_fn)(void *);
+#include "qnx_input_probe.h"
 
 static void log_hid_result(const char *name, int status)
 {
@@ -1427,6 +1446,9 @@ int ScreenRegister(void *screen)
         return -1;
     int status = real(screen);
     log_hid_result("ScreenRegister", status);
+#ifdef MHI2Q_CAPTURE_INPUT_QEMU
+    if (!status) lab_touch_register(screen);
+#endif
     return status;
 }
 
@@ -1463,14 +1485,14 @@ int AirPlayReceiverServerControl(void *server, uint32_t flags, void *command,
     return status;
 }
 
-int HIDDeviceCreateVirtual(void *out_device)
+int HIDDeviceCreateVirtual(void *out_device, const void *properties)
 {
     static hid_create_fn real;
     if (!real)
         real = (hid_create_fn)dlsym(RTLD_NEXT, "HIDDeviceCreateVirtual");
     if (!real)
         return -1;
-    int status = real(out_device);
+    int status = real(out_device, properties);
     log_hid_result("HIDDeviceCreateVirtual", status);
     return status;
 }

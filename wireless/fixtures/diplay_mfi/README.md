@@ -52,6 +52,14 @@ FFmpeg decoding: 31 primary frames at 800×480 show the native CarPlay app launc
 separately from the API authentication probe. USB-port forwarding and physical
 iPhone operation remain unverified.
 
+A later run on the same date independently decoded actual Maps tiles at
+1440×542 from stream 111 using a bounded RAM GOP capture. A native virtual HID
+tap on GO changed the cluster's blue location dot to a navigation arrow.
+The `vphone_native_qnx_maps` manifest entry records the distinct capture hashes
+and the official guest location simulation used for this test. Longer wire
+pacing now has measured evidence, including long gaps; stable 30 fps remains
+unverified.
+
 ## 🧪 Integration status
 
 This directory stores an experimental fixture. The host `TestSoftwareMfi`

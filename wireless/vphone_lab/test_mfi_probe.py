@@ -97,7 +97,7 @@ class NativePeerTests(unittest.TestCase):
 
     def test_invalid_session_options_fail_before_fixture_or_guest_access(self):
         variants = [{"identify": 1}, {"identify": True, "negative": "signature"},
-                    {"start_carplay": True}, {"hold_seconds": True}, {"hold_seconds": 31},
+                    {"start_carplay": True}, {"hold_seconds": True}, {"hold_seconds": 121},
                     {"receiver_ipv6": "::1"}, {"receiver_ipv6": "fe80::2%en0"},
                     {"public_key": bytes(31)}, {"public_key": "0" * 32},
                     {"carplay_interface": True}, {"carplay_interface": 3}]

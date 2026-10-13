@@ -10,7 +10,7 @@ static int iap_smoke_valid_frame(const unsigned char *bytes, unsigned long count
     return !(sum&255);
 }
 
-static int iap_smoke(const char *peer_nonce) {
+static int iap_smoke(const char *peer_nonce, unsigned peer_seconds) {
     void *framework=dlopen("/System/Library/PrivateFrameworks/CoreAccessories.framework/CoreAccessories",2);
     if (!framework) return 45;
     const char **names=dlsym(framework,"kACCEndpoint_Protocol_Strings");
@@ -56,7 +56,7 @@ static int iap_smoke(const char *peer_nonce) {
         snprintf(incoming,sizeof(incoming),"/private/var/tmp/mhi2-vphone-lab/iap-peer-%s.inbox",peer_nonce);
         snprintf(finished,sizeof(finished),"/private/var/tmp/mhi2-vphone-lab/iap-peer-%s.done",peer_nonce);
         unsigned char buffer[65536]; size_t consumed=0;
-        for (unsigned iteration=0;iteration<60;iteration++) {
+        for (unsigned iteration=0;iteration<peer_seconds;iteration++) {
             FILE *input=fopen(incoming,"rb"); size_t length=0;
             if (input) { length=fread(buffer,1,sizeof(buffer),input);fclose(input); }
             while (length>=consumed+4) {

@@ -28,8 +28,8 @@ they do not demonstrate our CarPlay sender, encoder, MFi or AltScreen path.[^1]
 | USB trust | Native pairing accepted by the dedicated guest |
 | Ethernet attachment | Native Direct NCM primary interface carries the authenticated QNX session; `/info` returns 210.81 |
 | iAP2 attachment | Native CoreAccessories API peer: AA05, identification 1D02, availability 4300 and start 4301; USB-port forwarding remains unverified |
-| Primary video | Native CarPlay app launcher; 31 independently decoded H.264 frames, 800×480 |
-| AltScreen video | Stream 111: 22 independently decoded H.264 frames, 1440×542; image remains black |
+| Primary video | Native Maps and CarPlay launcher; RAM capture independently decoded at 800×480 |
+| AltScreen video | Native Maps tiles and location marker; independently decoded stream 111, 1440×542 |
 | Siri | Enabled through native Settings after rebuilding stale MobileGestalt capabilities |
 
 `scripts/carplay_lab.sh doctor` writes the actual host report to
@@ -89,8 +89,11 @@ flowchart LR
     native_iap --> ios_guest
     ios_guest --> ethernet_adapter["Primary Direct NCM"]
     ethernet_adapter --> qnx_receiver["Paired stock210 QNX receiver"]
+    ethernet_adapter -->|"Receiver commands"| ios_guest
     mfi_signer --> qnx_receiver
-    qnx_receiver --> video_capture["Main and stream 111 AVC"]
+    host_control["Loopback HID tap and GOP retrieval"] --> qnx_receiver
+    qnx_receiver -->|"Native HID control"| ethernet_adapter
+    qnx_receiver --> video_capture["Bounded RAM capture of both AVC streams"]
     video_capture --> independent_decode["Independent FFmpeg decoding"]
 ```
 
@@ -249,8 +252,8 @@ scripts/carplay_lab.sh mfi-probe --experimental --identify
 The MFi command uses `build/vphone-lab/venv/bin/python`, including cryptography
 and the wire-codec dependencies installed during lab bootstrap. It signs only
 on the host with the integrity-checked public fixture. Packet records travel
-through a nonce-scoped RPC file queue; the helper bounds input, runs at most
-60 seconds and destroys its own connection and endpoint. Both sides preserve
+through a nonce-scoped RPC file queue; the helper bounds input, runs for a bounded
+60–180 seconds and destroys its own connection and endpoint. Both sides preserve
 the ordinary native authentication checks. No authentication state is assigned.
 Fixed Objective-C call prototypes are required on arm64; C varargs do not use
 the method argument ABI.
@@ -415,6 +418,100 @@ screen need not keep emitting pictures. These short runs do not establish
 sustained frame pacing, end-to-end latency, physical OMX output or 2.4 GHz RF
 performance. Stream-111 decoding proves its video transport, not map content.
 
+### Maps, native input and RAM capture
+
+A subsequent native Maps run used simulated CoreLocation coordinates near Apple
+Park and requested `maps://` through the stock receiver. A virtual primary-screen
+HID device now makes the native CarPlay GO control accessible from the QNX lab.
+The phone supplies every rendered/encoded pixel; no scene or encoder substitute
+is installed into vphone.
+
+| Measured evidence | Result |
+|---|---|
+| Primary RAM capture before GO | 364 independently decoded frames, 800×480; Maps route choices and GO |
+| Cluster RAM capture before GO | 7 decoded frames, 1440×542; actual Apple Park map tiles and blue location dot |
+| Native QNX HID tap | `(374,184)`, status 0; press followed by release |
+| Cluster capture after GO | 3 decoded frames, 1440×542; blue dot changes to a navigation arrow |
+| Native iAP2 held session | 90 seconds; valid MFi and identification, helper exit 0 |
+
+The navigation marker change is the observed input effect. This does not yet
+validate every roller/button gesture or an entire moving route. Input JSON
+reports retain `visible_effect_verified=false` because the CLI itself does not
+inspect decoded images.
+
+`--input-control` registers a virtual HID against the actual first screen's UUID
+and its 800×480 coordinate range. It is compiled only into the QNX fixture.
+The native `HIDDeviceCreateVirtual` interposer now forwards both ABI arguments:
+pinned stock210 address `0x69358` saves its properties argument from `r1`.
+The control endpoint binds the separate guest MFi network's `10.0.3.15:32503`;
+QEMU forwards it only to host `127.0.0.1:32503`. The host command checks the owned
+iOS machine, exact running QNX process and explicit build flags before connecting.
+The endpoint permits at most 256 requests, bounds each tap, times out incomplete
+requests, and always posts release after a press attempt. It disappears when QNX
+stops. The default build exposes no such endpoint.
+
+The pacing profile redirects the retained socket probe's output to `/dev/null`
+and caps its payload formatting at one byte (`PROBE_IO_CAP=1`; zero means full
+payload in that probe). It disables UART AVC capture. `--capture-memory` instead
+keeps at most 2 MiB per screen, beginning at an IDR with its configuration.
+A new IDR resets that screen's GOP. Once the cap is reached, that GOP stops
+growing until another IDR; a snapshot is not necessarily the newest frame.
+This happened to the primary snapshot after GO, so its unchanged bytes were not
+used to claim an input effect. The cluster's new GOP supplies the marker evidence.
+RAM copying, the remaining probe calls and diagnostic logs still add overhead.
+
+```sh
+scripts/carplay_lab.sh qnx-stop
+scripts/carplay_lab.sh qnx-build --request-ui-maps --input-control \
+  --capture-memory --pacing-only
+scripts/carplay_lab.sh qnx-start
+scripts/carplay_lab.sh qnx-info
+# In other terminals, start the primary bridge and signer, then the peer:
+scripts/carplay_lab.sh ethernet --seconds 120
+PYTHONPATH=. build/vphone-lab/venv/bin/python -m wireless.lab_common.mfi_sap \
+  --qnx-dir build/vphone-lab/qnx-network --seconds 120
+scripts/carplay_lab.sh mfi-probe --experimental --start-carplay \
+  --carplay-interface 2 --hold-seconds 90 --receiver-public-key CURRENT_64_HEX_KEY
+# While the native CarPlay scene is connected:
+scripts/carplay_lab.sh input snapshot primary
+scripts/carplay_lab.sh input snapshot cluster
+scripts/carplay_lab.sh input tap 374 184
+scripts/carplay_lab.sh input snapshot cluster --output build/vphone-lab/cluster-after-go.h264
+```
+
+Inspect the current scene before choosing coordinates: `(374,184)` was GO in the
+measured route-selection image, not a universal navigation command. For this
+run, official guest `location.set` used latitude `37.3349`, longitude `-122.0090`;
+Maps opened `maps://?daddr=37.3229,-122.0322&dirflg=d`. This is simulated guest
+location, not the Mac's or a physical phone's location.
+
+### Longer pacing measurement without UART payloads
+
+The 120-second companion PCAP includes these complete, independently reconstructed
+screen access units. This describes delivery during native Maps rendering and
+idle periods, without changing the phone's output cadence:
+
+| Screen | Access units | Video span | Median | p95 | Maximum gap |
+|---|---:|---:|---:|---:|---:|
+| Main, port 6030 | 1483 | 63.789 s | 33.421 ms | 68.333 ms | 1057.821 ms |
+| Cluster, port 6031 | 1446 | 103.995 s | 33.819 ms | 191.345 ms | 2828.865 ms |
+
+Main has 12 gaps over 100 ms, cluster 217; their long-gap counts over one second
+are 2 and 7. Reassembly reports no sequence gaps or unparsed contiguous bytes.
+Repeated TCP payload bytes are 2430 and 7140, which do not establish RF packet
+loss. Phone telemetry reports `encoderCurrentFPS=30`; the observed averages are
+23.233 and 13.895 access units/s, including sparse/idle periods. The long tails
+remain real observations; this result does not establish stable 30 fps or
+attribute stalls to the encoder, guest GPU or receiver without more timing evidence.
+
+Artifacts are `quiet-{main,cluster}-wire-pacing.json`, `quiet-primary-before.h264`,
+`quiet-cluster-before.h264`, `quiet-cluster-after-go.h264` and their decoded PNGs
+under ignored `build/vphone-lab/`. The last two cluster hashes are
+`41da439bc79025da8bd696a30695b1103a3cec68d7767f5bc97a8cd564542ecd` and
+`0725359231b7ae53d2391b99676b107929349a0edfa9e617c4a4d28bb9016617`.
+Physical OMX presentation, end-to-end latency and a 2.4 GHz radio are still not
+measured by this stand.
+
 ### Stream metadata and protocol experiments
 
 The native port plugin selects its endpoint protocol using
@@ -460,8 +557,8 @@ only `accessoryd` through `com.apple.iap2d.xpc` and does not repeatedly start a
 crashing legacy service. This Radio database is Apple media state, not a
 measurement of a Wi-Fi radio.
 
-Next: produce map content on stream 111, verify CarPlay input and reconnect,
-and measure sustained timing with UART payload capture disabled. USB-port
+Next: test a moving route and roller/button gestures, repeat reconnect, and
+separate source rendering/encoding stalls from receiver delivery gaps. USB-port
 forwarding remains a separate transport task; the stream-type experiments
 below are historical diagnostics, not the active video recipe.
 
@@ -565,11 +662,18 @@ existing operation rather than starting another restore.[^5]
 
 ## 🧪 Shared receiver and evidence tools
 
-Validation passed 70 guest/bootstrap/transport/output tests and 90 retained
+Validation passed 76 guest/bootstrap/transport/output tests and 92 retained
 laboratory regression tests, including seeded malformed-report and TCP-framing
-fuzzing. The native helper compiled with warnings treated as errors and was run
+fuzzing. A native C RAM-capture test passes ASan/UBSan with 10,000 seeded inputs.
+The native helper compiled with warnings treated as errors and was run
 on the owned guest. These offline checks validate the tools; the separate live
 pairing, MFi-SAP and independent video evidence above establishes the sender session.
+
+```sh
+clang -Wall -Wextra -Werror -fsanitize=address,undefined \
+  wireless/receiver_bridge/test_qnx_input_memory.c -o build/vphone-lab/test-qnx-input-memory
+build/vphone-lab/test-qnx-input-memory
+```
 
 ```sh
 scripts/carplay_lab.sh qnx-build

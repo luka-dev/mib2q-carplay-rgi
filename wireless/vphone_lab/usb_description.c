@@ -363,13 +363,23 @@ static int iap_inspect(const char *selected, int list_classes) {
 #include "iap_smoke.h"
 
 int main(int argc, char **argv) {
-    alarm(argc == 4 && !strcmp(argv[1], "iap-peer") ? 70 : 20);
-    if ((argc != 3 && !(argc == 4 && (!strcmp(argv[1], "iap-inspect") || !strcmp(argv[1], "port-prepare") || !strcmp(argv[1], "iap-peer")))) || getuid() != 0 || (strcmp(argv[1], "probe") && strcmp(argv[1], "apply") && strcmp(argv[1], "restore") && strcmp(argv[1], "reconnect") && strcmp(argv[1], "network") && strcmp(argv[1], "network-classify") && strcmp(argv[1], "apply-destroy") && strcmp(argv[1], "ncm-direct") && strcmp(argv[1], "iap-list") && strcmp(argv[1], "iap-wake") && strcmp(argv[1], "iap-inspect") && strcmp(argv[1], "iap-registry") && strcmp(argv[1], "iap-smoke") && strcmp(argv[1], "iap-peer") && strcmp(argv[1], "manager-apply") && strcmp(argv[1], "manager-remove") && strcmp(argv[1], "port-prepare"))) return 2;
+    alarm(20);
+    unsigned peer_seconds = 60;
+    if ((argc != 3 && !(argc == 5 && !strcmp(argv[1], "iap-peer")) && !(argc == 4 && (!strcmp(argv[1], "iap-inspect") || !strcmp(argv[1], "port-prepare") || !strcmp(argv[1], "iap-peer")))) || getuid() != 0 || (strcmp(argv[1], "probe") && strcmp(argv[1], "apply") && strcmp(argv[1], "restore") && strcmp(argv[1], "reconnect") && strcmp(argv[1], "network") && strcmp(argv[1], "network-classify") && strcmp(argv[1], "apply-destroy") && strcmp(argv[1], "ncm-direct") && strcmp(argv[1], "iap-list") && strcmp(argv[1], "iap-wake") && strcmp(argv[1], "iap-inspect") && strcmp(argv[1], "iap-registry") && strcmp(argv[1], "iap-smoke") && strcmp(argv[1], "iap-peer") && strcmp(argv[1], "manager-apply") && strcmp(argv[1], "manager-remove") && strcmp(argv[1], "port-prepare"))) return 2;
     if (!strcmp(argv[1], "port-prepare") && (argc != 4 || (strcmp(argv[3], "1") && strcmp(argv[3], "4") && strcmp(argv[3], "5")))) return 2;
     if (!strcmp(argv[1], "iap-peer")) {
-        if (argc != 4) return 2;
+        if (argc != 4 && argc != 5) return 2;
         for (unsigned i=0;i<16;i++) if (!argv[3][i] || !((argv[3][i]>='0' && argv[3][i]<='9') || (argv[3][i]>='a' && argv[3][i]<='f'))) return 2;
         if (argv[3][16]) return 2;
+        if (argc == 5) {
+            peer_seconds = 0;
+            for (unsigned i = 0; argv[4][i]; i++) {
+                if (i >= 3 || argv[4][i] < '0' || argv[4][i] > '9') return 2;
+                peer_seconds = peer_seconds * 10 + (unsigned)(argv[4][i] - '0');
+            }
+            if (peer_seconds < 60 || peer_seconds > 180) return 2;
+        }
+        alarm(peer_seconds + 10);
     }
     /* Reject physical controllers before loading any mutating SPI. */
     u32 service = IOServiceGetMatchingService(0, IOServiceMatching("AppleVirtIOUSBDeviceController"));
@@ -390,8 +400,8 @@ int main(int argc, char **argv) {
     if (!strcmp(argv[1], "manager-apply") || !strcmp(argv[1], "manager-remove")) return manager_configure(service, !strcmp(argv[1], "manager-remove"));
     if (!strcmp(argv[1], "port-prepare")) return port_prepare(service, argv[3][0] - '0');
     if (!strcmp(argv[1], "iap-registry")) return iap_registry(service);
-    if (!strcmp(argv[1], "iap-smoke")) return iap_smoke(0);
-    if (!strcmp(argv[1], "iap-peer")) return iap_smoke(argv[3]);
+    if (!strcmp(argv[1], "iap-smoke")) return iap_smoke(0, 60);
+    if (!strcmp(argv[1], "iap-peer")) return iap_smoke(argv[3], peer_seconds);
     if (!strcmp(argv[1], "iap-inspect")) return iap_inspect(argc == 4 ? argv[3] : "ACCTransportPluginIOAccessoryManager", argc == 3);
     if (!strcmp(argv[1], "iap-wake")) {
         void *connection = xpc_connection_create_mach_service("com.apple.iap2d.xpc", 0, 2);

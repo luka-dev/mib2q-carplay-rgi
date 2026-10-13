@@ -105,6 +105,40 @@
         "primary_sha256": "ef2e2e8cc0ba635b37bbc4064bdbd5c247f0ce1f93baf65edaeb5c9fc8f7c4eb",
         "cluster_sha256": "38679ce361750bd52d6b37c94190ca0081b3b1d0ba219e1d4447589969495673"
       }
+    },
+    "vphone_native_qnx_maps": {
+      "date": "2026-10-13",
+      "source": "Native Maps with official guest CoreLocation simulation",
+      "primary_decoded_frames": 364,
+      "primary_resolution": [
+        800,
+        480
+      ],
+      "cluster_resolution": [
+        1440,
+        542
+      ],
+      "cluster_before_go": {
+        "decoded_frames": 7,
+        "sha256": "41da439bc79025da8bd696a30695b1103a3cec68d7767f5bc97a8cd564542ecd",
+        "picture": "Actual map tiles and blue location dot"
+      },
+      "cluster_after_go": {
+        "decoded_frames": 3,
+        "sha256": "0725359231b7ae53d2391b99676b107929349a0edfa9e617c4a4d28bb9016617",
+        "picture": "Map tiles with navigation arrow"
+      },
+      "native_hid_tap": [
+        374,
+        184
+      ],
+      "native_hid_status": 0,
+      "capture": "Bounded RAM GOP, independently decoded by FFmpeg",
+      "uart_video_payload_capture": false,
+      "iap2_hold_seconds": 90,
+      "stable_30fps_verified": false,
+      "physical_device_tested": false,
+      "evidence_document": "docs/wireless-carplay/VPHONE_LAB.md"
     }
   },
   "runtime_integration": "The opt-in ios_vm_lab/mfi_probe.py and mfi_sap.py host signers read this fixture; the QEMU-only capture adapter receives public MFi-SAP response bytes over bounded RPC. Private key remains on the host. TestSoftwareMfi, default daemon and production QNX preloader remain unchanged. The opt-in vphone_lab/mfi_probe.py uses the same host fixture against a native CoreAccessories API endpoint, with bounded RPC queues and native connection cleanup."

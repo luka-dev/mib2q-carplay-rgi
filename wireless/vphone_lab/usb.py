@@ -57,7 +57,7 @@ def build(*, catalogue: bool = False) -> Path:
 
 
 def _run(mode: str, inspect_class: str | None = None, stream_type: int | None = None,
-         *, peer_nonce: str | None = None, on_launch=None) -> dict:
+         *, peer_nonce: str | None = None, peer_seconds: int = 60, on_launch=None) -> dict:
     if mode not in ACTIONS:
         raise ValueError("unknown native USB action")
     if inspect_class is not None and (mode != "iap-inspect" or not re.fullmatch(r"ACCTransport[A-Za-z]{1,80}", inspect_class)):
@@ -70,7 +70,9 @@ def _run(mode: str, inspect_class: str | None = None, stream_type: int | None = 
     if mode == "iap-peer":
         if not isinstance(peer_nonce, str) or not re.fullmatch(r"[0-9a-f]{16}", peer_nonce) or not callable(on_launch):
             raise ValueError("native API peer requires a scoped nonce and launch observer")
-    elif peer_nonce is not None or on_launch is not None:
+        if type(peer_seconds) is not int or not 60 <= peer_seconds <= 180:
+            raise ValueError("native API peer lifetime must be 60..180 seconds")
+    elif peer_nonce is not None or on_launch is not None or peer_seconds != 60:
         raise ValueError("peer options apply only to iap-peer")
     settings = lab.profile()
     machine = lab.require_machine(settings, "running")
@@ -108,11 +110,13 @@ def _run(mode: str, inspect_class: str | None = None, stream_type: int | None = 
     log = GUEST_DIR + "/" + name + ".log"
     path = GUEST_DIR + "/" + name + ".plist"
     arguments = [remote, mode, udid] + ([inspect_class] if inspect_class else []) + ([str(stream_type)] if stream_type is not None else []) + ([peer_nonce] if peer_nonce else [])
+    if mode == "iap-peer" and peer_seconds != 60:
+        arguments.append(str(peer_seconds))
     job = {"Label": label, "ProgramArguments": arguments, "RunAtLoad": True,
            "StandardOutPath": log, "StandardErrorPath": log}
     lab.rpc(settings, "files.write", {"path": path, "content": plistlib.dumps(job).decode()})
     loaded = lab.rpc(settings, "services.load", {"paths": [path]})
-    deadline = time.monotonic() + (75 if mode == "iap-peer" else 30)
+    deadline = time.monotonic() + (peer_seconds + 15 if mode == "iap-peer" else 30)
     try:
         if on_launch:
             on_launch(log)
@@ -141,11 +145,11 @@ def _run(mode: str, inspect_class: str | None = None, stream_type: int | None = 
     return result
 
 
-def run(mode: str, inspect_class: str | None = None, stream_type: int | None = None, *, peer_nonce: str | None = None, on_launch=None) -> dict:
+def run(mode: str, inspect_class: str | None = None, stream_type: int | None = None, *, peer_nonce: str | None = None, peer_seconds: int = 60, on_launch=None) -> dict:
     lab.OUT.mkdir(parents=True, exist_ok=True)
     with open(os.open(lab.OUT / ".usb.lock", os.O_RDWR | os.O_CREAT, 0o600), "r+") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        return _run(mode, inspect_class, stream_type, peer_nonce=peer_nonce, on_launch=on_launch)
+        return _run(mode, inspect_class, stream_type, peer_nonce=peer_nonce, peer_seconds=peer_seconds, on_launch=on_launch)
 
 
 if __name__ == "__main__":

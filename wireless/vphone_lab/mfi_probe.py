@@ -101,8 +101,8 @@ def run(*, negative: str | None = None, identify: bool = False, start_carplay: b
         raise ValueError("unknown native MFi negative control")
     if type(identify) is not bool or type(start_carplay) is not bool or (identify or start_carplay) and negative is not None:
         raise ValueError("identification requires the valid MFi control")
-    if type(hold_seconds) is not int or not 1 <= hold_seconds <= 30:
-        raise ValueError("native API peer hold must be between 1 and 30 seconds")
+    if type(hold_seconds) is not int or not 1 <= hold_seconds <= 120:
+        raise ValueError("native API peer hold must be between 1 and 120 seconds")
     if type(carplay_interface) is not int or carplay_interface not in (2, 4):
         raise ValueError("CarPlay interface must be an owned NCM data interface: 2 or 4")
     receiver = ipaddress.IPv6Address(receiver_ipv6)
@@ -140,7 +140,8 @@ def run(*, negative: str | None = None, identify: bool = False, start_carplay: b
 
     def worker():
         try:
-            context["native"] = usb.run("iap-peer", peer_nonce=nonce, on_launch=launched)
+            context["native"] = usb.run("iap-peer", peer_nonce=nonce,
+                                        peer_seconds=max(60, hold_seconds + 30), on_launch=launched)
         except Exception as error:
             context["error"] = str(error)
             ready.set()

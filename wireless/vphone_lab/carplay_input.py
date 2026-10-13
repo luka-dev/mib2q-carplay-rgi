@@ -1,0 +1,89 @@
+"""Tap the native CarPlay screen only in the explicitly enabled owned QNX lab."""
+import argparse
+import json
+import socket
+import struct
+import hashlib
+from pathlib import Path
+
+from wireless.lab_common import qnx_receiver
+from . import lab
+
+
+def request(x: int, y: int) -> bytes:
+    if type(x) is not int or type(y) is not int or not 0 <= x < 800 or not 0 <= y < 480:
+        raise ValueError("CarPlay coordinates must be integer pixels inside 800x480")
+    return b"MHT" + struct.pack(">HH", x, y)
+
+
+def receiver(capability: str = "input_control") -> int:
+    lab.require_machine(lab.profile(), "running")
+    qnx_receiver.set_output(lab.OUT / "qnx-network")
+    pid = qnx_receiver.running()
+    record = json.loads((qnx_receiver.OUT / "build-record.json").read_text())
+    if not pid or record.get(capability) is not True or record.get("input_control") is not True or record.get("software_mfi") is not True:
+        raise RuntimeError("owned QNX input-control receiver is not running")
+    return pid
+
+
+def receive(peer, length: int) -> bytes:
+    response = bytearray()
+    while len(response) < length:
+        part = peer.recv(length-len(response))
+        if not part:
+            raise RuntimeError("incomplete QNX response")
+        response.extend(part)
+    return bytes(response)
+
+
+def snapshot(channel: str, output: Path | None = None) -> dict:
+    if channel not in ("primary", "cluster"):
+        raise ValueError("unknown CarPlay screen")
+    target = (output or lab.OUT / ("memory-"+channel+".h264")).resolve()
+    if not target.is_relative_to(lab.OUT.resolve()) or target.suffix != ".h264":
+        raise ValueError("AVC output must remain inside the owned vphone lab")
+    pid = receiver("capture_memory")
+    with socket.create_connection(("127.0.0.1", 32503), timeout=3) as peer:
+        peer.settimeout(3)
+        peer.sendall((b"MHC" if channel == "cluster" else b"MHM") + bytes(4))
+        length, = struct.unpack(">I", receive(peer, 4))
+        if not 1 <= length <= 2*1024*1024:
+            raise ValueError("no complete bounded IDR capture available")
+        data = receive(peer, length)
+    if not data.startswith((b"\0\0\1", b"\0\0\0\1")):
+        raise ValueError("native capture is not Annex B")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(data)
+    result = {"channel": channel, "bytes": length, "sha256": hashlib.sha256(data).hexdigest(),
+              "qnx_pid": pid, "output": str(target), "independent_decode_verified": False}
+    lab.save("memory-"+channel+".json", result)
+    return result
+
+
+def tap(x: int, y: int) -> dict:
+    packet = request(x, y)
+    pid = receiver()
+    with socket.create_connection(("127.0.0.1", 32503), timeout=3) as peer:
+        peer.settimeout(3)
+        peer.sendall(packet)
+        response = receive(peer, 4)
+    status, = struct.unpack(">i", response)
+    result = {"x": x, "y": y, "qnx_pid": pid, "native_hid_status": status,
+              "visible_effect_verified": False}
+    lab.save("carplay-input.json", result)
+    if status:
+        raise RuntimeError("native HID rejected the tap; inspect carplay-input.json")
+    return result
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    sub = parser.add_subparsers(dest="action", required=True)
+    touch = sub.add_parser("tap")
+    touch.add_argument("x", type=int)
+    touch.add_argument("y", type=int)
+    memory = sub.add_parser("snapshot")
+    memory.add_argument("channel", choices=["primary", "cluster"])
+    memory.add_argument("--output", type=Path)
+    args = parser.parse_args()
+    print(json.dumps(tap(args.x, args.y) if args.action == "tap" else snapshot(args.channel, args.output)))

@@ -9,6 +9,29 @@ import qnx_network
 
 
 class QNXNetworkTests(unittest.TestCase):
+    def test_pacing_and_maps_options_reject_incompatible_capture_before_build(self):
+        with self.assertRaisesRegex(ValueError, "excludes video payload"):
+            qnx_network.build("unused", software_mfi=True, capture_video=True, pacing_only=True)
+        with self.assertRaisesRegex(ValueError, "requires software MFi"):
+            qnx_network.network_manifest("", pacing_only=True)
+        for request_ui, music in ((False, False), (True, True)):
+            with self.assertRaisesRegex(ValueError, "Maps UI"):
+                qnx_network.build("unused", request_ui=request_ui, request_ui_music=music, request_ui_maps=True)
+        with self.assertRaisesRegex(ValueError, "input control requires"):
+            qnx_network.build("unused", input_control=True)
+        for options in ({"capture_memory": True},
+                        {"capture_memory": True, "input_control": True, "software_mfi": True, "capture_video": True}):
+            with self.assertRaisesRegex(ValueError, "memory capture"):
+                qnx_network.build("unused", **options)
+
+    def test_input_forwarding_is_explicit_loopback_on_separate_network(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(qnx_network, "OUT", Path(directory)):
+            record = Path(directory)/"build-record.json"
+            record.write_text('{"software_mfi":true,"input_control":true}')
+            command = qnx_network.command("socket")
+            self.assertIn("user,id=mfi,net=10.0.3.0/24,hostfwd=tcp:127.0.0.1:32503-10.0.3.15:32503", command)
+            record.write_text('{"software_mfi":true}')
+            self.assertFalse(any("32503" in item for item in qnx_network.command("socket")))
     def test_ui_request_requires_isolated_software_mfi_build(self):
         with self.assertRaisesRegex(ValueError, "requires software MFi"):
             qnx_network.build("unused", request_ui=True)
@@ -73,6 +96,15 @@ class QNXNetworkTests(unittest.TestCase):
         self.assertIn("MHI2Q_CP_WIRELESS_ALT_QEMU=1", paired)
         self.assertIn("MHI2Q_DIO_OWNER_MODE=wireless", paired)
         self.assertIn("MHI2Q_CP_WIRELESS_MEDIA=1", paired)
+        with patch.object(Path, "read_bytes", return_value=b"stock fixture"), \
+                patch.object(qnx_network.hashlib, "sha256") as digest:
+            digest.return_value.hexdigest.return_value = "01c116b1674215daa0602d556a6d9b2eb48c2113ca294ea1f5d58787e3f656f2"
+            paced = qnx_network.network_manifest(source, True, True, True, False, True, True)
+        self.assertIn("PROBE_LOG=/dev/null", paced)
+        self.assertIn("PROBE_IO_CAP=1", paced)
+        self.assertIn("MHI2Q_CP_WIRELESS_PAIRING=1", paced)
+        self.assertIn("MHI2Q_CP_WIRELESS_MEDIA=1", paced)
+        self.assertIn("MHI2Q_CP_WIRELESS_ALT_QEMU=1", paced)
 
     def test_manifest_orders_drivers_and_preserves_reusable_tools(self):
         source = "    /proc/boot/ifconfig lo0 alias 10.0.0.16\n" + \
