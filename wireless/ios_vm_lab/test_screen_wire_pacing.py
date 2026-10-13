@@ -23,6 +23,20 @@ def picture(opcode=0, data=b"encrypted bytes"):
 
 
 class ScreenWireTests(unittest.TestCase):
+    def test_buffered_other_direction_does_not_invalidate_screen_clock(self):
+        a = picture()
+        other = bytearray(frame(1))
+        struct.pack_into(">H", other, 14+40+2, 5000)
+        result = report(pcap([(0, frame(100, flags=2)), (100, bytes(other)),
+                              (10, frame(101, a)), (40, frame(101+len(a), a))]))
+        self.assertEqual(result["connections"][0]["screen_access_units"]["span_ms"], 30)
+
+    def test_regression_within_measured_screen_flow_is_rejected(self):
+        a = picture()
+        with self.assertRaisesRegex(ValueError, "clock moved backwards"):
+            report(pcap([(0, frame(100, flags=2)), (40, frame(101, a)),
+                         (10, frame(101+len(a), a))]))
+
     def test_fragmented_and_repeated_payload_keeps_first_completion_time(self):
         a, b = picture(), picture()
         items = [(0, frame(100, flags=2)), (10, frame(101, a[:70])),

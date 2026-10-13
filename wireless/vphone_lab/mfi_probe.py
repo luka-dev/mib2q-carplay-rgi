@@ -172,6 +172,10 @@ def run(*, negative: str | None = None, identify: bool = False, start_carplay: b
             raise RuntimeError("native identification was not accepted")
         if start_carplay and "carplay_start_sent" not in result:
             raise RuntimeError("native CarPlay start request was not sent")
+        if identify and not start_carplay:
+            # Keep the native connection alive for its first-pairing UI.
+            result["identification_hold_seconds"] = hold_seconds
+            time.sleep(hold_seconds)
     except Exception as error:
         result["error"] = str(error)
     finally:

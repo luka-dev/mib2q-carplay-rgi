@@ -1,6 +1,6 @@
 # vphone CarPlay laboratory
 
-_Active guest platform · 2026-10-12 · Branch `feat/vphone-carplay-lab`._
+_Active guest platform · 2026-10-13 · Branch `feat/vphone-carplay-lab`._
 
 [Wireless overview](README.md) · [Retained Inferno evidence](IOS_VM_LAB.md) · [Software MFi](TEST_SOFTWARE_MFI.md)
 
@@ -26,8 +26,11 @@ they do not demonstrate our CarPlay sender, encoder, MFi or AltScreen path.[^1]
 | QNX receiver | Fresh build passed ABI checks; native `/info` verified in the new directory |
 | Shared signer | Loopback runtime returned a bounded 711-byte MFi-SAP response; host crypto tests passed |
 | USB trust | Native pairing accepted by the dedicated guest |
-| Ethernet attachment | Original NCM primary interface exchanges IPv6 with QNX; native `/info` returns HTTP 200 / 210.81 |
-| iAP2 attachment | Guest vendor bulk adapter enumerates and survives; report descriptor/control write verified; detect and authentication pending |
+| Ethernet attachment | Native Direct NCM primary interface carries the authenticated QNX session; `/info` returns 210.81 |
+| iAP2 attachment | Native CoreAccessories API peer: AA05, identification 1D02, availability 4300 and start 4301; USB-port forwarding remains unverified |
+| Primary video | Native CarPlay app launcher; 31 independently decoded H.264 frames, 800×480 |
+| AltScreen video | Stream 111: 22 independently decoded H.264 frames, 1440×542; image remains black |
+| Siri | Enabled through native Settings after rebuilding stale MobileGestalt capabilities |
 
 `scripts/carplay_lab.sh doctor` writes the actual host report to
 `build/vphone-lab/doctor.json` and exits nonzero until its checks pass. Host Setup
@@ -77,18 +80,17 @@ the guest. They never select a physical phone or fall back to Inferno.
 ```mermaid
 flowchart LR
     accTitle: vphone CarPlay Laboratory Migration
-    accDescr: vphone renders native applications and reaches QNX through NCM. A native CoreAccessories API test peer completes iAP2 authentication and identification; the USB binding and QNX CarPlay session remain separate checks.
+    accDescr: A native CoreAccessories API peer authenticates iAP2 and requests CarPlay. Direct NCM carries the paired stock210 QNX session and both H264 screen streams for independent host decoding.
 
-    launchpad["Launchpad guest control"] --> ios_guest["iOS guest with Metal"]
-    ios_guest --> ethernet_adapter["Owned NCM Ethernet adapter"]
-    ethernet_adapter --> qnx_receiver["Native stock210 QNX receiver"]
-    ios_guest --> api_peer["Native CoreAccessories API test peer"]
-    api_peer --> native_iap["Verified iAP2 and MFi authentication"]
+    launchpad["Launchpad guest control"] --> ios_guest["Native iOS applications and encoder"]
+    ios_guest --> api_peer["CoreAccessories API test peer"]
     mfi_signer["Public fixture MFi signer"] --> api_peer
-    ios_guest -.-> iap_adapter["Vendor bulk iAP adapter; binding pending"]
-    iap_adapter -.-> qnx_receiver
+    api_peer --> native_iap["iAP2 authentication and CarPlay start"]
+    native_iap --> ios_guest
+    ios_guest --> ethernet_adapter["Primary Direct NCM"]
+    ethernet_adapter --> qnx_receiver["Paired stock210 QNX receiver"]
     mfi_signer --> qnx_receiver
-    qnx_receiver -.-> video_capture["Authenticated AVC capture"]
+    qnx_receiver --> video_capture["Main and stream 111 AVC"]
     video_capture --> independent_decode["Independent FFmpeg decoding"]
 ```
 
@@ -96,9 +98,9 @@ The initial NAT interface provides guest connectivity and diagnostics. It is
 not a completed CarPlay transport. Upstream's `tunnel` mode drops IPv6, so it
 cannot carry the existing IPv6 link-local recipe unchanged.[^4] The running
 guest exposes USBMUX and two NCM pairs through `AppleVirtIOUSBDeviceController`.
-Primary USB data interface 2 maps to guest `en2`; auxiliary data interface 4
-carries the guest's `anpi0` management link. Host names (`en22` / `en21` in the
-measured run) are discovered below the owned USB serial and registry entries,
+Primary USB data interface 2 maps to guest `en2` in the measured run; auxiliary
+data interface 4 carries `anpi0`. The Direct profile preserves both pairs. Host
+names (`en22` / `en21` in the measured runs) are discovered below the owned USB serial and registry entries,
 never hardcoded. The retained ARM-only, fixed-UDID USB probe is not applied to
 vphone and its identity guard is not relaxed.
 
@@ -109,7 +111,7 @@ response. Independent parsing of the captured binary plist returned
 `sourceVersion=210.81` and `model=AirPlayGeneric1,1`. This establishes bidirectional
 Ethernet and native receiver discovery; it does not establish CarPlay or MFi.
 
-## 🔌 Native USB adapter and discovery boundary
+## 🔌 Retained USB adapter experiments
 
 The original diagnostic, an AVP available-buffer log, was not the fatal cause.
 Static arm64e analysis shows that handler logging and returning. Reordering the
@@ -273,47 +275,145 @@ This proves native iAP2/MFi and identification through the API test connection.
 It does not prove forwarding through `IOAccessoryPortUSB`, a QNX CarPlay session,
 primary AVC or AltScreen AVC. Those boundaries remain explicit in the reports.
 
-### CarPlay start and NCM classification
+### Native CarPlay session and Direct NCM
 
-The native CoreUtils query reports primary `en2` as type `0x8` (ordinary
-Ethernet), with extended flags `0x8c1`. Auxiliary `anpi0` reports type `0x10`
-and `IFEF_DIRECTLINK` (`0x20000080`), which matches APTransport's direct-link
-classification. The bridge can explicitly select the original auxiliary NCM
-data interface `4`; primary interface `2` remains its default. USB descriptors
-and interface flags are unchanged by channel selection.
+The original primary `en2` is CoreUtils type `0x8`; `airplayd` rejects it with
+`USB transport type mismatch:8`. Selecting auxiliary interface 4 did not change
+which interface the native USB transport selected. The active opt-in profile
+instead uses the stock CarPlay control/data pairing from the guest's
+`USBDeviceConfiguration.plist`, preserves USBMUX and retains the auxiliary pair:
 
-After starting QNX, obtain its current public key with `qnx-info`. A QNX restart
-changes that volatile key. In separate terminals, the controlled start probe is:
+| Interface | Native function |
+|---|---|
+| 0 | `AppleUSBMux` |
+| 1 / 2 | `AppleUSBNCMControlDirect` / `AppleUSBNCMData` |
+| 3 / 4 | `AppleUSBNCMControlAux` / `AppleUSBNCMDataAux` |
+
+`usb ncm-direct --experimental` applies this ordinary USB description through
+`IOUSBDeviceControllerSetDescription`. It saves the original description against
+the owned UDID, requires only the USB-description entitlement, and uses no HID,
+RAM adapter or accessory-manager personality. `usb network-classify` reads the
+actual CoreUtils classification: measured `en2` has type `0x10` and extended flags
+`0x200000c1`. Applying a description alone does not prove the interface is ready.
+An earlier mixed Direct/Aux data pairing worked once but failed after restart;
+it was replaced with the native control/data pair above.
+The corrected profile was applied directly after a second cold start and again
+reported type `0x10` with both NCM pairs present. QNX pairing, MFi-SAP and both
+video streams repeated; FFmpeg decoded 31 primary and 8 cluster frames in that
+bounded repeat.
+
+Unlock the guest, configure Siri as described below, then prepare the link:
 
 ```sh
+scripts/carplay_lab.sh unlock
+scripts/carplay_lab.sh usb ncm-direct --experimental
+scripts/carplay_lab.sh usb network-classify
 scripts/carplay_lab.sh qnx-start
 scripts/carplay_lab.sh qnx-info
-scripts/carplay_lab.sh ethernet --channel auxiliary --seconds 65
-build/vphone-lab/venv/bin/python -m wireless.lab_common.mfi_sap \
-  --qnx-dir build/vphone-lab/qnx-network --seconds 65
-scripts/carplay_lab.sh mfi-probe --experimental --start-carplay \
-  --carplay-interface 4 --hold-seconds 30 --receiver-public-key CURRENT_64_HEX_KEY
 ```
 
-The probe publishes its native connection and sends `CarPlayStartSession`
-(`0x4301`) after authenticated identification and availability. Successful
-request transmission is not session creation: initial primary and auxiliary
-runs received a link ACK but no native TCP connection to QNX or MFi-SAP request.
-Unlocking the guest and publishing the connection did not complete that handoff.
-The native path goes through `ACCCarPlayService` and CarKit's
-`CRHandleCarPlayConnectionRequest`; those service and interface associations are
-the next trace targets. A longer native `carkitd` capture confirms accessory
-arrival, parsed certificate data, the start request and a host-session request.
-Its first-pairing flow waits at `allow while locked`, activates
-`com.apple.CarPlaySetupApp`, then dismisses the presenter after its timer and
-cancels the flow with required steps still remaining. The presenter connection
-logs Cocoa error `4099`. The capture was capped at 150 entries, so it is partial;
-these observed events do not prove an absence of later messages. Opening that
-app directly produced a blank view with no accessibility controls, rather than
-a completed permission step. The setup presentation is the current concrete
-blocker to investigate; no approval state was fabricated.
-`mfi-api-carplay.json` keeps QNX-session and video
-verification false until independent receiver evidence exists.
+Read the receiver public key from each run's `/info`; do not assume it changed
+or remained the same after restart. In separate terminals, start the bridge and
+signer before the native peer:
+
+```sh
+scripts/carplay_lab.sh ethernet --channel primary --seconds 65
+PYTHONPATH=. build/vphone-lab/venv/bin/python -m wireless.lab_common.mfi_sap \
+  --qnx-dir build/vphone-lab/qnx-network --seconds 65
+scripts/carplay_lab.sh mfi-probe --experimental --start-carplay \
+  --carplay-interface 2 --hold-seconds 30 --receiver-public-key CURRENT_64_HEX_KEY
+```
+
+For first pairing, click the genuine **Allow CarPlay while locked** prompt while
+the peer remains connected, then repeat the session. Settings → General →
+CarPlay lists **MHI2 QEMU Lab**, and `carkitd` confirms the stored pairing.
+Launching `CarPlaySetupApp` directly creates a blank scene; it is not the pairing
+flow. A stale direct-launched instance was terminated before the fresh native
+prompt appeared. The identification-only probe now honors `--hold-seconds` to
+keep its native connection open; it does not fabricate approval.
+
+Receiver evidence confirms `/pair-setup`, `/pair-verify`, a live 711-byte signed
+MFi-SAP response, encrypted control, screen SETUP, stream-111 SETUP and the main
+screen's `INITIALIZING → READY` transition. The API probe's own
+`qnx_session_verified` and `video_verified` stay false: it does not inspect the
+receiver. Independent session evidence is recorded separately in the
+[fixture manifest](../../wireless/fixtures/diplay_mfi/manifest.json).
+
+### Siri capability cache and native setup
+
+The live DeviceTree had `assistant=1`, `siri-gesture=1` and `dictation=1`, but the
+first-boot MobileGestalt cache hid Siri in Settings. The native Siri services
+were running. Backing up and removing that cache, then stopping and starting the
+owned VM, restored the Siri row. Use the official guest RPC only when this stale
+cache condition has been verified:
+
+```sh
+~/.local/bin/vphone-launchpad-cli guest rpc mhi2-carplay files.copy \
+  '{"from":"/private/var/containers/Shared/SystemGroup/systemgroup.com.apple.mobilegestaltcache/Library/Caches/com.apple.MobileGestalt.plist","to":"/private/var/tmp/mhi2-vphone-lab/mobilegestalt-before-siri.plist"}'
+~/.local/bin/vphone-launchpad-cli guest rpc mhi2-carplay files.remove \
+  '{"path":"/private/var/containers/Shared/SystemGroup/systemgroup.com.apple.mobilegestaltcache/Library/Caches/com.apple.MobileGestalt.plist"}'
+scripts/carplay_lab.sh stop
+scripts/carplay_lab.sh start
+scripts/carplay_lab.sh unlock
+```
+
+In Settings → Siri → Talk to Siri, enable **Press Side Button for Siri**, confirm
+**Enable Siri**, choose a voice, and finish the native wizard. The measured
+switch is `1`; voice-trigger listening remains Off. Before this setup, the
+native primary video showed “CarPlay Not Available — enable Siri”. After it,
+the decoded video shows the genuine CarPlay app launcher. No Siri eligibility
+check, authentication state or source pixels were patched.
+
+Guest input success is verified with a fresh UI tree or screenshot after settling.
+The host socket takes screenshot pixels; guest AX uses points. Convert using
+`device.screen.scale`, and activate the owned VM window before native host taps.
+The measured scale is 3; process IDs and host interface names change after restart.
+
+### Independent video and pacing evidence
+
+The bounded QNX decoder-input capture exports authenticated Annex B bytes before
+the stand's mock OMX decoder. FFmpeg provides the independent picture check:
+
+| Capture after Siri setup | Complete records | Bytes | Decoded frames | Picture |
+|---|---:|---:|---:|---|
+| Primary H.264 | 32 | 370754 | 31, 800×480 | CarPlay app launcher |
+| Stream 111 H.264 | 23 | 1470 | 22, 1440×542 | Black image |
+
+Primary SHA-256: `5e367255a6b32ee0e69387eeb0b57461b6f7b3f408cb5efa7c379cc98a14e6d9`.
+Cluster SHA-256: `e8d38de4f4a5697b1a6e91afb9ce4f3aca1602bc9cc183699258a74ab3c55c0a`.
+Artifacts are ignored under `build/vphone-lab/`: `dashboard-primary.h264`,
+`dashboard-primary-last.png`, `dashboard-cluster.h264` and the JSON pacing reports.
+
+```sh
+scripts/carplay_lab.sh extract build/vphone-lab/qnx-network/serial.log \
+  --output build/vphone-lab/dashboard-primary.h264
+scripts/carplay_lab.sh extract build/vphone-lab/qnx-network/serial.log --cluster \
+  --output build/vphone-lab/dashboard-cluster.h264
+ffprobe -v error -count_frames -show_entries stream=codec_name,width,height,nb_read_frames \
+  -of json build/vphone-lab/dashboard-primary.h264
+scripts/carplay_lab.sh pacing build/vphone-lab/qnx-network/serial.log \
+  --output build/vphone-lab/dashboard-frame-pacing.json
+scripts/carplay_lab.sh wire-pacing build/vphone-lab/ethernet.pcap \
+  --output build/vphone-lab/dashboard-wire-pacing.json
+scripts/carplay_lab.sh wire-pacing build/vphone-lab/ethernet.pcap --port 6031 \
+  --output build/vphone-lab/dashboard-cluster-wire-pacing.json
+```
+
+The active wrapper scopes these outputs to `build/vphone-lab`; standalone shared
+commands retain the Inferno default. Traversal and external symlinks are rejected.
+PCAP clock validation is per measured screen TCP flow: buffered BPF receive
+records can appear after newer unrelated transmit records without a regression
+in that flow. A regression inside the measured flow is still rejected; records
+are not sorted and their timestamps are not rewritten.
+
+Before Siri setup, the main stream's 30-picture animation spanned 965.68 ms,
+with 33.16 ms median and 35.32 ms p95 wire intervals (about 30.03 events/s).
+After setup, the launcher capture had 44 wire access units over 5298.41 ms,
+median 36.95 ms and p95 451.86 ms; its 31 UART-captured picture buffers spanned
+34627.97 ms. UART hex capture adds substantial receiver overhead, and a static
+screen need not keep emitting pictures. These short runs do not establish
+sustained frame pacing, end-to-end latency, physical OMX output or 2.4 GHz RF
+performance. Stream-111 decoding proves its video transport, not map content.
 
 ### Stream metadata and protocol experiments
 
@@ -360,10 +460,10 @@ only `accessoryd` through `com.apple.iap2d.xpc` and does not repeatedly start a
 crashing legacy service. This Radio database is Apple media state, not a
 measurement of a Wi-Fi radio.
 
-Next: connect the authenticated native API test peer to the QNX CarPlay
-receiver, then validate the session and independently decode its video.
-USB-port forwarding remains a separate transport task. No captured packet
-above is a CarPlay video frame.
+Next: produce map content on stream 111, verify CarPlay input and reconnect,
+and measure sustained timing with UART payload capture disabled. USB-port
+forwarding remains a separate transport task; the stream-type experiments
+below are historical diagnostics, not the active video recipe.
 
 For the RAM adapter, run the official debug launch in one terminal:
 
@@ -465,10 +565,11 @@ existing operation rather than starting another restore.[^5]
 
 ## 🧪 Shared receiver and evidence tools
 
-Migration validation passed 47 guest/bootstrap/transport tests and the 88 retained
-laboratory regression tests. A fresh QNX build, native `/info` and the shared
-signer's loopback response were checked. These results establish the migrated
-tools; they do not establish a vphone sender session.
+Validation passed 70 guest/bootstrap/transport/output tests and 90 retained
+laboratory regression tests, including seeded malformed-report and TCP-framing
+fuzzing. The native helper compiled with warnings treated as errors and was run
+on the owned guest. These offline checks validate the tools; the separate live
+pairing, MFi-SAP and independent video evidence above establishes the sender session.
 
 ```sh
 scripts/carplay_lab.sh qnx-build

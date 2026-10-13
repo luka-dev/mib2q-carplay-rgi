@@ -45,8 +45,12 @@ repeated native iAP2 authentication on iOS `26.6.2 / 23G90` through a
 CoreAccessories API test connection. The valid fixture received `AA05`;
 changed response and certificate signatures received `AA04`, with certificate
 rejection before the challenge. Native identification received `1D02` and the
-guest announced CarPlay availability. This verifies native authentication,
-not a physical USB connection or a vphone CarPlay video stream.
+guest announced CarPlay availability. A separate primary Direct NCM run then
+completed QNX pairing and MFi-SAP, main-screen and stream-111 SETUP, and independent
+FFmpeg decoding: 31 primary frames at 800×480 show the native CarPlay app launcher;
+22 cluster frames at 1440×542 are black. The manifest records this session
+separately from the API authentication probe. USB-port forwarding and physical
+iPhone operation remain unverified.
 
 ## 🧪 Integration status
 

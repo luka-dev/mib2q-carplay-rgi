@@ -33,11 +33,11 @@ case "$action" in
     mfi)
         exec python3 -m wireless.lab_common.mfi_sap --qnx-dir "$qnx_dir" "$@" ;;
     extract)
-        exec python3 -m wireless.lab_common.extract_native_video "$@" ;;
+        exec python3 -m wireless.lab_common.extract_native_video --lab-dir build/vphone-lab "$@" ;;
     pacing)
-        exec python3 -m wireless.lab_common.frame_pacing "$@" ;;
+        exec python3 -m wireless.lab_common.frame_pacing --lab-dir build/vphone-lab "$@" ;;
     wire-pacing)
-        exec python3 -m wireless.lab_common.screen_wire_pacing "$@" ;;
+        exec python3 -m wireless.lab_common.screen_wire_pacing --lab-dir build/vphone-lab "$@" ;;
     *)
         printf 'Unknown action: %s\n' "$action" >&2
         exit 2 ;;

@@ -63,6 +63,48 @@
       "physical_device_tested": false,
       "usb_forwarding_verified": false,
       "carplay_video_verified": false
+    },
+    "vphone_native_qnx_session": {
+      "date": "2026-10-13",
+      "ios": "26.6.2",
+      "build": "23G90",
+      "transport": "Native CoreAccessories API iAP2 peer; primary Direct NCM to stock210 QNX",
+      "pair_setup_verified": true,
+      "pair_verify_verified": true,
+      "mfi_sap_signed_response_bytes": 711,
+      "main_screen_ready": true,
+      "stream_111_setup_verified": true,
+      "native_siri_enabled_through_settings": true,
+      "primary_avc": {
+        "records": 32,
+        "bytes": 370754,
+        "sha256": "5e367255a6b32ee0e69387eeb0b57461b6f7b3f408cb5efa7c379cc98a14e6d9",
+        "decoded_frames": 31,
+        "width": 800,
+        "height": 480,
+        "picture": "Native CarPlay app launcher"
+      },
+      "cluster_avc": {
+        "records": 23,
+        "bytes": 1470,
+        "sha256": "e8d38de4f4a5697b1a6e91afb9ce4f3aca1602bc9cc183699258a74ab3c55c0a",
+        "decoded_frames": 22,
+        "width": 1440,
+        "height": 542,
+        "picture": "Black image"
+      },
+      "independent_decoder": "FFmpeg",
+      "usb_port_forwarding_verified": false,
+      "physical_device_tested": false,
+      "sustained_frame_pacing_verified": false,
+      "evidence_document": "docs/wireless-carplay/VPHONE_LAB.md",
+      "repeat_after_cold_guest_restart": {
+        "native_direct_ncm_type": "0x10",
+        "primary_decoded_frames": 31,
+        "cluster_decoded_frames": 8,
+        "primary_sha256": "ef2e2e8cc0ba635b37bbc4064bdbd5c247f0ce1f93baf65edaeb5c9fc8f7c4eb",
+        "cluster_sha256": "38679ce361750bd52d6b37c94190ca0081b3b1d0ba219e1d4447589969495673"
+      }
     }
   },
   "runtime_integration": "The opt-in ios_vm_lab/mfi_probe.py and mfi_sap.py host signers read this fixture; the QEMU-only capture adapter receives public MFi-SAP response bytes over bounded RPC. Private key remains on the host. TestSoftwareMfi, default daemon and production QNX preloader remain unchanged. The opt-in vphone_lab/mfi_probe.py uses the same host fixture against a native CoreAccessories API endpoint, with bounded RPC queues and native connection cleanup."

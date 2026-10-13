@@ -63,6 +63,23 @@ extern u32 if_nametoindex(const char *);
 extern unsigned short htons(unsigned short);
 extern int memcmp(const void *, const void *, size_t);
 
+static int network_classify(void) {
+    void *library = dlopen("/System/Library/PrivateFrameworks/CoreUtils.framework/CoreUtils", 2);
+    int (*info)(int, const char *, char *, u32 *, unsigned char *, u32 *, u32 *,
+                unsigned long long *, unsigned long long *, u32 *) = library ? dlsym(library, "SocketGetInterfaceInfo") : 0;
+    if (!info) return 25;
+    const char *names[] = {"en0", "en1", "en2", "en3", "en4", "en5", "anpi0", "anpi1"};
+    for (unsigned i = 0; i < sizeof(names)/sizeof(names[0]); i++) {
+        u32 index = 0, media = 0, flags = 0, type = 0;
+        unsigned long long extended = 0, other = 0;
+        unsigned char mac[6] = {0};
+        int status = info(-1, names[i], 0, &index, mac, &media, &flags, &extended, &other, &type);
+        printf("native network name=%s status=%d index=%u flags=0x%x extended=0x%llx type=0x%x\n",
+               names[i], status, index, flags, extended, type);
+    }
+    return 0;
+}
+
 static int network_probe(void) {
     struct { unsigned char len, family; unsigned short port; u32 flow; unsigned char ip[16]; u32 scope; } address = {0};
     address.len = sizeof(address); address.family = 30; address.port = htons(5000);
@@ -347,7 +364,7 @@ static int iap_inspect(const char *selected, int list_classes) {
 
 int main(int argc, char **argv) {
     alarm(argc == 4 && !strcmp(argv[1], "iap-peer") ? 70 : 20);
-    if ((argc != 3 && !(argc == 4 && (!strcmp(argv[1], "iap-inspect") || !strcmp(argv[1], "port-prepare") || !strcmp(argv[1], "iap-peer")))) || getuid() != 0 || (strcmp(argv[1], "probe") && strcmp(argv[1], "apply") && strcmp(argv[1], "restore") && strcmp(argv[1], "reconnect") && strcmp(argv[1], "network") && strcmp(argv[1], "apply-destroy") && strcmp(argv[1], "iap-list") && strcmp(argv[1], "iap-wake") && strcmp(argv[1], "iap-inspect") && strcmp(argv[1], "iap-registry") && strcmp(argv[1], "iap-smoke") && strcmp(argv[1], "iap-peer") && strcmp(argv[1], "manager-apply") && strcmp(argv[1], "manager-remove") && strcmp(argv[1], "port-prepare"))) return 2;
+    if ((argc != 3 && !(argc == 4 && (!strcmp(argv[1], "iap-inspect") || !strcmp(argv[1], "port-prepare") || !strcmp(argv[1], "iap-peer")))) || getuid() != 0 || (strcmp(argv[1], "probe") && strcmp(argv[1], "apply") && strcmp(argv[1], "restore") && strcmp(argv[1], "reconnect") && strcmp(argv[1], "network") && strcmp(argv[1], "network-classify") && strcmp(argv[1], "apply-destroy") && strcmp(argv[1], "ncm-direct") && strcmp(argv[1], "iap-list") && strcmp(argv[1], "iap-wake") && strcmp(argv[1], "iap-inspect") && strcmp(argv[1], "iap-registry") && strcmp(argv[1], "iap-smoke") && strcmp(argv[1], "iap-peer") && strcmp(argv[1], "manager-apply") && strcmp(argv[1], "manager-remove") && strcmp(argv[1], "port-prepare"))) return 2;
     if (!strcmp(argv[1], "port-prepare") && (argc != 4 || (strcmp(argv[3], "1") && strcmp(argv[3], "4") && strcmp(argv[3], "5")))) return 2;
     if (!strcmp(argv[1], "iap-peer")) {
         if (argc != 4) return 2;
@@ -369,6 +386,7 @@ int main(int argc, char **argv) {
     printf("owned research USB description verified\n"); fflush(0);
     if (!strcmp(argv[1], "probe")) return dump(original);
     if (!strcmp(argv[1], "network")) return network_probe();
+    if (!strcmp(argv[1], "network-classify")) return network_classify();
     if (!strcmp(argv[1], "manager-apply") || !strcmp(argv[1], "manager-remove")) return manager_configure(service, !strcmp(argv[1], "manager-remove"));
     if (!strcmp(argv[1], "port-prepare")) return port_prepare(service, argv[3][0] - '0');
     if (!strcmp(argv[1], "iap-registry")) return iap_registry(service);
@@ -426,20 +444,27 @@ int main(int argc, char **argv) {
     if (!dict || !matches(dict, "uniqueDeviceID", argv[2])) return 10;
     put(dict, "AllowMultipleCreates", kCFBooleanTrue);
     CFMutableRef config = CFDictionaryCreateMutable(0, 0, kCFTypeDictionaryKeyCallBacks, kCFTypeDictionaryValueCallBacks);
-    CFRef name = str("MHI2 vphone USBMUX + iAP2 + NCM"); put(config, "Description", name); CFRelease(name);
+    CFRef name = str(!strcmp(argv[1], "ncm-direct") ? "MHI2 vphone USBMUX + Direct NCM" : "MHI2 vphone USBMUX + iAP2 + NCM"); put(config, "Description", name); CFRelease(name);
     put(config, "DefaultConfiguration", kCFBooleanTrue);
-    /* Preserve both VZ NCM channels and their original interface numbers. */
-    CFRef interfaces[] = {str("AppleUSBMux"), str("AppleUSBNCMControl"), str("AppleUSBNCMData"),
-        str("AppleUSBNCMControlAux"), str("AppleUSBNCMDataAux"), str("IapOverUsbHid")};
-    CFRef array = CFArrayCreate(0, interfaces, 6, kCFTypeArrayCallBacks); put(config, "Interfaces", array); CFRelease(array);
-    for (unsigned i = 0; i < 6; i++) CFRelease(interfaces[i]);
+    /* A native Direct/Aux profile marks the primary NCM link for APTransport.
+       Preserve USBMUX and two NCM pairs; the API peer needs no HID interface. */
+    int direct = !strcmp(argv[1], "ncm-direct");
+    const char *ordinary[] = {"AppleUSBMux", "AppleUSBNCMControl", "AppleUSBNCMData",
+        "AppleUSBNCMControlAux", "AppleUSBNCMDataAux", "IapOverUsbHid"};
+    const char *direct_names[] = {"AppleUSBMux", "AppleUSBNCMControlDirect", "AppleUSBNCMData",
+        "AppleUSBNCMControlAux", "AppleUSBNCMDataAux"};
+    unsigned count = direct ? 5 : 6;
+    CFRef interfaces[6];
+    for (unsigned i=0;i<count;i++) interfaces[i]=str(direct ? direct_names[i] : ordinary[i]);
+    CFRef array = CFArrayCreate(0, interfaces, count, kCFTypeArrayCallBacks); put(config, "Interfaces", array); CFRelease(array);
+    for (unsigned i=0;i<count;i++) CFRelease(interfaces[i]);
     CFRef configs[] = {config}; array = CFArrayCreate(0, configs, 1, kCFTypeArrayCallBacks);
     if (backup) {
         CFRef key = str("ConfigurationDescriptors");
         CFRef restored = CFDictionaryGetValue(backup, key); CFRelease(key);
         if (!restored) return 15;
         put(dict, "ConfigurationDescriptors", restored); CFRelease(backup);
-    } else if (!strcmp(argv[1], "apply") || !strcmp(argv[1], "apply-destroy")) put(dict, "ConfigurationDescriptors", array);
+    } else if (!strcmp(argv[1], "apply") || !strcmp(argv[1], "apply-destroy") || direct) put(dict, "ConfigurationDescriptors", array);
     CFRelease(array); CFRelease(config);
     if (!strcmp(argv[1], "apply-destroy")) {
         CFMutableRef command = CFDictionaryCreateMutable(0, 0, kCFTypeDictionaryKeyCallBacks, kCFTypeDictionaryValueCallBacks);

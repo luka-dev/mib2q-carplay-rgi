@@ -78,11 +78,7 @@ def report(data: bytes, port: int = 6030) -> dict:
     if not 1 <= port <= 65535:
         raise ValueError("invalid receiver screen port")
     flows = {}
-    previous_stamp = None
     for stamp, frame in packets(data):
-        if previous_stamp is not None and stamp < previous_stamp:
-            raise ValueError("PCAP clock moved backwards")
-        previous_stamp = stamp
         item = tcp(frame)
         if not item:
             continue
@@ -92,8 +88,14 @@ def report(data: bytes, port: int = 6030) -> dict:
         if flow not in flows:
             if len(flows) >= 8:
                 raise ValueError("too many screen TCP connections")
-            flows[flow] = {"origin": None, "segments": [], "syn": False}
+            flows[flow] = {"origin": None, "segments": [], "syn": False, "previous_stamp": None}
         state = flows[flow]
+        # The bridge combines buffered BPF receive timestamps with immediate
+        # transmit timestamps. Their global order can differ; only regressions
+        # within the measured sender-to-screen flow invalidate its pacing.
+        if state["previous_stamp"] is not None and stamp < state["previous_stamp"]:
+            raise ValueError("screen TCP flow clock moved backwards")
+        state["previous_stamp"] = stamp
         if flags & 2:
             if state["syn"] and state["origin"] != (seq+1) & 0xffffffff:
                 raise ValueError("reused TCP tuple; split captures by connection")
@@ -180,11 +182,15 @@ def main():
     parser.add_argument("pcap", type=Path)
     parser.add_argument("--port", type=int, default=6030)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--lab-dir", type=Path, default=Path(__file__).resolve().parents[2]/"build/ios-vm-lab")
     args = parser.parse_args()
     if args.pcap.stat().st_size > LIMIT:
         parser.error("PCAP exceeds 64 MiB")
     if args.output:
-        lab = Path(__file__).resolve().parents[2]/"build/ios-vm-lab"
+        build = Path(__file__).resolve().parents[2]/"build"
+        lab = args.lab_dir.resolve()
+        if not lab.is_relative_to(build.resolve()) or lab == build.resolve():
+            parser.error("lab directory must be inside the owned build tree")
         if not args.output.resolve().is_relative_to(lab.resolve()) or args.output.suffix != ".json":
             parser.error("report must be JSON inside the owned lab")
     try:

@@ -22,6 +22,7 @@ class NativeUSBTests(unittest.TestCase):
         self.info = {"model": "iPhone99,11", "ios_version": "26.6.2"}
         self.exit_status = 0
         self.truncated = False
+        self.log = "native result"
         self.calls = []
         self.patches = [patch.object(lab, "OUT", self.out),
                         patch.object(lab, "profile", return_value={}),
@@ -39,7 +40,7 @@ class NativeUSBTests(unittest.TestCase):
         if method == "services.status":
             return {"result": {"running": False, "last_exit_status": self.exit_status}}
         if method == "files.read":
-            return {"result": {"content": "native result", "truncated": self.truncated}}
+            return {"result": {"content": self.log, "truncated": self.truncated}}
         return {"ok": True}
 
     def test_invalid_actions_and_class_selection_do_not_contact_guest(self):
@@ -138,6 +139,26 @@ class NativeUSBTests(unittest.TestCase):
         mkdir = next(i for i, (m, _) in enumerate(self.calls) if m == "files.mkdir")
         backup = next(i for i, (m, p) in enumerate(self.calls) if m == "files.write" and p["path"].endswith("usb-original.plist"))
         self.assertLess(mkdir, backup)
+
+    def test_direct_ncm_saves_original_and_restore_reuses_it_without_catalogue(self):
+        original = {"uniqueDeviceID": self.udid, "ConfigurationDescriptors": [{"Interfaces": ["AppleUSBMux"]}]}
+        self.log = "owned controller\n" + plistlib.dumps(original).decode()
+        usb._run("ncm-direct")
+        saved = json.loads((self.out / "usb-original.json").read_text())
+        self.assertEqual(saved["description"], original)
+        self.mocks[3].assert_called_with(catalogue=False)
+        self.log = "native restored"
+        usb._run("restore")
+        uploads = [plistlib.loads(p["content"].encode()) for m, p in self.calls
+                   if m == "files.write" and p["path"].endswith("usb-original.plist")]
+        self.assertEqual(uploads, [original, original])
+
+    def test_direct_ncm_rejects_backup_from_different_guest_before_build(self):
+        (self.out / "usb-original.json").write_text(json.dumps({"udid": "other", "description": {}}))
+        with self.assertRaisesRegex(RuntimeError, "another guest"):
+            usb._run("ncm-direct")
+        self.mocks[3].assert_not_called()
+        self.assertFalse(any(m == "files.write" for m, _ in self.calls))
 
     def test_failed_native_result_keeps_evidence_and_removes_only_own_job(self):
         self.exit_status = 39 << 8

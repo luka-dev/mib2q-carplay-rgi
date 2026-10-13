@@ -77,12 +77,16 @@ def main():
     parser.add_argument("qnx_log", type=Path)
     parser.add_argument("--source-log", type=Path)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--lab-dir", type=Path, default=Path(__file__).resolve().parents[2]/"build/ios-vm-lab")
     args = parser.parse_args()
     for path in (args.qnx_log, args.source_log):
         if path and path.stat().st_size > 67108864:
             parser.error("timing log exceeds 64 MiB")
     if args.output:
-        lab = Path(__file__).resolve().parents[2]/"build/ios-vm-lab"
+        build = Path(__file__).resolve().parents[2]/"build"
+        lab = args.lab_dir.resolve()
+        if not lab.is_relative_to(build.resolve()) or lab == build.resolve():
+            parser.error("lab directory must be inside the owned build tree")
         if not args.output.resolve().is_relative_to(lab.resolve()) or args.output.suffix != ".json":
             parser.error("report must be JSON inside the owned lab")
     try:

@@ -74,12 +74,17 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("log", type=Path)
     parser.add_argument("--cluster", action="store_true", help="extract authenticated stream-111 Annex B records")
-    parser.add_argument("--output", type=Path, default=Path("build/ios-vm-lab/combined-usb/native-carplay.h264"))
+    parser.add_argument("--lab-dir", type=Path)
+    parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     if args.log.stat().st_size > 67108864:
         parser.error("QNX trace exceeds 64 MiB")
-    lab = Path(__file__).resolve().parents[2]/"build/ios-vm-lab"
-    target = args.output.resolve()
+    build = Path(__file__).resolve().parents[2]/"build"
+    lab = (args.lab_dir or build/"ios-vm-lab").resolve()
+    if not lab.is_relative_to(build.resolve()) or lab == build.resolve():
+        parser.error("lab directory must be inside the owned build tree")
+    default = lab/"native-carplay.h264" if args.lab_dir else lab/"combined-usb/native-carplay.h264"
+    target = (args.output or default).resolve()
     if not target.is_relative_to(lab.resolve()) or target.suffix != ".h264":
         parser.error("output must be an .h264 file inside the owned laboratory")
     try:
@@ -88,6 +93,7 @@ def main():
     except ValueError as error:
         target.unlink(missing_ok=True)
         parser.error(str(error))
+    target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(data)
     print(json.dumps({"records": records, "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest(),
                       "output": str(target)}))

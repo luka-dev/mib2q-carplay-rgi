@@ -7,9 +7,12 @@ _Host crypto and iAP2 control validation · 2026-10-09._
 [Wireless overview](README.md) · [iAP2 daemon](IAP2_DAEMON.md)
 
 The active [vphone laboratory](VPHONE_LAB.md) uses the shared, integrity-checked
-fixture and MFi-SAP service in `wireless/lab_common/`. Existing Inferno/iOS 14
-authentication evidence below is historical; native iAP2 on vphone still needs
-guest-specific transport validation.
+fixture and MFi-SAP service in `wireless/lab_common/`. The native CoreAccessories
+API peer now passes valid/invalid iAP2 authentication controls on iOS 26.6.2;
+primary Direct NCM completes the QNX CarPlay session and carries independently
+decoded primary and stream-111 video. USB-port forwarding remains unverified.
+The Inferno/iOS 14 authentication evidence below is historical. Current native
+session evidence is separate from the synthetic Rust provider described here.
 
 ## 🎯 Purpose and boundary
 

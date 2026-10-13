@@ -8,21 +8,16 @@ _Stock210 mod architecture, implementation evidence and offline validation — 2
 
 ## 📋 Current status
 
-The active iOS laboratory is migrating to [vphone](VPHONE_LAB.md) on branch
-`feat/vphone-carplay-lab`: pinned iOS 26.6.2, paravirtual graphics and the shared
-stock-210 QNX receiver. Launchpad, Research Guests, Developer Tools, the signed
-helper and Core Bundle now pass host checks. The dedicated iOS 26.6.2 guest has
-been created, boots and renders native UI and Maps. Its original NCM link reaches
-QNX and receives native `/info` over IPv6. A guest vendor bulk adapter now preserves
-USB enumeration. A scoped runtime personality now starts a native accessory
-manager and an upstream USB-port link that `accessoryd` opens. Native packets
-arrive in explicit stream-type experiments, which select other protocols.
-A separate native CoreAccessories API peer now completes iAP2 and software MFi:
-valid signatures receive `AA05`; corrupted response and certificate signatures
-receive `AA04`. Native identification passes and iOS announces CarPlay availability.
-USB forwarding, the vphone-to-QNX CarPlay session and its video remain unverified.
-The Inferno results below are retained
-historical evidence.
+The active [vphone laboratory](VPHONE_LAB.md) on `feat/vphone-carplay-lab` now
+carries genuine iOS 26.6.2 CarPlay video to the stock-210 QNX receiver. The native
+CoreAccessories API peer passes valid/invalid software MFi controls, identifies
+the accessory and starts CarPlay through primary Direct NCM. Native pairing,
+MFi-SAP, encrypted control and both screen SETUPs complete. FFmpeg independently
+decoded 31 primary frames at 800×480 showing the CarPlay app launcher, and 22
+stream-111 frames at 1440×542 showing a black image. Siri was enabled through
+native Settings after rebuilding a stale MobileGestalt cache. Cluster map
+content, sustained pacing, input/reconnect and USB-port forwarding still need
+validation. The Inferno results below are retained historical evidence.
 
 The MU1316 / P5087 candidate retains factory AirPlay **210.81** on QNX 6.5 ARM.
 The C wireless hook supplies pairing and modern control/event/media security;

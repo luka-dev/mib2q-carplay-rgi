@@ -15,9 +15,9 @@ import time
 from . import lab
 
 GUEST_DIR = "/private/var/tmp/mhi2-vphone-lab"
-ACTIONS = ("probe", "apply", "apply-destroy", "restore", "reconnect", "network",
+ACTIONS = ("probe", "apply", "apply-destroy", "ncm-direct", "restore", "reconnect", "network", "network-classify",
            "iap-list", "iap-wake", "iap-inspect", "iap-registry", "iap-smoke", "iap-peer", "manager-apply", "manager-remove", "port-prepare")
-READ_ONLY_ACTIONS = ("probe", "network", "iap-list", "iap-wake", "iap-inspect", "iap-registry")
+READ_ONLY_ACTIONS = ("probe", "network", "network-classify", "iap-list", "iap-wake", "iap-inspect", "iap-registry")
 
 
 def build(*, catalogue: bool = False) -> Path:
@@ -82,9 +82,9 @@ def _run(mode: str, inspect_class: str | None = None, stream_type: int | None = 
         raise RuntimeError("guest model or userland no longer matches the reviewed profile")
     # /var/tmp can be cleared at a guest restart, even when the host backup exists.
     lab.rpc(settings, "files.mkdir", {"path": GUEST_DIR})
-    if mode in ("apply", "apply-destroy", "restore"):
+    if mode in ("apply", "apply-destroy", "ncm-direct", "restore"):
         backup = lab.OUT / "usb-original.json"
-        if mode.startswith("apply") and not backup.exists():
+        if mode != "restore" and not backup.exists():
             probe = _run("probe")["log"]["result"]
             if probe.get("truncated"):
                 raise RuntimeError("original USB description was truncated")

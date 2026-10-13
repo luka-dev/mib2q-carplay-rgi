@@ -10,6 +10,34 @@ from wireless.vphone_lab import mfi_probe
 
 
 class NativePeerTests(unittest.TestCase):
+    def test_identification_holds_connection_before_cleanup_for_pairing_ui(self):
+        events = []
+        def rpc(settings, method, params=None):
+            if method == "device.info":
+                return {"result": {"model": "iPhone99,11", "ios_version": "26.6.2"}}
+            if method == "files.write" and params["path"].endswith(".done"):
+                events.append("done")
+            return {"ok": True}
+        def native(mode, **options):
+            options["on_launch"]("/owned.log")
+            return {"status": {"last_exit_status": 0}}
+        def handshake(peer, descriptors, certificate, result, **options):
+            result.update(link_synchronized=True, first_control_message="0xaa00",
+                          authentication_messages=["0xaa05"], challenge_bytes=32,
+                          signature_bytes=64, identification_accepted=True)
+        with patch.object(mfi_probe, "fixture_key", return_value=(None, b"fixture")), \
+                patch.object(mfi_probe.lab, "profile", return_value={}), \
+                patch.object(mfi_probe.lab, "require_machine"), \
+                patch.object(mfi_probe.lab, "rpc", side_effect=rpc), \
+                patch.object(mfi_probe.lab, "save"), \
+                patch.object(mfi_probe.usb, "run", side_effect=native), \
+                patch.object(wire, "handshake", side_effect=handshake), \
+                patch.object(mfi_probe.time, "sleep", side_effect=lambda seconds: events.append(seconds)):
+            result = mfi_probe.run(identify=True, hold_seconds=30)
+        self.assertNotIn("error", result)
+        self.assertEqual(result["identification_hold_seconds"], 30)
+        self.assertEqual(events, [30, "done"])
+
     def setUp(self):
         self.peer = mfi_probe.NativeAPIPeer({}, "/owned.inbox", "/owned.log")
 
