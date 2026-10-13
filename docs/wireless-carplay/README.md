@@ -14,8 +14,9 @@ stock-210 QNX receiver. Launchpad, Research Guests, Developer Tools, the signed
 helper and Core Bundle now pass host checks. The dedicated iOS 26.6.2 guest has
 been created, boots and renders native UI and Maps. Its original NCM link reaches
 QNX and receives native `/info` over IPv6. A guest vendor bulk adapter now preserves
-USB enumeration; native accessory-manager discovery, CarPlay/MFi and stream-111
-video remain unverified. The Inferno results below are retained
+USB enumeration. A scoped runtime personality now starts a native accessory
+manager that `accessoryd` opens; the USB port's upstream relationship remains
+missing. CarPlay/MFi and stream-111 video remain unverified. The Inferno results below are retained
 historical evidence.
 
 The MU1316 / P5087 candidate retains factory AirPlay **210.81** on QNX 6.5 ARM.

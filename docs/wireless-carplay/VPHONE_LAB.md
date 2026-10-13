@@ -77,7 +77,7 @@ the guest. They never select a physical phone or fall back to Inferno.
 ```mermaid
 flowchart LR
     accTitle: vphone CarPlay Laboratory Migration
-    accDescr: vphone renders native applications and reaches QNX through its original NCM link. The vendor bulk iAP adapter enumerates, but accessory-manager discovery and native authentication remain pending.
+    accDescr: vphone renders native applications and reaches QNX through its original NCM link. The vendor bulk iAP adapter enumerates and accessoryd opens a native manager, but the USB port has no upstream link and authentication remains pending.
 
     launchpad["Launchpad guest control"] --> ios_guest["iOS guest with Metal"]
     ios_guest --> ethernet_adapter["Owned NCM Ethernet adapter"]
@@ -152,13 +152,64 @@ It was reverted using the official disk/SEP/NVRAM snapshot
 `DeviceDestroy` experiment partly tore down USB despite returning an error, so
 it is not a working reset recipe.
 
-Native `IOAccessoryPortUSB` is published, but the measured registry has no
-`IOAccessoryManager`. The iOS 26 device transport is the
-`IOAccessoryManager.transport` plugin; `accessoryd` owns the iAP2 XPC service.
-The native XPC helper activated that daemon without changing launchd jobs or
-claiming authentication. Repeated detect reads still timed out. The next step is
-to establish native manager/transport discovery and obtain detect, SYN/ACK and
-actual MFi acceptance before requesting CarPlay video.
+### Native accessory manager checkpoint, 2026-10-13
+
+The research platform initially published `IOAccessoryPortUSB` without an
+accessory manager. The opt-in helper now starts the kernel's existing
+`IOAccessoryDockUSB_UFP`, an `IOAccessoryManager` subclass, on the verified
+`AppleVirtIOUSBDeviceController`. Its native `start()` requires the provider's
+four-byte, little-endian `primary-port-id`. A scoped
+`IOHIDProviderPropertyMerger` supplies port `2` before registering the manager;
+placing `IOProviderMergeProperties` directly on the manager did not merge it.[^7]
+
+Catalogue changes use a guest helper signed with
+`com.apple.private.security.iocatalog-management`, with runtime entitlement and
+service-ownership checks. An API return of zero alone is insufficient: XNU can
+report success without applying a catalogue request when that entitlement is
+absent.[^6] The helper verifies the actual manager class, category, parent
+controller and primary port. Repeated application reuses the matching manager.
+No Apple daemon job, authentication result or host security setting is changed.
+
+| Native observation after recovery | Result |
+|---|---|
+| Manager class | `IOAccessoryDockUSB_UFP`, registered and active |
+| Manager category / primary port | `MHI2ResearchAccessoryManager` / `2` |
+| `accessoryd` | Opens the manager's genuine `IOAccessoryManagerUserClient` |
+| Manager and USB port in `IOAccessory` plane | Both present |
+| USB port's `IOAccessoryManagerGetUpstreamService()` | `0`, no upstream manager |
+| USB port user client | No direct child found |
+| iAP2 detect | Control write succeeds; input read times out |
+| MFi / primary AVC / AltScreen AVC | Not reached |
+
+`iap-registry` uses native matching, plane queries and child iteration. User
+clients can be unregistered; checking only `IOServiceGetMatchingService()` for
+their class can miss an active client. The RPC `device.ioreg` does not implement
+the attempted `class` filter, so it is not used to establish these results.
+
+```mermaid
+flowchart LR
+    accTitle: Native accessory discovery checkpoint
+    accDescr: The scoped provider merger starts a real native accessory manager that accessoryd opens. The USB port is published, but its upstream relationship to the manager is missing and no iAP2 detect response has been received.
+
+    merger["Native provider property merger"] --> manager["IOAccessoryDockUSB_UFP"]
+    manager --> client["Manager user client in accessoryd"]
+    usb_port["Native IOAccessoryPortUSB"] -.->|"Upstream link missing"| manager
+    usb_port -.->|"No detect response"| iap["Native iAP2 and MFi"]
+```
+
+The userland upstream lookup follows registry ancestry. The kernel transport
+also searches its provider ancestry for a manager. Publishing a sibling manager
+does not establish that relationship. Recreating the USB interface after
+manager creation did not solve it. A direct RAM write to the transport's cached
+manager field made USB reconfiguration and RPC time out; the VM subsequently
+stopped during debugger recovery. A normal official debug launch restored RPC
+and the unmodified USB defaults. This field write is excluded from the recipe.
+
+The remaining work is a proper virtual port relationship and connection-event
+path, followed by detect, SYN/ACK and genuine MFi acceptance. Guest software
+breakpoints (`Z0`) were observed at the native control-request and catalogue
+handlers. Accepted `Z1` requests did not yield the expected stop; absence of such
+a stop was not treated as proof that a function was not called.
 
 For the RAM adapter, run the official debug launch in one terminal:
 
@@ -171,8 +222,13 @@ Then operate the owned guest from another terminal:
 
 ```sh
 scripts/carplay_lab.sh usb-kernel --apply
+scripts/carplay_lab.sh usb manager-apply --experimental
 scripts/carplay_lab.sh usb apply --experimental
 scripts/carplay_lab.sh usb iap-wake
+scripts/carplay_lab.sh usb iap-registry
+scripts/carplay_lab.sh usb iap-inspect
+# Inspect another class's metadata without invoking the transport:
+scripts/carplay_lab.sh usb iap-inspect --inspect-class ACCTransportIOAccessorySharedManager
 scripts/carplay_lab.sh usb iap-list
 ```
 
@@ -181,6 +237,13 @@ The bounded guest helper verifies the recorded UDID, research product string,
 controller and chosen chip `FE01`. Live USB changes remain opt-in; ordinary
 startup never applies them. Reports, native descriptors, debugger evidence and
 pristine reference extraction stay ignored under `build/vphone-lab/`.
+
+The manager and its provider property are runtime-only and disappear at VM
+restart. `manager-remove --experimental` removes only the helper's inactive
+catalogue descriptions; it refuses to imply removal of a live manager. Stop and
+restart the VM to remove an active manager and reset provider properties. Native
+code-dump and raw object-pointer experiments are not exposed by the tracked
+helper. Its guest directory is recreated before backup upload after a restart.
 
 The shared QNX image retains pairing, native MFi-SAP, media authentication and
 the explicit QEMU-only paired AltScreen gate. Hardware decoder output still
@@ -247,7 +310,7 @@ existing operation rather than starting another restore.[^5]
 
 ## 🧪 Shared receiver and evidence tools
 
-Migration validation passed 35 guest/bootstrap/transport tests and the 88 retained
+Migration validation passed 45 guest/bootstrap/transport tests and the 88 retained
 laboratory regression tests. A fresh QNX build, native `/info` and the shared
 signer's loopback response were checked. These results establish the migrated
 tools; they do not establish a vphone sender session.
@@ -318,3 +381,5 @@ codec helpers are not installed into the new guest.
 [^3]: Lakr233/vphone-cli. (2026). "Create and run a VM." https://github.com/Lakr233/vphone-cli/blob/0da1bea0e58199a1888581135b94a69063d71779/Documents/Guides/create-and-run.md
 [^4]: Lakr233/vphone-cli. (2026). "Networking." https://github.com/Lakr233/vphone-cli/blob/0da1bea0e58199a1888581135b94a69063d71779/Documents/Guides/networking.md
 [^5]: Lakr233/vphone-cli. (2026). "vphone guest control skill." https://github.com/Lakr233/vphone-cli/blob/0da1bea0e58199a1888581135b94a69063d71779/Skills/vphone-guest-control/SKILL.md
+[^6]: Apple. "XNU IOUserClient.cpp, is_io_catalog_send_data." https://github.com/apple-oss-distributions/xnu/blob/main/iokit/Kernel/IOUserClient.cpp
+[^7]: Apple. "IOHIDProviderPropertyMerger.cpp." https://github.com/apple-oss-distributions/IOHIDFamily/blob/main/IOHIDFamily/IOHIDProviderPropertyMerger.cpp

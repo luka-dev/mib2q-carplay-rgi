@@ -15,21 +15,24 @@ import time
 from . import lab
 
 GUEST_DIR = "/private/var/tmp/mhi2-vphone-lab"
+ACTIONS = ("probe", "apply", "apply-destroy", "restore", "reconnect", "network",
+           "iap-list", "iap-wake", "iap-inspect", "iap-registry", "manager-apply", "manager-remove")
+READ_ONLY_ACTIONS = ("probe", "network", "iap-list", "iap-wake", "iap-inspect", "iap-registry")
 
 
-def build() -> Path:
+def build(*, catalogue: bool = False) -> Path:
     out = lab.OUT / "usb"
     out.mkdir(parents=True, exist_ok=True)
     libraries = {
-        "libSystem": ("/usr/lib/libSystem.B.dylib", ["printf", "puts", "strcmp", "getuid", "sleep", "alarm", "fflush", "dlopen", "dlsym", "dlerror", "fopen", "fread", "fclose", "socket", "connect", "close", "send", "recv", "setsockopt", "inet_pton", "if_nametoindex", "htons", "memcmp", "xpc_connection_create_mach_service", "xpc_connection_set_event_handler", "xpc_connection_activate", "xpc_dictionary_create", "xpc_connection_send_message", "xpc_connection_cancel", "xpc_release", "_NSConcreteGlobalBlock", "__chkstk_darwin", "__stack_chk_guard", "__stack_chk_fail"]),
+        "libSystem": ("/usr/lib/libSystem.B.dylib", ["putchar", "strstr", "free", "printf", "puts", "strcmp", "getuid", "sleep", "alarm", "fflush", "dlopen", "dlsym", "dlerror", "fopen", "fread", "fclose", "socket", "connect", "close", "send", "recv", "setsockopt", "inet_pton", "if_nametoindex", "htons", "memcmp", "xpc_connection_create_mach_service", "xpc_connection_set_event_handler", "xpc_connection_activate", "xpc_dictionary_create", "xpc_connection_send_message", "xpc_connection_cancel", "xpc_release", "_NSConcreteGlobalBlock", "__chkstk_darwin", "__stack_chk_guard", "__stack_chk_fail"]),
         "CoreFoundation": ("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation", [
             "kCFTypeDictionaryKeyCallBacks", "kCFTypeDictionaryValueCallBacks", "kCFTypeArrayCallBacks", "kCFBooleanTrue",
             "CFStringCreateWithCString", "CFDictionaryCreateMutable", "CFDictionaryGetValue", "CFDictionarySetValue",
             "CFArrayCreate", "CFRelease", "CFStringGetCString", "CFPropertyListCreateData", "CFDataGetBytePtr", "CFDataGetLength",
-            "CFDataCreate", "CFPropertyListCreateWithData", "CFGetTypeID", "CFDictionaryGetTypeID", "CFDataGetTypeID", "CFStringGetTypeID"]),
+            "CFDataCreate", "CFPropertyListCreateWithData", "CFGetTypeID", "CFDictionaryGetTypeID", "CFDataGetTypeID", "CFStringGetTypeID", "CFNumberGetTypeID", "CFNumberGetValue"]),
         "IOKit": ("/System/Library/Frameworks/IOKit.framework/IOKit", ["IOServiceGetMatchingService", "IOServiceMatching",
-            "IORegistryEntryCreateCFProperty", "IORegistryEntryFromPath", "IORegistryEntrySetCFProperties", "IOObjectRelease"]),
-        "objc": ("/usr/lib/libobjc.A.dylib", ["objc_getClass", "sel_registerName", "objc_msgSend"]),
+            "IORegistryEntryCreateCFProperty", "IORegistryEntryFromPath", "IORegistryEntrySetCFProperties", "IOObjectRelease", "IOObjectIsEqualTo", "IOObjectConformsTo", "IORegistryEntryGetParentEntry", "IORegistryEntryGetChildIterator", "IOIteratorNext", "IORegistryEntryInPlane"]),
+        "objc": ("/usr/lib/libobjc.A.dylib", ["objc_getClass", "sel_registerName", "objc_msgSend", "class_copyMethodList", "method_getName", "sel_getName", "class_getName", "objc_copyClassList", "class_getImageName"]),
     }
     for name, (install, symbols) in libraries.items():
         (out / f"{name}.tbd").write_text(
@@ -45,20 +48,29 @@ def build() -> Path:
     subprocess.run(["ld", "-ld_classic", "-arch", "arm64", "-platform_version", "ios", "18.0", "18.0",
                     "-o", str(binary), str(out / "usb.o"), *[str(out / f"{n}.tbd") for n in libraries]], check=True)
     entitlement = out / "entitlements.plist"
-    entitlement.write_bytes(plistlib.dumps({"com.apple.private.usbdevice.setdescription": True}))
+    entitlements = {"com.apple.private.usbdevice.setdescription": True}
+    if catalogue:
+        entitlements["com.apple.private.security.iocatalog-management"] = True
+    entitlement.write_bytes(plistlib.dumps(entitlements))
     subprocess.run(["codesign", "-f", "-s", "-", "--entitlements", str(entitlement), str(binary)], check=True)
     return binary
 
 
-def _run(mode: str) -> dict:
+def _run(mode: str, inspect_class: str | None = None) -> dict:
+    if mode not in ACTIONS:
+        raise ValueError("unknown native USB action")
+    if inspect_class is not None and (mode != "iap-inspect" or not re.fullmatch(r"ACCTransport[A-Za-z]{1,80}", inspect_class)):
+        raise ValueError("inspection requires a native transport class")
     settings = lab.profile()
     machine = lab.require_machine(settings, "running")
     udid = machine.get("udid", "")
-    if mode not in ("probe", "apply", "apply-destroy", "restore", "reconnect", "network", "iap-list", "iap-wake") or not re.fullmatch(r"0000FE01-[0-9A-F]{16}", udid):
+    if not re.fullmatch(r"0000FE01-[0-9A-F]{16}", udid):
         raise ValueError("expected the owned research VM identity and an explicit USB action")
     info = lab.rpc(settings, "device.info").get("result", {})
     if info.get("model") != "iPhone99,11" or info.get("ios_version") != "26.6.2":
         raise RuntimeError("guest model or userland no longer matches the reviewed profile")
+    # /var/tmp can be cleared at a guest restart, even when the host backup exists.
+    lab.rpc(settings, "files.mkdir", {"path": GUEST_DIR})
     if mode in ("apply", "apply-destroy", "restore"):
         backup = lab.OUT / "usb-original.json"
         if mode.startswith("apply") and not backup.exists():
@@ -74,8 +86,7 @@ def _run(mode: str) -> dict:
         lab.rpc(settings, "files.write", {"path": GUEST_DIR + "/usb-original.plist",
                                          "content": plistlib.dumps(saved["description"]).decode()})
         lab.rpc(settings, "files.chmod", {"path": GUEST_DIR + "/usb-original.plist", "mode": "600"})
-    binary = build()
-    lab.rpc(settings, "files.mkdir", {"path": GUEST_DIR})
+    binary = build(catalogue=mode in ("manager-apply", "manager-remove"))
     remote = GUEST_DIR + "/usb-description"
     lab.rpc(settings, "files.write", {"path": remote, "content": base64.b64encode(binary.read_bytes()).decode(), "encoding": "base64"})
     lab.rpc(settings, "files.chmod", {"path": remote, "mode": "700"})
@@ -85,7 +96,8 @@ def _run(mode: str) -> dict:
     label = "com.mhi2.vphone." + name
     log = GUEST_DIR + "/" + name + ".log"
     path = GUEST_DIR + "/" + name + ".plist"
-    job = {"Label": label, "ProgramArguments": [remote, mode, udid], "RunAtLoad": True,
+    arguments = [remote, mode, udid] + ([inspect_class] if inspect_class else [])
+    job = {"Label": label, "ProgramArguments": arguments, "RunAtLoad": True,
            "StandardOutPath": log, "StandardErrorPath": log}
     lab.rpc(settings, "files.write", {"path": path, "content": plistlib.dumps(job).decode()})
     loaded = lab.rpc(settings, "services.load", {"paths": [path]})
@@ -102,7 +114,7 @@ def _run(mode: str) -> dict:
         lab.save("usb-" + mode + "-failure.json", {"mode": mode, "udid": udid, "error": str(error),
                  "loaded": loaded, "console": lab.client("vm", "log", *lab.machine_arguments(settings), "--lines", "100")})
         raise
-    result = {"mode": mode, "udid": udid, "loaded": loaded, "status": status,
+    result = {"mode": mode, "inspect_class": inspect_class, "udid": udid, "loaded": loaded, "status": status,
               "log": lab.rpc(settings, "files.read", {"path": log, "limit": 6000})}
     lab.save("usb-" + mode + ".json", result)
     # Remove our completed one-shot job only, never an Apple service.
@@ -111,22 +123,25 @@ def _run(mode: str) -> dict:
     lab.rpc(settings, "files.remove", {"path": log})
     if status.get("last_exit_status") != 0:
         raise RuntimeError("native USB helper failed; inspect build/vphone-lab/usb-" + mode + ".json")
+    if result["log"]["result"].get("truncated"):
+        raise RuntimeError("native USB diagnostic was truncated; inspect the saved report")
     return result
 
 
-def run(mode: str) -> dict:
+def run(mode: str, inspect_class: str | None = None) -> dict:
     lab.OUT.mkdir(parents=True, exist_ok=True)
     with open(os.open(lab.OUT / ".usb.lock", os.O_RDWR | os.O_CREAT, 0o600), "r+") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        return _run(mode)
+        return _run(mode, inspect_class)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("probe", "apply", "apply-destroy", "restore", "reconnect", "network", "iap-list", "iap-wake"))
+    parser.add_argument("mode", choices=ACTIONS)
     parser.add_argument("--experimental", action="store_true",
-                        help="run a live USB replacement experiment; may stop this VM")
+                        help="run a live USB or accessory-manager experiment; may stop this VM")
+    parser.add_argument("--inspect-class", help="inspect metadata of a class from the native iAP transport image")
     args = parser.parse_args()
-    if args.mode not in ("probe", "network", "iap-list", "iap-wake") and not args.experimental:
-        parser.error("live USB replacement is experimental and requires --experimental")
-    print(json.dumps(run(args.mode), indent=2))
+    if args.mode not in READ_ONLY_ACTIONS and not args.experimental:
+        parser.error("live USB/accessory configuration requires --experimental")
+    print(json.dumps(run(args.mode, args.inspect_class), indent=2))
