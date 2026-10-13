@@ -53,6 +53,7 @@ extern int IORegistryEntryGetChildIterator(u32, const char *, u32 *);
 extern u32 IOIteratorNext(u32), IORegistryEntryInPlane(u32, const char *);
 extern unsigned long CFNumberGetTypeID(void);
 extern unsigned char CFNumberGetValue(CFRef, int, void *);
+extern CFRef CFNumberCreate(void *, int, const void *);
 extern int IORegistryEntrySetCFProperties(u32, CFRef);
 extern int socket(int, int, int), connect(int, const void *, u32), close(int);
 extern long send(int, const void *, size_t, int), recv(int, void *, size_t, int);
@@ -96,6 +97,25 @@ static int dump(CFRef d) {
 }
 
 /* All callers first validate the controller identity, model and research chip. */
+static const unsigned char dock_phandle[] = {2, 0, 1, 254}; /* 0xFE010002 */
+static const unsigned char dock_parent[] = {2, 0, 1, 254, 0x50, 0x63, 0x63, 0x61}; /* accP */
+static const char dock_resource[] = "IOFunctionParentFE010002";
+
+static int controller_data(u32 controller, const char *name, const unsigned char *expected, CFIndex length) {
+    CFRef key = str(name), value = IORegistryEntryCreateCFProperty(controller, key, 0, 0);
+    CFRelease(key);
+    if (!value) return 0;
+    int valid = CFGetTypeID(value) == CFDataGetTypeID() && CFDataGetLength(value) == length && !memcmp(CFDataGetBytePtr(value), expected, (size_t)length);
+    CFRelease(value); return valid ? 1 : -1;
+}
+
+static int controller_platform(u32 controller) {
+    int phandle = controller_data(controller, "AAPL,phandle", dock_phandle, sizeof(dock_phandle));
+    int parent = controller_data(controller, "function-dock_parent", dock_parent, sizeof(dock_parent));
+    if (phandle < 0 || parent < 0) return -1;
+    return phandle && parent;
+}
+
 static int controller_port(u32 controller) {
     CFRef key = str("primary-port-id"), value = IORegistryEntryCreateCFProperty(controller, key, 0, 0);
     CFRelease(key);
@@ -121,6 +141,15 @@ static int owned_manager(u32 controller) {
     valid = valid && !IORegistryEntryGetParentEntry(manager, "IOService", &parent) && IOObjectIsEqualTo(parent, controller);
     if (parent) IOObjectRelease(parent);
     IOObjectRelease(manager); return valid ? 1 : -1;
+}
+
+static int manager_function_parent(void) {
+    u32 manager = IOServiceGetMatchingService(0, IOServiceMatching("IOAccessoryManager"));
+    if (!manager) return 0;
+    CFRef key = str(dock_resource), value = IORegistryEntryCreateCFProperty(manager, key, 0, 0); CFRelease(key);
+    int registered = value && CFGetTypeID(value) == CFDataGetTypeID() && CFDataGetLength(value) == 0;
+    if (value) CFRelease(value);
+    IOObjectRelease(manager); return registered;
 }
 
 static CFMutableRef manager_personality(int merger) {
@@ -160,10 +189,12 @@ static int catalogue_entitled(void) {
 static int manager_configure(u32 controller, int remove) {
     int existing = owned_manager(controller);
     int property = controller_port(controller);
-    if (existing < 0 || property < 0 || (existing && property != 1)) { printf("existing accessory metadata belongs to another configuration\n"); return 36; }
+    int platform = controller_platform(controller);
+    if (existing < 0 || property < 0 || platform < 0 || (existing && property != 1)) { printf("existing accessory metadata belongs to another configuration\n"); return 36; }
     if (existing) {
         printf("owned native manager already present\n");
         if (remove) { printf("restart the VM to remove the live manager and provider properties\n"); return 39; }
+        if (!platform || !manager_function_parent()) { printf("restart the VM to establish the native platform function before manager startup\n"); return 41; }
         return 0;
     }
     if (!catalogue_entitled()) { printf("catalogue entitlement missing; refusing a possible false success\n"); return 31; }
@@ -181,20 +212,64 @@ static int manager_configure(u32 controller, int remove) {
     CFMutableRef properties = CFDictionaryCreateMutable(0, 0, kCFTypeDictionaryKeyCallBacks, kCFTypeDictionaryValueCallBacks);
     static const unsigned char port[] = {2, 0, 0, 0};
     CFRef data = CFDataCreate(0, port, sizeof(port)); put(properties, "primary-port-id", data); CFRelease(data);
+    data = CFDataCreate(0, dock_phandle, sizeof(dock_phandle)); put(properties, "AAPL,phandle", data); CFRelease(data);
+    data = CFDataCreate(0, dock_parent, sizeof(dock_parent)); put(properties, "function-dock_parent", data); CFRelease(data);
     put(merger, "IOProviderMergeProperties", properties); CFRelease(properties);
     CFRef item[] = {merger}; CFRef array = CFArrayCreate(0, item, 1, kCFTypeArrayCallBacks);
     int status = catalogue_send(io, 1, array); CFRelease(array); CFRelease(merger);
     if (status) { CFRelease(manager); return 33; }
-    for (unsigned i = 0; i < 5 && controller_port(controller) == 0; i++) sleep(1);
-    if (controller_port(controller) != 1) { CFRelease(manager); printf("provider primary-port-id not established\n"); return 35; }
-    printf("virtual provider primary-port-id=2 verified\n"); fflush(0);
+    for (unsigned i = 0; i < 5 && (controller_port(controller) == 0 || controller_platform(controller) == 0); i++) sleep(1);
+    if (controller_port(controller) != 1 || controller_platform(controller) != 1) { CFRelease(manager); printf("provider port/platform data not established\n"); return 35; }
+    printf("virtual provider port=2 phandle=FE010002 dock-parent=accP verified\n"); fflush(0);
     item[0] = manager; array = CFArrayCreate(0, item, 1, kCFTypeArrayCallBacks);
     status = catalogue_send(io, 1, array); CFRelease(array); CFRelease(manager);
     if (status) return 33;
     for (unsigned i = 0; i < 5 && owned_manager(controller) == 0; i++) sleep(1);
-    int verified = owned_manager(controller) == 1;
+    int verified = owned_manager(controller) == 1 && manager_function_parent();
     printf("owned native manager verified=%d\n", verified);
     return verified ? 0 : 34;
+}
+
+static int port_prepare(u32 controller, int target_stream) {
+    /* Explicit metadata experiment only: no authentication state is assigned. */
+    if (owned_manager(controller) != 1 || controller_platform(controller) != 1 || !manager_function_parent() || !catalogue_entitled()) return 42;
+    u32 port = IOServiceGetMatchingService(0, IOServiceMatching("IOAccessoryPortUSB"));
+    u32 manager = IOServiceGetMatchingService(0, IOServiceMatching("IOAccessoryManager"));
+    void *library = dlopen("/usr/lib/libIOAccessoryManager.dylib", 2);
+    u32 (*upstream)(u32) = library ? dlsym(library, "IOAccessoryManagerGetUpstreamService") : 0;
+    u32 parent = port && upstream ? upstream(port) : 0;
+    int valid = parent && manager && IOObjectIsEqualTo(parent, manager);
+    if (parent) IOObjectRelease(parent);
+    if (manager) IOObjectRelease(manager);
+    if (!valid) { if (port) IOObjectRelease(port); return 43; }
+    CFRef key = str("IOAccessoryPortStreamType"), previous = IORegistryEntryCreateCFProperty(port, key, 0, 0);
+    CFRelease(key);
+    int stream = 0;
+    if (previous) {
+        valid = CFGetTypeID(previous) == CFNumberGetTypeID() && CFNumberGetValue(previous, 3, &stream) && stream == target_stream;
+        CFRelease(previous); IOObjectRelease(port);
+        printf("existing virtual port stream metadata verified=%d\n", valid); return valid ? 0 : 44;
+    }
+    CFMutableRef merger = CFDictionaryCreateMutable(0, 0, kCFTypeDictionaryKeyCallBacks, kCFTypeDictionaryValueCallBacks);
+    const char *keys[] = {"CFBundleIdentifier", "IOClass", "IOProviderClass", "IOMatchCategory"};
+    const char *values[] = {"com.apple.iokit.IOHIDFamily", "IOHIDProviderPropertyMerger", "IOAccessoryPortUSB", "MHI2ResearchIapStreamMetadata"};
+    for (unsigned i = 0; i < 4; i++) { CFRef value = str(values[i]); put(merger, keys[i], value); CFRelease(value); }
+    CFMutableRef match = CFDictionaryCreateMutable(0, 0, kCFTypeDictionaryKeyCallBacks, kCFTypeDictionaryValueCallBacks);
+    int two = 2; CFRef number = CFNumberCreate(0, 3, &two);
+    put(match, "IOAccessoryDevicePort", number); put(match, "IOAccessoryPortManagerPrimaryPort", number); CFRelease(number);
+    put(merger, "IOPropertyMatch", match); CFRelease(match);
+    CFMutableRef properties = CFDictionaryCreateMutable(0, 0, kCFTypeDictionaryKeyCallBacks, kCFTypeDictionaryValueCallBacks);
+    number = CFNumberCreate(0, 3, &target_stream); put(properties, "IOAccessoryPortStreamType", number); CFRelease(number);
+    put(merger, "IOProviderMergeProperties", properties); CFRelease(properties);
+    CFRef items[] = {merger}; CFRef array = CFArrayCreate(0, items, 1, kCFTypeArrayCallBacks);
+    void *io = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", 2);
+    int status = io ? catalogue_send(io, 1, array) : 31;
+    CFRelease(array); CFRelease(merger);
+    u32 (*get_stream)(u32) = library ? dlsym(library, "IOAccessoryPortGetStreamType") : 0;
+    for (unsigned i = 0; get_stream && i < 5 && get_stream(port) == 0; i++) sleep(1);
+    valid = !status && get_stream && get_stream(port) == (u32)target_stream;
+    IOObjectRelease(port); printf("virtual port stream metadata=%d verified=%d\n", target_stream, valid);
+    return valid ? 0 : 45;
 }
 
 static int client_children(u32 service, const char *type) {
@@ -215,15 +290,22 @@ static int iap_registry(u32 controller) {
     void *io = dlopen("/usr/lib/libIOAccessoryManager.dylib", 2);
     u32 (*upstream)(u32) = io ? dlsym(io, "IOAccessoryManagerGetUpstreamService") : 0;
     if (!upstream) return 30;
-    printf("owned-manager=%d provider-port=%d\n", owned_manager(controller), controller_port(controller));
+    printf("owned-manager=%d provider-port=%d provider-platform=%d\n", owned_manager(controller), controller_port(controller), controller_platform(controller));
     const char *classes[] = {"IOAccessoryManager", "IOAccessoryPortUSB", "IOAccessoryEAInterface", "AppleAuthCP"};
     int incomplete = 0;
     for (unsigned i = 0; i < 4; i++) {
         u32 service = IOServiceGetMatchingService(0, IOServiceMatching(classes[i]));
         printf("registry-class=%s present=%d", classes[i], service != 0);
         if (service && i < 2) printf(" accessory-plane=%u", IORegistryEntryInPlane(service, "IOAccessory"));
+        if (service && i == 0) {
+            CFRef key = str(dock_resource), value = IORegistryEntryCreateCFProperty(service, key, 0, 0); CFRelease(key);
+            printf(" native-function-parent=%d", value && CFGetTypeID(value) == CFDataGetTypeID() && CFDataGetLength(value) == 0);
+            if (value) CFRelease(value);
+        }
         if (service && i == 1) {
             u32 parent = upstream(service); printf(" upstream-service=0x%x", parent); if (parent) IOObjectRelease(parent);
+            u32 (*stream_type)(u32) = dlsym(io, "IOAccessoryPortGetStreamType");
+            if (stream_type) printf(" stream-type=%u", stream_type(service));
             CFRef key = str("function-dock_parent");
             CFRef link = IORegistryEntrySearchCFProperty(service, "IOService", key, 0, 3); CFRelease(key);
             printf(" dock-parent-property=%d", link != 0);
@@ -262,7 +344,8 @@ static int iap_inspect(const char *selected, int list_classes) {
 
 int main(int argc, char **argv) {
     alarm(20);
-    if ((argc != 3 && !(argc == 4 && !strcmp(argv[1], "iap-inspect"))) || getuid() != 0 || (strcmp(argv[1], "probe") && strcmp(argv[1], "apply") && strcmp(argv[1], "restore") && strcmp(argv[1], "reconnect") && strcmp(argv[1], "network") && strcmp(argv[1], "apply-destroy") && strcmp(argv[1], "iap-list") && strcmp(argv[1], "iap-wake") && strcmp(argv[1], "iap-inspect") && strcmp(argv[1], "iap-registry") && strcmp(argv[1], "manager-apply") && strcmp(argv[1], "manager-remove"))) return 2;
+    if ((argc != 3 && !(argc == 4 && (!strcmp(argv[1], "iap-inspect") || !strcmp(argv[1], "port-prepare")))) || getuid() != 0 || (strcmp(argv[1], "probe") && strcmp(argv[1], "apply") && strcmp(argv[1], "restore") && strcmp(argv[1], "reconnect") && strcmp(argv[1], "network") && strcmp(argv[1], "apply-destroy") && strcmp(argv[1], "iap-list") && strcmp(argv[1], "iap-wake") && strcmp(argv[1], "iap-inspect") && strcmp(argv[1], "iap-registry") && strcmp(argv[1], "manager-apply") && strcmp(argv[1], "manager-remove") && strcmp(argv[1], "port-prepare"))) return 2;
+    if (!strcmp(argv[1], "port-prepare") && (argc != 4 || (strcmp(argv[3], "1") && strcmp(argv[3], "4") && strcmp(argv[3], "5")))) return 2;
     /* Reject physical controllers before loading any mutating SPI. */
     u32 service = IOServiceGetMatchingService(0, IOServiceMatching("AppleVirtIOUSBDeviceController"));
     if (!service) return 3;
@@ -279,6 +362,7 @@ int main(int argc, char **argv) {
     if (!strcmp(argv[1], "probe")) return dump(original);
     if (!strcmp(argv[1], "network")) return network_probe();
     if (!strcmp(argv[1], "manager-apply") || !strcmp(argv[1], "manager-remove")) return manager_configure(service, !strcmp(argv[1], "manager-remove"));
+    if (!strcmp(argv[1], "port-prepare")) return port_prepare(service, argv[3][0] - '0');
     if (!strcmp(argv[1], "iap-registry")) return iap_registry(service);
     if (!strcmp(argv[1], "iap-inspect")) return iap_inspect(argc == 4 ? argv[3] : "ACCTransportPluginIOAccessoryManager", argc == 3);
     if (!strcmp(argv[1], "iap-wake")) {
@@ -288,7 +372,8 @@ int main(int argc, char **argv) {
         xpc_connection_activate(connection);
         void *message = xpc_dictionary_create(0, 0, 0);
         xpc_connection_send_message(connection, message); xpc_release(message);
-        sleep(10); xpc_connection_cancel(connection); xpc_release(connection); return 0;
+        sleep(10); xpc_connection_cancel(connection); xpc_release(connection);
+        return 0;
     }
     if (!strcmp(argv[1], "iap-list")) {
         if (!dlopen("/System/Library/Frameworks/ExternalAccessory.framework/ExternalAccessory", 2)) return 25;

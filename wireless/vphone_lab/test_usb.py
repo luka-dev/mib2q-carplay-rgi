@@ -87,6 +87,25 @@ class NativeUSBTests(unittest.TestCase):
                 usb._run(action)
                 self.mocks[3].assert_called_with(catalogue=True)
 
+    def test_port_experiment_requires_explicit_reviewed_integer_before_rpc(self):
+        for stream in (None, True, 0, 2, 3, 6, -1, "1"):
+            with self.subTest(stream=stream), self.assertRaises(ValueError):
+                usb._run("port-prepare", stream_type=stream)
+        with self.assertRaises(ValueError):
+            usb._run("iap-inspect", stream_type=1)
+        self.assertEqual(self.calls, [])
+        self.mocks[1].assert_not_called()
+
+    def test_port_experiment_records_literal_type_and_catalogue_privilege(self):
+        for stream in (1, 4, 5):
+            self.calls.clear()
+            result = usb._run("port-prepare", stream_type=stream)
+            self.assertEqual(result["stream_type"], stream)
+            self.mocks[3].assert_called_with(catalogue=True)
+            jobs = [plistlib.loads(p["content"].encode()) for m, p in self.calls
+                    if m == "files.write" and p["path"].endswith(".plist")]
+            self.assertEqual(jobs[0]["ProgramArguments"][-1], str(stream))
+
     def test_native_class_selection_is_a_literal_program_argument(self):
         selected = "ACCTransportIOAccessorySharedManager"
         usb._run("iap-inspect", selected)

@@ -77,12 +77,12 @@ the guest. They never select a physical phone or fall back to Inferno.
 ```mermaid
 flowchart LR
     accTitle: vphone CarPlay Laboratory Migration
-    accDescr: vphone renders native applications and reaches QNX through its original NCM link. The vendor bulk iAP adapter enumerates and accessoryd opens a native manager, but the USB port has no upstream link and authentication remains pending.
+    accDescr: vphone renders native applications and reaches QNX through its original NCM link. The vendor bulk iAP adapter enumerates and accessoryd opens a native manager, the USB port has a native upstream link, and authentication remains pending.
 
     launchpad["Launchpad guest control"] --> ios_guest["iOS guest with Metal"]
     ios_guest --> ethernet_adapter["Owned NCM Ethernet adapter"]
     ethernet_adapter --> qnx_receiver["Native stock210 QNX receiver"]
-    ios_guest -.-> iap_adapter["Vendor bulk iAP adapter; discovery pending"]
+    ios_guest -.-> iap_adapter["Vendor bulk iAP adapter; protocol dispatch pending"]
     iap_adapter -.-> qnx_receiver
     mfi_signer["Public fixture MFi signer"] --> qnx_receiver
     qnx_receiver --> video_capture["Authenticated AVC capture"]
@@ -170,49 +170,103 @@ absent.[^6] The helper verifies the actual manager class, category, parent
 controller and primary port. Repeated application reuses the matching manager.
 No Apple daemon job, authentication result or host security setting is changed.
 
-| Native observation after recovery | Result |
+The platform relationship is now established through the stock resolver. The
+provider merger supplies these runtime values before starting the manager:
+
+| Provider property | Data |
+|---|---|
+| `primary-port-id` | `02 00 00 00` |
+| `AAPL,phandle` | `02 00 01 fe` (`0xFE010002`) |
+| `function-dock_parent` | `02 00 01 fe 50 63 63 61` (phandle + `accP`) |
+
+AppleARMPlatform registers the manager's empty-data marker
+`IOFunctionParentFE010002` from `AAPL,phandle`. Its resolver creates an `IOFunction`
+object for the eight-byte link. `IOAccessoryManager::callPlatformFunction()`
+handles `accP` by returning the manager through its output argument. The helper
+checks the actual marker, types and data before reporting a usable manager.
+The reserved phandle is local to this guest's controller; no DeviceTree image,
+Apple executable or authentication result is edited.
+
+| Native observation after platform setup | Result |
 |---|---|
 | Manager class | `IOAccessoryDockUSB_UFP`, registered and active |
 | Manager category / primary port | `MHI2ResearchAccessoryManager` / `2` |
-| `accessoryd` | Opens the manager's genuine `IOAccessoryManagerUserClient` |
+| Native function-parent marker | Present, empty CFData |
+| `IOAccessoryManagerGetUpstreamService()` on the USB port | Returns the native manager |
 | Manager and USB port in `IOAccessory` plane | Both present |
-| USB port's `IOAccessoryManagerGetUpstreamService()` | `0`, no upstream manager |
-| `function-dock_parent` in port/provider ancestry | Absent |
-| USB port user client | No direct child found |
-| iAP2 detect | Control write succeeds; input read times out |
-| MFi / primary AVC / AltScreen AVC | Not reached |
+| `accessoryd` clients | Genuine manager and USB-port user clients |
+| Default `IOAccessoryPortGetStreamType()` | `0`; no stream metadata published |
+| Native NCM `/info` | HTTP 200, 775 bytes after these changes |
+| iAP2 SYN/ACK / MFi / primary AVC / AltScreen AVC | Not reached |
 
-`iap-registry` uses native matching, plane queries and child iteration. User
-clients can be unregistered; checking only `IOServiceGetMatchingService()` for
-their class can miss an active client. The RPC `device.ioreg` does not implement
-the attempted `class` filter, so it is not used to establish these results.
+`iap-registry` uses matching, plane queries and child iteration. User clients
+can be unregistered; matching only their class can miss an active client. The
+RPC `device.ioreg` does not implement the attempted `class` filter. The helper
+also reports the native stream-type getter and the platform-link data size.
 
 ```mermaid
 flowchart LR
-    accTitle: Native accessory discovery checkpoint
-    accDescr: The scoped provider merger starts a real native accessory manager that accessoryd opens. The USB port is published, but its upstream relationship to the manager is missing and no iAP2 detect response has been received.
+    accTitle: Native accessory platform relationship
+    accDescr: Runtime provider metadata lets Apple's resolver build an IOFunction and locate the native manager. Accessoryd opens the USB port, but protocol selection and native iAP2 authentication remain unverified.
 
-    merger["Native provider property merger"] --> manager["IOAccessoryDockUSB_UFP"]
-    manager --> client["Manager user client in accessoryd"]
-    usb_port["Native IOAccessoryPortUSB"] -.->|"Upstream link missing"| manager
-    usb_port -.->|"No detect response"| iap["Native iAP2 and MFi"]
+    metadata["Provider metadata"] --> manager["IOAccessoryDockUSB_UFP"]
+    metadata --> function["Native IOFunction resolver"]
+    usb_port["IOAccessoryPortUSB"] --> function
+    function --> manager
+    manager --> daemon["accessoryd and native user clients"]
+    daemon -.->|"Protocol dispatch still under test"| iap["iAP2, MFi and CarPlay video"]
 ```
 
-The userland upstream lookup follows registry ancestry. The kernel transport
-searches provider ancestry for the `function-dock_parent` platform link using
-AppleARMPlatform's resolver (`0xfffffe0007b25980` in the pinned kernel), then caches
-its result. Publishing a sibling manager does not supply this platform link.
-Recreating the USB interface after
-manager creation did not solve it. A direct RAM write to the transport's cached
-manager field made USB reconfiguration and RPC time out; the VM subsequently
-stopped during debugger recovery. A normal official debug launch restored RPC
-and the unmodified USB defaults. This field write is excluded from the recipe.
+The previous direct RAM write put a manager pointer into a field that actually
+holds an `IOFunction` object. USB reconfiguration and RPC timed out; the VM
+stopped during debugger recovery. This pointer shortcut is excluded. The stock
+platform-function construction above replaces it and survived fresh starts.
+Guest `Z0` software breakpoints were observed at native handlers; accepted `Z1`
+requests did not yield the expected stop and were not used as negative evidence.
 
-The remaining work is the native `function-dock_parent` relationship and
-connection-event path, followed by detect, SYN/ACK and genuine MFi acceptance. Guest software
-breakpoints (`Z0`) were observed at the native control-request and catalogue
-handlers. Accepted `Z1` requests did not yield the expected stop; absence of such
-a stop was not treated as proof that a function was not called.
+### Stream metadata and protocol experiments
+
+The native port plugin selects its endpoint protocol using
+`IOAccessoryPortStreamType`, not just `IOAccessoryTransportType`. The getter
+returns zero when that property is absent. An explicit `port-prepare` experiment
+uses a scoped native property merger on the already-owned USB port. It requires
+an exact native upstream-manager match, refuses conflicting existing metadata,
+and never assigns an authentication status. Choosing a type proves only that
+metadata was published, not that iAP2 accepted it.
+
+| Experimental stream type | Native endpoint protocol branch | Measured result |
+|---|---|---|
+| `1` | `10` | No detect echo; investigated legacy `iapd` separately |
+| `4` | `15` | Genuine input report containing `01 30 23 ...`; not the expected iAP2 detect marker |
+| `5` | `16` | Genuine input report `01 00 19 01 00 00`; not the expected iAP2 detect marker |
+
+There is no default stream choice. Reboot between different values, recreate
+the platform/USB setup, then use `port-prepare --stream-type 1|4|5 --experimental`.
+The daemon caches this metadata when creating a port object; merely observing
+an updated registry value is insufficient to prove it re-read the property.
+A scoped `TERM` of the verified `accessoryd` process followed by native XPC
+activation recreated its port objects during the experiments. `services.stop`
+was refused by launchd with status 144; no system launchd plist was altered.
+
+Vendor capability request `0x53` returned `01 00 00 00`. The matching `0x51`
+role request returned a USB pipe error and is not part of a working recipe.
+Both the original NCM link and the vendor bulk interface stayed usable.
+
+Legacy `iapd` was tested through its own declared XPC service and exited with
+`SIGABRT` on the Now Playing queue. A separate bounded diagnostic launch captured
+`SQLITE_AUTH` (23) while Core Data accessed
+`/var/mobile/Media/Radio/Radio.db`. Unlocking the guest and initializing the
+native `RadioModel` as `mobile` did not repair that daemon. A diagnostic
+`DYLD_INSERT_LIBRARIES` constructor was not observed in the signed program; its
+job and guest dylib were removed. `iap-wake` therefore continues to activate
+only `accessoryd` through `com.apple.iap2d.xpc` and does not repeatedly start a
+crashing legacy service. This Radio database is Apple media state, not a
+measurement of a Wi-Fi radio.
+
+Next: identify the native protocol dispatch needed for iAP2 and resolve any
+required daemon startup dependency, then validate detect, SYN/ACK and real MFi
+acceptance before requesting video. No captured packet above is an authenticated
+CarPlay frame.
 
 For the RAM adapter, run the official debug launch in one terminal:
 
@@ -224,6 +278,7 @@ scripts/carplay_lab.sh debug-start
 Then operate the owned guest from another terminal:
 
 ```sh
+scripts/carplay_lab.sh unlock
 scripts/carplay_lab.sh usb-kernel --apply
 scripts/carplay_lab.sh usb manager-apply --experimental
 scripts/carplay_lab.sh usb apply --experimental
@@ -241,7 +296,7 @@ controller and chosen chip `FE01`. Live USB changes remain opt-in; ordinary
 startup never applies them. Reports, native descriptors, debugger evidence and
 pristine reference extraction stay ignored under `build/vphone-lab/`.
 
-The manager and its provider property are runtime-only and disappear at VM
+The manager and its provider properties are runtime-only and disappear at VM
 restart. `manager-remove --experimental` removes only the helper's inactive
 catalogue descriptions; it refuses to imply removal of a live manager. Stop and
 restart the VM to remove an active manager and reset provider properties. Native
@@ -313,7 +368,7 @@ existing operation rather than starting another restore.[^5]
 
 ## 🧪 Shared receiver and evidence tools
 
-Migration validation passed 45 guest/bootstrap/transport tests and the 88 retained
+Migration validation passed 47 guest/bootstrap/transport tests and the 88 retained
 laboratory regression tests. A fresh QNX build, native `/info` and the shared
 signer's loopback response were checked. These results establish the migrated
 tools; they do not establish a vphone sender session.
