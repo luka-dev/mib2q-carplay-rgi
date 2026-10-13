@@ -20,6 +20,8 @@ case "$action" in
         exec build/vphone-lab/venv/bin/python -m wireless.vphone_lab.mfi_probe "$@" ;;
     ethernet)
         exec python3 -m wireless.vphone_lab.ethernet "$@" ;;
+    queue-report)
+        exec python3 -m wireless.vphone_lab.bridge_queues "$@" ;;
     moving-route)
         exec python3 -m wireless.vphone_lab.moving_route "$@" ;;
     input)

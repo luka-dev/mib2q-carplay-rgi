@@ -83,6 +83,21 @@ class ScreenWireTests(unittest.TestCase):
             self.assertEqual(result["screen_access_units"]["events"], count)
             self.assertEqual(result["unparsed_contiguous_bytes"], 0)
 
+    def test_reset_window_is_not_classified_as_receive_buffer_backpressure(self):
+        def reply(window,flags):
+            data=bytearray(frame(20,flags=flags))
+            data[22:54]=bytes(range(16,32))+bytes(range(16))
+            struct.pack_into('>HH',data,54,6030,49152)
+            struct.pack_into('>H',data,68,window)
+            return bytes(data)
+        result=report(pcap([(0,frame(100,flags=2)),(10,frame(101,picture())),
+                           (20,reply(40000,16)),(30,reply(0,4)),(40,reply(0,16))]))['connections'][0]
+        windows=result['receiver_advertised_window']
+        self.assertEqual(windows['samples'],2)
+        self.assertEqual(windows['zero_window_samples'],1)
+        self.assertEqual(windows['resets'],1)
+        self.assertEqual(windows['raw_max'],40000)
+
     def test_window_filters_picture_pairs_after_tcp_reassembly(self):
         a=picture()
         data=pcap([(0,frame(100,flags=2)),(10,frame(101,a)),(40,frame(101+len(a),a)),(80,frame(101+2*len(a),a))])

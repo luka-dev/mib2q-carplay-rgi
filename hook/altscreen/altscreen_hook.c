@@ -748,6 +748,18 @@ static int env_on(const char *name)
  * CopyDisplaysInfo ignores its session argument and asks stock ScreenCopyMain,
  * so this is the earliest safe point to prove that the negotiated contract can
  * actually be fulfilled. */
+/* Explicit QNX laboratory mode: capture the native stream without pretending
+ * that the absent hardware renderer presented it. Production has no such mode. */
+static int alt_qemu_capture_only(void)
+{
+#ifdef MHI2Q_WIRELESS_ALT_QEMU
+    const char *value = getenv("MHI2Q_CP_QEMU_CAPTURE_ONLY");
+    return value && !strcmp(value,"1");
+#else
+    return 0;
+#endif
+}
+
 static int g_forward_available = 1; /* module init clears this on worker failure */
 static int alt_wireless_blocked(void)
 {
@@ -1460,7 +1472,7 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
             }
             frame_valid=alt_avcc_prepare(body,bodySize,ls,ls==4,&prepared)==0;
             is_idr=frame_valid && prepared.idr;
-            if(!frame_valid){altav_note_input_loss(av_gen);renderer_wait_idr=1;alt_request_cluster_idr(av_gen,"invalid-AU");}
+            if(!frame_valid){if(!alt_qemu_capture_only())altav_note_input_loss(av_gen);renderer_wait_idr=1;alt_request_cluster_idr(av_gen,"invalid-AU");}
             /* Re-check ownership here: the header/body read above can block in poll for
              * up to 500 ms, during which a reconnect may have superseded us.  The control
              * commands below target g_alt_session and must never run for a stale stream. */
@@ -1484,7 +1496,7 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
                 alt_kick_viewarea(av_gen);
             }
 
-            if (altav_take_failure(av_gen)) {
+            if (!alt_qemu_capture_only() && altav_take_failure(av_gen)) {
                 renderer_wait_idr = 1;
 
             }
@@ -1504,7 +1516,7 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
              * P-frames until iOS answers the cluster-targeted keyframe request.
              * The first IDR then reconnects, replays cached SPS/PPS, and opens
              * decoding with a valid random-access picture. */
-            if (frame_valid && !renderer_wait_idr) {
+            if (frame_valid && !renderer_wait_idr && !alt_qemu_capture_only()) {
                 int forward_rc = altav_enqueue_owned(av_gen, &body, &bodycap, &prepared, &frame_meta);
 #if ENABLE_LOGGING || ENABLE_ALTSCREEN_PACE_TRACE
                 pace_forwarded = forward_rc >= 0;
@@ -1519,7 +1531,7 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
                     LOG_INFO(LOG_MODULE,
                              "alt recv: renderer connected on IDR-safe access unit");
                 }
-            } else if ((nframes & 0x7f) == 0) {
+            } else if (!alt_qemu_capture_only() && (nframes & 0x7f) == 0) {
                 LOG_INFO(LOG_MODULE,
                          "alt recv: dropping frame pending fresh IDR (frame#%lu body=%u)",
                          nframes, bodySize);
@@ -2565,6 +2577,7 @@ done:
 
 static int alt_request_cluster_idr(uint32_t gen,const char *reason)
 {
+    if (alt_qemu_capture_only()) return alt_send_cluster_idr_raw(gen, reason);
     unsigned kind=ALT_KEYFRAME_RECOVERY;
     if(reason && !strcmp(reason,"stream-start"))kind=ALT_KEYFRAME_START;
     else if(reason && !strcmp(reason,"showUI-accepted"))kind=ALT_KEYFRAME_UI;
@@ -2693,7 +2706,7 @@ static void rgi_on_cmd(uint16_t type, uint8_t flags, const uint8_t *payload, uin
 static void alt_forward_failed(uint32_t gen, void *context)
 {
     (void)context;
-    alt_send_cluster_idr_raw(gen, "coordinated-recovery");
+    if (!alt_qemu_capture_only()) alt_send_cluster_idr_raw(gen, "coordinated-recovery");
 }
 
 static void altscreen_init(void)

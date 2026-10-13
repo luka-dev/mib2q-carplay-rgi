@@ -5,7 +5,7 @@ import struct
 import random
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 from wireless.vphone_lab import ethernet, usb
 
@@ -21,6 +21,28 @@ class EthernetTests(unittest.TestCase):
                      "IORegistryEntryLocation": "2", "IORegistryEntryChildren": [{"IOObjectClass": "AppleUSBNCMData",
                          "IORegistryEntryChildren": [{"IOObjectClass": "IOEthernetInterface",
                              "IORegistryEntryName": "en22", "IORegistryEntryID": 20}]}]}]}]
+
+    def test_capture_configures_immediate_mode_before_activation_and_closes_on_error(self):
+        library=MagicMock()
+        library.pcap_create.return_value=123
+        library.pcap_set_snaplen.return_value=0
+        library.pcap_set_promisc.return_value=0
+        library.pcap_set_timeout.return_value=0
+        library.pcap_set_immediate_mode.return_value=0
+        library.pcap_activate.return_value=0
+        library.pcap_datalink.return_value=1
+        library.pcap_setdirection.return_value=0
+        library.pcap_setnonblock.return_value=0
+        library.pcap_get_selectable_fd.return_value=9
+        with patch.object(ethernet.c,'CDLL',return_value=library):
+            capture=ethernet.Capture('en22')
+            library.pcap_set_immediate_mode.assert_called_once_with(123,1)
+            methods=[call[0] for call in library.mock_calls]
+            self.assertLess(methods.index('pcap_set_immediate_mode'),methods.index('pcap_activate'))
+            capture.close()
+            library.pcap_set_immediate_mode.return_value=-1
+            with self.assertRaises(RuntimeError):ethernet.Capture('en22')
+            self.assertEqual(library.pcap_close.call_count,2)
 
     def test_owned_primary_selected_despite_other_devices_and_auxiliary(self):
         tree = self.tree()

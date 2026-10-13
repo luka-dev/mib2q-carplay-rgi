@@ -11,6 +11,20 @@
 #define MHI2Q_CAPTURE_VIDEO_MEMORY_QEMU 1
 #include "qnx_input_probe.h"
 
+static pthread_mutex_t blocked_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t blocked_cond = PTHREAD_COND_INITIALIZER;
+static int blocked_started, unblock, releases;
+static int blocked_force(void *session, void *completion, void *context)
+{
+    (void)session; (void)completion; (void)context;
+    pthread_mutex_lock(&blocked_lock);
+    blocked_started = 1; pthread_cond_signal(&blocked_cond);
+    while (!unblock) pthread_cond_wait(&blocked_cond, &blocked_lock);
+    pthread_mutex_unlock(&blocked_lock);
+    return 0;
+}
+static void fake_release(const void *session) { (void)session; releases++; }
+
 int main(void)
 {
     const uint8_t cfg[] = {0,0,0,1,0x67,1,0,0,0,1,0x68,2};
@@ -75,6 +89,29 @@ int main(void)
         assert(ntohl(count) == 1);
         assert(recv(fd[1],stamp,sizeof(stamp),MSG_WAITALL) == sizeof(stamp));
         for (i=0;i<8;i++) assert(stamp[i] == i+1);
+        close(fd[0]); close(fd[1]);
+    }
+    {
+        struct lab_force_context *context = malloc(sizeof(*context));
+        pthread_t worker;
+        int fd[2]; uint8_t clocks[56]; uint64_t generation;
+        assert(context);
+        context->session = (void *)1; context->channel = 0;
+        context->force = blocked_force; context->release = fake_release;
+        lab_force_active = 1;
+        assert(!pthread_create(&worker,NULL,lab_avc_force_worker,context));
+        pthread_mutex_lock(&blocked_lock);
+        while (!blocked_started) pthread_cond_wait(&blocked_cond,&blocked_lock);
+        pthread_mutex_unlock(&blocked_lock);
+        assert(!socketpair(AF_UNIX,SOCK_STREAM,0,fd));
+        lab_clock_snapshot(fd[0]);
+        assert(recv(fd[1],clocks,sizeof(clocks),MSG_WAITALL) == sizeof(clocks));
+        assert(lab_avc_refresh(0,&generation) != 0); /* No second in-flight job. */
+        pthread_mutex_lock(&blocked_lock);
+        unblock = 1; pthread_cond_signal(&blocked_cond);
+        pthread_mutex_unlock(&blocked_lock);
+        assert(!pthread_join(worker,NULL));
+        assert(!lab_force_active && !lab_force_result && releases == 1);
         close(fd[0]); close(fd[1]);
     }
     puts("AVC memory: IDR reset, configuration, channels, bounds and 10000 fuzz inputs OK");

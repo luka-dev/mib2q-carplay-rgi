@@ -15,6 +15,7 @@ import subprocess
 import time
 
 from . import lab
+from .bridge_queues import Journal
 from wireless.lab_common import qnx_receiver
 
 MAX_FRAME = 2048
@@ -74,11 +75,20 @@ class Header(c.Structure):
     _fields_ = [("timestamp", Timeval), ("captured", c.c_uint32), ("length", c.c_uint32)]
 
 
+class CaptureStats(c.Structure):
+    _fields_=[('received',c.c_uint32),('dropped',c.c_uint32),('interface_dropped',c.c_uint32)]
+
+
 class Capture:
-    def __init__(self, interface: str):
+    def __init__(self, interface: str, immediate: bool = True):
         self.lib = c.CDLL("/usr/lib/libpcap.A.dylib")
         signatures = {
-            "pcap_open_live": (c.c_void_p, [c.c_char_p, c.c_int, c.c_int, c.c_int, c.c_char_p]),
+            "pcap_create": (c.c_void_p, [c.c_char_p, c.c_char_p]),
+            "pcap_set_snaplen": (c.c_int, [c.c_void_p, c.c_int]),
+            "pcap_set_promisc": (c.c_int, [c.c_void_p, c.c_int]),
+            "pcap_set_timeout": (c.c_int, [c.c_void_p, c.c_int]),
+            "pcap_set_immediate_mode": (c.c_int, [c.c_void_p, c.c_int]),
+            "pcap_activate": (c.c_int, [c.c_void_p]),
             "pcap_setdirection": (c.c_int, [c.c_void_p, c.c_int]),
             "pcap_setnonblock": (c.c_int, [c.c_void_p, c.c_int, c.c_char_p]),
             "pcap_get_selectable_fd": (c.c_int, [c.c_void_p]),
@@ -87,14 +97,19 @@ class Capture:
             "pcap_inject": (c.c_int, [c.c_void_p, c.c_void_p, c.c_size_t]),
             "pcap_geterr": (c.c_char_p, [c.c_void_p]),
             "pcap_close": (None, [c.c_void_p]),
+            "pcap_stats": (c.c_int,[c.c_void_p,c.POINTER(CaptureStats)]),
         }
         for name, (returns, args) in signatures.items():
             function = getattr(self.lib, name); function.restype = returns; function.argtypes = args
         error = c.create_string_buffer(256)
-        self.handle = self.lib.pcap_open_live(interface.encode(), MAX_FRAME, 0, 50, error)
+        self.handle = self.lib.pcap_create(interface.encode(), error)
         if not self.handle:
             raise RuntimeError(error.value.decode())
         try:
+            for name,value in [('pcap_set_snaplen',MAX_FRAME),('pcap_set_promisc',0),
+                               ('pcap_set_timeout',50),('pcap_set_immediate_mode',int(immediate))]:
+                if getattr(self.lib,name)(self.handle,value): raise RuntimeError('cannot configure owned BPF capture')
+            if self.lib.pcap_activate(self.handle)<0: raise RuntimeError('cannot activate owned BPF capture')
             if self.lib.pcap_datalink(self.handle) != 1:
                 raise RuntimeError("owned NCM capture is not Ethernet")
             # Do not reflect frames injected from QNX back into its socket.
@@ -124,12 +139,18 @@ class Capture:
         if self.lib.pcap_inject(self.handle, frame, len(frame)) != len(frame):
             raise RuntimeError("short NCM injection")
 
+    def statistics(self):
+        stats=CaptureStats()
+        if self.lib.pcap_stats(self.handle,c.byref(stats)):
+            return {'available':False}
+        return {'available':True,**{name:getattr(stats,name) for name,_ in stats._fields_}}
+
     def close(self):
         if self.handle:
             self.lib.pcap_close(self.handle); self.handle = None
 
 
-def _run(seconds: int, channel: str = "primary") -> dict:
+def _run(seconds: int, channel: str = "primary", trace_queues: bool = False, buffered_capture: bool = False) -> dict:
     if type(seconds) is not int or not 1 <= seconds <= 120 or channel not in ("primary", "auxiliary"):
         raise ValueError("bounded link duration is 1..120 seconds")
     # Root is needed for BPF only. No Launchpad command is run as root.
@@ -143,48 +164,68 @@ def _run(seconds: int, channel: str = "primary") -> dict:
     pid = qnx_receiver.running()
     if not pid or (qnx_receiver.OUT / "transport.txt").read_text().strip() != "socket":
         raise RuntimeError("owned QNX socket receiver must already be running")
-    capture = Capture(owned["interface"])
+    capture = Capture(owned["interface"], immediate=not buffered_capture)
+    journal = None
     started = time.monotonic()
     result = {**owned, "qnx_pid": pid, "rx_frames": 0, "tx_frames": 0, "seconds": seconds,
-              "complete": False, "pcap_clock": "host realtime"}
+              "complete": False, "pcap_clock": "host realtime",
+              "capture_immediate": not buffered_capture, "socket_nodelay": True, "trace_queues": trace_queues}
     buffer = bytearray()
     try:
         with socket.create_connection(("127.0.0.1", 32501), timeout=2) as peer, \
                 open(os.open(lab.OUT / "ethernet.pcap", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "wb") as pcap:
+            peer.setsockopt(socket.IPPROTO_TCP,socket.TCP_NODELAY,1)
+            if trace_queues:
+                journal=Journal(lab.OUT / 'bridge-queues.jsonl',{'qnx_pid':pid,'interface':owned['interface'],
+                    'capture_immediate':not buffered_capture,'socket_nodelay':True,'clock':'host monotonic; capture age uses host realtime'})
             os.chmod(lab.OUT / "ethernet.pcap", 0o600)
             pcap.write(struct.pack("<IHHIIII", 0xA1B2C3D4, 2, 4, 0, 0, MAX_FRAME, 1))
             def record(frame, stamp, direction):
                 pcap.write(struct.pack("<IIII", int(stamp), int((stamp % 1) * 1e6), len(frame), len(frame)) + frame)
-                pcap.flush(); result[direction + "_frames"] += 1
+                result[direction + "_frames"] += 1
             print(json.dumps({"ethernet_ready": True, **owned}), flush=True)
             end = time.monotonic() + seconds
             check = time.monotonic() + 5
-            buffered_capture = False
+            drain_capture = False
             while time.monotonic() < end:
                 if time.monotonic() >= check:
+                    check_started = time.monotonic_ns()
                     if discovery(recorded["udid"], channel) != owned or qnx_receiver.running() != pid:
                         raise RuntimeError("owned endpoints changed during capture")
+                    if journal: journal.check(check_started,time.monotonic_ns())
+                    pcap.flush()
                     print(json.dumps(result), flush=True); check = time.monotonic() + 5
-                ready = select.select([capture.fd, peer], [], [], 0 if buffered_capture else .1)[0]
-                if capture.fd in ready or buffered_capture:
-                    buffered_capture = False
+                ready = select.select([capture.fd, peer], [], [], 0 if drain_capture else .1)[0]
+                if capture.fd in ready or drain_capture:
+                    drain_capture = False
                     for _ in range(64):
                         item = capture.receive()
                         if item is None or time.monotonic() >= end:
                             break
                         stamp, frame = item
-                        peer.sendall(struct.pack(">I", len(frame)) + frame); record(frame, stamp, "rx")
+                        read_ns,wall_ns=time.monotonic_ns(),time.time_ns()
+                        encoded=struct.pack(">I",len(frame))+frame
+                        send_started=time.monotonic_ns()
+                        peer.sendall(encoded)
+                        send_ended=time.monotonic_ns()
+                        if journal: journal.packet('rx',frame,round(stamp*1e9),wall_ns,read_ns,send_started,send_ended)
+                        record(frame, stamp, "rx")
                     else:
                         # libpcap can have buffered packets after the BPF fd
                         # stops being readable. Drain them without a wait.
-                        buffered_capture = True
+                        drain_capture = True
                 if peer in ready:
                     part = peer.recv(8192)
                     if not part:
                         raise EOFError("owned QNX Ethernet socket closed")
+                    read_ns,wall_ns=time.monotonic_ns(),time.time_ns()
                     buffer.extend(part)
                     for frame in frames(buffer):
-                        capture.send(frame); record(frame, time.time(), "tx")
+                        send_started=time.monotonic_ns()
+                        capture.send(frame)
+                        send_ended=time.monotonic_ns()
+                        if journal: journal.packet('tx',frame,wall_ns,wall_ns,read_ns,send_started,send_ended)
+                        record(frame, time.time(), "tx")
             if buffer:
                 raise ValueError("incomplete QNX frame at capture deadline")
             result["complete"] = True
@@ -192,27 +233,33 @@ def _run(seconds: int, channel: str = "primary") -> dict:
         result["error"] = type(error).__name__ + ": " + str(error)
         raise
     finally:
-        capture.close()
+        result['bpf_statistics']=capture.statistics()
+        try:
+            if journal: journal.close(result["complete"])
+        finally:
+            capture.close()
         result["elapsed_seconds"] = time.monotonic() - started
         lab.save("ethernet.json", result)
         # Leave artifacts usable by the invoking workspace owner after sudo.
         if os.geteuid() == 0 and os.environ.get("SUDO_UID") and os.environ.get("SUDO_GID"):
-            for name in ("ethernet.json", "ethernet.pcap"):
+            for name in ("ethernet.json", "ethernet.pcap", "bridge-queues.jsonl"):
                 file = lab.OUT / name
                 if file.exists():
                     os.chown(file, int(os.environ["SUDO_UID"]), int(os.environ["SUDO_GID"]))
     return result
 
 
-def run(seconds: int, channel: str = "primary") -> dict:
+def run(seconds: int, channel: str = "primary", trace_queues: bool = False, buffered_capture: bool = False) -> dict:
     with open(os.open(lab.OUT / ".ethernet.lock", os.O_RDWR | os.O_CREAT, 0o600), "r+") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        return _run(seconds, channel)
+        return _run(seconds, channel, trace_queues, buffered_capture)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--seconds", type=int, default=30)
+    parser.add_argument("--trace-queues",action="store_true")
+    parser.add_argument("--buffered-capture",action="store_true",help="retain 50ms BPF buffering for comparison")
     parser.add_argument("--inspect", action="store_true")
     parser.add_argument("--channel", choices=("primary", "auxiliary"), default="primary")
     args = parser.parse_args()
@@ -220,4 +267,4 @@ if __name__ == "__main__":
         machine = lab.require_machine(lab.profile(), "running")
         print(json.dumps(discovery(machine["udid"], args.channel), indent=2))
     else:
-        print(json.dumps(run(args.seconds, args.channel), indent=2))
+        print(json.dumps(run(args.seconds, args.channel, args.trace_queues, args.buffered_capture), indent=2))

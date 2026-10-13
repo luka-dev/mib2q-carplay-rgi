@@ -95,6 +95,41 @@ def timing(channel: str) -> dict:
     return result
 
 
+def clock(samples: int = 6, interval: float = 1.0) -> dict:
+    if type(samples) is not int or not 2 <= samples <= 20 or not .1 <= interval <= 2:
+        raise ValueError("clock sample bounds: 2..20 samples, 0.1..2 seconds apart")
+    pid = receiver()
+    result = {"qnx_pid": pid, "samples": []}
+    for i in range(samples):
+        with socket.create_connection(("127.0.0.1",32503),timeout=3) as peer:
+            peer.settimeout(3)
+            before = time.monotonic_ns()
+            peer.sendall(b"MCL"+bytes(4))
+            values = struct.unpack(">QQQQQqQ", receive(peer,56))
+            after = time.monotonic_ns()
+        result["samples"].append(dict(zip(
+            ("mono_ns","real_ns","cycles","declared_cycles_hz","timer_rate","timer_scale","nsec_inc"),values),
+            host_before_ns=before, host_after_ns=after))
+        if i+1 < samples: time.sleep(interval)
+    a,b=result["samples"][0],result["samples"][-1]
+    host = ((b["host_before_ns"]+b["host_after_ns"])-(a["host_before_ns"]+a["host_after_ns"]))/2
+    if host <= 0 or b["mono_ns"] <= a["mono_ns"]:
+        raise ValueError("clock sampling did not advance")
+    result["guest_to_host_rate"] = (b["mono_ns"]-a["mono_ns"])/host
+    minimum = b["host_before_ns"]-a["host_after_ns"]
+    maximum = b["host_after_ns"]-a["host_before_ns"]
+    elapsed = b["mono_ns"]-a["mono_ns"]
+    lower, upper = elapsed/maximum, elapsed/minimum if minimum > 0 else None
+    result["rate_bounds"] = {"lower":lower,"upper":upper}
+    result["rate_estimate_reliable"] = upper is not None and (upper-lower)/result["guest_to_host_rate"] <= .1
+    result["cycles_hz_observed"] = (b["cycles"]-a["cycles"])*1e9/host
+    result["max_roundtrip_ms"] = max((s["host_after_ns"]-s["host_before_ns"])/1e6 for s in result["samples"])
+    result["limitations"] = ["rate measured at bracket midpoints; asymmetric RPC delay affects estimate",
+                             "clock offsets are bounded by host request/response, not exactly synchronized"]
+    lab.save("qnx-clock.json",result)
+    return result
+
+
 def tap(x: int, y: int) -> dict:
     packet = request(x, y)
     pid = receiver()
@@ -123,5 +158,8 @@ if __name__ == "__main__":
     memory.add_argument("--fresh", action="store_true")
     timing_parser = sub.add_parser("timing")
     timing_parser.add_argument("channel", choices=["primary", "cluster"])
+    clock_parser = sub.add_parser("clock")
+    clock_parser.add_argument("--samples", type=int, default=6)
+    clock_parser.add_argument("--interval", type=float, default=1)
     args = parser.parse_args()
-    print(json.dumps(tap(args.x, args.y) if args.action == "tap" else timing(args.channel) if args.action == "timing" else snapshot(args.channel, args.output, args.fresh)))
+    print(json.dumps(clock(args.samples,args.interval) if args.action == "clock" else tap(args.x, args.y) if args.action == "tap" else timing(args.channel) if args.action == "timing" else snapshot(args.channel, args.output, args.fresh)))

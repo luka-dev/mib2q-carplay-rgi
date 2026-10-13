@@ -80,12 +80,26 @@ def report(data: bytes, port: int = 6030, window: tuple[float, float] | None = N
         raise ValueError("invalid receiver screen port")
     if window is not None and (len(window) != 2 or any(not math.isfinite(v) for v in window) or window[0] >= window[1]):
         raise ValueError("capture window must be finite and increasing")
-    flows = {}
+    flows, receiver_windows = {}, {}
     for stamp, frame in packets(data):
         item = tcp(frame)
         if not item:
             continue
         flow, seq, flags, payload = item
+        if flow[2] == port:
+            reverse = (flow[1],flow[0],flow[3],flow[2])
+            if reverse not in receiver_windows:
+                if len(receiver_windows) >= 8: raise ValueError("too many receiver ACK flows")
+                receiver_windows[reverse] = {"samples":0,"zero_window_samples":0,"raw_min":None,"raw_max":None,"resets":0}
+            windows = receiver_windows[reverse]
+            if flags & 4: windows["resets"] += 1
+            elif flags & 16 and not flags & 3:
+                offset = 14+(40 if frame[12:14] == b"\x86\xdd" else (frame[14]&15)*4)
+                raw = int.from_bytes(frame[offset+14:offset+16], "big")
+                windows["samples"] += 1
+                windows["zero_window_samples"] += raw == 0
+                windows["raw_min"] = raw if windows["raw_min"] is None else min(raw,windows["raw_min"])
+                windows["raw_max"] = raw if windows["raw_max"] is None else max(raw,windows["raw_max"])
         if flow[3] != port:
             continue
         if flow not in flows:
@@ -110,7 +124,7 @@ def report(data: bytes, port: int = 6030, window: tuple[float, float] | None = N
             state["segments"].append((seq, payload, stamp))
     results = []
     allocated = 0
-    for state in flows.values():
+    for flow, state in flows.items():
         if not state["segments"]:
             continue
         if state["origin"] is None:
@@ -188,6 +202,7 @@ def report(data: bytes, port: int = 6030, window: tuple[float, float] | None = N
                         "sender_timestamp_intervals": intervals(sender_ms) if sender_valid else None,
                         "long_gaps": gaps,
                         "sender_clock": "screen params[0], NTP 32.32; relative intervals only",
+                        "receiver_advertised_window": receiver_windows.get(flow),
                         "repeated_tcp_payload_bytes": repeated,
                         "unparsed_contiguous_bytes": contiguous-at,
                         "unparsed_first_capture_ms": arrival_times[first_arrival[at]-1] if contiguous > at else None,
@@ -196,6 +211,7 @@ def report(data: bytes, port: int = 6030, window: tuple[float, float] | None = N
     return {"connections": results, "capture_window_ms": window, "clock": "companion PCAP capture clock",
             "limitations": ["no cryptographic keys or decrypted video used",
                 "TCP repeats and capture gaps do not establish network packet loss",
+                "receiver window values are unscaled TCP header values; RST is not a zero-window advertisement",
                 "sender timestamps are presentation targets, not render or encoder completion times",
                 "transit deltas compare clock intervals; absolute latency and clock offset unknown",
                 "NCM Ethernet is not a 2.4 GHz RF measurement",

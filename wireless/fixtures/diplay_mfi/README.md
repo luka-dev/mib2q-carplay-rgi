@@ -65,6 +65,11 @@ IDR requests now refresh capped RAM captures, with a UUID-targeted cluster comma
 Turn-by-turn navigation remains unverified. See the
 [vphone runbook](../../../docs/wireless-carplay/VPHONE_LAB.md).
 
+The subsequent [clock/queue report](../../../docs/wireless-carplay/VPHONE_TIMING.md)
+records the guarded QNX timer correction, immediate BPF measurements and an
+explicit capture-only stream111 profile. Both native streams still decode;
+physical presentation and sustained 30 fps remain unverified.
+
 ## 🧪 Integration status
 
 This directory stores an experimental fixture. The host `TestSoftwareMfi`

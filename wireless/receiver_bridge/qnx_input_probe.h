@@ -3,6 +3,10 @@
 #include <time.h>
 #include <sys/select.h>
 #include <stdlib.h>
+#ifdef __QNXNTO__
+#include <sys/neutrino.h>
+#include <sys/syspage.h>
+#endif
 static void *lab_touch_device;
 static int (*lab_touch_post)(void *, const void *, size_t);
 #ifdef MHI2Q_CAPTURE_VIDEO_MEMORY_QEMU
@@ -58,19 +62,57 @@ static int lab_avc_force_cluster(void *session)
     return result;
 }
 
+/* A native control call can block during teardown. Permit only one detached
+ * call; the input/clock endpoint still times out and remains usable. */
+static int lab_force_active, lab_force_result;
+struct lab_force_context {
+    void *session;
+    unsigned channel;
+    int (*force)(void *, void *, void *);
+    void (*release)(const void *);
+};
+static void *lab_avc_force_worker(void *argument)
+{
+    struct lab_force_context *context = argument;
+    int result = context->channel ? lab_avc_force_cluster(context->session) :
+        context->force(context->session, NULL, NULL);
+    context->release(context->session);
+    free(context);
+    pthread_mutex_lock(&lab_avc_lock);
+    lab_force_result = result; lab_force_active = 0;
+    pthread_mutex_unlock(&lab_avc_lock);
+    return NULL;
+}
+
 /* Explicit diagnostics only: never request periodic IDRs during pacing. */
 static int lab_avc_refresh(unsigned channel, uint64_t *generation)
 {
     int (*force)(void *, void *, void *) = dlsym(RTLD_NEXT, "AirPlayReceiverSessionForceKeyFrame");
     void *(*retain)(const void *) = dlsym(RTLD_NEXT, "CFRetain");
     void (*release)(const void *) = dlsym(RTLD_NEXT, "CFRelease");
-    void *session = NULL;
+    struct lab_force_context *context = NULL;
+    pthread_t thread;
     int result = -6705;
     pthread_mutex_lock(&lab_avc_lock);
     *generation = lab_avc[channel].generation;
-    if (lab_avc_session && force && retain && release) session = retain(lab_avc_session);
+    if (!lab_force_active && lab_avc_session && force && retain && release) {
+        context = malloc(sizeof(*context));
+        if (context) {
+            context->session = retain(lab_avc_session);
+            context->channel = channel; context->force = force; context->release = release;
+            lab_force_active = 1; lab_force_result = -6705;
+        }
+    }
     pthread_mutex_unlock(&lab_avc_lock);
-    if (session) { result = channel ? lab_avc_force_cluster(session) : force(session, NULL, NULL); release(session); }
+    if (!context) return result;
+    result = pthread_create(&thread, NULL, lab_avc_force_worker, context);
+    if (!result) pthread_detach(thread);
+    else {
+        release(context->session); free(context);
+        pthread_mutex_lock(&lab_avc_lock);
+        lab_force_active = 0;
+        pthread_mutex_unlock(&lab_avc_lock);
+    }
     return result;
 }
 
@@ -123,12 +165,18 @@ static void lab_avc_snapshot(int fd, unsigned channel, int fresh)
     uint64_t generation = 0;
     int ready = !fresh;
     unsigned attempt;
+    struct timespec start, now;
+    uint64_t deadline = 0;
+    if (!clock_gettime(CLOCK_MONOTONIC, &start))
+        deadline = (uint64_t)start.tv_sec*1000000000ULL + start.tv_nsec + 2000000000ULL;
     if (fresh && !lab_avc_refresh(channel, &generation)) {
-        for (attempt = 0; attempt < 500; attempt++) {
+        for (attempt = 0; attempt < 250; attempt++) {
             pthread_mutex_lock(&lab_avc_lock);
-            ready = lab_avc[channel].generation > generation && lab_avc[channel].collecting && lab_avc[channel].length;
+            ready = !lab_force_active && !lab_force_result && lab_avc[channel].generation > generation && lab_avc[channel].collecting && lab_avc[channel].length;
             pthread_mutex_unlock(&lab_avc_lock);
             if (ready) break;
+            if (deadline && !clock_gettime(CLOCK_MONOTONIC, &now) &&
+                (uint64_t)now.tv_sec*1000000000ULL + now.tv_nsec >= deadline) break;
             usleep(10000);
         }
     }
@@ -179,6 +227,35 @@ static void lab_avc_timing(int fd, unsigned channel)
     free(words);
 }
 #endif
+
+static void lab_clock_snapshot(int fd)
+{
+    uint64_t values[7] = {0};
+    uint32_t words[14];
+    struct timespec stamp;
+    unsigned i;
+    size_t sent = 0;
+    if (!clock_gettime(CLOCK_MONOTONIC, &stamp))
+        values[0] = (uint64_t)stamp.tv_sec*1000000000ULL + stamp.tv_nsec;
+    if (!clock_gettime(CLOCK_REALTIME, &stamp))
+        values[1] = (uint64_t)stamp.tv_sec*1000000000ULL + stamp.tv_nsec;
+#ifdef __QNXNTO__
+    values[2] = ClockCycles();
+    values[3] = SYSPAGE_ENTRY(qtime)->cycles_per_sec;
+    values[4] = SYSPAGE_ENTRY(qtime)->timer_rate;
+    values[5] = (uint64_t)(int64_t)SYSPAGE_ENTRY(qtime)->timer_scale;
+    values[6] = SYSPAGE_ENTRY(qtime)->nsec_inc;
+#endif
+    for (i = 0; i < 7; i++) {
+        words[i*2] = htonl((uint32_t)(values[i] >> 32));
+        words[i*2+1] = htonl((uint32_t)values[i]);
+    }
+    while (sent < sizeof(words)) {
+        ssize_t n = send(fd, (uint8_t *)words+sent, sizeof(words)-sent, 0);
+        if (n <= 0) break;
+        sent += (size_t)n;
+    }
+}
 
 static void *lab_touch_worker(void *unused)
 {
@@ -235,6 +312,9 @@ static void *lab_touch_worker(void *unused)
             lab_avc_timing(fd, command[2] == 'C'); close(fd); continue;
         }
 #endif
+        if (received == sizeof(command) && !memcmp(command, "MCL\0\0\0\0", 7)) {
+            lab_clock_snapshot(fd); close(fd); continue;
+        }
         x = received == sizeof(command) ? ((unsigned)command[3] << 8) | command[4] : 800;
         y = received == sizeof(command) ? ((unsigned)command[5] << 8) | command[6] : 480;
         if (received == sizeof(command) && !memcmp(command, "MHT", 3) && x < 800 && y < 480) {

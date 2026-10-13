@@ -24,6 +24,20 @@ class QNXNetworkTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "memory capture"):
                 qnx_network.build("unused", **options)
 
+    def test_clock_and_headless_modes_are_guarded_and_explicit(self):
+        with self.assertRaisesRegex(ValueError,'realtime clock'):
+            qnx_network.build('unused',clock_realtime=True)
+        with self.assertRaisesRegex(ValueError,'capture-only'):
+            qnx_network.build('unused',capture_only_altscreen=True)
+        with self.assertRaisesRegex(ValueError,'capture-only'):
+            qnx_network.network_manifest('',capture_only_altscreen=True)
+        with tempfile.TemporaryDirectory() as directory, patch.object(qnx_network,'OUT',Path(directory)):
+            record=Path(directory)/'build-record.json'
+            record.write_text('{"clock_realtime":true}')
+            self.assertIn('cortex-a15,cntfrq=62500000',qnx_network.command('socket'))
+            record.write_text('{}')
+            self.assertIn('cortex-a15',qnx_network.command('socket'))
+
     def test_input_forwarding_is_explicit_loopback_on_separate_network(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(qnx_network, "OUT", Path(directory)):
             record = Path(directory)/"build-record.json"

@@ -22,6 +22,7 @@ OUT = DEFAULT_LAB / "qnx-network"
 IMAGE_HASH = "1a05a14c8d8f2350aa15636c16f78591f1815e976f999da04f6974717d9ee2a6"
 sys.path.insert(0, str(ROOT / "wireless/receiver_bridge"))
 import qemu_capture as capture
+from wireless.lab_common import qnx_clock
 
 
 def set_output(directory: Path) -> None:
@@ -35,7 +36,9 @@ def set_output(directory: Path) -> None:
 
 def network_manifest(source: str, pairing: bool = False, media: bool = False, software_mfi: bool = False,
                      legacy_altscreen: bool = False, paired_altscreen: bool = False,
-                     pacing_only: bool = False) -> str:
+                     pacing_only: bool = False, capture_only_altscreen: bool = False) -> str:
+    if capture_only_altscreen and not paired_altscreen:
+        raise ValueError("capture-only AltScreen requires paired QNX lab")
     if pacing_only and not software_mfi:
         raise ValueError("pacing-only requires software MFi")
     if paired_altscreen and (legacy_altscreen or not software_mfi):
@@ -103,6 +106,8 @@ def network_manifest(source: str, pairing: bool = False, media: bool = False, so
     if software_mfi:
         source = source.replace("LD_PRELOAD=/proc/boot/libcarplay_hook.so:/proc/boot/libdio_capture_probe.so:",
             "LD_PRELOAD=/proc/boot/libdio_capture_probe.so:/proc/boot/libcarplay_hook.so:")
+    if capture_only_altscreen:
+        source = source.replace("    MHI2Q_CP_WIRELESS_ALT_QEMU=1\n", "    MHI2Q_CP_WIRELESS_ALT_QEMU=1\n    MHI2Q_CP_QEMU_CAPTURE_ONLY=1\n")
     if pacing_only:
         source = source.replace("    MHI2Q_DIO_OWNER_MODE=", "    PROBE_LOG=/dev/null\n    PROBE_IO_CAP=1\n    MHI2Q_DIO_OWNER_MODE=", 1)
     if legacy_altscreen or paired_altscreen:
@@ -120,7 +125,10 @@ def network_manifest(source: str, pairing: bool = False, media: bool = False, so
 
 
 def command(transport: str = "user") -> list[str]:
-    result = [str(capture.QEMU), "-M", "virt", "-m", "2048", "-cpu", "cortex-a15",
+    record_path = OUT / "build-record.json"
+    record_value = json.loads(record_path.read_text()) if record_path.exists() else {}
+    cpu = f"cortex-a15,cntfrq={qnx_clock.FREQUENCY}" if record_value.get("clock_realtime") else "cortex-a15"
+    result = [str(capture.QEMU), "-M", "virt", "-m", "2048", "-cpu", cpu,
             "-device", f"loader,file={OUT / 'qemu_start_debug.bin'},addr=0x40200000,force-raw=on,cpu-num=0",
             "-display", "none", "-serial", "stdio", "-monitor", "none",
             "-netdev", ("socket,id=n0,listen=127.0.0.1:32501" if transport == "socket" else
@@ -150,7 +158,12 @@ def build(image: str, pairing: bool = False, media: bool = False, software_mfi: 
           capture_video_long: bool = False, legacy_altscreen: bool = False,
           paired_altscreen: bool = False, request_ui_maps: bool = False,
           pacing_only: bool = False, input_control: bool = False,
-          capture_memory: bool = False) -> None:
+          capture_memory: bool = False, clock_realtime: bool = False,
+          capture_only_altscreen: bool = False) -> None:
+    if clock_realtime and not software_mfi:
+        raise ValueError("realtime clock profile requires isolated software MFi")
+    if capture_only_altscreen and (not paired_altscreen or not capture_memory):
+        raise ValueError("capture-only AltScreen requires paired RAM capture")
     if capture_memory and (not input_control or not software_mfi or capture_video):
         raise ValueError("memory capture requires input control/software MFi and excludes UART video capture")
     if input_control and not software_mfi:
@@ -187,7 +200,10 @@ def build(image: str, pairing: bool = False, media: bool = False, software_mfi: 
         path = args[0] / "capture.build"
         if pairing:
             shutil.copy2(hook, args[0] / "libcarplay_hook.so")
-        path.write_text(network_manifest(path.read_text(), pairing, media, software_mfi, legacy_altscreen, paired_altscreen, pacing_only))
+        path.write_text(network_manifest(path.read_text(), pairing, media, software_mfi, legacy_altscreen, paired_altscreen, pacing_only, capture_only_altscreen))
+        if clock_realtime:
+            startup = args[0] / "startup-virt"
+            startup.write_bytes(qnx_clock.corrected(startup.read_bytes()))
         shutil.copy2(path, OUT / "network.build")
     def docker(work, *args, **kwargs):
         args = tuple('-DMHI2Q_CAPTURE_INTERFACE_NAME="ecm0"' if
@@ -227,7 +243,9 @@ def build(image: str, pairing: bool = False, media: bool = False, software_mfi: 
         "request_ui_music": request_ui_music,
         "request_ui_maps": request_ui_maps, "pacing_only": pacing_only,
         "input_control": input_control,
-        "capture_memory": capture_memory,
+        "capture_memory": capture_memory, "clock_realtime": clock_realtime,
+        "timer_frequency_hz": qnx_clock.FREQUENCY if clock_realtime else None,
+        "capture_only_altscreen": capture_only_altscreen,
         "probe_trace_sink": "/dev/null" if pacing_only else "UART",
         "capture_video": capture_video,
         "capture_video_long": capture_video_long, "legacy_altscreen": legacy_altscreen,
@@ -249,6 +267,8 @@ def main() -> None:
     parser.add_argument("--request-ui-music", action="store_true", help="request the Music CarPlay UI URL instead of allowing the phone to choose Maps")
     parser.add_argument("--request-ui-maps", action="store_true", help="request the native Maps CarPlay UI URL")
     parser.add_argument("--pacing-only", action="store_true", help="disable AVC payload capture and sink socket probe traces to /dev/null; preserves authentication")
+    parser.add_argument("--clock-realtime", action="store_true", help="correct pinned QNX qtime to the explicit 62.5 MHz QEMU timer")
+    parser.add_argument("--capture-only-altscreen", action="store_true", help="observe authenticated stream111 RAM without a renderer forwarder; no presentation success reported")
     parser.add_argument("--input-control", action="store_true", help="register virtual primary touch HID and expose its bounded test endpoint on loopback")
     parser.add_argument("--capture-memory", action="store_true", help="retain a bounded AVC GOP per screen in RAM and retrieve through the owned loopback endpoint")
     parser.add_argument("--capture-video", action="store_true", help="capture bounded plaintext AVC at the mock decoder; requires --software-mfi")
@@ -278,7 +298,7 @@ def main() -> None:
     if args.action == "build":
         build(args.image, args.pairing, args.media, args.software_mfi, args.request_ui,
               args.request_ui_music, args.capture_video, args.capture_video_long, args.legacy_altscreen, args.paired_altscreen,
-              args.request_ui_maps, args.pacing_only, args.input_control, args.capture_memory)
+              args.request_ui_maps, args.pacing_only, args.input_control, args.capture_memory, args.clock_realtime, args.capture_only_altscreen)
     elif args.action == "start":
         if running():
             raise RuntimeError("owned QNX receiver is already running")

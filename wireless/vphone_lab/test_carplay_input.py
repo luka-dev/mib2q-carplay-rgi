@@ -96,5 +96,31 @@ class CarPlayInputTests(unittest.TestCase):
                 peer.recv.side_effect = [struct.pack(">I", 8193)]
                 with self.assertRaises(ValueError): control.timing("cluster")
 
+    def test_clock_query_reports_acceleration_and_signed_timer_scale(self):
+        peer=MagicMock()
+        peer.recv.side_effect=[struct.pack('>QQQQQqQ',1000000000,1,10,24000000,83333333,-15,1000000),
+                               struct.pack('>QQQQQqQ',6208333300,2,62500010,24000000,83333333,-15,1000000)]
+        connection=MagicMock();connection.__enter__.return_value=peer
+        with tempfile.TemporaryDirectory() as directory, patch.object(control.lab,'OUT',Path(directory)), \
+                patch.object(control,'receiver',return_value=42), \
+                patch.object(control.socket,'create_connection',return_value=connection), \
+                patch.object(control.time,'monotonic_ns',side_effect=[10,12,1000000010,1000000012]),patch.object(control.time,'sleep'):
+            result=control.clock(2,.1)
+            self.assertAlmostEqual(result['guest_to_host_rate'],5.2083333)
+            self.assertEqual(result['cycles_hz_observed'],62500000)
+            self.assertEqual(result['samples'][0]['timer_scale'],-15)
+
+    def test_delayed_clock_reply_does_not_claim_a_reliable_rate(self):
+        peer=MagicMock();peer.recv.side_effect=[struct.pack('>QQQQQqQ',1000000000,1,10,62500000,16000000,-15,1000000),
+                                               struct.pack('>QQQQQqQ',1291000000,2,18187510,62500000,16000000,-15,1000000)]
+        connection=MagicMock();connection.__enter__.return_value=peer
+        with tempfile.TemporaryDirectory() as directory, patch.object(control.lab,'OUT',Path(directory)), \
+                patch.object(control,'receiver',return_value=42),patch.object(control.socket,'create_connection',return_value=connection), \
+                patch.object(control.time,'monotonic_ns',side_effect=[0,1366000000,1616000000,1638000000]),patch.object(control.time,'sleep'):
+            result=control.clock(2,.1)
+            self.assertFalse(result['rate_estimate_reliable'])
+            self.assertLess(result['rate_bounds']['lower'],1)
+            self.assertGreater(result['rate_bounds']['upper'],1)
+
 
 if __name__ == "__main__": unittest.main()

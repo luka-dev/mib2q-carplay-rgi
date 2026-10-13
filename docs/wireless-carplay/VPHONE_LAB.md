@@ -2,7 +2,7 @@
 
 _Active guest platform · 2026-10-13 · Branch `feat/vphone-carplay-lab`._
 
-[Wireless overview](README.md) · [Retained Inferno evidence](IOS_VM_LAB.md) · [Software MFi](TEST_SOFTWARE_MFI.md)
+[Wireless overview](README.md) · [Clock and queue measurements](VPHONE_TIMING.md) · [Retained Inferno evidence](IOS_VM_LAB.md) · [Software MFi](TEST_SOFTWARE_MFI.md)
 
 ## 📋 Decision and measured state
 
@@ -23,7 +23,7 @@ they do not demonstrate our CarPlay sender, encoder, MFi or AltScreen path.[^1]
 | Research Guests | Enabled; verified after the owner's Recovery step |
 | Developer Tools / helper | Access allowed; signed helper `ready (16)` |
 | Dedicated guest | `mhi2-carplay` created from template `17d93ffd69ab`, first boot passed, native UI and Maps render |
-| QNX receiver | Fresh build passed ABI checks; native `/info` verified in the new directory |
+| QNX receiver | Corrected 62.5 MHz bootstrap clock; active-session rate about 1:1 with host; native `/info` and ABI checks passed |
 | Shared signer | Loopback runtime returned a bounded 711-byte MFi-SAP response; host crypto tests passed |
 | USB trust | Native pairing accepted by the dedicated guest |
 | Ethernet attachment | Native Direct NCM primary interface carries the authenticated QNX session; `/info` returns 210.81 |
@@ -477,7 +477,7 @@ RAM copying, the remaining probe calls and diagnostic logs still add overhead.
 ```sh
 scripts/carplay_lab.sh qnx-stop
 scripts/carplay_lab.sh qnx-build --request-ui-maps --input-control \
-  --capture-memory --pacing-only
+  --capture-memory --pacing-only --clock-realtime --capture-only-altscreen
 scripts/carplay_lab.sh qnx-start
 scripts/carplay_lab.sh qnx-info
 # In other terminals, start the primary bridge and signer, then the peer:
@@ -603,6 +603,23 @@ Artifacts are `moving-fixed-ethernet.pcap`, `moving-fixed-route.json`,
 `b8e5bb875a1bed36473f26763ca2a174fe85c6d715e5e05b381f7ddc95917a1d`).
 Their native request-to-snapshot durations were 427 / 1086 host milliseconds,
 which describe this diagnostic request, not normal video latency.
+
+### Corrected clock and queue isolation
+
+The current opt-in measurement profile adds `--clock-realtime` and
+`--capture-only-altscreen`. QNX clock rate is now about 1:1 with the host during
+an active session. The retained motion measurements above used the legacy
+accelerated clock and remain historical evidence, not the corrected profile's
+acceptance result. Capture-only stream111 has no hardware renderer or periodic
+renderer recovery requests; it still validates and captures native video.
+
+Immediate BPF capture is now the bridge default, with `TCP_NODELAY` and buffered
+artifact writes. `ethernet --trace-queues` records bounded queue metadata;
+`queue-report` analyzes BPF-to-read, socket-send and QNX ACK observation delays.
+Main BPF-to-read median fell from about 28 ms to 0.036 ms in the final run.
+Second-scale ACK observations and upstream sender-target/delivery differences
+remain. See the [timing report](VPHONE_TIMING.md) for clock guards, exact results,
+failed-run limits, the sequence diagram and the current reproduction recipe.
 
 ### Stream metadata and protocol experiments
 
@@ -754,7 +771,7 @@ existing operation rather than starting another restore.[^5]
 
 ## 🧪 Shared receiver and evidence tools
 
-Validation passed 82 guest/bootstrap/transport/output tests and 95 retained
+Validation passed 92 guest/bootstrap/transport/output tests and 97 retained
 laboratory regression tests, including seeded malformed-report and TCP-framing
 fuzzing. A native C RAM-capture test passes ASan/UBSan with 10,000 seeded inputs,
 rejects frozen-GOP snapshots and checks timing wire framing.
