@@ -5,7 +5,8 @@
 October 10, the owner after the first SCENE drive of October 9: the SCENE upmix
 "sounds good, really good"; the TEL key goes straight into CarPlay and the OPS popup
 beside CarPlay "work great" (r4 accepted); the MMI touchpad moves the CarPlay focus
-like a D-pad, and Apple Music crashes when driven from it (open, iOS beta suspected).
+like a D-pad, and Apple Music crashes when driven from it (iOS 27.2 beta bug in Music, other apps fine;
+the Java DPAD bridge is back since October 13).
 Still to check on the next drive: the resume "rip" fix and the cluster-blink fix, both
 in `build/install_unprotected.zip` (SHA-256 `e91df625…`), which must be installed first
 ([Scene Backend Deploy](docs/build-and-deploy/SCENE_BACKEND_DEPLOY.md)).
@@ -56,16 +57,17 @@ boot until then. Open: needs an earlier "CarPlay will own the cluster" signal.
 Check: cold boot with CarPlay shows the CarPlay cluster map and no NA screen; without CarPlay stock
 navigation still shows its own "Initialising" screen. [Details](docs/cluster-and-rgi/NAV_INITIALIZING_SCREEN.md).
 
-### Open: Apple Music crashes when driven from the MMI touchpad
+### Open (iOS side): native trackpad mode parked behind an Apple Music crash
 
-Owner, 2026-10-10: with the native trackpad focus mode of 2026-09-23 (`features | 0x10`,
-`primaryInputDevice = 2`) a pad swipe moves the CarPlay focus like a D-pad, the expected
-shape of CarPlay's pointer-less trackpad mode; but Apple Music crashes when it is
-controlled from the pad. The phone runs an iOS beta, so the crash may be iOS's own;
-whether the knob triggers it too was not reported and no phone crash log exists yet.
-Next: reproduce on a release iOS and collect the phone's crash log; if it reproduces,
-log the trackpad reports (`HIDSingleTrackPadFillReport`) before changing the descriptor.
-[Details](docs/reference/ARCHITECTURE.md#mmi-touchpad).
+Owner, 2026-10-10/12: in native trackpad focus mode (`features | 0x10`,
+`primaryInputDevice = 2`) any pad input inside Apple Music kills the Music app (CarPlay
+stays up); the knob and every other app are fine. Crash log (iOS 27.2 beta 24B5099f):
+UIKit NSAssert in `-[_UIFocusEventRecognizer _panGestureStart:]`, "Attempted a
+pan-gesture-based focus movement without a touchpad.". HU side checked: every stock HID
+carries `displayUUID` = the main screen UUID. Read as an iOS beta bug in Music.
+2026-10-13: the hook advert is under `#if 0` and the Java `TouchpadController` DPAD bridge
+is back (built, tests pass, not yet in the car). Next: check Music on a newer iOS build,
+then flip back. [Details](docs/reference/ARCHITECTURE.md#mmi-touchpad).
 
 ### Closed: CarPlay telephony on the cluster tab
 

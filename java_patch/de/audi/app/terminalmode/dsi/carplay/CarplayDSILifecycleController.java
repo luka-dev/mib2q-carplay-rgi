@@ -50,6 +50,7 @@ import org.dsi.ifc.carplay.ResourceRequest;
 import org.dsi.ifc.carplay.ServiceConfiguration;
 import org.dsi.ifc.carplay.TelephonyState;
 import org.dsi.ifc.carplay.TouchEvent;
+import com.luka.carplay.input.TouchpadController;
 import com.luka.carplay.core.SteeringWheelInputModule;
 import org.dsi.ifc.carplay.TrackData;
 import org.dsi.ifc.global.ResourceLocator;
@@ -101,6 +102,9 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
         this.startDSI();
         this.dsiCarPlayListener.init();
         this.carPlayDsiController.init();
+        /* The same component object can be deinit/init'd; deinit clears the singleton sink. */
+        ((CarplayDSILifecycleController.TerminalModeDSIKeyEventsController)this.keyEventController)
+            .installTouchpadSink();
         /* Cluster telephone tab actions -> CarPlay (GatedPhoneListener). */
         final DSICarplaySafe dsi = this.dsiCarplaySafe;
         GatedPhoneService.setCommands(new GatedPhoneService.Commands() {
@@ -111,6 +115,11 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
     }
 
     public void deinit() {
+        /* Remove the touch sink installed at CarPlay start — the TouchpadController is a
+         * long-lived singleton, so leaving it set would let post-session touchpad gestures
+         * inject into the torn-down DSI proxy (stale-DSI injection) and accumulate across
+         * connect cycles. */
+        TouchpadController.getInstance().setTouchSink(null);
         GatedPhoneService.setCommands(null);
         super.deinit();
         this.carPlayDsiController.deinit();
@@ -843,6 +852,31 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
             this.this$0 = carplaydsilifecyclecontroller;
         }
 
+        /* Wire TouchpadController's DPAD output back through the stock DSI bridge's
+         * postButtonEvent (JS_WEST=5 / JS_EAST=6 / JS_NORTH=7 / JS_SOUTH=8;
+         * state 0=press, 1=release) — CarPlay's iOS side moves focus accordingly. */
+        private void installTouchpadSink() {
+            final CarplayDSILifecycleController outer = this.this$0;
+            TouchpadController.getInstance().setTouchSink(new TouchpadController.TouchSink() {
+                public void postDpad(int keyCode) {
+                    int id;
+                    switch (keyCode) {
+                        case TouchpadController.KEY_DPAD_LEFT:  id = 5; break;
+                        case TouchpadController.KEY_DPAD_RIGHT: id = 6; break;
+                        case TouchpadController.KEY_DPAD_UP:    id = 7; break;
+                        case TouchpadController.KEY_DPAD_DOWN:  id = 8; break;
+                        default: return;
+                    }
+                    try {
+                        if (outer.dsiCarplaySafe != null) {
+                            outer.dsiCarplaySafe.postButtonEvent(id, 0);
+                            outer.dsiCarplaySafe.postButtonEvent(id, 1);
+                        }
+                    } catch (Throwable t) { /* never break the DSI flow */ }
+                }
+            });
+        }
+
         public void updateKey(Key key, KeyState keystate) {
             /* Raw key 40 (left MFW roller) and raw key 16 (centre DDS) both become
              * DDS_SELECT in the stock keyboard stack.  The raw listener marks only
@@ -959,37 +993,43 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
         }
 
         public void updateTouchEvents(de.audi.app.terminalmode.keyevents.TouchEvent[] atouchevent) {
-            /* Stock routes the whole batch by element 0's type.  Split it per event instead, so
-             * a mixed batch can never inject touchpad coordinates into the touchscreen stream
-             * or the reverse: touchscreen on DSI input 1 (screen offset removed), MMI touchpad
-             * on DSI input 0, which dio_manager turns into its HID trackpad.  iOS moves focus
-             * from that trackpad only because the hook advertises it (main display features
-             * 0x10 + primaryInputDevice 2).  Active fingers: getTouchState() != 1 (RELEASED). */
-            if (atouchevent == null || atouchevent.length == 0) return;
+            /* Touchscreen events follow the stock conversion/sort path on DSI input 1.  MMI
+             * touchpad single-finger events become DPAD ticks via TouchpadController: native
+             * trackpad focus mode crashes Apple Music on iOS 27.2 (UIKit "pan-gesture-based
+             * focus movement without a touchpad"), see docs/reference/ARCHITECTURE.md, "MMI
+             * touchpad".  Partition per event, never by element 0, so a mixed batch cannot
+             * inject pad coordinates into the touchscreen stream.  Active: getTouchState() != 1. */
+            TouchpadController c = TouchpadController.getInstance();
+            if (atouchevent == null || atouchevent.length == 0) { c.onTouchEnd(); return; }
+
             ArrayList screen = new ArrayList(atouchevent.length);
-            ArrayList pad = new ArrayList(atouchevent.length);
-            int screenActive = 0, padActive = 0;
+            int screenActive = 0;
+            int padCount = 0, padActive = 0, padFirstActive = -1;
             for (int i = 0; i < atouchevent.length; i++) {
-                boolean active = atouchevent[i].getTouchState() != 1;
                 if (atouchevent[i].isTouchScreen()) {
                     screen.add(new TouchEvent(
                         atouchevent[i].getCurrentX() - this.this$0.configuration.getScreenOffsetX(),
                         atouchevent[i].getCurrentY() - this.this$0.configuration.getScreenOffsetY()));
-                    if (active) screenActive++;
+                    if (atouchevent[i].getTouchState() != 1) screenActive++;
                 } else {
-                    pad.add(new TouchEvent(atouchevent[i].getCurrentX(), atouchevent[i].getCurrentY()));
-                    if (active) padActive++;
+                    padCount++;
+                    if (atouchevent[i].getTouchState() != 1) {
+                        if (padActive == 0) padFirstActive = i;
+                        padActive++;
+                    }
                 }
             }
-            postSorted(1, screenActive, screen);
-            postSorted(0, padActive, pad);
-        }
-
-        private void postSorted(int inputId, int active, ArrayList events) {
-            if (events.isEmpty()) return;
-            Collections.sort(events, new TouchXComparator());
-            this.this$0.dsiCarplaySafe.postTouchEvent(
-                inputId, active, (TouchEvent[])events.toArray(new TouchEvent[events.size()]));
+            if (!screen.isEmpty()) {
+                Collections.sort(screen, new TouchXComparator());
+                this.this$0.dsiCarplaySafe.postTouchEvent(
+                    1, screenActive, (TouchEvent[])screen.toArray(new TouchEvent[screen.size()]));
+            }
+            if (padCount > 0 && padActive == 1) {
+                c.onOneFinger(atouchevent[padFirstActive].getCurrentX(),
+                    atouchevent[padFirstActive].getCurrentY());
+            } else {
+                c.onTouchEnd();
+            }
         }
 
         /** Stock updateTouchEvents orders fingers left-to-right before DSI serialization. */
