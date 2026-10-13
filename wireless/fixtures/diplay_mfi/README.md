@@ -58,7 +58,12 @@ tap on GO changed the cluster's blue location dot to a navigation arrow.
 The `vphone_native_qnx_maps` manifest entry records the distinct capture hashes
 and the official guest location simulation used for this test. Longer wire
 pacing now has measured evidence, including long gaps; stable 30 fps remains
-unverified.
+unverified. A repeated 40-second simulated-motion test visibly moved both Maps
+screens. Its pacing report compares sender presentation targets with TCP delivery;
+it does not measure encoder completion or physical display timing. Explicit native
+IDR requests now refresh capped RAM captures, with a UUID-targeted cluster command.
+Turn-by-turn navigation remains unverified. See the
+[vphone runbook](../../../docs/wireless-carplay/VPHONE_LAB.md).
 
 ## 🧪 Integration status
 

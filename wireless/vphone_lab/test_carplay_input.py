@@ -71,5 +71,30 @@ class CarPlayInputTests(unittest.TestCase):
                     control.snapshot("cluster", target)
                 self.assertEqual(target.read_bytes(), b"last good capture")
 
+    def test_fresh_snapshot_requests_native_refresh_and_reads_fragmented_bytes(self):
+        data = b"\0\0\0\1\x67config\0\0\1\x65picture"
+        with tempfile.TemporaryDirectory() as directory, patch.object(control.lab, "OUT", Path(directory)), \
+                patch.object(control, "receiver", return_value=42):
+            peer = MagicMock(); peer.recv.side_effect = [struct.pack(">I", len(data)), data[:5], data[5:]]
+            connection = MagicMock(); connection.__enter__.return_value = peer
+            with patch.object(control.socket, "create_connection", return_value=connection):
+                result = control.snapshot("primary", fresh=True)
+            peer.sendall.assert_called_once_with(b"MFM"+bytes(4))
+            peer.settimeout.assert_called_once_with(10)
+            self.assertTrue(result["native_keyframe_requested"])
+            self.assertEqual(Path(result["output"]).read_bytes(), data)
+
+    def test_timing_excludes_payload_and_rejects_unbounded_counts(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(control.lab, "OUT", Path(directory)), \
+                patch.object(control, "receiver", return_value=42):
+            peer = MagicMock(); peer.recv.side_effect = [struct.pack(">I", 3), struct.pack(">QQQ", 10, 33333343, 66666676)]
+            connection = MagicMock(); connection.__enter__.return_value = peer
+            with patch.object(control.socket, "create_connection", return_value=connection):
+                result = control.timing("cluster")
+                self.assertEqual(result["picture_input"]["events"], 3)
+                peer.sendall.assert_called_once_with(b"MDC"+bytes(4))
+                peer.recv.side_effect = [struct.pack(">I", 8193)]
+                with self.assertRaises(ValueError): control.timing("cluster")
+
 
 if __name__ == "__main__": unittest.main()

@@ -4,10 +4,13 @@ import json
 import socket
 import struct
 import hashlib
+import time
+import tempfile
 from pathlib import Path
 
 from wireless.lab_common import qnx_receiver
 from . import lab
+from wireless.lab_common.frame_pacing import intervals
 
 
 def request(x: int, y: int) -> bytes:
@@ -36,27 +39,59 @@ def receive(peer, length: int) -> bytes:
     return bytes(response)
 
 
-def snapshot(channel: str, output: Path | None = None) -> dict:
+def snapshot(channel: str, output: Path | None = None, fresh: bool = False) -> dict:
     if channel not in ("primary", "cluster"):
         raise ValueError("unknown CarPlay screen")
     target = (output or lab.OUT / ("memory-"+channel+".h264")).resolve()
     if not target.is_relative_to(lab.OUT.resolve()) or target.suffix != ".h264":
         raise ValueError("AVC output must remain inside the owned vphone lab")
     pid = receiver("capture_memory")
+    request_ns = time.time_ns()
     with socket.create_connection(("127.0.0.1", 32503), timeout=3) as peer:
-        peer.settimeout(3)
-        peer.sendall((b"MHC" if channel == "cluster" else b"MHM") + bytes(4))
+        peer.settimeout(10 if fresh else 3)
+        command = (b"MFC" if channel == "cluster" else b"MFM") if fresh else (b"MHC" if channel == "cluster" else b"MHM")
+        peer.sendall(command + bytes(4))
         length, = struct.unpack(">I", receive(peer, 4))
         if not 1 <= length <= 2*1024*1024:
-            raise ValueError("no complete bounded IDR capture available")
+            raise ValueError("no current bounded IDR capture available; try --fresh (requests a native keyframe)")
         data = receive(peer, length)
     if not data.startswith((b"\0\0\1", b"\0\0\0\1")):
         raise ValueError("native capture is not Annex B")
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_bytes(data)
+    with tempfile.NamedTemporaryFile(dir=target.parent, prefix=".avc-", delete=False) as file:
+        temporary = Path(file.name)
+        try:
+            file.write(data)
+            file.close()
+            temporary.replace(target)
+        finally:
+            temporary.unlink(missing_ok=True)
     result = {"channel": channel, "bytes": length, "sha256": hashlib.sha256(data).hexdigest(),
-              "qnx_pid": pid, "output": str(target), "independent_decode_verified": False}
+              "qnx_pid": pid, "output": str(target), "native_keyframe_requested": fresh,
+              "host_request_ns": request_ns, "host_complete_ns": time.time_ns(), "independent_decode_verified": False}
     lab.save("memory-"+channel+".json", result)
+    return result
+
+
+def timing(channel: str) -> dict:
+    if channel not in ("primary", "cluster"):
+        raise ValueError("unknown CarPlay screen")
+    pid = receiver("capture_memory")
+    with socket.create_connection(("127.0.0.1", 32503), timeout=3) as peer:
+        peer.settimeout(3)
+        peer.sendall((b"MDC" if channel == "cluster" else b"MDM") + bytes(4))
+        count, = struct.unpack(">I", receive(peer, 4))
+        if not 0 <= count <= 8192:
+            raise ValueError("decoder timing count outside bounds")
+        data = receive(peer, count*8)
+    stamps = [v[0] for v in struct.iter_unpack(">Q", data)]
+    result = {"channel": channel, "qnx_pid": pid,
+              "picture_input": intervals([(v-stamps[0])/1e6 for v in stamps]),
+              "timestamps_ns": stamps, "capture_limit": 8192, "capture_limit_reached": count == 8192,
+              "clock": "QNX CLOCK_MONOTONIC; rate not aligned to host",
+              "limitations": ["decoder input only; no physical decode or presentation measured",
+                              "first 8192 picture buffers; configuration buffers excluded"]}
+    lab.save("memory-"+channel+"-timing.json", result)
     return result
 
 
@@ -85,5 +120,8 @@ if __name__ == "__main__":
     memory = sub.add_parser("snapshot")
     memory.add_argument("channel", choices=["primary", "cluster"])
     memory.add_argument("--output", type=Path)
+    memory.add_argument("--fresh", action="store_true")
+    timing_parser = sub.add_parser("timing")
+    timing_parser.add_argument("channel", choices=["primary", "cluster"])
     args = parser.parse_args()
-    print(json.dumps(tap(args.x, args.y) if args.action == "tap" else snapshot(args.channel, args.output)))
+    print(json.dumps(tap(args.x, args.y) if args.action == "tap" else timing(args.channel) if args.action == "timing" else snapshot(args.channel, args.output, args.fresh)))

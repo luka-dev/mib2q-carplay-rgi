@@ -47,6 +47,7 @@ extern char *__progname;
 #include "video_capture_bounds.h"
 #ifdef MHI2Q_CAPTURE_VIDEO_MEMORY_QEMU
 static void lab_avc_store(const char *, const uint8_t *, uint32_t);
+static void lab_avc_set_session(void *);
 #endif
 #ifdef MHI2Q_CAPTURE_VIDEO_LONG_QEMU
 #define VIDEO_CAPTURE_RECORDS 4096
@@ -401,6 +402,15 @@ static int trace_http_handle(void *connection, void *message, void *context)
     if (sap_request(connection, message, &result)) return result;
 #endif
     int stock_result = stock_http_handle(connection, message, context);
+#ifdef MHI2Q_CAPTURE_VIDEO_MEMORY_QEMU
+    if (!stock_result && message && sap_word(message, 8224) == 6) {
+        const char *method = (const char *)(uintptr_t)sap_word(message, 8220);
+        if (method && !memcmp(method, "RECORD", 6)) {
+            void *owner = (void *)(uintptr_t)sap_word(connection, 8);
+            if (owner) lab_avc_set_session((void *)(uintptr_t)sap_word(owner, 244));
+        }
+    }
+#endif
 #ifdef MHI2Q_CAPTURE_NATIVE_UI_QEMU
     native_ui_after_record(connection, message, stock_result);
 #endif

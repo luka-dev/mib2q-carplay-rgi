@@ -139,6 +139,54 @@
       "stable_30fps_verified": false,
       "physical_device_tested": false,
       "evidence_document": "docs/wireless-carplay/VPHONE_LAB.md"
+    },
+    "vphone_native_qnx_moving_map": {
+      "date": "2026-10-13",
+      "source": "Native Maps with 41 official CoreLocation updates over a 40-second straight simulated path",
+      "visible_map_movement_verified": true,
+      "turn_by_turn_navigation_verified": false,
+      "stable_30fps_verified": false,
+      "host_location_modified": false,
+      "motion_pacing": {
+        "main": {
+          "delivered_access_units": 166,
+          "sender_median_ms": 166.66662483476102,
+          "sender_max_ms": 1833.3333334885538,
+          "delivery_median_ms": 189.14697265625,
+          "delivery_max_ms": 1808.18310546875
+        },
+        "cluster": {
+          "delivered_access_units": 132,
+          "sender_median_ms": 66.66670856066048,
+          "sender_max_ms": 4133.333291625604,
+          "delivery_median_ms": 132.775146484375,
+          "delivery_max_ms": 4081.05029296875
+        }
+      },
+      "sender_clock": "NTP 32.32 presentation targets; render and encoder completion not measured",
+      "qnx_clock_aligned_to_host": false,
+      "native_fresh_capture": {
+        "primary": {
+          "decoded_frames": 3,
+          "resolution": [
+            800,
+            480
+          ],
+          "sha256": "0ecab93150bc99ebe02a179c382b44c99512a0872563937a904b423f0f5e4c7f",
+          "command": "AirPlayReceiverSessionForceKeyFrame"
+        },
+        "cluster": {
+          "decoded_frames": 1,
+          "resolution": [
+            1440,
+            542
+          ],
+          "sha256": "b8e5bb875a1bed36473f26763ca2a174fe85c6d715e5e05b381f7ddc95917a1d",
+          "command": "forceKeyFrame with params.uuid targeting the advertised cluster"
+        }
+      },
+      "physical_device_tested": false,
+      "evidence_document": "docs/wireless-carplay/VPHONE_LAB.md"
     }
   },
   "runtime_integration": "The opt-in ios_vm_lab/mfi_probe.py and mfi_sap.py host signers read this fixture; the QEMU-only capture adapter receives public MFi-SAP response bytes over bounded RPC. Private key remains on the host. TestSoftwareMfi, default daemon and production QNX preloader remain unchanged. The opt-in vphone_lab/mfi_probe.py uses the same host fixture against a native CoreAccessories API endpoint, with bounded RPC queues and native connection cleanup."

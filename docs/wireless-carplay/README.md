@@ -19,8 +19,11 @@ to a navigation arrow. Siri was enabled through native Settings after rebuilding
 a stale MobileGestalt cache. A longer run without UART video payloads measured
 33.42/33.82 ms median
 main/cluster delivery intervals, with substantial long gaps still present.
-Moving-route, roller/button and reconnect coverage, and USB-port forwarding
-still need validation. The Inferno results below are retained historical evidence.
+A controlled 40-second guest location simulation now visibly moves both Maps
+screens; sender-target and TCP-delivery intervals are reported separately.
+Explicit native IDR refresh replaces unavailable capped RAM GOPs. Turn-by-turn
+navigation, roller/button and reconnect coverage, and USB-port forwarding still
+need validation. The Inferno results below are retained historical evidence.
 
 The MU1316 / P5087 candidate retains factory AirPlay **210.81** on QNX 6.5 ARM.
 The C wireless hook supplies pairing and modern control/event/media security;

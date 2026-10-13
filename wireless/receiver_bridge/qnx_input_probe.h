@@ -11,8 +11,69 @@ static struct {
     uint8_t bytes[LAB_AVC_LIMIT], configuration[16384];
     size_t length, configuration_length;
     int collecting;
+    uint64_t generation, pictures, timestamps[8192];
+    size_t timestamp_count;
 } lab_avc[2];
 static pthread_mutex_t lab_avc_lock = PTHREAD_MUTEX_INITIALIZER;
+static void *lab_avc_session;
+
+/* Retain the authenticated stock session; replace it on a later RECORD. */
+static void lab_avc_set_session(void *session)
+{
+    void *(*retain)(const void *) = dlsym(RTLD_NEXT, "CFRetain");
+    void (*release)(const void *) = dlsym(RTLD_NEXT, "CFRelease");
+    void *old;
+    if (!session || !retain || !release) return;
+    retain(session);
+    pthread_mutex_lock(&lab_avc_lock);
+    old = lab_avc_session; lab_avc_session = session;
+    pthread_mutex_unlock(&lab_avc_lock);
+    if (old) release(old);
+}
+
+/* Same UUID advertised by the explicitly enabled stream-111 QNX fixture. */
+static int lab_avc_force_cluster(void *session)
+{
+    static const uint8_t command_bytes[] = {
+        0x62,0x70,0x6c,0x69,0x73,0x74,0x30,0x30,0xd2,0x01,0x02,0x03,0x06,0x56,0x70,0x61,
+        0x72,0x61,0x6d,0x73,0x54,0x74,0x79,0x70,0x65,0xd1,0x04,0x05,0x54,0x75,0x75,0x69,
+        0x64,0x5f,0x10,0x24,0x43,0x31,0x30,0x35,0x37,0x45,0x31,0x32,0x2d,0x41,0x30,0x44,
+        0x31,0x2d,0x34,0x45,0x32,0x30,0x2d,0x42,0x30,0x43,0x30,0x2d,0x31,0x30,0x35,0x37,
+        0x45,0x31,0x32,0x41,0x30,0x44,0x31,0x30,0x5d,0x66,0x6f,0x72,0x63,0x65,0x4b,0x65,
+        0x79,0x46,0x72,0x61,0x6d,0x65,0x08,0x0d,0x14,0x19,0x1c,0x21,0x48,0x00,0x00,0x00,
+        0x00,0x00,0x00,0x01,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x07,0x00,0x00,0x00,
+        0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x56,
+    };
+    void *(*data_create)(void *, const uint8_t *, long) = dlsym(RTLD_NEXT, "CFDataCreate");
+    void *(*parse)(void *, const void *, unsigned long, void *, void *) = dlsym(RTLD_NEXT, "CFPropertyListCreateWithData");
+    void (*release)(const void *) = dlsym(RTLD_NEXT, "CFRelease");
+    int (*send_command)(void *, void *, void *, void *) = dlsym(RTLD_NEXT, "AirPlayReceiverSessionSendCommand");
+    void *data, *command;
+    int result = -6705;
+    if (!data_create || !parse || !release || !send_command) return result;
+    data = data_create(NULL, command_bytes, sizeof(command_bytes));
+    if (!data) return -6728;
+    command = parse(NULL, data, 0, NULL, NULL); release(data);
+    if (command) { result = send_command(session, command, NULL, NULL); release(command); }
+    return result;
+}
+
+/* Explicit diagnostics only: never request periodic IDRs during pacing. */
+static int lab_avc_refresh(unsigned channel, uint64_t *generation)
+{
+    int (*force)(void *, void *, void *) = dlsym(RTLD_NEXT, "AirPlayReceiverSessionForceKeyFrame");
+    void *(*retain)(const void *) = dlsym(RTLD_NEXT, "CFRetain");
+    void (*release)(const void *) = dlsym(RTLD_NEXT, "CFRelease");
+    void *session = NULL;
+    int result = -6705;
+    pthread_mutex_lock(&lab_avc_lock);
+    *generation = lab_avc[channel].generation;
+    if (lab_avc_session && force && retain && release) session = retain(lab_avc_session);
+    pthread_mutex_unlock(&lab_avc_lock);
+    if (session) { result = channel ? lab_avc_force_cluster(session) : force(session, NULL, NULL); release(session); }
+    return result;
+}
+
 
 static void lab_avc_store(const char *marker, const uint8_t *data, uint32_t length)
 {
@@ -28,6 +89,13 @@ static void lab_avc_store(const char *marker, const uint8_t *data, uint32_t leng
         }
     }
     pthread_mutex_lock(&lab_avc_lock);
+    if (picture) {
+        struct timespec stamp;
+        lab_avc[channel].pictures++;
+        if (lab_avc[channel].timestamp_count < 8192 && !clock_gettime(CLOCK_MONOTONIC, &stamp))
+            lab_avc[channel].timestamps[lab_avc[channel].timestamp_count++] =
+                (uint64_t)stamp.tv_sec*1000000000ULL + (uint64_t)stamp.tv_nsec;
+    }
     if (configuration && !picture && length <= sizeof(lab_avc[channel].configuration)) {
         memcpy(lab_avc[channel].configuration, data, length);
         lab_avc[channel].configuration_length = length;
@@ -36,6 +104,7 @@ static void lab_avc_store(const char *marker, const uint8_t *data, uint32_t leng
         lab_avc[channel].length = configuration ? 0 : lab_avc[channel].configuration_length;
         memcpy(lab_avc[channel].bytes, lab_avc[channel].configuration, lab_avc[channel].length);
         lab_avc[channel].collecting = 1;
+        lab_avc[channel].generation++;
     }
     if (picture && lab_avc[channel].collecting) {
         if (length <= LAB_AVC_LIMIT - lab_avc[channel].length) {
@@ -46,13 +115,25 @@ static void lab_avc_store(const char *marker, const uint8_t *data, uint32_t leng
     pthread_mutex_unlock(&lab_avc_lock);
 }
 
-static void lab_avc_snapshot(int fd, unsigned channel)
+static void lab_avc_snapshot(int fd, unsigned channel, int fresh)
 {
     uint8_t *snapshot = NULL;
     size_t length, sent = 0;
     uint32_t header;
+    uint64_t generation = 0;
+    int ready = !fresh;
+    unsigned attempt;
+    if (fresh && !lab_avc_refresh(channel, &generation)) {
+        for (attempt = 0; attempt < 500; attempt++) {
+            pthread_mutex_lock(&lab_avc_lock);
+            ready = lab_avc[channel].generation > generation && lab_avc[channel].collecting && lab_avc[channel].length;
+            pthread_mutex_unlock(&lab_avc_lock);
+            if (ready) break;
+            usleep(10000);
+        }
+    }
     pthread_mutex_lock(&lab_avc_lock);
-    length = lab_avc[channel].length;
+    length = ready && lab_avc[channel].collecting ? lab_avc[channel].length : 0;
     if (length) {
         snapshot = malloc(length);
         if (snapshot) memcpy(snapshot, lab_avc[channel].bytes, length);
@@ -68,6 +149,34 @@ static void lab_avc_snapshot(int fd, unsigned channel)
         }
     }
     free(snapshot);
+}
+#endif
+
+#ifdef MHI2Q_CAPTURE_VIDEO_MEMORY_QEMU
+static void lab_avc_timing(int fd, unsigned channel)
+{
+    uint32_t count, i, header;
+    uint32_t *words = malloc(8192u*8u);
+    size_t sent = 0, length;
+    if (!words) { header = 0; (void)send(fd, &header, sizeof(header), 0); return; }
+    pthread_mutex_lock(&lab_avc_lock);
+    count = (uint32_t)lab_avc[channel].timestamp_count;
+    for (i = 0; i < count; i++) {
+        uint64_t stamp = lab_avc[channel].timestamps[i];
+        words[i*2] = htonl((uint32_t)(stamp >> 32));
+        words[i*2+1] = htonl((uint32_t)stamp);
+    }
+    pthread_mutex_unlock(&lab_avc_lock);
+    header = htonl(count);
+    if (send(fd, &header, sizeof(header), 0) == sizeof(header)) {
+        length = count*8u;
+        while (sent < length) {
+            ssize_t n = send(fd, (uint8_t *)words + sent, length - sent, 0);
+            if (n <= 0) break;
+            sent += (size_t)n;
+        }
+    }
+    free(words);
 }
 #endif
 
@@ -115,7 +224,15 @@ static void *lab_touch_worker(void *unused)
 #ifdef MHI2Q_CAPTURE_VIDEO_MEMORY_QEMU
         if (received == sizeof(command) && (!memcmp(command, "MHM\0\0\0\0", 7) ||
                                            !memcmp(command, "MHC\0\0\0\0", 7))) {
-            lab_avc_snapshot(fd, command[2] == 'C'); close(fd); continue;
+            lab_avc_snapshot(fd, command[2] == 'C', 0); close(fd); continue;
+        }
+        if (received == sizeof(command) && (!memcmp(command, "MFM", 3) || !memcmp(command, "MFC", 3)) &&
+                !memcmp(command+3, "\0\0\0\0", 4)) {
+            lab_avc_snapshot(fd, command[2] == 'C', 1); close(fd); continue;
+        }
+        if (received == sizeof(command) && (!memcmp(command, "MDM", 3) || !memcmp(command, "MDC", 3)) &&
+                !memcmp(command+3, "\0\0\0\0", 4)) {
+            lab_avc_timing(fd, command[2] == 'C'); close(fd); continue;
         }
 #endif
         x = received == sizeof(command) ? ((unsigned)command[3] << 8) | command[4] : 800;

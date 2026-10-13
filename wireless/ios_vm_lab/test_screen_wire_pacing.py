@@ -83,6 +83,35 @@ class ScreenWireTests(unittest.TestCase):
             self.assertEqual(result["screen_access_units"]["events"], count)
             self.assertEqual(result["unparsed_contiguous_bytes"], 0)
 
+    def test_window_filters_picture_pairs_after_tcp_reassembly(self):
+        a=picture()
+        data=pcap([(0,frame(100,flags=2)),(10,frame(101,a)),(40,frame(101+len(a),a)),(80,frame(101+2*len(a),a))])
+        result=report(data,window=(30,90))["connections"][0]
+        self.assertEqual(result["screen_access_units"]["events"],2)
+        self.assertEqual(result["screen_access_units"]["span_ms"],40)
+        for window in ((0,float("inf")),(40,10),(1,1)):
+            with self.assertRaises(ValueError): report(data,window=window)
+
+    def test_sender_target_gap_is_distinguished_from_delivery_stall(self):
+        def timed(ms):
+            data = bytearray(picture())
+            struct.pack_into("<Q", data, 8, (1 << 32)+round(ms*(1 << 32)/1000))
+            return bytes(data)
+        a,b,c = timed(0),timed(33),timed(533)
+        result = report(pcap([(0, frame(100, flags=2)), (10, frame(101,a)),
+                              (510,frame(101+len(a),b)), (543,frame(101+len(a)+len(b),c))]))["connections"][0]
+        self.assertTrue(result["sender_timestamps_available"])
+        self.assertAlmostEqual(result["long_gaps"][0]["sender_gap_ms"], 33, places=4)
+        self.assertAlmostEqual(result["long_gaps"][0]["transit_delta_ms"], 467, places=4)
+        self.assertAlmostEqual(result["long_gaps"][1]["sender_gap_ms"], 500, places=4)
+        self.assertAlmostEqual(result["long_gaps"][1]["transit_delta_ms"], -467, places=4)
+
+    def test_unusable_sender_timestamps_do_not_invalidate_delivery_measurement(self):
+        a=picture()
+        result=report(pcap([(0,frame(100,flags=2)), (10,frame(101,a))]))["connections"][0]
+        self.assertFalse(result["sender_timestamps_available"])
+        self.assertIsNone(result["sender_timestamp_intervals"])
+
 
 if __name__ == "__main__":
     unittest.main()

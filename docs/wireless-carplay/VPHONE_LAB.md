@@ -91,9 +91,9 @@ flowchart LR
     ethernet_adapter --> qnx_receiver["Paired stock210 QNX receiver"]
     ethernet_adapter -->|"Receiver commands"| ios_guest
     mfi_signer --> qnx_receiver
-    host_control["Loopback HID tap and GOP retrieval"] --> qnx_receiver
+    host_control["Loopback HID, fresh IDR and timing retrieval"] --> qnx_receiver
     qnx_receiver -->|"Native HID control"| ethernet_adapter
-    qnx_receiver --> video_capture["Bounded RAM capture of both AVC streams"]
+    qnx_receiver --> video_capture["Current bounded GOP or unavailable"]
     video_capture --> independent_decode["Independent FFmpeg decoding"]
 ```
 
@@ -454,10 +454,24 @@ The pacing profile redirects the retained socket probe's output to `/dev/null`
 and caps its payload formatting at one byte (`PROBE_IO_CAP=1`; zero means full
 payload in that probe). It disables UART AVC capture. `--capture-memory` instead
 keeps at most 2 MiB per screen, beginning at an IDR with its configuration.
-A new IDR resets that screen's GOP. Once the cap is reached, that GOP stops
-growing until another IDR; a snapshot is not necessarily the newest frame.
-This happened to the primary snapshot after GO, so its unchanged bytes were not
-used to claim an input effect. The cluster's new GOP supplies the marker evidence.
+A new IDR resets that screen's GOP. Once the cap is reached, collection stops;
+ordinary snapshots now return unavailable instead of that frozen GOP. Use
+`input snapshot primary --fresh` or `input snapshot cluster --fresh` to request
+an IDR over the authenticated native control channel and wait for a newer GOP.
+Failure, timeout or overflow preserves the host's previous file and reports an
+error. The retained primary snapshot after GO was capped, so its unchanged bytes
+were not used as input evidence; the cluster's new GOP supplied that evidence.
+
+Primary refresh calls stock `AirPlayReceiverSessionForceKeyFrame`, whose pinned
+stock210 export is at `0x28a5c`. Cluster refresh sends the equivalent native
+`AirPlayReceiverSessionSendCommand` dictionary with `params.uuid` equal to the
+fixture's advertised `C1057E12-A0D1-4E20-B0C0-1057E12A0D10`. Stock210's convenience
+function omits that UUID and targets the primary screen. Refresh is explicit;
+this helper does not request periodic IDRs or change the sender's cadence.
+Capture retains the authenticated session from successful RECORD, bounds RAM to
+2 MiB per screen and unlocks the capture mutex before native command submission.
+Parameters are currently observed as combined SPS/PPS records; arbitrary split
+parameter-set changes have not been validated.
 RAM copying, the remaining probe calls and diagnostic logs still add overhead.
 
 ```sh
@@ -511,6 +525,84 @@ under ignored `build/vphone-lab/`. The last two cluster hashes are
 `0725359231b7ae53d2391b99676b107929349a0edfa9e617c4a4d28bb9016617`.
 Physical OMX presentation, end-to-end latency and a 2.4 GHz radio are still not
 measured by this stand.
+
+### Moving map, sender intervals and current snapshots
+
+A complete repeated 120-second session verified 41 official `location.set`
+updates over a 40-second measurement. The laboratory path runs from
+`37.3349,-122.0090` to `37.3320,-122.0160` at about 17.45 m/s, course 242.48°;
+it is a straight simulated path, not a road-matched route. Host location
+synchronization must be disabled. The helper leaves the guest at its last
+coordinate with speed zero, including after a partial failure.
+
+Independent decoding shows the main map moving from the Apple Park ring to the
+intersection near I-280 and Wolfe Road; stream 111 shows the corresponding map
+position. Native Maps returned **Directions Not Available** during the earlier
+navigation attempt. Moving map rendering is confirmed; turn-by-turn guidance
+and a complete driving route remain unverified.
+
+| Screen | Delivered AUs in motion window | Sender median / maximum | Delivery median / maximum |
+|---|---:|---:|---:|
+| Main 6030 | 166 | 166.667 / 1833.333 ms | 189.147 / 1808.183 ms |
+| Cluster 6031 | 132 | 66.667 / 4133.333 ms | 132.775 / 4081.050 ms |
+
+The window contains 39.864 / 39.529 seconds between the first and last delivered
+AUs: 4.139 / 3.314 AUs/s. Sparse map updates do not establish sustained 30 fps.
+Both reconstructed connections have no sequence gaps. The cluster capture ends
+with an incomplete 18,564-byte access unit starting 31.830 seconds after the
+motion window; that trailing unit is excluded from the timing table.
+The analyzer now reads the screen header's `params[0]` NTP 32.32 timestamp and
+pairs its relative intervals with complete TCP access-unit delivery intervals.
+These are presentation targets, **not render or encoder completion times**.
+For example, the main flow has a 1563.628 ms delivery gap with a 33.333 ms sender
+target gap, followed shortly by a 1433.333 ms sender gap delivered in 97.950 ms.
+This demonstrates batching relative to sender targets; encoder, iOS scheduling,
+NCM and companion bridging remain possible contributors. Clock offsets and
+absolute end-to-end latency have not been measured.
+
+`input timing primary|cluster` exports the first 8192 picture-buffer input
+stamps, excluding configuration records, without dumping AVC into UART.
+These stamps use **QNX CLOCK_MONOTONIC**. In this run 790 main / 436 cluster input
+buffers span 317.096 / 309.773 guest seconds while the session is measured in
+host seconds. The accelerated QNX clock cannot be compared directly to host or
+sender clocks; the records do not measure physical decoder output or display.
+QNX still reports fake-OMX presentation errors and stream-111 forwarding recovery
+requests, which can affect the test. Their specific contribution is unquantified.
+
+The first timing-export attempt overflowed the QNX thread stack and terminated
+`dio_manager`. Its artifacts are explicitly named `moving-aborted-*` and excluded
+from the table. The export now uses a bounded heap buffer; the repeated full
+motion run and a separate final fresh-capture session have no such crash.
+A host C compile check rejects stack frames above 4096 bytes in this helper.
+
+```bash
+# With the owned Maps session, bridge and signer already active:
+scripts/carplay_lab.sh moving-route --seconds 40
+# Export timings before issuing fresh-capture requests.
+scripts/carplay_lab.sh input timing primary
+scripts/carplay_lab.sh input timing cluster
+scripts/carplay_lab.sh input snapshot primary --fresh \
+  --output build/vphone-lab/fresh-primary.h264
+scripts/carplay_lab.sh input snapshot cluster --fresh \
+  --output build/vphone-lab/fresh-cluster.h264
+```
+
+For a motion-only pacing report, pass `--window-start-ms` and `--window-end-ms`
+from `moving-route.json`'s first `host_end_ns` and last `host_start_ns`, divided by
+1e6. Both bounds are required; TCP reconstruction still uses the complete PCAP
+including SYN. Opcode counts and telemetry still describe the whole connection;
+only picture timing is filtered. Keep fresh-IDR requests outside that window.
+
+Artifacts are `moving-fixed-ethernet.pcap`, `moving-fixed-route.json`,
+`moving-fixed-{main,cluster}-pacing.json`, `moving-fixed-{primary,cluster}-timing.json`,
+`moving-fixed-primary-{before,after}.h264` and decoded PNGs under ignored
+`build/vphone-lab/`. Final native refresh verification independently decodes
+`fresh-final-primary.h264` (SHA-256
+`0ecab93150bc99ebe02a179c382b44c99512a0872563937a904b423f0f5e4c7f`) and
+`fresh-final-cluster.h264` (SHA-256
+`b8e5bb875a1bed36473f26763ca2a174fe85c6d715e5e05b381f7ddc95917a1d`).
+Their native request-to-snapshot durations were 427 / 1086 host milliseconds,
+which describe this diagnostic request, not normal video latency.
 
 ### Stream metadata and protocol experiments
 
@@ -662,15 +754,16 @@ existing operation rather than starting another restore.[^5]
 
 ## 🧪 Shared receiver and evidence tools
 
-Validation passed 76 guest/bootstrap/transport/output tests and 92 retained
+Validation passed 82 guest/bootstrap/transport/output tests and 95 retained
 laboratory regression tests, including seeded malformed-report and TCP-framing
-fuzzing. A native C RAM-capture test passes ASan/UBSan with 10,000 seeded inputs.
+fuzzing. A native C RAM-capture test passes ASan/UBSan with 10,000 seeded inputs,
+rejects frozen-GOP snapshots and checks timing wire framing.
 The native helper compiled with warnings treated as errors and was run
 on the owned guest. These offline checks validate the tools; the separate live
 pairing, MFi-SAP and independent video evidence above establishes the sender session.
 
 ```sh
-clang -Wall -Wextra -Werror -fsanitize=address,undefined \
+clang -Wall -Wextra -Werror -Wframe-larger-than=4096 -fsanitize=address,undefined \
   wireless/receiver_bridge/test_qnx_input_memory.c -o build/vphone-lab/test-qnx-input-memory
 build/vphone-lab/test-qnx-input-memory
 ```
