@@ -28,6 +28,10 @@ responsible for any damage, bricked units or warranty issues resulting from thei
 **Virtual Cockpit: CarPlay map on the cluster, route guidance beside it**
 
 <p align="center">
+  <img src="assets/gallery/vc_rs4_night_nav.jpeg" width="39%" />
+  <img src="assets/gallery/maneuver_demo.gif" width="52%" />
+</p>
+<p align="center">
   <img src="assets/gallery/vc_day_nav.jpeg" width="45%" />
   <img src="assets/gallery/vc_night_nav.jpeg" width="45%" />
 </p>
@@ -61,9 +65,8 @@ responsible for any damage, bricked units or warranty issues resulting from thei
 **Head-up display**
 
 <p align="center">
-  <img src="assets/gallery/maneuver_demo.gif" width="30%" />
-  <img src="assets/gallery/IMG_6302.jpeg" width="30%" />
-  <img src="assets/gallery/IMG_0599.jpeg" width="30%" />
+  <img src="assets/gallery/IMG_6302.jpeg" width="45%" />
+  <img src="assets/gallery/IMG_0599.jpeg" width="45%" />
 </p>
 
 <a id="contents"></a>
