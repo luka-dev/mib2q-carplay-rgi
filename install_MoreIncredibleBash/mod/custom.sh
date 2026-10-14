@@ -250,11 +250,12 @@ ncm_lua() {
     grep -q 'stopncm.sh carplay0' "$1" && block=1
     while IFS= read -r line || [ -n "$line" ]; do
         ind=${line%%[! ]*}
-        case $line in
-            *'return ("/etc/scripts/startncm.sh " .. Device_Stack.path .. " " .. interface .. " " .. iopkt_instance'*)
+        case ${line#"$ind"} in      # the whole statement only: anything else on the line is not ours to edit
+            'return ("/etc/scripts/startncm.sh " .. Device_Stack.path .. " " .. interface .. " " .. iopkt_instance)'|\
+            'return ("/etc/scripts/startncm.sh " .. Device_Stack.path .. " " .. interface .. " " .. iopkt_instance .. " $(busno) $(devno) $(iface)")')
                 n_start=$((n_start + 1))
                 line=$ind'return ("/etc/scripts/startncm.sh " .. Device_Stack.path .. " " .. interface .. " " .. iopkt_instance .. " $(busno) $(devno) $(iface)")' ;;
-            *'return "/etc/scripts/stopncm.sh"')
+            'return "/etc/scripts/stopncm.sh"')
                 if [ $block = 0 ]; then
                     n_stop=$((n_stop + 1))
                     printf '%s\n' "${ind}if not posix.stat(\"/tmp/carlife_active\") then" \
