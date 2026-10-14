@@ -87,7 +87,7 @@ out = ["# Documentation map", "",
        "[Documentation home](README.md) · [Landmines](LANDMINES.md)", "",
        "## 🗺️ How to use this map", "",
        "Each domain has one mindmap of its notes, followed by the same notes as links. "
-       "The [documentation home](README.md#-the-domains) has the compact version: domains and topic groups only. "
+       "The [documentation home](README.md#-the-domains) and the repository README show all of them in one mindmap. "
        f"{len(placed)} notes in {len(MAP)} domains.", ""]
 for folder, name, emoji, groups in MAP:
     out += [f"## {emoji} {name}", ""]
@@ -104,14 +104,6 @@ for folder, name, emoji, groups in MAP:
     out.append("")
 open("DOCS_MAP.md", "w").write("\n".join(out).rstrip() + "\n")
 
-# compact mindmap for the home page
-compact = ["```mermaid", "mindmap", "  root((MHI2Q CarPlay docs))"]
-for folder, name, emoji, groups in MAP:
-    compact.append(f"    {name}")
-    compact += [f"      {g}" for g, _ in groups]
-compact.append("```")
-
-
 # A–Z index: every note, domain READMEs as "<Domain> overview"
 entries = [(f"{name} overview", f"{folder}/README.md") for folder, name, *_ in MAP
            if os.path.isfile(f"{folder}/README.md")]
@@ -127,7 +119,16 @@ def splice(path, name, body):
     i, j = text.index(begin) + len(begin), text.index(end)
     open(path, "w").write(text[:i] + "\n" + body + "\n" + text[j:])
 
-splice("README.md", "compact-mindmap", "\n".join(compact))
+# full mindmap for docs/README.md: every note under its domain and group
+full = ["```mermaid", "mindmap", "  root((MHI2Q CarPlay docs))"]
+for folder, name, emoji, groups in MAP:
+    full.append(f"    {name}")
+    for g, files in groups:
+        full.append(f"      {g}")
+        full += [f"        {label(f'{folder}/{f}.md')}" for f in files]
+full.append("```")
+
+splice("README.md", "full-mindmap", "\n".join(full))
 splice("README.md", "a-z", az)
-splice(os.path.join(REPO, "README.md"), "compact-mindmap", "\n".join(compact))
+splice(os.path.join(REPO, "README.md"), "full-mindmap", "\n".join(full))
 print(len(placed), "notes placed;", len(entries), "A-Z entries")

@@ -63,51 +63,173 @@ records the exact evidence and limits.
 
 ## 📚 The domains
 
-_Compact mindmap: the eight domains and their topic groups. Every note, grouped the same way, is in the [documentation map](DOCS_MAP.md)._
+_Full mindmap: every curated note under its domain and topic group. The same notes as per-domain mindmaps with links are in the [documentation map](DOCS_MAP.md)._
 
-<!-- BEGIN generated:compact-mindmap -->
+<!-- BEGIN generated:full-mindmap -->
 ```mermaid
 mindmap
   root((MHI2Q CarPlay docs))
     Audio
       Upmix runtime
+        Stereo to 5.1 Upmix
+        Stereo-to-rear scene algorithm
+        Upmix Calibration and Tuning
+        Upmix Compute Budget
+        Upmix Code Retirement Map
       Upmix research and history
+        Upmix History and Results
+        UPMIX rework baseline
+        UPMIX rework proposal
+        UPMIX radical directions
+        Upmix Stability
+        Current Track A on the matched full40 harness
+        Upmix Training History
+        Upmix Datasets and Teachers
+        Upmix Literature
+        Upmix domain model and qualification map
+        HSSR Model
       Listening and release
+        CarPlay Upmix Listening Protocol
+        Upmix Listening and Deploy Log
+        Upmix Release and Acceptance
       Amplifier and DSP
+        Virtual Cabin and Amp RE
+        J525 Wiring and Speakers
+        SHARC B Processors
+        SHARC DSP Blocks
+        Internal Amp Path
       Codecs and routing
+        APAC Codec
+        Cinemo AAC Decoder
+        Dolby Atmos
+        Discrete 5.1 Routing
+        Buffered Audio Path
+        Buffered Playback Lifecycle
+        Call and Siri Routing
+        QNX Audio Topology
+        iOS 26 type-103 connection triage
     Cluster and RGI
       Contexts and layout
+        Cluster Contexts
+        KDK Geometry and Animation
+        VC Layout and Fonts
+        VC FPK State Machine
+        PDC Small Stage
+        Nav Initializing Screen
       Route guidance
+        RGI and BAP Bridge
+        iAP2 Route Guidance TLVs
+        Maneuver Mapping
+        Lane Guidance
+        Distance Bargraph
+        HUD Renderer
+        NavSD FctID Matrix
+        Third-party Nav Apps
       Phone and telephony
+        CarPlay Telephony
+        iAP2 Communications
+        VC Telephone Tab
+        Phone Tab Gating
+        Smartphone Tab and Kombi DSI
       Open research
+        CarPlay speed-limit investigation
+        iAP2 StartRoadObjectDetection and Type research
     AltScreen and Video
       Cluster video
+        AltScreen Cluster Video
+        Video Pipeline
+        Cluster Loader
+        Cluster Video Encoder
+        Reconnect and Lifecycle
       Pacing and input
+        AltScreen Frame Rate
+        AltScreen Pacing Validation
+        AltScreen Input Commands
       Features
+        Cover Art Pipeline
+        Enhanced Siri Contract
+        CarPlay Video Playback
+        CarPlay Feature Survey
+        Partial 360 Camera Preflight
       History
+        AltScreen RE History
     Connect and USB
       USB session
+        USB and NCM Connect
+        Session Lifecycle
+        iOS Version Gate
+        HMI Startup and Identity
       Replug recovery
+        USB Replug Recovery
+        SI Stack and Replug Race
       Network and phone data
+        PF Firewall
+        Vehicle Data To Phone
+        Now Playing Cold Start
     Wireless CarPlay
       Receiver and ownership
+        Wireless CarPlay with MU1316 stock AirPlay 210.81
+        Stock210 wireless readiness, restart and wired priority
+        Receiver startup gap for wireless CarPlay
+        dio receiver bridge
+        Smartphone Integrator ownership for wireless startup
       Bluetooth graft
+        MHI2Q RFCOMM graft
+        Offline insertion survey for the MHI2Q btstack
+        MU1316 btstack launcher path
+        RFCOMM server channel for iAP2
+        RFCOMM connection, transmit, and credit ABI
+        CarPlay Bluetooth discovery
       iAP2 and MFi bootstrap
+        Offline iAP2 bridge daemon prototype
+        Vendored LIVI iAP2 crates
+        Software MFi for offline tests
+        P5092 bootstrap reference versus the MU1316/P5087 wireless mod
       Pairing and media
+        Stock 210.81 HTTP boundary for hook/wireless
+        Stock 210.81 paired media adapters
+        AirPlay 280.33.8 pairing
       iOS, radio and hardware
+        iOS 26/27 selection of stock AirPlay 210 MFi-SAP
+        iOS wireless CarPlay gates
+        Wireless CarPlay and Wi-Fi
+        Wireless CarPlay on the Head Unit
+        Wireless CarPlay PF profiles, offline
       Evidence
+        Stock 210 + hook/wireless
+        Wireless CarPlay investigation history
+        Wireless documentation migration
     CarPlay Laboratory
       vphone sender
+        vphone CarPlay laboratory
+        vphone and QNX timing measurements
+        Native CarPlay screen test
       Earlier labs and review
+        iOS virtual machine laboratory
+        Wireless hook review against iOS and MHI2Q 210
     Build and Deploy
       Build and release
+        Build System
+        Deploy and Release
+        Scene Backend Deploy
+        VIN Protection
       Audits and recovery
+        Production Audits
+        Issue 24
+        RE Artifacts
     Reference
       System
+        Architecture
+        Hook to Java Bus
+        Record Replay Tooling
       Formats and ports
+        iOS CarPlay Spatial Wireformat
+        MHI2 MU1439 Port
       History and comparisons
+        Archive and History
+        Repository Comparison
 ```
-<!-- END generated:compact-mindmap -->
+<!-- END generated:full-mindmap -->
 
 | Domain | Map of content | Covers |
 | --- | --- | --- |
