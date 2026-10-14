@@ -87,7 +87,7 @@ out = ["# Documentation map", "",
        "[Documentation home](README.md) · [Landmines](LANDMINES.md)", "",
        "## 🗺️ How to use this map", "",
        "Each domain has one mindmap of its notes, followed by the same notes as links. "
-       "The [documentation home](README.md#-the-domains) and the repository README show all of them in one mindmap. "
+       "The [documentation home](README.md#-the-domains) shows all of them in one mindmap; the repository README shows each topic group with its note count and lead note. "
        f"{len(placed)} notes in {len(MAP)} domains.", ""]
 for folder, name, emoji, groups in MAP:
     out += [f"## {emoji} {name}", ""]
@@ -129,6 +129,15 @@ for folder, name, emoji, groups in MAP:
 full.append("```")
 
 splice("README.md", "full-mindmap", "\n".join(full))
+
+# overview mindmap for the repository README: each group with its note count and its lead note (first in MAP)
+overview = ["```mermaid", "mindmap", "  root((MHI2Q CarPlay docs))"]
+for folder, name, emoji, groups in MAP:
+    overview.append(f"    {name}")
+    for g, files in groups:
+        overview.append(f"      {g} · {len(files)} note{'s' if len(files) != 1 else ''}")  # no parentheses: mindmap reads them as a node shape
+        overview.append(f"        {label(f'{folder}/{files[0]}.md')}")
+overview.append("```")
 splice("README.md", "a-z", az)
-splice(os.path.join(REPO, "README.md"), "full-mindmap", "\n".join(full))
+splice(os.path.join(REPO, "README.md"), "overview-mindmap", "\n".join(overview))
 print(len(placed), "notes placed;", len(entries), "A-Z entries")
