@@ -7,31 +7,31 @@ if (( $# )); then shift; fi
 qnx_dir="build/vphone-lab/qnx-network"
 case "$action" in
     bootstrap)
-        exec python3 -m wireless.vphone_lab.bootstrap "$@" ;;
+        exec python3 -m tests.carplay_lab.vphone.bootstrap "$@" ;;
     doctor|plan|create|recover-create|start|debug-start|stop|status|snapshot|diagnose|unlock|screenshot)
-        exec python3 -m wireless.vphone_lab.lab "$action" "$@" ;;
+        exec python3 -m tests.carplay_lab.vphone.lab "$action" "$@" ;;
     usb)
-        exec python3 -m wireless.vphone_lab.usb "$@" ;;
+        exec python3 -m tests.carplay_lab.vphone.usb "$@" ;;
     usb-kernel)
-        exec python3 -m wireless.vphone_lab.usb_kernel "$@" ;;
+        exec python3 -m tests.carplay_lab.vphone.usb_kernel "$@" ;;
     iap-smoke)
-        exec python3 -m wireless.vphone_lab.iap "$@" ;;
+        exec python3 -m tests.carplay_lab.vphone.iap "$@" ;;
     mfi-probe)
-        exec build/vphone-lab/venv/bin/python -m wireless.vphone_lab.mfi_probe "$@" ;;
+        exec build/vphone-lab/venv/bin/python -m tests.carplay_lab.vphone.mfi_probe "$@" ;;
     ethernet)
-        exec python3 -m wireless.vphone_lab.ethernet "$@" ;;
+        exec python3 -m tests.carplay_lab.vphone.ethernet "$@" ;;
     queue-report)
-        exec python3 -m wireless.vphone_lab.bridge_queues "$@" ;;
+        exec python3 -m tests.carplay_lab.vphone.bridge_queues "$@" ;;
     qemu-trace-build)
-        exec python3 -m wireless.vphone_lab.qemu_trace_build "$@" ;;
+        exec python3 -m tests.carplay_lab.vphone.qemu_trace_build "$@" ;;
     usb-queue-report)
-        exec python3 -m wireless.vphone_lab.qemu_usb_queues "$@" ;;
+        exec python3 -m tests.carplay_lab.vphone.qemu_usb_queues "$@" ;;
     sender-log)
-        exec python3 -m wireless.vphone_lab.sender_logs "$@" ;;
+        exec python3 -m tests.carplay_lab.vphone.sender_logs "$@" ;;
     moving-route)
-        exec python3 -m wireless.vphone_lab.moving_route "$@" ;;
+        exec python3 -m tests.carplay_lab.vphone.moving_route "$@" ;;
     input)
-        exec python3 -m wireless.vphone_lab.carplay_input "$@" ;;
+        exec python3 -m tests.carplay_lab.vphone.carplay_input "$@" ;;
     qnx-build)
         source scripts/build_hook_common.sh
         capture_args=(--capture-video)
@@ -40,20 +40,20 @@ case "$action" in
         done
         OUTDIR_REL=build/wireless-alt-qemu HOOK_WIRELESS=1 HOOK_AUDIO=0 \
             WIRELESS_ALT_QEMU=1 QNX_TOOLCHAIN_VARIANT=8.5 carplay_build_hook
-        exec env QNX_TOOLCHAIN_VARIANT=8.5 python3 -m wireless.lab_common.qnx_receiver \
+        exec env QNX_TOOLCHAIN_VARIANT=8.5 python3 -m tests.carplay_lab.common.qnx_receiver \
             build --lab-dir "$qnx_dir" --pairing --media --software-mfi \
             --request-ui "${capture_args[@]}" --paired-altscreen "$@" ;;
     qnx-start|qnx-stop|qnx-status|qnx-info)
-        exec python3 -m wireless.lab_common.qnx_receiver "${action#qnx-}" \
+        exec python3 -m tests.carplay_lab.common.qnx_receiver "${action#qnx-}" \
             --lab-dir "$qnx_dir" --transport socket "$@" ;;
     mfi)
-        exec python3 -m wireless.lab_common.mfi_sap --qnx-dir "$qnx_dir" "$@" ;;
+        exec python3 -m tests.carplay_lab.common.mfi_sap --qnx-dir "$qnx_dir" "$@" ;;
     extract)
-        exec python3 -m wireless.lab_common.extract_native_video --lab-dir build/vphone-lab "$@" ;;
+        exec python3 -m tests.carplay_lab.common.extract_native_video --lab-dir build/vphone-lab "$@" ;;
     pacing)
-        exec python3 -m wireless.lab_common.frame_pacing --lab-dir build/vphone-lab "$@" ;;
+        exec python3 -m tests.carplay_lab.common.frame_pacing --lab-dir build/vphone-lab "$@" ;;
     wire-pacing)
-        exec python3 -m wireless.lab_common.screen_wire_pacing --lab-dir build/vphone-lab "$@" ;;
+        exec python3 -m tests.carplay_lab.common.screen_wire_pacing --lab-dir build/vphone-lab "$@" ;;
     *)
         printf 'Unknown action: %s\n' "$action" >&2
         exit 2 ;;

@@ -40,7 +40,7 @@ from the review bundle and must never run on the head.
 Run the local AirPlay 280 receiver image with:
 
 ```sh
-python3 wireless/receiver_bridge/qemu_capture.py --mesh \
+python3 tests/carplay_lab/qnx/qemu_capture.py --mesh \
   --start-experiment --seed-display --skip-hid-qemu --mdnsd \
   --mock-mac-qemu --interface-lo0-qemu --airplay280-qemu \
   --airplay280-image wireless/receiver_bridge/out/airplay280_qemu/libairplay.qemu.so \

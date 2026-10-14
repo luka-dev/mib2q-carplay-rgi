@@ -60,7 +60,7 @@ causes `mdnsd` to report `Can't assign requested address` when sending to
 Reproduce the complete QEMU-only A/B path with:
 
 ```sh
-python3 wireless/receiver_bridge/qemu_capture.py --mesh \
+python3 tests/carplay_lab/qnx/qemu_capture.py --mesh \
   --start-experiment --seed-display --skip-hid-qemu --feature37 \
   --mdnsd --mock-mac-qemu --interface-lo0-qemu
 ```

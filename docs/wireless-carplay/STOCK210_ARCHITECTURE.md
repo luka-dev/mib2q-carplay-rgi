@@ -101,7 +101,7 @@ hook implementation; see the ABI document above. This original diagnostic
 remains separate from the module.
 
 The QEMU observation is reproducible with
-`python3 wireless/receiver_bridge/qemu_capture.py --mesh --start-experiment
+`python3 tests/carplay_lab/qnx/qemu_capture.py --mesh --start-experiment
 --seed-display --skip-hid-qemu --feature37 --http-delegate-qemu --mdnsd
 --mock-mac-qemu --interface-lo0-qemu --dump-txt-qemu`. Its MAC/interface and
 display seed are synthetic; the exact 210 library and `dio_manager` are not.

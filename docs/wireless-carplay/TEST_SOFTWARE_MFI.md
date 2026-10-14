@@ -6,8 +6,8 @@ _Host crypto and iAP2 control validation · 2026-10-09._
 
 [Wireless overview](README.md) · [iAP2 daemon](IAP2_DAEMON.md)
 
-The active [vphone laboratory](VPHONE_LAB.md) uses the shared, integrity-checked
-fixture and MFi-SAP service in `wireless/lab_common/`. The native CoreAccessories
+The active [vphone laboratory](../carplay-lab/VPHONE_LAB.md) uses the shared, integrity-checked
+fixture and MFi-SAP service in `tests/carplay_lab/common/`. The native CoreAccessories
 API peer now passes valid/invalid iAP2 authentication controls on iOS 26.6.2;
 primary Direct NCM completes the QNX CarPlay session and carries independently
 decoded primary and stream-111 video. USB-port forwarding remains unverified.
@@ -32,13 +32,13 @@ There is no software-auth runtime selector or external credential loader. The
 feature is disabled by default and its build script rejects QNX and non-Unix
 targets. OpenSSL is invoked only by the host test provider.
 
-A separate [DiPlay public-release identity fixture](../../wireless/fixtures/diplay_mfi/README.md)
+A separate [DiPlay public-release identity fixture](../../tests/carplay_lab/fixtures/diplay_mfi/README.md)
 records the P-256 private key and certificate extracted from the upstream 0.2.16
 APK, with pinned provenance and hashes. Its key consistency was checked locally.
 The provider and QNX daemon do not load this fixture; the automated tests
 described here continue to use freshly generated synthetic identities.
 
-The separate [iOS VM laboratory](IOS_VM_LAB.md) now uses that pinned public
+The separate [iOS VM laboratory](../carplay-lab/IOS_VM_LAB.md) now uses that pinned public
 fixture in an opt-in host signer. Emulated iOS `18A5351d` negotiated a native
 iAP2 control session, issued a fresh 32-byte challenge, and accepted the 64-byte
 P-256 response with `AA05`. Corrupted response and certificate signatures
@@ -62,7 +62,7 @@ pixels. The QEMU-only paired AltScreen build negotiated a native 1440×542
 CarInstruments display and stream 111, but no cluster video units arrived.
 The legacy attempt stopped during control setup. The bounded native screen
 result and recipe are
-in the [native screen runbook](NATIVE_SCREEN_TEST.md). The software MFi results
+in the [native screen runbook](../carplay-lab/NATIVE_SCREEN_TEST.md). The software MFi results
 do not add a live backend to the QNX preloader or production daemon,
 and do not establish physical iPhone or CarPlay media behavior.
 
@@ -200,7 +200,7 @@ fixture separately validates CU pairing, encrypted media adapters, wired
 takeover and wireless resume. It uses synthetic peripherals and input-only
 fake OMX; this synthetic fixture does not prove decoded frames or physical
 radio timing. Independent native-iOS video decoding is covered by the separate
-[native screen test](NATIVE_SCREEN_TEST.md).
+[native screen test](../carplay-lab/NATIVE_SCREEN_TEST.md).
 
 For a single bootstrap exchange:
 

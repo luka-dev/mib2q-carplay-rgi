@@ -23,6 +23,13 @@ source code is the ground truth for what the system does.
 External implementation comparison: [mhi2q-evo vs our complete CarPlay stack](reference/REPOSITORY_COMPARISON_MHI2Q_EVO_2026-10-10.md)
 records the video, cluster/HUD, input, wireless, audio, build and deployment differences, selected host checks and proposed transfers.
 
+## 🧪 CarPlay emulator laboratory
+
+The [CarPlay emulator laboratory](carplay-lab/README.md) has a separate source
+tree under `tests/carplay_lab/` and its own runbooks. Native vphone/QNX video
+and timing results are distinct from the [wireless implementation](wireless-carplay/README.md)
+and on-unit radio measurements.
+
 ## 🧪 Current AltScreen pacing candidate
 
 The 2026-10-06 source implements all six follow-up improvements: shared recovery,
@@ -56,7 +63,7 @@ records the exact evidence and limits.
 
 ## 📚 The domains
 
-_Mindmap of the docs: the seven domains and their curated notes._
+_Mindmap of the docs: the eight domains and their curated notes._
 
 ```mermaid
 mindmap
@@ -137,6 +144,11 @@ mindmap
       DIO Ownership and USB Priority
       iOS Gates and Donor Evidence
       Validation and Investigation History
+    CarPlay Laboratory
+      Native vphone Sender
+      QNX Clock and Packet Queues
+      Software MFi Fixtures
+      Retained iOS 14 Experiments
     Build and Deploy
       Build System
       Deploy and Release
@@ -326,7 +338,7 @@ Every curated note, alphabetical:
 - [Wireless CarPlay overview](wireless-carplay/README.md)
 - [Wireless CarPlay PF profiles, offline](wireless-carplay/FIREWALL.md)
 - [Wireless CarPlay with MU1316 stock AirPlay 210.81](wireless-carplay/STOCK210_ARCHITECTURE.md)
-- [Wireless code review against iOS and original MHI2Q 210](wireless-carplay/IOS210_CODE_REVIEW.md)
+- [Wireless code review against iOS and original MHI2Q 210](carplay-lab/IOS210_CODE_REVIEW.md)
 - [Wireless documentation migration](wireless-carplay/MIGRATION.md)
 - [Wireless investigation history](wireless-carplay/history/README.md)
 

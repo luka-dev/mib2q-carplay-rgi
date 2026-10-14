@@ -43,7 +43,7 @@ set). No phone has connected and the stock server has not bound TCP 7000.
 Reproduce from the repository root with:
 
 ```sh
-python3 wireless/receiver_bridge/qemu_capture.py --mesh --start-experiment \
+python3 tests/carplay_lab/qnx/qemu_capture.py --mesh --start-experiment \
   --seed-display --skip-hid-qemu --feature37
 ```
 

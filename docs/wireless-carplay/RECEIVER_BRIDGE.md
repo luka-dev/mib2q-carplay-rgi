@@ -153,7 +153,7 @@ succeeded and produced an ELF32 ARM EABI5 shared object. The diagnostic build
 `dio_manager` using:
 
 ```sh
-python3 wireless/receiver_bridge/qemu_capture.py
+python3 tests/carplay_lab/qnx/qemu_capture.py
 ```
 
 Its serial log showed:
@@ -191,7 +191,7 @@ before installation. The on-unit binaries and processes remain untouched.
 ## 📋 Stock receiver mesh experiments
 
 The broker/servicemgr mesh image keeps stock `dio_manager` alive; run it with
-`python3 wireless/receiver_bridge/qemu_capture.py --mesh`. The same exact-image
+`python3 tests/carplay_lab/qnx/qemu_capture.py --mesh`. The same exact-image
 probe captured a manager that remained alive through the observation window.
 The QEMU-only `--start-experiment` posts the stock StartAirPlay event on that
 manager eight seconds later. Its optional `--seed-display` writes 800×480 to
@@ -264,7 +264,7 @@ while on-unit behavior remains unverified. The test log is `out/qemu_soft_restar
 The integrated test is:
 
 ```sh
-python3 wireless/receiver_bridge/qemu_capture.py --mesh \
+python3 tests/carplay_lab/qnx/qemu_capture.py --mesh \
   --start-experiment --skip-hid-qemu --feature37 \
   --mdnsd --mock-mac-qemu --interface-lo0-qemu \
   --bridge-qemu --bridge-first-start-qemu
@@ -284,7 +284,7 @@ The same receiver fixture can be driven by the actual QNX/Rust
 `LoopbackReceiverControl` implementation instead of the C self-client:
 
 ```sh
-python3 wireless/receiver_bridge/qemu_capture.py --mesh \
+python3 tests/carplay_lab/qnx/qemu_capture.py --mesh \
   --start-experiment --skip-hid-qemu --feature37 \
   --mdnsd --mock-mac-qemu --interface-lo0-qemu \
   --bridge-qemu --bridge-first-start-qemu --receiver-control-probe
@@ -305,7 +305,7 @@ synthetic iAP2 phone and MFi I²C preload, and stock `dio_manager` in the
 **same** IFS:
 
 ```sh
-python3 wireless/receiver_bridge/qemu_capture.py --mesh \
+python3 tests/carplay_lab/qnx/qemu_capture.py --mesh \
   --start-experiment --skip-hid-qemu --feature37 \
   --mdnsd --mock-mac-qemu --interface-lo0-qemu \
   --bridge-qemu --bridge-first-start-qemu --daemon-phone-qemu

@@ -142,7 +142,7 @@ keys stay under `/mnt/persist/mhi2q-carplay/pairing`.
 ```sh
 bash scripts/build_hook_wireless.sh
 python3 wireless/receiver_bridge/build_offline.py --receiver stock210 --property-handoff
-python3 wireless/receiver_bridge/qemu_capture.py --wireless-hook-qemu \
+python3 tests/carplay_lab/qnx/qemu_capture.py --wireless-hook-qemu \
   --wireless-media-qemu --wireless-lifecycle-qemu --mesh --start-experiment \
   --seed-display --skip-hid-qemu --mdnsd --mock-mac-qemu --interface-lo0-qemu
 python3 wireless/integration/build_stock210_review.py

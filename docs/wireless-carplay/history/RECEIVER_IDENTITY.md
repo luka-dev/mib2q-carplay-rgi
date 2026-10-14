@@ -39,7 +39,7 @@ to `DNSServiceRegister` for `_airplay._tcp.` without modifying them. The same
 run read the stock receiver's HTTP `/info` response. Reproduce with:
 
 ```sh
-python3 wireless/receiver_bridge/qemu_capture.py --mesh \
+python3 tests/carplay_lab/qnx/qemu_capture.py --mesh \
   --start-experiment --seed-display --skip-hid-qemu --feature37 \
   --mdnsd --mock-mac-qemu --interface-lo0-qemu --dump-txt-qemu
 ```
@@ -128,7 +128,7 @@ The actual writable mount and ownership remain unverified. QEMU candidate SHA-25
 The QEMU run with this candidate and pinned MU1316 `dio_manager` passed:
 
 ```sh
-python3 wireless/receiver_bridge/qemu_capture.py --mesh \
+python3 tests/carplay_lab/qnx/qemu_capture.py --mesh \
   --start-experiment --seed-display --skip-hid-qemu --mdnsd \
   --mock-mac-qemu --interface-lo0-qemu --airplay280-qemu \
   --airplay280-image wireless/receiver_bridge/out/airplay280_qemu/libairplay.qemu.so \

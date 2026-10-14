@@ -8,23 +8,6 @@ _Stock210 mod architecture, implementation evidence and offline validation — 2
 
 ## 📋 Current status
 
-The active [vphone laboratory](VPHONE_LAB.md) on `feat/vphone-carplay-lab` now
-carries genuine iOS 26.6.2 CarPlay video to the stock-210 QNX receiver. The native
-CoreAccessories API peer passes valid/invalid software MFi controls, identifies
-the accessory and starts CarPlay through primary Direct NCM. Native pairing,
-MFi-SAP, encrypted control and both screen SETUPs complete. FFmpeg independently
-decoded the primary Maps UI at 800×480 and actual map tiles on stream 111
-at 1440×542. A native virtual HID tap on GO changed the cluster location dot
-to a navigation arrow. Siri was enabled through native Settings after rebuilding
-a stale MobileGestalt cache. A longer run without UART video payloads measured
-33.42/33.82 ms median
-main/cluster delivery intervals, with substantial long gaps still present.
-A controlled 40-second guest location simulation now visibly moves both Maps
-screens; sender-target and TCP-delivery intervals are reported separately.
-Explicit native IDR refresh replaces unavailable capped RAM GOPs. Turn-by-turn
-navigation, roller/button and reconnect coverage, and USB-port forwarding still
-need validation. The Inferno results below are retained historical evidence.
-
 The MU1316 / P5087 candidate retains factory AirPlay **210.81** on QNX 6.5 ARM.
 The C wireless hook supplies pairing and modern control/event/media security;
 the Rust daemon handles iAP2, MFi and Wi-Fi bootstrap. The private280 SDK code
@@ -33,45 +16,12 @@ the factory receiver. [Architecture](STOCK210_ARCHITECTURE.md) and
 [lifecycle evidence](STOCK210_RECEIVER_LIFECYCLE.md) describe the current path.
 
 Combined QNX/QEMU validation passed three DIO owner generations and two media
-sessions, including wired-priority drain and wireless resume. Physical iPhone,
-MFi chip, radio, USB and on-unit media rendering remain unverified.
-The separate [iOS/QEMU laboratory](IOS_VM_LAB.md) has now negotiated actual
-iAP2 with emulated iOS 14 and verified live software MFi authentication:
-valid signatures receive `AA05`, while corrupted response/certificate
-signatures receive `AA04`. Native identification and CarPlay approval passed;
-a direct Ethernet bridge connects to the QNX receiver. Native Pair Setup/Verify
-and the QEMU-only live MFi-SAP responder established a real CarPlay session.
-Screen negotiation reached 800×480 / 30 FPS. An opt-in codec-property workaround
-passes native A/B probes and lets `mediaserverd` reach encoder configuration.
-The earlier screen payload was status telemetry with zero sent frames; Maps crashes
-in VectorKit with no native Metal device. A separate CPU-pixel probe selects
-CarPlay's encoder usage; the default mode fails to allocate its internal
-hardware encoder. The native `UnifiedEncoderMode=0` override produced three
-800×480 H.264 frames per probe, verified by independent decoding. The VM-only
-software surface adapter now sends actual native UI through the stock encoder
-and receiver: 31 real 800×480 frames independently decoded, with 26 distinct
-image hashes and a visible Dashboard. A longer 60 guest-second run now
-independently decodes 519 frames; PCAP measures 10.84 access units/s over
-47.78 host seconds. Guest clocks differ, so the runbook reports each stage
-separately. Maps, audio, actual AltScreen pixels and a physical radio link
-remain separate checks. The QEMU-only paired AltScreen profile now negotiates
-stream 111 and creates the native 1440×542 CarInstruments display, while the
-ordinary hook keeps its paired-session guard. Port 6031 carries state and
-telemetry only: no cluster video frames have been observed. The separate
-legacy attempt stopped during control setup.
-The opt-in native framebuffer-2 producer now selects its own advertised
-1440×542 mode and validated NV12 surfaces. Pool access is confirmed; live
-stream-111 video has not yet been independently decoded.
-The [native screen test](NATIVE_SCREEN_TEST.md) describes the bounded software
-mode hold, native surface adapter, live session sequence and independent decode.
-The subsequent [iOS/stock210 code review and corrections](IOS210_CODE_REVIEW.md)
-fixed authentication-first iAP2 handling, unsupported stream 111 negotiation
-and wired SETUP with inherited wireless flags. The combined QEMU rerun covers
-both authentication orders; production wireless offers the main display only.
-The opt-in QEMU paired-111 experiment is documented separately in the native
-screen runbook and is not a deployment profile.
-All work remains **offline only**; no HU connection, process restart, reboot or
-original firmware-file change is part of this milestone.
+sessions, including wired-priority drain and wireless resume. Physical wireless
+CarPlay authentication and on-unit wireless media rendering remain unverified.
+The emulator stand has its own [CarPlay laboratory documentation](../carplay-lab/README.md)
+and [test source tree](../../tests/carplay_lab/). Native vphone video, retained
+iOS 14 experiments and queue measurements live there. They do not establish a
+physical wireless CarPlay session on the unit.
 
 The optional [software MFi QNX/QEMU tests](TEST_SOFTWARE_MFI.md#-qnx-and-qemu-integration)
 replace fixed mock signature bytes with freshly generated RSA test vectors.
@@ -115,19 +65,19 @@ Bonjour, `/info`, signed PairSetup and iAP2 StartSession share one persistent
 pairing identifier `pi`. It is separate from the Ed25519 public key. Pairing
 keys, owner locks and the advisory generation marker use `/mnt/persist`;
 `/tmp` is transient RAM. Pairing initialization and the media SETUP guard are
-scoped to wireless owner mode. See [review corrections](IOS210_CODE_REVIEW.md#-corrections-and-regression-coverage) and
+scoped to wireless owner mode. See [review corrections](../carplay-lab/IOS210_CODE_REVIEW.md#-corrections-and-regression-coverage) and
 [receiver lifecycle](STOCK210_RECEIVER_LIFECYCLE.md#queue-and-owner-lifecycle).
 
 ## 📚 Reading paths
 
 | Topic | Notes |
 |---|---|
-| Current code review | [iOS and stock210 findings, reproductions and fixes required](IOS210_CODE_REVIEW.md) |
+| Current code review | [iOS and stock210 findings, reproductions and fixes required](../carplay-lab/IOS210_CODE_REVIEW.md) |
 | Current receiver | [Architecture](STOCK210_ARCHITECTURE.md) · [Startup](RECEIVER_START.md) · [Bridge](RECEIVER_BRIDGE.md) · [Readiness and restart](STOCK210_RECEIVER_LIFECYCLE.md) |
 | Bluetooth transport | [Graft](BTSTACK_GRAFT.md) · [Channel layout](RFCOMM_CHANNEL_LAYOUT.md) · [Duplex ABI](RFCOMM_DUPLEX.md) · [Discovery](BLUETOOTH_DISCOVERY.md) |
 | Graft construction | [Insertion plan](GRAFT_INSERTION_PLAN.md) · [Factory launcher experiments](GRAFT_LAUNCHER_LIFECYCLE.md) |
 | Pairing and media | [HTTP ABI](STOCK210_HTTP_PAIRING_ABI.md) · [Media crypto ABI](STOCK210_MEDIA_CRYPTO_ABI.md) · [280 source recipe](AIRPLAY280_PAIRING_RECIPE.md) |
-| Bootstrap and ownership | [iAP2 daemon](IAP2_DAEMON.md) · [Software MFi tests](TEST_SOFTWARE_MFI.md) · [iOS VM laboratory](IOS_VM_LAB.md) · [DIO ownership](DIO_OWNERSHIP.md) · [Vendor provenance](IAP2_VENDOR_PROVENANCE.md) |
+| Bootstrap and ownership | [iAP2 daemon](IAP2_DAEMON.md) · [Software MFi tests](TEST_SOFTWARE_MFI.md) · [iOS VM laboratory](../carplay-lab/IOS_VM_LAB.md) · [DIO ownership](DIO_OWNERSHIP.md) · [Vendor provenance](IAP2_VENDOR_PROVENANCE.md) |
 | Network and hardware | [Wi-Fi discovery](WIFI_AND_DISCOVERY.md) · [Firewall](FIREWALL.md) · [Hardware and donors](HARDWARE_AND_DONORS.md) |
 | iOS and references | [Authentication selection](IOS_AUTH_SELECTION.md) · [Wireless session gates](IOS_WIRELESS_SESSION_GATES.md) · [Bootstrap comparison](BOOTSTRAP_COMPARISON.md) |
 | Evidence and history | [Pairing/media milestones](STOCK210_VALIDATION.md) · [Historical experiments](history/README.md) · [Migration map](MIGRATION.md) |
@@ -148,7 +98,7 @@ Those external inputs are not committed here.
 
 ```sh
 bash scripts/build_hook_wireless.sh
-python3 wireless/receiver_bridge/qemu_capture.py --wireless-hook-qemu \
+python3 tests/carplay_lab/qnx/qemu_capture.py --wireless-hook-qemu \
   --wireless-media-qemu --wireless-lifecycle-qemu --mesh --start-experiment \
   --seed-display --skip-hid-qemu --mdnsd --mock-mac-qemu --interface-lo0-qemu
 python3 wireless/daemon/probes/qemu_daemon_bridge.py --phone-probe --control-probe

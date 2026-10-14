@@ -36,8 +36,8 @@ def main() -> int:
         "phone_qemu_probe.rs", "mock_mfi_qemu.c", "software_mfi_fixture.rs",
         "software_mfi_fixture_main.rs", "software_mfi_fixture.h", "software_mfi_phone.rs",
         "software_mfi_verify_qemu.c", "software_mfi_qemu.py", "qemu_daemon_bridge.py")]
-    sources += ["tests/software_mfi_fixture_test.c", "wireless/receiver_bridge/qemu_capture.py",
-                "wireless/receiver_bridge/stock210_lifecycle_fixture.py"]
+    sources += ["tests/software_mfi_fixture_test.c", "tests/carplay_lab/qnx/qemu_capture.py",
+                "tests/carplay_lab/qnx/stock210_lifecycle_fixture.py"]
     report["source_sha256"] = {
         path: hashlib.sha256((ROOT / path).read_bytes()).hexdigest() for path in sources
     }
@@ -124,7 +124,7 @@ def main() -> int:
             ]:
                 run(f"qemu-software-mfi-{name}", [*base, "--software-mfi-qemu", *flags])
             run("stock210-software-mfi-lifecycle", [
-                "python3", str(ROOT / "wireless/receiver_bridge/qemu_capture.py"),
+                "python3", str(ROOT / "tests/carplay_lab/qnx/qemu_capture.py"),
                 "--wireless-hook-qemu", "--wireless-media-qemu", "--wireless-lifecycle-qemu",
                 "--mesh", "--start-experiment", "--seed-display", "--skip-hid-qemu",
                 "--mdnsd", "--mock-mac-qemu", "--interface-lo0-qemu", "--software-mfi-qemu"],

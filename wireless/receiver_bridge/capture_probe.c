@@ -1395,7 +1395,9 @@ int connect(int fd, const struct sockaddr *address, socklen_t length)
 
 typedef int (*hid_create_fn)(void *, const void *);
 typedef int (*hid_register_fn)(void *);
-#include "qnx_input_probe.h"
+#ifdef MHI2Q_CAPTURE_INPUT_QEMU
+#include "../../tests/carplay_lab/qnx/qnx_input_probe.h"
+#endif
 
 static void log_hid_result(const char *name, int status)
 {
@@ -1897,5 +1899,5 @@ void mhi2q_probe_record_airplay_server(void *server)
 }
 
 #ifdef MHI2Q_CAPTURE_WIRELESS_MEDIA_QEMU
-#include "stock210_media_qemu.c"
+#include "../../tests/carplay_lab/qnx/stock210_media_qemu.c"
 #endif

@@ -27,7 +27,7 @@ This build must not be installed by the older 280 replacement bundle.
 
 ```sh
 bash scripts/build_hook_wireless.sh
-python3 wireless/receiver_bridge/qemu_capture.py --wireless-hook-qemu \
+python3 tests/carplay_lab/qnx/qemu_capture.py --wireless-hook-qemu \
   --mesh --start-experiment --seed-display --skip-hid-qemu \
   --mdnsd --mock-mac-qemu --interface-lo0-qemu
 # Add --wireless-media-qemu to the QEMU command for media validation.
