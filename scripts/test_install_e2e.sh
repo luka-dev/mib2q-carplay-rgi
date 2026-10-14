@@ -40,7 +40,7 @@ unit() {   # unit [stock SI file] [stock deva size]: a fresh fake unit, BOTH jar
     cp "$ROOT/deploy/binpatch/binpatch.py" "$T/mod/carplay/"
     rm -f "$T/mod/carplay/root/mnt/app/eso/bin/apps/smartphone_integrator"   # an older stage still carried it
     grep -v '/eso/bin/apps/smartphone_integrator$' "$MOD/carplay/manifest.txt" > "$T/mod/carplay/manifest.txt"
-    sed -e "s#/mnt/#$U/mnt/#g" -e "s#dest=/\${f\#./}#dest=$U/\${f\#./}#" -e "s#/tmp/#$U/tmp/#g" "$ROOT/install_MoreIncredibleBash/mod/custom.sh" > "$T/mod/custom.sh"
+    sed -e "s#/mnt/#$U/mnt/#g" -e "s#dest=/\${f\#./}#dest=$U/\${f\#./}#" -e "/carlife_active/!s#/tmp/#$U/tmp/#g" "$ROOT/install_MoreIncredibleBash/mod/custom.sh" > "$T/mod/custom.sh"
     grep -q "dest=$U/" "$T/mod/custom.sh" || { echo "FAIL: harness could not redirect the install root"; exit 1; }
 }
 run() { CARPLAY_MICROPYTHON=$MP E2P_READ="$1" E2P_AMP_READ="${2:-echo 0x000000fc 02}" "$SH" "$T/mod/custom.sh" install > "$T/log" 2>&1; }
@@ -59,6 +59,19 @@ cmp -s "$U/mnt/app/eso/bin/apps/smartphone_integrator" "$ROOT/deploy/smartphone_
     cmp -s "$U/mnt/app/eso/bin/apps/smartphone_integrator.carplay-stock" "$US_SI" || fail us "SI not patched in place"
 run "cat $T/us" && cmp -s "$U/mnt/app/eso/bin/apps/smartphone_integrator" "$ROOT/deploy/smartphone_integrator/smartphone_integrator" &&
     cmp -s "$U/mnt/app/eso/bin/apps/smartphone_integrator.carplay-stock" "$US_SI" || fail us-again "reinstall changed the SI or its stock copy"
+
+# usblauncher_otg.lua: only its two NCM command lines are patched - stock, an older fence of ours
+# (start line only) and the current one all end as the payload; a file without the lines is left alone
+LUA=mnt/system/etc/usblauncher_otg.lua; PAY=$MOD/carplay/ncm/payload/usblauncher_otg.lua
+cmp -s "$U/$LUA" "$PAY" && cmp -s "$U/$LUA.carplay-stock" "$FW/etc/usblauncher_otg.lua" || fail lua-stock "stock lua not fenced or backup wrong"
+cmp -s "$U/$LUA" "$PAY" && grep -q "$LUA already fenced" "$T/log" || fail lua-again "reinstall changed the fenced lua"
+unit; sed 's#iopkt_instance)$#iopkt_instance .. " $(busno) $(devno) $(iface)")#' "$FW/etc/usblauncher_otg.lua" > "$U/$LUA"
+cmp -s "$U/$LUA" "$FW/etc/usblauncher_otg.lua" && fail lua-old "harness: the older fence equals the stock"
+run "cat $T/us" || fail lua-old "install failed"
+cmp -s "$U/$LUA" "$PAY" && cmp -s "$U/$LUA.carplay-stock" "$FW/etc/usblauncher_otg.lua" || fail lua-old "older fence not brought to the payload or backup not the stock"
+unit; grep -v 'startncm.sh' "$FW/etc/usblauncher_otg.lua" > "$U/$LUA"; cp "$U/$LUA" "$T/lua.before"
+run "cat $T/us" || fail lua-unknown "install failed"
+cmp -s "$U/$LUA" "$T/lua.before" && [ ! -e "$U/$LUA.carplay-stock" ] && grep -q 'its fence skipped' "$T/log" || fail lua-unknown "an unknown lua was touched"
 
 # amplifier gate: only an external amp (E2P 0xFC = 02) keeps the 6-channel path
 spatial | grep -qx 'export AUDIO_SPATIAL=1' && grep -q 'Amplifier: external' "$T/log" || fail amp-ext "external amp lost AUDIO_SPATIAL=1"
@@ -93,4 +106,4 @@ for brand in vw po none; do
     rm -rf "$T/before"
 done
 
-echo "installer end-to-end: US/JP -> carplay_hook.jar, CN -> carplay_hook_cn.jar, SI patched in place on US and CN, deva always replaced, other jar removed, other region -> none, VW/Porsche/no E2P refused untouched, 5.1 only on an external amp ($SH) PASS"
+echo "installer end-to-end: US/JP -> carplay_hook.jar, CN -> carplay_hook_cn.jar, SI patched in place on US and CN, NCM lua line-patched (stock/old fence/unknown), deva always replaced, other jar removed, other region -> none, VW/Porsche/no E2P refused untouched, 5.1 only on an external amp ($SH) PASS"

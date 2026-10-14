@@ -1,7 +1,8 @@
 #!/bin/sh
 # patch_ncm() + patch_otg_cleanup() from the M.I.B. installer, and the stopncm.sh path
-# for SI's cleanup (NCM_EXPECT_GENERATION).  Installer: replaces the NCM files only over
-# the exact stock, keeps a stock backup, is a no-op on re-run, leaves other firmware alone;
+# for SI's cleanup (NCM_EXPECT_GENERATION).  Installer: replaces the NCM scripts only over
+# the exact stock and patches the Lua's two command lines, keeps a stock backup, is a no-op
+# on re-run, leaves unknown scripts alone (the Lua is independent);
 # repoints otgStackCleanupScript once.  stopncm: destroys only the expected generation.
 set -eu
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -13,9 +14,9 @@ fail() { echo "FAIL ($1): $2"; exit 1; }
 { echo 'set -u'
   sed -n '/^mode_for()/,/^}/p' "$SRC"
   sed -n "/^NCM_MARK=/p;/^same_text()/p" "$SRC"
-  sed -n '/^ncm_known()/,/^}/p' "$SRC"
+  sed -n '/^ncm_known()/,/^}/p;/^ncm_lua()/,/^}/p' "$SRC"
   sed -n '/^patch_ncm()/,/^}/p;/^OTG_CLEANUP=/p;/^patch_otg_cleanup()/,/^}/p' "$SRC"
-  echo 'RES=$1; CFG=$2; NCM_FILES="$3/startncm.sh $3/stopncm.sh $3/usblauncher_otg.lua"; patch_ncm; patch_otg_cleanup'
+  echo 'RES=$1; CFG=$2; NCM_SCRIPTS="$3/startncm.sh $3/stopncm.sh"; NCM_LUA=$3/usblauncher_otg.lua; patch_ncm; patch_otg_cleanup'
 } > "$T/h.sh"
 mkdir -p "$T/res/ncm/stock" "$T/res/ncm/payload"
 for f in startncm.sh stopncm.sh usblauncher_otg.lua; do
@@ -56,15 +57,16 @@ for sh in $shells; do
     case $out in *damaged*) ;; *) fail "$sh" "truncated payload not detected: $out" ;; esac
     cmp -s "$T/u/startncm.sh" "$NCM/stock/startncm.sh" || fail "$sh" "installed from a damaged card"
 
-    # other firmware: one file differs -> nothing touched, no backups
+    # other firmware: a script differs -> no script touched or backed up; the stock Lua still fenced
     rm -rf "$T/u"; mkdir "$T/u"
     for f in startncm.sh stopncm.sh usblauncher_otg.lua; do cp "$NCM/stock/$f" "$T/u/"; done
     echo '# vendor change' >> "$T/u/stopncm.sh"
     printf '    "otgStackCleanupScript":"/etc/scripts/other.sh",\n' > "$T/si"; cp "$T/si" "$T/si0"
     out=$("$sh" "$T/h.sh" "$T/res" "$T/si" "$T/u") || fail "$sh" "skip returned non-zero"
-    case $out in *'NCM fence skipped'*) ;; *) fail "$sh" "no skip: $out" ;; esac
-    cmp -s "$T/u/startncm.sh" "$NCM/stock/startncm.sh" || fail "$sh" "file touched on other firmware"
-    ls "$T/u" | grep -q carplay-stock && fail "$sh" "backup made on other firmware"
+    case $out in *'NCM scripts skipped'*) ;; *) fail "$sh" "no skip: $out" ;; esac
+    cmp -s "$T/u/startncm.sh" "$NCM/stock/startncm.sh" || fail "$sh" "script touched on other firmware"
+    ls "$T/u" | grep -q 'ncm.sh.carplay-stock' && fail "$sh" "script backup made on other firmware"
+    cmp -s "$T/u/usblauncher_otg.lua" "$NCM/payload/usblauncher_otg.lua" || fail "$sh" "stock Lua not fenced beside unknown scripts"
     cmp -s "$T/si" "$T/si0" || fail "$sh" "unknown otg cleanup value modified"
 done
 ls -R "$T" | grep -q carplay-new && fail all "temporary file left behind"

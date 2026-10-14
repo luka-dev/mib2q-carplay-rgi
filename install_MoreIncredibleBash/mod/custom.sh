@@ -226,28 +226,56 @@ patch_otg_cleanup() {
 
 # ---- NCM fence: generation-aware startncm/stopncm + usblauncher_otg.lua ------
 # Fixes the fast-replug race where a late teardown destroys the new carplay0
-# (docs/connect-and-usb/USB_REPLUG_RECOVERY.md).  Whole files, so only over the exact
-# stock they were written against (MU1316 P5087) or our own copy; anything else is left
-# alone - the scripts and the Lua work independently, so a skip is never half-broken.
-# The unit has no cmp: compare as text.  An older copy of our own scripts (marker line)
-# counts as ours, so a script update still installs.  The stock copy for uninstall comes
-# from the bundled original with the file's mode, so it is exact and executable even if an
-# older install already replaced the file.
-NCM_FILES="/mnt/system/etc/scripts/startncm.sh /mnt/system/etc/scripts/stopncm.sh /mnt/system/etc/usblauncher_otg.lua"
+# (docs/connect-and-usb/USB_REPLUG_RECOVERY.md).  The two scripts are whole files, so only over
+# the exact stock they were written against (MU1316 P5087) or our own copy; usblauncher_otg.lua
+# gets only its two NCM command lines patched, so stock, our current fence and any older one
+# all end the same.  Anything else is left alone - the scripts and the Lua work independently,
+# so a skip is never half-broken.  The unit has no cmp: compare as text.  An older copy of our
+# own scripts (marker line) counts as ours, so a script update still installs.  The scripts'
+# stock copy for uninstall comes from the bundled original with the file's mode, so it is exact
+# and executable even if an older install already replaced the file.
+NCM_SCRIPTS="/mnt/system/etc/scripts/startncm.sh /mnt/system/etc/scripts/stopncm.sh"
+NCM_LUA=/mnt/system/etc/usblauncher_otg.lua
+NCM_FILES="$NCM_SCRIPTS $NCM_LUA"
 NCM_MARK='Generation-aware replacement for the stock MU1316'
 same_text() { [ -f "$1" ] && [ -f "$2" ] && [ "$(cat "$1")" = "$(cat "$2")" ]; }
-ncm_known() {   # $1 = on-unit file: stock, current payload, or an older copy of ours
+ncm_known() {   # $1 = on-unit script: stock, current payload, or an older copy of ours
     same_text "$1" "$RES/ncm/stock/${1##*/}" || same_text "$1" "$RES/ncm/payload/${1##*/}" ||
-        { case $1 in *.sh) grep -q "$NCM_MARK" "$1" 2>/dev/null ;; *) false ;; esac; }
+        grep -q "$NCM_MARK" "$1" 2>/dev/null
+}
+# ncm_lua <in> <out>: the start command gets the USB generation args, the stop command the
+# CarLife-aware block (kept if already there).  Fails unless each line is found exactly once.
+ncm_lua() {
+    n_start=0; n_stop=0; block=0
+    grep -q 'stopncm.sh carplay0' "$1" && block=1
+    while IFS= read -r line || [ -n "$line" ]; do
+        ind=${line%%[! ]*}
+        case $line in
+            *'return ("/etc/scripts/startncm.sh " .. Device_Stack.path .. " " .. interface .. " " .. iopkt_instance'*)
+                n_start=$((n_start + 1))
+                line=$ind'return ("/etc/scripts/startncm.sh " .. Device_Stack.path .. " " .. interface .. " " .. iopkt_instance .. " $(busno) $(devno) $(iface)")' ;;
+            *'return "/etc/scripts/stopncm.sh"')
+                if [ $block = 0 ]; then
+                    n_stop=$((n_stop + 1))
+                    printf '%s\n' "${ind}if not posix.stat(\"/tmp/carlife_active\") then" \
+                        "$ind    "'return "/etc/scripts/stopncm.sh carplay0 $(busno) $(devno) $(iface)"' \
+                        "${ind}else" "$ind    "'return "/etc/scripts/stopncm.sh"' "${ind}end"
+                    continue
+                fi ;;
+        esac
+        printf '%s\n' "$line"
+    done < "$1" > "$2" || return 1
+    [ $n_start = 1 ] && { [ $block = 1 ] || [ $n_stop = 1 ]; }
 }
 patch_ncm() {
-    for dest in $NCM_FILES; do
+    ok=1
+    for dest in $NCM_SCRIPTS; do
         n=${dest##*/}
-        [ -f "$RES/ncm/stock/$n" ] && [ -f "$RES/ncm/payload/$n" ] || { echo "  WARN no NCM resources - NCM fence skipped"; return 0; }
-        case $n in *.sh) sh -n "$RES/ncm/payload/$n" || { echo "  WARN $n on the card is damaged - NCM fence skipped (copy mod/ again)"; return 0; } ;; esac
-        ncm_known "$dest" || { echo "  WARN $dest is not the known stock - NCM fence skipped (firmware differs)"; return 0; }
+        [ -f "$RES/ncm/stock/$n" ] && [ -f "$RES/ncm/payload/$n" ] || { echo "  WARN no NCM resources - NCM scripts skipped"; ok=0; break; }
+        sh -n "$RES/ncm/payload/$n" || { echo "  WARN $n on the card is damaged - NCM scripts skipped (copy mod/ again)"; ok=0; break; }
+        ncm_known "$dest" || { echo "  WARN $dest is not the known stock - NCM scripts skipped (firmware differs)"; ok=0; break; }
     done
-    for dest in $NCM_FILES; do
+    [ $ok = 1 ] && for dest in $NCM_SCRIPTS; do
         n=${dest##*/}
         if [ ! -e "$dest.carplay-stock" ]; then
             cp "$RES/ncm/stock/$n" "$dest.carplay-stock" && chmod $(mode_for "$dest") "$dest.carplay-stock" ||
@@ -259,6 +287,20 @@ patch_ncm() {
             { echo "FAILED install $dest"; rm -f "$tmp"; return 1; }
         echo "  $dest"
     done
+    dest=$NCM_LUA; tmp=$dest.carplay-new.$$
+    [ -f "$dest" ] && ncm_lua "$dest" "$tmp" ||
+        { rm -f "$tmp"; echo "  WARN $dest has no single NCM start/stop command - its fence skipped (firmware differs)"; return 0; }
+    if same_text "$tmp" "$dest"; then rm -f "$tmp"; echo "  $dest already fenced"; return 0; fi
+    if [ ! -e "$dest.carplay-stock" ]; then
+        # the unit's own file when untouched; a fence of ours was only ever made over the bundled stock
+        src=$dest   # (QNX grep has no alternation: one pattern per call)
+        grep -q 'stopncm.sh carplay0' "$dest" && src=$RES/ncm/stock/${dest##*/}
+        grep -q 'iopkt_instance .. " $(busno)' "$dest" && src=$RES/ncm/stock/${dest##*/}
+        cp "$src" "$dest.carplay-stock" && chmod $(mode_for "$dest") "$dest.carplay-stock" ||
+            { echo "FAILED backup $dest"; rm -f "$tmp" "$dest.carplay-stock"; return 1; }
+    fi
+    chmod $(mode_for "$dest") "$tmp" && mv -f "$tmp" "$dest" || { echo "FAILED install $dest"; rm -f "$tmp"; return 1; }
+    echo "  $dest (NCM commands patched)"
 }
 
 # ---- pf: widen the CarPlay TCP rule in every profile (MANDATORY) --------------

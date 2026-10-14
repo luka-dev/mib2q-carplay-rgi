@@ -57,7 +57,8 @@ fi
 cp "$PROJECT_DIR/build/maneuver_render" "$PROJECT_DIR/build/altscreen_render" "$HOOKS/"
 cp "$PROJECT_DIR/maneuver_render/resources/flag_atlas.rgba" "$HOOKS/"
 cp "$SI"/carplay_{startup,monitor,processes,cleanup,ncm_cleanup}.sh "$HOOKS/"
-# NCM fence: the installer replaces these only over the exact stock copy (patch_ncm).
+# NCM fence: the installer replaces the scripts only over the exact stock copy and patches the two
+# command lines of the Lua in place (patch_ncm); the Lua pair is the uninstall copy and the test reference.
 NCM=$PROJECT_DIR/deploy/experimental/usb_replug_recovery/bundle_mu1316_p5087
 mkdir -p "$MOD/carplay/ncm/stock" "$MOD/carplay/ncm/payload"
 for f in startncm.sh stopncm.sh usblauncher_otg.lua; do
