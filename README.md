@@ -85,6 +85,19 @@ features below follow it automatically.
   dialling, recents and favorites, the missed-call indication, signal and carrier. There is no
   caller photo: iPhone does not send one to the car. Confirmed on the car
   ([details](docs/cluster-and-rgi/CARPLAY_TELEPHONY.md)).
+- **MMI touchpad moves the CarPlay focus.** Stock only highlighted the focused item; a swipe on
+  the touchpad now steps the focus through lists and buttons, faster swipes stepping further.
+  It runs as a D-pad bridge in Java, because iOS's native trackpad mode crashes Apple Music on
+  iOS 27.2 beta ([details](docs/reference/ARCHITECTURE.md#mmi-touchpad)).
+- **Car data to the iPhone.** The phone receives wheel speed (one PASCD sentence per second, for
+  apps that use it alongside GPS), the remaining range and the low-fuel warning. Confirmed in the
+  car (2026-10-10). The outside temperature is fixed but not yet re-checked in the car; the
+  iPhone battery on the cluster phone tab does not show yet, because the phone has not sent its
+  level ([details](docs/connect-and-usb/VEHICLE_DATA_TO_PHONE.md)).
+- **Siri on a short press.** A short press of the steering-wheel voice key opens Siri instead
+  of the car's own voice control while CarPlay is connected (long press already did). Built,
+  not yet checked in the car
+  ([details](docs/connect-and-usb/VEHICLE_DATA_TO_PHONE.md)).
 - **Parking popups no longer hide CarPlay.** When the Audi front PDC / parking view pops up,
   CarPlay stays on screen beside it instead of being replaced.
 - **5.1 surround for CarPlay music (B&O).** The head unit feeds the external B&O amplifier six
@@ -100,7 +113,13 @@ features below follow it automatically.
     which parts may move; the subwoofer gets its own bass feed. Calls and Siri stay plain stereo.
     Measured under QEMU, the renderer takes about 1-2 ms of each 16 ms audio period on the audio
     thread and the network runs on its own thread
-    ([details](docs/build-and-deploy/SCENE_BACKEND_DEPLOY.md)); the car has not heard it yet.
+    ([details](docs/build-and-deploy/SCENE_BACKEND_DEPLOY.md)). Heard and accepted in the car
+    (2026-10-10).
+  - *UpMix level in the MMI:* a **CarPlay UpMix** row in the Sound effects menu sets Off,
+    Moderate, Normal, Full or Aggressive; the change applies live with a short fade and is kept
+    across restarts. Confirmed in the car (2026-10-13); the levels above Off differ only subtly,
+    best heard with the fader to the rear
+    ([details](docs/reference/HOOK_TO_JAVA_BUS.md)).
   - Built for the B&O amplifier only. The startup script enables it unconditionally for now;
     cars with the internal amplifier have no six-channel route and are untested.
 
