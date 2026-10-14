@@ -66,6 +66,15 @@ responsible for any damage, bricked units or warranty issues resulting from thei
   <img src="assets/gallery/IMG_0599.jpeg" width="30%" />
 </p>
 
+<a id="contents"></a>
+
+## 📍 Contents
+
+- [Gallery](#gallery) · [Features](#features)
+- [Repository layout](#repository-layout) · [Build](#build)
+- [Deployment](#deployment): [install with M.I.B.](#install-with-mib) · [manual install](#manual-install) · [reboot and check](#reboot-and-check) · [uninstall](#uninstall)
+- [Logging](#logging) · [Documentation](#documentation) · [Help wanted](#help-wanted) · [References](#references)
+
 <a id="features"></a>
 
 ## 🎯 Features
@@ -134,80 +143,6 @@ features below follow it automatically.
     on the head unit's own amplifier, which has no six-channel route, CarPlay audio stays stock
     stereo and the CarPlay UpMix row is not shown. Verified on B&O; Bose is untested.
 
-<a id="documentation"></a>
-
-## 📚 Documentation
-
-All documentation is one linked Markdown tree in [`docs/`](docs/README.md). Start at
-[`docs/README.md`](docs/README.md), then the per-domain maps.
-
-> 🗺️ **Looking for a note? See the [documentation map](docs/DOCS_MAP.md)**: every note, one mindmap per domain, with links.
-
-_What the project covers, at a glance. Every note is in the [documentation map](docs/DOCS_MAP.md)._
-
-```mermaid
-mindmap
-  root((MHI2Q CarPlay))
-    🔊 Audio
-      UpMix 5.1
-      SCENE renderer
-      ML Training
-      Virtual Cabin
-      B&O J525 amp
-      Dolby Atmos
-      APAC codec
-      Calls and Siri
-    📊 Virtual Cockpit
-      Route Guidance
-      Maneuver arrows
-      Lane Guidance
-      Distance bargraph
-      Head-up display
-      Telephony
-      Third-party nav
-    🖥️ AltScreen
-      CarPlay map in the cluster
-      Frame pacing
-      Zoom and View button
-      Cover Art
-      Enhanced Siri
-    🔌 Connect
-      USB NCM
-      Replug recovery
-      iOS 26 and 27
-      Vehicle data to phone
-      PF firewall
-    📶 Wireless CarPlay
-      Stock210 hook
-      Bluetooth graft
-      iAP2 and MFi
-      2.4 GHz radio
-    🧪 Emulator Lab
-      vphone sender
-      QNX receiver in QEMU
-      Virtual MFi
-    📦 Build and Deploy
-      QNX toolchain
-      M.I.B. installer
-      VIN protection
-      Release audits
-```
-
-| Domain | Entry point |
-| --- | --- |
-| Audio (upmix, scene renderer, J525 amp, codecs, 5.1 routing) | [`docs/audio/README.md`](<docs/audio/README.md>) |
-| Cluster and route guidance (contexts, BAP/RGI, HUD renderer, CarPlay telephony) | [`docs/cluster-and-rgi/README.md`](<docs/cluster-and-rgi/README.md>) |
-| AltScreen and video (stream 111, OMX pipeline, loader) | [`docs/altscreen-and-video/README.md`](<docs/altscreen-and-video/README.md>) |
-| Connect and USB (NCM, replug recovery, PF, session lifecycle) | [`docs/connect-and-usb/README.md`](<docs/connect-and-usb/README.md>) |
-| Wireless CarPlay (stock210 hook, btstack graft, iAP2/MFi; parked) | [`docs/wireless-carplay/README.md`](<docs/wireless-carplay/README.md>) |
-| CarPlay laboratory (vphone sender, native video, QNX timing) | [`docs/carplay-lab/README.md`](<docs/carplay-lab/README.md>) |
-| Build and deploy (toolchain, release map, VIN protection) | [`docs/build-and-deploy/README.md`](<docs/build-and-deploy/README.md>) |
-| Architecture overview | [`docs/reference/ARCHITECTURE.md`](docs/reference/ARCHITECTURE.md) |
-
-Read [`docs/LANDMINES.md`](docs/LANDMINES.md) before touching a subsystem. Long-form white papers
-are in `docs/research/`; primary evidence (papers, manuals, data files, decompiled stock Java) is in
-`docs/sources/`.
-
 <a id="repository-layout"></a>
 
 ## 🗂️ Repository layout
@@ -233,7 +168,6 @@ are in `docs/research/`; primary evidence (papers, manuals, data files, decompil
 | `logs/` | Ignored local evidence: vehicle captures, HU logs, iPhone sysdiagnose, state traces |
 
 Build output, raw unit logs and generated class trees are intentionally kept outside Git.
-The cleanup archive is under `/Users/luka/Desktop/AUDI_2/LocalLogs/`.
 
 <a id="build"></a>
 
@@ -314,37 +248,184 @@ features) until it is added. Also needed:
 
 - a fully digital instrument cluster (Audi virtual cockpit); cars with an analog cluster are not
   supported;
-- preferably, the latest firmware available for the unit, flashed before installing the patch.
+- preferably, the latest firmware available for the unit, flashed before installing the patch;
+- for 5.1 sound, an external amplifier (B&O, verified; Bose untested). With the head unit's own
+  amplifier everything else installs and CarPlay audio stays stock stereo.
 
 With these in place it should almost certainly work, as long as nothing went wrong during the
 install itself.
 
-A release is assembled by hand. Stage the build outputs, the models and the `deploy/` runtime files
-into `install_MoreIncredibleBash/mod/carplay/root/`, each at its on-unit path (for example
-`mod/carplay/root/mnt/app/root/hooks/libcarplay_hook.so`), and put `carplay_child.json` in
-`mod/carplay/`. Copy the contents of `install_MoreIncredibleBash/` onto the M.I.B. SD card, so the
-card holds `mod/custom.sh` and `mod/carplay/`, then run `mod/custom.sh` from M.I.B. The
+**What gets installed.** Everything the installer replaces or edits keeps a `.carplay-stock`
+backup; files it adds have none and are simply removed on uninstall.
+
+| On the unit | What |
+| --- | --- |
+| `/mnt/app/root/hooks/` | the hook (`libcarplay_hook.so`, `libcarplay_apac.so`), both renderers (`maneuver_render`, `altscreen_render`), `flag_atlas.rgba`, the upmix mask net `scene_masknet_c.bin` and the `carplay_*.sh` runtime scripts |
+| `/mnt/app/eso/hmi/lsd/jars/` | the Java patch for this firmware family (one jar, see above) |
+| `/mnt/app/eso/bin/apps/smartphone_integrator`, `/mnt/app/armle/lib/dll/deva-ctrl-qc.so` | patched stock binaries, replaced only over the MU1316 P5087 build (any other build keeps its stock file) |
+| `/mnt/system/etc/eso/production/smartphone_integrator.json` | the `carplay` child replaced by [`carplay_child.json`](deploy/smartphone_integrator/carplay_child.json) |
+| `/mnt/system/etc/eso/production/dio_manager.json` | iAP2 route-guidance, telephony and vehicle-data message IDs (without them iOS sends route guidance and the SDK silently drops it), and the PASCD bit |
+| `/mnt/system/etc/pf*.conf` | the CarPlay rule widened in all four PF profiles |
+| `/mnt/system/etc/scripts/{start,stop}ncm.sh`, `/mnt/system/etc/usblauncher_otg.lua` | the NCM fence for USB replug recovery |
+| `/mnt/app/eso/hmi/lsd/jars/lang_data.zip` | the texts of the CarPlay UpMix row |
+
+<a id="install-with-mib"></a>
+
+**With M.I.B. (recommended).**
+
+1. Get an install zip (`install_*.zip`) or build one with `scripts/prepare_install.sh` (see
+   [Build](#build)), and copy the **contents** of its `install_MoreIncredibleBash/` onto the M.I.B.
+   SD card, so the card holds `mod/custom.sh` and `mod/carplay/`.
+2. Disconnect CarPlay, then run **GEM → M.I.B. → Advanced Settings → Run Custom Script**.
+3. `custom.sh` checks the firmware and that the whole payload is on the card (a partial copy stops
+   before anything is written), reads the amplifier coding, copies with atomic renames and patches
+   the configs in place. It never stops processes or reboots the unit. It also deletes M.I.B.'s
+   NavActiveIgnore jar, which breaks CarPlay's app state.
+
+<a id="manual-install"></a>
+
+**Manually** (no M.I.B.; needs a root shell on the unit over SSH or Telnet): `mount -uw /mnt/app`
+and `/mnt/system`, copy the files and edit the configs as text (`dio_manager.json` has `##`
+comment lines, so no JSON tools). What to copy where and every config change are in
+[Manual install](<docs/build-and-deploy/DEPLOY_AND_RELEASE.md#-manual-install-without-mib>); the
 source-to-unit map, file modes and hashes are in
 [Deploy and Release](<docs/build-and-deploy/DEPLOY_AND_RELEASE.md>).
 
-- `custom.sh` copies every file under `SD:/mod/carplay/root/` to the same path under `/` on the
-  unit, replaces the SI `carplay` child by path, widens the CarPlay rule in all four PF profiles
-  and registers the iAP2 route-guidance and telephony message IDs in `dio_manager.json` (without
-  them no route guidance arrives, and the cluster phone tab has no lists, hold or mute). It keeps
-  a `.carplay-stock` backup of everything it replaces or edits, and never stops processes or
-  reboots the HU.
-- **Manual install** (no M.I.B.; needs a root shell on the unit over SSH or Telnet): the same steps
-  by hand, what to copy where and what to change in each config file, in
-  [Manual install](<docs/build-and-deploy/DEPLOY_AND_RELEASE.md#-manual-install-without-mib>).
-- Uninstall: copy `uninstall_MoreIncredibleBash/` over the card and run it; it restores every
-  `.carplay-stock` backup and deletes the owned files.
-- The runtime integration (renderer supervision, environment, spatial/upmix settings) lives in
-  [`deploy/smartphone_integrator/`](deploy/smartphone_integrator/README.md); the shipped audio
-  calibration is set in `deploy/smartphone_integrator/carplay_startup.sh` and documented in
-  [Stereo to 5.1 Upmix](<docs/audio/STEREO_TO_5_1_UPMIX.md>).
+<a id="reboot-and-check"></a>
 
-Disconnect CarPlay first and reboot the HU manually after installing. Deploying the Java jar always
-means a full unit restart (it is on j9's boot classpath).
+**Reboot and check.** The installer runs `sync` itself; still wait a few seconds after it prints
+`DONE`, then reboot normally with CarPlay disconnected. A forced reboot (the MMI button combination) right after copying
+can leave files truncated or missing. The jar is on j9's boot classpath, so it only loads after a
+full restart. On boot `smartphone_integrator` starts everything; connect the phone and look at
+`/tmp/carplay_hook.log` and `/tmp/carplay_java.log` (see [Logging](#logging)).
+
+<a id="uninstall"></a>
+
+**Uninstall.** Copy `uninstall_MoreIncredibleBash/` onto the card and run it the same way: it
+restores every `.carplay-stock` backup and deletes the files the installer added. Running it again
+changes nothing.
+
+The runtime integration (renderer supervision, environment, spatial/upmix settings) lives in
+[`deploy/smartphone_integrator/`](deploy/smartphone_integrator/README.md); the shipped audio
+calibration is set in `deploy/smartphone_integrator/carplay_startup.sh` and documented in
+[Stereo to 5.1 Upmix](<docs/audio/STEREO_TO_5_1_UPMIX.md>).
+
+<a id="logging"></a>
+
+## 📝 Logging
+
+Everything logs to `/tmp` on the unit, which is RAM: pull the logs before a reboot.
+
+| File | Source |
+| --- | --- |
+| `/tmp/carplay_hook.log` | native hook (inside `dio_manager`) |
+| `/tmp/carplay_java.log` | Java patch (bounded at 512 KB and rotated, `.1` = previous) |
+| `/tmp/maneuver_render.log` | cluster maneuver renderer |
+| `/tmp/altscreen_render.log` | cluster CarPlay video renderer (rotated, `.1` = previous) |
+| `/tmp/carplay_wrapper.log` | startup wrapper and renderer monitor |
+
+By default only warnings and errors are recorded. To capture **everything** (hook and Java at
+`INFO`, plus the audio and pacing diagnostics), drop a marker file on the unit; no rebuild needed:
+
+```sh
+touch /mnt/app/carplay_verbose        # survives a reboot; /tmp/carplay_verbose does not
+```
+
+It takes effect at the next phone connection. Remove the marker to return to the quiet default.
+Builds with extra traces (raw route-guidance packets, the audio state ledger) are listed under
+[Build](#build).
+
+**No shell? Use M.I.B.** Copy `logging_MoreIncredibleBash/` onto the card and run it like the
+installer. Each run saves the logs, process list, mounts, network, PF rules and the MMX and RCC
+`sloginfo` to `<card>/carplay_logs/NNN/`, then creates `/tmp/carplay_verbose`. Run it once,
+reconnect the phone and drive with CarPlay, run it again: the second folder holds the verbose
+session. Attach that folder to a bug report. Nothing on the unit is deleted.
+
+<a id="documentation"></a>
+
+## 📚 Documentation
+
+All documentation is one linked Markdown tree in [`docs/`](docs/README.md). Start at
+[`docs/README.md`](docs/README.md), then the per-domain maps.
+
+> 🗺️ **Looking for a note? See the [documentation map](docs/DOCS_MAP.md)**: every note, one mindmap per domain, with links.
+
+_What the project covers, at a glance. Every note is in the [documentation map](docs/DOCS_MAP.md)._
+
+```mermaid
+mindmap
+  root((MHI2Q CarPlay))
+    🔊 Audio
+      UpMix 5.1
+      SCENE renderer
+      ML Training
+      Virtual Cabin
+      B&O J525 amp
+      Dolby Atmos
+      APAC codec
+      Calls and Siri
+    📊 Virtual Cockpit
+      Route Guidance
+      Maneuver arrows
+      Lane Guidance
+      Distance bargraph
+      Head-up display
+      Telephony
+      Third-party nav
+    🖥️ AltScreen
+      CarPlay map in the cluster
+      Frame pacing
+      Zoom and View button
+      Cover Art
+      Enhanced Siri
+    🔌 Connect
+      USB NCM
+      Replug recovery
+      iOS 26 and 27
+      Vehicle data to phone
+      PF firewall
+    📶 Wireless CarPlay
+      Stock210 hook
+      Bluetooth graft
+      iAP2 and MFi
+      2.4 GHz radio
+    🧪 Emulator Lab
+      vphone sender
+      QNX receiver in QEMU
+      Virtual MFi
+    📦 Build and Deploy
+      QNX toolchain
+      M.I.B. installer
+      VIN protection
+      Release audits
+```
+
+| Domain | Entry point |
+| --- | --- |
+| Audio (upmix, scene renderer, J525 amp, codecs, 5.1 routing) | [`docs/audio/README.md`](<docs/audio/README.md>) |
+| Cluster and route guidance (contexts, BAP/RGI, HUD renderer, CarPlay telephony) | [`docs/cluster-and-rgi/README.md`](<docs/cluster-and-rgi/README.md>) |
+| AltScreen and video (stream 111, OMX pipeline, loader) | [`docs/altscreen-and-video/README.md`](<docs/altscreen-and-video/README.md>) |
+| Connect and USB (NCM, replug recovery, PF, session lifecycle) | [`docs/connect-and-usb/README.md`](<docs/connect-and-usb/README.md>) |
+| Wireless CarPlay (stock210 hook, btstack graft, iAP2/MFi; parked) | [`docs/wireless-carplay/README.md`](<docs/wireless-carplay/README.md>) |
+| CarPlay laboratory (vphone sender, native video, QNX timing) | [`docs/carplay-lab/README.md`](<docs/carplay-lab/README.md>) |
+| Build and deploy (toolchain, release map, VIN protection) | [`docs/build-and-deploy/README.md`](<docs/build-and-deploy/README.md>) |
+| Architecture overview | [`docs/reference/ARCHITECTURE.md`](docs/reference/ARCHITECTURE.md) |
+
+Read [`docs/LANDMINES.md`](docs/LANDMINES.md) before touching a subsystem. Long-form white papers
+are in `docs/research/`; primary evidence (papers, manuals, data files, decompiled stock Java) is in
+`docs/sources/`.
+
+<a id="help-wanted"></a>
+
+## 🤝 Help wanted
+
+PRs are welcome: bug fixes, new maneuver cases, docs and on-car test reports, especially from
+cars this was not developed on (internal amplifier, Bose, other regions and trains).
+
+**Reporting a bad maneuver icon.** The iAP2 → BAP mapping covers all CarPlay maneuver types but has
+been exercised on a limited set of real routes. A snippet of `/tmp/carplay_hook.log` from the moment
+and a note on what was expected help a lot. The hook logs a route-guidance message it does not handle
+as `Unknown 0x52xx msgid=0xNNNN dir=IN len=N`; that line is the best starting point.
 
 <a id="references"></a>
 
