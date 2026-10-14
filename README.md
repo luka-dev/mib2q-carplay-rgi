@@ -156,12 +156,6 @@ mindmap
       vphone sender
       QNX receiver in QEMU
       Virtual MFi
-      MFi-SAP responder
-      Direct NCM bridge
-      Virtual HID input
-      Native video capture
-      Timing and queues
-      iOS 14 VM
     📦 Build and Deploy
       QNX toolchain
       M.I.B. installer
