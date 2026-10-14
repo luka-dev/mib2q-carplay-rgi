@@ -18,6 +18,10 @@ fail() { echo "FAIL ($1): $2"; exit 1; }
   sed -n '/^patch_ncm()/,/^}/p;/^OTG_CLEANUP=/p;/^patch_otg_cleanup()/,/^}/p' "$SRC"
   echo 'RES=$1; CFG=$2; NCM_SCRIPTS="$3/startncm.sh $3/stopncm.sh"; NCM_LUA=$3/usblauncher_otg.lua; patch_ncm; patch_otg_cleanup'
 } > "$T/h.sh"
+# printf that passes only as many args as its format has conversions (the QNX one)
+{ echo 'printf() { _c=$(command printf %s "$1" | tr -cd % | wc -c); _a="\"\$1\""; _i=1'
+  echo '  while [ $_i -le $_c ]; do _i=$((_i + 1)); _a="$_a \"\${$_i}\""; done; eval "command printf $_a"; }'
+  cat "$T/h.sh"; } > "$T/hq.sh"
 mkdir -p "$T/res/ncm/stock" "$T/res/ncm/payload"
 for f in startncm.sh stopncm.sh usblauncher_otg.lua; do
     cp "$NCM/stock/$f" "$T/res/ncm/stock/"; cp "$NCM/payload/$f" "$T/res/ncm/payload/"
@@ -40,6 +44,18 @@ for sh in $shells; do
     done
     [ -x "$T/u/startncm.sh.carplay-stock" ] && [ -x "$T/u/stopncm.sh.carplay-stock" ] || fail "$sh" "stock script backup not executable"
     lua_ok "$T/u/usblauncher_otg.lua" "$sh"
+    # the unit's printf prints its format once and drops extra args (issue #39: a 5-line block
+    # came out as its first line, usblauncher_otg.lua:269 did not load): same install, that printf
+    rm -rf "$T/q"; mkdir "$T/q"; cp "$NCM/stock/usblauncher_otg.lua" "$T/q/"
+    "$sh" "$T/hq.sh" "$T/res" "$T/si.stock" "$T/q" > /dev/null || fail "$sh" "install (unit printf) returned non-zero"
+    cmp -s "$T/q/usblauncher_otg.lua" "$NCM/payload/usblauncher_otg.lua" || fail "$sh" "Lua differs under the unit's printf"
+    # what that release wrote (the block's first line only) is repaired from the stock backup
+    sed 's#iopkt_instance)$#iopkt_instance .. " $(busno) $(devno) $(iface)")#
+         s#^\( *\)return "/etc/scripts/stopncm.sh"$#\1if not posix.stat("/tmp/carlife_active") then#' \
+        "$NCM/stock/usblauncher_otg.lua" > "$T/q/usblauncher_otg.lua"
+    [ -z "$LUAC" ] || ! "$LUAC" -p "$T/q/usblauncher_otg.lua" 2>/dev/null || fail harness "broken Lua parses"
+    "$sh" "$T/hq.sh" "$T/res" "$T/si.stock" "$T/q" > /dev/null || fail "$sh" "broken Lua repair returned non-zero"
+    cmp -s "$T/q/usblauncher_otg.lua" "$NCM/payload/usblauncher_otg.lua" || fail "$sh" "broken Lua not repaired"
     grep -q '"otgStackCleanupScript":"/mnt/app/root/hooks/carplay_ncm_cleanup.sh",' "$T/si" || fail "$sh" "otg cleanup not repointed"
     out=$("$sh" "$T/h.sh" "$T/res" "$T/si" "$T/u") || fail "$sh" "re-run returned non-zero"
     case $out in *'already fenced'*'already ours'*) ;; *) fail "$sh" "re-run not a no-op: $out" ;; esac

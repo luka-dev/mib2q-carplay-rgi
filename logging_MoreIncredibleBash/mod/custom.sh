@@ -80,7 +80,7 @@ run sloginfo_mmx.txt sloginfo
 run sloginfo_rcc.txt on -f rcc sloginfo
 run hooks_ls.txt ls -la /mnt/app/root/hooks /mnt/app/eso/hmi/lsd/jars /mnt/app/eso/bin/apps/smartphone_integrator /mnt/app/armle/lib/dll/deva-ctrl-qc.so
 run carplay_stock_ls.txt find /mnt/app /mnt/system -name '*.carplay-stock'
-run tmp_ls.txt ls -la "$SRC"
+run tmp_ls.txt ls -la "$SRC/"     # /tmp is a symlink to /dev/shmem: list what it points at
 run cores_ls.txt ls -la /mnt/ota/system/core
 
 # ---- logs and captures from /tmp (never the shared-memory objects also living there) ----

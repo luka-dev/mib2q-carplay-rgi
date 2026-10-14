@@ -258,7 +258,8 @@ ncm_lua() {
             'return "/etc/scripts/stopncm.sh"')
                 if [ $block = 0 ]; then
                     n_stop=$((n_stop + 1))
-                    printf '%s\n' "${ind}if not posix.stat(\"/tmp/carlife_active\") then" \
+                    # one %s per line: the unit's printf does not reuse the format for extra args
+                    printf '%s\n%s\n%s\n%s\n%s\n' "${ind}if not posix.stat(\"/tmp/carlife_active\") then" \
                         "$ind    "'return "/etc/scripts/stopncm.sh carplay0 $(busno) $(devno) $(iface)"' \
                         "${ind}else" "$ind    "'return "/etc/scripts/stopncm.sh"' "${ind}end"
                     continue
@@ -289,7 +290,8 @@ patch_ncm() {
         echo "  $dest"
     done
     dest=$NCM_LUA; tmp=$dest.carplay-new.$$
-    [ -f "$dest" ] && ncm_lua "$dest" "$tmp" ||
+    # the stock backup when the unit's copy does not patch: the 10-14 release left a broken one (#39)
+    { [ -f "$dest" ] && ncm_lua "$dest" "$tmp"; } || { [ -f "$dest.carplay-stock" ] && ncm_lua "$dest.carplay-stock" "$tmp"; } ||
         { rm -f "$tmp"; echo "  WARN $dest has no single NCM start/stop command - its fence skipped (firmware differs)"; return 0; }
     if same_text "$tmp" "$dest"; then rm -f "$tmp"; echo "  $dest already fenced"; return 0; fi
     if [ ! -e "$dest.carplay-stock" ]; then

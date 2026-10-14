@@ -114,6 +114,8 @@ Domain: [Build System](build-and-deploy/BUILD_SYSTEM.md).
 
 **An exported symbol is not automatically interposable — check the PLT/GOT call path, and `DT_SYMBOLIC`.** `LD_PRELOAD` only wins where the caller goes through the PLT. Stock 210 libairplay routes even its own internal calls through PLT → GOT (`j_AirPlayCopyServerInfo`), which is why the hook can preempt them ([AltScreen RE History](altscreen-and-video/ALTSCREEN_RE_HISTORY.md)). A `DT_SYMBOLIC` library binds its own calls internally: MU1439 `ipod-drvr-iap2.so` never sees an interposed `link_handle_iap2pkt`, so there only a binary patch works ([MHI2 MU1439 Port](reference/MHI2_MU1439_PORT.md)). · decompile + `.dynamic` dump.
 
+**The unit's `printf` prints its format once and drops extra arguments: one conversion per argument.** `printf '%s\n' a b c` writes only `a` on the head unit (POSIX format reuse is missing), while every host shell repeats it. The 2026-10-14 release wrote only the first line of the Lua stop block, `usblauncher_otg.lua:269: unexpected symbol near '}'` in sloginfo, the OTG launcher never loaded and CarPlay failed on every connect (issue #39). Fixed with `printf '%s\n%s\n%s\n%s\n%s\n'` (`install_MoreIncredibleBash/mod/custom.sh` `ncm_lua`); `scripts/test_install_ncm.sh` runs the install under a non-reusing `printf`, and the installer repairs a broken copy from `usblauncher_otg.lua.carplay-stock`.
+
 **Renderers must reopen stderr in append mode (`"a"`), or supervisor truncation never bounds the log.** With `"w"` the file offset survives truncation and the log grows straight back (614,400 → 143 → 614,419 bytes). Fixed: `altscreen_render/main.c:484`. · audit repro · [Production Audits](build-and-deploy/PRODUCTION_AUDITS.md).
 
 ---
