@@ -54,14 +54,12 @@ count_char() { n=0; rest=$1; while :; do case $rest in *"$2"*) rest=${rest#*"$2"
 
 file_size() { set -- $(ls -l "$1" 2>/dev/null); echo "${5:-}"; }
 
-# Firmware train from the RCC EEPROM, read like M.I.B. (config/GLOBALS: modifyE2P r 3A0 19),
-# e.g. MHI2Q_CN_AUG22_K1004 = platform _ region _ brand(AU=Audi)+platform-generation _ version.
-# modifyE2P prints "0x<addr> <hex>" lines (bytes spaced or not) and can block until the RCC
-# E2P service is up, so it runs with a 10 s limit.  Sets TRAIN (empty if unreadable).
-E2P_READ=${E2P_READ:-"on -f rcc /usr/apps/modifyE2P r 3A0 19"}
-read_train() {
-    TRAIN=; out=/tmp/carplay_train.$$
-    $E2P_READ > "$out" 2>/dev/null &
+# RCC EEPROM reads go through modifyE2P, which prints "0x<addr> <hex>" lines (bytes spaced or
+# not) and can block until the RCC E2P service is up, so each read runs with a 10 s limit.
+# e2p_bytes <command>: the data bytes as two-digit hex, one per line.
+e2p_bytes() {
+    out=/tmp/carplay_e2p.$$
+    $1 > "$out" 2>/dev/null &
     p=$!; i=0
     while kill -0 $p 2>/dev/null && [ $i -lt 10 ]; do sleep 1; i=$((i+1)); done
     kill $p 2>/dev/null
@@ -70,14 +68,35 @@ read_train() {
         for tok in $rest; do
             while [ -n "$tok" ]; do
                 b=${tok%"${tok#??}"}; tok=${tok#??}
-                case $b in [0-9a-fA-F][0-9a-fA-F]) ;; *) break ;; esac
-                d=$((16#$b))
-                [ $d -ge 32 ] && [ $d -lt 127 ] || continue
-                TRAIN=$TRAIN$(printf "\\$((d/64))$((d/8%8))$((d%8))")
+                case $b in [0-9a-fA-F][0-9a-fA-F]) echo "$b" ;; *) break ;; esac
             done
         done
     done < "$out"
     rm -f "$out"
+}
+
+# Firmware train, read like M.I.B. (config/GLOBALS: modifyE2P r 3A0 19),
+# e.g. MHI2Q_CN_AUG22_K1004 = platform _ region _ brand(AU=Audi)+platform-generation _ version.
+# Sets TRAIN (empty if unreadable).
+E2P_READ=${E2P_READ:-"on -f rcc /usr/apps/modifyE2P r 3A0 19"}
+read_train() {
+    TRAIN=
+    for b in $(e2p_bytes "$E2P_READ"); do
+        d=$((16#$b))
+        [ $d -ge 32 ] && [ $d -lt 127 ] || continue
+        TRAIN=$TRAIN$(printf "\\$((d/64))$((d/8%8))$((d%8))")
+    done
+}
+
+# Amplifier coding: RCC E2P 0xFC (block 0xF1 byte 11, Sound_System) is 02 for an external
+# MOST amplifier (B&O, Bose) and 01 for the head unit's internal amplifier; the RCC treats
+# anything else as internal.  Only the external branch has a 6-channel route for CarPlay
+# media; on the internal amp a PCM6 stream plays as L/R only (docs/audio/INTERNAL_AMP_PATH.md).
+# Sets AMP to external, internal or unknown.
+E2P_AMP_READ=${E2P_AMP_READ:-"on -f rcc /usr/apps/modifyE2P r FC 1"}
+read_amp() {
+    set -- $(e2p_bytes "$E2P_AMP_READ")
+    case ${1:-} in 02) AMP=external ;; 01) AMP=internal ;; *) AMP=unknown ;; esac
 }
 train_field() {   # $1 = field number (1 platform, 2 region, 3 brand+gen, 4 version)
     t=$TRAIN; i=1
@@ -125,6 +144,33 @@ list_payload() {
         rm -f "$2" "$2.err"; return 1
     fi
     rm -f "$2.err"
+}
+
+# ---- 5.1 / UpMix only on an amplifier with the 6-channel route ----------------
+# The startup ships with AUDIO_SPATIAL=1 (the whole PCM6 path: 5.1, Spatial Audio, UpMix).
+# Without an external amplifier it is rewritten to stock stereo; AUDIO_STEREO_UPMIX=off alone
+# would not do, the bypass still rides the six-channel path.
+STARTUP=/mnt/app/root/hooks/carplay_startup.sh
+gate_audio() {
+    read_amp
+    case $AMP in
+        external) echo "  Amplifier: external (Sound_System 2, B&O/Bose over MOST) - CarPlay 5.1 and UpMix on"
+                  return 0 ;;
+        internal) echo "  Amplifier: internal (Sound_System 1) - no 6-channel route, CarPlay audio stays stock stereo" ;;
+        *)        echo "  WARN amplifier coding unreadable - CarPlay audio stays stock stereo" ;;
+    esac
+    [ -f "$STARTUP" ] || { echo "  WARN no $STARTUP to switch to stereo"; return 0; }
+    tmp=$STARTUP.carplay-new.$$
+    : > "$tmp" || { echo "FAILED create $tmp"; return 1; }
+    while IFS= read -r line || [ -n "$line" ]; do
+        case $line in
+            "export AUDIO_SPATIAL="*)       line="export AUDIO_SPATIAL=0  # set by the installer: $AMP amplifier" ;;
+            "export AUDIO_SPATIAL_ATMOS="*) line="export AUDIO_SPATIAL_ATMOS=0" ;;
+        esac
+        printf '%s\n' "$line" >> "$tmp"
+    done < "$STARTUP"
+    grep -q '^export AUDIO_SPATIAL=0 ' "$tmp" || { rm -f "$tmp"; echo "FAILED: no AUDIO_SPATIAL line in $STARTUP"; return 1; }
+    chmod 755 "$tmp" && mv -f "$tmp" "$STARTUP" || { rm -f "$tmp"; echo "FAILED activate $STARTUP"; return 1; }
 }
 
 # ---- smartphone_integrator.json: replace the "carplay" child by path ----------
@@ -385,6 +431,7 @@ install)
         if rm -f "$j"; then echo "  removed $j (M.I.B. NavActiveIgnore conflicts with CarPlay app state)"
         else echo "  WARN could not remove $j"; fi
     done
+    gate_audio || exit 1
     patch_json
     patch_ncm
     patch_pf

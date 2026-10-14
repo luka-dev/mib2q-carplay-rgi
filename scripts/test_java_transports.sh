@@ -18,6 +18,10 @@ trap 'rm -rf "$TEST_DIR"' EXIT
     -d "$TEST_DIR" "$PROJECT_DIR/tests/VehicleDataEncodingTest.java"
 "$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar:$PROJECT_DIR/java_stock/US_MU1316_lsd.jar" \
     com.luka.carplay.core.VehicleDataEncodingTest
+"$TEST_JDK/bin/javac" -encoding UTF-8 -cp "$PROJECT_DIR/build/carplay_hook.jar:$PROJECT_DIR/java_stock/US_MU1316_lsd.jar" \
+    -d "$TEST_DIR" "$PROJECT_DIR/tests/UpmixSettingTest.java"
+"$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar:$PROJECT_DIR/java_stock/US_MU1316_lsd.jar" \
+    com.luka.carplay.core.UpmixSettingTest
 for variant in us eu cn; do
     case "$variant" in
         us) patch=carplay_hook.jar; stock=US_MU1316_lsd.jar ;;
@@ -76,6 +80,7 @@ mkdir -p "$TEST_DIR/lifecycle"
     "$PROJECT_DIR/java_patch/com/luka/carplay/core/Module.java" \
     "$PROJECT_DIR/tests/CarPlayAppLifecycleTest.java" \
     "$PROJECT_DIR/tests/stubs/app-lifecycle/com/luka/carplay/core/LifecycleFixtures.java" \
+    "$PROJECT_DIR/tests/stubs/app-lifecycle/com/luka/carplay/core/UpmixSetting.java" \
     "$PROJECT_DIR/tests/stubs/app-lifecycle/com/luka/carplay/bus/CarplayBus.java" \
     "$PROJECT_DIR/tests/stubs/app-lifecycle/com/luka/carplay/framework/Log.java" \
     "$PROJECT_DIR/tests/stubs/app-lifecycle/com/luka/carplay/pdc/PdcSmallStageGuard.java" \

@@ -3,14 +3,15 @@
 #  - java_jar(): E2P region US/ER/JP -> carplay_hook.jar, CN -> carplay_hook_cn.jar, else none;
 #  - p5087_size(): SI/deva are replaced only over the P5087 build;
 #  - read_train()/train_field(): the E2P train (modifyE2P r 3A0 19, bytes spaced or not)
-#    decodes to text and splits into platform/region/brand/version.
+#    decodes to text and splits into platform/region/brand/version;
+#  - read_amp(): the amplifier coding byte (modifyE2P r FC 1) -> external / internal / unknown.
 set -eu
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 SRC=$ROOT/install_MoreIncredibleBash/mod/custom.sh
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 { echo 'set -u'
   sed -n '/^file_size()/p;/^p5087_size()/p' "$SRC"
-  sed -n '/^java_jar()/,/^}/p;/^E2P_READ=/p;/^read_train()/,/^}/p;/^train_field()/,/^}/p' "$SRC"
+  sed -n '/^java_jar()/,/^}/p;/^e2p_bytes()/,/^}/p;/^E2P_READ=/p;/^read_train()/,/^}/p;/^train_field()/,/^}/p;/^E2P_AMP_READ=/p;/^read_amp()/,/^}/p' "$SRC"
 } > "$T/f.sh"
 fail() { echo "FAIL ($1): $2"; exit 1; }
 shells=
@@ -39,5 +40,10 @@ for sh in $shells; do
     done
     got=$(E2P_READ="false" "$sh" -c ". $T/f.sh; read_train; echo \"[\$TRAIN]\"")
     [ "$got" = "[]" ] || fail "$sh" "unreadable E2P -> '$got'"
+    for case in "0x000000fc 02:external" "0xfc: 01:internal" "0x000000fc ff:unknown" ":unknown"; do
+        line=${case%:*}; want=${case##*:}
+        got=$(E2P_AMP_READ="echo $line" "$sh" -c ". $T/f.sh; read_amp; echo \$AMP")
+        [ "$got" = "$want" ] || fail "$sh" "amp '$line' -> '$got', want '$want'"
+    done
 done
-echo "Firmware gates (Java variant by E2P region, SI/deva by P5087 size, E2P train parse):$shells PASS"
+echo "Firmware gates (Java variant by E2P region, SI/deva by P5087 size, E2P train parse, amplifier coding):$shells PASS"

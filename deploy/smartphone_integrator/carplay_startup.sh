@@ -77,9 +77,9 @@ export IAP2_VEHICLE_SPEED=on
 export IAP2_PHONE_BATTERY=on
 
 # Buffered CarPlay audio policy.
-# 1 = this unit (external J525 amp, 6-channel MOST route). The internal-amp thread's policy is
-# AUDIO_SPATIAL=0 unless E2P 0xFC reads 02 (docs/audio/DISCRETE_5_1_ROUTING.md); that gate belongs to the
-# installer, not to this unit's startup file.
+# 1 = the 6-channel path (external MOST amp: B&O J525 on this unit). The installer reads the amplifier
+# coding (RCC E2P 0xFC) and rewrites this line to 0 unless it is 02 (external): the internal amp has no
+# 6-channel route (docs/audio/INTERNAL_AMP_PATH.md).
 export AUDIO_SPATIAL=1
 export AUDIO_SPATIAL_ATMOS=0
 export AUDIO_SPATIAL_ATMOS_MODE=downmix

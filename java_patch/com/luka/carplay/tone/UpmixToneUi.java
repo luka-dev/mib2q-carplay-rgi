@@ -89,7 +89,7 @@ public final class UpmixToneUi {
 
         protected Screen createScreen(int id, int terminal) {
             Screen s = super.createScreen(id, terminal);
-            if (id == SCREEN_SOUND_EFFECTS) {
+            if (id == SCREEN_SOUND_EFFECTS && UpmixSetting.available()) {
                 try { addRow(s); } catch (Throwable t) { /* stock screen unchanged up to the failure point */ }
             }
             return s;

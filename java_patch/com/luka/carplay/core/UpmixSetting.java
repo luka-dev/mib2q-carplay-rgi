@@ -7,6 +7,8 @@
  * stored level to TMP_FILE, which the hook reads at init and at every stream start
  * (spa_upmix_level_reload, hook/audio/audio_hook.c); a choice in
  * the row updates the store and the file and sends CMD_UPMIX for the running hook.
+ * The row is left out on the head unit's own amplifier: its route has no six channels
+ * (docs/audio/INTERNAL_AMP_PATH.md), and the installer then runs CarPlay audio as stock stereo.
  *
  * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
@@ -16,6 +18,7 @@ import com.luka.carplay.bus.CarplayBus;
 import com.luka.carplay.framework.Log;
 import com.luka.carplay.tone.UpmixToneUi;
 import de.audi.atip.base.IFrameworkAccess;
+import de.audi.atip.interapp.audio.AmplifierListener;
 import de.audi.atip.storage.IStorageAccess;
 import de.audi.tghu.storage.FlushValuesDict;
 import java.io.FileOutputStream;
@@ -28,6 +31,9 @@ public final class UpmixSetting {
     static final String TMP_FILE = "/tmp/carplay_upmix_level";   // hook/audio/upmix_level.c
 
     private static volatile IFrameworkAccess fw;
+    /* DSI AmplifierCapabilities.amplifier (org.dsi.ifc.audio DEVICETYPE_*) as the stock tone
+     * app hands it to AmplifierListener services; -1 until it has reported. */
+    private static volatile int amplifier = -1;
 
     private UpmixSetting() {}
 
@@ -41,6 +47,18 @@ public final class UpmixSetting {
                 /* an older, non-shared FlushValuesDict loaded first: still stored, flushed later */
                 Log.w(TAG, "flush key not registered: " + t);
             }
+            try {
+                /* the stock tone app tracks AmplifierListener services and calls each with the
+                 * active amplifier at once and on every change (AmplifierProvider) */
+                framework.getBundleCxt().registerService(AmplifierListener.class.getName(), new AmplifierListener() {
+                    public void updateAmplifier(int type) {
+                        amplifier = type;
+                        Log.i(TAG, "amplifier " + type + (internalAmp(type) ? " (head unit amp: no UpMix row)" : ""));
+                    }
+                }, null);
+            } catch (Throwable t) {
+                Log.w(TAG, "amplifier not watched, UpMix row always shown: " + t);
+            }
             int level = read();
             writeTmp(level);
             UpmixToneUi.show(level);
@@ -48,6 +66,18 @@ public final class UpmixSetting {
         } catch (Throwable t) {
             Log.w(TAG, "boot failed: " + t);
         }
+    }
+
+    /** BASIC_2CH, BASIC_4CH, STANDARD_6CH: the head unit's internal amplifier, stereo route only. */
+    static boolean internalAmp(int type) {
+        return type == 1 || type == 2 || type == 3;
+    }
+
+    /** False on the internal amplifier: the row could change nothing.
+     *  ponytail: decided when the Sound effects screen is built; an amplifier reported only
+     *  after that keeps the row until the next HMI start. */
+    public static boolean available() {
+        return !internalAmp(amplifier);
     }
 
     /** The user picked a level in the row (HMI thread). */
