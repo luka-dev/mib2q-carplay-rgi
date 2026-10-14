@@ -1,6 +1,6 @@
 # MHI2Q CarPlay cluster integration
 
-_Production overview and offline candidate documentation._
+_CarPlay for the Audi MHI2Q head unit: the map and route guidance in the Virtual Cockpit, calls on the cluster, and 5.1 sound._
 
 ---
 
@@ -105,7 +105,7 @@ features below follow it automatically.
   CarPlay mode" note, the Virtual Cockpit telephone tab works as with a Bluetooth phone: caller
   name and number, call state and timer, accept / hang up (tab or steering wheel), hold, mute and
   dialling, recents and favorites, the missed-call indication, signal and carrier. There is no
-  caller photo: iPhone does not send one to the car. Confirmed on the car
+  caller photo: iPhone does not send one to the car
   ([details](docs/cluster-and-rgi/CARPLAY_TELEPHONY.md)).
 - **MMI touchpad moves the CarPlay focus.** Stock only highlighted the focused item; a swipe on
   the touchpad now steps the focus through lists and buttons, faster swipes stepping further.
@@ -113,12 +113,11 @@ features below follow it automatically.
   iOS 27.2 beta ([details](docs/reference/ARCHITECTURE.md#mmi-touchpad)).
 - **Car data to the iPhone.** The phone receives wheel speed (one PASCD sentence per second, for
   apps that use it alongside GPS), the remaining range, the outside temperature and the low-fuel
-  warning. Confirmed in the car (2026-10-10, again 2026-10-14). The iPhone battery on the cluster
-  phone tab does not show yet, because the phone has not sent its level
-  ([details](docs/connect-and-usb/VEHICLE_DATA_TO_PHONE.md)).
+  warning. The iPhone battery on the cluster phone tab does not show yet: the phone does not
+  send its level ([details](docs/connect-and-usb/VEHICLE_DATA_TO_PHONE.md)).
 - **Siri on a short press.** A short press of the steering-wheel voice key opens Siri instead
-  of the car's own voice control while CarPlay is connected (long press already did).
-  Confirmed in the car (2026-10-14) ([details](docs/connect-and-usb/VEHICLE_DATA_TO_PHONE.md)).
+  of the car's own voice control while CarPlay is connected (long press already did)
+  ([details](docs/connect-and-usb/VEHICLE_DATA_TO_PHONE.md)).
 - **Parking popups no longer hide CarPlay.** When the Audi front PDC / parking view pops up,
   CarPlay stays on screen beside it instead of being replaced.
 - **5.1 surround for CarPlay music (B&O).** The head unit feeds the external B&O amplifier six
@@ -131,22 +130,19 @@ features below follow it automatically.
     upmixes it. It reads the stereo image itself: instruments the mix places off-centre move to
     the rear speakers as whole objects, the room ambience goes behind as a wide layer, vocals,
     bass and drums stay anchored in front, and a small network (the mask net) decides per band
-    which parts may move; the subwoofer gets its own bass feed. Calls and Siri stay plain stereo.
-    Measured under QEMU, the renderer takes about 1-2 ms of each 16 ms audio period on the audio
-    thread and the network runs on its own thread
-    ([details](docs/build-and-deploy/SCENE_BACKEND_DEPLOY.md)). Heard and accepted in the car
-    (2026-10-10).
+    which parts may move; the subwoofer gets its own bass feed. Calls and Siri stay plain stereo
+    ([details](docs/audio/STEREO_TO_5_1_UPMIX.md)).
   - *UpMix level in the MMI:* a **CarPlay UpMix** row in the Sound effects menu sets Off,
     Moderate, Normal, Full or Aggressive; the change applies live with a short fade and is kept
-    across restarts. Confirmed in the car (2026-10-13); the levels above Off differ only subtly,
-    best heard with the fader to the rear
+    across restarts. The levels above Off differ subtly; they are easiest to hear with the fader
+    to the rear
     ([details](docs/reference/HOOK_TO_JAVA_BUS.md)).
   - *Recommended MMI sound settings to start with:* every equalizer band at 0 (dials centred),
     **Surround level** at 0, which is the far-left end of the slider, **3D effect** Off,
     **Focus** All, and **CarPlay UpMix** to taste.
   - Only on an external amplifier. The installer reads the amplifier coding (RCC EEPROM 0xFC):
     on the head unit's own amplifier, which has no six-channel route, CarPlay audio stays stock
-    stereo and the CarPlay UpMix row is not shown. Verified on B&O; Bose is untested.
+    stereo and the CarPlay UpMix row is not shown. Developed on B&O; Bose has not been tried yet.
 
 <a id="repository-layout"></a>
 
@@ -196,7 +192,8 @@ Then run from this repository's root:
 ./scripts/build_renderers.sh
 ```
 
-Native builds run in the `qnx65-armv7-toolchain` Docker image; `:latest` (the default) is GCC 8.5,
+The Java patch needs a JDK 8 (set `JAVA8_HOME`, see `scripts/java_env.sh`) and compiles against the
+stock HMI jars in `java_stock/`. Native builds run in the `qnx65-armv7-toolchain` Docker image; `:latest` (the default) is GCC 8.5,
 `QNX_TOOLCHAIN_VARIANT=4.9` selects GCC 4.9.4. Renderer import libraries are generated during the
 build; the resulting ELFs resolve the real Screen/EGL/GLES/OpenMAX libraries on the unit.
 
@@ -207,7 +204,7 @@ build; the resulting ELFs resolve the real Screen/EGL/GLES/OpenMAX libraries on 
 | State trace | `AUDIO_STATE_TRACE=1 ./scripts/build_hook.sh` | compact `/tmp/carplay_state_trace.log` ledger (see `scripts/carplay_state_trace.sh`) |
 | VIN-locked | `./scripts/build_hook_protected.sh <VIN>` | stamped `.so` files in `build/protected_<VIN>/` | <!-- protected-only -->
 
-Build outputs (binaries only; builds never package a release):
+Build outputs (binaries only; `scripts/prepare_install.sh` assembles the install zip from them):
 
 ```text
 build/carplay_hook.jar
@@ -222,23 +219,12 @@ renderer's fine mask net c, with its manifest and the knob settings it was measu
 
 Tests: `./scripts/run_tests.sh`.
 
-AltScreen pacing offline checks (ASan/UBSan, fault injection, Clang analysis and
-libFuzzer): `bash scripts/test_altscreen_pacing.sh`. The report and reproducer
-corpus are written to `build/altscreen-pacing-validation/`; `FUZZ_SECONDS` changes
-the budget per target (default 30 seconds; three targets). This performs no vehicle operations.
-Static operation comparison: `python3 scripts/compare_altscreen_static.py`.
-The current AltScreen candidate enables decoded-output mailbox selection;
-`ALTSCREEN_PRESENT_FIFO=1` selects the FIFO fallback. See
-[frame pacing contracts](docs/altscreen-and-video/ALTSCREEN_FRAME_RATE.md) for
-recovery, ownership, protocol and validation limits.
-
-The 2026-10-09 input candidate adds paced roller intent, command priority and
-latest pending state, including the pre-commit/CF/expired-selection review fixes.
-[Input commands](docs/altscreen-and-video/ALTSCREEN_INPUT_COMMANDS.md) documents
-configuration and cancellation boundaries;
-[validation](docs/altscreen-and-video/ALTSCREEN_PACING_VALIDATION.md) records the
-source-hashed offline results. Vehicle latency and FPS were not measured for
-these input changes.
+AltScreen pacing offline checks (ASan/UBSan, fault injection, Clang analysis and libFuzzer):
+`bash scripts/test_altscreen_pacing.sh`; the report lands in `build/altscreen-pacing-validation/`
+and `FUZZ_SECONDS` sets the budget per target. Contracts and limits:
+[frame rate](docs/altscreen-and-video/ALTSCREEN_FRAME_RATE.md),
+[input commands](docs/altscreen-and-video/ALTSCREEN_INPUT_COMMANDS.md) and
+[validation](docs/altscreen-and-video/ALTSCREEN_PACING_VALIDATION.md).
 
 <a id="deployment"></a>
 
