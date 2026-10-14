@@ -351,9 +351,9 @@ session. Attach that folder to a bug report. Nothing on the unit is deleted.
 All documentation is one linked Markdown tree in [`docs/`](docs/README.md). Start at
 [`docs/README.md`](docs/README.md), then the per-domain maps.
 
-> 🗺️ **Looking for a note? See the [documentation map](docs/DOCS_MAP.md)**: every note, one mindmap per domain, with links.
+> 🗺️ **Looking for a note?** The [documentation home](docs/README.md) has every note in one mindmap and, below it, [the same notes as links by topic](docs/README.md#notes-by-topic).
 
-_What the project covers, at a glance. Every note is in the [documentation map](docs/DOCS_MAP.md)._
+_What the project covers, at a glance._
 
 ```mermaid
 mindmap
