@@ -390,7 +390,9 @@ mindmap
     📦 Build and Deploy
       QNX toolchain
       M.I.B. installer
+      %% >>> protected
       VIN protection
+      %% <<< protected
       Release audits
 ```
 
@@ -402,7 +404,7 @@ mindmap
 | Connect and USB (NCM, replug recovery, PF, session lifecycle) | [`docs/connect-and-usb/README.md`](<docs/connect-and-usb/README.md>) |
 | Wireless CarPlay (stock210 hook, btstack graft, iAP2/MFi; parked) | [`docs/wireless-carplay/README.md`](<docs/wireless-carplay/README.md>) |
 | CarPlay laboratory (vphone sender, native video, QNX timing) | [`docs/carplay-lab/README.md`](<docs/carplay-lab/README.md>) |
-| Build and deploy (toolchain, release map, VIN protection) | [`docs/build-and-deploy/README.md`](<docs/build-and-deploy/README.md>) |
+| Build and deploy (toolchain, release map<!-- >>> protected -->, VIN protection<!-- <<< protected -->) | [`docs/build-and-deploy/README.md`](<docs/build-and-deploy/README.md>) |
 | Architecture overview | [`docs/reference/ARCHITECTURE.md`](docs/reference/ARCHITECTURE.md) |
 
 Read [`docs/LANDMINES.md`](docs/LANDMINES.md) before touching a subsystem. Long-form white papers

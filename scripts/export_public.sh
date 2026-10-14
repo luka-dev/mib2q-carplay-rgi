@@ -50,7 +50,7 @@ done
 python3 "$OUT/scripts/gen_docs_map.py" > /dev/null
 
 # Nothing private may survive the cut.
-LEAK='REPOSITORY_COMPARISON|mhi2q-evo|protector/|build_hook_protected|VIN_PROTECTION|PROT_SECRET|CARPLAY_PROT|carplay_prot|protected_<VIN>|>>> protected|<<< protected|protected-only|/Users/luka|WAUZZZ|WA19NAF|leandr1999|100\.127\.|100\.85\.'
+LEAK='[Vv][Ii][Nn][ -]?([Pp]rotect|[Ll]ock)|REPOSITORY_COMPARISON|mhi2q-evo|protector/|build_hook_protected|VIN_PROTECTION|PROT_SECRET|CARPLAY_PROT|carplay_prot|protected_<VIN>|>>> protected|<<< protected|protected-only|/Users/luka|WAUZZZ|WA19NAF|leandr1999|100\.127\.|100\.85\.'
 if grep -rIl -E "$LEAK" "$OUT"; then echo "FAILED: private text left in the files above"; exit 1; fi
 
 # Relative links in the markdown still resolve.
