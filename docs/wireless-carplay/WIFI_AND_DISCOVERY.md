@@ -1,6 +1,6 @@
 # Wireless CarPlay and Wi-Fi
 
-_MHI2Q wireless CarPlay — technical reference, integrated 2026-09-29._
+_MHI2Q wireless CarPlay — technical reference, integrated 2026-09-29, on-unit radio measurements 2026-10-13._
 
 ---
 
@@ -10,7 +10,7 @@ Maintained technical reference. The evidence below distinguishes static analysis
 
 Implementation and local diagnostic paths in this record refer to the [original source directory](../connect-and-usb/). Run `wireless/...` commands from the repository root; moving this note does not move binaries or logs.
 
-*What the iPhone actually requires to bring CarPlay up over Wi-Fi, why there is no 5 GHz check anywhere in iOS, and why this head unit is 2.4 GHz only and has no wireless CarPlay transport at all.*
+*What the iPhone actually requires to bring CarPlay up over Wi-Fi, why there is no 5 GHz check anywhere in iOS, and why this head unit is 2.4 GHz only, what its access point actually carries, and why the stock unit has no wireless CarPlay transport.*
 
 ---
 
@@ -27,8 +27,9 @@ What the phone does check is a different thing entirely: the access point must c
 | What marks a network as a CarPlay network? | The beacon's `APPLE_DEVICE_IE` with `APPLE_DEVICE_IE_FEATURE_SUPPORTS_CARPLAY` true. **[decompile]** |
 | Is there any CarPlay 5 GHz code at all? | Yes, one scan optimisation in `CoreWiFi` auto-join. It skips 2.4 GHz, it never rejects it. **[decompile]** |
 | What does 2.4 GHz actually cost? | Channels 1, 6 or 11 only, HT20 only, and **no legacy Bluetooth profiles** alongside iAP2. **[spec]** |
-| Could this head unit do wireless CarPlay? | Not as it stands: its CarPlay stack has no wireless transport at all. The band is not the blocker. **[code]** |
+| Could this head unit do wireless CarPlay? | Not as shipped: the stock CarPlay stack has no wireless transport. The stock210 hook, daemon and graft in this section supply one; the band is not the blocker. **[code]** |
 | Which band would it have to use? | 2.4 GHz. The unit's radio sees nothing above 2452 MHz across three scans. **[car]** |
+| Is the 2.4 GHz link fast enough? | Marginal: ~20 Mbit/s usable on a crowded channel 11, against ~17.5 Mbit/s for a wired session. **[car]** |
 
 Wireless is out of scope for the head-unit patch itself ([CarPlay Feature Survey](../altscreen-and-video/CARPLAY_FEATURE_SURVEY.md)), but it is not out of scope for the programme: the sibling project `cp-wireless-to-usb-proxy` attacks it from the other side, see [The path that does exist](#-the-path-that-does-exist).
 
@@ -207,7 +208,7 @@ flowchart LR
   mlan["🌐 mlan0 station + wpa_supplicant"]
   cm["⚙️ connectionmanager writes /tmp/uaputl.cfg"]
   ap["🔧 start-ap.sh: uaputl sys_config"]
-  band["⚠️ Band 0 = 2.4 GHz, channel 6"]
+  band["⚠️ Band 0 = 2.4 GHz<br/>template channel 6"]
   boot --> fw --> drv
   drv --> uap
   drv --> mlan
@@ -234,38 +235,11 @@ One caveat worth keeping honest: the driver is not obviously the limit. It carri
 
 Nor is the Apple vendor element out of reach. Our `hostapd` is v0.6.4 and has no `vendor_elements`, but the access point is driven by the Marvell tool, which carries arbitrary elements with `uaputl sys_cfg_custom_ie [INDEX] [MASK] [IEBuffer]`. The binary's own help assigns bit 8 to beacon, bit 5 to probe response, bit 3 to reassociation response and bit 1 to association response, so `0x12A` selects all four frames required by the Device IE specification. Its example mask `0x101` selects beacon and association **request**, not probe response. **[code]**
 
-### What the live access point looks like
+The templates are not what runs: on the unit the access point is on channel 11, because `connectionmanager` writes its own config. What it actually carries is in [Radio and throughput on the unit](#-radio-and-throughput-on-the-unit).
 
-Read off the unit, 2026-09-27, read-only. The hotspot is up and, on the Wi-Fi side alone, it already satisfies what the specification asks of a 2.4 GHz CarPlay accessory. **[car]**
+## 📶 Radio and throughput on the unit
 
-| Property | Live value | Against the specification |
-|---|---|---|
-| Interface and mode | `uap0`, `hostap`, status active, `10.173.189.1` | — |
-| SSID | `Audi_MMI_9137`, broadcast | not hidden, as required |
-| Channel and band | channel 11, `Band = 2.4GHz`, no secondary channel | 11 is one of the three permitted 2.4 GHz channels |
-| 802.11n | enabled, `STA channel width = 20MHz` | HT20, and HT40 is forbidden on 2.4 GHz |
-| 802.11d | enabled | — |
-| Custom information elements | eight slots, indices 0 to 7, every one `len=0` with mask `0x00` | all free, so the Apple element has somewhere to go |
-
-### The radio does not see 5 GHz
-
-The station interface `mlan0` is up with no network, and `wpa_supplicant` runs on it, so it can be asked to scan. Three passes were run with the hotspot's clients disconnected first, so nothing was disturbed. **[car]**
-
-| Pass | Networks found | Frequencies |
-|---|---|---|
-| 1 | 2 | 2412, 2452 |
-| 2 | 3 | 2412, 2452 |
-| 3 | 4 | 2412, 2437, 2452 |
-
-Six distinct access points across the three passes, every one in the 2.4 GHz band, including the dual-band `LuKa-WiFi` at signal 55 to 58 whose 5 GHz radio the owner's phone sees from the same spot. Not one entry above 2452 MHz appeared. So on this unit the radio scans 2.4 GHz only, and 5 GHz is not available as shipped.
-
-That is evidence rather than proof: a region code can gate the A band, and `mlan_region [interface] [regioncode]` exists to change it. Changing it is a write to the radio configuration and was not attempted. The practical reading stands: plan for 2.4 GHz, which the specification permits, and accept the Bluetooth-profile restriction that comes with it.
-
-Against the specification the unit's access point is legal where it counts: channel 6 is one of the three permitted 2.4 GHz channels, and `Enable11n=1` with no HT40 setting matches the HT20-only rule. What it is missing is everything above the radio.
-
-## 📶 Radio and throughput on the unit (2026-10-13)
-
-A read-mostly session on the car measured what the 2.4 GHz access point actually carries. No CarPlay traffic went over Wi-Fi. The only writes were temporary `iperf` processes and one runtime channel switch, described below, which did not hold. Wireless experiments are **parked** after this session. **[car]**
+Two read-mostly sessions on the car, 2026-09-27 (access point and scan) and 2026-10-13 (readiness, radio settings, throughput). The 2026-10-13 session measured what the 2.4 GHz access point actually carries. No CarPlay traffic went over Wi-Fi. The only writes were temporary `iperf` processes and one runtime channel switch, described below, which did not hold. Wireless experiments are **parked** after this session. **[car]**
 
 ### Readiness of the unit for the stock210 bundle
 
@@ -314,18 +288,35 @@ flowchart LR
 
 ### Live access point state
 
-Read with the stock `uaputl` (read-only commands). **[car]**
+Read with the stock `uaputl` (read-only commands). Against the specification the access point is legal on the Wi-Fi side: a permitted channel, HT20 only, SSID broadcast. What it lacks is everything above the radio. **[car]**
 
 | Property | Value | Effect |
 |---|---|---|
-| Channel, width | 11, HT20, SGI-20, `ht_cap_info=0x12c` | 72 Mbit/s PHY ceiling |
+| Interface, SSID | `uap0`, `hostap`, `10.173.189.1`, `Audi_MMI_9137` broadcast | not hidden, as required |
+| Channel, width | 11, HT20, SGI-20, `ht_cap_info=0x12c`, no secondary channel | permitted channel; 72 Mbit/s PHY ceiling |
 | A-MPDU per TID | on for TID 0–3, **off for TID 4–7** (video and voice) | only the unit's own transmit side; the phone's uplink is unaffected |
 | ADDBA windows | tx 32, **rx 16**, `addbareject` all 0 | aggregation accepted, receive aggregates capped at 16 MPDUs |
 | HT protection | `1`, non-greenfield stations present | RTS/CTS overhead |
 | WMM | BE 3/4/10, BK 7/4/10, VI 2/3/4 TXOP 94, VO 2/2/3 TXOP 47 | standard |
 | Transmit power | **9 dBm** (templates say 13) | range, not short-range throughput |
 | BT coexistence (`coex.cfg`) | `APBTCoex=0`; ACL profile `btTime=40`, `wlanTime=60` | if active with an iAP2 link up, Wi-Fi gets 60 % airtime; untested |
+| 802.11d | enabled | — |
+| Custom information elements | eight slots, indices 0–7, all `len=0`, mask `0x00` (2026-09-27) | free for the Apple vendor element |
 | Channel neighbours (host scan) | 7 networks on channels 8–11, 1 on channel 1 | channel 11 is crowded |
+
+### The radio does not see 5 GHz (2026-09-27)
+
+The station interface `mlan0` is up with no network, and `wpa_supplicant` runs on it, so it can be asked to scan. Three passes were run with the hotspot's clients disconnected first, so nothing was disturbed. **[car]**
+
+| Pass | Networks found | Frequencies |
+|---|---|---|
+| 1 | 2 | 2412, 2452 |
+| 2 | 3 | 2412, 2452 |
+| 3 | 4 | 2412, 2437, 2452 |
+
+Six distinct access points across the three passes, every one in the 2.4 GHz band, including the dual-band `LuKa-WiFi` at signal 55 to 58 whose 5 GHz radio the owner's phone sees from the same spot. Not one entry above 2452 MHz appeared. So on this unit the radio scans 2.4 GHz only, and 5 GHz is not available as shipped.
+
+That is evidence rather than proof: a region code can gate the A band, and `mlan_region [interface] [regioncode]` exists to change it. Changing it is a write to the radio configuration and was not attempted. The practical reading stands: plan for 2.4 GHz, which the specification permits, and accept the Bluetooth-profile restriction that comes with it.
 
 ### Throughput
 
@@ -371,9 +362,9 @@ Nothing persistent changed on the unit. Temporary files `/tmp/ch_switch.sh`, `/t
 2. A/B a clean channel through `start-ap.sh` and with Bluetooth connected, to see whether `coex.cfg` takes 40 % airtime.
 3. Read the radio's band capability and region code to settle 5 GHz.
 
-## 🔒 Why this unit cannot do wireless today
+## 🔒 Why the stock unit cannot do wireless
 
-The band is not the blocker. Even a spec-perfect 5 GHz access point would change nothing, because the CarPlay stack on this unit has no wireless transport to offer.
+The band is not the blocker. Even a spec-perfect 5 GHz access point would change nothing, because the stock CarPlay stack has no wireless transport to offer.
 
 - `dio_manager.json` marks `carplay0` as the Bonjour Direct Link interface through `MDNS_DIRECTLINK_IFACE=carplay0`. This does not exclude `uap0`: the stock `mdnsd` still calls `mDNS_RegisterInterface` for other interfaces. The actual WLAN barrier is PF's quick inbound block to `uap0`; see [Wireless firewall](FIREWALL.md). **[decompile]**
 - `smartphone_integrator.json` carries no Wi-Fi or wireless key at all. **[code]**
@@ -443,7 +434,7 @@ Claims are tagged **[car]** confirmed on the unit, **[decompile]** from reverse 
 - The Apple vendor IE requirement is **[decompile]**, read from `MobileWiFi` and corroborated by the same constant in `CoreWiFi`; its Flags bit layout is **[spec]**.
 - The head unit's 2.4 GHz configuration and the missing wireless transport are **[code]**, read from the MU1316 trees.
 - The radio seeing only 2.4 GHz is **[car]**, from three scan passes with six distinct access points and nothing above 2452 MHz. Whether a region-code change would unlock the A band is **[open]** and was not attempted.
-- The live access-point properties and the eight free information-element slots are **[car]**, read with the stock Marvell tool.
+- The live access-point properties and the eight free information-element slots are **[car]**, read with the stock Marvell tool on 2026-09-27 and 2026-10-13.
 - The external report of a working iPhone-facing bootstrap is **[open]** and unreproduced here.
 - Radio state, `uaputl` values, throughput, CPU load and the failed runtime channel switch are **[car]**, 2026-10-13. No CarPlay session ran over Wi-Fi; there is still no wireless path on the unit to test.
 
