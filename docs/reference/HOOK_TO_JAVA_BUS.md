@@ -85,6 +85,8 @@ valid queued state. See [Input commands](../altscreen-and-video/ALTSCREEN_INPUT_
 
 **Vehicle data goes the other way.** `CMD_VEHICLE 0x0118` (Java → hook, binary, little-endian, 14 bytes) is `[u8 version 1][u8 valid bits: speed, gear, range, temperature, warning][u16 speed cm/s][u8 gear 0 unknown / 1 D / 2 R / 3 N / 4 P][u16 range km][i16 outside temperature 0.1 °C][u8 range warning][u32 Java ms]`, sent every 200 ms by `VehicleDataModule`; `hook/vehicle` turns it into `$PASCD` and VehicleStatusUpdate. See [Vehicle Data To Phone](../connect-and-usb/VEHICLE_DATA_TO_PHONE.md). **[code]**
 
+**The upmix level goes one way.** `CMD_UPMIX 0x0119` (Java → hook, binary) is `[u8 level]`, 0 off / 1 moderate / 2 normal / 3 full / 4 aggressive, sent by the Sound effects "CarPlay UpMix" row. Java stores the level; the hook gets the boot value from `/tmp/carplay_upmix_level`, which Java writes at HMI start, before `dio_manager`. See [Stereo To 5.1 Upmix](../audio/STEREO_TO_5_1_UPMIX.md#mmi-level). **[code]**
+
 ---
 
 ## ⚙️ Hook side: threads, queue and failure handling

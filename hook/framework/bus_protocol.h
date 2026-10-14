@@ -128,6 +128,10 @@
                                         /* Speed at most 10 Hz, slow fields on */
                                         /* change. Hook: $PASCD (0xFFFB) and   */
                                         /* VehicleStatusUpdate (0xA101).       */
+#define CMD_UPMIX               0x0119  /* binary [u8 level 0 off 1 moderate 2  */
+                                        /* normal 3 full 4 aggressive], the    */
+                                        /* MMI "CarPlay UpMix" row (Java keeps */
+                                        /* it; boot value via /tmp file)       */
 /* NOTE: dispatchable inbound types must be < MAX_TYPES in bus.c (grown to      */
 /* cover this 0x11x block).                                                     */
 

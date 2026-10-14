@@ -296,6 +296,30 @@ patch_dio() {
     chmod 644 "$tmp"; mv -f "$tmp" "$DIO" && echo "  dio_manager.json route-guidance, telephony and vehicle IDs registered (nmea +PASCD)"
 }
 
+# ---- lang_data.zip: the Sound effects "CarPlay UpMix" row texts --------------------------
+# carplay/upmix_lang.py (with our ldzip.py) puts the label and the five levels into slots 1000..1005 of
+# every HMIToneEvoHigh locale; idempotent, atomic.  It needs M.I.B.'s micropython
+# (apps/sbin/beta on the SD, or one installed by M.I.B. tools).  The jar has no copy of
+# the texts: without this step the row has empty labels, so a failure is loud.  The first
+# install keeps the zip as .carplay-stock (an upgrade keeps that first copy) and uninstall
+# puts it back - which also drops any OTHER patch's text edits made after our install
+# (e.g. luka-collection): re-apply those after an uninstall.
+LANG_ZIP=/mnt/app/eso/hmi/lsd/jars/lang_data.zip
+patch_lang() {
+    mp=
+    for c in "$D/../apps/sbin/beta/micropython" "$(command -v micropython 2>/dev/null)"; do
+        [ -n "$c" ] && [ -f "$c" ] && { mp=$c; break; }
+    done
+    [ -n "$mp" ] || { echo "  WARN no M.I.B. micropython - CarPlay UpMix row will have NO labels"; return 0; }
+    [ -f "$LANG_ZIP" ] || { echo "  WARN no $LANG_ZIP - CarPlay UpMix row will have NO labels"; return 0; }
+    backup_once "$LANG_ZIP" "$LANG_ZIP.carplay-stock" || return 0
+    rm -f "$LANG_ZIP.carplay-new"
+    # the zip is read whole (US 0.5 MB, EU 4.2 MB, 16 MB heap measured); default micropython
+    # heaps are smaller.  A build without -X support gets one plain try.
+    "$mp" -X heapsize=32M "$RES/upmix_lang.py" "$LANG_ZIP" || "$mp" "$RES/upmix_lang.py" "$LANG_ZIP" ||
+        { rm -f "$LANG_ZIP.carplay-new"; echo "  WARN CarPlay UpMix texts not added - the row will have NO labels"; }
+}
+
 echo "custom.sh: CarPlay $ACTION"
 echo "Remounting app and system read-write..."
 mount -uw /mnt/app    2>/dev/null || true
@@ -365,6 +389,7 @@ install)
     patch_ncm
     patch_pf
     patch_dio
+    patch_lang
     sync
     echo "DONE (install). Reboot the HU to load."
     ;;
@@ -383,6 +408,7 @@ uninstall)
     # restore in-place patched configs
     [ -e "$CFG.carplay-stock" ] && mv -f "$CFG.carplay-stock" "$CFG"
     [ -e "$DIO.carplay-stock" ] && mv -f "$DIO.carplay-stock" "$DIO"
+    [ -e "$LANG_ZIP.carplay-stock" ] && mv -f "$LANG_ZIP.carplay-stock" "$LANG_ZIP" && echo "  restored $LANG_ZIP"
     for f in $NCM_FILES; do
         [ -e "$f.carplay-stock" ] && mv -f "$f.carplay-stock" "$f"
     done

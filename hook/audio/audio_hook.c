@@ -51,6 +51,26 @@
 #include <sys/asoundlib.h>
 #include <sys/socket.h>
 
+/* MMI "CarPlay UpMix" level (enum spa_upmix_level): Java's file (reloaded here
+ * at hook init and at every stream start, so a hook that came up before Java
+ * wrote it still catches up), then CMD_UPMIX (upmix_level.c).  Both scene
+ * instances read it at init and on every period (an int store/load; the
+ * instance applies it on its own thread). */
+volatile int spa_upmix_level = SPA_UPMIX_LEVEL_NORMAL;
+
+/* 1 = read from the file, 0 = no file or a bad one (the level is left as is) */
+int spa_upmix_level_reload(void)
+{
+    FILE *f = fopen(SPA_UPMIX_LEVEL_FILE, "r");
+    int level = -1, ok;
+
+    if (!f) return 0;
+    ok = fscanf(f, "%d", &level) == 1 && level >= 0 && level < SPA_UPMIX_LEVEL_COUNT;
+    fclose(f);
+    if (ok) spa_upmix_level = level;
+    return ok;
+}
+
 DEFINE_LOG_MODULE(audio);
 
 /* The probe files are diagnostic-only; none participates in negotiation,
@@ -1893,6 +1913,8 @@ static void spa103_render_start(uint32_t generation, int64_t formatIndex, int ha
     upmixConfig.backend = config->stereoUpmixBackend;
     upmixConfig.lfe_gain_q15 = config->stereoLfeGainQ15;
     spa_apply_scene_knobs(&upmixConfig, config);
+    (void)spa_upmix_level_reload();
+    upmixConfig.level = spa_upmix_level;
     if (upmixConfig.backend == SPA_STEREO_UPMIX_SCENE) {
         spa_apply_scene_mask_blob(&upmixConfig);
         spa_scene_mask_worker_attach(&spa103_render.sceneMaskWorker,
@@ -3278,6 +3300,7 @@ static int spa103_render_frame(const uint8_t *packet, size_t length,
                 else
                     spa103_reorder_5_1_s16(src, rendered, out, run);
             } else if (action == SPA_DECODED_PCM_ACTION_STEREO_UPMIX) {
+                spa_stereo_upmix_set_level(&spa103_render.stereoUpmix, spa_upmix_level);
                 rc = spa_stereo_upmix_process_s16(&spa103_render.stereoUpmix,
                                                   src, run, rendered, run);
                 if (rc != SPA_STEREO_UPMIX_OK) {
@@ -3872,6 +3895,8 @@ static void spa_rt_upmix_start(snd_pcm_t *handle)
     upmixConfig.backend = config->stereoUpmixBackend;
     upmixConfig.lfe_gain_q15 = config->stereoLfeGainQ15;
     spa_apply_scene_knobs(&upmixConfig, config);
+    (void)spa_upmix_level_reload();
+    upmixConfig.level = spa_upmix_level;
     spa_apply_scene_mask_blob(&upmixConfig);
     spa_scene_mask_worker_attach(&spa_rt_upmix.sceneMaskWorker, &spa_rt_upmix.sceneMaskWorkerStarted,
                                  &upmixConfig, config, "rt");
@@ -3966,6 +3991,7 @@ static int spa_rt_upmix_period_locked(const int16_t *buffer, size_t frames,
         if (!spa_rt_upmix.lastPeriodUpmixed) spa_rt_upmix_reset_locked();
         if (__sync_lock_test_and_set(&spa_rt_upmix_track_change, 0u))
             (void)spa_stereo_upmix_scene_track_change(&spa_rt_upmix.upmix);
+        spa_stereo_upmix_set_level(&spa_rt_upmix.upmix, spa_upmix_level);
         upmixed = spa_stereo_upmix_process_s16(&spa_rt_upmix.upmix, buffer, frames,
                                                spa_pcm_sink.scratch, frames) ==
                   SPA_STEREO_UPMIX_OK;

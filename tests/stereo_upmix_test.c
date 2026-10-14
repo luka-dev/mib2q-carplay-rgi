@@ -608,6 +608,86 @@ static void test_scene_mask_worker(void)
     g_worker_sleep_ms = 0;
 }
 
+/* MMI levels: OFF is the bypass, input SPA_SCENE_LATENCY_FRAMES late; to/from OFF
+ * crossfades and between levels the tuning glides, both over SPA_UPMIX_LEVEL_FADE_MS;
+ * init and reset land on the level. */
+static void test_scene_levels(void)
+{
+    enum { N = 48000, BLOCK = 768 };
+    static struct spa_stereo_upmix state;
+    static int16_t in[N * 2], out[N * TEST_CHANNELS];
+    struct spa_stereo_upmix_config config;
+    const size_t fade = (size_t)SPA_UPMIX_LEVEL_FADE_MS * 48u;
+    uint32_t seed = UINT32_C(0x4c564c53);
+    size_t i, f;
+    double rear_early = 0.0, rear_late = 0.0;
+
+    for (i = 0; i < N; ++i) {                     /* quiet noise + a wide offset: guard never binds */
+        in[2 * i] = (int16_t)((int32_t)(test_prng(&seed) % 4001u) - 2000);
+        in[2 * i + 1] = (int16_t)((int32_t)(test_prng(&seed) % 4001u) - 2000) / 3;
+    }
+    spa_stereo_upmix_default_config(&config);
+    config.backend = SPA_STEREO_UPMIX_SCENE;
+    assert(spa_stereo_upmix_init(&state, &config) == SPA_STEREO_UPMIX_OK);
+    spa_stereo_upmix_set_level(&state, 99);                       /* ignored */
+    assert(state._level_req == SPA_UPMIX_LEVEL_NORMAL);
+    spa_stereo_upmix_set_level(&state, SPA_UPMIX_LEVEL_OFF);
+    assert(spa_stereo_upmix_process_s16(&state, in, 1, out, 1) == SPA_STEREO_UPMIX_OK);
+    assert(spa_stereo_upmix_reset(&state) == SPA_STEREO_UPMIX_OK);
+    assert(state._wet == 0.0f);                                   /* a new stream starts at OFF */
+    for (f = 0; f < N; f += BLOCK)
+        assert(spa_stereo_upmix_process_s16(&state, in + f * 2, BLOCK < N - f ? BLOCK : N - f,
+                                            out + f * TEST_CHANNELS, N) == SPA_STEREO_UPMIX_OK);
+    for (f = 0; f < N; ++f) {
+        const int16_t *o = out + f * TEST_CHANNELS;
+        const int16_t want_l = f < SPA_SCENE_LATENCY_FRAMES ? 0 : in[2 * (f - SPA_SCENE_LATENCY_FRAMES)];
+        const int16_t want_r = f < SPA_SCENE_LATENCY_FRAMES ? 0 : in[2 * (f - SPA_SCENE_LATENCY_FRAMES) + 1];
+        assert(o[0] == want_l && o[1] == want_r && !o[2] && !o[3] && !o[4] && !o[5]);
+    }
+
+    /* OFF -> FULL mid-stream: tuning switched, rears fade in, fully wet after the fade */
+    spa_stereo_upmix_set_level(&state, SPA_UPMIX_LEVEL_FULL);
+    for (f = 0; f < N; f += BLOCK)
+        assert(spa_stereo_upmix_process_s16(&state, in + f * 2, BLOCK < N - f ? BLOCK : N - f,
+                                            out + f * TEST_CHANNELS, N) == SPA_STEREO_UPMIX_OK);
+    assert(state._runtime._scene.cfg.alpha == 0.9f && state._runtime._scene.cfg.side_lp_hz == 11000.0f);
+    assert(state._wet == 1.0f);
+    for (f = 0; f < fade / 4; ++f) rear_early += fabs((double)out[f * TEST_CHANNELS + 4]);
+    for (f = fade; f < fade + fade / 4; ++f) rear_late += fabs((double)out[f * TEST_CHANNELS + 4]);
+    assert(rear_late > 4.0 * rear_early);                          /* eased in, not stepped */
+
+    /* a state initialised at OFF starts dry, no fade from the scene */
+    config.level = SPA_UPMIX_LEVEL_OFF;
+    assert(spa_stereo_upmix_init(&state, &config) == SPA_STEREO_UPMIX_OK);
+    assert(state._wet == 0.0f && state._level_applied == SPA_UPMIX_LEVEL_OFF);
+    config.level = SPA_UPMIX_LEVEL_COUNT;
+    assert(spa_stereo_upmix_init(&state, &config) == SPA_STEREO_UPMIX_ERROR_CONFIG);
+    config.level = SPA_UPMIX_LEVEL_FULL;
+    assert(spa_stereo_upmix_init(&state, &config) == SPA_STEREO_UPMIX_OK);
+    assert(state._wet == 1.0f && state._runtime._scene.cfg.alpha == 0.9f);
+    config.level = SPA_UPMIX_LEVEL_NORMAL;
+
+    /* NORMAL -> FULL glides (one block in: between), then lands on FULL */
+    assert(spa_stereo_upmix_init(&state, &config) == SPA_STEREO_UPMIX_OK);
+    spa_stereo_upmix_set_level(&state, SPA_UPMIX_LEVEL_FULL);
+    assert(spa_stereo_upmix_process_s16(&state, in, BLOCK, out, N) == SPA_STEREO_UPMIX_OK);
+    assert(state._runtime._scene.cfg.alpha > config.scene.alpha && state._runtime._scene.cfg.alpha < 0.9f);
+    assert(state._runtime._scene.cfg.side_lp_hz > 7000.0f && state._runtime._scene.cfg.side_lp_hz < 11000.0f);
+    for (f = 0; f < N; f += BLOCK)
+        assert(spa_stereo_upmix_process_s16(&state, in + f * 2, BLOCK < N - f ? BLOCK : N - f,
+                                            out + f * TEST_CHANNELS, N) == SPA_STEREO_UPMIX_OK);
+    assert(state._runtime._scene.cfg.alpha == 0.9f && state._runtime._scene.cfg.side_lp_hz == 11000.0f);
+
+    /* NORMAL restores the configured scene */
+    spa_stereo_upmix_set_level(&state, SPA_UPMIX_LEVEL_NORMAL);
+    for (f = 0; f < N; f += BLOCK)
+        assert(spa_stereo_upmix_process_s16(&state, in + f * 2, BLOCK < N - f ? BLOCK : N - f,
+                                            out + f * TEST_CHANNELS, N) == SPA_STEREO_UPMIX_OK);
+    assert(state._runtime._scene.cfg.alpha == config.scene.alpha &&
+           state._runtime._scene.cfg.side_lp_hz == config.scene.side_lp_hz &&
+           state._runtime._scene.cfg.duck_depth == config.scene.duck_depth);
+}
+
 int main(void)
 {
     test_default_validation_and_fail_closed();
@@ -616,6 +696,7 @@ int main(void)
     test_corrected_guard_extremes();
     test_scene_backend_smoke();
     test_scene_mask_worker();
-    puts("stereo_upmix_test: OK (validation, OFF bypass, LFE V2 + cabin guard, SCENE smoke, mask worker)");
+    test_scene_levels();
+    puts("stereo_upmix_test: OK (validation, OFF bypass, LFE V2 + cabin guard, SCENE smoke, mask worker, levels)");
     return 0;
 }

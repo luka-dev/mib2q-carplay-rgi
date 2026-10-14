@@ -2,7 +2,7 @@
 # M.I.B. -> Advanced Settings -> Run Custom Script.  QNX 6.5 /bin/sh is ksh.
 # Self-contained CarPlay uninstaller: needs no payload tree.
 #   - restore every *.carplay-stock the installer left (firmware binaries,
-#     smartphone_integrator.json, all pf profiles, dio_manager.json) by renaming
+#     smartphone_integrator.json, all pf profiles, dio_manager.json, lang_data.zip) by renaming
 #     the backup back;
 #   - remove the files we added and own (hooks/.so/jar), which have no backup.
 # Upgrade-safe and idempotent: re-running is a no-op once everything is restored.
