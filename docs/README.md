@@ -339,7 +339,7 @@ Every curated note, alphabetical:
 - [Wireless CarPlay PF profiles, offline](wireless-carplay/FIREWALL.md)
 - [Wireless CarPlay with MU1316 stock AirPlay 210.81](wireless-carplay/STOCK210_ARCHITECTURE.md)
 - [Wireless code review against iOS and original MHI2Q 210](carplay-lab/IOS210_CODE_REVIEW.md)
-- [Wireless documentation migration](wireless-carplay/MIGRATION.md)
+- [Wireless documentation migration](wireless-carplay/history/MIGRATION.md)
 - [Wireless investigation history](wireless-carplay/history/README.md)
 
 ---

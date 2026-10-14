@@ -80,7 +80,7 @@ scoped to wireless owner mode. See [review corrections](../carplay-lab/IOS210_CO
 | Bootstrap and ownership | [iAP2 daemon](IAP2_DAEMON.md) · [Software MFi tests](TEST_SOFTWARE_MFI.md) · [iOS VM laboratory](../carplay-lab/IOS_VM_LAB.md) · [DIO ownership](DIO_OWNERSHIP.md) · [Vendor provenance](IAP2_VENDOR_PROVENANCE.md) |
 | Network and hardware | [Wi-Fi discovery](WIFI_AND_DISCOVERY.md) · [Firewall](FIREWALL.md) · [Hardware and donors](HARDWARE_AND_DONORS.md) |
 | iOS and references | [Authentication selection](IOS_AUTH_SELECTION.md) · [Wireless session gates](IOS_WIRELESS_SESSION_GATES.md) · [Bootstrap comparison](BOOTSTRAP_COMPARISON.md) |
-| Evidence and history | [Pairing/media milestones](STOCK210_VALIDATION.md) · [Historical experiments](history/README.md) · [Migration map](MIGRATION.md) |
+| Evidence and history | [Pairing/media milestones](STOCK210_VALIDATION.md) · [Historical experiments](history/README.md) · [Migration map](history/MIGRATION.md) |
 
 The history section preserves the earlier feature-bit probe, replacement280
 receiver, installer experiment and failure traces. These are evidence records,
@@ -153,5 +153,5 @@ session. Details and next steps: [Radio and throughput on the unit](WIFI_AND_DIS
    display. The current wired altScreen path uses legacy AES.
 
 Original offsets, byte layouts, hashes and negative results remain in the
-technical notes. [The migration map](MIGRATION.md) accounts for every document
+technical notes. [The migration map](history/MIGRATION.md) accounts for every document
 moved from `wireless/`; source-directory READMEs now point here.

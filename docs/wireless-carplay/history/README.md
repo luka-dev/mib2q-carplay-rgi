@@ -38,6 +38,7 @@ flowchart LR
 | [Info serialization](INFO_SERIALIZATION.md) | Delegate/CF ownership failures and quiesce experiments |
 | [Experimental280 bundle](EXPERIMENTAL280_BUNDLE.md) | Replacement-receiver archive and its build evidence |
 | [Experimental280 installer](EXPERIMENTAL280_INSTALLER.md) | Historical staging/rollback checks; incompatible with stock210 review |
+| [Documentation migration](MIGRATION.md) | 2026-09-29 map from old `wireless/` paths to this section |
 
 ## 🔗 Current successors
 
