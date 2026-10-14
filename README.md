@@ -109,7 +109,55 @@ features below follow it automatically.
 ## 📚 Documentation
 
 All documentation is one linked Markdown tree in [`docs/`](docs/README.md). Start at
-[`docs/README.md`](docs/README.md), then the per-domain maps:
+[`docs/README.md`](docs/README.md), then the per-domain maps.
+
+> 🗺️ **Looking for a note? See the [documentation map](docs/DOCS_MAP.md)**: every note, one mindmap per domain, with links.
+
+_Compact mindmap: the eight documentation domains and their topic groups._
+
+<!-- BEGIN generated:compact-mindmap -->
+```mermaid
+mindmap
+  root((MHI2Q CarPlay docs))
+    Audio
+      Upmix runtime
+      Upmix research and history
+      Listening and release
+      Amplifier and DSP
+      Codecs and routing
+    Cluster and RGI
+      Contexts and layout
+      Route guidance
+      Phone and telephony
+      Open research
+    AltScreen and Video
+      Cluster video
+      Pacing and input
+      Features
+      History
+    Connect and USB
+      USB session
+      Replug recovery
+      Network and phone data
+    Wireless CarPlay
+      Receiver and ownership
+      Bluetooth graft
+      iAP2 and MFi bootstrap
+      Pairing and media
+      iOS, radio and hardware
+      Evidence
+    CarPlay Laboratory
+      vphone sender
+      Earlier labs and review
+    Build and Deploy
+      Build and release
+      Audits and recovery
+    Reference
+      System
+      Formats and ports
+      History and comparisons
+```
+<!-- END generated:compact-mindmap -->
 
 | Domain | Entry point |
 | --- | --- |
@@ -117,6 +165,8 @@ All documentation is one linked Markdown tree in [`docs/`](docs/README.md). Star
 | Cluster and route guidance (contexts, BAP/RGI, HUD renderer, CarPlay telephony) | [`docs/cluster-and-rgi/README.md`](<docs/cluster-and-rgi/README.md>) |
 | AltScreen and video (stream 111, OMX pipeline, loader) | [`docs/altscreen-and-video/README.md`](<docs/altscreen-and-video/README.md>) |
 | Connect and USB (NCM, replug recovery, PF, session lifecycle) | [`docs/connect-and-usb/README.md`](<docs/connect-and-usb/README.md>) |
+| Wireless CarPlay (stock210 hook, btstack graft, iAP2/MFi; parked) | [`docs/wireless-carplay/README.md`](<docs/wireless-carplay/README.md>) |
+| CarPlay laboratory (vphone sender, native video, QNX timing) | [`docs/carplay-lab/README.md`](<docs/carplay-lab/README.md>) |
 | Build and deploy (toolchain, release map, VIN protection) | [`docs/build-and-deploy/README.md`](<docs/build-and-deploy/README.md>) |
 | Architecture overview | [`docs/reference/ARCHITECTURE.md`](docs/reference/ARCHITECTURE.md) |
 

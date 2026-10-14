@@ -63,106 +63,51 @@ records the exact evidence and limits.
 
 ## 📚 The domains
 
-_Mindmap of the docs: the eight domains and their curated notes._
+_Compact mindmap: the eight domains and their topic groups. Every note, grouped the same way, is in the [documentation map](DOCS_MAP.md)._
 
+<!-- BEGIN generated:compact-mindmap -->
 ```mermaid
 mindmap
-  root((MHI2Q CarPlay))
+  root((MHI2Q CarPlay docs))
     Audio
-      APAC Codec
-      Buffered Audio Path
-      Buffered Playback Lifecycle
-      Call and Siri Routing
-      Cinemo AAC Decoder
-      Discrete 5.1 Routing
-      Dolby Atmos
-      HSSR Model
-      Internal Amp Path
-      J525 Wiring and Speakers
-      QNX Audio Topology
-      SHARC B Processors
-      SHARC DSP Blocks
-      Stereo to 5.1 Upmix
-      Upmix Calibration and Tuning
-      Upmix Compute Budget
-      Upmix Datasets and Teachers
-      Upmix Listening and Deploy Log
-      Upmix Literature
-      Upmix Release and Acceptance
-      Upmix Training History
-      Upmix Domain Model
-      Track A Three-Model Runtime
-      Track B Paused Single-Network Research
-      Separator Attempt Chronicle
-      Final Spectral40k Verdict
-      Virtual Cabin and Amp RE
+      Upmix runtime
+      Upmix research and history
+      Listening and release
+      Amplifier and DSP
+      Codecs and routing
     Cluster and RGI
-      Cluster Contexts
-      Distance Bargraph
-      HUD Renderer
-      iAP2 Route Guidance TLVs
-      KDK Geometry and Animation
-      Lane Guidance
-      Maneuver Mapping
-      NavSD FctID Matrix
-      PDC Small Stage
-      Phone Tab Gating
-      RGI and BAP Bridge
-      Smartphone Tab and Kombi DSI
-      Third-party Nav Apps
-      VC FPK State Machine
-      VC Layout and Fonts
+      Contexts and layout
+      Route guidance
+      Phone and telephony
+      Open research
     AltScreen and Video
-      AltScreen Cluster Video
-      AltScreen Frame Rate
-      AltScreen Input Commands
-      AltScreen Pacing Validation
-      AltScreen RE History
-      CarPlay Feature Survey
-      CarPlay Video Playback
-      Cluster Loader
-      Cluster Video Encoder
-      Cover Art Pipeline
-      Partial 360 Camera Preflight
-      Reconnect and Lifecycle
-      Video Pipeline
+      Cluster video
+      Pacing and input
+      Features
+      History
     Connect and USB
-      HMI Startup and Identity
-      iOS Version Gate
-      Now Playing Cold Start
-      PF Firewall
-      Session Lifecycle
-      SI Stack and Replug Race
-      USB and NCM Connect
-      USB Replug Recovery
-      Vehicle Data To Phone
+      USB session
+      Replug recovery
+      Network and phone data
     Wireless CarPlay
-      Stock210 Architecture and Lifecycle
-      Bluetooth Graft and RFCOMM ABI
-      iAP2 MFi and Wi-Fi Bootstrap
-      Pairing and Media Security
-      DIO Ownership and USB Priority
-      iOS Gates and Donor Evidence
-      Validation and Investigation History
+      Receiver and ownership
+      Bluetooth graft
+      iAP2 and MFi bootstrap
+      Pairing and media
+      iOS, radio and hardware
+      Evidence
     CarPlay Laboratory
-      Native vphone Sender
-      QNX Clock and Packet Queues
-      Software MFi Fixtures
-      Retained iOS 14 Experiments
+      vphone sender
+      Earlier labs and review
     Build and Deploy
-      Build System
-      Deploy and Release
-      Production Audits
-      RE Artifacts
-      VIN Protection
+      Build and release
+      Audits and recovery
     Reference
-      Architecture
-      Archive and History
-      Hook to Java Bus
-      iOS CarPlay Spatial Wireformat
-      MHI2 MU1439 Port
-      Record Replay Tooling
+      System
+      Formats and ports
+      History and comparisons
 ```
+<!-- END generated:compact-mindmap -->
 
 | Domain | Map of content | Covers |
 | --- | --- | --- |
@@ -170,10 +115,12 @@ mindmap
 | **Cluster and RGI** | [Cluster and RGI overview](cluster-and-rgi/README.md) | cluster contexts, BAP route guidance, HUD renderer, third-party nav, phone tab |
 | **AltScreen and Video** | [AltScreen and Video overview](altscreen-and-video/README.md) | cluster video (stream 111), OMX pipeline, boot loader, reconnect lifecycle |
 | **Connect and USB** | [Connect and USB overview](connect-and-usb/README.md) | NCM connect, USB replug recovery, PF firewall, iOS version gate |
-| **Wireless CarPlay** | [Wireless CarPlay overview](wireless-carplay/README.md) | stock210 hook, btstack graft, iAP2/MFi, receiver readiness, wired priority and offline evidence |
+| **Wireless CarPlay** | [Wireless CarPlay overview](wireless-carplay/README.md) | stock210 hook, btstack graft, iAP2/MFi, receiver readiness, wired priority; parked after the 2026-10-13 on-unit radio check |
+| **CarPlay Laboratory** | [CarPlay Laboratory overview](carplay-lab/README.md) | vphone sender, native video over Direct NCM, QNX timing, earlier iOS VM labs |
 | **Build and Deploy** | [Build and Deploy overview](build-and-deploy/README.md) | Docker QNX build, hand-assembled release, VIN protection, RE artifacts |
 | **Reference** | — | [Architecture](reference/ARCHITECTURE.md), [Archive and History](reference/ARCHIVE_AND_HISTORY.md), [Hook to Java Bus](reference/HOOK_TO_JAVA_BUS.md), [iOS CarPlay Spatial Wireformat](reference/IOS_CARPLAY_SPATIAL_WIREFORMAT.md), [MHI2 MU1439 Port](reference/MHI2_MU1439_PORT.md), [Record Replay Tooling](reference/RECORD_REPLAY_TOOLING.md) |
 | **Traps** | [Landmines](LANDMINES.md) | cross-project rules that break, slow, or mislead |
+| **Map** | [Documentation map](DOCS_MAP.md) | every note in one mindmap per domain, with links |
 | **Sources** | [📚 Sources and research](#-sources-and-research) | the original audits, handoffs, papers and data files, verbatim |
 
 ---
@@ -235,10 +182,13 @@ flowchart TB
 
 Every curated note, alphabetical:
 
+<!-- BEGIN generated:a-z -->
 - [AirPlay 280.33.8 pairing: source recipe for the stock-210 extension](wireless-carplay/AIRPLAY280_PAIRING_RECIPE.md)
 - [AltScreen and Video overview](altscreen-and-video/README.md)
 - [AltScreen Cluster Video](altscreen-and-video/ALTSCREEN_CLUSTER_VIDEO.md)
 - [AltScreen Frame Rate](altscreen-and-video/ALTSCREEN_FRAME_RATE.md)
+- [AltScreen Input Commands](altscreen-and-video/ALTSCREEN_INPUT_COMMANDS.md)
+- [AltScreen Pacing Validation](altscreen-and-video/ALTSCREEN_PACING_VALIDATION.md)
 - [AltScreen RE History](altscreen-and-video/ALTSCREEN_RE_HISTORY.md)
 - [APAC Codec](audio/APAC_CODEC.md)
 - [Architecture](reference/ARCHITECTURE.md)
@@ -251,7 +201,10 @@ Every curated note, alphabetical:
 - [Call and Siri Routing](audio/CALL_AND_SIRI_ROUTING.md)
 - [CarPlay Bluetooth discovery: factory path and MHI2Q graft](wireless-carplay/BLUETOOTH_DISCOVERY.md)
 - [CarPlay Feature Survey](altscreen-and-video/CARPLAY_FEATURE_SURVEY.md)
+- [CarPlay Laboratory overview](carplay-lab/README.md)
+- [CarPlay speed-limit investigation](cluster-and-rgi/CARPLAY_SPEED_LIMIT.md)
 - [CarPlay Telephony](cluster-and-rgi/CARPLAY_TELEPHONY.md)
+- [CarPlay Upmix Listening Protocol](audio/UPMIX_CARPLAY_LISTENING_PROTOCOL.md)
 - [CarPlay Video Playback](altscreen-and-video/CARPLAY_VIDEO_PLAYBACK.md)
 - [Cinemo AAC Decoder](audio/CINEMO_AAC_DECODER.md)
 - [Cluster and RGI overview](cluster-and-rgi/README.md)
@@ -260,10 +213,12 @@ Every curated note, alphabetical:
 - [Cluster Video Encoder](altscreen-and-video/CLUSTER_VIDEO_ENCODER.md)
 - [Connect and USB overview](connect-and-usb/README.md)
 - [Cover Art Pipeline](altscreen-and-video/COVER_ART_PIPELINE.md)
+- [Current Track A on the matched full40 harness](audio/UPMIX_TRACKA_MATCHED40_2026-09-30.md)
 - [Deploy and Release](build-and-deploy/DEPLOY_AND_RELEASE.md)
 - [dio receiver bridge: offline QNX build and QEMU verification](wireless-carplay/RECEIVER_BRIDGE.md)
 - [Discrete 5.1 Routing](audio/DISCRETE_5_1_ROUTING.md)
 - [Distance Bargraph](cluster-and-rgi/DISTANCE_BARGRAPH.md)
+- [Documentation map](DOCS_MAP.md)
 - [Dolby Atmos](audio/DOLBY_ATMOS.md)
 - [Enhanced Siri Contract](altscreen-and-video/ENHANCED_SIRI_CONTRACT.md)
 - [HMI Startup and Identity](connect-and-usb/HMI_STARTUP_AND_IDENTITY.md)
@@ -272,11 +227,15 @@ Every curated note, alphabetical:
 - [HUD Renderer](cluster-and-rgi/HUD_RENDERER.md)
 - [iAP2 Communications](cluster-and-rgi/IAP2_COMMUNICATIONS.md)
 - [iAP2 Route Guidance TLVs](cluster-and-rgi/IAP2_ROUTE_GUIDANCE_TLVS.md)
+- [iAP2 StartRoadObjectDetection and Type research](cluster-and-rgi/IAP2_ROAD_OBJECT_DETECTION.md)
 - [Internal Amp Path](audio/INTERNAL_AMP_PATH.md)
+- [iOS 26 type-103 connection triage](audio/IOS26_TYPE103_CONNECTION_TRIAGE_2026-10-03.md)
 - [iOS 26/27 selection of stock AirPlay 210 MFi-SAP](wireless-carplay/IOS_AUTH_SELECTION.md)
 - [iOS CarPlay Spatial Wireformat](reference/IOS_CARPLAY_SPATIAL_WIREFORMAT.md)
 - [iOS Version Gate](connect-and-usb/IOS_VERSION_GATE.md)
+- [iOS virtual machine laboratory](carplay-lab/IOS_VM_LAB.md)
 - [iOS wireless CarPlay gates: stock 210 requires a pairing/crypto extension](wireless-carplay/IOS_WIRELESS_SESSION_GATES.md)
+- [Issue 24: RCC/MMX boot, reset supervision, and recovery entry points](build-and-deploy/ISSUE24_RCC_MMX_RECOVERY.md)
 - [J525 Wiring and Speakers](audio/J525_WIRING_AND_SPEAKERS.md)
 - [KDK Geometry and Animation](cluster-and-rgi/KDK_GEOMETRY_AND_ANIMATION.md)
 - [Landmines](LANDMINES.md)
@@ -285,6 +244,7 @@ Every curated note, alphabetical:
 - [MHI2 MU1439 Port](reference/MHI2_MU1439_PORT.md)
 - [MHI2Q RFCOMM graft: offline build (2026-09-27)](wireless-carplay/BTSTACK_GRAFT.md)
 - [MU1316 btstack launcher path (offline, 2026-09-28)](wireless-carplay/GRAFT_LAUNCHER_LIFECYCLE.md)
+- [Native CarPlay screen test](carplay-lab/NATIVE_SCREEN_TEST.md)
 - [Nav Initializing Screen](cluster-and-rgi/NAV_INITIALIZING_SCREEN.md)
 - [NavSD FctID Matrix](cluster-and-rgi/NAVSD_FCTID_MATRIX.md)
 - [Now Playing Cold Start](connect-and-usb/NOW_PLAYING_COLD_START.md)
@@ -301,27 +261,38 @@ Every curated note, alphabetical:
 - [Receiver startup gap for wireless CarPlay](wireless-carplay/RECEIVER_START.md)
 - [Reconnect and Lifecycle](altscreen-and-video/RECONNECT_AND_LIFECYCLE.md)
 - [Record Replay Tooling](reference/RECORD_REPLAY_TOOLING.md)
+- [Repository Comparison: mhi2q-evo and Our CarPlay Stack](reference/REPOSITORY_COMPARISON_MHI2Q_EVO_2026-10-10.md)
 - [RFCOMM connection, transmit, and credit ABI (static RE, 2026-09-27)](wireless-carplay/RFCOMM_DUPLEX.md)
 - [RFCOMM server channel for iAP2 (static RE, 2026-09-27)](wireless-carplay/RFCOMM_CHANNEL_LAYOUT.md)
 - [RGI and BAP Bridge](cluster-and-rgi/RGI_AND_BAP_BRIDGE.md)
+- [Scene Backend Deploy](build-and-deploy/SCENE_BACKEND_DEPLOY.md)
 - [Session Lifecycle](connect-and-usb/SESSION_LIFECYCLE.md)
 - [SHARC B Processors](audio/SHARC_B_PROCESSORS.md)
 - [SHARC DSP Blocks](audio/SHARC_DSP_BLOCKS.md)
 - [SI Stack and Replug Race](connect-and-usb/SI_STACK_AND_REPLUG_RACE.md)
 - [Smartphone Integrator ownership for wireless startup](wireless-carplay/DIO_OWNERSHIP.md)
 - [Smartphone Tab and Kombi DSI](cluster-and-rgi/SMARTPHONE_TAB_AND_KOMBI_DSI.md)
+- [Software MFi for offline tests](wireless-carplay/TEST_SOFTWARE_MFI.md)
 - [Stereo to 5.1 Upmix](audio/STEREO_TO_5_1_UPMIX.md)
+- [Stereo-to-rear scene algorithm (2026-10-08, v2)](audio/UPMIX_SCENE_ALGORITHM_2026-10-08.md)
 - [Stock 210 + hook/wireless: offline validation, 2026-09-29](wireless-carplay/STOCK210_VALIDATION.md)
 - [Stock 210.81 HTTP boundary for hook/wireless](wireless-carplay/STOCK210_HTTP_PAIRING_ABI.md)
 - [Stock 210.81 paired media adapters](wireless-carplay/STOCK210_MEDIA_CRYPTO_ABI.md)
 - [Stock210 wireless readiness, restart and wired priority](wireless-carplay/STOCK210_RECEIVER_LIFECYCLE.md)
 - [Third-party Nav Apps](cluster-and-rgi/THIRD_PARTY_NAV_APPS.md)
 - [Upmix Calibration and Tuning](audio/UPMIX_CALIBRATION_AND_TUNING.md)
+- [Upmix Code Retirement Map](audio/UPMIX_CODE_RETIREMENT_2026-10-09.md)
 - [Upmix Compute Budget](audio/UPMIX_COMPUTE_BUDGET.md)
 - [Upmix Datasets and Teachers](audio/UPMIX_DATASETS_AND_TEACHERS.md)
+- [Upmix domain model and qualification map](audio/UPMIX_DOMAIN_MODEL.md)
+- [Upmix History and Results](audio/UPMIX_HISTORY_AND_RESULTS_2026-10-09.md)
 - [Upmix Listening and Deploy Log](audio/UPMIX_LISTENING_AND_DEPLOY_LOG.md)
 - [Upmix Literature](audio/UPMIX_LITERATURE.md)
+- [UPMIX radical directions (2026-10-07)](audio/UPMIX_RADICAL_DIRECTIONS_2026-10-07.md)
 - [Upmix Release and Acceptance](audio/UPMIX_RELEASE_AND_ACCEPTANCE.md)
+- [UPMIX rework baseline (2026-10-07)](audio/UPMIX_REWORK_BASELINE_2026-10-07.md)
+- [UPMIX rework proposal (2026-10-07)](audio/UPMIX_REWORK_PROPOSAL_2026-10-07.md)
+- [Upmix Stability: "the sound goes back and front" (2026-09-25)](audio/UPMIX_STABILITY_2026-09-25.md)
 - [Upmix Training History](audio/UPMIX_TRAINING_HISTORY.md)
 - [USB and NCM Connect](connect-and-usb/USB_AND_NCM_CONNECT.md)
 - [USB Replug Recovery](connect-and-usb/USB_REPLUG_RECOVERY.md)
@@ -333,14 +304,17 @@ Every curated note, alphabetical:
 - [Video Pipeline](altscreen-and-video/VIDEO_PIPELINE.md)
 - [VIN Protection](build-and-deploy/VIN_PROTECTION.md)
 - [Virtual Cabin and Amp RE](audio/VIRTUAL_CABIN_AND_AMP_RE.md)
+- [vphone and QNX timing measurements](carplay-lab/VPHONE_TIMING.md)
+- [vphone CarPlay laboratory](carplay-lab/VPHONE_LAB.md)
 - [Wireless CarPlay and Wi-Fi](wireless-carplay/WIFI_AND_DISCOVERY.md)
+- [Wireless CarPlay investigation history](wireless-carplay/history/README.md)
 - [Wireless CarPlay on the Head Unit](wireless-carplay/HARDWARE_AND_DONORS.md)
 - [Wireless CarPlay overview](wireless-carplay/README.md)
 - [Wireless CarPlay PF profiles, offline](wireless-carplay/FIREWALL.md)
 - [Wireless CarPlay with MU1316 stock AirPlay 210.81](wireless-carplay/STOCK210_ARCHITECTURE.md)
-- [Wireless code review against iOS and original MHI2Q 210](carplay-lab/IOS210_CODE_REVIEW.md)
 - [Wireless documentation migration](wireless-carplay/history/MIGRATION.md)
-- [Wireless investigation history](wireless-carplay/history/README.md)
+- [Wireless hook review against iOS and MHI2Q 210](carplay-lab/IOS210_CODE_REVIEW.md)
+<!-- END generated:a-z -->
 
 ---
 

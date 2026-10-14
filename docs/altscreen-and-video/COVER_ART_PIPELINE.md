@@ -63,6 +63,42 @@ The hook enters far lower: `NmeTransport::Recv(NmeArray<uchar>&)` (`hook/framewo
 
 The "stock-like" cleanup that shipped keeps a one-slot latest-wins queue, registers the module through lazy framework initialisation instead of a constructor, starts **one joinable worker** only when the first complete image is ready, and stops and `pthread_join`s it before bus shutdown instead of polling a detached thread (`coverart_hook.c:595-690`, `:747-790`, `:860-900`). Callback quiescence protects a concurrently copied sink pointer. **[code]**
 
+### Worker stages and the Java side
+
+```mermaid
+flowchart LR
+  accTitle: Cover art worker stages
+  accDescr: A complete image passes a CRC duplicate check and a header-only size check before decode, gets the narrow EXIF fix, and is published through an atomic symlink swap only if its Identify generation is still current; Java uses the CRC as the picture id.
+  queue["📥 One-slot queue, latest wins"]
+  dup{"CRC32 same as last?"}
+  dims{"Header ≤ 4096 px/side, ≤ 8 Mpx?"}
+  decode["⚙️ stb_image decode, EXIF 4 flip, 256×256 contain, PNG"]
+  gen{"Identify generation current?"}
+  swap["📄 coverart_N.png, symlink rename"]
+  java["☕ EVT_COVERART → CoverArt → VC picture"]
+  drop["❌ Dropped"]
+  queue --> dup
+  dup -->|yes| drop
+  dup -->|no| dims
+  dims -->|no| drop
+  dims -->|yes| decode --> gen
+  gen -->|no| drop
+  gen -->|yes| swap --> java
+  classDef primary fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
+  classDef success fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
+  classDef danger fill:#fee2e2,stroke:#dc2626,stroke-width:2px,color:#7f1d1d
+  class queue,decode,swap primary
+  class java success
+  class drop danger
+```
+
+- **Size before decode.** `stbi_info_from_memory` reads only the header; `coverart_image_dimensions_safe` (`hook/coverart/jpeg_safety.c`) rejects more than 4096 px per side or 8 Mpixel before `stb_image` allocates pixels (`coverart_hook.c:474-483`). **[code]**
+- **Orientation.** `coverart_jpeg_orientation` is a bounded EXIF parser that returns 1–8 or 0. Only orientation 4 (vertical flip) is applied; rotations are ignored, and there is no default flip, which once produced upside-down art (`coverart_hook.c:493-510`). **[code]**
+- **Atomic publish.** The PNG is written to `coverart_0.png` or `coverart_1.png` in turn; a temporary symlink to it is `rename()`d over `coverart.png`, then the old slot is unlinked, so a reader never sees a partial file (`coverart_hook.c:327-412`). **[code]**
+- **Stale sessions.** A new iAP2 Identify bumps the receive generation; a decode that finishes for an older generation is discarded instead of overwriting the current session's art (`coverart_hook.c:535-540`). **[code]**
+- **Java.** `CoverArt` ignores `crc == 0` and repeats, and uses the CRC as the picture id (`java_patch/com/luka/carplay/coverart/CoverArt.java:88-90`). If track text already went to the VC without art, `TerminalModeBapCombi` resends it with id + 1 so the VC refreshes the picture (`java_patch/de/audi/app/terminalmode/combi/TerminalModeBapCombi.java:264-271`). **[code]**
+- **Tests.** `scripts/run_tests.sh` builds `coverart_stream_test` (framing, reorder, bounds, size-only Setup), `coverart_safety_test` (EXIF parser and size budget on malformed input) and `coverart_pipeline_test` (real decode and publish with an Identify reset mid-encode). **[code]**
+
 Sources: `MH2P_STOCK_COVERART_PIPELINE`
 
 ## ❌ The size-only Setup regression (2026-09-12)
