@@ -26,6 +26,16 @@ on -f mmx /bin/sh -c "mount -uw /mnt/app; cd $CPJ && rm -rf $CPF; sync" 2>/dev/n
 sync 2>/dev/null
 ls -l /net/mmx$CPJ 2>&1 | $TEE -i -a $LOG
 
+# The installer's USB Lua patch back to stock (when it left a .carplay-stock): if USB/CarPlay
+# connect broke after an install. A copy, so the backup stays for the uninstaller.
+echo -ne "\n--- CarPlay rescue: restoring stock usblauncher_otg.lua --\n" | $TEE -i -a $LOG
+CPL=/mnt/system/etc/usblauncher_otg.lua
+mount -uw /net/mmx/mnt/system 2>/dev/null
+[ -f /net/mmx$CPL.carplay-stock ] && cp /net/mmx$CPL.carplay-stock /net/mmx$CPL 2>/dev/null
+on -f mmx /bin/sh -c "mount -uw /mnt/system; [ -f $CPL.carplay-stock ] && cp $CPL.carplay-stock $CPL; sync" 2>/dev/null
+sync 2>/dev/null
+ls -l /net/mmx$CPL* 2>&1 | $TEE -i -a $LOG
+
 echo -ne "\n--- Load PNG to display during finalscript --\n" | $TEE -i -a $LOG
 ${2}/apps/showimage -load 0 ${2}/mod/images/showimage/ finalscript.png SWDL
 echo -ne "\n--- Running basic backup --------------------\n" | $TEE -i -a $LOG
