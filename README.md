@@ -141,6 +141,9 @@ features below follow it automatically.
     across restarts. Confirmed in the car (2026-10-13); the levels above Off differ only subtly,
     best heard with the fader to the rear
     ([details](docs/reference/HOOK_TO_JAVA_BUS.md)).
+  - *Recommended MMI sound settings to start with:* every equalizer band at 0 (dials centred),
+    **Surround level** at 0, which is the far-left end of the slider, **3D effect** Off,
+    **Focus** All, and **CarPlay UpMix** to taste.
   - Only on an external amplifier. The installer reads the amplifier coding (RCC EEPROM 0xFC):
     on the head unit's own amplifier, which has no six-channel route, CarPlay audio stays stock
     stereo and the CarPlay UpMix row is not shown. Verified on B&O; Bose is untested.
