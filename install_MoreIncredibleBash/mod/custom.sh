@@ -377,7 +377,8 @@ patch_si() {
     [ -f "$SI_BIN" ] || { echo "  WARN no $SI_BIN"; return 0; }
     src=$SI_BIN; [ -f "$SI_BIN.carplay-stock" ] && src=$SI_BIN.carplay-stock
     rm -f "$SI_BIN.carplay-new"
-    "$mp" "$RES/binpatch.py" smartphone_integrator "$src" "$SI_BIN.carplay-new"; rc=$?
+    # the SI is read whole (0.8 MB): default micropython heaps are smaller (MemoryError on the unit)
+    "$mp" -X heapsize=8M "$RES/binpatch.py" smartphone_integrator "$src" "$SI_BIN.carplay-new"; rc=$?
     case $rc in
         0) backup_once "$SI_BIN" "$SI_BIN.carplay-stock" || { rm -f "$SI_BIN.carplay-new"; return 1; }
            chmod 755 "$SI_BIN.carplay-new" && mv -f "$SI_BIN.carplay-new" "$SI_BIN" ||

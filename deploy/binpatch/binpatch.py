@@ -42,7 +42,7 @@ def find_once(data, needle):
 
 
 def patch(data, sites):
-    """(patched data, 0) | (None, 3) already patched | (None, 1) no unique match."""
+    """(sorted [(offset, bytes)], 0) | (None, 3) already patched | (None, 1) no unique match."""
     edits, done = [], 0
     for pre, old, new, post in sites:
         at = find_once(data, pre + old + post)
@@ -56,10 +56,7 @@ def patch(data, sites):
         return None, 3
     if done:
         return None, 1          # half patched: not ours to finish
-    out = bytearray(data)
-    for at, new in edits:
-        out[at:at + len(new)] = new
-    return out, 0
+    return sorted(edits), 0
 
 
 def main(argv):
@@ -72,15 +69,19 @@ def main(argv):
     except OSError as e:
         print('binpatch: cannot read %s: %s' % (argv[2], e))
         return 1
-    out, rc = patch(data, PATCHES[argv[1]])
+    edits, rc = patch(data, PATCHES[argv[1]])
     if rc == 3:
         print('binpatch: %s already patched' % argv[2])
     elif rc:
         print('binpatch: %s does not match the %s patch sites - left unchanged' % (argv[2], argv[1]))
     else:
         try:
+            # no second copy of the file: M.I.B.'s micropython heap is smaller than an 800 KB SI
+            view, pos = memoryview(data), 0
             with open(argv[3], 'wb') as f:
-                f.write(out)
+                for at, new in edits:
+                    f.write(view[pos:at]); f.write(new); pos = at + len(new)
+                f.write(view[pos:])
         except OSError as e:
             print('binpatch: cannot write %s: %s' % (argv[3], e))
             return 1
