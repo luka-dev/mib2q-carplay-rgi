@@ -147,18 +147,12 @@ list_payload() {
 # Without an external amplifier it is rewritten to stock stereo; AUDIO_STEREO_UPMIX=off alone
 # would not do, the bypass still rides the six-channel path.
 STARTUP=/mnt/app/root/hooks/carplay_startup.sh
-DEVA_SIZE=694904      # MU1316 P5087 = MU1329 P5092 deva-ctrl-qc.so (stock and ours)
-DEVA_STOCK=0
 gate_audio() {
     read_amp
     case $AMP in
         external)
-            if [ "$DEVA_STOCK" = 1 ]; then
-                echo "  Amplifier: external, but the stock deva-ctrl-qc.so stays - CarPlay audio stays stock stereo"
-            else
-                echo "  Amplifier: external (Sound_System 2, B&O/Bose over MOST) - CarPlay 5.1 and UpMix on"
-                return 0
-            fi ;;
+            echo "  Amplifier: external (Sound_System 2, B&O/Bose over MOST) - CarPlay 5.1 and UpMix on"
+            return 0 ;;
         internal) echo "  Amplifier: internal (Sound_System 1) - no 6-channel route, CarPlay audio stays stock stereo" ;;
         *)        echo "  WARN amplifier coding unreadable - CarPlay audio stays stock stereo" ;;
     esac
@@ -437,12 +431,6 @@ install)
         esac
         mkdir -p "$dir" || { echo "FAILED mkdir $dir"; rm -f "$LIST"; exit 1; }
         if is_replaced "$dest"; then
-            if [ "${dest##*/}" = deva-ctrl-qc.so ] && [ "$(file_size "$dest")" != "$DEVA_SIZE" ]; then
-                # our deva is the P5087 driver (P5092 ships the same file); another build
-                # (CN K1004) keeps its own driver, and with it CarPlay audio stays stereo
-                echo "  WARN skipped $dest: not the P5087/P5092 build - stock kept, CarPlay audio stays stereo"
-                DEVA_STOCK=1; continue
-            fi
             backup_once "$dest" "$dest.carplay-stock" || { rm -f "$LIST"; exit 1; }
         fi
         tmp=$dest.carplay-new.$$

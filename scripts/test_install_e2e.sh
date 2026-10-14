@@ -25,7 +25,7 @@ fail() { echo "FAIL ($1): $2"; sed -n '1,60p' "$T/log"; exit 1; }
 # E2P dumps as modifyE2P prints them (19 bytes, as M.I.B. reads 0x3A0)
 e2p() { printf '0x000003a0 '; printf '%s' "${1:0:19}" | od -An -tx1 | tr -s ' \n' ' '; echo; }
 
-unit() {   # unit [stock SI file] [deva size]: a fresh fake unit, BOTH jars left over from an older install
+unit() {   # unit [stock SI file] [stock deva size]: a fresh fake unit, BOTH jars left over from an older install
     U=$T/u; rm -rf "$U" "$T/mod"; mkdir -p "$U/$JARS" "$U/mnt/app/eso/bin/apps" "$U/mnt/app/armle/lib/dll" \
         "$U/mnt/app/root/hooks" "$U/mnt/system/etc/scripts" "$U/mnt/system/etc/eso/production" "$U/tmp"
     cp "$FW/etc/eso/production/smartphone_integrator.json" "$FW/etc/eso/production/dio_manager.json" "$U/mnt/system/etc/eso/production/"
@@ -72,8 +72,8 @@ unit "$CN_SI" 694860; run "cat $T/cn" || fail cn "install failed"
 grep -q 'region CN, brand AU' "$T/log" || fail cn "train not read"
 [ "$(cmp -l "$U/mnt/app/eso/bin/apps/smartphone_integrator" "$CN_SI" | wc -l | tr -d ' ')" = 4 ] &&
     [ -f "$U/mnt/app/eso/bin/apps/smartphone_integrator.carplay-stock" ] || fail cn "CN SI not patched in place"
-[ "$(wc -c < "$U/mnt/app/armle/lib/dll/deva-ctrl-qc.so")" -eq 694860 ] &&
-    spatial | grep -q '^export AUDIO_SPATIAL=0 ' || fail cn "CN deva replaced or 5.1 left on"
+cmp -s "$U/mnt/app/armle/lib/dll/deva-ctrl-qc.so" "$T/mod/carplay/root/mnt/app/armle/lib/dll/deva-ctrl-qc.so" &&
+    spatial | grep -qx 'export AUDIO_SPATIAL=1' || fail cn "CN deva not replaced or 5.1 off"
 has carplay_hook_cn.jar && [ ! -e "$U/$JARS/carplay_hook.jar" ] || fail cn "want only carplay_hook_cn.jar"
 
 unit; run "cat $T/jp" || fail jp "install failed"
@@ -93,4 +93,4 @@ for brand in vw po none; do
     rm -rf "$T/before"
 done
 
-echo "installer end-to-end: US/JP -> carplay_hook.jar, CN -> carplay_hook_cn.jar, SI patched in place on US and CN, CN keeps its deva and stays stereo, other jar removed, other region -> none, VW/Porsche/no E2P refused untouched, 5.1 only on an external amp ($SH) PASS"
+echo "installer end-to-end: US/JP -> carplay_hook.jar, CN -> carplay_hook_cn.jar, SI patched in place on US and CN, deva always replaced, other jar removed, other region -> none, VW/Porsche/no E2P refused untouched, 5.1 only on an external amp ($SH) PASS"

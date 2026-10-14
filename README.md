@@ -257,7 +257,7 @@ backup; files it adds have none and are simply removed on uninstall.
 | `/mnt/app/root/hooks/` | the hook (`libcarplay_hook.so`, `libcarplay_apac.so`), both renderers (`maneuver_render`, `altscreen_render`), `flag_atlas.rgba`, the upmix mask net `scene_masknet_c.bin` and the `carplay_*.sh` runtime scripts |
 | `/mnt/app/eso/hmi/lsd/jars/` | the Java patch for this firmware family (one jar, see above) |
 | `/mnt/app/eso/bin/apps/smartphone_integrator` | the unit's own file, patched in place by `binpatch.py` (one instruction, the USB error re-arm); a firmware without that code keeps it stock |
-| `/mnt/app/armle/lib/dll/deva-ctrl-qc.so` | the six-channel audio driver, replaced on MU1316 P5087 and MU1329 P5092 (the same stock file); other firmware keeps its driver and CarPlay audio stays stereo |
+| `/mnt/app/armle/lib/dll/deva-ctrl-qc.so` | the six-channel audio driver, always replaced by the patched P5087 driver (P5092 ships the same file, CN K1004 the same code) |
 | `/mnt/system/etc/eso/production/smartphone_integrator.json` | the `carplay` child replaced by [`carplay_child.json`](deploy/smartphone_integrator/carplay_child.json) |
 | `/mnt/system/etc/eso/production/dio_manager.json` | iAP2 route-guidance, telephony and vehicle-data message IDs (without them iOS sends route guidance and the SDK silently drops it), and the PASCD bit |
 | `/mnt/system/etc/pf*.conf` | the CarPlay rule widened in all four PF profiles |
