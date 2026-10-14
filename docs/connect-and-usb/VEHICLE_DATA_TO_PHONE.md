@@ -1,6 +1,6 @@
 # Vehicle Data To Phone
 
-*Four car-and-phone features built on 2026-10-10 and not yet tried in the car: wheel speed for Apple Maps in tunnels, range and outside temperature for Maps, the iPhone battery on the cluster phone tab, and Siri on a short press of the voice key. Enhanced Siri was decoded, not built.*
+*Four car-and-phone features built on 2026-10-10: wheel speed for Apple Maps in tunnels, range and outside temperature for Maps, the iPhone battery on the cluster phone tab, and Siri on a short press of the voice key. Enhanced Siri was decoded, not built.*
 
 ---
 
@@ -13,6 +13,8 @@
 | iPhone battery on the cluster | The VC phone tab shows the iPhone's charge like a Bluetooth phone | `hook/telephony/`, `GatedPhoneService` | `IAP2_PHONE_BATTERY=on` | built, host-tested **[code]** |
 | Siri on a short press | With CarPlay connected, a short press of the wheel voice key starts Siri instead of the car's voice control; a second one ends it; the long press is unchanged | `TerminalModeSDSHandler`, `CarPlaySpeechRequestHandler` (replaced stock classes) | none | built, linkage-audited **[code]** |
 | Enhanced Siri | Zero-latency listening on the key; voice trigger | probe only | none | decoded, not built: [Enhanced Siri Contract](../altscreen-and-video/ENHANCED_SIRI_CONTRACT.md) **[open]** |
+
+Car session 2026-10-14 **[car]** (owner): vehicle data reaches the phone, and Siri on a short press works (second version, `daaeac50`). The iPhone battery on the cluster was not reported.
 
 Car session 2026-10-10 (iOS beta phone, wired) **[car]**:
 
@@ -76,7 +78,7 @@ Stock: the short press of the wheel voice key opens the car's own voice control,
 - `TerminalModeSDSHandler` reports speech as active for every CarPlay connection (connection method 1), so the short press goes to TerminalMode. Its only callers are the three PTT branches of `SDSHMIListener`; Android Auto and CarLife keep the stock answer.
 - `CarPlaySpeechRequestHandler.cancelPrewarm()`, whose only caller is that short-release branch, replays the stock long-press path on `SDSAppHandler` (found as the TerminalMode `ISDSKeyInterceptor` service): `pttLongDetected()` then `pttReleasedAfterLongPress()`. Stock thereby sets the SPEECH owner to the phone, which is what opens the microphone, and sends SIRI START then STOP: a button tap, after which iOS listens until the speaker stops. The first version sent a bare SIRI START: on the car (2026-10-10) Siri showed its animation, heard nothing and never got the release. Whether iOS treats the immediate START+STOP as a tap (hands-free) and not a zero-length push-to-talk is **[open]**.
 
-Result with CarPlay connected: short press starts Siri, a second short press ends it, the long press stays hold-to-talk Siri. The car's own voice control is reachable only without CarPlay. **[code]**
+Result with CarPlay connected: short press starts Siri, a second short press ends it, the long press stays hold-to-talk Siri. The car's own voice control is reachable only without CarPlay. **[code]** Confirmed by the owner in the car on 2026-10-14: Siri opens on a short press and hears the driver. **[car]**
 
 ## 🧩 Enhanced Siri
 

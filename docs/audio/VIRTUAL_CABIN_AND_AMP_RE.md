@@ -278,7 +278,7 @@ Sources: `AMP_7_1_SINK`, `SOUNDAMP_9VS_VIRTUAL_CABIN_EVIDENCE`
 **Blocked / modelled / not done:**
 
 - **Phone-side spatial over realtime CarPlay** — refused live; phone-side gate, lever exhausted. See [Dolby Atmos](DOLBY_ATMOS.md). `[car]`
-- **Non-B&O internal 6ch** — no route exists; feasible via RCC flashing but untested for lack of an internal-amp car. The installer-side `AUDIO_SPATIAL` E2P gate is not implemented yet (`deploy/smartphone_integrator/carplay_startup.sh:57-60`). `[open]`
+- **Non-B&O internal 6ch** — no route exists; feasible via RCC flashing but untested for lack of an internal-amp car. The installer-side `AUDIO_SPATIAL` gate on E2P 0xFC keeps such cars on stock stereo ([Internal Amp Path](INTERNAL_AMP_PATH.md)); not yet run on a car. `[open]`
 - **The amp DSP model is static RE** — no live bank/profile/mode/level/limiter/gain readback (no verified J525 readback transport; RCC `/dev/io-amp` is the internal TI DSP); the level-selected input EQ bank, C4D17 and both B processors are not proven off or on; bus→speaker binding, per-driver EQ, and "3D OFF = level 0" are inferences; nothing is bit-exact. `[model]`
 - **HSSR upmix quality** — a formal stationary-vehicle A/B is still outstanding. `[open]`
 

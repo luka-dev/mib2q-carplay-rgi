@@ -8,7 +8,7 @@
 
 On an internal-amp car there is **no stock six-channel CarPlay route**. MIBRoot picks the stereo pair `eSRC_ENT_AMP_DIO_MEDIA (0x46e) → eSNK_SPEAKERS`, which allocates a 4-byte (2 × 16-bit) MOST source. The MMX still packs six TDM slots and the hook still writes PCM6, so C/LFE/Ls/Rs are simply not transported: expect front L/R only — worse than stock, because the HSSR upmix moves energy out of the fronts `[decompile]`.
 
-The policy is therefore `AUDIO_SPATIAL=0` unless the RCC coding byte says external (`02`). The checked-in startup hardcodes `AUDIO_SPATIAL=1` for this B&O unit and assigns the gate to "the installer" (`deploy/smartphone_integrator/carplay_startup.sh:56-60`); no installer code reads the byte yet `[open]`. `AUDIO_STEREO_UPMIX=off` alone is not enough — it still writes PCM6 `L R 0 0 0 0`.
+The policy is therefore `AUDIO_SPATIAL=0` unless the RCC coding byte says external (`02`). The installer implements it: `custom.sh` (`read_amp`, `gate_audio`) reads `modifyE2P r FC 1` and rewrites the installed `carplay_startup.sh` to `AUDIO_SPATIAL=0` unless the byte is `02`; an unreadable byte also gives stereo. The Java UpMix row is left out on `DEVICETYPE_BASIC_2CH/BASIC_4CH/STANDARD_6CH` from the stock `AmplifierListener` `[code]`; the live `modifyE2P` output for one byte has not been seen on a car `[open]`. `AUDIO_STEREO_UPMIX=off` alone is not enough — it still writes PCM6 `L R 0 0 0 0`.
 
 A real internal 5.1 path is **feasible with no hard wall**, but needs RCC-only edits in two binaries (MIBRoot and the DSP image) and a car with the internal amp to test on.
 

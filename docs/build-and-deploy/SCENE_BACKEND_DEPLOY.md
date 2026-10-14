@@ -94,11 +94,13 @@ Drive of 2026-10-09, 22:40–23:30, hook `33b6ee9b…` deployed over SSH (the ja
 | realtime type 100 (Spotify-class apps), 19 min | mean 2.0 ms / worst 6.0 ms per 16 ms period, guard never tripped (`disables=0`); worker rows 106,490, `skipped=1`, about one row in three superseded by the next (the 768-vs-512 cadence) |
 | buffered type 103, AAC index 23 | `stereoUpmix=scene sceneMask=worker`, centre silent, LFE assist about −29 dBFS, Ls/Rs at 60–80 % of the front on mid-heavy content, `drop=0` |
 | Atmos tracks (index 65) | bypass the upmix as designed |
-| pause → resume on type 103 | a small "rip" heard by the owner, one `prepare+retry` per resume in the log; root cause and fix in [Buffered Audio Path](../audio/BUFFERED_AUDIO_PATH.md), shipped in the follow-up package above, not yet heard |
+| pause → resume on type 103 | a small "rip" heard by the owner, one `prepare+retry` per resume in the log; root cause and fix in [Buffered Audio Path](../audio/BUFFERED_AUDIO_PATH.md), shipped in the follow-up package above; play/pause without a rip confirmed by the owner on 2026-10-14 `[car]` |
 
 The owner's verdict on 2026-10-10, after that drive: **the SCENE upmix sounds good, "really good"**. One sighted listener, no blind test, no level-matched A/B against `AUDIO_STEREO_UPMIX=off`; the blinded six-condition car kit was not played. This replaces the 2026-09-22 Track A acceptance as the current acceptance source. `[car]`
 
-_Timeline of the scene renderer's path into the car: from the first wired package through the first drive, the two static fixes and the owner's verdict, to the checks still due on the next drive. Timelines carry no accTitle/accDescr._
+On 2026-10-14 the owner switched the upmix on and off at the same volume and judged that it works as intended; still sighted and informal, not the blinded kit. The same drive showed no cluster blink with `9305604d` and no rip on play/pause. `[car]`
+
+_Timeline of the scene renderer's path into the car: from the first wired package through the first drive, the two static fixes and the owner's verdict, to the 2026-10-14 confirmations. Timelines carry no accTitle/accDescr._
 
 ```mermaid
 timeline
@@ -111,8 +113,8 @@ timeline
     section 2026-10-10
         00:19 : 📦 package e91df625 : cluster fix 9305604d
         verdict : ✅ owner : sounds good, really good
-    section next drive
-        checks : ▶️ play and pause without a rip : 🖥️ cluster without a blink : 🔊 upmix on and off A/B
+    section 2026-10-14
+        owner : ✅ play and pause without a rip : ✅ cluster without a blink : ✅ upmix on and off at one volume : ✅ UpMix level row works
 ```
 
 ## 🔍 What to read in the log after the first car session

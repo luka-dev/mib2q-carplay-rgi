@@ -243,7 +243,7 @@ flowchart TB
 - **Apple Music crashed on any pad input** (owner, 2026-10-10/12); the knob and every other app were fine. The crash (iOS 27.2 beta 24B5099f) is a UIKit NSAssert in `-[_UIFocusEventRecognizer _panGestureStart:]`, "Attempted a pan-gesture-based focus movement without a touchpad.": on CarPlay the method looks the touch's `_senderID` up in `windowScene.carPlaySession touchpadForSenderID:` (the list DashBoard's `-[DBScreenController _UISceneTouchpads]` copies from its `CARInputDeviceManager`, unfiltered) and in `CARInputDeviceManager touchpadWithSenderID:`, and asserts when both are nil. CarKit makes a touchpad from an IOHID service whose `displayUUID` is a session screen ID and whose primary usage is Digitizer/TouchPad; stock `dio_manager` (MU1316 `fcn.00158ef8`) gives every HID `displayUUID` `e5f7a68d-7b0f-4305-984b-974f677a150b`, the registered main screen, so the HU side is consistent, and other apps find the pad. Read as an iOS beta bug in Music. `[decompile]` (iOS 27 dsc 24A5418b, stock `dio_manager`)
 - To re-enable: recheck Music on a newer iOS build first. The default 4 cm gain was never judged; `HIDSingleTrackPadCreateDescriptor` can be interposed to add physical units.
 
-**History.** The DPAD bridge first shipped before 2026-09-14 as a workaround for knob-mode highlighting. Commit `8c78e282` (2026-09-23) replaced it with native trackpad focus mode; it was restored on 2026-10-13 after the Music crash.
+**History.** The DPAD bridge first shipped before 2026-09-14 as a workaround for knob-mode highlighting. Commit `8c78e282` (2026-09-23) replaced it with native trackpad focus mode; it was restored on 2026-10-13 after the Music crash and confirmed working in the car by the owner on 2026-10-14. `[car]`
 
 ### Cluster composition
 

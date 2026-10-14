@@ -112,14 +112,13 @@ features below follow it automatically.
   It runs as a D-pad bridge in Java, because iOS's native trackpad mode crashes Apple Music on
   iOS 27.2 beta ([details](docs/reference/ARCHITECTURE.md#mmi-touchpad)).
 - **Car data to the iPhone.** The phone receives wheel speed (one PASCD sentence per second, for
-  apps that use it alongside GPS), the remaining range and the low-fuel warning. Confirmed in the
-  car (2026-10-10). The outside temperature is fixed but not yet re-checked in the car; the
-  iPhone battery on the cluster phone tab does not show yet, because the phone has not sent its
-  level ([details](docs/connect-and-usb/VEHICLE_DATA_TO_PHONE.md)).
-- **Siri on a short press.** A short press of the steering-wheel voice key opens Siri instead
-  of the car's own voice control while CarPlay is connected (long press already did). Built,
-  not yet checked in the car
+  apps that use it alongside GPS), the remaining range, the outside temperature and the low-fuel
+  warning. Confirmed in the car (2026-10-10, again 2026-10-14). The iPhone battery on the cluster
+  phone tab does not show yet, because the phone has not sent its level
   ([details](docs/connect-and-usb/VEHICLE_DATA_TO_PHONE.md)).
+- **Siri on a short press.** A short press of the steering-wheel voice key opens Siri instead
+  of the car's own voice control while CarPlay is connected (long press already did).
+  Confirmed in the car (2026-10-14) ([details](docs/connect-and-usb/VEHICLE_DATA_TO_PHONE.md)).
 - **Parking popups no longer hide CarPlay.** When the Audi front PDC / parking view pops up,
   CarPlay stays on screen beside it instead of being replaced.
 - **5.1 surround for CarPlay music (B&O).** The head unit feeds the external B&O amplifier six
