@@ -263,6 +263,114 @@ That is evidence rather than proof: a region code can gate the A band, and `mlan
 
 Against the specification the unit's access point is legal where it counts: channel 6 is one of the three permitted 2.4 GHz channels, and `Enable11n=1` with no HT40 setting matches the HT20-only rule. What it is missing is everything above the radio.
 
+## 📶 Radio and throughput on the unit (2026-10-13)
+
+A read-mostly session on the car measured what the 2.4 GHz access point actually carries. No CarPlay traffic went over Wi-Fi. The only writes were temporary `iperf` processes and one runtime channel switch, described below, which did not hold. Wireless experiments are **parked** after this session. **[car]**
+
+### Readiness of the unit for the stock210 bundle
+
+| Item | On the unit | Expected by the bundle |
+|---|---|---|
+| `eso/lib/libairplay.so` | 763420 B, sha256 `01c116b1…` | `stock_libairplay_sha256` in `wireless/integration/build_stock210_review.py`, match |
+| `eso/bin/apps/btstack` | 1852334 B, sha256 `154c1782…` | graft input pinned in `wireless/graft/graft.c`, match |
+| `/mnt/system/etc/pf{,.ecm0,.mlan0,.ppp0}.conf` | all four byte-identical to `deploy/pf/patched/` (carry `6030:6032`) | input hashes of `wireless/firewall/build_offline.py`, match |
+| Free space | `/mnt/app` 188 MB, `/mnt/system` 3.2 MB | enough |
+| `pfctl` | `/mnt/app/armle/sbin/pfctl`, not on the SSH `PATH` | installer preflight must use the full path |
+
+Hashes were computed on the host from files read back over SSH. Live PF still ends the `uap0` block with `block drop in quick on uap0 from any to (uap0)`, so mDNS and the AirPlay ports are closed on Wi-Fi until the bundle's profiles are installed.
+
+### Who configures the radio
+
+```mermaid
+flowchart LR
+    accTitle: MU1316 WLAN and Bluetooth control path
+    accDescr: connectionmanager writes the access point config and start-ap.sh applies it with uaputl to the Marvell 8787 driver; btstack drives the Bluetooth half of the same chip over the same SDIO device.
+
+    conman["⚙️ connectionmanager<br/>channel, power, SSID from persistence"]
+    cfg["📄 /tmp/uaputl.cfg"]
+    startap["🔧 eso/telephone/start-ap.sh"]
+    uaputl["🔧 uaputl<br/>sys_config, coex_config, aggrpriotbl"]
+    driver["📡 devnp-mrvl_wlan-sdiorm.so<br/>drv_mode=3, uap0 + mlan0"]
+    btstack["🔵 btstack<br/>HCI on /dev/sdio0"]
+    chip["📶 Marvell 88W8787<br/>one 2.4 GHz radio"]
+
+    conman --> cfg --> startap --> uaputl --> driver --> chip
+    btstack --> chip
+    conman -.->|re-applies its own config| startap
+
+    classDef ctrl fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
+    classDef file fill:#fef9c3,stroke:#ca8a04,stroke-width:2px,color:#713f12
+    classDef hw fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
+
+    class conman,startap,uaputl,btstack ctrl
+    class cfg file
+    class driver,chip hw
+```
+
+- The templates in `/etc/uaputl*.conf` and `/etc/hostapd.conf` are not what runs. The live config is the file `connectionmanager` writes. Its fixed part is `Enable11n=1`, `HTCapInfo=0x12c`, `AMPDU=0x03`, `Enable2040Coex=0`, `ChanList=1,6,11`; channel and power come from persistence (`WLAN::setDefaultChannel`, `WLAN::setTxPower`). **[code]**
+- `start-ap.sh` then runs `deepsleep 0`, `coex_config /eso/telephone/coex.cfg`, optional ED-MAC (`ed_mac_ctrl.conf`, flag-driven) and `aggrpriotbl 2 255 0 255 1 255 3 255 255 …`. **[code]**
+- `btstack` keeps HCI on `/dev/sdio0`, stores pairings through `/dev/eso/persistence` and listens only on `10.0.0.15:21314` (internal `mmx0`). Firmware for both halves is `/mnt/app/var/FwImage/w8787_wlan_SDIO_bt_SDIO.bin` and `sd8787_uapsta.bin`; `/eso/bin/reset_bt.sh` resets the whole chip. **[car]**
+- The DHCP server on `uap0` is `dnsmasq` (leases in `/ramdisk/dnsmasq.leases`), not the `dhcpd.conf` template. **[car]**
+
+### Live access point state
+
+Read with the stock `uaputl` (read-only commands). **[car]**
+
+| Property | Value | Effect |
+|---|---|---|
+| Channel, width | 11, HT20, SGI-20, `ht_cap_info=0x12c` | 72 Mbit/s PHY ceiling |
+| A-MPDU per TID | on for TID 0–3, **off for TID 4–7** (video and voice) | only the unit's own transmit side; the phone's uplink is unaffected |
+| ADDBA windows | tx 32, **rx 16**, `addbareject` all 0 | aggregation accepted, receive aggregates capped at 16 MPDUs |
+| HT protection | `1`, non-greenfield stations present | RTS/CTS overhead |
+| WMM | BE 3/4/10, BK 7/4/10, VI 2/3/4 TXOP 94, VO 2/2/3 TXOP 47 | standard |
+| Transmit power | **9 dBm** (templates say 13) | range, not short-range throughput |
+| BT coexistence (`coex.cfg`) | `APBTCoex=0`; ACL profile `btTime=40`, `wlanTime=60` | if active with an iAP2 link up, Wi-Fi gets 60 % airtime; untested |
+| Channel neighbours (host scan) | 7 networks on channels 8–11, 1 on channel 1 | channel 11 is crowded |
+
+### Throughput
+
+Measured with the unit's `/eso/bin/iperf` 2.0.5 against a Mac on the same access point (MCS7, −42 to −51 dBm). The Mac to unit direction used UDP port 49161, which stock PF already admits on `uap0`. **[car]**
+
+| Direction | Test | Result |
+|---|---|---|
+| Unit → Mac | UDP 8 Mbit/s, 15 s | 7.7 Mbit/s, 0.13 % loss, ~1 ms jitter |
+| Unit → Mac | UDP 10 Mbit/s, 30 s | 9.1 Mbit/s, 3.1 % loss (one 2 s window at 21 %) |
+| Unit → Mac | UDP 20 Mbit/s | 15.1 Mbit/s, 5.5 % loss; sender CPU-bound |
+| Unit → Mac | TCP, default 126 KB window | 2.2–25 Mbit/s; bursts of 15–26 then 1–3 s stalls, ~7 RTOs per 10 s |
+| Unit → Mac | TCP, 16 KB window | steady 14–17 Mbit/s |
+| Mac → unit | UDP 10 / 20 / 30 Mbit/s, 21 KB socket buffer | 8.9 / 14.5 / 19.0 Mbit/s, 15 / 31 / 39 % loss |
+| Mac → unit | UDP 10 / 20 / 30 Mbit/s, 256 KB socket buffer | 10.2 / 18.8 / 22.6 Mbit/s, 2.9 / 10 / 24 % loss |
+| Unit → iPhone | ping, 50 × 56 B and 50 × 1400 B | 0 % loss, avg 42–47 ms, max 234 ms (phone power save while idle) |
+
+For comparison, a wired CarPlay session on `carplay0` received **15–19.5 Mbit/s, mean ~17.5**, and sent ~0.11 Mbit/s, sampled over 64 s from `netstat -ib`. That figure is main screen, cluster stream 111 and audio together, on a link where iOS has no reason to economise.
+
+### Why it is ~20 Mbit/s and not 72
+
+72 Mbit/s is the PHY rate. A clean single-client 802.11n HT20 link normally delivers about 40–45 Mbit/s of goodput. The remaining gap has three causes, none of them aggregation:
+
+1. **Crowded channel 11.** Seven neighbouring networks share or overlap it.
+2. **HT protection** (`1`) spends airtime on RTS/CTS.
+3. **Unit CPU.** `top` shows ~60 % busy on all four cores with no CarPlay session (`mcd` ~27 % of one core, then `videoencoderservice`, `videoCore`, `displaymanager`, `traceserver`, navigation, `kgsl`, each 7–8 %). `iperf` at priority 10 loses packets in the socket: a 256 KB buffer cut loss at 10 Mbit/s from 15 % to 3 %. A wireless receiver needs large buffers and priority.
+
+The default TCP window overruns the unit's transmit queue (ALTQ `default_out`, `qlimit 50`, RED), causing the RTO stalls. That direction only carries control and microphone for CarPlay.
+
+`mcd` is stock: `etc/boot/startup.sh` starts `mcd -Vv /etc/mcd.conf`, and its ~13 timer threads (CD poll `CD_MEDIA_IOBLK 250,500` plus one per media rule) cost ~1–2 % each. It owns SD/USB mounts and SWDL autorun, so it was left alone: the gain would be ~7 % of total CPU.
+
+### Changing channel, HT40 and 5 GHz
+
+- **Runtime channel switch does not hold.** `uaputl bss_stop / sys_config / bss_start` with `Channel=1` worked (Mac reassociated, 72 Mbit/s, −51 dBm), but within ~90 s the access point was back on channel 11 without the script's revert running. `connectionmanager` re-applied its own config. A lasting change has to go through its persistence value or `start-ap.sh`. **[car]**
+- **`start-ap.sh` is the lever.** It is a plain script on `/mnt/app` that receives the generated config as `$2` before `sys_config`, so it can rewrite `Channel=` (and `HTCapInfo`) and `connectionmanager` will apply the result itself. Not done. **[code]**
+- **HT40 is not worth it.** The specification forbids HT40 for a 2.4 GHz CarPlay access point (§30.2.5, quoted above), it would overlap the crowded neighbours, and Apple clients are expected to stay at HT20 on 2.4 GHz **[open]**.
+- **5 GHz stays open.** The 88W8787 silicon and this driver have A-band code, but the radio scans nothing above 2452 MHz. Region code, module band flags (`fw_bands`) or an unpopulated 5 GHz front end are all possible; only the first two are software. Not probed further. **[open]**
+
+### Parked state
+
+Nothing persistent changed on the unit. Temporary files `/tmp/ch_switch.sh`, `/tmp/uaputl.ch1.cfg` and `/tmp/ch_switch.log` live in RAM and vanish on reboot. Next steps, when wireless resumes:
+
+1. Measure iPhone → unit throughput and mDNS reachability with the bundle's PF rules loaded at runtime.
+2. A/B a clean channel through `start-ap.sh` and with Bluetooth connected, to see whether `coex.cfg` takes 40 % airtime.
+3. Read the radio's band capability and region code to settle 5 GHz.
+
 ## 🔒 Why this unit cannot do wireless today
 
 The band is not the blocker. Even a spec-perfect 5 GHz access point would change nothing, because the CarPlay stack on this unit has no wireless transport to offer.
@@ -337,6 +445,6 @@ Claims are tagged **[car]** confirmed on the unit, **[decompile]** from reverse 
 - The radio seeing only 2.4 GHz is **[car]**, from three scan passes with six distinct access points and nothing above 2452 MHz. Whether a region-code change would unlock the A band is **[open]** and was not attempted.
 - The live access-point properties and the eight free information-element slots are **[car]**, read with the stock Marvell tool.
 - The external report of a working iPhone-facing bootstrap is **[open]** and unreproduced here.
-- Nothing in this note was tested on the car. There is no wireless path on the unit to test.
+- Radio state, `uaputl` values, throughput, CPU load and the failed runtime channel switch are **[car]**, 2026-10-13. No CarPlay session ran over Wi-Fi; there is still no wireless path on the unit to test.
 
 Related: [USB and NCM Connect](../connect-and-usb/USB_AND_NCM_CONNECT.md) · [Session Lifecycle](../connect-and-usb/SESSION_LIFECYCLE.md) · [iOS Version Gate](../connect-and-usb/IOS_VERSION_GATE.md) · [CarPlay Feature Survey](../altscreen-and-video/CARPLAY_FEATURE_SURVEY.md) · sibling project `cp-wireless-to-usb-proxy`

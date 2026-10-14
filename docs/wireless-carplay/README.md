@@ -188,6 +188,11 @@ Local log links require running the corresponding fixtures; logs are not in Git.
 
 ## 🎯 Remaining work
 
+**Parked 2026-10-13.** An on-unit check confirmed the stock210 bundle inputs
+(`libairplay`, `btstack`, all four PF profiles) match the car, and measured the
+2.4 GHz access point at ~20 Mbit/s usable against ~17.5 Mbit/s for a wired
+session. Details and next steps: [Radio and throughput on the unit](WIFI_AND_DISCOVERY.md#-radio-and-throughput-on-the-unit-2026-10-13).
+
 1. Review deployment integration for the stock210 hook, btstack graft, per-unit
    configuration, AP/firewall and wired wrapper dependencies.
 2. After hardware work is separately authorized, validate real MFi Method1,
