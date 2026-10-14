@@ -93,7 +93,10 @@ features below follow it automatically.
 - **Turn-by-turn on the cluster.** During CarPlay navigation the cluster shows a 3D maneuver
   arrow beside the map. Its distance bar fills as the turn approaches and blinks just before it.
   The cluster also shows lane arrows, distance to the turn, arrival time and remaining distance.
-  Needs an app that sends CarPlay route guidance: Apple Maps does, Waze does not
+  With an app that sends CarPlay route guidance (Apple Maps, recent AMap) the cluster draws all
+  of this itself and the phone streams the map alone, so nothing appears twice. Apps that do not
+  (Waze) still show guidance on the cluster: the phone then draws its own turn card and arrival
+  time into the cluster map, as far as the app provides them
   ([details](docs/cluster-and-rgi/THIRD_PARTY_NAV_APPS.md)).
 - **Route text in the Virtual Cockpit.** A text line under the map names the exit sign or the
   next road (the current road when there is nothing else); long names scroll. Press **OK** (the
