@@ -621,6 +621,15 @@ Second-scale ACK observations and upstream sender-target/delivery differences
 remain. See the [timing report](VPHONE_TIMING.md) for clock guards, exact results,
 failed-run limits, the sequence diagram and the current reproduction recipe.
 
+`qemu-trace-build` builds an isolated diagnostic executable from copied sources;
+`qnx-start --trace-network` adds payload-free TCP/USB stage timestamps.
+`usb-queue-report` joins them to the bridge journal after QNX stops and flushes
+its footer. The reviewed run localizes main-port backlog before USB acceptance:
+816.922 ms median versus 4.579 ms for USB copy. `sender-log --seconds 25` records
+native `airplayd` counters and sink overflow. A receive/transmit-64 driver
+experiment did not remove the queue and is excluded from the standard recipe.
+These measurements do not establish 30 fps or fix the earlier multi-second tail.
+
 ### Stream metadata and protocol experiments
 
 The native port plugin selects its endpoint protocol using
@@ -771,7 +780,7 @@ existing operation rather than starting another restore.[^5]
 
 ## 🧪 Shared receiver and evidence tools
 
-Validation passed 92 guest/bootstrap/transport/output tests and 97 retained
+Validation passed 101 guest/bootstrap/transport/output tests and 97 retained
 laboratory regression tests, including seeded malformed-report and TCP-framing
 fuzzing. A native C RAM-capture test passes ASan/UBSan with 10,000 seeded inputs,
 rejects frozen-GOP snapshots and checks timing wire framing.

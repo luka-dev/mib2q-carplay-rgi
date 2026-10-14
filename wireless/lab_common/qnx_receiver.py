@@ -128,7 +128,15 @@ def command(transport: str = "user") -> list[str]:
     record_path = OUT / "build-record.json"
     record_value = json.loads(record_path.read_text()) if record_path.exists() else {}
     cpu = f"cortex-a15,cntfrq={qnx_clock.FREQUENCY}" if record_value.get("clock_realtime") else "cortex-a15"
-    result = [str(capture.QEMU), "-M", "virt", "-m", "2048", "-cpu", cpu,
+    trace_record = OUT / "network-trace.json"
+    binary = capture.QEMU
+    if trace_record.exists():
+        expected = (OUT.parent / "qemu-net-trace/qemu-system-arm").resolve()
+        trace_value = json.loads(trace_record.read_text())
+        if trace_value.get("binary") != str(expected) or not expected.is_relative_to((ROOT / "build").resolve()):
+            raise ValueError("unexpected diagnostic QEMU identity")
+        binary = expected
+    result = [str(binary), "-M", "virt", "-m", "2048", "-cpu", cpu,
             "-device", f"loader,file={OUT / 'qemu_start_debug.bin'},addr=0x40200000,force-raw=on,cpu-num=0",
             "-display", "none", "-serial", "stdio", "-monitor", "none",
             "-netdev", ("socket,id=n0,listen=127.0.0.1:32501" if transport == "socket" else
@@ -259,6 +267,7 @@ def main() -> None:
     parser.add_argument("action", choices=("build", "start", "stop", "status", "info"))
     parser.add_argument("--image", default="qnx65-armv7-toolchain:8.5")
     parser.add_argument("--transport", choices=("user", "socket"), default="user")
+    parser.add_argument("--trace-network", action="store_true", help="start the owned diagnostic QEMU with bounded TCP/USB stage timestamps")
     parser.add_argument("--lab-dir", type=Path, help="receiver artifacts inside the owned build tree")
     parser.add_argument("--pairing", action="store_true", help="build with the existing stock210 pairing hook and writable test store")
     parser.add_argument("--media", action="store_true", help="enable the existing paired media adapters; requires --pairing")
@@ -276,6 +285,8 @@ def main() -> None:
     parser.add_argument("--legacy-altscreen", action="store_true", help="isolated legacy AES AltScreen negotiation; disables paired wireless media")
     parser.add_argument("--paired-altscreen", action="store_true", help="QEMU-only authenticated paired stream 111; requires the dedicated hook and --software-mfi")
     args = parser.parse_args()
+    if args.trace_network and args.action != "start":
+        parser.error("--trace-network applies only to start")
     if args.lab_dir is not None:
         set_output(args.lab_dir)
     if args.paired_altscreen and (args.legacy_altscreen or not args.software_mfi):
@@ -304,11 +315,28 @@ def main() -> None:
             raise RuntimeError("owned QNX receiver is already running")
         if not (OUT / "qemu_start_debug.bin").is_file():
             raise RuntimeError("build the QNX receiver first")
+        environment = dict(os.environ)
+        environment.pop("MHI2Q_QEMU_NET_TRACE", None)
+        trace_record = OUT / "network-trace.json"
+        trace_record.unlink(missing_ok=True)
+        if args.trace_network:
+            if args.transport != "socket":
+                raise ValueError("network tracing requires the isolated socket transport")
+            binary = (OUT.parent / "qemu-net-trace/qemu-system-arm").resolve()
+            recorded = json.loads((binary.parent / "build.json").read_text())
+            if recorded.get("binary") != str(binary) or recorded.get("sha256") != hashlib.sha256(binary.read_bytes()).hexdigest():
+                raise ValueError("diagnostic QEMU fingerprint changed; rebuild it")
+            trace = OUT / "network-trace.jsonl"
+            fd = os.open(trace, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+            os.fchmod(fd, 0o600)
+            os.close(fd)
+            trace_record.write_text(json.dumps(recorded)+"\n")
+            environment["MHI2Q_QEMU_NET_TRACE"] = str(trace)
         # Host USB diagnostics can interrupt individual UART characters when
         # merged into the same file. Keep decoder-input capture intact.
         with (OUT / "serial.log").open("w") as stream, (OUT / "qemu-host.log").open("w") as host_log:
             child = subprocess.Popen(command(args.transport), stdin=subprocess.DEVNULL, stdout=stream,
-                                     stderr=host_log, start_new_session=True)
+                                     stderr=host_log, start_new_session=True, env=environment)
         (OUT / "qnx.pid").write_text(str(child.pid) + "\n")
         (OUT / "transport.txt").write_text(args.transport + "\n")
         print(json.dumps({"qnx_pid": child.pid, "transport": args.transport}))
@@ -321,6 +349,7 @@ def main() -> None:
                 if time.monotonic() >= deadline:
                     raise RuntimeError("owned QNX guest has not stopped")
                 time.sleep(.1)
+        (OUT / "network-trace.json").unlink(missing_ok=True)
         print(json.dumps({"stopped_pid": pid}))
     elif args.action == "status":
         transport = (OUT / "transport.txt").read_text().strip() if (OUT / "transport.txt").exists() else "user"

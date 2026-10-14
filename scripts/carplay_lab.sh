@@ -22,6 +22,12 @@ case "$action" in
         exec python3 -m wireless.vphone_lab.ethernet "$@" ;;
     queue-report)
         exec python3 -m wireless.vphone_lab.bridge_queues "$@" ;;
+    qemu-trace-build)
+        exec python3 -m wireless.vphone_lab.qemu_trace_build "$@" ;;
+    usb-queue-report)
+        exec python3 -m wireless.vphone_lab.qemu_usb_queues "$@" ;;
+    sender-log)
+        exec python3 -m wireless.vphone_lab.sender_logs "$@" ;;
     moving-route)
         exec python3 -m wireless.vphone_lab.moving_route "$@" ;;
     input)
