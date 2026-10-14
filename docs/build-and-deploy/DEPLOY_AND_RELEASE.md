@@ -297,8 +297,7 @@ The file has `##` comment lines, so edit it as text, not with a JSON tool.
 sync
 ```
 
-Wait a few seconds after `sync`, then reboot. A forced reboot (the MMI button combo) right after
-copying can leave files truncated or missing. After the reboot, start a route in Apple Maps: the
+Wait a few seconds after `sync`, then reboot the head unit. After the reboot, start a route in Apple Maps: the
 cluster map, the turn arrow and the HUD arrow must appear. Logs: `/tmp/carplay_hook.log` and
 `/tmp/carplay_java.log`.
 

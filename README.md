@@ -289,8 +289,7 @@ source-to-unit map, file modes and hashes are in
 <a id="reboot-and-check"></a>
 
 **Reboot and check.** The installer runs `sync` itself; still wait a few seconds after it prints
-`DONE`, then reboot normally with CarPlay disconnected. A forced reboot (the MMI button combination) right after copying
-can leave files truncated or missing. The jar is on j9's boot classpath, so it only loads after a
+`DONE`, then reboot the head unit with CarPlay disconnected. The jar is on j9's boot classpath, so it only loads after a
 full restart. On boot `smartphone_integrator` starts everything; connect the phone and look at
 `/tmp/carplay_hook.log` and `/tmp/carplay_java.log` (see [Logging](#logging)).
 
