@@ -76,7 +76,7 @@ responsible for any damage, bricked units or warranty issues resulting from thei
 - [Gallery](#gallery) · [Features](#features)
 - [Repository layout](#repository-layout) · [Build](#build)
 - [Deployment](#deployment): [install with M.I.B.](#install-with-mib) · [manual install](#manual-install) · [reboot and check](#reboot-and-check) · [uninstall](#uninstall)
-- [Logging](#logging) · [Documentation](#documentation) · [Help wanted](#help-wanted) · [References](#references)
+- [Logging](#logging) · [Documentation](#documentation) · [Help wanted](#help-wanted) · [License](#license) · [References](#references)
 
 <a id="features"></a>
 
@@ -428,6 +428,15 @@ cars this was not developed on (internal amplifier, Bose, other regions and trai
 been exercised on a limited set of real routes. A snippet of `/tmp/carplay_hook.log` from the moment
 and a note on what was expected help a lot. The hook logs a route-guidance message it does not handle
 as `Unknown 0x52xx msgid=0xNNNN dir=IN len=N`; that line is the best starting point.
+
+<a id="license"></a>
+
+## 📄 License
+
+GNU General Public License v3.0 or later ([LICENSE](LICENSE)): use, change and share it, also
+commercially, as long as the source of what you distribute stays open under the same license and
+the copyright notices stay in place. Stock firmware files, jars, fonts and other third-party
+material in the repository keep their owners' terms; [NOTICE](NOTICE.md) lists them.
 
 <a id="references"></a>
 
