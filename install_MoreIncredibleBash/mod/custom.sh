@@ -114,10 +114,6 @@ java_jar() {
         CN)       echo carplay_hook_cn.jar ;;
     esac
 }
-# The firmware binaries we replace whole are patched MU1316 US P5087 files (same size as
-# the stock they came from).  Other trains ship different builds (CN K1004: both differ),
-# so replace only a file of that size - the P5087 stock or our own copy.
-p5087_size() { case $1 in */smartphone_integrator) echo 802798 ;; */deva-ctrl-qc.so) echo 694904 ;; esac; }
 
 backup_once() { [ -e "$2" ] || cp -p "$1" "$2" || { echo "FAILED backup $2"; return 1; }; }
 
@@ -151,11 +147,18 @@ list_payload() {
 # Without an external amplifier it is rewritten to stock stereo; AUDIO_STEREO_UPMIX=off alone
 # would not do, the bypass still rides the six-channel path.
 STARTUP=/mnt/app/root/hooks/carplay_startup.sh
+DEVA_SIZE=694904      # MU1316 P5087 = MU1329 P5092 deva-ctrl-qc.so (stock and ours)
+DEVA_STOCK=0
 gate_audio() {
     read_amp
     case $AMP in
-        external) echo "  Amplifier: external (Sound_System 2, B&O/Bose over MOST) - CarPlay 5.1 and UpMix on"
-                  return 0 ;;
+        external)
+            if [ "$DEVA_STOCK" = 1 ]; then
+                echo "  Amplifier: external, but the stock deva-ctrl-qc.so stays - CarPlay audio stays stock stereo"
+            else
+                echo "  Amplifier: external (Sound_System 2, B&O/Bose over MOST) - CarPlay 5.1 and UpMix on"
+                return 0
+            fi ;;
         internal) echo "  Amplifier: internal (Sound_System 1) - no 6-channel route, CarPlay audio stays stock stereo" ;;
         *)        echo "  WARN amplifier coding unreadable - CarPlay audio stays stock stereo" ;;
     esac
@@ -351,12 +354,16 @@ patch_dio() {
 # puts it back - which also drops any OTHER patch's text edits made after our install
 # (e.g. luka-collection): re-apply those after an uninstall.
 LANG_ZIP=/mnt/app/eso/hmi/lsd/jars/lang_data.zip
-patch_lang() {
-    mp=
+find_mp() {   # M.I.B.'s micropython (apps/sbin/beta on the SD, or one M.I.B. tools installed)
+    mp=${CARPLAY_MICROPYTHON:-}
+    [ -n "$mp" ] && return 0
     for c in "$D/../apps/sbin/beta/micropython" "$(command -v micropython 2>/dev/null)"; do
-        [ -n "$c" ] && [ -f "$c" ] && { mp=$c; break; }
+        [ -n "$c" ] && [ -f "$c" ] && { mp=$c; return 0; }
     done
-    [ -n "$mp" ] || { echo "  WARN no M.I.B. micropython - CarPlay UpMix row will have NO labels"; return 0; }
+    return 1
+}
+patch_lang() {
+    find_mp || { echo "  WARN no M.I.B. micropython - CarPlay UpMix row will have NO labels"; return 0; }
     [ -f "$LANG_ZIP" ] || { echo "  WARN no $LANG_ZIP - CarPlay UpMix row will have NO labels"; return 0; }
     backup_once "$LANG_ZIP" "$LANG_ZIP.carplay-stock" || return 0
     rm -f "$LANG_ZIP.carplay-new"
@@ -364,6 +371,28 @@ patch_lang() {
     # heaps are smaller.  A build without -X support gets one plain try.
     "$mp" -X heapsize=32M "$RES/upmix_lang.py" "$LANG_ZIP" || "$mp" "$RES/upmix_lang.py" "$LANG_ZIP" ||
         { rm -f "$LANG_ZIP.carplay-new"; echo "  WARN CarPlay UpMix texts not added - the row will have NO labels"; }
+}
+
+# ---- smartphone_integrator: SI error re-arm, patched into THIS unit's own binary --------
+# carplay/binpatch.py (deploy/binpatch/ in the repo) finds the one instruction by its surrounding code, so every train
+# whose SI has that code gets the fix (P5087, P5092 and K1004 do) and anything else keeps
+# its stock SI.  It always patches the stock copy (.carplay-stock once it exists).
+SI_BIN=/mnt/app/eso/bin/apps/smartphone_integrator
+patch_si() {
+    find_mp || { echo "  WARN no M.I.B. micropython - smartphone_integrator stays stock (no USB error re-arm)"; return 0; }
+    [ -f "$SI_BIN" ] || { echo "  WARN no $SI_BIN"; return 0; }
+    src=$SI_BIN; [ -f "$SI_BIN.carplay-stock" ] && src=$SI_BIN.carplay-stock
+    rm -f "$SI_BIN.carplay-new"
+    "$mp" "$RES/binpatch.py" smartphone_integrator "$src" "$SI_BIN.carplay-new"; rc=$?
+    case $rc in
+        0) backup_once "$SI_BIN" "$SI_BIN.carplay-stock" || { rm -f "$SI_BIN.carplay-new"; return 1; }
+           chmod 755 "$SI_BIN.carplay-new" && mv -f "$SI_BIN.carplay-new" "$SI_BIN" ||
+               { rm -f "$SI_BIN.carplay-new"; echo "FAILED activate $SI_BIN"; return 1; }
+           echo "  $SI_BIN (USB error re-arm patched in)" ;;
+        3) echo "  $SI_BIN already carries the USB error re-arm" ;;
+        *) rm -f "$SI_BIN.carplay-new"; echo "  WARN smartphone_integrator stays stock (no USB error re-arm)" ;;
+    esac
+    return 0
 }
 
 echo "custom.sh: CarPlay $ACTION"
@@ -408,9 +437,11 @@ install)
         esac
         mkdir -p "$dir" || { echo "FAILED mkdir $dir"; rm -f "$LIST"; exit 1; }
         if is_replaced "$dest"; then
-            want=$(p5087_size "$dest"); have=$(file_size "$dest")
-            if [ -n "$want" ] && [ "$have" != "$want" ]; then
-                echo "  WARN skipped $dest: not the P5087 build (size '$have') - stock kept"; continue
+            if [ "${dest##*/}" = deva-ctrl-qc.so ] && [ "$(file_size "$dest")" != "$DEVA_SIZE" ]; then
+                # our deva is the P5087 driver (P5092 ships the same file); another build
+                # (CN K1004) keeps its own driver, and with it CarPlay audio stays stereo
+                echo "  WARN skipped $dest: not the P5087/P5092 build - stock kept, CarPlay audio stays stereo"
+                DEVA_STOCK=1; continue
             fi
             backup_once "$dest" "$dest.carplay-stock" || { rm -f "$LIST"; exit 1; }
         fi
@@ -431,6 +462,7 @@ install)
         if rm -f "$j"; then echo "  removed $j (M.I.B. NavActiveIgnore conflicts with CarPlay app state)"
         else echo "  WARN could not remove $j"; fi
     done
+    patch_si || exit 1
     gate_audio || exit 1
     patch_json
     patch_ncm
@@ -455,6 +487,7 @@ uninstall)
     # restore in-place patched configs
     [ -e "$CFG.carplay-stock" ] && mv -f "$CFG.carplay-stock" "$CFG"
     [ -e "$DIO.carplay-stock" ] && mv -f "$DIO.carplay-stock" "$DIO"
+    [ -e "$SI_BIN.carplay-stock" ] && mv -f "$SI_BIN.carplay-stock" "$SI_BIN"
     [ -e "$LANG_ZIP.carplay-stock" ] && mv -f "$LANG_ZIP.carplay-stock" "$LANG_ZIP" && echo "  restored $LANG_ZIP"
     for f in $NCM_FILES; do
         [ -e "$f.carplay-stock" ] && mv -f "$f.carplay-stock" "$f"

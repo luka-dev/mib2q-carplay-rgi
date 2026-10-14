@@ -1,7 +1,6 @@
 #!/bin/sh
 # Firmware gates of the M.I.B. installer:
 #  - java_jar(): E2P region US/ER/JP -> carplay_hook.jar, CN -> carplay_hook_cn.jar, else none;
-#  - p5087_size(): SI/deva are replaced only over the P5087 build;
 #  - read_train()/train_field(): the E2P train (modifyE2P r 3A0 19, bytes spaced or not)
 #    decodes to text and splits into platform/region/brand/version;
 #  - read_amp(): the amplifier coding byte (modifyE2P r FC 1) -> external / internal / unknown.
@@ -10,7 +9,6 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 SRC=$ROOT/install_MoreIncredibleBash/mod/custom.sh
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 { echo 'set -u'
-  sed -n '/^file_size()/p;/^p5087_size()/p' "$SRC"
   sed -n '/^java_jar()/,/^}/p;/^e2p_bytes()/,/^}/p;/^E2P_READ=/p;/^read_train()/,/^}/p;/^train_field()/,/^}/p;/^E2P_AMP_READ=/p;/^read_amp()/,/^}/p' "$SRC"
 } > "$T/f.sh"
 fail() { echo "FAIL ($1): $2"; exit 1; }
@@ -24,8 +22,6 @@ for sh in $shells; do
         [ "$got" = "$want" ] || fail "$sh" "train '$train' -> '$got', want '$want'"
     done
 
-    [ "$("$sh" -c ". $T/f.sh; p5087_size /x/smartphone_integrator")" = 802798 ] || fail "$sh" "SI size"
-    [ "$("$sh" -c ". $T/f.sh; p5087_size /x/deva-ctrl-qc.so")" = 694904 ] || fail "$sh" "deva size"
 
     # modifyE2P output: address, then the bytes, spaced (1-2 lines) or run together
     printf '0x000003a0 4d 48 49 32 51 5f 43 4e 5f 41 55 47 32\n0x000003ad 32 5f 4b 31 30 30 34\n' > "$T/cn"
@@ -46,4 +42,4 @@ for sh in $shells; do
         [ "$got" = "$want" ] || fail "$sh" "amp '$line' -> '$got', want '$want'"
     done
 done
-echo "Firmware gates (Java variant by E2P region, SI/deva by P5087 size, E2P train parse, amplifier coding):$shells PASS"
+echo "Firmware gates (Java variant by E2P region, E2P train parse, amplifier coding):$shells PASS"

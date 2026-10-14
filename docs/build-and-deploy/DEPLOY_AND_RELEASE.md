@@ -70,8 +70,8 @@ The on-unit column is the path under `/`. On the card, that same file goes at `m
 | `carplay_ncm_cleanup.sh` | `deploy/smartphone_integrator/`; SI's `usb.otgStackCleanupScript` points here | `/mnt/app/root/hooks/` |
 | `startncm.sh`, `stopncm.sh`, `usblauncher_otg.lua` | `deploy/experimental/usb_replug_recovery/bundle_mu1316_p5087/{stock,payload}/`, staged as `mod/carplay/ncm/`, not in `root/`; `patch_ncm` installs them only over the exact stock, with a `.carplay-stock` backup | `/mnt/system/etc/scripts/`, `/mnt/system/etc/` |
 | `carplay_{startup,monitor,processes,cleanup}.sh` | `deploy/smartphone_integrator/` | `/mnt/app/root/hooks/` |
-| `smartphone_integrator` | `deploy/smartphone_integrator/` | `/mnt/app/eso/bin/apps/` (replaces the whole file) |
-| `deva-ctrl-qc.so` | `deploy/deva-ctrl-qc/deva-ctrl-qc.so.patched`, renamed | `/mnt/app/armle/lib/dll/` (replaces the whole file) |
+| `binpatch.py` | `deploy/binpatch/`, staged as `mod/carplay/binpatch.py` | patches the unit's own `/mnt/app/eso/bin/apps/smartphone_integrator` in place (`custom.sh` `patch_si`, M.I.B. micropython); the binary itself is not shipped |
+| `deva-ctrl-qc.so` | `deploy/deva-ctrl-qc/deva-ctrl-qc.so.patched`, renamed | `/mnt/app/armle/lib/dll/` (replaces the whole file, only over the P5087/P5092 stock of 694,904 bytes) |
 | `carplay_child.json` | `deploy/smartphone_integrator/` | Not installed as a file: it goes in `mod/carplay/` next to `root/`, and `custom.sh` splices it in as `children.carplay` |
 | `dio_manager.json` | Not staged: `custom.sh` adds the route-guidance message IDs in place (see [Route-guidance message IDs](#-route-guidance-message-ids-in-dio_managerjson)) | `/mnt/system/etc/eso/production/` |
 | `patch_si_rearm.py` | `deploy/experimental/usb_replug_recovery/` | Host-side only, to reproduce or reverse the SI re-arm patch; never staged |

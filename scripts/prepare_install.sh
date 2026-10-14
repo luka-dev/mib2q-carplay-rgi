@@ -39,6 +39,7 @@ mkdir -p "$HOOKS" "$ROOT/mnt/app/eso/hmi/lsd/jars" "$ROOT/mnt/app/eso/bin/apps" 
 cp "$PROJECT_DIR/install_MoreIncredibleBash/mod/custom.sh" "$PROJECT_DIR/install_MoreIncredibleBash/mod/command.sh" "$MOD/"
 cp "$SI/carplay_child.json" "$MOD/carplay/"
 cp "$PROJECT_DIR/deploy/lang/ldzip.py" "$PROJECT_DIR/deploy/lang/upmix_lang.py" "$MOD/carplay/"   # UpMix row texts (patch_lang)
+cp "$PROJECT_DIR/deploy/binpatch/binpatch.py" "$MOD/carplay/"   # the unit's own SI re-arm (patch_si)
 
 # the knob values recorded beside each model must be the ones the startup script ships
 python3 "$PROJECT_DIR/scripts/check_model_settings.py" "$SI/carplay_startup.sh" "$PROJECT_DIR"/models/*/settings.json
@@ -65,13 +66,12 @@ for f in startncm.sh stopncm.sh usblauncher_otg.lua; do
 done
 # Both Java variants ship; custom.sh keeps the one for the E2P region and removes the other.
 cp "$PROJECT_DIR/build/carplay_hook.jar" "$PROJECT_DIR/build/carplay_hook_cn.jar" "$ROOT/mnt/app/eso/hmi/lsd/jars/"
-cp "$SI/smartphone_integrator" "$ROOT/mnt/app/eso/bin/apps/"
 cp "$PROJECT_DIR/deploy/deva-ctrl-qc/deva-ctrl-qc.so.patched" "$ROOT/mnt/app/armle/lib/dll/deva-ctrl-qc.so"
 
 # custom.sh sets the on-unit modes; make the card copy match anyway.
 find "$ROOT" -type f -exec chmod 644 {} +
 chmod 755 "$MOD/custom.sh" "$MOD/command.sh" "$HOOKS"/*.so "$HOOKS"/*_render "$HOOKS"/*.sh \
-  "$ROOT/mnt/app/eso/bin/apps/smartphone_integrator" "$ROOT/mnt/app/armle/lib/dll/deva-ctrl-qc.so"
+  "$ROOT/mnt/app/armle/lib/dll/deva-ctrl-qc.so"
 
 # The installer checks these files one by one instead of walking the card (QNX fs-dos
 # fails to walk some FAT cards, and a partly copied card is caught by name).
