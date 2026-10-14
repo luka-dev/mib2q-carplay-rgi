@@ -25,11 +25,6 @@ responsible for any damage, bricked units or warranty issues resulting from thei
 
 ## 🎨 Gallery
 
-<p align="center">
-  <img src="assets/gallery/maneuver_demo.gif" width="90%" /><br />
-  <sub>Cluster maneuver renderer driven through a demo route</sub>
-</p>
-
 **Virtual Cockpit: CarPlay map on the cluster, route guidance beside it**
 
 <p align="center">
@@ -37,8 +32,8 @@ responsible for any damage, bricked units or warranty issues resulting from thei
   <img src="assets/gallery/vc_night_nav.jpeg" width="45%" />
 </p>
 <p align="center">
-  <img src="assets/gallery/vc_full_map.jpeg" width="45%" />
-  <img src="assets/gallery/vc_lane_guidance.jpeg" width="45%" />
+  <img src="assets/gallery/vc_full_map.jpeg" width="52%" />
+  <img src="assets/gallery/vc_lane_guidance.jpeg" width="39%" />
 </p>
 
 **Audi front PDC no longer hides CarPlay** · **Cover art on the cluster**
@@ -48,10 +43,25 @@ responsible for any damage, bricked units or warranty issues resulting from thei
   <img src="assets/gallery/cover_art.jpeg" width="45%" />
 </p>
 
+**CarPlay calls on the cluster phone tab**
+
+<p align="center">
+  <img src="assets/gallery/vc_incoming_call.jpeg" width="31%" />
+  <img src="assets/gallery/vc_call_list.jpeg" width="28%" />
+  <img src="assets/gallery/vc_phone_favorites.jpeg" width="33%" />
+</p>
+
+**5.1 sound: CarPlay UpMix level in the MMI · Spatial Audio from Apple Music**
+
+<p align="center">
+  <img src="assets/gallery/upmix_mmi_level.jpeg" width="55%" />
+  <img src="assets/gallery/spatial_audio_now_playing.jpeg" width="31%" />
+</p>
+
 **Head-up display**
 
 <p align="center">
-  <img src="assets/gallery/IMG_0623.jpeg" width="30%" />
+  <img src="assets/gallery/maneuver_demo.gif" width="30%" />
   <img src="assets/gallery/IMG_6302.jpeg" width="30%" />
   <img src="assets/gallery/IMG_0599.jpeg" width="30%" />
 </p>
