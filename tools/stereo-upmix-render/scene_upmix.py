@@ -74,6 +74,7 @@ class SceneConfig:
     rear_delay_ms: float = 0.0        # signed: + delays the rear, - delays the front (rear-lead). Variant J (09.10): 0, the J525 rear bus is ~11.8 ms late by itself and our rear meets the amp's front bleed in phase at the doors
     bleed_cancel: float = 0.0         # J525 bank-1: the rear-door bus = 0.707*L + 2.0*Ls; Ls -= coef*L cancels the amp's front bleed (0.355 doors, 0.251 effect bus); 0 = off, needs the cabin tone probe for the tap offset
     bleed_cancel_offset_ms: float = 0.0
+    front_keep_db: float = 0.0        # front anchor: the most the transfers may take from the front, dB over ~1 s (sparse wide mixes); 0 = off
     wide_pair: bool = False           # 13.2 item 10: uncorrelated L/R takes as a transferred pair
     wide_pair_alpha: float = 0.5
     wide_env_tau_ms: float = 300.0
@@ -455,6 +456,8 @@ def _engine(cfg, F, G, group, freqs, duck_mask=None, inst_mask=None, prot_mask=N
         a_iatt = ema_alpha(cfg.inst_attack_ms, H); a_irel = ema_alpha(cfg.inst_release_ms, H)
         e_long = np.zeros(F); a_long = ema_alpha(cfg.inst_long_tau_s * 1000.0, H) if cfg.inst_long_tau_s > 0 else 0.0
     cold = 0
+    anchor = 1.0; anc_ex = anc_rxs = anc_es = 0.0   # front anchor state (front_keep_db)
+    a_anc_meas = ema_alpha(1000.0, H); a_anc_att = ema_alpha(300.0, H); a_anc_rel = ema_alpha(2000.0, H)
 
     gsum = lambda v: np.bincount(group, weights=v, minlength=G)
     msg = yield None
@@ -558,7 +561,7 @@ def _engine(cfg, F, G, group, freqs, duck_mask=None, inst_mask=None, prot_mask=N
             p_now = np.clip(prot_mask[ctrl_p][pbin], 0.0, 1.0)
             d_prot = d_prot + np.where(p_now > d_prot, a_datt, a_drel) * (p_now - d_prot)
             D = cfg.duck_depth * d_prot
-        cold_gain = min(1.0, (t + 1) / ramp_hops)
+        cold_gain = min(1.0, (t + 1) / ramp_hops) * anchor
         a_r = alpha_b * w_bin * (1.0 - D) * cold_gain
         a_f = alpha_b * w_front_bin * (1.0 - D) * cold_gain
         g_r = np.sqrt(np.maximum(1.0 - (1.0 - a_r) ** 2, 0.0)) if cfg.energy_conserving else a_r
@@ -634,6 +637,20 @@ def _engine(cfg, F, G, group, freqs, duck_mask=None, inst_mask=None, prot_mask=N
             subL += wg * L; subR += wg * R
         st["p"] = p; st["PN"] = PN; st["PS"] = PS; st["w"] = w
         st["w_fast"] = np.bincount(group, weights=w_fast_bin, minlength=G) / np.maximum(np.bincount(group, minlength=G), 1); st["w_member"] = w_member
+        if cfg.front_keep_db > 0:
+            # front anchor: the front is X - a S (S = the subtraction at full transfer); its 1 s energy
+            # Ex - 2a Rxs + a^2 Es must stay >= keep Ex; a = the smaller root, followed 0.3 s down / 2 s back
+            keep = 10.0 ** (-cfg.front_keep_db / 10.0)
+            inv = 1.0 / max(cold_gain, 1e-3)
+            sL_full = subL * inv; sR_full = subR * inv
+            anc_ex += a_anc_meas * (float(np.sum(np.abs(L) ** 2 + np.abs(R) ** 2)) - anc_ex)
+            anc_rxs += a_anc_meas * (float(np.sum((np.conj(L) * sL_full).real + (np.conj(R) * sR_full).real)) - anc_rxs)
+            anc_es += a_anc_meas * (float(np.sum(np.abs(sL_full) ** 2 + np.abs(sR_full) ** 2)) - anc_es)
+            disc = anc_rxs * anc_rxs - anc_es * (1.0 - keep) * anc_ex
+            a_max = 1.0 if anc_es <= 1e-12 or disc < 0 else (anc_rxs - np.sqrt(disc)) / anc_es
+            target = min(max(a_max, 0.0), 1.0)
+            anchor += (a_anc_att if target < anchor else a_anc_rel) * (target - anchor)
+        st["anchor"] = anchor
         msg = yield (subL, subR, rearL, rearR, st)
 
 
@@ -653,10 +670,10 @@ def render(x, cfg=SceneConfig(), duck_mask=None, dump=None, inst_mask=None, prot
     rearL = np.zeros((T, F), complex); rearR = np.zeros((T, F), complex)
     stats = {"p": np.zeros((T, G)), "PN": np.zeros((T, G)), "PS": np.zeros((T, G)), "w": np.zeros((T, G)),
              "w_fast": np.zeros((T, G)), "w_member": np.zeros((T, G)), "n_clusters": np.zeros(T, int),
-             "places": np.full((T, 8, 4), np.nan)}   # per frame up to 8 clusters: centre, sigma, mass, gain
+             "places": np.full((T, 8, 4), np.nan), "anchor": np.ones(T)}   # per frame up to 8 clusters: centre, sigma, mass, gain; front anchor gain
     for t in range(T):
         subL[t], subR[t], rearL[t], rearR[t], st = eng.send((XL[t], XR[t], t))
-        for k in ("p", "PN", "PS", "w", "w_fast", "w_member", "n_clusters", "places"):
+        for k in ("p", "PN", "PS", "w", "w_fast", "w_member", "n_clusters", "places", "anchor"):
             if k in st:
                 stats[k][t] = st[k]
 
@@ -845,6 +862,7 @@ def config_from_args(argv):
     ap.add_argument("--air-db", type=float, default=-9.0)
     ap.add_argument("--rear-delay-ms", type=float, default=0.0)
     ap.add_argument("--bleed-cancel", type=float, default=0.0)
+    ap.add_argument("--front-keep-db", type=float, default=0.0)
     ap.add_argument("--bleed-cancel-offset-ms", type=float, default=0.0)
     ap.add_argument("--pan-lo", type=float, default=0.10)
     ap.add_argument("--pan-hi", type=float, default=0.35)
@@ -892,7 +910,7 @@ def config_from_args(argv):
                       inst_mask_nfft=ns.inst_mask_nfft, inst_mask_hop=ns.inst_mask_hop, inst_gamma=ns.inst_gamma, inst_thresh=ns.inst_thresh,
                       duck_depth=ns.duck_depth, duck_from_mask=not ns.no_duck_from_mask, inst_long_tau_s=ns.inst_long_tau_s,
                       inst_gamma_lo=ns.inst_gamma_lo, inst_gamma_split_hz=ns.inst_gamma_split_hz,
-                      bleed_cancel=ns.bleed_cancel, bleed_cancel_offset_ms=ns.bleed_cancel_offset_ms)
+                      bleed_cancel=ns.bleed_cancel, bleed_cancel_offset_ms=ns.bleed_cancel_offset_ms, front_keep_db=ns.front_keep_db)
     return cfg, ns, pos
 
 

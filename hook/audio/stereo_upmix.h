@@ -221,7 +221,8 @@ void spa_stereo_upmix_config_set_lfe(
 /* SCENE knobs (the AUDIO_SCENE_* environment), each clamped to its range:
  * alpha 0..1 (transfer fraction), inst_alpha 0..1, inst_gamma 0.1..4,
  * duck_depth 0..1, rear_delay_ms -50..50 (signed: < 0 delays the front),
- * sigma_min 0.01..1, side_lp_hz 0 (off) or 1000..24000, bleed_cancel 0..0.5. */
+ * sigma_min 0.01..1, side_lp_hz 0 (off) or 1000..24000, bleed_cancel 0..0.5,
+ * front_keep_db 0 (off) or 0.5..12 (the most the transfers may take from the front). */
 void spa_stereo_upmix_config_set_scene_alpha(struct spa_stereo_upmix_config *config, float value);
 void spa_stereo_upmix_config_set_scene_inst_alpha(struct spa_stereo_upmix_config *config, float value);
 void spa_stereo_upmix_config_set_scene_inst_gamma(struct spa_stereo_upmix_config *config, float value);
@@ -230,6 +231,7 @@ void spa_stereo_upmix_config_set_scene_rear_delay_ms(struct spa_stereo_upmix_con
 void spa_stereo_upmix_config_set_scene_sigma_min(struct spa_stereo_upmix_config *config, float value);
 void spa_stereo_upmix_config_set_scene_side_lp_hz(struct spa_stereo_upmix_config *config, float value);
 void spa_stereo_upmix_config_set_scene_bleed_cancel(struct spa_stereo_upmix_config *config, float value);
+void spa_stereo_upmix_config_set_scene_front_keep_db(struct spa_stereo_upmix_config *config, float value);
 
 /* SCENE only: install the mask row of the control period that starts now
  * (scene_engine_set_mask: elig/prot[bins] in 0..1, bins 257 or 1025, either

@@ -110,6 +110,10 @@ export AUDIO_SCENE_DUCK_DEPTH=0.25
 export AUDIO_SCENE_ALPHA=0.7
 export AUDIO_SCENE_SIDE_LP_HZ=7000
 export AUDIO_SCENE_BLEED_CANCEL=0
+# Front anchor: the transfers may take at most this many dB from the front over ~1 s.  Without it a
+# sparse mix of only wide parts (no vocal, bass or drums for the mask to protect) went almost whole to
+# the rear; dense mixes take < 1 dB and are untouched.  0 = off.
+export AUDIO_SCENE_FRONT_KEEP_DB=1
 # The scene upmix also for the stock realtime media stream (type 100, audioType=media: Spotify and
 # every app without buffered type 103). Own DSP state and controller; plain L/R while a
 # phone/Siri/alert stream is tracked or while type 103 owns the rail. off = zero rears as before.

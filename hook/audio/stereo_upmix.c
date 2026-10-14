@@ -393,6 +393,8 @@ void spa_stereo_upmix_config_set_scene_side_lp_hz(struct spa_stereo_upmix_config
 { if (config) config->scene.side_lp_hz = value > 0.0f ? spa_upmix_clampf(value, 1000.0f, 24000.0f) : 0.0f; }
 void spa_stereo_upmix_config_set_scene_bleed_cancel(struct spa_stereo_upmix_config *config, float value)
 { if (config) config->scene.bleed_cancel = spa_upmix_clampf(value, 0.0f, 0.5f); }
+void spa_stereo_upmix_config_set_scene_front_keep_db(struct spa_stereo_upmix_config *config, float value)
+{ if (config) config->scene.front_keep_db = value > 0.0f ? spa_upmix_clampf(value, 0.5f, 12.0f) : 0.0f; }
 
 void spa_stereo_upmix_config_set_scene_mask_blob(struct spa_stereo_upmix_config *config,
                                                  const void *blob, size_t bytes)
@@ -426,6 +428,7 @@ static int spa_scene_config_valid(const struct spa_stereo_upmix_config *config)
     spa_stereo_upmix_config_set_scene_sigma_min(&probe, probe.scene.sigma_min);
     spa_stereo_upmix_config_set_scene_side_lp_hz(&probe, probe.scene.side_lp_hz);
     spa_stereo_upmix_config_set_scene_bleed_cancel(&probe, probe.scene.bleed_cancel);
+    spa_stereo_upmix_config_set_scene_front_keep_db(&probe, probe.scene.front_keep_db);
     return config->scene.n_fft == SCENE_NFFT && config->scene.hop == SCENE_HOP &&
            memcmp(&probe.scene, &config->scene, sizeof(probe.scene)) == 0;
 }

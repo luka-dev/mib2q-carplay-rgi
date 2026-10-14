@@ -198,8 +198,15 @@ Read once per `dio_manager` start (a change applies at the next HU boot of the C
 | `AUDIO_SCENE_SIGMA_MIN` | not exported | 0.08 | 0.01..1 | place width floor; 0.15 is the documented second candidate (spec §15) |
 | `AUDIO_SCENE_SIDE_LP_HZ` | `7000` (`:98`) | 7000 | 0 = off, 1000..24000 | side-layer low-pass |
 | `AUDIO_SCENE_BLEED_CANCEL` | `0` (`:99`) | 0 | 0..0.5 | variant K's cancel of the amp's −3 dB front copy in the rear bus (0.355); 0 = J |
+| `AUDIO_SCENE_FRONT_KEEP_DB` | `1` (`:116`) | 0 (off) | 0 = off, 0.5..12 | front anchor: the most every transfer together may take from the front over ~1 s (below) |
 
 What the renderer no longer has: `AUDIO_STEREO_SURROUND`, `FRONT_BASS_DB`, `FRONT_TREBLE_DB`, `REAR_BODY_DB`, `REAR_AIR_DB`, `FRONT_RETENTION` and every `AUDIO_HSSR_*` knob left with the Universal backend; the fronts and rears leave at the engine's own levels (unity scale, as the car kit renders) and only the LFE assist and the cabin guard apply on top (`hook/audio/stereo_upmix.h:72-83`).
+
+### Front anchor
+
+A sparse mix made only of wide parts (two guitars at the edges and their room, no vocal, bass or drums for the mask to protect) used to go almost whole to the rear: the mask lets every cell go, each transfer is subtracted from the front, and nothing bounded the total. Measured through the hook renderer at the Aggressive level: the intro of a sparse wide song lost 2.8 dB of front with the rear only 3 dB under it; a wide-guitar rock song lost up to 9.8 dB with the rear up to 6.8 dB over the front; dense mixes lose under 1 dB. `[sim]`
+
+`front_keep_db` bounds it (`hook/audio/scene_engine.c`, `front_anchor()`; the same in `scene_upmix.py`). Per frame the engine sums, with a 1 s EMA, the input energy `Ex`, the front subtraction at full transfer `S` (`sub / cold_gain`) as `Es`, and their cross term `Rxs`; the front at anchor gain `a` keeps `Ex − 2a·Rxs + a²·Es`, so the largest `a` that keeps `10^(−keep/10)·Ex` is the smaller root of a quadratic: no feedback through the measurement, nothing to hunt. The gain follows that bound down in 0.3 s and back in 2 s and multiplies `cold_gain`, so every transfer and the ambient layer shrink together and the scene keeps its shape. At 1 dB (shipped): the sparse intro keeps the rear 5.4 dB under the front instead of 3.2, the wide-guitar song 5.6 dB under instead of 0.7, dense mixes are unchanged to 0.1 dB; a centred vocal renders bit-identically with it on (`test_scene_upmix.py` check 14). C against the reference: −69 dB without the net, −72 dB with its rows. `[sim]` Not yet heard in the car.
 
 ### MMI level
 

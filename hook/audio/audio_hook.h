@@ -94,6 +94,7 @@
 #define SPA_AUDIO_SCENE_SIGMA_MIN_ENV      "AUDIO_SCENE_SIGMA_MIN"      /* 0.01..1, default 0.08 */
 #define SPA_AUDIO_SCENE_SIDE_LP_HZ_ENV     "AUDIO_SCENE_SIDE_LP_HZ"     /* 0 = off or 1000..24000, default 7000 */
 #define SPA_AUDIO_SCENE_BLEED_CANCEL_ENV   "AUDIO_SCENE_BLEED_CANCEL"   /* 0..0.5, default 0 */
+#define SPA_AUDIO_SCENE_FRONT_KEEP_DB_ENV  "AUDIO_SCENE_FRONT_KEEP_DB"  /* 0 = off or 0.5..12, default 0 */
 
 /* Buffered-stream loudness policy.  Apple's/Pioneer's SoundCheck metadata is
  * enabled by default.  The local RMS substitute and sample-peak limiter are

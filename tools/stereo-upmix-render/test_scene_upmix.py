@@ -504,10 +504,34 @@ def check_10_cold_start():
             Row("10 cold start", "rear RMS first 100 ms re steady TOTAL rear (5-20 s) dB", round(d_total, 1), "info (task asked <= -40; ramp arithmetic gives ~-35)", True)]
 
 
+def check_14_front_anchor():
+    """Front anchor (front_keep_db): a sparse mix of only wide parts the mask lets go (two plucked takes
+    near the edges + their room, no vocal/bass/drums to protect) must not empty the front; a centred
+    vocal the transfers never touch must render bit-identically with the anchor on."""
+    sec = 20.0
+    seed(); r = np.random.default_rng(5)
+    a, b = pluck_take(sec, (196, 247, 294), r), pluck_take(sec, (220, 277, 330), r)
+    mix = ub.pan(a, -0.8) * 0.4 + ub.pan(b, 0.8) * 0.4 + ub.stereo_reverb(a + b, rt60=1.5, wet=0.3) * 0.2
+    mix = mix * (0.7 / np.abs(mix).max())
+    elig = np.ones((int(sec * SR) // 512 + 1, 257))           # the mask lets everything go
+    cfg = su.SceneConfig(alpha=1.0, inst_alpha=1.0, duck_depth=0.1)
+    s = slice(4 * SR, None)
+    lost = {}
+    for kd in (0.0, 1.0):
+        out6 = su.render(mix.T, replace(cfg, front_keep_db=kd), inst_mask=elig)
+        lost[kd] = 10 * np.log10((mix.T[s] ** 2).sum() / (out6[s, :2] ** 2).sum())
+    voc = ub.pan(ub.formant_voice(sec, [466, 523, 587, 659], bpm=50), 0.0) * 0.5
+    v0 = su.render(voc.T, cfg); v1 = su.render(voc.T, replace(cfg, front_keep_db=1.0))
+    return [Row("14 sparse wide mix, mask lets all go", "front lost, anchor off dB", round(lost[0.0], 2), ">= 1.5 (the case the anchor exists for)", lost[0.0] >= 1.5),
+            Row("14 sparse wide mix, mask lets all go", "front lost, front_keep_db 1 dB", round(lost[1.0], 2), "0.7..1.2", 0.7 <= lost[1.0] <= 1.2),
+            Row("14 centred vocal", "anchor on vs off, max |diff|", float(np.abs(v1 - v0).max()), "== 0 (nothing leaves the front)", np.array_equal(v0, v1))]
+
+
 CHECKS = [check_1_centred_protection, check_2_transfer_vs_vocal, check_3_energy_conservation,
           check_4_drums_no_pumping, check_5_wide_pair, check_6_mono, check_7_antiphase,
           check_8_membership_stability, check_9_vocal_entry_front_stable, check_10_cold_start,
-          check_11_instrument_mask, check_12_stream_equivalence, check_13_song_memory_and_reset]
+          check_11_instrument_mask, check_12_stream_equivalence, check_13_song_memory_and_reset,
+          check_14_front_anchor]
 
 
 def _assert_rows(rows):
@@ -528,6 +552,7 @@ def test_10(): _assert_rows(check_10_cold_start())
 def test_11(): _assert_rows(check_11_instrument_mask())
 def test_12(): _assert_rows(check_12_stream_equivalence())
 def test_13(): _assert_rows(check_13_song_memory_and_reset())
+def test_14(): _assert_rows(check_14_front_anchor())
 
 
 if __name__ == "__main__":

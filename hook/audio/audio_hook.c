@@ -130,7 +130,7 @@ typedef struct {
     uint32_t stereoLfeGainQ15;     /* assist level, 1..16384, default 4096 */
     /* SCENE backend knobs (AUDIO_SCENE_*), engine units, range-checked at parse. */
     float sceneAlpha, sceneInstAlpha, sceneInstGamma, sceneDuckDepth;
-    float sceneRearDelayMs, sceneSigmaMin, sceneSideLpHz, sceneBleedCancel;
+    float sceneRearDelayMs, sceneSigmaMin, sceneSideLpHz, sceneBleedCancel, sceneFrontKeepDb;
     int sceneMaskSync;                /* AUDIO_SCENE_MASK_SYNC: the net on the audio thread, default off */
     spa_soundcheck_config_t soundCheck;
 } spa_audio_config_t;
@@ -239,6 +239,7 @@ static void spa_apply_scene_knobs(struct spa_stereo_upmix_config *upmix,
     spa_stereo_upmix_config_set_scene_sigma_min(upmix, config->sceneSigmaMin);
     spa_stereo_upmix_config_set_scene_side_lp_hz(upmix, config->sceneSideLpHz);
     spa_stereo_upmix_config_set_scene_bleed_cancel(upmix, config->sceneBleedCancel);
+    spa_stereo_upmix_config_set_scene_front_keep_db(upmix, config->sceneFrontKeepDb);
 }
 
 static int spa_parse_soundcheck_fallback(void)
@@ -294,6 +295,7 @@ static void spa_audio_config_init_once(void)
             spa_audio_config_value.sceneSideLpHz = d.side_lp_hz;
         }
         spa_audio_config_value.sceneBleedCancel = spa_parse_scene_float(SPA_AUDIO_SCENE_BLEED_CANCEL_ENV, 0.0, 0.5, d.bleed_cancel);
+        spa_audio_config_value.sceneFrontKeepDb = spa_parse_scene_float(SPA_AUDIO_SCENE_FRONT_KEEP_DB_ENV, 0.0, 12.0, d.front_keep_db);
         spa_audio_config_value.sceneMaskSync = spa_parse_bool(SPA_AUDIO_SCENE_MASK_SYNC_ENV, &present);
     }
     spa_audio_config_value.stereoLfeAssist = spa_parse_stereo_lfe();

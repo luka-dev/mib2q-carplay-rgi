@@ -85,6 +85,7 @@ struct scene_config {
     float rear_delay_ms           ; /* default 0.0f */
     float bleed_cancel            ; /* default 0.0f */
     float bleed_cancel_offset_ms  ; /* default 0.0f */
+    float front_keep_db           ; /* default 0.0f */
     int   wide_pair               ; /* default 0 */
     float wide_pair_alpha         ; /* default 0.5f */
     float wide_env_tau_ms         ; /* default 300.0f */
@@ -146,6 +147,7 @@ struct scene_state {
     scene_cpx phL[SCENE_BINS], phR[SCENE_BINS];
     float     window[SCENE_NFFT];
     float     a_s, a_fast, a_dir, a_slow, a_rel, a_env, a_iatt, a_irel, a_long, a_datt, a_drel, theta_max, cos_theta_max;
+    float     a_anc_meas, a_anc_att, a_anc_rel;      /* front anchor: demand statistics, gain down, gain back */
     int       mbin[SCENE_BINS];                   /* bin -> mask bin (nearest), both masks */
     float     gamma_vec[SCENE_BINS];              /* per-bin eligibility exponent */
     /* per-bin statistics (three EMA sets, slow pan, holds, mask smoothers) */
@@ -162,6 +164,8 @@ struct scene_state {
     /* masks: the current control row (installed by scene_engine_set_mask) */
     int       mask_bins, have_mask;
     float     elig_row[SCENE_MASK_BINS_MAX], prot_row[SCENE_MASK_BINS_MAX];
+    /* front anchor (front_keep_db): 1 s sums of the input, the unscaled front demand and their cross term */
+    float     anc_ex, anc_rxs, anc_es, anchor;
     /* frame counter and control */
     int       t, pending_reset;
     /* streaming: analysis buffer in pad-index space, OLA ring, delay lines */

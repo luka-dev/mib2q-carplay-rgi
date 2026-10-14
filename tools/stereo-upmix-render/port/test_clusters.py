@@ -80,7 +80,8 @@ def build_lib(path):
 def c_config(Config, cfg_dict):
     cfg = Config()
     for name, _ in Config._fields_:
-        v = cfg_dict["front_follows"] == "slow" if name == "front_follows_slow" else cfg_dict[name]
+        # a knob newer than the fixture takes the reference default (no fixture regeneration for it)
+        v = cfg_dict["front_follows"] == "slow" if name == "front_follows_slow" else cfg_dict.get(name, getattr(scene_upmix.SceneConfig(), name))
         setattr(cfg, name, v)
     return cfg
 

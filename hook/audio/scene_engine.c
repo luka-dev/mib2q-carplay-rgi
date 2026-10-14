@@ -103,6 +103,9 @@ int scene_engine_init(struct scene_state *s, const struct scene_config *cfg)
     s->a_long = cfg->inst_long_tau_s > 0.0f ? scene_ema_alpha(cfg->inst_long_tau_s * 1000.0f, H) : 0.0f;
     s->a_datt = scene_ema_alpha(cfg->duck_attack_ms, H);
     s->a_drel = scene_ema_alpha(cfg->duck_release_ms, H);
+    s->a_anc_meas = scene_ema_alpha(1000.0f, H);
+    s->a_anc_att  = scene_ema_alpha(300.0f, H);
+    s->a_anc_rel  = scene_ema_alpha(2000.0f, H);
     s->theta_max = cfg->theta_max_deg * (SCENE_PI / 180.0f);                   /* np.deg2rad */
     s->cos_theta_max = cosf(s->theta_max);                                     /* the group gate compares cosines, not angles */
 
@@ -161,6 +164,7 @@ void scene_engine_reset_state(struct scene_state *s)
     s->delay_rear = delay_rear;
     s->delay_front = delay_front;
     s->blen = blen;
+    s->anchor = 1.0f;
 }
 
 void scene_engine_reset(struct scene_state *s)
@@ -508,6 +512,38 @@ static inline void output_quad(struct scene_state *s, const struct frame_scratch
     v4_st2_n((float *)(s->rearR + k), rearRr, rearRi, n);
 }
 
+/* Front anchor: a sparse mix of only off-centre and wide parts (no vocal, bass or drums the mask
+ * protects) would otherwise move most of the song to the rear and leave the front thin.  The front
+ * is X - a S, S = this frame's subtraction at full transfer (sub / cold_gain), a = the anchor gain.
+ * Its 1 s energy Ex - 2a Rxs + a^2 Es must stay >= keep Ex (keep = 10^(-front_keep_db/10)): the
+ * largest such a is the smaller root of the quadratic.  No feedback through the measurement, so it
+ * cannot hunt; the gain follows that bound down in 0.3 s and comes back in 2 s.  It scales every
+ * transfer and the ambient layer together (cold_gain), so the scene keeps its shape, only quieter. */
+static void front_anchor(struct scene_state *s, const scene_cpx *XL, const scene_cpx *XR, float cold_gain)
+{
+    const float keep = expf(-s->cfg.front_keep_db * (2.302585092994046f / 10.0f));   /* 10 ** (-db / 10) */
+    const float inv = 1.0f / (cold_gain > 1e-3f ? cold_gain : 1e-3f);
+    float ex = 0.0f, rxs = 0.0f, es = 0.0f, a_max, disc, target;
+    int k;
+
+    for (k = 0; k < s->F; k++) {
+        const float slr = s->subL[k].re * inv, sli = s->subL[k].im * inv;
+        const float srr = s->subR[k].re * inv, sri = s->subR[k].im * inv;
+        ex  += XL[k].re * XL[k].re + XL[k].im * XL[k].im + XR[k].re * XR[k].re + XR[k].im * XR[k].im;
+        rxs += XL[k].re * slr + XL[k].im * sli + XR[k].re * srr + XR[k].im * sri;
+        es  += slr * slr + sli * sli + srr * srr + sri * sri;
+    }
+    s->anc_ex  += s->a_anc_meas * (ex - s->anc_ex);
+    s->anc_rxs += s->a_anc_meas * (rxs - s->anc_rxs);
+    s->anc_es  += s->a_anc_meas * (es - s->anc_es);
+    /* a^2 Es - 2a Rxs + (1 - keep) Ex <= 0 */
+    disc = s->anc_rxs * s->anc_rxs - s->anc_es * (1.0f - keep) * s->anc_ex;
+    if (s->anc_es <= 1e-12f || disc < 0.0f) a_max = 1.0f;     /* never takes that much at any a */
+    else a_max = (s->anc_rxs - sqrtf(disc)) / s->anc_es;
+    target = a_max < 0.0f ? 0.0f : (a_max > 1.0f ? 1.0f : a_max);
+    s->anchor += (target < s->anchor ? s->a_anc_att : s->a_anc_rel) * (target - s->anchor);
+}
+
 void scene_engine_frame(struct scene_state *s, const scene_cpx *XL, const scene_cpx *XR, int t)
 {
     const struct scene_config *cfg = &s->cfg;
@@ -527,6 +563,7 @@ void scene_engine_frame(struct scene_state *s, const scene_cpx *XL, const scene_
     fc.prot_on = s->have_mask && cfg->duck_from_mask;
     fc.gamma_on = cfg->inst_gamma != 1.0f || cfg->inst_gamma_lo > 0.0f;   /* some gamma_vec[k] != 1 */
     fc.cold_gain = t + 1 >= SCENE_RAMP_HOPS ? 1.0f : (float)(t + 1) / (float)SCENE_RAMP_HOPS;   /* min(1, (t+1)/ramp_hops) */
+    fc.cold_gain *= s->anchor;                                  /* 1 unless the front anchor holds the transfers back */
     sc.PN = (float *)(((uintptr_t)s->fft_scratch + 15u) & ~(uintptr_t)15u);
     sc.PS = sc.PN + SCENE_BINS4;
     sc.w_member = sc.PS + SCENE_BINS4;
@@ -648,6 +685,7 @@ void scene_engine_frame(struct scene_state *s, const scene_cpx *XL, const scene_
 
     for (k = 0; k + 4 <= F; k += 4) output_quad(s, &sc, &fc, XL, XR, wide, k, 4);
     if (k < F) output_quad(s, &sc, &fc, XL, XR, wide, k, F - k);
+    if (cfg->front_keep_db > 0.0f) front_anchor(s, XL, XR, fc.cold_gain);
 }
 
 /* ----------------------------------------------------------------------------- block driver (SceneStream) */

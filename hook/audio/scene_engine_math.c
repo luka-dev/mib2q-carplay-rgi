@@ -64,6 +64,7 @@ void scene_config_defaults(struct scene_config *cfg)
     cfg->rear_delay_ms          = 0.0f;      /* variant J: the J525 rear bus is ~11.8 ms late by itself */
     cfg->bleed_cancel           = 0.0f;
     cfg->bleed_cancel_offset_ms = 0.0f;
+    cfg->front_keep_db          = 0.0f;      /* front anchor off; > 0 = the most the transfers may take from the front, dB */
     cfg->wide_pair              = 0;
     cfg->wide_pair_alpha        = 0.5f;
     cfg->wide_env_tau_ms        = 300.0f;
