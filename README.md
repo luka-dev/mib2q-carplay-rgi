@@ -113,80 +113,55 @@ All documentation is one linked Markdown tree in [`docs/`](docs/README.md). Star
 
 > 🗺️ **Looking for a note? See the [documentation map](docs/DOCS_MAP.md)**: every note, one mindmap per domain, with links.
 
-_Overview mindmap: each documentation domain, its topic groups with their note counts, and the lead note of each group._
+_What the project covers, at a glance. Every note is in the [documentation map](docs/DOCS_MAP.md)._
 
-<!-- BEGIN generated:overview-mindmap -->
 ```mermaid
 mindmap
-  root((MHI2Q CarPlay docs))
-    Audio
-      Upmix runtime · 5 notes
-        Stereo to 5.1 Upmix
-      Upmix research and history · 11 notes
-        Upmix History and Results
-      Listening and release · 3 notes
-        CarPlay Upmix Listening Protocol
-      Amplifier and DSP · 5 notes
-        Virtual Cabin and Amp RE
-      Codecs and routing · 9 notes
-        APAC Codec
-    Cluster and RGI
-      Contexts and layout · 6 notes
-        Cluster Contexts
-      Route guidance · 8 notes
-        RGI and BAP Bridge
-      Phone and telephony · 5 notes
-        CarPlay Telephony
-      Open research · 2 notes
-        CarPlay speed-limit investigation
-    AltScreen and Video
-      Cluster video · 5 notes
-        AltScreen Cluster Video
-      Pacing and input · 3 notes
-        AltScreen Frame Rate
-      Features · 5 notes
-        Cover Art Pipeline
-      History · 1 note
-        AltScreen RE History
-    Connect and USB
-      USB session · 4 notes
-        USB and NCM Connect
-      Replug recovery · 2 notes
-        USB Replug Recovery
-      Network and phone data · 3 notes
-        PF Firewall
-    Wireless CarPlay
-      Receiver and ownership · 5 notes
-        Wireless CarPlay with MU1316 stock AirPlay 210.81
-      Bluetooth graft · 6 notes
-        MHI2Q RFCOMM graft
-      iAP2 and MFi bootstrap · 4 notes
-        Offline iAP2 bridge daemon prototype
-      Pairing and media · 3 notes
-        Stock 210.81 HTTP boundary for hook/wireless
-      iOS, radio and hardware · 5 notes
-        iOS 26/27 selection of stock AirPlay 210 MFi-SAP
-      Evidence · 3 notes
-        Stock 210 + hook/wireless
-    CarPlay Laboratory
-      vphone sender · 3 notes
-        vphone CarPlay laboratory
-      Earlier labs and review · 2 notes
-        iOS virtual machine laboratory
-    Build and Deploy
-      Build and release · 4 notes
-        Build System
-      Audits and recovery · 3 notes
-        Production Audits
-    Reference
-      System · 3 notes
-        Architecture
-      Formats and ports · 2 notes
-        iOS CarPlay Spatial Wireformat
-      History and comparisons · 2 notes
-        Archive and History
+  root((MHI2Q CarPlay))
+    🔊 Audio
+      UpMix 5.1
+      SCENE renderer
+      ML Training
+      Virtual Cabin
+      B&O J525 amp
+      Dolby Atmos
+      APAC codec
+      Calls and Siri
+    📊 Virtual Cockpit
+      Route Guidance
+      Maneuver arrows
+      Lane Guidance
+      Distance bargraph
+      Head-up display
+      Telephony
+      Third-party nav
+    🖥️ AltScreen
+      CarPlay map in the cluster
+      Frame pacing
+      Zoom and View button
+      Cover Art
+      Enhanced Siri
+    🔌 Connect
+      USB NCM
+      Replug recovery
+      iOS 26 and 27
+      Vehicle data to phone
+      PF firewall
+    📶 Wireless CarPlay
+      Stock210 hook
+      Bluetooth graft
+      iAP2 and MFi
+      2.4 GHz radio
+    🧪 Emulator Lab
+      vphone sender
+      QNX receiver in QEMU
+      Software MFi
+    📦 Build and Deploy
+      QNX toolchain
+      M.I.B. installer
+      VIN protection
+      Release audits
 ```
-<!-- END generated:overview-mindmap -->
 
 | Domain | Entry point |
 | --- | --- |
