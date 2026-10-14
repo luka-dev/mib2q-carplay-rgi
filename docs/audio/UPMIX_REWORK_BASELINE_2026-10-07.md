@@ -14,7 +14,7 @@ Platform naming: all docs say the MMX is an APQ8064/Krait at 1512 MHz under QNX 
 
 ## 1. The system as it runs in the car today
 
-State = best install build `build/install_protected_WAUZZZF47HA098927.zip` (SHA-256 710342a1…075f, 2026-09-28, from 800de9d / Track A final 04fb06d). Nothing under `hook/audio/{stereo_upmix,hssr_*}`, `models/` or `carplay_startup.sh` changed after 2026-09-27 (git). Owner blind listening of this build: pending.
+State = best install build `build/install_<VIN>.zip` (SHA-256 710342a1…075f, 2026-09-28, from 800de9d / Track A final 04fb06d). Nothing under `hook/audio/{stereo_upmix,hssr_*}`, `models/` or `carplay_startup.sh` changed after 2026-09-27 (git). Owner blind listening of this build: pending.
 
 ### 1.1 Phone to hook
 

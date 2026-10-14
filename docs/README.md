@@ -20,9 +20,6 @@ source code is the ground truth for what the system does.
 
 > 📌 **Before you touch a subsystem, read [Landmines](LANDMINES.md)** — the traps that already cost days.
 
-External implementation comparison: [mhi2q-evo vs our complete CarPlay stack](reference/REPOSITORY_COMPARISON_MHI2Q_EVO_2026-10-10.md)
-records the video, cluster/HUD, input, wireless, audio, build and deployment differences, selected host checks and proposed transfers.
-
 ## 🧪 CarPlay emulator laboratory
 
 The [CarPlay emulator laboratory](carplay-lab/README.md) has a separate source
@@ -225,9 +222,8 @@ mindmap
       Formats and ports
         iOS CarPlay Spatial Wireformat
         MHI2 MU1439 Port
-      History and comparisons
+      History
         Archive and History
-        Repository Comparison
 ```
 <!-- END generated:full-mindmap -->
 
@@ -357,7 +353,7 @@ Every curated note as a link, grouped like the mindmap above.
 
 - System: [Architecture](reference/ARCHITECTURE.md) · [Hook to Java Bus](reference/HOOK_TO_JAVA_BUS.md) · [Record Replay Tooling](reference/RECORD_REPLAY_TOOLING.md)
 - Formats and ports: [iOS CarPlay Spatial Wireformat](reference/IOS_CARPLAY_SPATIAL_WIREFORMAT.md) · [MHI2 MU1439 Port](reference/MHI2_MU1439_PORT.md)
-- History and comparisons: [Archive and History](reference/ARCHIVE_AND_HISTORY.md) · [Repository Comparison](reference/REPOSITORY_COMPARISON_MHI2Q_EVO_2026-10-10.md)
+- History: [Archive and History](reference/ARCHIVE_AND_HISTORY.md)
 
 Across every domain: [Landmines](LANDMINES.md).
 <!-- END generated:notes-by-topic -->

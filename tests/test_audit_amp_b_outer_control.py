@@ -9,7 +9,8 @@ import unittest
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'tools'))
 from audit_amp_b_outer_control import outer_control, function_operations, direct_lp_candidates
-IMAGE=Path('/Users/luka/Desktop/AUDI_2/Firmwares/SoundAmp/'
+import os as _os; _REPO = _os.path.normpath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..')); _WS = _os.environ.get('AUDI_WORKSPACE', _os.path.expanduser('~/Desktop/AUDI_2'))  # sibling firmware/data dirs
+IMAGE=Path(_WS + '/Firmwares/SoundAmp/'
            'uPD70f3479_8W0035465_0420_H11/CodeFlash_24082026_172027.bin')
 OUT=ROOT/'output/r2/soundamp/remaining-blocks-20260919'
 

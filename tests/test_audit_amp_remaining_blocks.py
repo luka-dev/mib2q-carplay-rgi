@@ -11,7 +11,8 @@ from extract_amp_sharc_app import parse_blocks
 from inspect_amp_visa import load_shortwords, decode
 from audit_amp_input_path import input_path_parameters
 
-IMAGE=Path('/Users/luka/Desktop/AUDI_2/Firmwares/SoundAmp/'
+import os as _os; _REPO = _os.path.normpath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..')); _WS = _os.environ.get('AUDI_WORKSPACE', _os.path.expanduser('~/Desktop/AUDI_2'))  # sibling firmware/data dirs
+IMAGE=Path(_WS + '/Firmwares/SoundAmp/'
            'uPD70f3479_8W0035465_0420_H11/CodeFlash_24082026_172027.bin')
 LOADER=ROOT/'output/r2/soundamp/J525_8W0035465_SW0420_SHARC_SPI_bitrev.ldr.bin'
 

@@ -228,7 +228,7 @@ snapshots (27 files in the runtime bundle),4 checkpoints and7 numeric mirrors.
 Plan SHA`c7a2464b677238656894979a7feb0a7f8f25ec61e3713c5e32e7d917380d3c80`;
 final checkpoint`42f283f98830194d184e06b215edfcce3b1059b51870668340663f191523a55e`.
 
-Remote base: `/mnt/shared/users/luka/Audi/upmix-training-2026-09-11`.
+Remote base: `/mnt/shared/users/<user>/Audi/upmix-training-2026-09-11`.
 Read `runtime/source-g8-nas-full-a/status.json` and
 `runtime/source-g8-nas-supervision-a/status.json`. The detached supervisor owns a
 single-run lock, two CPU threads/nice10,4GiB RSS /1GiB available-memory guards,
@@ -874,7 +874,7 @@ checked without starting playback; no listening/role/purity approval is implied.
 At09:18UTC the existing NAS SSH password helper was denied authentication.
 No credential/account configuration was changed. One separate key-only attempt
 also failed; no repeated password probing. SMB remains readable/writable, and
-G12 completed normally. At17:12UTC, after the user confirmed100.85.38.96, the
+G12 completed normally. At17:12UTC, after the user confirmed<nas>, the
 unchanged helper again authenticated as oem and authorized private execution
 as luka succeeded. No credential/account changes were made; the transient cause
 was not diagnosed. Linux3.12.3/Torch2.10.0+cpu/NumPy2.5.1, frozen hashes and

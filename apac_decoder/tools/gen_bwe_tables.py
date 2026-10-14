@@ -38,7 +38,8 @@ RODATA = os.path.join(ROOT, 'reference', 'decomp', 'rodata')
 OUT = os.path.join(ROOT, 'src', 'bwe_tables.cpp')
 DEFAULT_LIB = os.path.join(ROOT, 'reference', '.build', 'libs',
                            'libSPF_CP_PlugInWrapper.so')
-OTA_LIB = ('/Users/luka/Desktop/AUDI_2/Firmwares/Other/Pioneer_SPHERA_OTA/'
+import os as _os; _REPO = _os.path.normpath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '../..')); _WS = _os.environ.get('AUDI_WORKSPACE', _os.path.expanduser('~/Desktop/AUDI_2'))  # sibling firmware/data dirs
+OTA_LIB = (_WS + '/Firmwares/Other/Pioneer_SPHERA_OTA/'
            'extracted_01030010/rootfs/usr/local/lib/libSPF_CP_PlugInWrapper.so')
 
 # apac::LSFTools::Initialize walks this pair, 16 bytes per record, pushing one

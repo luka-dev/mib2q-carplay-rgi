@@ -186,12 +186,12 @@ _Read this first, then [the night report](UPMIX_SEPARATOR_NIGHT_REPORT_2026-09-2
 
 | Item | Value |
 | --- | --- |
-| PC (the owner's second computer) | Windows 11, RTX 5080 16 GB, reached over Tailscale: `ssh luka@100.127.113.11` (PowerShell on the far side). **All tests, stems and training run here, on drive D:** |
+| PC (the owner's second computer) | Windows 11, RTX 5080 16 GB, reached over Tailscale: `ssh <user>@<training-pc>` (PowerShell on the far side). **All tests, stems and training run here, on drive D:** |
 | Music library | `D:\music` — the owner's own songs (source of the teacher-labelled masters and of the listening-test picks) |
 | Work dir | `D:\upmix` — `tools\` (scripts, renderer exe, models), `datasets\`, `runs\` |
 | D: filesystem | **WinBtrfs** — slow CloseHandle, occasional stalls; every long job runs under a watchdog with `--resume` (`tools\stems_guard.ps1`) |
 | Python | `C:\Users\LuKa\AppData\Local\Programs\Python\Python313\python.exe`, torch 2.11 cu128 |
-| Mac (this repo) | `/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay`; local torch 2.10 for CPU smoke tests only |
+| Mac (this repo) | `<workspace>/Patches/mhi2-carplay`; local torch 2.10 for CPU smoke tests only |
 
 <details>
 <summary><strong>🔧 PC traps that cost hours</strong></summary>
@@ -276,9 +276,9 @@ A job is one line `tag|sep_net args` in `D:\upmix\runs\rapid\QUEUE.txt`. The dae
 
 ```text
 # add a job
-ssh luka@100.127.113.11 "Add-Content D:\upmix\runs\rapid\QUEUE.txt -Value 'mytag|--mask shared_sigmoid --steps 10000'"
+ssh <user>@<training-pc> "Add-Content D:\upmix\runs\rapid\QUEUE.txt -Value 'mytag|--mask shared_sigmoid --steps 10000'"
 # read the board
-ssh luka@100.127.113.11 "Get-Content D:\upmix\runs\rapid\LEADERBOARD.md"
+ssh <user>@<training-pc> "Get-Content D:\upmix\runs\rapid\LEADERBOARD.md"
 ```
 
 **How to read it (review 15).** It is a *mechanism screen*, not a substitute for 40k: promote 4k → 10k → 40k. Compare against the anchors of the same training age (two seeds: noise ±0.05 eligible transmission, ±0.04 vocal, ±0.01 renderer shares). Promotion triggers: eligible transmission +0.03 at ≤ +0.01 vocal; entry ducking 10 points closer to 1 with p10 not worse; instrument shares +0.02 with voice, bass, level and error as guardrails. Every stem counts, not only the voice. A transparent mask "improves" transmission while failing separation; a silent mask has perfect ducking.

@@ -28,7 +28,7 @@ flowchart LR
 ## 📋 Implementation and evidence
 
 Compared offline on 2026-09-28 with
-`/Users/luka/Desktop/AUDI_2/Refferences/btstack-bootstrap-2026-09-28`.
+`<workspace>/Refferences/btstack-bootstrap-2026-09-28`.
 `scripts/verify_package.py` in that export passed: 139 files, hashes and the
 bootstrap-only source boundary. The owner reports that, with **manual
 injection**, the reference already completed Bluetooth authentication,

@@ -83,7 +83,7 @@ Instruments audibly and stably in the rear, the voice never, no "back and forth"
 | Krait measurement | Mask **1.33 ms/control** of ~10.7 ms, 839/839 on time, audio thread +1 % | — |
 | Reset bug | `spa_stereo_upmix_reset()` dropped the guard/mask pointers — the mask never ran in the car before this | c43a17c |
 | Car tuning | Mask drive **1.5**, rear air **−9 dB**: guitars 0.17 / voice 0.08 (4 songs >15 % vs 8 in the 22.09 build); guitar swing range a quarter lower, voice a third lower | 04fb06d |
-| Best build | `build/install_protected_WAUZZZF47HA098927.zip` (SHA 710342a1…075f), three models, VIN-locked | 800de9d |
+| Best build | `build/install_<VIN>.zip` (SHA 710342a1…075f), three models | 800de9d |
 
 ### Track B — separator feasibility
 

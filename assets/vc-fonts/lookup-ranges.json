@@ -1,6 +1,6 @@
 [
   {
-    "source": "/Users/luka/Desktop/AUDI_2/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.2/data/gtf/AudiTypeDisplayHigh_Normal_China.lur",
+    "source": "<workspace>/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.2/data/gtf/AudiTypeDisplayHigh_Normal_China.lur",
     "file": "AudiTypeDisplayHigh_Normal_China.lur",
     "sha256": "bb02904760aa922e82164d0877f97a35e4dde2bf67e36ad0b7df46ecc51bcdf6",
     "version": 1,
@@ -1553,7 +1553,7 @@
     }
   },
   {
-    "source": "/Users/luka/Desktop/AUDI_2/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.2/data/gtf/AudiTypeDisplayHigh_Normal_EU_Arabic.lur",
+    "source": "<workspace>/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.2/data/gtf/AudiTypeDisplayHigh_Normal_EU_Arabic.lur",
     "file": "AudiTypeDisplayHigh_Normal_EU_Arabic.lur",
     "sha256": "157438506b5cc07f6087fa0e36022f265cccf32f0ba1ab774b7ffef630db46fc",
     "version": 1,
@@ -3111,7 +3111,7 @@
     }
   },
   {
-    "source": "/Users/luka/Desktop/AUDI_2/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.2/data/gtf/AudiTypeDisplayHigh_Normal_Japanese.lur",
+    "source": "<workspace>/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.2/data/gtf/AudiTypeDisplayHigh_Normal_Japanese.lur",
     "file": "AudiTypeDisplayHigh_Normal_Japanese.lur",
     "sha256": "2934e7ad3371fd1282e7c2eef156fb822121f97cb32f9606ba7a20a741b945cf",
     "version": 1,
@@ -48059,7 +48059,7 @@
     }
   },
   {
-    "source": "/Users/luka/Desktop/AUDI_2/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.2/data/gtf/AudiTypeDisplayHigh_Normal_Korea.lur",
+    "source": "<workspace>/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.2/data/gtf/AudiTypeDisplayHigh_Normal_Korea.lur",
     "file": "AudiTypeDisplayHigh_Normal_Korea.lur",
     "sha256": "66f414eb43dcc9feed93cf53731a65292da3509874719dec9776e2965e3ed7c6",
     "version": 1,
@@ -111137,7 +111137,7 @@
     }
   },
   {
-    "source": "/Users/luka/Desktop/AUDI_2/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.2/data/gtf/AudiTypeDisplay_Normal_China.lur",
+    "source": "<workspace>/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.2/data/gtf/AudiTypeDisplay_Normal_China.lur",
     "file": "AudiTypeDisplay_Normal_China.lur",
     "sha256": "2a394be127f682f9b10f00b9acc5807320cbeaae5c7dd9d10ad111712f7c3818",
     "version": 1,
@@ -112695,7 +112695,7 @@
     }
   },
   {
-    "source": "/Users/luka/Desktop/AUDI_2/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.2/data/gtf/AudiTypeDisplay_Normal_EU_Arabic.lur",
+    "source": "<workspace>/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.2/data/gtf/AudiTypeDisplay_Normal_EU_Arabic.lur",
     "file": "AudiTypeDisplay_Normal_EU_Arabic.lur",
     "sha256": "8c6843f59c908c3794e6615a880a47f44bc9fce62d165e6328f4a010345b3b5b",
     "version": 1,
@@ -114258,7 +114258,7 @@
     }
   },
   {
-    "source": "/Users/luka/Desktop/AUDI_2/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.2/data/gtf/AudiTypeDisplay_Normal_Japanese.lur",
+    "source": "<workspace>/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.2/data/gtf/AudiTypeDisplay_Normal_Japanese.lur",
     "file": "AudiTypeDisplay_Normal_Japanese.lur",
     "sha256": "628a9f47232100b62d9e278e61d95cc2bb7ee47482d8770e807865e04bebb722",
     "version": 1,
@@ -159211,7 +159211,7 @@
     }
   },
   {
-    "source": "/Users/luka/Desktop/AUDI_2/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.2/data/gtf/AudiTypeDisplay_Normal_Korea.lur",
+    "source": "<workspace>/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.2/data/gtf/AudiTypeDisplay_Normal_Korea.lur",
     "file": "AudiTypeDisplay_Normal_Korea.lur",
     "sha256": "f0d68135e999dac107b19f39268e28d6cb89d531e6ed5d8d413144bdf90e6263",
     "version": 1,

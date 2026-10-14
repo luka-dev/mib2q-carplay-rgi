@@ -14,7 +14,8 @@ from capstone import Cs, CS_ARCH_ARM, CS_MODE_ARM
 from elftools.elf.elffile import ELFFile
 
 HERE = Path(__file__).resolve().parent
-SOURCE = Path('/Users/luka/Desktop/AUDI_2/Firmwares/HU/MU1316-MHI2Q_US_AUG22_P5087-JTB-07426.03.1811930398/advanced/MU1316-appimg/eso/bin/apps/btstack')
+import os as _os; _REPO = _os.path.normpath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '../..')); _WS = _os.environ.get('AUDI_WORKSPACE', _os.path.expanduser('~/Desktop/AUDI_2'))  # sibling firmware/data dirs
+SOURCE = Path(_WS + '/Firmwares/HU/MU1316-MHI2Q_US_AUG22_P5087-JTB-07426.03.1811930398/advanced/MU1316-appimg/eso/bin/apps/btstack')
 EXPECTED_SHA = '154c17826f0773a57b2004f5b17d818e3437c46fcbb6a857d40c696898c29bc5'
 HOOK = 0x11ECD0
 RESUME = 0x11ECD4

@@ -1,5 +1,6 @@
 import struct, sys
-LIB="/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/apac_decoder/reference/.build/libs/libSPF_CP_PlugInWrapper.so"
+import os as _os; _REPO = _os.path.normpath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '../../..')); _WS = _os.environ.get('AUDI_WORKSPACE', _os.path.expanduser('~/Desktop/AUDI_2'))  # sibling firmware/data dirs
+LIB=_REPO + "/apac_decoder/reference/.build/libs/libSPF_CP_PlugInWrapper.so"
 DATA=open(LIB,'rb').read()
 # parse program headers (ELF64 LE)
 e_phoff=struct.unpack_from('<Q',DATA,0x20)[0]

@@ -4239,7 +4239,7 @@
   },
   "launch": {
     "started_utc": "2026-10-04T06:57:24.303957+00:00",
-    "root": "/mnt/shared/users/luka/Audi/upmix-training-2026-09-11/runtime/scene-fly-topology-4096-20261004-a",
+    "root": "/mnt/shared/users/<user>/Audi/upmix-training-2026-09-11/runtime/scene-fly-topology-4096-20261004-a",
     "supervisor_pid": 428343,
     "source_hashes": {
       "scene_flywire_783_64.json": "d57c7966deb0c792b51c02fdeb4ea73a3690cd26d5c999adc8cee0aa8f7cb461",

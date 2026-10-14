@@ -125,7 +125,7 @@ This establishes the behavior of the checked RGI and road-object interfaces. It 
 ## 🔗 Sources and artifacts
 
 - Earlier notes: [Feature Survey](../altscreen-and-video/CARPLAY_FEATURE_SURVEY.md), [Route Guidance TLVs](IAP2_ROUTE_GUIDANCE_TLVS.md), [Third-party Nav Apps](THIRD_PARTY_NAV_APPS.md).
-- Local source root: `/Users/luka/Desktop/AUDI_2/Refferences`.
+- Local source root: `<workspace>/Refferences`.
 - Raw disassembly, incoming dispatch tables, fingerprints, and IPSW build metadata: `ios_carplay_diff/analysis/speed_limit_2026-09-29/`. The directory was started on September 29 and completed September 30.
 - `accessoryd`: `ios_carplay_diff/ios26/23G71__iPhone18,2/System/Library/PrivateFrameworks/CoreAccessories.framework/Support/accessoryd` and the corresponding `ios27/24A5418b__iPhone18,1/.../accessoryd`.
 - `DashBoard`: `ios266_extract/dylibs/DashBoard` and `ios27_dsc/24A5418b__iPhone18,1/DashBoard`, plus each version's original `dyld_shared_cache_arm64e`.

@@ -1,7 +1,7 @@
 {
   "font": {
     "file": "fonts/LT_Univers440_88perc_Arabic.ttf",
-    "source": "/Users/luka/Desktop/AUDI_2/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.2/data/gtf/LT_Univers440_88perc_Arabic.ttf",
+    "source": "<workspace>/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.2/data/gtf/LT_Univers440_88perc_Arabic.ttf",
     "bytes": 228176,
     "sha256": "26beb8735551f6ff1bc7c43c70657cdc361365104d21dca185bcc7a4816192c8",
     "family": "LTUnivers 440 Extended",

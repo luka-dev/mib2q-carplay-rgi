@@ -7,7 +7,7 @@ obtained shell or a script execution entry and are not instructions to open GEM.
 ## Inputs and limits
 
 Requested backup:
-`/Users/luka/Desktop/AUDI_2/Firmwares/HU/MU1316-MHI2Q_US_AUG22_P5087-JTB-07426.03.1811930398`.
+`<workspace>/Firmwares/HU/MU1316-MHI2Q_US_AUG22_P5087-JTB-07426.03.1811930398`.
 
 MMX IFS binaries absent from that backup were inspected in the neighboring
 `MHI2Q_US_AUG22_P5087_MU1316/extracted/` tree. These findings are verified for

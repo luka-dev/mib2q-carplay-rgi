@@ -36,14 +36,14 @@ bundle_mu1316_p5087/
 ## Local verification
 
 ```sh
-cd /Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/deploy/experimental/usb_replug_recovery/bundle_mu1316_p5087
+cd deploy/experimental/usb_replug_recovery/bundle_mu1316_p5087
 ./verify_bundle.sh
 ```
 
 Expected: eight `OK` lines and `bundle verification: PASS`.
 
 By default
-`/Users/luka/Desktop/AUDI_2/audi_ssh.sh` is used. For a different helper:
+`<workspace>/audi_ssh.sh` is used. For a different helper:
 
 ```sh
 AUDI_SSH_HELPER=/absolute/path/to/audi_ssh.sh ./verify_over_ssh.sh stock

@@ -89,7 +89,8 @@ for ea,lst in sorted(FUNCS.items()):
     out["text"].append(rec)
 
 # ---- vtables / typeinfo / rodata ----
-SYMS="/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/docs/reference/apac_symbols_pioneer.txt"
+import os as _os; _REPO = _os.path.normpath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '../../../..')); _WS = _os.environ.get('AUDI_WORKSPACE', _os.path.expanduser('~/Desktop/AUDI_2'))  # sibling firmware/data dirs
+SYMS=_REPO + "/docs/reference/apac_symbols_pioneer.txt"
 rows=[]
 for line in open(SYMS):
     m=re.match(r'^(0x[0-9a-f]+)\s+(\S+)\s+(\d+)\s+(.*)$', line.rstrip("\n"))

@@ -88,8 +88,8 @@ Monitoring uses two fixed 256-frame crops per admitted song, approximately 1.38 
 ### Recorded launch
 
 ```text
-NAS: 100.85.38.96, CPU only; CUDA unavailable
-Root: /mnt/shared/users/luka/Audi/upmix-training-2026-09-11/runtime/scene-joint-front-rear-20261003-a
+NAS: <nas>, CPU only; CUDA unavailable
+Root: /mnt/shared/users/<user>/Audi/upmix-training-2026-09-11/runtime/scene-joint-front-rear-20261003-a
 Start: 2026-10-03T23:08:04.960675+00:00
 PID at launch: 403068
 Horizon: 4096 updates

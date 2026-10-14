@@ -1,9 +1,9 @@
 {
-  "firmware": "/Users/luka/Desktop/AUDI_2/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018",
+  "firmware": "<workspace>/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018",
   "fonts": [
     {
       "file": "fonts/arial.ftgz",
-      "source": "/Users/luka/Desktop/AUDI_2/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/ifs_stage1_recovery/data/fonts/arial.ftgz",
+      "source": "<workspace>/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/ifs_stage1_recovery/data/fonts/arial.ftgz",
       "bytes": 24872,
       "sha256": "f1bba14b6eb243fd7909319d7135253ab1eec72dcbcfce1dd860de507a68f834",
       "kind": "gzip-wrapped raster font, not TrueType cmap",
@@ -12,7 +12,7 @@
     },
     {
       "file": "fonts/AudiTypeDisplay-Normal.ttf",
-      "source": "/Users/luka/Desktop/AUDI_2/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.1/data/gtf/AudiTypeDisplay-Normal.ttf",
+      "source": "<workspace>/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.1/data/gtf/AudiTypeDisplay-Normal.ttf",
       "bytes": 280096,
       "sha256": "4e0f6fb1d522df648c7430b3a345f24c7f85af1e3b7ba82a07b55c316f036b5e",
       "family": "Audi Type Display",
@@ -215,7 +215,7 @@
     },
     {
       "file": "fonts/AudiTypeDisplay-Bold.ttf",
-      "source": "/Users/luka/Desktop/AUDI_2/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.2/data/gtf/AudiTypeDisplay-Bold.ttf",
+      "source": "<workspace>/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.2/data/gtf/AudiTypeDisplay-Bold.ttf",
       "bytes": 235800,
       "sha256": "035e0f76aeae954ad4c09a5e9542488b7199b5ee796fd9e7fda1b06816df87d8",
       "family": "Audi Type Display",
@@ -418,7 +418,7 @@
     },
     {
       "file": "fonts/AudiTypeDisplayHigh-Bold.ttf",
-      "source": "/Users/luka/Desktop/AUDI_2/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.2/data/gtf/AudiTypeDisplayHigh-Bold.ttf",
+      "source": "<workspace>/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.2/data/gtf/AudiTypeDisplayHigh-Bold.ttf",
       "bytes": 305032,
       "sha256": "c9d43c4e781b91ee857ccbace8feb850bfdbdd5cf8e182b6749bc8563f731abb",
       "family": "Audi Type Display High",
@@ -625,7 +625,7 @@
     },
     {
       "file": "fonts/AudiTypeDisplayHigh-Normal.ttf",
-      "source": "/Users/luka/Desktop/AUDI_2/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.2/data/gtf/AudiTypeDisplayHigh-Normal.ttf",
+      "source": "<workspace>/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.2/data/gtf/AudiTypeDisplayHigh-Normal.ttf",
       "bytes": 408212,
       "sha256": "dc859c10b86b8629fbc1d426ecd2b7cade58a11deb2e015d17a23df8ca518c19",
       "family": "Audi Type Display High",
@@ -832,7 +832,7 @@
     },
     {
       "file": "fonts/LT_Univers440_88perc_Arabic.ttf",
-      "source": "/Users/luka/Desktop/AUDI_2/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.2/data/gtf/LT_Univers440_88perc_Arabic.ttf",
+      "source": "<workspace>/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.2/data/gtf/LT_Univers440_88perc_Arabic.ttf",
       "bytes": 228176,
       "sha256": "26beb8735551f6ff1bc7c43c70657cdc361365104d21dca185bcc7a4816192c8",
       "family": "LTUnivers 440 Extended",
@@ -1039,7 +1039,7 @@
     },
     {
       "file": "fonts/SourceHanSansJP-Regular.otf",
-      "source": "/Users/luka/Desktop/AUDI_2/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.2/data/gtf/SourceHanSansJP-Regular.otf",
+      "source": "<workspace>/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.2/data/gtf/SourceHanSansJP-Regular.otf",
       "bytes": 4480124,
       "sha256": "cd156d1efe50e67393e31e8d3f607501bed4963a8f5bd43e2818b3986f9d68e6",
       "family": "Source Han Sans JP Regular",
@@ -1247,7 +1247,7 @@
     },
     {
       "file": "fonts/SourceHanSansKR-Regular.otf",
-      "source": "/Users/luka/Desktop/AUDI_2/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.2/data/gtf/SourceHanSansKR-Regular.otf",
+      "source": "<workspace>/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.2/data/gtf/SourceHanSansKR-Regular.otf",
       "bytes": 4560056,
       "sha256": "c2daeecb5e7734764d2af9ba78edaccfbfdc3b63122296a20dbb5e256bc92794",
       "family": "Source Han Sans KR Regular",
@@ -1455,7 +1455,7 @@
     },
     {
       "file": "fonts/ZYHei_GB18030_c.ttf",
-      "source": "/Users/luka/Desktop/AUDI_2/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.2/data/gtf/ZYHei_GB18030_c.ttf",
+      "source": "<workspace>/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.2/data/gtf/ZYHei_GB18030_c.ttf",
       "bytes": 2286896,
       "sha256": "9f9a43a0ac80ae774929be0a2516be6cdefad047e2c151d62a593edf4d1438f3",
       "family": "ZYHei_GB18030_c",
@@ -1639,7 +1639,7 @@
     },
     {
       "file": "fonts/AudiTypeDisplayHigh-Normal_08.ttf",
-      "source": "/Users/luka/Desktop/AUDI_2/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage3_fs/data/gem/fonts/AudiTypeDisplayHigh-Normal_08.ttf",
+      "source": "<workspace>/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage3_fs/data/gem/fonts/AudiTypeDisplayHigh-Normal_08.ttf",
       "bytes": 217004,
       "sha256": "5a9e529d2fbc677dad0938bf681b9431bc8335f718070f9cb952ac9243c23d95",
       "family": "Audi Type Display High",

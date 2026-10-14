@@ -124,7 +124,7 @@ PNG — образцы из извлечённых TTF через FreeType/Pillo
 
 ```sh
 python3 tools/vc_font_audit.py \
-  /Users/luka/Desktop/AUDI_2/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018 \
+  <workspace>/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018 \
   output/r2/vc-fonts-0379-20260910 --refresh
 ```
 

@@ -1,7 +1,7 @@
 {
   "launch": {
     "started_utc": "2026-10-04T15:23:23.875214+00:00",
-    "root": "/mnt/shared/users/luka/Audi/upmix-training-2026-09-11/runtime/scene-encoded-history16-fixed-8192-20261004-a",
+    "root": "/mnt/shared/users/<user>/Audi/upmix-training-2026-09-11/runtime/scene-encoded-history16-fixed-8192-20261004-a",
     "supervisor_pid": 449798,
     "source_hashes": {
       "run_scene_fly_pair_nas.py": "44c139243ea6d3bf7fea10f14b79a8f8e53f6f4dd2e392c61530e121a9595cc9",

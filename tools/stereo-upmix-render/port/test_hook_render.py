@@ -44,8 +44,9 @@ TOOLS = os.path.dirname(HERE)
 ROOT = os.path.dirname(os.path.dirname(TOOLS))
 HOOK = os.path.join(ROOT, "hook", "audio")
 BUILD = os.path.join(ROOT, "build", "scene_port")
-WAV = "/Users/luka/Desktop/AUDI_2/upmix-data/scene_car_kit_2026-10-08/sources/album01.wav"
-DEFAULT_FIX = "/Users/luka/Desktop/AUDI_2/upmix-data/scene_port_fixtures_2026-10-09"
+import os as _os; _REPO = _os.path.normpath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '../../..')); _WS = _os.environ.get('AUDI_WORKSPACE', _os.path.expanduser('~/Desktop/AUDI_2'))  # sibling firmware/data dirs
+WAV = _WS + "/upmix-data/scene_car_kit_2026-10-08/sources/album01.wav"
+DEFAULT_FIX = _WS + "/upmix-data/scene_port_fixtures_2026-10-09"
 LATENCY, TOL_DB, FRONT_Q15 = 1024, -60.0, 31392
 MASK_HOP, MASK_BINS, MASK_PREFILL = 512, 257, 256
 LIB_SOURCES = ["stereo_upmix.c", "scene_engine_math.c",

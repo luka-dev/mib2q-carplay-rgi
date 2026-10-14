@@ -1,6 +1,6 @@
 # NAS Scene-Training Archive Recheck
 
-*2026-10-03 · Saved-report inspection on NAS 100.85.38.96 · No new training, audio inference, listening or deployment.*
+*2026-10-03 · Saved-report inspection on NAS <nas> · No new training, audio inference, listening or deployment.*
 
 ---
 
@@ -17,7 +17,7 @@ The owner pointed back to the NAS after proposing joint front/rear scene learnin
 Read timestamp for the numerical excerpts: **2026-10-03 20:07:45 UTC**. Private root:
 
 ```text
-/mnt/shared/users/luka/Audi/upmix-training-2026-09-11
+/mnt/shared/users/<user>/Audi/upmix-training-2026-09-11
 ```
 
 The supplied SSH helper authenticated; private reads used the authorized `luka` account context. No account/configuration changes were made. The runtime root contains206 directories, including57 named `p1-*`. Those are directories containing training, qualification, preparation and diagnostic work, **not57 independent models**.

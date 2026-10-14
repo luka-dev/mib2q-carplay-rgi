@@ -1,5 +1,6 @@
 import json,struct,os,collections,bisect,math,shutil
-OUT="/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/apac_decoder/reference/decomp"
+import os as _os; _REPO = _os.path.normpath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '../../../..')); _WS = _os.environ.get('AUDI_WORKSPACE', _os.path.expanduser('~/Desktop/AUDI_2'))  # sibling firmware/data dirs
+OUT=_REPO + "/apac_decoder/reference/decomp"
 shutil.rmtree(OUT+"/rodata", ignore_errors=True); os.makedirs(OUT+"/rodata")
 f=open("/tmp/apacwork/lib.so","rb").read()
 D=json.load(open("/tmp/apacwork/out/final.json")); DR=json.load(open("/tmp/apacwork/out/drr.json"))

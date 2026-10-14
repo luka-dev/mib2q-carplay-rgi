@@ -1,7 +1,7 @@
 {
   "launch": {
     "started_utc": "2026-10-04T00:09:39.125056+00:00",
-    "root": "/mnt/shared/users/luka/Audi/upmix-training-2026-09-11/runtime/scene-joint-fixed-train-8192-20261003-b",
+    "root": "/mnt/shared/users/<user>/Audi/upmix-training-2026-09-11/runtime/scene-joint-fixed-train-8192-20261003-b",
     "pid": 409909,
     "source_hashes": {
       "scene_joint_net.py": "c0df585b44146301c160beacd4997d5a1b45ba16c036b74684105026edbcc238",
@@ -156,7 +156,7 @@
         "dry_pcm_null_max": 4.870817065238953e-06,
         "dry_pcm_null_relative_rms": 5.395074822445167e-07
       },
-      "predecessor": "/mnt/shared/users/luka/Audi/upmix-training-2026-09-11/runtime/scene-joint-fixed-train-20261003-a/run",
+      "predecessor": "/mnt/shared/users/<user>/Audi/upmix-training-2026-09-11/runtime/scene-joint-fixed-train-20261003-a/run",
       "randomness": "No stochastic operations after initialization in this fixed-crop recipe",
       "max_replayed_metric_difference": 0.0
     },

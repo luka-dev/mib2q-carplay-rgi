@@ -21,7 +21,8 @@ import argparse
 import sys
 from pathlib import Path
 
-FW = Path("/Users/luka/Desktop/AUDI_2/Firmwares/HU")
+import os as _os; _REPO = _os.path.normpath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..')); _WS = _os.environ.get('AUDI_WORKSPACE', _os.path.expanduser('~/Desktop/AUDI_2'))  # sibling firmware/data dirs
+FW = Path(_WS + "/Firmwares/HU")
 OURS = FW / "MU1316-MHI2Q_US_AUG22_P5087-JTB-07426.03.1811930398/advanced/MU1316-appimg/eso/bin/apps/btstack"
 DONOR = FW / "MHI2_US_AUG22_K3347_MU1439/extracted/app50/eso/bin/apps/btstack"
 

@@ -8,9 +8,9 @@
 # byte-identical to US.
 set -euo pipefail
 PROJECT_DIR=$(cd "$(dirname "$0")/.." && pwd)
-TOOLS_DIR="$PROJECT_DIR/../../Tools/jxe2jar"
-JDK="$TOOLS_DIR/jvms/zulu8.78.0.19-ca-jdk8.0.412-macosx_aarch64/zulu-8.jdk/Contents/Home"
-ASM="$TOOLS_DIR/tools/uninline/lib/asm-9.7.jar:$TOOLS_DIR/tools/uninline/lib/asm-tree-9.7.jar"
+. "$PROJECT_DIR/scripts/java_env.sh"; TOOLS_DIR=$JXE2JAR; java_need_jxe2jar audit_java_variants
+JDK="$JAVA8_HOME"
+ASM="$ASM_CP"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 "$JDK/bin/javac" -cp "$ASM" -d "$T" "$PROJECT_DIR/tests/JavaStockLinkageAudit.java"
 audit() {   # audit <jar> <stock>

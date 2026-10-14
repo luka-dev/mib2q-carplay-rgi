@@ -83,7 +83,7 @@
   ],
   "locations": {
     "pc_root": "D:\\upmix\\third_party\\bsrnn_reference",
-    "mac_source": "/Users/luka/Desktop/AUDI_2/Research/bsrnn-reference"
+    "mac_source": "<workspace>/Research/bsrnn-reference"
   },
   "verification_date": "2026-09-29",
   "pc_dependency_inventory": {

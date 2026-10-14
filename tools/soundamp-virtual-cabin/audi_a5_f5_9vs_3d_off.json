@@ -99,7 +99,7 @@
       "public_reference": "https://static.nhtsa.gov/odi/tsbs/2021/MC-10189329-0001.pdf"
     },
     "documentation": {
-      "current_flow_document": "/Users/luka/Documents/Audi/S5_B9_2018_by_category/S5_B9_2018_4_Electrical_MIB2_Wiring.pdf",
+      "current_flow_document": "~/Documents/Audi/S5_B9_2018_by_category/S5_B9_2018_4_Electrical_MIB2_Wiring.pdf",
       "system_pages": "PDF 540-548, Current Flow Diagram No. 45/1-45/9, Bang & Olufsen sound system (9VS), from July 2016",
       "connector_page": "PDF 1694, J525 T38 connector assignment for Coupe/Sportback up to September 2019"
     }
@@ -157,7 +157,7 @@
     {"id": "R221", "name": "Front right treble 2", "zone": "front", "side": "right", "location": "A-pillar, top right", "schematic_xyz": [0.82, 0.82, 0.88], "orientation": null}
   ],
   "speaker_layout_provenance": {
-    "document": "/Users/luka/Documents/Audi/Audi A5 (2016 - 2019) [F5,F53,F57,F5A] - Repair manuals/D4B8067F819-Communication.pdf",
+    "document": "~/Documents/Audi/Audi A5 (2016 - 2019) [F5,F53,F57,F5A] - Repair manuals/D4B8067F819-Communication.pdf",
     "pdf_pages": "31-33",
     "manual_pages": "27-29",
     "edition": "09.2021",

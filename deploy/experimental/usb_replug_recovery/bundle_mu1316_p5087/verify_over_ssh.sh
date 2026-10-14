@@ -5,7 +5,7 @@
 set -eu
 
 BUNDLE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-SSH_HELPER=${AUDI_SSH_HELPER:-/Users/luka/Desktop/AUDI_2/audi_ssh.sh}
+SSH_HELPER=${AUDI_SSH_HELPER:-${AUDI_WORKSPACE:-$HOME/Desktop/AUDI_2}/audi_ssh.sh}
 EXPECTED=${1:-}
 
 case "${EXPECTED}" in

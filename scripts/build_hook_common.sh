@@ -1,7 +1,7 @@
 #!/bin/bash
-# Shared compile+verify core for the CarPlay hook, sourced by the two thin
-# entrypoints:
-#   build_hook.sh            -> unprotected build into build/unprotected/
+# Shared compile+verify core for the CarPlay hook, sourced by the build entrypoints:
+#   build_hook.sh            -> build into build/unprotected/
+# >>> protected
 #   build_hook_protected.sh  -> VIN-locked build into build/protected_<VIN>/
 #
 # There is ONE copy of the compile and the ABI-safety verify on purpose. The
@@ -11,12 +11,14 @@
 # (the gate is #ifdef CARPLAY_PROT and, unstamped, fails inert on every car), so
 # it cannot be a post-step over an ordinary .so - hence a shared core, not a
 # wrapper.
+# <<< protected
 #
 # The caller sets, then calls carplay_build_hook:
-#   OUTDIR_REL   (required)  output dir relative to the repo root, e.g.
-#                            build/unprotected  or  build/protected_<VIN>
+#   OUTDIR_REL   (required)  output dir relative to the repo root, e.g. build/unprotected
+# >>> protected
 #   PROT_BUILD   (0/1, default 0)   1 links the VIN-gate protector objects
 #   PROT_SECRET  (hex)              required when PROT_BUILD=1
+# <<< protected
 # It also honors: QNX_TOOLCHAIN_VARIANT,
 # HOOK_AUDIO, AUDIO_STATE_TRACE, ALTSCREEN_PACE_TRACE, LOG_RGD_PACKET_RAW.
 # On success it sets OUT and APAC_OUT (absolute paths) for the caller.
@@ -35,14 +37,15 @@ carplay_build_hook() {
   PROJECT_DIR="$(cd "$_BHC_DIR/.." && pwd)"
 
   OUTDIR_REL="${OUTDIR_REL:?carplay_build_hook: OUTDIR_REL must be set}"
-  local PROT_BUILD="${PROT_BUILD:-0}"
+  # >>> protected
+  local PROT_BUILD="${PROT_BUILD:-0}" PROT_SECRET_ENC=""
   local PROT_SECRET="${PROT_SECRET:-}"
   if [ "$PROT_BUILD" = "1" ] && [ -z "$PROT_SECRET" ]; then
     echo "carplay_build_hook: PROT_BUILD=1 requires PROT_SECRET"; return 1
   fi
   # The runtime gets the secret masked (protector/prot_rt.c prot_secret), never as a string.
-  local PROT_SECRET_ENC=""
   [ "$PROT_BUILD" = "1" ] && PROT_SECRET_ENC="$(python3 -c 'import sys; print(",".join(str(b ^ ((i*167+59) & 255)) for i, b in enumerate(sys.argv[1].encode())))' "$PROT_SECRET")"
+  # <<< protected
 
   local QNX_TOOLCHAIN_VARIANT="${QNX_TOOLCHAIN_VARIANT:-latest}"
   case "$QNX_TOOLCHAIN_VARIANT" in
@@ -108,7 +111,9 @@ carplay_build_hook() {
   # bench, so a drifted flag list can't measure a binary nobody ships).
   . "$_BHC_DIR/apac_flags.sh"
 
+  # >>> protected
   [ "$PROT_BUILD" = "1" ] && echo "Protected build: VIN-gate objects linked in"
+  # <<< protected
   echo "=== CarPlay Hook Build (Docker $IMG) -> $OUTDIR_REL ==="
 
   docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
@@ -126,22 +131,24 @@ carplay_build_hook() {
     OUTD=/src/$OUTDIR_REL
     mkdir -p $OUTD
 
+    HOOK_AUDIO='"$HOOK_AUDIO"'
+    HOOK_WIRELESS='"$HOOK_WIRELESS"'
+    EXTRA_OBJS=""; EXTRA_CC=""
+    # >>> protected
     # Protected build: compile the VIN-gate protector objects (pure C, no
     # constructor, hidden visibility -> no new dynamic exports, .init_array stays
     # compiler-only). Linked into both .so; each gets its own PROT slot.
     PROT_BUILD='"$PROT_BUILD"'
-    HOOK_AUDIO='"$HOOK_AUDIO"'
-    HOOK_WIRELESS='"$HOOK_WIRELESS"'
     PROT_SECRET_ENC='"$PROT_SECRET_ENC"'
-    PROT_OBJS=""; PROT_CC=""
     if [ "$PROT_BUILD" = "1" ]; then
         for p in prot_rt prot_vin carplay_prot; do
             $CC -O2 -fPIC -fvisibility=hidden -std=gnu99 -I/src/protector \
                 -DPROT_SECRET_ENC="$PROT_SECRET_ENC" -c /src/protector/$p.c -o $OBJ/$p.o
         done
-        PROT_OBJS="$OBJ/prot_rt.o $OBJ/prot_vin.o $OBJ/carplay_prot.o"
-        PROT_CC="-DCARPLAY_PROT -I/src/protector"
+        EXTRA_OBJS="$OBJ/prot_rt.o $OBJ/prot_vin.o $OBJ/carplay_prot.o"
+        EXTRA_CC="-DCARPLAY_PROT -I/src/protector"
     fi
+    # <<< protected
 
     if [ "$HOOK_AUDIO" = "1" ]; then
     # The APAC decoder port and its C shim.  The flag set comes from
@@ -151,13 +158,13 @@ carplay_build_hook() {
     CXXFLAGS="'"$APAC_CXXFLAGS_NOINC"' \
               -I/src/apac_decoder/include -I/src/hook/audio"
     for f in /src/apac_decoder/src/*.cpp /src/hook/audio/apac_bridge.cpp; do
-        $CXX $CXXFLAGS $PROT_CC -c "$f" -o "$OBJ/cxx_$(basename "$f" .cpp).o"
+        $CXX $CXXFLAGS $EXTRA_CC -c "$f" -o "$OBJ/cxx_$(basename "$f" .cpp).o"
     done
     echo "  compiled $(ls $OBJ/cxx_*.o | wc -l | tr -d " ") APAC decoder objects"
 
     # Optional decoder library. One versioned C function table is its only
     # contract with libcarplay_hook.so.
-    $CC -shared -fPIC -O2 $OBJ/cxx_*.o $PROT_OBJS -o $OUTD/libcarplay_apac.so \
+    $CC -shared -fPIC -O2 $OBJ/cxx_*.o $EXTRA_OBJS -o $OUTD/libcarplay_apac.so \
         -Wl,--gc-sections -Wl,-soname,libcarplay_apac.so -lm
     fi
 
@@ -169,7 +176,7 @@ carplay_build_hook() {
           altscreen/altscreen_av.c altscreen/altscreen_hook.c telephony/tel_hook.c vehicle/vehicle_hook.c main.c"
     AUDIO_SRCS="audio/spatial_downmix.c audio/apap_crypto.c audio/apap_lifecycle.c \
           audio/apac_codec_loader.c audio/aac_bridge.c audio/audio_hook.c audio/upmix_level.c"
-    HOOK_CFLAGS="-fPIC -O2 -std=gnu99 -fvisibility=hidden -fdata-sections -ffunction-sections '"$CFLAGS_EXTRA"' $PROT_CC -I. -I/src/apac_decoder/include"
+    HOOK_CFLAGS="-fPIC -O2 -std=gnu99 -fvisibility=hidden -fdata-sections -ffunction-sections '"$CFLAGS_EXTRA"' $EXTRA_CC -I. -I/src/apac_decoder/include"
     DSP_OBJS=""
     WIRELESS_LIB=""
     if [ "$HOOK_WIRELESS" = "1" ]; then
@@ -185,7 +192,7 @@ carplay_build_hook() {
             DSP_OBJS="$DSP_OBJS $o"
         done
     fi
-    $CC -shared $HOOK_CFLAGS $SRCS $DSP_OBJS $PROT_OBJS $WIRELESS_LIB \
+    $CC -shared $HOOK_CFLAGS $SRCS $DSP_OBJS $EXTRA_OBJS $WIRELESS_LIB \
         -o $OUTD/libcarplay_hook.so -Wl,--gc-sections \
         -Wl,--version-script=/src/hook/carplay_hook.exports.map \
         -lz -lsocket -lm

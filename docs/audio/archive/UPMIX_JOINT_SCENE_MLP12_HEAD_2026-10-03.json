@@ -1,7 +1,7 @@
 {
   "launch": {
     "started_utc": "2026-10-04T01:16:04.726292+00:00",
-    "root": "/mnt/shared/users/luka/Audi/upmix-training-2026-09-11/runtime/scene-joint-head-mlp12-fixed-8192-20261003-c",
+    "root": "/mnt/shared/users/<user>/Audi/upmix-training-2026-09-11/runtime/scene-joint-head-mlp12-fixed-8192-20261003-c",
     "pid": 417087,
     "source_hashes": {
       "scene_joint_net.py": "c0df585b44146301c160beacd4997d5a1b45ba16c036b74684105026edbcc238",

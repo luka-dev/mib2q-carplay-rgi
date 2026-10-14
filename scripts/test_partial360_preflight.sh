@@ -3,10 +3,10 @@
 # Fresh Java patch compilation stays in a temporary directory; no HU or release writes.
 set -euo pipefail
 PROJECT_DIR=$(cd "$(dirname "$0")/.." && pwd)
-TOOLS_DIR="$PROJECT_DIR/../../Tools/jxe2jar"
-JDK="$TOOLS_DIR/jvms/zulu8.78.0.19-ca-jdk8.0.412-macosx_aarch64/zulu-8.jdk/Contents/Home"
-LIBS="$TOOLS_DIR/libs/org.osgi.framework-1.10.0.jar:$TOOLS_DIR/libs/org.osgi.util.tracker-1.5.4.jar"
-ASM="$TOOLS_DIR/tools/uninline/lib/asm-9.7.jar:$TOOLS_DIR/tools/uninline/lib/asm-tree-9.7.jar"
+. "$PROJECT_DIR/scripts/java_env.sh"; TOOLS_DIR=$JXE2JAR; java_need_jxe2jar test_partial360_preflight
+JDK="$JAVA8_HOME"
+LIBS="$OSGI_CP"
+ASM="$ASM_CP"
 TEST_DIR=$(mktemp -d)
 trap 'rm -rf "$TEST_DIR"' EXIT
 mkdir -p "$TEST_DIR/patch" "$TEST_DIR/stubs" "$TEST_DIR/test"

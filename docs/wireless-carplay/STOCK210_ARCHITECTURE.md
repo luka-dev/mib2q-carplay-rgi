@@ -169,7 +169,7 @@ Owner locks, the advisory generation marker and long-term pairing keys use
 
 ## 🔗 P5092 bootstrap reference and current iPhone clients
 
-`/Users/luka/Desktop/AUDI_2/Refferences/btstack-bootstrap-2026-09-28` is a
+`<workspace>/Refferences/btstack-bootstrap-2026-09-28` is a
 P5092 bootstrap source snapshot, not a working full CarPlay build. Its own
 `docs/VALIDATION.md` reports synthetic host/loopback and compile-only QNX
 checks, and explicitly leaves real iPhone and stock MFi operations unverified.

@@ -1,11 +1,11 @@
 {
   "schema": "joint-scene-nas-evidence-v1",
   "captured_utc": "2026-10-03T23:22:21.527450+00:00",
-  "root": "/mnt/shared/users/luka/Audi/upmix-training-2026-09-11/runtime/scene-joint-front-rear-20261003-a",
+  "root": "/mnt/shared/users/<user>/Audi/upmix-training-2026-09-11/runtime/scene-joint-front-rear-20261003-a",
   "launch": {
     "started_utc": "2026-10-03T23:08:04.960675+00:00",
     "pid": 403068,
-    "root": "/mnt/shared/users/luka/Audi/upmix-training-2026-09-11/runtime/scene-joint-front-rear-20261003-a",
+    "root": "/mnt/shared/users/<user>/Audi/upmix-training-2026-09-11/runtime/scene-joint-front-rear-20261003-a",
     "source_hashes": {
       "scene_joint_net.py": "c0df585b44146301c160beacd4997d5a1b45ba16c036b74684105026edbcc238",
       "test_scene_joint_net.py": "723fa88fc5bf5f4d7213e68dcbdde2b836a665df89498cd9350243e9029285e8",

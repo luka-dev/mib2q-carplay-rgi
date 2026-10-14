@@ -31,9 +31,9 @@ The BSP client libraries (`libscreen`, `libEGL`, `libGLESv2`, `libOmxCore`) expo
 
 | Script | Input | Output | Notes |
 |---|---|---|---|
-| `scripts/build_hook.sh` | `hook/`, `apac_decoder/` | `build/unprotected/libcarplay_hook.so` (+ `libcarplay_apac.so`) | Builds without protection only. It takes no arguments, sets `OUTDIR_REL=build/unprotected` and calls the shared core. |
-| `scripts/build_hook_protected.sh <VIN>` | same | `build/protected_<VIN>/` (stamped) | Uses the same core with `PROT_BUILD=1`, then stamps the result. See [VIN Protection](VIN_PROTECTION.md). |
-| `scripts/build_hook_common.sh` | — | — | The one shared compile+verify core, `carplay_build_hook()`, sourced by both hook scripts. |
+| `scripts/build_hook.sh` | `hook/`, `apac_decoder/` | `build/unprotected/libcarplay_hook.so` (+ `libcarplay_apac.so`) | It takes no arguments, sets `OUTDIR_REL=build/unprotected` and calls the shared core. |
+| `scripts/build_hook_protected.sh <VIN>` | same | `build/protected_<VIN>/` (stamped) | Uses the same core with `PROT_BUILD=1`, then stamps the result. See [VIN Protection](VIN_PROTECTION.md). | <!-- protected-only -->
+| `scripts/build_hook_common.sh` | — | — | The one shared compile+verify core, `carplay_build_hook()`, sourced by the hook build scripts. |
 | `scripts/build_java.sh` | `java_patch/` (+ `java_patch_cn/*.patch`) + `java_resources/` | `build/carplay_hook.jar` (US/EU) + `build/carplay_hook_cn.jar` (CN), each with a `-build.json` receipt | Targets Foundation 1.1 with `-source 1.4 -target 1.4`. It takes no arguments. |
 | `scripts/build_renderers.sh [grid]` | `maneuver_render/`, `altscreen_render/`, `common/` | `build/maneuver_render`, `build/altscreen_render` (+ `build/libmaneuver_scene.a`) | The `grid` argument adds `-DCR_DEBUG_GRID` to the maneuver build. |
 | `scripts/apac_flags.sh` | — | — | The single source of the APAC compiler flags. The hook core and `apac_decoder/bench/build_qnx_bench.sh` both source it. |
@@ -41,7 +41,9 @@ The BSP client libraries (`libscreen`, `libEGL`, `libGLESv2`, `libOmxCore`) expo
 
 ## 🔧 The hook build and its verify
 
+<!-- >>> protected -->
 `build_hook_common.sh` deliberately holds **one** copy of the compile and the ABI-safety verify. The protected `.so` has to pass exactly the same gates as the shipping one, and a second copy of the verify could drift and ship a broken binary. Protection is decided at compile time (`#ifdef CARPLAY_PROT`), so it lives in a shared core rather than in a wrapper around a finished `.so`.
+<!-- <<< protected -->
 
 The APAC decoder ships as an **optional** `libcarplay_apac.so`. The hook only `dlopen`s it for a buffered Spatial stream and has no `DT_NEEDED` entry for it. It is C++ behind a C interface and is linked with GCC rather than G++, so `libstdc++.so.6` never ends up in `DT_NEEDED`; the unit's image does not carry that library.
 

@@ -331,7 +331,7 @@ Suggested order if the port is picked up: install branching and the Java rebuild
 
 ## 🔗 Where the artifacts live
 
-All outside this repo, under `/Users/luka/Desktop/AUDI_2/`:
+All outside this repo, under `<workspace>/`:
 
 | What | Path |
 |---|---|

@@ -34,7 +34,7 @@ Addresses below are ARM virtual addresses (image base `0x100000`). The donor is
 the target is
 `Firmwares/HU/MU1316-MHI2Q_US_AUG22_P5087-JTB-07426.03.1811930398/advanced/MU1316-appimg/eso/bin/apps/btstack`
 (SHA-256 `154c17826f0773a57b2004f5b17d818e3437c46fcbb6a857d40c696898c29bc5`).
-Those paths are relative to `/Users/luka/Desktop/AUDI_2/`. The `wireless/verify_graft_points.py`
+Those paths are relative to `<workspace>/`. The `wireless/verify_graft_points.py`
 checks passed against both binaries (8/8). Neither binary nor the head unit was modified.
 
 <a id="ownership-and-initialization-in-the-donor"></a>

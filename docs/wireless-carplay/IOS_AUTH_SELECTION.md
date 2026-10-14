@@ -102,7 +102,7 @@ stream key handling, as detailed in [Ios Wireless Session Gates](IOS_WIRELESS_SE
 
 ## 🔗 Independent dongle references (28 September 2026)
 
-`/Users/luka/Desktop/AUDI_2/Refferences/catplay` at commit `13d174e`
+`<workspace>/Refferences/catplay` at commit `13d174e`
 provides useful independent implementations of the Bluetooth/iAP2 and
 AirPlay endpoints, but its two roles must be kept separate:
 
@@ -129,7 +129,7 @@ AirPlay endpoints, but its two roles must be kept separate:
   references; its BlueZ object model and hard-coded channel 19 cannot be used
   as the QNX Blue SDK channel layout or allocation recipe.
 
-`/Users/luka/Desktop/AUDI_2/Refferences/wireless-carplay-dongle-reverse-engineering`
+`<workspace>/Refferences/wireless-carplay-dongle-reverse-engineering`
 contains a 1.4 GB `.git` directory but no checked-out files or valid HEAD,
 so there was no local code to inspect. Its public upstream README describes
 Carlinkit USB wireless-to-wired adapters, not an in-head-unit patch. Neither

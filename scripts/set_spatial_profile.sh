@@ -5,7 +5,7 @@
 
 set -eu
 
-DEFAULT_SSH=/Users/luka/Desktop/AUDI_2/audi_ssh.sh
+DEFAULT_SSH=${AUDI_WORKSPACE:-$HOME/Desktop/AUDI_2}/audi_ssh.sh
 AUDI_SSH=${AUDI_SSH:-$DEFAULT_SSH}
 REMOTE_STARTUP=/mnt/app/root/hooks/carplay_startup.sh
 

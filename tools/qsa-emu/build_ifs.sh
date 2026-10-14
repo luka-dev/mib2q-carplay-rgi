@@ -3,7 +3,7 @@
 set -e
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
-A=/Users/luka/Desktop/AUDI_2
+A=${AUDI_WORKSPACE:-$HOME/Desktop/AUDI_2}
 BSP=$A/Tools/bsp-qemu-arm/extract
 FW=$A/Firmwares/HU/MHI2Q_US_AUG22_P5087_MU1316/extracted
 OUT=$ROOT/build/qsa-emu

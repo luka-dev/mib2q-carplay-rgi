@@ -106,7 +106,7 @@ Metric names: *rear share* = fraction of a stem's own-cell energy (≥ 300 Hz, s
 | 09-26/27 | Phase 1: v21a in C (`hssr_mask.c`, int8/NEON, blob `HSSRMSK1` 694,856 B) | three cost passes | 3.92 → 1.97 → 1.46 M instr/control; Krait 1.33 ms per 10.67 ms control; 839/839 worker jobs on time; NEON vs scalar 4e-5, int8 decoder vs PyTorch 0.0168 [log] | shipped 27.09 | `UPMIX_MASK_PHASE1_REPORT_2026-09-27.md` |
 | 09-27 | reset bug (`c43a17c`) | `spa_stereo_upmix_reset()` dropped the guard and mask pointers | health line maskReady=0 with 1535/1535 worker jobs [log] | fixed; the mask net had never run in the car before 27.09 evening | `UPMIX_MASK_PHASE1_REPORT_2026-09-27.md` |
 | 09-27 | drive curve → shipped config (`04fb06d`) | mask drive 1.0 / 1.3 / 1.5 / 1.7, air −9, gate 0.5 | 40 DEV guitars / voice: 1.0 → 0.07 / 0.04; 1.3 → 0.13 / 0.06; 1.5 → 0.17 / 0.08 (4 songs > 15 %), drums 0.30, −34.4 dBFS; 1.7 → 0.21 / 0.10 (8) [offline] | drive 1.5 / air −9 / gate 0.5 shipped, sighted; [car] "something behind, still less than 22.09", "the ear still wants more" | `UPMIX_MASK_PHASE1_REPORT_2026-09-27.md`, `UPMIX_REWORK_BASELINE_2026-10-07.md` §2.4 |
-| 09-28 | best install build | `install_protected_WAUZZZF47HA098927.zip` from `800de9d` / Track A final `04fb06d` | SHA-256 710342a1…075f | the last Track A zip; owner blind listening pending | `UPMIX_REWORK_BASELINE_2026-10-07.md` §1 |
+| 09-28 | best install build | `install_<VIN>.zip` from `800de9d` / Track A final `04fb06d` | SHA-256 710342a1…075f | the last Track A zip; owner blind listening pending | `UPMIX_REWORK_BASELINE_2026-10-07.md` §1 |
 | 09-30 | Track A matched40 | host replay of the three deployed models at the shipped knobs, DEV40 × 60 s, 231 stem rows | guitar .165 / keys .152 / piano .095 / strings .069; voice .076 / bass .149 / drums .296; 29/40 swinging; −34.5 dBFS; 5 of 11 gates pass [offline] | the Track A reference row | `UPMIX_TRACKA_MATCHED40_2026-09-30.md` |
 
 ### Era 4, Track B research, never ported to the hook (2026-09-27 to 10-04)
@@ -240,7 +240,7 @@ No TEST20 row exists for the net c car candidate (`UPMIX_SCENE_ALGORITHM_2026-10
 
 ## 🗂️ Where the retired code went
 
-Removal commit of 2026-10-09; the last state before it is tagged ``upmix-universal-last-2026-10-09` (commit 1501fc7d)` (maintainer fills in). Rollback of the whole step: `git revert` of the removal commits, or the last Track A zip `build/install_protected_WAUZZZF47HA098927.zip` (SHA 710342a1…075f). Inventory: `UPMIX_CODE_RETIREMENT_2026-10-09.md`.
+Removal commit of 2026-10-09; the last state before it is tagged ``upmix-universal-last-2026-10-09` (commit 1501fc7d)` (maintainer fills in). Rollback of the whole step: `git revert` of the removal commits, or the last Track A zip `build/install_<VIN>.zip` (SHA 710342a1…075f). Inventory: `UPMIX_CODE_RETIREMENT_2026-10-09.md`.
 
 | Era | Deleted or archived on 2026-10-09 | How to recover | Described in |
 |---|---|---|---|

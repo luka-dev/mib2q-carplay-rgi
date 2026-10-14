@@ -223,7 +223,7 @@ All addresses are unslid VAs. The daemon binaries are Mach-O arm64e, 64-bit, lit
 
 ### Local sources
 
-Reference root: `/Users/luka/Desktop/AUDI_2/Refferences`.
+Reference root: `<workspace>/Refferences`.
 
 - Daemon 26.6: `ios_carplay_diff/ios26/23G71__iPhone18,2/System/Library/PrivateFrameworks/CoreAccessories.framework/Support/accessoryd`.
 - Daemon 27: `ios_carplay_diff/ios27/24A5418b__iPhone18,1/System/Library/PrivateFrameworks/CoreAccessories.framework/Support/accessoryd`.

@@ -21,7 +21,7 @@ This is documented menu semantics, not a measurement of each physical output.
 
 ## Java evidence
 
-Source root: `/Users/luka/Desktop/AUDI_2/Tools/jxe2jar/out/MU1316-combined-vf`.
+Source root: `<workspace>/Tools/jxe2jar/out/MU1316-combined-vf`.
 
 - `de/audi/tone/app/sound/SoundFocus.java`: UI indices All/Driver/Movie/Front/Rear
   are 0/1/2/3/4; DSI presets are 1/8/16/2/4. Visibility depends on the supplied
@@ -38,7 +38,7 @@ Source root: `/Users/luka/Desktop/AUDI_2/Tools/jxe2jar/out/MU1316-combined-vf`.
 
 ## Native MIBRoot evidence
 
-Binary: `/Users/luka/Desktop/AUDI_2/Firmwares/HU/MHI2Q_US_AUG22_P5087_MU1316/MHI2Q_US_AUG22_P5087_MU1316/RE/MIBRoot/MIBRoot`.
+Binary: `<workspace>/Firmwares/HU/MHI2Q_US_AUG22_P5087_MU1316/MHI2Q_US_AUG22_P5087_MU1316/RE/MIBRoot/MIBRoot`.
 ARM32 LE ELF; addresses below are virtual addresses. SHA-256:
 `e6e710d7467be935c3fea933ef9068a66786c392f3f7a0e78155ad9a1063acd1`.
 

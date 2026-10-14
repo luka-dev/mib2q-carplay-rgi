@@ -217,7 +217,7 @@ Every file was written as `name.new`, renamed, read back and compared byte for b
 
 - **The harness never resets; the hook resets on every stream.** Any state the config hands over in `init()` must be handed over in `reset()` too, and the test now says so.
 - **A stability count with an absolute threshold is a level metric in disguise.** Compare swings relative to the stem's own rear share, or level-match first.
-- **The unit's address is `10.173.189.1` (LAN) or `100.127.17.86` (tailscale).** The `8.78.0.19` that scripts mention is not the head unit; a day of "unreachable" was the wrong address.
+- **The unit's address is `10.173.189.1` (LAN) or `<hu-tailscale>` (tailscale).** The `8.78.0.19` that scripts mention is not the head unit; a day of "unreachable" was the wrong address.
 - **QNX 6.5 `expf`/`logf` on a softfp build cost ~180 instructions each.** Float-epsilon polynomials are exact enough for a network and 10× cheaper.
 - **`objdump` histograms beat line profiles at `-O3`.** Spills show as `vldr`/`vstr`; the fix is code shape, not intrinsics.
 - **zsh does not word-split unquoted variables.** Options assembled in a string become one argument; use arrays.

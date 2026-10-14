@@ -1,7 +1,7 @@
 # The one definition of how the APAC decoder is compiled for the head unit.
 #
-# Sourced by scripts/build_hook_common.sh, the compile core behind build_hook.sh and
-# build_hook_protected.sh that produces the shipping .so, and by
+# Sourced by scripts/build_hook_common.sh, the compile core behind build_hook.sh
+# that produces the shipping .so, and by
 # apac_decoder/bench/build_qnx_bench.sh, which measures how much it costs. Those
 # two had copies of the same flag list, and a copy that drifts does not announce
 # itself: the benchmark would go on reporting a headroom figure for a binary

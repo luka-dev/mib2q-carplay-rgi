@@ -10,8 +10,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tools'))
 from audit_amp_output_bindings import complex_process_mask, hmi_3d_mode_to_hu_level
 
-JAVA = Path('/Users/luka/Desktop/AUDI_2/Tools/jxe2jar/out/MU1316-vf')
-HU = Path('/Users/luka/Desktop/AUDI_2/Firmwares/HU/MHI2Q_US_AUG22_P5087_MU1316/'
+import os as _os; _REPO = _os.path.normpath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..')); _WS = _os.environ.get('AUDI_WORKSPACE', _os.path.expanduser('~/Desktop/AUDI_2'))  # sibling firmware/data dirs
+JAVA = Path(_WS + '/Tools/jxe2jar/out/MU1316-vf')
+HU = Path(_WS + '/Firmwares/HU/MHI2Q_US_AUG22_P5087_MU1316/'
           'MHI2Q_US_AUG22_P5087_MU1316/RE/MIBRoot/MIBRoot')
 
 

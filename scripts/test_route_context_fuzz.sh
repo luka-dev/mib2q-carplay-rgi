@@ -4,7 +4,7 @@
 # Replay a failure with the printed seed; complete output persists in build/route-context-fuzz/.
 set -euo pipefail
 PROJECT_DIR=$(cd "$(dirname "$0")/.." && pwd)
-TEST_JDK="$PROJECT_DIR/../../Tools/jxe2jar/jvms/zulu8.78.0.19-ca-jdk8.0.412-macosx_aarch64/zulu-8.jdk/Contents/Home"
+. "$PROJECT_DIR/scripts/java_env.sh"; TEST_JDK=$JAVA8_HOME
 ITERATIONS=${CARPLAY_FUZZ_ITERATIONS:-10000}
 SEEDS=${CARPLAY_FUZZ_SEEDS:-"32 47426351 0x8b338d86 0x4ccb85a6"}
 case "$ITERATIONS" in ''|*[!0-9]*) echo "Invalid CARPLAY_FUZZ_ITERATIONS" >&2; exit 2 ;; esac

@@ -19,7 +19,7 @@ Weights: [Zenodo record 17516442, version 3](https://zenodo.org/records/17516442
 | Optimized SIMO, one four-source checkpoint | `D:\upmix\third_party\bsrnn_reference\weights\simo-bsrnn-opt\simo-bsrnn-opt\separator.ckpt` |
 | Original archives | `D:\upmix\third_party\bsrnn_reference\archives` |
 | PC provenance and hashes | `D:\upmix\third_party\bsrnn_reference\INTAKE_COMPLETE.json` |
-| Full Mac code, same clean revision | `/Users/luka/Desktop/AUDI_2/Research/bsrnn-reference` |
+| Full Mac code, same clean revision | `<workspace>/Research/bsrnn-reference` |
 | Repository copy of the intake manifest | [Public provenance and checkpoint hashes](UPMIX_BSRNN_REFERENCE_INTAKE_2026-09-29.json) |
 | Reproducible downloader | [download_bsrnn_reference.py](../../../tools/stereo-upmix-render/pc/download_bsrnn_reference.py) |
 

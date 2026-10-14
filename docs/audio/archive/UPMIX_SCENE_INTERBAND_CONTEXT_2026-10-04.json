@@ -1,7 +1,7 @@
 {
   "launch": {
     "started_utc": "2026-10-04T14:28:51.558218+00:00",
-    "root": "/mnt/shared/users/luka/Audi/upmix-training-2026-09-11/runtime/scene-interband-gru12-fixed-8192-20261004-b",
+    "root": "/mnt/shared/users/<user>/Audi/upmix-training-2026-09-11/runtime/scene-interband-gru12-fixed-8192-20261004-b",
     "supervisor_pid": 440423,
     "source_hashes": {
       "test_scene_interband_net.py": "870c840fefa5407e99aee6544e16b4837a77defe6b5de7838de55b77b08807ee",
@@ -4167,7 +4167,7 @@
   "preflight_failure": {
     "launch": {
       "started_utc": "2026-10-04T14:26:38.192378+00:00",
-      "root": "/mnt/shared/users/luka/Audi/upmix-training-2026-09-11/runtime/scene-interband-gru12-fixed-8192-20261004-a",
+      "root": "/mnt/shared/users/<user>/Audi/upmix-training-2026-09-11/runtime/scene-interband-gru12-fixed-8192-20261004-a",
       "supervisor_pid": 440368,
       "source_hashes": {
         "test_scene_interband_net.py": "870c840fefa5407e99aee6544e16b4837a77defe6b5de7838de55b77b08807ee",
@@ -4191,7 +4191,7 @@
       "error": "'global_core'"
     },
     "failure_log": {
-      "supervisor.log": "Traceback (most recent call last):\n  File \"/mnt/shared/users/luka/Audi/upmix-training-2026-09-11/runtime/scene-interband-gru12-fixed-8192-20261004-a/code/run_scene_interband_nas.py\", line 88, in <module>\n    main()\n  File \"/mnt/shared/users/luka/Audi/upmix-training-2026-09-11/runtime/scene-interband-gru12-fixed-8192-20261004-a/code/run_scene_interband_nas.py\", line 32, in main\n    assert anchor['head_variant'] == 'mlp12' and anchor['global_core'] == 'gru'\n                                                 ~~~~~~^^^^^^^^^^^^^^^\nKeyError: 'global_core'\n"
+      "supervisor.log": "Traceback (most recent call last):\n  File \"/mnt/shared/users/<user>/Audi/upmix-training-2026-09-11/runtime/scene-interband-gru12-fixed-8192-20261004-a/code/run_scene_interband_nas.py\", line 88, in <module>\n    main()\n  File \"/mnt/shared/users/<user>/Audi/upmix-training-2026-09-11/runtime/scene-interband-gru12-fixed-8192-20261004-a/code/run_scene_interband_nas.py\", line 32, in main\n    assert anchor['head_variant'] == 'mlp12' and anchor['global_core'] == 'gru'\n                                                 ~~~~~~^^^^^^^^^^^^^^^\nKeyError: 'global_core'\n"
     }
   },
   "anchor_evidence": "UPMIX_JOINT_SCENE_MLP12_HEAD_2026-10-03.json",

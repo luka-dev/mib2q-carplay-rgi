@@ -75,7 +75,7 @@ The QNX 6.5 ARM build succeeds with the local
 
 ```sh
 docker run --rm --platform=linux/amd64 \
-  -v /Users/luka/Desktop/AUDI_2:/src \
+  -v <workspace>:/src \
   -w /src/Patches/mhi2-carplay \
   qnx65-armv7-toolchain:latest \
   /opt/rust/qnx-cargo build \

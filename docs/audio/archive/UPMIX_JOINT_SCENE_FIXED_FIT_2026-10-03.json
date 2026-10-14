@@ -2,7 +2,7 @@
   "launch": {
     "started_utc": "2026-10-03T23:52:50.530423+00:00",
     "pid": 407748,
-    "root": "/mnt/shared/users/luka/Audi/upmix-training-2026-09-11/runtime/scene-joint-fixed-train-20261003-a",
+    "root": "/mnt/shared/users/<user>/Audi/upmix-training-2026-09-11/runtime/scene-joint-fixed-train-20261003-a",
     "source_hashes": {
       "scene_joint_net.py": "c0df585b44146301c160beacd4997d5a1b45ba16c036b74684105026edbcc238",
       "train_scene_joint_nas.py": "bc6a72cef88ba17781e0631ffe2a5cf233b1626e34b038cf6570ab35f5c286a0",

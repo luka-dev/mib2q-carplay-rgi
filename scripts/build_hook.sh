@@ -1,8 +1,10 @@
 #!/bin/bash
 # Build the CarPlay LD_PRELOAD hook (libcarplay_hook.so) for QNX/ARMv7 in Docker.
-# Unprotected build; output lands in build/unprotected/. For a VIN-locked build
-# use scripts/build_hook_protected.sh. The compile+verify live in
-# scripts/build_hook_common.sh (one copy, shared by both).
+# Output lands in build/unprotected/. The compile+verify live in
+# scripts/build_hook_common.sh.
+# >>> protected
+# For a VIN-locked build use scripts/build_hook_protected.sh (same core).
+# <<< protected
 #
 #   ./scripts/build_hook.sh                        # the one image: WARN log, full
 #                                                  # diagnostics with carplay_verbose

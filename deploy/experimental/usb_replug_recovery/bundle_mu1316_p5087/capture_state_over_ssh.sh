@@ -4,7 +4,7 @@
 
 set -eu
 
-SSH_HELPER=${AUDI_SSH_HELPER:-/Users/luka/Desktop/AUDI_2/audi_ssh.sh}
+SSH_HELPER=${AUDI_SSH_HELPER:-${AUDI_WORKSPACE:-$HOME/Desktop/AUDI_2}/audi_ssh.sh}
 OUTPUT=${1:-./hu_usb_state.txt}
 
 [ -x "${SSH_HELPER}" ] || {

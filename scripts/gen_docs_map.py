@@ -47,13 +47,15 @@ MAP = [
    ("Earlier labs and review", ["IOS_VM_LAB", "IOS210_CODE_REVIEW"]),
  ]),
  ("build-and-deploy", "Build and Deploy", "📦", [
-   ("Build and release", ["BUILD_SYSTEM", "DEPLOY_AND_RELEASE", "SCENE_BACKEND_DEPLOY", "VIN_PROTECTION"]),
+   ("Build and release", ["BUILD_SYSTEM", "DEPLOY_AND_RELEASE", "SCENE_BACKEND_DEPLOY",
+                           "VIN_PROTECTION",  # protected-only
+                           ]),
    ("Audits and recovery", ["PRODUCTION_AUDITS", "ISSUE24_RCC_MMX_RECOVERY", "RE_ARTIFACTS"]),
  ]),
  ("reference", "Reference", "📚", [
    ("System", ["ARCHITECTURE", "HOOK_TO_JAVA_BUS", "RECORD_REPLAY_TOOLING"]),
    ("Formats and ports", ["IOS_CARPLAY_SPATIAL_WIREFORMAT", "MHI2_MU1439_PORT"]),
-   ("History and comparisons", ["ARCHIVE_AND_HISTORY", "REPOSITORY_COMPARISON_MHI2Q_EVO_2026-10-10"]),
+   ("History", ["ARCHIVE_AND_HISTORY"]),
  ]),
 ]
 

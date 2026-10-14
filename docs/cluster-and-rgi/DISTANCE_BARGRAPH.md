@@ -71,7 +71,7 @@ Sources: `DISTANCE_BARGRAPH_CHAIN`, `RGI_HUD_RENDERER_KNOWLEDGE`
 
 ## ❌ The VC hiding predicate
 
-Analysed file: `/Users/luka/Desktop/AUDI_2/Patches/UiModVC/A5_2018_unpacked/hmi_app.elf` (AU491 / A5 2018), SHA-256 `d2df7d51e7dc6e9d16f0eb063142cb39212e32148b729041d318489bbbe9dc9b`, ELF32 ARM LE, QNX `/usr/lib/ldqnx.so.2`, first PT_LOAD at file offset 0 → VA `0x100000`. The image installed in the car was not read, so the addresses belong to this ELF only. `[decompile]`
+Analysed file: `<workspace>/Patches/UiModVC/A5_2018_unpacked/hmi_app.elf` (AU491 / A5 2018), SHA-256 `d2df7d51e7dc6e9d16f0eb063142cb39212e32148b729041d318489bbbe9dc9b`, ELF32 ARM LE, QNX `/usr/lib/ldqnx.so.2`, first PT_LOAD at file offset 0 → VA `0x100000`. The image installed in the car was not read, so the addresses belong to this ELF only. `[decompile]`
 
 | DP ID (`dp_monitor.cfg`) | Meaning |
 |---|---|
@@ -91,13 +91,13 @@ visible = rg_available != 0 && rg_status == 1 && bargraph_on == 0
 
 The deciding branch is `0x5ecaec ldrsh r3,[sp,0xa]` / `0x5ecaf0 cmp r3,0` / **`0x5ecaf4 bne 0x5ecb18`** (file offset `0x4ecaf4`, bytes `07 00 00 1a`). Callback `0x5f0d58` feeds the result to the widget visibility setter `0x654830` (string `m_visibleByModel.m_DPID`, writes `widget+0xa0` in direct mode). `tools/verify_vc_distance_visibility.py` executes the real ARM predicate, callback and setter under Unicorn 2.1.4 for **336 combinations** (only DP reads and the virtual widget getter stubbed): with active RG, valid distance in metres, BargraphOn 0 → visible 1, BargraphOn 1 → visible 0. The model-bound setter branch was not executed. The script refuses any other ELF hash. `[decompile]`
 
-External evidence (outside the repo): stock `AppConnectorNavi`, `BAPDistanceFormatter`, `DistanceToNextManeuver_Status`, `ByteArrayStream` in `/Users/luka/Desktop/AUDI_2/Tools/jxe2jar/out/MU1316-combined-vf/` (executable `MU1316-combined-final.jar`); BAP NAV SD v2.80 §8 `Refferences/476121999-BAP-FC-NAV-SD-P30DF48-v2-80-F.md`; `dp_monitor.cfg` under `Refferences/VC_AUDI/nand_extraction/extract_app/KI_FPK_AU491/gss-applications/8/default/app.img/dp/`; signal-read index `UiModVC/vc_native_studio/assets/runtime/hmi_signal_usage.json`; logs `LocalLogs/reviews/distance-bargraph-chain-2026-09-11/`.
+External evidence (outside the repo): stock `AppConnectorNavi`, `BAPDistanceFormatter`, `DistanceToNextManeuver_Status`, `ByteArrayStream` in `<workspace>/Tools/jxe2jar/out/MU1316-combined-vf/` (executable `MU1316-combined-final.jar`); BAP NAV SD v2.80 §8 `Refferences/476121999-BAP-FC-NAV-SD-P30DF48-v2-80-F.md`; `dp_monitor.cfg` under `Refferences/VC_AUDI/nand_extraction/extract_app/KI_FPK_AU491/gss-applications/8/default/app.img/dp/`; signal-read index `UiModVC/vc_native_studio/assets/runtime/hmi_signal_usage.json`; logs `LocalLogs/reviews/distance-bargraph-chain-2026-09-11/`.
 
 Sources: `DISTANCE_BARGRAPH_CHAIN`
 
 ## 🔍 What the HUD graphics can draw
 
-Firmware roots under `/Users/luka/Desktop/AUDI_2/Firmwares/HUD/extracted/`. FD_61 = raw GDC image (ARM32 LE, ARM mode), FD_62 = scene data, FD_51 = the V850 MCU. `.GraphicsDrawTask.text` maps FD_61 file offset `0x12debc` to runtime VA `0x808f5000` (size `0x2329b4`); function file offset = `0x12debc + (VA − 0x808f5000)`. The two versions differ in 14 bytes of that section, but the walker/selector range `[0x13259c, 0x133e44)` and the FD_62 page tree `[0x1294, 0x114a68)` are byte-identical. `[decompile]`
+Firmware roots under `<workspace>/Firmwares/HUD/extracted/`. FD_61 = raw GDC image (ARM32 LE, ARM mode), FD_62 = scene data, FD_51 = the V850 MCU. `.GraphicsDrawTask.text` maps FD_61 file offset `0x12debc` to runtime VA `0x808f5000` (size `0x2329b4`); function file offset = `0x12debc + (VA − 0x808f5000)`. The two versions differ in 14 bytes of that section, but the walker/selector range `[0x13259c, 0x133e44)` and the FD_62 page tree `[0x1294, 0x114a68)` are byte-identical. `[decompile]`
 
 | Firmware | Block | SHA-256 |
 |---|---|---|

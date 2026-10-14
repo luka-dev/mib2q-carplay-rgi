@@ -1,7 +1,9 @@
 #!/bin/bash
 # Assemble an M.I.B. install folder + zip from one hook build folder.
 #
+# >>> protected
 #   ./scripts/prepare_install.sh build/protected_<VIN>
+# <<< protected
 #   ./scripts/prepare_install.sh build/unprotected
 #   SKIP_BUILD=1 ./scripts/prepare_install.sh build/unprotected   # reuse build/ jar + renderers
 #

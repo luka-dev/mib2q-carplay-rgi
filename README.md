@@ -161,7 +161,7 @@ features below follow it automatically.
 | `deploy/` | On-unit runtime scripts, SI child config, patched firmware and PF/deva recipes |
 | `scripts/` | Host build and test entry points |
 | `install_MoreIncredibleBash/`, `uninstall_MoreIncredibleBash/`, `logging_MoreIncredibleBash/` | M.I.B. SD install / remove / log-collection scripts |
-| `protector/` | VIN-lock protector used by the protected build |
+| `protector/` | VIN-lock protector used by the protected build | <!-- protected-only -->
 | `tools/` | Host tools (upmix renderer and benches, QSA emulator, amp model, …) |
 | `assets/` | RE working sets (`soundamp/`, `vc-fonts/`) and visual references |
 | `toolchain/qnx65-abi/` | QNX Screen/OpenMAX ABI headers used only for cross-compilation |
@@ -202,7 +202,7 @@ build; the resulting ELFs resolve the real Screen/EGL/GLES/OpenMAX libraries on 
 | Production | `./scripts/build_hook.sh` | the one image: WARN/ERROR log only; `touch /mnt/app/carplay_verbose` turns on INFO, audio captures and pace reports for the next session |
 | No audio module | `HOOK_AUDIO=0 ./scripts/build_hook.sh` | hook without the type-103 audio path, no codec |
 | State trace | `AUDIO_STATE_TRACE=1 ./scripts/build_hook.sh` | compact `/tmp/carplay_state_trace.log` ledger (see `scripts/carplay_state_trace.sh`) |
-| VIN-locked | `./scripts/build_hook_protected.sh <VIN>` | stamped `.so` files in `build/protected_<VIN>/` |
+| VIN-locked | `./scripts/build_hook_protected.sh <VIN>` | stamped `.so` files in `build/protected_<VIN>/` | <!-- protected-only -->
 
 Build outputs (binaries only; builds never package a release):
 

@@ -133,11 +133,11 @@ configuration words are not yet verified for this HU, the ownership race
 during manager destruction is not fully validated, and multicast/phone session
 callbacks have not been exercised. The build script never connects to the HU.
 
-Build offline with `/Users/luka/Desktop/AUDI_2/Tools/qnx-65-sdp-docker`:
+Build offline with `<workspace>/Tools/qnx-65-sdp-docker`:
 
 ```sh
 docker run --rm --platform=linux/amd64 \
-  -v /Users/luka/Desktop/AUDI_2:/src \
+  -v <workspace>:/src \
   -w /src/Patches/mhi2-carplay \
   qnx65-armv7-toolchain:latest \
   arm-unknown-nto-qnx6.5.0eabi-gcc -std=c11 -fPIC -shared -Os \

@@ -97,7 +97,7 @@ ceiling is ≈ 200 M MAC/s int8 on the async worker; the two shipped GRUs use
 
 ## 🔬 Phase 0 — prove the mask on the PC, no hook changes
 
-Everything runs on the training PC (`100.127.113.11`, RTX 5080, MoisesDB at
+Everything runs on the training PC (`<training-pc>`, RTX 5080, MoisesDB at
 `D:\upmix\datasets\moisesdb\moisesdb_v0.1`, 3,367 library songs at `D:\music`).
 
 1. **Cache at the car's geometry.**  FFT 512, hop 128, half-sine window,

@@ -11,7 +11,7 @@ Maintained technical reference. The evidence below distinguishes static analysis
 Implementation and local diagnostic paths in this record refer to the [original source directory](../../wireless/). Run `wireless/...` commands from the repository root; moving this note does not move binaries or logs.
 
 Offline static analysis, 2026-09-28. The source supplied by the owner is
-`/Users/luka/Desktop/AUDI_2/Refferences/Carplay`; its
+`<workspace>/Refferences/Carplay`; its
 `Sources/AirPlayVersion.h:60` declares **280.33.8**. This document explains
 normal authenticated pairing, including where the real MFi signer is used.
 No HU connection, binary patch, deployment, restart, or new runtime test was

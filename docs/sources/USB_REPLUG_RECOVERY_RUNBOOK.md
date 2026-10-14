@@ -120,7 +120,7 @@ installation, not to bypass the check.
 On the Mac:
 
 ```sh
-cd /Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay
+cd <workspace>/Patches/mhi2-carplay
 
 sh -n deploy/experimental/usb_replug_recovery/startncm.sh
 sh -n deploy/experimental/usb_replug_recovery/stopncm.sh
@@ -128,7 +128,7 @@ sh -n scripts/test_usb_replug_recovery.sh
 ./scripts/test_usb_replug_recovery.sh
 
 python3 -B deploy/experimental/usb_replug_recovery/patch_si_rearm.py check \
-  /Users/luka/Desktop/AUDI_2/Firmwares/HU/MU1316-MHI2Q_US_AUG22_P5087-JTB-07426.03.1811930398/advanced/MU1316-appimg/eso/bin/apps/smartphone_integrator
+  <workspace>/Firmwares/HU/MU1316-MHI2Q_US_AUG22_P5087-JTB-07426.03.1811930398/advanced/MU1316-appimg/eso/bin/apps/smartphone_integrator
 ```
 
 Expected: `USB replug recovery shell tests: PASS` and
@@ -152,8 +152,8 @@ The following phases assume that the variables `PROJECT_DIR`, `SSH` and `WORK_DI
 remain set in the same shell window.
 
 ```sh
-PROJECT_DIR=/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay
-SSH=/Users/luka/Desktop/AUDI_2/audi_ssh.sh
+PROJECT_DIR=<workspace>/Patches/mhi2-carplay
+SSH=<workspace>/audi_ssh.sh
 WORK_DIR=$(mktemp -d /tmp/mhi2-usb-recovery.XXXXXX)
 
 "$SSH" exec 'cat /mnt/system/etc/scripts/startncm.sh' \
@@ -182,7 +182,7 @@ named `stock` from an unknown file, and do not force the patch.
 ### A1. Build the patched Lua locally
 
 ```sh
-FW_SYSTEM=/Users/luka/Desktop/AUDI_2/Firmwares/HU/MU1316-MHI2Q_US_AUG22_P5087-JTB-07426.03.1811930398/advanced/MU1316-system
+FW_SYSTEM=<workspace>/Firmwares/HU/MU1316-MHI2Q_US_AUG22_P5087-JTB-07426.03.1811930398/advanced/MU1316-system
 
 cp "$FW_SYSTEM/etc/usblauncher_otg.lua" \
   "$WORK_DIR/usblauncher_otg.lua.stock"

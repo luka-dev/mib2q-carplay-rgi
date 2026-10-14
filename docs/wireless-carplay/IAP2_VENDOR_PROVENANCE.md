@@ -15,7 +15,7 @@ Implementation and local diagnostic paths in this record refer to the [original 
 `iap2-link` and `iap2-csm` are verbatim copies of the corresponding crates
 from LIVI[^1], commit
 `6bc9ddb8c26319665b91ed934ca8ccf717c8c44c` (local checkout under
-`/Users/luka/Desktop/AUDI_2/Refferences/LIVI`). Their original crate tests
+`<workspace>/Refferences/LIVI`). Their original crate tests
 and vectors are included. The copies were compared to that checkout with
 `diff -qr` before integration.
 

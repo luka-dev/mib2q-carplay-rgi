@@ -17,7 +17,8 @@ DEC  = os.path.dirname(HERE)
 RO   = os.path.join(DEC, 'reference', 'decomp', 'rodata')
 MD   = os.path.join(DEC, 'reference', 'decomp', 'RODATA.md')
 
-DEFAULT_LIB = ('/Users/luka/Desktop/AUDI_2/Firmwares/Other/Pioneer_SPHERA_OTA/'
+import os as _os; _REPO = _os.path.normpath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '../..')); _WS = _os.environ.get('AUDI_WORKSPACE', _os.path.expanduser('~/Desktop/AUDI_2'))  # sibling firmware/data dirs
+DEFAULT_LIB = (_WS + '/Firmwares/Other/Pioneer_SPHERA_OTA/'
                'extracted_01030010/rootfs/usr/local/lib/libSPF_CP_PlugInWrapper.so')
 
 

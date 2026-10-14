@@ -84,13 +84,19 @@ Domain: [Build System](build-and-deploy/BUILD_SYSTEM.md).
 
 **Never call `std::fmin` / `std::fmax` on floats with the QNX GCC 8.5 toolchain — use `::fminf` / `::fmaxf`.** The QNX 6.5 `xtgmath` float templates recurse into themselves (the call compiles to a `b .` self-branch) and the renderer hangs. Use the libm float entry points throughout (`maneuver_render/scene/lane_panel.cpp:10-11`). · disassembly · [Lane Guidance](cluster-and-rgi/LANE_GUIDANCE.md).
 
+<!-- >>> protected -->
 **`--gc-sections` silently drops an unreferenced protector slot — keep it alive with a volatile self-read.** Nothing references the slot by symbol, so a `-fdata-sections` / `--gc-sections` link removes it; `protector/carplay_prot.c:14-16` forces retention, and any new slot owner must do the same. · build audit · [VIN Protection](build-and-deploy/VIN_PROTECTION.md).
+<!-- <<< protected -->
 
+<!-- >>> protected -->
 **`strchr(allowed, c)` matches the string terminator when `c == 0` — test `p[i] == 0` explicitly.** A proposed VIN validator accepted 17 NUL bytes or an embedded NUL this way; a charset scan alone can also latch onto the byte before the field and shift the result by one. · code review · [VIN Protection](build-and-deploy/VIN_PROTECTION.md).
+<!-- <<< protected -->
 
 **A compile-time-false trace flag still costs — delete the call sites, don't just gate them.** `traceBap` / `traceDescriptor` were off yet still built every argument string; they were removed with the standalone `Log.d` sites. Two `Log.d` calls remain in `java_patch/com/luka/carplay/core/AltScreenNavStatusGate.java:82,136` [open]. · 2026-08-15 cleanup audit · [Production Audits](build-and-deploy/PRODUCTION_AUDITS.md).
 
+<!-- >>> protected -->
 **The VIN is an identifier, not a secret — the lock stops casual cloning, not a determined owner.** Everything derived from one substitutable VIN source can be reproduced, and no hardware root of trust was confirmed; don't describe it as more. Keep the wrong-VIN path failing open to stock instead of decoding garbage. · protection handoff · [VIN Protection](build-and-deploy/VIN_PROTECTION.md).
+<!-- <<< protected -->
 
 ---
 
@@ -430,7 +436,7 @@ Domains: [Build System](build-and-deploy/BUILD_SYSTEM.md), [Deploy and Release](
 
 ## 🔍 RE methodology
 
-Domains: [HSSR Model](audio/HSSR_MODEL.md), [VIN Protection](build-and-deploy/VIN_PROTECTION.md).
+Domains: [HSSR Model](audio/HSSR_MODEL.md)<!-- >>> protected -->, [VIN Protection](build-and-deploy/VIN_PROTECTION.md)<!-- <<< protected -->.
 
 **12-class supervised separation on 240 songs cannot work — the rear needs one mask, not twelve.** The model collapsed to ≈ mute+drums (raw-scalar control == init; disabled == mute); the band-power interface structurally can't separate lead/backing or keys/guitar. Mis-posed, not under-trained. A control arm that equals the model's init or equals mute proves nothing — a candidate must beat a static 2×2 Wiener mask and the TRAIN-fitted raw scalar ([Upmix Training History](audio/UPMIX_TRAINING_HISTORY.md)). · independent Q2 audit · `memory/upmix_q2_independent_audit.md`, `docs/research/HSSR_UPMIX_MODEL.md`.
 

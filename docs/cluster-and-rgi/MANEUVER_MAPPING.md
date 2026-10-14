@@ -106,7 +106,7 @@ For GEO 4 only, Apple normalizes the sign by driving side (`FNEG` at `0x1010b415
 - 26.6 `CarPlay.framework/CarPlay` (from the dyld cache): UUID `1602A652-319F-3FF9-9879-6D9C6919F901`, SHA-256 `064993976618cd75b0c6561bfd43aa255a319985de1c27954564ba80f05578ae`.
 - 27.0 CarPlay: `0x2471643f4` selector `junctionExitAngle`; `0x24716440c`/`0x247164410` key 11 / `paramKey:`; `0x247164424`/`0x247164438` `degrees` / `copySettingDimension:`; `0x247123e0c` nil on reset; `0x24712508c` missing value skips conversion; `0x247124f54`/`0x247124f60` `measurementByConvertingToUnit:` / `doubleValue`; `0x247124f7c` `NSNumberForCPAccNavTypeFromDouble`.
 - 26.6 fine addresses: step path role-2 select `0x1010b40e0–e4`, GEO-4 test `0x1010b4108–0c`, RHT positive→negate `0x1010b4114–28`, LHT negative→negate `0x1010b4130–48`, setter call `0x1010b4180`; event path role 2 `0x1010b4494–98`, GEO 4 `0x1010b44a4–a8`, side tests `0x1010b44b0–e4`, setter `0x1010b451c`; enum names at `Maps:0x1010b35cc/3700/3728/37b0` (keys `0x101875448/598/5b0/658`); GEO table entries `0x10138893a=04`, `…964=12`, `…978=1a`, `…9de=04`, `…9e2=04`; builder block `Maps:0x100da88c8` calls `setInfo:data:` directly.
-- User-provided restores: `Refferences/iPhone18-3_26.1_23B85_Restore`, `Refferences/iPhone18,1_27.0_24A5418b_Restore.ipsw` under `/Users/luka/Desktop/AUDI_2/`. The hash/disassembly dumps were under `output/ios-sentinel/`, which was not preserved.
+- User-provided restores: `Refferences/iPhone18-3_26.1_23B85_Restore`, `Refferences/iPhone18,1_27.0_24A5418b_Restore.ipsw` under `<workspace>/`. The hash/disassembly dumps were under `output/ios-sentinel/`, which was not preserved.
 
 </details>
 

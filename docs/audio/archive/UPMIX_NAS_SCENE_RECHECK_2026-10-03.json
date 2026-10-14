@@ -1,8 +1,8 @@
 {
   "schema": "upmix-nas-scene-archive-recheck-v1",
   "read_at_utc": "2026-10-03T20:07:45.975318+00:00",
-  "nas": "100.85.38.96",
-  "root": "/mnt/shared/users/luka/Audi/upmix-training-2026-09-11",
+  "nas": "<nas>",
+  "root": "/mnt/shared/users/<user>/Audi/upmix-training-2026-09-11",
   "scope": "Bounded metadata read on NAS; 10 selected runtime trees, 9 selected raw reports hashed. No model loading, PCM decoding, training, file changes on NAS, or new listening. Sanitized numerical/structural excerpts only.",
   "directory_counts": {
     "runtime_directories": 206,

@@ -26,7 +26,7 @@
     "-DSPA_HSSR_TEST_MASK",
     "-DSPA_HSSR_TEST_DIRECT_NO_BED",
     "-I",
-    "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/hook/audio",
+    "hook/audio",
     "-o",
     "/tmp/upmix_unified_audio_windows_v2/upmix_unified_audio.exe",
     "/tmp/upmix_unified_audio_windows_v2/stereo_upmix_render.c",
@@ -34,7 +34,7 @@
     "/tmp/upmix_unified_audio_windows_v2/hssr_dsp.c",
     "/tmp/upmix_unified_audio_windows_v2/hssr_neon.c",
     "/tmp/upmix_unified_audio_windows_v2/hssr_mask.c",
-    "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/hook/audio/soundcheck.c",
+    "hook/audio/soundcheck.c",
     "-lm"
   ],
   "binary_sha256": "6bc42871556e8bc1df94f13e1417d8f78c0c9be10d170e9044e73a8787184aa2",

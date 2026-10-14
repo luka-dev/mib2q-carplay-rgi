@@ -56,7 +56,7 @@ Sources: `VC_FONT_GLYPHS`, `VC_FONTS`
 
 In our MAP/LVDS presentation, `SV_LVDS_FPK_NavMap.NavStatus.Street` gives CurrentPosition **at most 359 px** of content width, **AudiTypeDisplay-Normal.ttf at size 27**, one line with truncation on, in **both fullscreen and smallscreen**. Short text gets its preferred width; longer text is cut at 359 px by the VC itself. There is no useful character-count limit. `[decompile]`
 
-Analysed ELF: `/Users/luka/Desktop/AUDI_2/Patches/UiModVC/A5_2018_unpacked/hmi_app.elf`, SHA-256 `d2df7d51e7dc6e9d16f0eb063142cb39212e32148b729041d318489bbbe9dc9b` (read through PT_LOAD mappings; data-segment file offsets differ from VAs).
+Analysed ELF: `<workspace>/Patches/UiModVC/A5_2018_unpacked/hmi_app.elf`, SHA-256 `d2df7d51e7dc6e9d16f0eb063142cb39212e32148b729041d318489bbbe9dc9b` (read through PT_LOAD mappings; data-segment file offsets differ from VAs).
 
 | Finding | Evidence |
 |---|---|

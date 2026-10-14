@@ -2,7 +2,8 @@ import json,re,collections,importlib.util
 spec=importlib.util.spec_from_file_location("apactypes","/tmp/apacwork/types.py")
 T=importlib.util.module_from_spec(spec); spec.loader.exec_module(T)
 D=json.load(open("/tmp/apacwork/out/final.json"))
-OUT="/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/apac_decoder/reference/decomp"
+import os as _os; _REPO = _os.path.normpath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '../../../..')); _WS = _os.environ.get('AUDI_WORKSPACE', _os.path.expanduser('~/Desktop/AUDI_2'))  # sibling firmware/data dirs
+OUT=_REPO + "/apac_decoder/reference/decomp"
 
 SZ={"_BYTE":1,"char":1,"unsigned __int8":1,"__int8":1,"bool":1,"_BOOL1":1,
     "_WORD":2,"__int16":2,"unsigned __int16":2,"_BOOL2":2,

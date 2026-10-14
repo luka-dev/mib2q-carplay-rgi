@@ -2,7 +2,7 @@
 # Compile shipping Java 1.4 sources, then exercise the local transports.
 set -euo pipefail
 PROJECT_DIR=$(cd "$(dirname "$0")/.." && pwd)
-TEST_JDK="$PROJECT_DIR/../../Tools/jxe2jar/jvms/zulu8.78.0.19-ca-jdk8.0.412-macosx_aarch64/zulu-8.jdk/Contents/Home"
+. "$PROJECT_DIR/scripts/java_env.sh"; TEST_JDK=$JAVA8_HOME
 bash "$PROJECT_DIR/scripts/build_java.sh"
 TEST_DIR=$(mktemp -d)
 trap 'rm -rf "$TEST_DIR"' EXIT
@@ -36,7 +36,7 @@ done
 # Stock Navigation may remain INITIALIZING while CarPlay already owns the
 # independent cluster video plane. Verify that takeover forces NAVSD ready and
 # faithfully restores the latest stock request on release.
-STOCK_JAR="$PROJECT_DIR/../../Tools/jxe2jar/out/MU1316-final.jar"
+STOCK_JAR="$PROJECT_DIR/java_stock/US_MU1316_lsd.jar"
 mkdir -p "$TEST_DIR/nav-init"
 "$TEST_JDK/bin/javac" -encoding UTF-8 \
     -cp "$PROJECT_DIR/build/carplay_hook.jar:$STOCK_JAR" \

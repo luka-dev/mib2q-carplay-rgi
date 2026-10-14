@@ -3,7 +3,7 @@
     "started_utc": "2026-10-04T14:17:59.122053+00:00",
     "start_time_source": "oracle protocol, not exact spawn time",
     "pid": 440289,
-    "root": "/mnt/shared/users/luka/Audi/upmix-training-2026-09-11/runtime/scene-output-oracle-20261004-a",
+    "root": "/mnt/shared/users/<user>/Audi/upmix-training-2026-09-11/runtime/scene-output-oracle-20261004-a",
     "nas_tests_passed": 3,
     "source_hashes": {
       "scene_operator_oracle.py": "b043027c219f0ee8f1901a4bf7e949617a6e7ee0b6a50ace6dd6a2a52b84ff8a",

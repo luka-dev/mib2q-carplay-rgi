@@ -6,7 +6,7 @@
 
 ## 📦 What is in the package
 
-`scripts/prepare_install.sh build/unprotected` output, assembled by the usual path ([Deploy and Release](DEPLOY_AND_RELEASE.md)): the same tree as every package since 2026-09-22 with one model file, the mask blob, and none of the HSSR models. Unprotected (no VIN lock); a VIN-locked copy is `scripts/build_hook_protected.sh <VIN>` then `prepare_install.sh build/protected_<VIN>` (the blob line is in `prepare_install.sh:48`, so it ships there too, [VIN Protection](VIN_PROTECTION.md)).
+`scripts/prepare_install.sh build/unprotected` output, assembled by the usual path ([Deploy and Release](DEPLOY_AND_RELEASE.md)): the same tree as every package since 2026-09-22 with one model file, the mask blob, and none of the HSSR models. <!-- >>> protected -->Unprotected (no VIN lock); a VIN-locked copy is `scripts/build_hook_protected.sh <VIN>` then `prepare_install.sh build/protected_<VIN>` (the blob line is in `prepare_install.sh:48`, so it ships there too, [VIN Protection](VIN_PROTECTION.md)).<!-- <<< protected -->
 
 | Artifact | Bytes | SHA-256 |
 |---|---:|---|
@@ -141,7 +141,7 @@ Order of reading: `skipped` (the worker keeps up or not), then `disables` and `m
 
 ## ↩️ How to roll back
 
-- **Previous install:** `build/install_protected_WAUZZZF47HA098927_trackA_2026-09-28.zip` is the Track A package of 2026-09-28 (VIN-locked to this unit; byte-identical to `install_protected_WAUZZZF47HA098927.zip`). Install it like any M.I.B. package; the HSSR models come back with it. The uninstaller (`uninstall_MoreIncredibleBash/mod/custom.sh:26-29`) lists both model sets, so an uninstall after either package leaves nothing behind.
+- **Previous install:** `build/install_<VIN>_trackA_2026-09-28.zip` is the Track A package of 2026-09-28 (built for this unit; byte-identical to `install_<VIN>.zip` of that day). Install it like any M.I.B. package; the HSSR models come back with it. The uninstaller (`uninstall_MoreIncredibleBash/mod/custom.sh:26-29`) lists both model sets, so an uninstall after either package leaves nothing behind.
 - **Rebuild the old tree:** `git checkout upmix-universal-last-2026-10-09` (commit `1501fc7d`, the last tree with the Universal backend beside SCENE), then `scripts/build_hook.sh` and `scripts/prepare_install.sh build/unprotected`; its startup file boots Universal with the scene block commented out.
 - **Keep the binary, change the sound:** `AUDIO_STEREO_UPMIX=off` gives the exact L/R bypass (rears silent); commenting the blob line gives spatial only. Both need the HU restart.
 

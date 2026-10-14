@@ -42,7 +42,7 @@
     }
   ],
   "band_definition_source": {
-    "path": "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/tools/stereo-upmix-render/upmix_stem_tests.py",
+    "path": "tools/stereo-upmix-render/upmix_stem_tests.py",
     "sha256": "184cc28b493dde68b0106410515ce578a2719cdeea4558d38976c625a02573fe"
   },
   "songs": 40,

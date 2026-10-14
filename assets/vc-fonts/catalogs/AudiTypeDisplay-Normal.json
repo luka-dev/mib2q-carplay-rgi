@@ -1,7 +1,7 @@
 {
   "font": {
     "file": "fonts/AudiTypeDisplay-Normal.ttf",
-    "source": "/Users/luka/Desktop/AUDI_2/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.1/data/gtf/AudiTypeDisplay-Normal.ttf",
+    "source": "<workspace>/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.1/data/gtf/AudiTypeDisplay-Normal.ttf",
     "bytes": 280096,
     "sha256": "4e0f6fb1d522df648c7430b3a345f24c7f85af1e3b7ba82a07b55c316f036b5e",
     "family": "Audi Type Display",

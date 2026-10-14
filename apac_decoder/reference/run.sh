@@ -54,7 +54,7 @@ ROOT="$(cd "$HERE/../.." && pwd)"
 WORK="$HERE/.build"
 IMAGE="${APAC_IMAGE:-apac-ref}"
 
-ROOTFS="${APAC_ROOTFS:-/Users/luka/Desktop/AUDI_2/Firmwares/Other/Pioneer_SPHERA_OTA/extracted_01030010/rootfs}"
+ROOTFS="${APAC_ROOTFS:-${AUDI_WORKSPACE:-$HOME/Desktop/AUDI_2}/Firmwares/Other/Pioneer_SPHERA_OTA/extracted_01030010/rootfs}"
 CAPTURE="${APAC_CAPTURE:-$ROOT/captures/apac_5_1_live_20260831_0205}"
 COOKIE="$CAPTURE/spatial_magiccookie_5_60100d08f9d19abb.bin"
 PACKETS="$CAPTURE/apac_packets"

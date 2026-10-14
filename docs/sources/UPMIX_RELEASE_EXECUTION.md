@@ -45,7 +45,7 @@ if TEST informs redesign, record contamination and obtain independent confirmati
   preserve them. New release work uses separately named files/owners.
 - Q1: paired128-update six-crop pilot is complete and unapproved. Global activity
   FiLM is not source-local guidance.73scoped tests are software evidence only.
-- NAS100.85.38.96 private training root is reachable. Live audit found no other
+- NAS<nas> private training root is reachable. Live audit found no other
   matched training/evaluation jobs, roughly7.03TiB free and7.44GB available RAM;
   Ryzen3 2300X,4cores, Torch2.10.0CPU. These are timestamped observations, not
   permanent resource guarantees. See the data audit for exact collection time.
@@ -149,7 +149,7 @@ FIFO and scores complete tails/one-second windows; no actual DEV music evaluated
 through that new scorer yet. Known source identity still gives no rear permission.
 
 Physical access check: established HU10.173.189.1 and historical Tailscale alias
-100.127.17.86 timed out on bounded read-only SSH attempts. No accepted new host
+<hu-tailscale> timed out on bounded read-only SSH attempts. No accepted new host
 key, installation or factory write. User was asked asynchronously to connect
 the Mac/confirm current HU endpoint; other work continues.
 

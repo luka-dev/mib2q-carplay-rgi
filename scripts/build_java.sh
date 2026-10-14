@@ -19,12 +19,10 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-TOOLS_DIR="$PROJECT_DIR/../../Tools/jxe2jar"
-JAVA_HOME="$TOOLS_DIR/jvms/zulu8.78.0.19-ca-jdk8.0.412-macosx_aarch64/zulu-8.jdk/Contents/Home"
+. "$PROJECT_DIR/scripts/java_env.sh"; TOOLS_DIR=$JXE2JAR
+JAVA_HOME="$JAVA8_HOME"
 JAVAC="$JAVA_HOME/bin/javac"
 JAR="$JAVA_HOME/bin/jar"
-OSGI_LIBS="$TOOLS_DIR/libs"
-OSGI_CP="$OSGI_LIBS/org.osgi.framework-1.10.0.jar:$OSGI_LIBS/org.osgi.util.tracker-1.5.4.jar"
 
 BUILD_DIR="$PROJECT_DIR/build"
 echo "=== CarPlay Java Patch Build ==="

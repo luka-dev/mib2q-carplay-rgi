@@ -20,7 +20,7 @@ in L+R+C+Ls+Rs, computed in the T-F cells the instrument owns (its dry stem is
 ≥ 10 dB above everything else), per 53 ms frame.  A stable instrument has a
 constant rear share; "back and front" is that share moving.
 
-The training PC (`100.127.113.11`) holds `D:\upmix\tools\upmix_render.exe`
+The training PC (`<training-pc>`) holds `D:\upmix\tools\upmix_render.exe`
 (mingw cross build, 3 LSB max from the Mac build), ffmpeg, the models and the
 three scripts; MoisesDB is at `D:\upmix\datasets\moisesdb\moisesdb_v0.1`, the
 user's library at `D:\music`, results under `D:\upmix\runs\<date>\`.

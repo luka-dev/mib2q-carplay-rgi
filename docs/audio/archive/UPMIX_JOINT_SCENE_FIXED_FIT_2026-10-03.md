@@ -28,7 +28,7 @@ flowchart LR
 
 | Element | Protocol |
 |---|---|
-| NAS | 100.85.38.96; CPU only; three threads |
+| NAS | <nas>; CPU only; three threads |
 | Launch | 2026-10-03T23:52:50.530423+00:00; PID407748 at launch |
 | Run | `runtime/scene-joint-fixed-train-20261003-a` under the existing private training root |
 | Parent | `runtime/scene-joint-front-rear-20261003-a/run` |

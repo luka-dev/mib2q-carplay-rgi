@@ -6,7 +6,7 @@
 
 ## 📦 Builds emit binaries, not releases
 
-Each build script writes its outputs into `build/`. `scripts/prepare_install.sh <hook build dir>` (e.g. `build/protected_<VIN>` or `build/unprotected`) rebuilds the jar and renderers (`SKIP_BUILD=1` reuses them), stages every file below at its on-unit path and writes `build/install_<name>/install_MoreIncredibleBash/` plus `build/install_<name>.zip`. A hook folder without `libcarplay_apac.so` (`HOOK_AUDIO=0`) also leaves out the upmix mask net. The old `package_mib.py`, `package_protected.sh` and `deploy_over_ssh.sh` stay deleted. A release comes from three folders:
+Each build script writes its outputs into `build/`. `scripts/prepare_install.sh <hook build dir>` (e.g. `build/unprotected`<!-- >>> protected --> or `build/protected_<VIN>`<!-- <<< protected -->) rebuilds the jar and renderers (`SKIP_BUILD=1` reuses them), stages every file below at its on-unit path and writes `build/install_<name>/install_MoreIncredibleBash/` plus `build/install_<name>.zip`. A hook folder without `libcarplay_apac.so` (`HOOK_AUDIO=0`) also leaves out the upmix mask net. The old packaging and SSH-deploy scripts stay deleted. A release comes from three folders:
 
 - `build/` holds the compiled outputs: `libcarplay_hook.so`, `libcarplay_apac.so`, `maneuver_render`, `altscreen_render` and `carplay_hook.jar`.
 - `models/` holds the scene renderer's mask net, `scene-masknet-c/scene_masknet_c.bin` (the only model since the Universal retirement of 2026-10-09).
@@ -60,8 +60,8 @@ The on-unit column is the path under `/`. On the card, that same file goes at `m
 
 | File | Source in the repo | On-unit path |
 |---|---|---|
-| `libcarplay_hook.so` | `build/unprotected/`, or `build/protected_<VIN>/` for a stamped build | `/mnt/app/root/hooks/` |
-| `libcarplay_apac.so` | `build/unprotected/` or `build/protected_<VIN>/`; leave it out of a `HOOK_AUDIO=0` build | `/mnt/app/root/hooks/` |
+| `libcarplay_hook.so` | `build/unprotected/`<!-- >>> protected -->, or `build/protected_<VIN>/` for a stamped build<!-- <<< protected --> | `/mnt/app/root/hooks/` |
+| `libcarplay_apac.so` | `build/unprotected/`<!-- >>> protected --> or `build/protected_<VIN>/`<!-- <<< protected -->; leave it out of a `HOOK_AUDIO=0` build | `/mnt/app/root/hooks/` |
 | `maneuver_render` | `build/` (`build_renderers.sh`) | `/mnt/app/root/hooks/` |
 | `altscreen_render` | `build/` (`build_renderers.sh`) | `/mnt/app/root/hooks/` |
 | `carplay_hook.jar`, `carplay_hook_cn.jar` | `build/` (`build_java.sh`); both ship; `custom.sh` reads the firmware version from E2P (`modifyE2P r 3A0 19`, as M.I.B.), stops on anything but Audi MHI2Q, keeps `carplay_hook.jar` for region US/ER/JP or `carplay_hook_cn.jar` for CN and deletes the other (both for any other region) | `/mnt/app/eso/hmi/lsd/jars/` |
@@ -76,7 +76,7 @@ The on-unit column is the path under `/`. On the card, that same file goes at `m
 | `dio_manager.json` | Not staged: `custom.sh` adds the route-guidance message IDs in place (see [Route-guidance message IDs](#-route-guidance-message-ids-in-dio_managerjson)) | `/mnt/system/etc/eso/production/` |
 | `patch_si_rearm.py` | `deploy/experimental/usb_replug_recovery/` | Host-side only, to reproduce or reverse the SI re-arm patch; never staged |
 
-Build the compiled outputs first (`build_hook.sh` or `build_hook_protected.sh`, then `build_renderers.sh` and `build_java.sh`); everything else is copied unchanged. `custom.sh` sets modes itself: `755` for `.so` files, the renderers, `eso/bin/apps/*` and `*.sh`, `644` for everything else (`custom.sh:39-47`). `.gitignore` keeps `mod/carplay/root/` and `mod/carplay/carplay_child.json` out of git.
+Build the compiled outputs first (`build_hook.sh`<!-- >>> protected --> or `build_hook_protected.sh`<!-- <<< protected -->, then `build_renderers.sh` and `build_java.sh`); everything else is copied unchanged. `custom.sh` sets modes itself: `755` for `.so` files, the renderers, `eso/bin/apps/*` and `*.sh`, `644` for everything else (`custom.sh:39-47`). `.gitignore` keeps `mod/carplay/root/` and `mod/carplay/carplay_child.json` out of git.
 
 ### Firmware and model identities
 
@@ -132,7 +132,7 @@ If `carplay_child.json` is missing from `mod/carplay/`, the JSON patch is skippe
 
 Watch the install output for `dio_manager.json route-guidance and telephony IDs registered` (or `already registered`). A `WARN dio_manager.json …` line means the file had an unexpected layout and was left as-is; then do the [manual step](#-route-guidance-message-ids-in-dio_managerjson) before the reboot, or route guidance (maneuvers, lanes, the cluster turn card) never arrives.
 
-To check an install on the unit (the mod only becomes active after a reboot, and on a protected build only on the stamped VIN):
+To check an install on the unit (the mod only becomes active after a reboot<!-- >>> protected -->, and on a protected build only on the stamped VIN<!-- <<< protected -->):
 
 ```bash
 grep carplay_startup.sh /mnt/system/etc/eso/production/smartphone_integrator.json
@@ -407,5 +407,5 @@ Merged originals were removed from the tree after this note absorbed them; they 
 
 - `RELEASE_ARTIFACTS`: the source → on-unit map, SD layout and firmware/model hashes.
 - `DEPLOYMENT`: install/uninstall steps and process ownership.
-- `PROTECTOR`: the protected-release variant and post-install checks.
+- `PROTECTOR`: the protected-release variant and post-install checks. <!-- protected-only -->
 - `oldREADME`: the pre-TCP device paths.
