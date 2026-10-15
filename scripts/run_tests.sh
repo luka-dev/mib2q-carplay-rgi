@@ -113,7 +113,7 @@ printf '%-32s ' altscreen_command_policy_test
 cc -std=gnu99 -O1 -Wall -Wextra -Werror tests/altscreen_command_policy_test.c -o "$OUT/alt_command_policy"
 "$OUT/alt_command_policy"
 if [ "$(uname)" = Darwin ]; then CMD_STRIP=-Wl,-dead_strip; else CMD_STRIP=-Wl,--gc-sections; fi
-for suite in worker reversal age refresh; do
+for suite in worker reversal age refresh night; do
     cc -std=gnu99 -O1 -Wall -Wextra -Werror -Wno-unused-variable -Wno-unused-function -Wno-unused-parameter \
         -Wno-unused-but-set-variable -ffunction-sections -fdata-sections -Ihook -Icommon \
         "tests/altscreen_command_${suite}_test.c" "$CMD_STRIP" -lpthread -lm -ldl -o "$OUT/alt_command_$suite"

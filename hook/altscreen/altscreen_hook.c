@@ -112,9 +112,13 @@ static void           *g_advert_features;
 static int             g_advert_ready;
 static int             g_advert_published;
 static uint32_t        g_advert_sequence;
-/* Seeded from stock /info's authoritative nightMode, then updated by the
- * dio->libairplay AirPlayReceiverSessionSetNightMode boundary call. */
+/* Seeded from stock /info's nightMode, then updated by the
+ * dio->libairplay AirPlayReceiverSessionSetNightMode boundary call.  The /info
+ * value is dio's startInNightMode byte, written only at startService and never by
+ * requestNightMode (dio 0x167ccc): once dio has set the mode for a session, that
+ * session's later /info must not overwrite it (issue #40: main day, cluster night). */
 static volatile int g_alt_night_mode;
+static void *volatile g_alt_night_dio_session;
 static void advert_apply_night_locked(int night);
 
 /* the CFLite array-callbacks constant has moved names across builds; try both */
@@ -712,6 +716,8 @@ static void advert_clear_for_session(void *session)
 {
     pthread_mutex_lock(&advert_lock);
     if (!session || g_advert_session == session) advert_clear_locked();
+    /* a later session reusing this address seeds from its own /info again */
+    if (!session || g_alt_night_dio_session == session) g_alt_night_dio_session = NULL;
     pthread_mutex_unlock(&advert_lock);
 }
 
@@ -882,8 +888,13 @@ static void alt_on_server_info(void *session, void *info)
          * same value in both main and cluster panel dictionaries. */
         int nightErr = 0;
         int infoNight = 0;
-        void *nightKey = cf_str(0, "nightMode", CFENC_UTF8);
-        if (nightKey) {
+        void *nightKey = NULL;
+        if (g_alt_night_dio_session == session) {
+            infoNight = g_alt_night_mode ? 1 : 0;
+            set_i64(info, "nightMode", infoNight);      /* the top-level key too */
+            LOG_INFO(LOG_MODULE,
+                     "cluster nightMode=%d kept from dio (stock /info value is stale)", infoNight);
+        } else if ((nightKey = cf_str(0, "nightMode", CFENC_UTF8)) != NULL) {
             int64_t value = cf_geti64(info, nightKey, &nightErr);
             if (!nightErr) {
                 infoNight = value ? 1 : 0;
@@ -2497,6 +2508,7 @@ HOOK_EXPORT int AirPlayReceiverSessionSetNightMode(void *session, int night,
     }
 
     g_alt_night_mode = night ? 1 : 0;
+    g_alt_night_dio_session = session;   /* this session's /info no longer seeds it */
     rc = real(session, night, completion, context);
     if (env_on("ALTSCREEN_HANDLE_ALT")) {
         uint32_t gen = alt_generation_for_session(session);
