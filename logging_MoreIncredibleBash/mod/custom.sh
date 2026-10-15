@@ -82,6 +82,11 @@ run hooks_ls.txt ls -la /mnt/app/root/hooks /mnt/app/eso/hmi/lsd/jars /mnt/app/e
 run carplay_stock_ls.txt find /mnt/app /mnt/system -name '*.carplay-stock'
 run tmp_ls.txt ls -la "$SRC/"     # /tmp is a symlink to /dev/shmem: list what it points at
 run cores_ls.txt ls -la /mnt/ota/system/core
+run e2p_train.txt on -f rcc /usr/apps/modifyE2P r 3A0 19     # firmware train, ASCII bytes
+run dio_env.txt pidin -p dio_manager env                       # the LD_PRELOAD dio really runs with
+# leftovers of other CarPlay mods: they preload their own libraries into dio
+run foreign_ls.txt ls -la /mnt/app /mnt/app/root
+run foreign_find.txt find /mnt/app /mnt/system -name 'mibr-*' -o -name '*altscreen*' -o -name '*carplaycluster*'
 
 # ---- logs and captures from /tmp (never the shared-memory objects also living there) ----
 mkdir "$OUT/tmp"
@@ -94,15 +99,32 @@ done
 mkdir "$OUT/config"
 for f in /mnt/system/etc/eso/production/dio_manager.json \
          /mnt/system/etc/eso/production/smartphone_integrator.json \
-         /mnt/system/etc/pf.conf /mnt/system/etc/pf.ecm0.conf; do
+         /mnt/system/etc/pf.conf /mnt/system/etc/pf.ecm0.conf \
+         /mnt/system/etc/usblauncher_otg.lua* \
+         /mnt/system/etc/scripts/startncm.sh* /mnt/system/etc/scripts/stopncm.sh*; do
     [ -f "$f" ] && cp "$f" "$OUT/config/" 2>/dev/null
 done
 
-# ---- crash dumps of our processes (dumper writes them to /mnt/ota/system/core) ----
+# ---- SI's own dumps at a CarPlay failure (sloginfo of that moment): the newest five ----
+mkdir "$OUT/si_errors"
+i=0
+for f in $(ls -t "$SRC"/smartphone_integrator_error_*.tar.gz 2>/dev/null); do
+    [ $i -lt 5 ] || break
+    cp "$f" "$OUT/si_errors/" 2>/dev/null && i=$((i+1))
+done
+
+# ---- every crash dump and freeze log (the dumper writes them to /mnt/ota/system/core) ----
+# A whole-MMI freeze needs j9/gemib/pc too, not only ours.  The dir survives reboots and
+# fills up to ~16 MB, so a file the previous save already holds (same name and size) is
+# skipped: two saves still fit one GitHub attachment.  The unit has no cmp.
+CORE=${CP_CORE_SRC:-/mnt/ota/system/core}
+case $last in ?) PREV=$BASE/00$last ;; ??) PREV=$BASE/0$last ;; *) PREV=$BASE/$last ;; esac
 mkdir "$OUT/core"
-for f in /mnt/ota/system/core/dio_manager* /mnt/ota/system/core/altscreen_render* \
-         /mnt/ota/system/core/maneuver_render* /mnt/ota/system/core/smartphone_integrator*; do
-    [ -f "$f" ] && cp "$f" "$OUT/core/" 2>/dev/null
+for f in "$CORE"/*; do
+    [ -f "$f" ] && [ -s "$f" ] || continue          # also skips the empty EBNavFreezeLog.N slots
+    p=$PREV/core/${f##*/}
+    [ -f "$p" ] && [ "$(wc -c < "$p")" = "$(wc -c < "$f")" ] && continue
+    cp "$f" "$OUT/core/" 2>/dev/null
 done
 
 sync
