@@ -107,8 +107,8 @@ public final class RouteGuidanceDeltaTest {
         feed(parse,rg,"m0_ver:n:21\nm0_type:n:2\nm0_exit_angle:n:90\n");
         check(state.mTurnAngle[0]==90 && state.mTurnAnglePresent[0],"new slot lost supplied angle");
         check(state.mJunctionAngles[0]==null && state.mAfterRoad[0]==null && state.mName[0]==null
-            && state.mDistance[0]==-1 && state.mLaneCount[0]==-1 && state.mLaneDirections[0]==null,
-            "new slot inherited omitted roads, text, distance or maneuver-local lanes");
+            && state.mDistance[0]==-1,
+            "new slot inherited omitted roads, text or distance");
         check(state.lgIndex[3]==42 && state.lgLaneCount[3]==2,"maneuver reassignment cleared independent lane event");
         feed(parse,rg,"m0_ver:n:22\nm0_type:n:2\nm0_exit_angle:n:1000\n");
         check(state.mExitAngle[0]==1000,"CarPlay positive safety sentinel lost");

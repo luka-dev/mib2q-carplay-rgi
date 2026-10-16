@@ -60,9 +60,6 @@ public final class LaneGuidanceLifecycleTest {
             "lg3_lane_count:n:1\nlg3_lane_directions:s:-45\nlg3_lane_status:s:2\nlg3_lane_angles:s:-45\n"
         };
         boolean[] shown={false,true,false,true,true,true,true,false,true,false,false,false,true};
-        // Legacy mirror deliberately contains stale data; modern missing/empty
-        // events must never fall back to this maneuver's lanes.
-        s.mLaneCount[0]=1;s.mLaneDirections[0]=new int[]{90};
         for(int i=0;i<deltas.length;i++) {
             s.dirtyMask=0;byte[] text=deltas[i].getBytes("UTF-8");
             parse.invoke(rg,CarplayBus.parseText(text,text.length));

@@ -209,7 +209,6 @@ static void rgd_update_cache_merge(const rgd_update_t* upd) {
     }
     if (upd->present & RGD_UPD_VISIBLE_IN_APP) c->visible_in_app = upd->visible_in_app;
     if (upd->present & RGD_UPD_LANE_INDEX) c->lane_guidance_index = upd->lane_guidance_index;
-    if (upd->present & RGD_UPD_LANE_TOTAL) c->lane_guidance_total = upd->lane_guidance_total;
     if (upd->present & RGD_UPD_LANE_SHOWING) c->lane_guidance_showing = upd->lane_guidance_showing;
     if (upd->present & RGD_UPD_SOURCE_NAME) memcpy(c->source_name, upd->source_name, sizeof(c->source_name));
     if (upd->present & RGD_UPD_SOURCE_SUPPORTS_RG) c->source_supports_route_guidance = upd->source_supports_route_guidance;
@@ -253,7 +252,6 @@ static const uint64_t RGD_UPD_WRITE_MASK = RGD_UPD_ROUTE_STATE |
                                             RGD_UPD_DISTANCE_STRING |
                                             RGD_UPD_DIST_TO_MANEUVER_STR |
                                             RGD_UPD_LANE_INDEX |
-                                            RGD_UPD_LANE_TOTAL |
                                             RGD_UPD_LANE_SHOWING |
                                             RGD_UPD_SOURCE_NAME |
                                             RGD_UPD_SOURCE_SUPPORTS_RG |
@@ -493,25 +491,6 @@ static void write_slot_data_keys(bus_text_builder_t* b, unsigned idx, const rgd_
      * Separate from slot_seq (LRU) which bumps on every data update. */
     snprintf(key, sizeof(key), "m%u_ver", idx);
     bus_text_uint(b, key, (g_rgd.slot_ver[idx] % 65535) + 1);
-    if (man->present & RGD_MAN_LANE_GUIDANCE_RAW) {
-        snprintf(key, sizeof(key), "m%u_lane_guidance_len", idx);
-        bus_text_int(b, key, man->lane_guidance_raw_len);
-#if RGD_TRACE_RAW_FULL
-        snprintf(key, sizeof(key), "m%u_lane_guidance_hex", idx);
-        bus_text_str(b, key, man->lane_guidance_hex);
-#endif
-    }
-    if (man->present & RGD_MAN_LINKED_LANE_INDEX) {
-        snprintf(key, sizeof(key), "m%u_linked_lane_guidance_index", idx);
-        bus_text_int(b, key, (int)man->linked_lane_guidance_index);
-        {
-            int linked_slot = rgd_lane_slot_for_iap_index(man->linked_lane_guidance_index, false);
-            if (linked_slot >= 0) {
-                snprintf(key, sizeof(key), "m%u_linked_lane_guidance_slot", idx);
-                bus_text_int(b, key, linked_slot);
-            }
-        }
-    }
     if (man->present & RGD_MAN_EXIT_INFO_RAW) {
         snprintf(key, sizeof(key), "m%u_exit_info_len", idx);
         bus_text_int(b, key, man->exit_info_raw_len);
@@ -644,8 +623,6 @@ static void write_bus_maneuver_partial(const rgd_maneuver_t* man) {
                           RGD_MAN_DESCRIPTION |
                           RGD_MAN_AFTER_ROAD |
                           RGD_MAN_JUNCTION_ANGLES |
-                          RGD_MAN_LANE_GUIDANCE_RAW |
-                          RGD_MAN_LINKED_LANE_INDEX |
                           RGD_MAN_EXIT_INFO_RAW |
                           RGD_MAN_EXIT_INFO_STR;
     if ((man->present & write_mask) == 0) return;
@@ -664,8 +641,8 @@ static void write_bus_maneuver_partial(const rgd_maneuver_t* man) {
 /*
  * 0x5204's TLV1 is iOS's lane-event index (CRAccNavController::sendLaneGuidances
  * batch-sends the window ahead of time); the ACTIVE event comes separately in
- * 0x5201 InfoType 16.  So a 0x5204 only fills the cache; the snapshot writer
- * derives lane_guidance_slot from the active index.
+ * 0x5201 InfoType 16.  So a 0x5204 only fills the cache; Java finds the active
+ * event's slot by its lgN_index.
  */
 static void write_bus_lane_guidance_partial(const rgd_lane_guidance_t* lane) {
     if (!lane || !(lane->present & RGD_LANE_INFORMATIONS)) return;
@@ -742,12 +719,6 @@ static void write_bus_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* 
         bus_text_str(b, "dist_maneuver_str", upd->dist_to_maneuver_string);
     if (present & RGD_UPD_LANE_INDEX)
         bus_text_int(b, "lane_guidance_index", upd->lane_guidance_index);
-    if (present & RGD_UPD_LANE_INDEX) {
-        int lane_slot = rgd_lane_slot_for_iap_index(upd->lane_guidance_index, false);
-        bus_text_int(b, "lane_guidance_slot", lane_slot >= 0 ? lane_slot : -1);
-    }
-    if (present & RGD_UPD_LANE_TOTAL)
-        bus_text_int(b, "lane_guidance_total", upd->lane_guidance_total);
     if (present & RGD_UPD_LANE_SHOWING)
         bus_text_int(b, "lane_guidance_showing", upd->lane_guidance_showing);
     if (present & RGD_UPD_SOURCE_NAME)

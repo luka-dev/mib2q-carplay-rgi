@@ -1564,20 +1564,18 @@ public class BAPBridge {
 
     private static LaneGuidanceSnapshot rendererLaneGuidance(RouteGuidance.State s, boolean showing) {
         if (!showing) return LaneGuidanceSnapshot.HIDDEN;
-        int slot = resolveLaneGuidanceManeuverIndex(s); // Same selection as HUD.
-        boolean complete = slot >= 0 && slot < s.lgLaneComplete.length
-            && lgSlotMatches(s, slot, s.laneGuidanceIndex) && s.lgLaneComplete[slot] == 1;
+        int slot = activeLaneSlot(s); // Same selection as HUD.
+        boolean complete = slot >= 0 && slot < s.lgLaneComplete.length && s.lgLaneComplete[slot] == 1;
         return LaneGuidanceSnapshot.copy(s.laneGuidanceIndex, true, complete,
-            laneCountForManeuver(s, slot), lanePositionsFor(s, slot), laneDirectionsFor(s, slot),
+            laneCacheCountForSlot(s, slot), lanePositionsFor(s, slot), laneDirectionsFor(s, slot),
             laneStatusFor(s, slot), laneAnglesFor(s, slot));
     }
 
     private void sendLaneGuidance(RouteGuidance.State s) throws Exception {
-        int idx = resolveLaneGuidanceManeuverIndex(s);
-        int count = laneCountForManeuver(s, idx);
-        boolean hasRealData = hasLaneGuidanceForManeuver(s, idx);
+        int idx = activeLaneSlot(s);
+        int count = laneCacheCountForSlot(s, idx);
 
-        if (hasRealData) {
+        if (count > 0) {
             sendRealLaneGuidance(s, idx, count);
         } else {
             appConnectorNavi.updateLaneGuidance(false, new CombiBAPNaviLaneGuidanceData[0]);
@@ -1616,39 +1614,9 @@ public class BAPBridge {
         appConnectorNavi.updateLaneGuidance(true, arr);
     }
 
-    private static boolean hasLaneGuidanceForManeuver(RouteGuidance.State s, int manIdx) {
-        if (manIdx < 0) return false;
-        if (hasLaneCacheForSlot(s, manIdx)) return true;
-        if (s.mLaneDirections == null || manIdx >= s.mLaneDirections.length) return false;
-        if (s.mLaneDirections[manIdx] == null) return false;
-        return laneCountForManeuver(s, manIdx) > 0;
-    }
-
     private static boolean hasLaneCacheForSlot(RouteGuidance.State s, int slot) {
         if (slot < 0) return false;
         return laneCacheCountForSlot(s, slot) > 0;
-    }
-
-    /* Verify lg-cache slot's stored event id still matches the active idx.
-     * Needed because lg cache slots are LRU-allocated independently of
-     * maneuver slot numbers, so a slot can be remapped to a different
-     * event after eviction. */
-    private static boolean lgSlotMatches(RouteGuidance.State s, int slot, int idx) {
-        if (slot < 0 || s.lgIndex == null || slot >= s.lgIndex.length) return false;
-        return s.lgIndex[slot] == idx;
-    }
-
-    /* m-cache-only check (skips lg-cache).  Used in legacy fallback paths
-     * where we need m-cache data without aliasing into lg-cache that
-     * happens to occupy the same numeric slot. */
-    private static boolean hasMCacheLaneForSlot(RouteGuidance.State s, int slot) {
-        if (slot < 0) return false;
-        if (s.mLaneDirections == null || slot >= s.mLaneDirections.length) return false;
-        if (s.mLaneDirections[slot] == null) return false;
-        int count = -1;
-        if (s.mLaneCount != null && slot < s.mLaneCount.length) count = s.mLaneCount[slot];
-        if (count < 0) count = s.mLaneDirections[slot].length;
-        return count > 0;
     }
 
     private static int laneCacheCountForSlot(RouteGuidance.State s, int slot) {
@@ -1679,152 +1647,31 @@ public class BAPBridge {
         return -1;
     }
 
-    /* Slot ids are shared by the legacy m-cache fallback and the lg-cache
-     * arrays.  Keep both caches in the same bounded numeric slot range. */
+    /* lg cache slots (C rgd_lane_slot_for_iap_index), never maneuver slots. */
     private static int[] lanePositionsFor(RouteGuidance.State s, int slot) {
-        if (hasLaneCacheForSlot(s, slot) && s.lgLanePositions != null && slot < s.lgLanePositions.length)
-            return s.lgLanePositions[slot];
-        if (s.mLanePositions != null && slot >= 0 && slot < s.mLanePositions.length)
-            return s.mLanePositions[slot];
-        return null;
+        return hasLaneCacheForSlot(s, slot) ? s.lgLanePositions[slot] : null;
     }
 
     private static int[] laneDirectionsFor(RouteGuidance.State s, int slot) {
-        if (hasLaneCacheForSlot(s, slot) && s.lgLaneDirections != null && slot < s.lgLaneDirections.length)
-            return s.lgLaneDirections[slot];
-        if (s.mLaneDirections != null && slot >= 0 && slot < s.mLaneDirections.length)
-            return s.mLaneDirections[slot];
-        return null;
+        return hasLaneCacheForSlot(s, slot) ? s.lgLaneDirections[slot] : null;
     }
 
     private static int[] laneStatusFor(RouteGuidance.State s, int slot) {
-        if (hasLaneCacheForSlot(s, slot) && s.lgLaneStatus != null && slot < s.lgLaneStatus.length)
-            return s.lgLaneStatus[slot];
-        if (s.mLaneStatus != null && slot >= 0 && slot < s.mLaneStatus.length)
-            return s.mLaneStatus[slot];
-        return null;
+        return hasLaneCacheForSlot(s, slot) ? s.lgLaneStatus[slot] : null;
     }
 
     private static int[][] laneAnglesFor(RouteGuidance.State s, int slot) {
-        if (hasLaneCacheForSlot(s, slot) && s.lgLaneAngles != null && slot < s.lgLaneAngles.length)
-            return s.lgLaneAngles[slot];
-        if (s.mLaneAngles != null && slot >= 0 && slot < s.mLaneAngles.length)
-            return s.mLaneAngles[slot];
-        return null;
+        return hasLaneCacheForSlot(s, slot) ? s.lgLaneAngles[slot] : null;
     }
 
-    private static int laneCountForManeuver(RouteGuidance.State s, int manIdx) {
-        if (manIdx < 0) return 0;
-        if (hasLaneCacheForSlot(s, manIdx)) {
-            return laneCacheCountForSlot(s, manIdx);
-        }
-        int count = 0;
-        if (s.mLaneCount != null && manIdx < s.mLaneCount.length) {
-            count = s.mLaneCount[manIdx];
-            if (count >= 0) return count;
-        }
-        if (count <= 0 && s.mLaneDirections != null && manIdx < s.mLaneDirections.length
-            && s.mLaneDirections[manIdx] != null) {
-            count = s.mLaneDirections[manIdx].length;
-        }
-        if (count <= 0 && s.mLaneStatus != null && manIdx < s.mLaneStatus.length
-            && s.mLaneStatus[manIdx] != null) {
-            count = s.mLaneStatus[manIdx].length;
-        }
-        if (count < 0) count = 0;
-        return count;
-    }
-
-    private static int resolveLaneGuidanceManeuverIndex(RouteGuidance.State s) {
-        /*
-         * iOS exposes the currently displayed lane guidance as a top-level
-         * currentLaneGuidanceIndex (0x5201 InfoType 16 — written by Maps.app
-         * in setCurrentLaneGuidanceIndex: from CarMetadataNavigationListener
-         * each location update).  0x5204's TLV1 is iOS's
-         * composedGuidanceEventIndex — an EVENT IDENTIFIER, sent for every
-         * cached event including future precache.  So the active is purely
-         * 0x5201, and we must look up the lg-cache slot whose stored event
-         * id matches the active.
-         *
-         * lg cache slot indices are NOT the same numeric space as maneuver
-         * slot indices: in C, rgd_lane_slot_for_iap_index() maintains an
-         * independent LRU.  After eviction, lg slot N may hold any cached
-         * event id, not necessarily event N — which means resolving by
-         * "primary maneuver slot" via lg-cache silently sends data for
-         * the wrong event.  Validate s.lgIndex[slot] == active before
-         * trusting any lg-cache slot.
-         */
-
-        int activeIdx = s.laneGuidanceIndex;
-        if (activeIdx < 0) return -1;
-
-        if (s.laneGuidanceSlot >= 0 && hasLaneCacheForSlot(s, s.laneGuidanceSlot)
-            && lgSlotMatches(s, s.laneGuidanceSlot, activeIdx)) {
-            return s.laneGuidanceSlot;
-        }
-
-        int byIndex = laneSlotForGuidanceIndex(s, activeIdx);
-        if (byIndex >= 0) return byIndex;
-
-        /*
-         * Linked-lane fallback: C publishes mN_linked_lane_guidance_slot
-         * pointing at a real lg-cache slot (not a maneuver slot), so it's
-         * safe to consult directly.  Only use it when its stored event id
-         * still matches the active (the linked field can outlive a cache
-         * remap of its target).
-         */
-        int primary = getFirstManeuverIndex(s);
-        int linked = linkedLaneSlotForManeuver(s, primary);
-        if (linked >= 0 && hasLaneCacheForSlot(s, linked)
-            && lgSlotMatches(s, linked, activeIdx)) {
-            return linked;
-        }
-
-        /*
-         * Legacy m-cache fallback for compatibility with pre-lg-split
-         * hooks (which wrote lane data into mN_lane_*).  Skip if the
-         * primary slot has any lg-cache data — that lg entry could be
-         * unrelated event data (post-eviction) and m-cache lookup with
-         * the same numeric slot would alias into it.
-         */
-        // Once the independent lg cache is present, a missing/empty active
-        // event must stay empty. Never substitute a maneuver's old lane data.
-        if (s.laneGuidanceSlot >= 0) return -1;
-        if (s.lgIndex != null) for (int i = 0; i < s.lgIndex.length; i++) {
-            if (s.lgIndex[i] >= 0) return -1;
-        }
-        int max = (s.mLaneCount != null) ? s.mLaneCount.length : 0;
-        if (activeIdx < max && hasMCacheLaneForSlot(s, activeIdx)
-            && !hasLaneCacheForSlot(s, activeIdx)) {
-            return activeIdx;
-        }
-        if (primary >= 0 && s.mLinkedLaneGuidanceIndex != null
-            && primary < s.mLinkedLaneGuidanceIndex.length
-            && s.mLinkedLaneGuidanceIndex[primary] == activeIdx
-            && hasMCacheLaneForSlot(s, primary)
-            && !hasLaneCacheForSlot(s, primary)) {
-            return primary;
-        }
-
-        return -1;
-    }
-
-
-
-    private static int linkedLaneSlotForManeuver(RouteGuidance.State s, int manIdx) {
-        if (manIdx < 0) return -1;
-        int max = (s.mLaneCount != null) ? s.mLaneCount.length : 0;
-
-        if (s.mLinkedLaneGuidanceSlot != null && manIdx < s.mLinkedLaneGuidanceSlot.length) {
-            int slot = s.mLinkedLaneGuidanceSlot[manIdx];
-            if (slot >= 0 && slot < max) return slot;
-        }
-
-        if (s.mLinkedLaneGuidanceIndex != null && manIdx < s.mLinkedLaneGuidanceIndex.length) {
-            int linkedIdx = s.mLinkedLaneGuidanceIndex[manIdx];
-            if (linkedIdx >= 0 && linkedIdx < max) return linkedIdx;
-        }
-        return -1;
+    /*
+     * The active lane event is purely 0x5201's currentLaneGuidanceIndex; 0x5204
+     * events are iOS's precached window (CarKitNavigation sendLaneGuidances).
+     * Its lg-cache slot is the one whose stored event id matches; a missing or
+     * empty active event stays empty.
+     */
+    private static int activeLaneSlot(RouteGuidance.State s) {
+        return laneSlotForGuidanceIndex(s, s.laneGuidanceIndex);
     }
 
     private static short mapLanePosition(RouteGuidance.State s, int manIdx, int laneIdx) {

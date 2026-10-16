@@ -136,9 +136,7 @@ public class RouteGuidance implements CarplayBus.Listener {
         public int visibleInApp = -1;
         public int sourceSupportsRg = -1;
         public int laneGuidanceShowing = -1;
-        public int laneGuidanceTotal = -1;
         public int laneGuidanceIndex = -1;
-        public int laneGuidanceSlot = -1;
 
         /* Distance to destination */
         public int distDestM = -1;
@@ -177,22 +175,9 @@ public class RouteGuidance implements CarplayBus.Listener {
          * MHI3 dio_manager uses sentinel 1000 when the field is missing.
          */
         public int[] mExitAngle = new int[MAX_MANEUVERS];
-        public int[] mLinkedLaneGuidanceIndex = new int[MAX_MANEUVERS];
-        public int[] mLinkedLaneGuidanceSlot = new int[MAX_MANEUVERS];
         /* Slot version: bumps in C hook when a different iOS maneuver is assigned to a slot.
          * Detects maneuver transitions even when type/angles are identical. */
         public int[] mVer = new int[MAX_MANEUVERS];
-
-        public int[][] mLanePositions = new int[MAX_MANEUVERS][];
-        public int[] mLaneCount = new int[MAX_MANEUVERS];
-        public int[][] mLaneDirections = new int[MAX_MANEUVERS][];
-        public int[][] mLaneStatus = new int[MAX_MANEUVERS][];
-        /*
-         * Per-lane angle vectors from 0x5204 lane informations.
-         * Format on the bus: lane0 comma-list, lanes separated by '|'
-         * Example: "1000|40,20|"
-         */
-        public int[][][] mLaneAngles = new int[MAX_MANEUVERS][][];
 
         /*
          * Lane-guidance cache keyed by iOS composedGuidanceEventIndex.
@@ -229,9 +214,7 @@ public class RouteGuidance implements CarplayBus.Listener {
             visibleInApp = -1;
             sourceSupportsRg = -1;
             laneGuidanceShowing = -1;
-            laneGuidanceTotal = -1;
             laneGuidanceIndex = -1;
-            laneGuidanceSlot = -1;
             clearAllManeuverSlots();
             clearDirty();
         }
@@ -268,13 +251,6 @@ public class RouteGuidance implements CarplayBus.Listener {
             mJunctionAngles[i] = null;
             mExitAngle[i] = 1000;
             mVer[i] = -1;
-            mLinkedLaneGuidanceIndex[i] = -1;
-            mLinkedLaneGuidanceSlot[i] = -1;
-            mLanePositions[i] = null;
-            mLaneCount[i] = -1;
-            mLaneDirections[i] = null;
-            mLaneStatus[i] = null;
-            mLaneAngles[i] = null;
         }
 
         public void clearDirty() {
@@ -848,8 +824,6 @@ public class RouteGuidance implements CarplayBus.Listener {
                 state.destination = null;
                 state.laneGuidanceShowing = -1;
                 state.laneGuidanceIndex = -1;
-                state.laneGuidanceSlot = -1;
-                state.laneGuidanceTotal = -1;
                 state.markAllDirtyForReplay();
             }
         }
@@ -909,9 +883,7 @@ public class RouteGuidance implements CarplayBus.Listener {
                     state.markDirty(State.DIRTY_MANEUVER_LIST);
                     state.clearAllManeuverSlots();
                     state.laneGuidanceShowing = -1;
-                    state.laneGuidanceTotal = -1;
                     state.laneGuidanceIndex = -1;
-                    state.laneGuidanceSlot = -1;
                     state.markDirty(State.DIRTY_MANEUVER_ICON | State.DIRTY_MANEUVER_TEXT | State.DIRTY_LANE_GUIDANCE);
                 }
             }
@@ -944,9 +916,7 @@ public class RouteGuidance implements CarplayBus.Listener {
                 state.maneuverOrder = null;
                 state.markDirty(State.DIRTY_MANEUVER_LIST);
                 state.laneGuidanceShowing = -1;
-                state.laneGuidanceTotal = -1;
                 state.laneGuidanceIndex = -1;
-                state.laneGuidanceSlot = -1;
                 state.markDirty(State.DIRTY_MANEUVER_ICON | State.DIRTY_MANEUVER_TEXT | State.DIRTY_LANE_GUIDANCE);
                 /* Per-slot data (mType, mTurnAngle, etc.) is NOT cleared here.
                  * It is preserved so that when count>0 returns, BAPBridge can
@@ -1037,24 +1007,10 @@ public class RouteGuidance implements CarplayBus.Listener {
                 state.markDirty(State.DIRTY_LANE_GUIDANCE);
             }
         }
-        if (d.has("lane_guidance_total")) {
-            int v = d.num("lane_guidance_total", -1);
-            if (v != state.laneGuidanceTotal) {
-                state.laneGuidanceTotal = v;
-                state.markDirty(State.DIRTY_LANE_GUIDANCE);
-            }
-        }
         if (d.has("lane_guidance_index")) {
             int v = d.num("lane_guidance_index", -1);
             if (v != state.laneGuidanceIndex) {
                 state.laneGuidanceIndex = v;
-                state.markDirty(State.DIRTY_LANE_GUIDANCE);
-            }
-        }
-        if (d.has("lane_guidance_slot")) {
-            int v = d.num("lane_guidance_slot", -1);
-            if (v != state.laneGuidanceSlot) {
-                state.laneGuidanceSlot = v;
                 state.markDirty(State.DIRTY_LANE_GUIDANCE);
             }
         }
@@ -1171,7 +1127,7 @@ public class RouteGuidance implements CarplayBus.Listener {
              * update yet, or the maneuver list is explicitly empty (canProcessManeuverIndex is
              * index-independent — it's a global "accept maneuver data right now?" check).
              * Gate on the predicate ALONE: the old key-list form omitted z_level/exit_info/
-             * exit_angle/lane_count/lane_positions/lane_directions/lane_status/linked_lane_guidance_*,
+             * exit_angle,
              * so a delta carrying only those keys bypassed the gate and polluted a rejected slot
              * (audit #7).  Predicate-only is also future-proof — new keys are gated automatically. */
             if (!canProcessManeuverIndex(i)) {
@@ -1286,55 +1242,6 @@ public class RouteGuidance implements CarplayBus.Listener {
                     state.mTurnAngle[i] = v;
                     state.mTurnAnglePresent[i] = true;
                     state.markManeuverDirty(i, State.MAN_DIR_ICON);
-                }
-            }
-            if (d.has(p + "lane_count")) {
-                int v = d.num(p + "lane_count", -1);
-                if (v != state.mLaneCount[i]) {
-                    state.mLaneCount[i] = v;
-                    state.markDirty(State.DIRTY_LANE_GUIDANCE);
-                }
-            }
-            if (d.has(p + "linked_lane_guidance_index")) {
-                int v = d.num(p + "linked_lane_guidance_index", -1);
-                if (v != state.mLinkedLaneGuidanceIndex[i]) {
-                    state.mLinkedLaneGuidanceIndex[i] = v;
-                    state.markDirty(State.DIRTY_LANE_GUIDANCE);
-                }
-            }
-            if (d.has(p + "linked_lane_guidance_slot")) {
-                int v = d.num(p + "linked_lane_guidance_slot", -1);
-                if (v != state.mLinkedLaneGuidanceSlot[i]) {
-                    state.mLinkedLaneGuidanceSlot[i] = v;
-                    state.markDirty(State.DIRTY_LANE_GUIDANCE);
-                }
-            }
-            if (d.has(p + "lane_positions")) {
-                int[] v = d.intList(p + "lane_positions");
-                if (!intArrayEq(state.mLanePositions[i], v)) {
-                    state.mLanePositions[i] = v;
-                    state.markDirty(State.DIRTY_LANE_GUIDANCE);
-                }
-            }
-            if (d.has(p + "lane_directions")) {
-                int[] v = d.intList(p + "lane_directions");
-                if (!intArrayEq(state.mLaneDirections[i], v)) {
-                    state.mLaneDirections[i] = v;
-                    state.markDirty(State.DIRTY_LANE_GUIDANCE);
-                }
-            }
-            if (d.has(p + "lane_status")) {
-                int[] v = d.intList(p + "lane_status");
-                if (!intArrayEq(state.mLaneStatus[i], v)) {
-                    state.mLaneStatus[i] = v;
-                    state.markDirty(State.DIRTY_LANE_GUIDANCE);
-                }
-            }
-            if (d.has(p + "lane_angles")) {
-                int[][] v = parseLaneAnglesMatrix(d.str(p + "lane_angles", null));
-                if (!intMatrixEq(state.mLaneAngles[i], v)) {
-                    state.mLaneAngles[i] = v;
-                    state.markDirty(State.DIRTY_LANE_GUIDANCE);
                 }
             }
         }
