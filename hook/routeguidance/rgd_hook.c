@@ -209,7 +209,6 @@ static void rgd_update_cache_merge(const rgd_update_t* upd) {
     }
     if (upd->present & RGD_UPD_VISIBLE_IN_APP) c->visible_in_app = upd->visible_in_app;
     if (upd->present & RGD_UPD_LANE_INDEX) c->lane_guidance_index = upd->lane_guidance_index;
-    if (upd->present & RGD_UPD_LANE_SLOT) c->lane_guidance_slot = upd->lane_guidance_slot;
     if (upd->present & RGD_UPD_LANE_TOTAL) c->lane_guidance_total = upd->lane_guidance_total;
     if (upd->present & RGD_UPD_LANE_SHOWING) c->lane_guidance_showing = upd->lane_guidance_showing;
     if (upd->present & RGD_UPD_SOURCE_NAME) memcpy(c->source_name, upd->source_name, sizeof(c->source_name));
@@ -254,7 +253,6 @@ static const uint64_t RGD_UPD_WRITE_MASK = RGD_UPD_ROUTE_STATE |
                                             RGD_UPD_DISTANCE_STRING |
                                             RGD_UPD_DIST_TO_MANEUVER_STR |
                                             RGD_UPD_LANE_INDEX |
-                                            RGD_UPD_LANE_SLOT |
                                             RGD_UPD_LANE_TOTAL |
                                             RGD_UPD_LANE_SHOWING |
                                             RGD_UPD_SOURCE_NAME |
@@ -431,14 +429,8 @@ static void write_bus_update_partial(const rgd_update_t* upd) {
     if (!upd) return;
     if (upd->present == 0) return;
     if ((upd->present & RGD_UPD_WRITE_MASK) == 0) return;
-    rgd_update_t enriched = *upd;
-    if (enriched.present & RGD_UPD_LANE_INDEX) {
-        int slot = rgd_lane_slot_for_iap_index(enriched.lane_guidance_index, false);
-        enriched.present |= RGD_UPD_LANE_SLOT;
-        enriched.lane_guidance_slot = (slot >= 0) ? (int16_t)slot : (int16_t)-1;
-    }
-    rgd_update_cache_merge(&enriched);
-    write_bus_snapshot_from_cache(-1, NULL, &enriched);
+    rgd_update_cache_merge(upd);
+    write_bus_snapshot_from_cache(-1, NULL, upd);
 }
 
 /*
@@ -519,92 +511,6 @@ static void write_slot_data_keys(bus_text_builder_t* b, unsigned idx, const rgd_
                 bus_text_int(b, key, linked_slot);
             }
         }
-    }
-    if (man->present & RGD_MAN_LANE_GUIDANCE) {
-        snprintf(key, sizeof(key), "m%u_lane_count", idx);
-        bus_text_int(b, key, man->lane_count);
-
-        {
-            char buf[128];
-            int boff = 0;
-            for (int j = 0; j < man->lane_count && j < MAX_LANE_GUIDANCE; j++)
-                boff += snprintf(buf + boff, sizeof(buf) - (size_t)boff, "%s%u",
-                                 j > 0 ? "," : "", (unsigned)man->lanes[j].position);
-            if (man->lane_count == 0) buf[0] = '\0';
-            snprintf(key, sizeof(key), "m%u_lane_positions", idx);
-            bus_text_str(b, key, buf);
-        }
-
-        {
-            char buf[128];
-            int boff = 0;
-            for (int j = 0; j < man->lane_count && j < MAX_LANE_GUIDANCE; j++)
-                boff += snprintf(buf + boff, sizeof(buf) - (size_t)boff, "%s%d",
-                                 j > 0 ? "," : "", (int)man->lanes[j].direction);
-            if (man->lane_count == 0) buf[0] = '\0';
-            snprintf(key, sizeof(key), "m%u_lane_directions", idx);
-            bus_text_str(b, key, buf);
-        }
-
-        {
-            char buf[128];
-            int boff = 0;
-            for (int j = 0; j < man->lane_count && j < MAX_LANE_GUIDANCE; j++)
-                boff += snprintf(buf + boff, sizeof(buf) - (size_t)boff, "%s%u",
-                                 j > 0 ? "," : "", (unsigned)man->lanes[j].status);
-            if (man->lane_count == 0) buf[0] = '\0';
-            snprintf(key, sizeof(key), "m%u_lane_status", idx);
-            bus_text_str(b, key, buf);
-        }
-
-        {
-            char buf[600];
-            int boff = 0;
-            for (int j = 0; j < man->lane_count && j < MAX_LANE_GUIDANCE; j++)
-                boff += snprintf(buf + boff, sizeof(buf) - (size_t)boff, "%s%s",
-                                 j > 0 ? "|" : "", man->lanes[j].description);
-            if (man->lane_count == 0) buf[0] = '\0';
-            snprintf(key, sizeof(key), "m%u_lane_desc", idx);
-            bus_text_str(b, key, buf);
-        }
-
-        /*
-         * Full lane-angle vectors from 0x5204 lane informations.
-         * Encoding:
-         *   lane0 angles comma-separated, lanes separated by '|'
-         * Example:
-         *   "1000|40,20|"
-         */
-        {
-            char buf[1200];
-            int boff = 0;
-            for (int j = 0; j < man->lane_count && j < MAX_LANE_GUIDANCE; j++) {
-                if (j > 0) {
-                    boff += snprintf(buf + boff, sizeof(buf) - (size_t)boff, "|");
-                }
-                for (int k = 0; k < man->lanes[j].angle_count && k < MAX_LANE_ANGLES; k++) {
-                    boff += snprintf(buf + boff, sizeof(buf) - (size_t)boff, "%s%d",
-                                     k > 0 ? "," : "", (int)man->lanes[j].angles[k]);
-                }
-            }
-            if (man->lane_count == 0) buf[0] = '\0';
-            snprintf(key, sizeof(key), "m%u_lane_angles", idx);
-            bus_text_str(b, key, buf);
-        }
-    } else if (man->present & RGD_MAN_LANE_GUIDANCE_RAW) {
-        /* Keep lane keys coherent when only raw linked-lane payload is available. */
-        snprintf(key, sizeof(key), "m%u_lane_count", idx);
-        bus_text_int(b, key, 0);
-        snprintf(key, sizeof(key), "m%u_lane_positions", idx);
-        bus_text_str(b, key, "");
-        snprintf(key, sizeof(key), "m%u_lane_directions", idx);
-        bus_text_str(b, key, "");
-        snprintf(key, sizeof(key), "m%u_lane_status", idx);
-        bus_text_str(b, key, "");
-        snprintf(key, sizeof(key), "m%u_lane_desc", idx);
-        bus_text_str(b, key, "");
-        snprintf(key, sizeof(key), "m%u_lane_angles", idx);
-        bus_text_str(b, key, "");
     }
     if (man->present & RGD_MAN_EXIT_INFO_RAW) {
         snprintf(key, sizeof(key), "m%u_exit_info_len", idx);
@@ -723,66 +629,6 @@ static bool rgd_lane_slot_has_data(int slot) {
            (RGD_LANE_GUIDANCE_INDEX | RGD_LANE_INFORMATIONS);
 }
 
-/*
- * Resolve linked-lane guidance references.
- * When a maneuver has RGD_MAN_LINKED_LANE_INDEX but no RGD_MAN_LANE_GUIDANCE,
- * look up the referenced maneuver in the slot cache and copy its lane data.
- */
-static void rgd_resolve_linked_lanes(int slot) {
-    rgd_maneuver_t* man = &g_rgd.slot_cache[slot];
-    if (!(man->present & RGD_MAN_LINKED_LANE_INDEX)) return;
-    if (man->present & RGD_MAN_LANE_GUIDANCE) return; /* already has own lane data */
-
-    uint16_t linked_iap_idx = man->linked_lane_guidance_index;
-    int linked_slot = rgd_slot_for_iap_index(linked_iap_idx, false);
-    if (linked_slot < 0) {
-        LOG_DEBUG(LOG_MODULE, "Linked lane idx %u: ref maneuver not cached yet", linked_iap_idx);
-        return;
-    }
-
-    const rgd_maneuver_t* src = &g_rgd.slot_cache[linked_slot];
-    if (!(src->present & RGD_MAN_LANE_GUIDANCE) || src->lane_count == 0) {
-        LOG_DEBUG(LOG_MODULE, "Linked lane idx %u (slot %d): source has no lane data",
-                  linked_iap_idx, linked_slot);
-        return;
-    }
-
-    man->lane_count = src->lane_count;
-    memcpy(man->lanes, src->lanes, sizeof(man->lanes));
-    man->present |= RGD_MAN_LANE_GUIDANCE;
-
-    LOG_INFO(LOG_MODULE, "Resolved linked lanes: slot %d -> slot %d (iAP2 %u), %d lanes",
-             slot, linked_slot, linked_iap_idx, man->lane_count);
-}
-
-/*
- * Back-propagate lane data: when a maneuver with lane data is cached,
- * check if any other cached maneuver has a linked-lane index pointing to
- * this one's iAP2 index, and resolve those references.
- */
-static void rgd_backpropagate_linked_lanes(int source_slot) {
-    const rgd_maneuver_t* src = &g_rgd.slot_cache[source_slot];
-    if (!(src->present & RGD_MAN_LANE_GUIDANCE) || src->lane_count == 0) return;
-
-    uint16_t src_iap_idx = g_rgd.slot_to_iap_idx[source_slot];
-    if (src_iap_idx == 0xFFFF) return;
-
-    for (int s = 0; s < MANEUVER_CACHE_SIZE; s++) {
-        if (s == source_slot) continue;
-        rgd_maneuver_t* man = &g_rgd.slot_cache[s];
-        if (!(man->present & RGD_MAN_LINKED_LANE_INDEX)) continue;
-        if (man->present & RGD_MAN_LANE_GUIDANCE) continue;
-        if (man->linked_lane_guidance_index != src_iap_idx) continue;
-
-        man->lane_count = src->lane_count;
-        memcpy(man->lanes, src->lanes, sizeof(man->lanes));
-        man->present |= RGD_MAN_LANE_GUIDANCE;
-
-        LOG_INFO(LOG_MODULE, "Back-propagated linked lanes: slot %d <- slot %d (iAP2 %u), %d lanes",
-                 s, source_slot, src_iap_idx, man->lane_count);
-    }
-}
-
 static void write_bus_maneuver_partial(const rgd_maneuver_t* man) {
     if (!man) return;
     if (man->present == 0) return;
@@ -800,7 +646,6 @@ static void write_bus_maneuver_partial(const rgd_maneuver_t* man) {
                           RGD_MAN_JUNCTION_ANGLES |
                           RGD_MAN_LANE_GUIDANCE_RAW |
                           RGD_MAN_LINKED_LANE_INDEX |
-                          RGD_MAN_LANE_GUIDANCE |
                           RGD_MAN_EXIT_INFO_RAW |
                           RGD_MAN_EXIT_INFO_STR;
     if ((man->present & write_mask) == 0) return;
@@ -813,92 +658,34 @@ static void write_bus_maneuver_partial(const rgd_maneuver_t* man) {
     /* Cache for re-publish on 0x5201 */
     g_rgd.slot_cache[slot] = *man;
 
-    /* Resolve linked-lane guidance: if this maneuver references another's lanes, copy them */
-    rgd_resolve_linked_lanes(slot);
-
-    /* If this maneuver has lane data, back-propagate to any maneuver linking to it */
-    if (g_rgd.slot_cache[slot].present & RGD_MAN_LANE_GUIDANCE) {
-        rgd_backpropagate_linked_lanes(slot);
-    }
-
     write_bus_snapshot_from_cache(slot, &g_rgd.slot_cache[slot], NULL);
 }
 
+/*
+ * 0x5204's TLV1 is iOS's lane-event index (CRAccNavController::sendLaneGuidances
+ * batch-sends the window ahead of time); the ACTIVE event comes separately in
+ * 0x5201 InfoType 16.  So a 0x5204 only fills the cache; the snapshot writer
+ * derives lane_guidance_slot from the active index.
+ */
 static void write_bus_lane_guidance_partial(const rgd_lane_guidance_t* lane) {
-    if (!lane) return;
-    if ((lane->present & (RGD_LANE_GUIDANCE_INDEX | RGD_LANE_INFORMATIONS)) == 0) return;
+    if (!lane || !(lane->present & RGD_LANE_INFORMATIONS)) return;
+    if (!(lane->present & RGD_LANE_GUIDANCE_INDEX)) {
+        LOG_WARN(LOG_MODULE, "0x5204 lane data without a lane index - dropped");
+        return;
+    }
 
-    rgd_update_t upd;
-    bool have_upd = false;
-    memset(&upd, 0, sizeof(upd));
-
-    uint16_t iap_idx = 0xFFFF;
-    if (lane->present & RGD_LANE_GUIDANCE_INDEX)
-        iap_idx = lane->lane_guidance_index;   /* iOS always keys lane events */
-
-    bool have_slot = false;
-    int slot = -1;
-    if (lane->present & RGD_LANE_INFORMATIONS) {
-        if (iap_idx == 0xFFFF) {
-            LOG_WARN(LOG_MODULE, "0x5204 lane data without a lane index - dropped");
-        } else {
-            slot = rgd_lane_slot_for_iap_index(iap_idx, true);
-            if (slot >= 0) {
-                rgd_lane_guidance_t* dst = &g_rgd.lane_cache[slot];
-                *dst = *lane;
-                dst->lane_guidance_index = iap_idx;
-                dst->present |= RGD_LANE_GUIDANCE_INDEX | RGD_LANE_INFORMATIONS;
-
-                if ((dst->present & RGD_LANE_GUIDANCE_DESC) && dst->lane_guidance_description[0] != '\0') {
-                    for (int i = 0; i < dst->lane_count && i < MAX_LANE_GUIDANCE; i++) {
-                        if (dst->lanes[i].description[0] == '\0') {
-                            snprintf(dst->lanes[i].description, sizeof(dst->lanes[i].description), "%s",
-                                     dst->lane_guidance_description);
-                        }
-                    }
-                }
-
-                have_slot = true;
+    int slot = rgd_lane_slot_for_iap_index(lane->lane_guidance_index, true);
+    rgd_lane_guidance_t* dst = &g_rgd.lane_cache[slot];
+    *dst = *lane;
+    if ((dst->present & RGD_LANE_GUIDANCE_DESC) && dst->lane_guidance_description[0] != '\0') {
+        for (int i = 0; i < dst->lane_count && i < MAX_LANE_GUIDANCE; i++) {
+            if (dst->lanes[i].description[0] == '\0') {
+                snprintf(dst->lanes[i].description, sizeof(dst->lanes[i].description), "%s",
+                         dst->lane_guidance_description);
             }
         }
     }
-
-    if (iap_idx != 0xFFFF) {
-        int publish_slot = (slot >= 0) ? slot : rgd_lane_slot_for_iap_index(iap_idx, false);
-        /*
-         * 0x5204's TLV1 (LANE_GUIDANCE_INDEX) is iOS's
-         * composedGuidanceEventIndex — the identifier of WHICH lane event
-         * this packet describes, NOT a flag that this is the active one.
-         * iOS Maps.app's CarMetadataNavigationListener routinely batch-
-         * sends 0x5204 for every event in the route (including future
-         * precache) via CRAccNavController::sendLaneGuidances, while the
-         * active is set separately via setCurrentLaneGuidanceIndex: ->
-         * 0x5201 InfoType 16.  Advancing Java's active from 0x5204 alone
-         * would flip the displayed lanes to a future event prematurely.
-         *
-         * Only refresh lane_guidance_slot when this 0x5204's iap_idx
-         * already matches the cached active.  Otherwise keep the cache
-         * fresh (lgN_* keys), do not touch top-level slot/index.
-         */
-        if ((g_rgd.update_cache.present & RGD_UPD_LANE_INDEX) &&
-            g_rgd.update_cache.lane_guidance_index == iap_idx) {
-            upd.present |= RGD_UPD_LANE_SLOT;
-            upd.lane_guidance_slot = (publish_slot >= 0) ? (int16_t)publish_slot : (int16_t)-1;
-            have_upd = true;
-        }
-    }
-
-    if (!have_upd && !have_slot) return;
-
-    if (have_upd) {
-        rgd_update_cache_merge(&upd);
-    }
-
-    if (have_slot) {
-        write_bus_snapshot_from_cache(slot, &g_rgd.slot_cache[slot], have_upd ? &upd : NULL);
-    } else {
-        write_bus_snapshot_from_cache(-1, NULL, &upd);
-    }
+    write_bus_snapshot_from_cache(-1, NULL, NULL);
 }
 
 static void write_bus_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* extra_man,
@@ -956,13 +743,8 @@ static void write_bus_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* 
     if (present & RGD_UPD_LANE_INDEX)
         bus_text_int(b, "lane_guidance_index", upd->lane_guidance_index);
     if (present & RGD_UPD_LANE_INDEX) {
-        /* Prefer lookup from the current lane_guidance_index.  RGD_UPD_LANE_SLOT
-         * is a bus-only helper and can be stale if cache pruning/remap happened
-         * after the update was merged. */
         int lane_slot = rgd_lane_slot_for_iap_index(upd->lane_guidance_index, false);
         bus_text_int(b, "lane_guidance_slot", lane_slot >= 0 ? lane_slot : -1);
-    } else if (present & RGD_UPD_LANE_SLOT) {
-        bus_text_int(b, "lane_guidance_slot", upd->lane_guidance_slot);
     }
     if (present & RGD_UPD_LANE_TOTAL)
         bus_text_int(b, "lane_guidance_total", upd->lane_guidance_total);
