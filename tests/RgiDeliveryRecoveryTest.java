@@ -72,7 +72,7 @@ public final class RgiDeliveryRecoveryTest {
             state=(RouteGuidance.State)get(rg,"state");
             feed("route_generation:n:100\nroute_state:n:1\nmaneuver_count:n:1\nmaneuver_list:s:0\n"
                 +"m0_ver:n:2\nm0_type:n:1\nm0_exit_angle:n:-90\nm0_junction_type:n:0\ndist_maneuver_m:n:5000\n"
-                +"lane_guidance_showing:n:1\nlane_guidance_index:n:73\nlane_guidance_slot:n:3\n"
+                +"lane_guidance_showing:n:1\nlane_guidance_index:n:73\n"
                 +"lg3_index:n:73\nlg3_lane_count:n:1\nlg3_lane_directions:s:-90\nlg3_lane_status:s:2\nlg3_lane_angles:s:-90\n");
             check(state.dirtyMask==0 && hud.lanes && renderer.lanes,"initial shared snapshot");
         }

@@ -116,7 +116,7 @@ public final class RouteGuidanceDeltaTest {
         check(state.mExitAngle[0]==-1000,"CarPlay negative safety sentinel lost");
         feed(parse,rg,"route_generation:n:100\nroute_state:n:1\nmaneuver_state:n:3\nmaneuver_count:n:1\nmaneuver_list:s:0\n"
             +"m0_ver:n:2\nm0_type:n:1\nm0_exit_angle:n:-90\nm0_after_road:s:Old route road\n"
-            +"lg3_index:n:73\nlg3_lane_count:n:1\nlane_guidance_showing:n:1\nlane_guidance_slot:n:3\n");
+            +"lg3_index:n:73\nlg3_lane_count:n:1\nlane_guidance_showing:n:1\n");
         state.clearDirty();
         feed(parse,rg,"route_generation:n:101\nroute_state:n:1\nmaneuver_count:n:1\nmaneuver_list:s:0\n"
             +"m0_ver:n:2\nm0_type:n:1\nm0_exit_angle:n:-90\n");

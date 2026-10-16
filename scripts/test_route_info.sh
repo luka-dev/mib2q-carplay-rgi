@@ -80,3 +80,6 @@ done
     -cp "$TEST_DIR:$PATCH_JAR:$PROJECT_DIR/java_stock/US_MU1316_lsd.jar:$OSGI_CP" \
     com.luka.carplay.rgd.CurrentPositionStockChainTest
 python3 "$PROJECT_DIR/tests/test_rgd_native_contract.py"
+
+# Native hook -> bus -> Java -> HUD/renderer, with the JAR built above.
+SKIP_JAVA_BUILD=1 bash "$PROJECT_DIR/scripts/test_lane_guidance_e2e.sh"

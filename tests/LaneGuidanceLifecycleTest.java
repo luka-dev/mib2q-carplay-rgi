@@ -45,15 +45,15 @@ public final class LaneGuidanceLifecycleTest {
         Method parse=RouteGuidance.class.getDeclaredMethod("parse",CarplayBus.Data.class);parse.setAccessible(true);
         s.routeState=1;s.maneuverCount=1;s.maneuverOrder=new int[]{0};s.mType[0]=4;
         String[] deltas={
-            "lane_guidance_showing:n:1\nlane_guidance_index:n:73\nlane_guidance_slot:n:-1\n",
+            "lane_guidance_showing:n:1\nlane_guidance_index:n:73\n",
             "lg3_index:n:73\nlg3_lane_count:n:2\nlg3_lane_positions:s:0,1\nlg3_lane_directions:s:0,45\nlg3_lane_status:s:0,2\nlg3_lane_angles:s:0|0,45\n",
             "lane_guidance_showing:n:0\n",
             "lane_guidance_showing:n:1\n",
             "lg3_lane_status:s:2,0\n",
             "lg4_index:n:99\nlg4_lane_count:n:1\nlg4_lane_directions:s:-90\nlg4_lane_status:s:2\nlg4_lane_angles:s:-90\n",
-            "lane_guidance_index:n:99\nlane_guidance_slot:n:4\n",
+            "lane_guidance_index:n:99\n",
             "lg4_lane_count:n:0\n",
-            "lane_guidance_index:n:73\nlane_guidance_slot:n:3\n",
+            "lane_guidance_index:n:73\n",
             "lg3_index:n:101\n",
             "lane_guidance_showing:n:0\n",
             "lane_guidance_showing:n:1\nlane_guidance_index:n:101\n",

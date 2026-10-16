@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Real C TLV parser, cache reset and slot/text writer -> Java -> stock BAP sender.
 
-Extract source functions verbatim for the host: only time, slot assignment and
-linked-lane lookup are fixtures. Does not emulate QNX services or HUD hardware.
+Extract source functions verbatim for the host: only time and slot assignment
+are fixtures. Does not emulate QNX services or HUD hardware.
 Run after scripts/build_java.sh; generated sources/frames stay under build/.
 """
 from pathlib import Path
@@ -25,7 +25,6 @@ c = r'''
 #include <assert.h>
 static uint64_t now_monotonic_ms(void) { return 100; }
 '''+native_state+'\n'+reset+r'''
-static int rgd_lane_slot_for_iap_index(uint16_t idx, bool create) { (void)idx; (void)create; return -1; }
 '''+text_writer+'\n'+slot_writer+r'''
 static size_t field(uint8_t *buf,size_t off,uint16_t key,const uint8_t *value,size_t size) {
     write_be16(buf+off,size+4);write_be16(buf+off+2,key);

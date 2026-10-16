@@ -65,7 +65,7 @@ ManeuverUpdate is fully covered: our `MAN_TLV_*` match Apple `ACCNav_MIUpdate_*`
 | 0x0C | LinkedLaneGuidanceInfo |
 | 0x0D | ExitInfo |
 
-The per-maneuver arrays are parsed for up to `MANEUVER_CACHE_SIZE = 32` maneuvers; BAP and the HUD show only the current one. Lane arrow geometry is not missed: per-lane positions, directions (angles) and status reach Java as `mLanePositions`, `mLaneDirections`, `mLaneStatus`. The lane instruction text (`0x5204` / `0x03`, `lane_guidance_description`, for example "Use the 2 left lanes") is parsed and sent as `m%u_lane_desc` / `lg%u_lane_desc`, but Java does not read it, so it never reaches the cluster. `[code]` (`rgd_hook.c:603`, `:714`, `:925`)
+The per-maneuver arrays are parsed for up to `MANEUVER_CACHE_SIZE = 32` maneuvers; BAP and the HUD show only the current one. Lane arrow geometry is not missed: per-lane positions, directions (angles) and status reach Java as independent lane events (`lgN_*`, `RouteGuidance.State.lgLane*`), see [Lane Guidance](LANE_GUIDANCE.md). The lane instruction text (`0x5204` / `0x03`, `lane_guidance_description`, for example "Use the 2 left lanes") is parsed and sent as `lg%u_lane_desc`, but Java does not read it, so it never reaches the cluster. `[code]` (`rgd_hook.c:589`)
 
 ## 🔍 Not handled at all
 
