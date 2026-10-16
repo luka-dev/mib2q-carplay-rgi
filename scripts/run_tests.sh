@@ -180,6 +180,9 @@ cc -std=gnu99 -O1 -Wall -Wextra -Werror -Wno-unused-function \
 printf '%-32s ' maneuver_reroute_clear
 bash scripts/test_maneuver_reroute.sh
 
+printf '%-32s ' rgd_lane_cache_test
+python3 -I tests/test_rgd_lane_cache.py
+
 printf '%-32s ' rgd_tlv_test
 cc -std=c99 -O1 -Wall -Wextra -Werror -Wno-unused-variable -Wno-unused-function \
     -DENABLE_LOGGING=0 -Ihook tests/rgd_tlv_test.c hook/routeguidance/rgd_tlv.c \
