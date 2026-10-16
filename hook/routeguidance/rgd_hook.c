@@ -101,6 +101,8 @@ static struct {
 	     * maneuver occupying slot 0 cannot mask lane-guidance index 0.
 	     */
 	    uint16_t lane_slot_to_iap_idx[MANEUVER_CACHE_SIZE]; /* 0xFFFF = empty */
+	    uint32_t lane_slot_born[MANEUVER_CACHE_SIZE];       /* insertion order; lookups never touch it */
+	    uint32_t lane_born_counter;
 	    rgd_lane_guidance_t lane_cache[MANEUVER_CACHE_SIZE];
 	    /*
 	     * Per-slot maneuver data cache.
@@ -229,12 +231,14 @@ static void rgd_update_cache_merge(const rgd_update_t* upd) {
 		    g_rgd.seq_counter = 0;
 		    g_rgd.ver_counter = 0;
 		    g_rgd.highest_list_index = 0;
+		    g_rgd.lane_born_counter = 0;
 	    for (int i = 0; i < MANEUVER_CACHE_SIZE; i++) {
 	        g_rgd.slot_to_iap_idx[i] = 0xFFFF;
 	        g_rgd.slot_seq[i] = 0;
 	        g_rgd.slot_ver[i] = 0;
 	        g_rgd.slot_cache[i].present = 0;
 	        g_rgd.lane_slot_to_iap_idx[i] = 0xFFFF;
+	        g_rgd.lane_slot_born[i] = 0;
 	        g_rgd.lane_cache[i].present = 0;
 		    }
 		}
@@ -364,10 +368,12 @@ static int rgd_slot_for_iap_index(uint16_t idx, bool create) {
  * Lane events are keyed by their own index (0x5204 / 0x5201 LaneGuidanceIndex),
  * never by maneuver index.  iOS (CarKitNavigation CRAccNavController) sends a
  * window of MaxLaneGuidanceStorageCapacity events starting at the current lane
- * index and, when its own sent-cache overflows, drops the LOWEST index: events
- * below the current one are never needed again.  A full cache here does the
- * same, sparing only the active event.  Entries otherwise live until
- * rgd_maneuver_map_reset().  A lookup never reorders anything.
+ * index, only events missing from its own sent-cache, and that cache drops the
+ * lowest index on overflow.  On the wire a window's 0x5204s come BEFORE the
+ * 0x5201 that makes one of them current.  Only a route reset empties the cache;
+ * a full cache drops the oldest entry except the active one (in-order windows
+ * make that the lowest index; a lane source renumbered by a reroute without a
+ * reset still keeps its new events).  A lookup never reorders anything.
  */
 static int rgd_lane_slot_for_iap_index(uint16_t idx, bool create) {
     int victim = -1;
@@ -383,12 +389,30 @@ static int rgd_lane_slot_for_iap_index(uint16_t idx, bool create) {
         uint16_t cur = g_rgd.lane_slot_to_iap_idx[s];
         if (cur == 0xFFFF) { victim = s; break; }
         if (have_active && cur == active) continue;
-        if (victim < 0 || cur < g_rgd.lane_slot_to_iap_idx[victim]) victim = s;
+        if (victim < 0 || g_rgd.lane_slot_born[s] < g_rgd.lane_slot_born[victim]) victim = s;
     }
 
     g_rgd.lane_slot_to_iap_idx[victim] = idx;
+    g_rgd.lane_slot_born[victim] = ++g_rgd.lane_born_counter;
     memset(&g_rgd.lane_cache[victim], 0, sizeof(g_rgd.lane_cache[victim]));
     return victim;
+}
+
+/*
+ * Called only for a 0x5201 that carries the current lane index, never when a
+ * 0x5204 arrives (its window precedes the 0x5201 that activates it).  iOS's
+ * sent-cache never holds an index below the current one and re-sends whatever
+ * it does not hold, so these events are never needed again; dropping them keeps
+ * each snapshot to about one window instead of every event of the route.
+ */
+static void rgd_drop_passed_lane_events(uint16_t active) {
+    for (int s = 0; s < MANEUVER_CACHE_SIZE; s++) {
+        uint16_t cur = g_rgd.lane_slot_to_iap_idx[s];
+        if (cur == 0xFFFF || cur >= active) continue;
+        g_rgd.lane_slot_to_iap_idx[s] = 0xFFFF;
+        g_rgd.lane_slot_born[s] = 0;
+        g_rgd.lane_cache[s].present = 0;
+    }
 }
 
 static void rgd_update_session_active(void) {
@@ -428,6 +452,8 @@ static void write_bus_update_partial(const rgd_update_t* upd) {
     if (upd->present == 0) return;
     if ((upd->present & RGD_UPD_WRITE_MASK) == 0) return;
     rgd_update_cache_merge(upd);
+    if (upd->present & RGD_UPD_LANE_INDEX)
+        rgd_drop_passed_lane_events(upd->lane_guidance_index);
     write_bus_snapshot_from_cache(-1, NULL, upd);
 }
 
@@ -647,7 +673,7 @@ static void write_bus_maneuver_partial(const rgd_maneuver_t* man) {
 static void write_bus_lane_guidance_partial(const rgd_lane_guidance_t* lane) {
     if (!lane || !(lane->present & RGD_LANE_INFORMATIONS)) return;
     if (!(lane->present & RGD_LANE_GUIDANCE_INDEX)) {
-        LOG_WARN(LOG_MODULE, "0x5204 lane data without a lane index - dropped");
+        LOG_INFO(LOG_MODULE, "0x5204 lane data without a lane index - dropped");
         return;
     }
 

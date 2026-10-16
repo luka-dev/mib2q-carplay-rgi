@@ -2,17 +2,19 @@
 """Native lane-event cache: the real rgd_hook.c state, reset and lane-slot allocator.
 
 Lane events are keyed by their own index.  Pre-sent events must survive any
-maneuver list, and a full cache drops the lowest index except the active one
-(the way iOS CarKitNavigation drops its own sent-cache).  Prints PASS.
+maneuver list; only a 0x5201's current index drops events below it; a full
+cache drops the oldest entry except the active one.  Prints PASS.
 """
 from pathlib import Path
+import os
 import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT / 'build/rgd-lane-cache'
 BUILD.mkdir(parents=True, exist_ok=True)
-hook = (ROOT / 'hook/routeguidance/rgd_hook.c').read_text()
+HOOK = Path(os.environ.get('HOOK_SRC', ROOT / 'hook'))   # another hook tree, e.g. a mutant
+hook = (HOOK / 'routeguidance/rgd_hook.c').read_text()
 
 # the maneuver-index prune was the "lanes only at route start" bug
 assert 'prune_stale_lane' not in hook, 'lane cache pruned by maneuver index again'
@@ -33,33 +35,43 @@ static uint64_t now_monotonic_ms(void) { return 100; }
 static int has(uint16_t idx) { return rgd_lane_slot_for_iap_index(idx, false) >= 0; }
 int main(void) {
     rgd_maneuver_map_reset();
-    /* route start: iOS sends lane events 0..5, maneuvers are already at 4..18 */
+    /* route start: iOS sends lane events 0..5, maneuvers are already at 17..18 */
     for (uint16_t i = 0; i < 6; i++) assert(rgd_lane_slot_for_iap_index(i, true) >= 0);
     g_rgd.current_list_present = true; g_rgd.current_list_count = 2;
     g_rgd.current_list[0] = 17; g_rgd.current_list[1] = 18;
     for (uint16_t i = 0; i < 6; i++) assert(has(i));            /* no maneuver-index pruning */
-    /* fill the cache, event 3 is active */
+
+    /* a 0x5201 making event 3 current drops only lane events below 3 */
     g_rgd.update_cache.present |= RGD_UPD_LANE_INDEX; g_rgd.update_cache.lane_guidance_index = 3;
-    for (uint16_t i = 6; i < MANEUVER_CACHE_SIZE; i++) assert(rgd_lane_slot_for_iap_index(i, true) >= 0);
-    assert(rgd_lane_slot_for_iap_index(100, true) >= 0);        /* full: drops 0, the lowest */
-    assert(!has(0) && has(1) && has(3) && has(100));
-    assert(rgd_lane_slot_for_iap_index(101, true) >= 0);        /* then 1 */
-    assert(rgd_lane_slot_for_iap_index(102, true) >= 0);        /* then 2 */
-    assert(rgd_lane_slot_for_iap_index(103, true) >= 0);        /* 3 is active: then 4 */
-    assert(!has(1) && !has(2) && has(3) && !has(4) && has(5));
-    /* a lookup changes nothing, a new route empties it */
-    int s = rgd_lane_slot_for_iap_index(5, false);
-    assert(s == rgd_lane_slot_for_iap_index(5, false));
+    rgd_drop_passed_lane_events(3);
+    assert(!has(0) && !has(1) && !has(2) && has(3) && has(4) && has(5));
+
+    /* full cache: the OLDEST entry goes, never the active one, and a lookup
+     * never refreshes anything.  Events 100..128 arrive after 3, 4, 5. */
+    for (uint16_t i = 100; i < 129; i++) assert(rgd_lane_slot_for_iap_index(i, true) >= 0);
+    for (int k = 0; k < 5; k++) assert(has(4));                 /* lookups of the oldest */
+    assert(rgd_lane_slot_for_iap_index(200, true) >= 0);        /* evicts 4: 3 is active */
+    assert(has(3) && !has(4) && has(5) && has(200));
+    assert(rgd_lane_slot_for_iap_index(201, true) >= 0);        /* then 5 */
+    assert(rgd_lane_slot_for_iap_index(202, true) >= 0);        /* then 100 */
+    assert(has(3) && !has(5) && !has(100) && has(101) && has(202));
+
+    /* a reroute renumbers the lane source without a reset: its new low events
+     * all survive (dropping the lowest index would evict each one in turn) */
+    for (uint16_t i = 0; i < 6; i++) assert(rgd_lane_slot_for_iap_index(i, true) >= 0);
+    for (uint16_t i = 0; i < 6; i++) assert(has(i));
+    assert(has(3));
+
     rgd_maneuver_map_reset();
-    assert(!has(3) && !has(100));
-    puts("lane cache: lanes kept across maneuver lists, full cache drops the lowest non-active index PASS");
+    assert(!has(3) && !has(200));
+    puts("lane cache: kept across maneuver lists, passed events dropped only by the current index, oldest-first eviction sparing the active event, renumbered events kept, lookups pure PASS");
     return 0;
 }
 '''
 (BUILD / 'lane_cache.c').write_text(c)
 cc = ['cc', '-std=c99', '-O1', '-Wall', '-Wextra', '-Werror', '-Wno-unused-function', '-Wno-unused-variable',
       '-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-DENABLE_LOGGING=0',
-      '-I' + str(ROOT / 'hook'), str(BUILD / 'lane_cache.c'), str(ROOT / 'hook/routeguidance/rgd_tlv.c'),
+      '-I' + str(HOOK), str(BUILD / 'lane_cache.c'), str(HOOK / 'routeguidance/rgd_tlv.c'),
       '-o', str(BUILD / 'lane_cache')]
 subprocess.run(cc, check=True)
 sys.exit(subprocess.run([str(BUILD / 'lane_cache')]).returncode)
