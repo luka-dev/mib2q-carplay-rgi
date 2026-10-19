@@ -82,6 +82,12 @@ Cold boot on 2026-09-16 still showed about 1.5 s of black: `Screen/EGL open` too
 
 Sources: `ALTSCREEN_PRISM_WAITING_2026_09_14`, `ALTSCREEN_VC_NAV_STATUSBAR`
 
+The October 18 [Java comparison and candidate](../cluster-and-rgi/NAV_INITIALIZING_SCREEN.md#-october-18-comparison-and-candidate)
+separates this surface-readiness wait from kamgurgul's explicit native-Navigation
+renderer delay. Our new NAVSD candidate permits only a confirmed CarPlay
+composition with a ready surface to clear the VC's INITIALIZING overlay;
+physical cold-boot verification remains pending.
+
 ## ⏱️ Renderer start cost
 
 Both renderers start only when the first `dio_manager` generation after boot starts `carplay_monitor.sh`; later sessions adopt the running processes, so this cost is paid once per boot.

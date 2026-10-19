@@ -1,6 +1,6 @@
 # Nav Initializing Screen
 
-*Why the Virtual Cockpit still shows "Initialising navigation system. Please wait..." over the CarPlay cluster map, what really drives it on both sides, why the September 16 fix (`7d35b53`) does not stop it, and the fix that should. Status: **open, no fix shipped.** A clamp in a patched `InitializationManagerNavi` was built on 2026-09-23 (`b4a661a`), did not remove the screen on the car, and was removed on 2026-09-24; the analysis and the decisions stay here for the next attempt. The analysis is static, of the VC `hmi_app.elf` (A5 2018, `AU491_0379`) and the HU stock Java (`Tools/jxe2jar/out/MU1316-vf/`).*
+*Why the Virtual Cockpit still shows "Initialising navigation system. Please wait..." over the CarPlay cluster map, what really drives it on both sides, why the September 16 fix (`7d35b53`) does not stop it, and the fix that should. Status: **new host-verified candidate, not deployed** (2026-10-18). A clamp in a patched `InitializationManagerNavi` was built on 2026-09-23 (`b4a661a`), did not remove the screen on the car, and was removed on 2026-09-24; the analysis and the decisions stay here for the next attempt. The analysis is static, of the VC `hmi_app.elf` (A5 2018, `AU491_0379`) and the HU stock Java (`Tools/jxe2jar/out/MU1316-vf/`).*
 
 ---
 
@@ -13,7 +13,97 @@
 | What is *not* the cause | NavSD **InfoStates** (FctID 38). It drives a separate hint-text popup and the "navigation on mobile device" screen (which the KSS firmware makes unreachable on this VC), not this text. |
 | Why the HU sends INITIALIZING | `AbstractBAPModuleInitializationManagerFSG.getGeneralOperationState()` returns INITIALIZING when the "Navi" app has not started (`appState == 0`), when the BAP init sequence is still running (`initState < 9`), during a software download, when `appIsReady` is false, or when the BAP stack is down. |
 | Why `7d35b53` fails | It only intercepts `showInitializingScreen()` / `hideInitializingScreen()`, which toggle `appIsReady`. The other four inputs still send INITIALIZING, from a manager that runs before and beside our wrapper. |
-| Fix | None shipped. The OP_State clamp (`b4a661a`) was tried and removed on 2026-09-24; see "The tried fix (removed)" below. |
+| Fix | October 18 candidate overrides INITIALIZING only for an applied CarPlay composition with a ready renderer; preserves native initialization semantics. Host-verified, not deployed. The broader September clamp remains historical. |
+
+## 🔍 October 18 comparison and candidate
+
+The compared kamgurgul revision is
+`1c3e07528b59bb424ff45b7d14ed7f44bd687efb`; source hashes and the normalized
+comparison are in ignored `build/cluster-startup-comparison.json`.
+
+| Boundary | kamgurgul at that revision | This repository |
+|---|---|---|
+| Native Navigation startup | `NavReadyMarker.watch()` polls `Navigation.getInstance()` and writes `/tmp/carplay_nav_ready`[^nav_marker] | No Navigation marker is required by AltScreen startup |
+| Renderer launch | Monitor waits for the marker or a 90-second cumulative timeout before starting both renderers[^nav_monitor] | Monitor starts AltScreen first, then maneuver renderer, without that gate |
+| Video visibility | Polls renderer heartbeat every 250 ms; screen module selects video context after live frames[^up_alt] | Current renderer control connection reports a posted loader/video surface; selects 80/81 without waiting for native Navigation |
+| Existing NavSD interception | `ScreenNavStatusGate` and `GatedCombiService` defer show/hide requests[^up_gate] | Same gate after class/tag renaming; only `appIsReady` is affected |
+| Final operation-state writer | No replacement `InitializationManagerNavi` in compared Java tree | New presentation-only replacement; candidate described below |
+
+The explicit renderer delay is documented upstream as a workaround for native
+Navigation missing its startup deadline during concurrent cold phone startup.
+A non-null Navigation singleton does not establish that the native map is fully
+loaded. Removing that workaround from another installation needs its own boot
+resource measurements; this repository already has a different startup path.
+The source comparison does not establish which older release a reporter used.
+
+### Presentation-only operation state
+
+The candidate adds
+[`InitializationManagerNavi.java`](../../java_patch/de/audi/app/combi/bap/app/navi/InitializationManagerNavi.java)
+at the final FctID 15 status writer. A state originating from native
+INITIALIZING is sent as NORMAL only when all of these hold:
+
+- The cached applied context is CarPlay 80 or 81 and a CarPlay session/video owns it.
+- The current renderer has published a surface; intention to connect alone is insufficient.
+- The BAP stack is up, power is on and software download is not running.
+
+OFF, DEFECT, BAP-down and software-download states retain stock behavior.
+The internal native app/init state and MOST operation state remain stock.
+`isOpStateNormalOperation()` also retains native initialization semantics:
+a presentation override must not tell the BAP initialization engine that
+Navigation has become ready.
+
+```mermaid
+flowchart TD
+    accTitle: CarPlay presentation and NAVSD status
+    accDescr: The stock manager computes native readiness. An applied CarPlay surface may override only the outgoing INITIALIZING status; native initialization remains unchanged and is recomputed on release.
+    native_state["Stock app, init, power and BAP state"] --> native_manager["Stock operation-state computation"]
+    native_manager --> state_writer["FctID 15 status writer"]
+    carplay_surface["Applied 80/81, renderer ready,<br/>CarPlay owns the cluster"] --> state_writer
+    state_writer --> vc_status["VC presentation status"]
+    native_manager --> native_init["Native initialization and MOST state"]
+```
+
+Refreshes occur after context application, renderer readiness/loss and lifecycle
+publication, outside the AltScreen state lock. Each refresh reads current state;
+there is no queued boolean takeover edge that can survive a reconnect.
+Disconnect/failure recomputes native readiness rather than replaying a guessed
+READY value. Native Navigation remains free to start normally in parallel.
+
+This differs from the removed September candidate: it uses applied surface
+readiness instead of connection intent, preserves software-download/power
+behavior and preserves the native `isOpStateNormalOperation()` result.
+It still needs a real cold HU/VC test; vphone/QNX video alone does not exercise
+the instrument cluster's BAP state machine.
+
+### Verification
+
+[`NavOperationStateTest.java`](../../tests/NavOperationStateTest.java) executes
+the shipping replacement with the **unmodified stock superclass** computing
+operation state. External BAP transport, power and DisplayManager are controlled
+fixtures; framework constructors are bypassed with host-only Unsafe. It proves
+the old show/hide wrapper's counterexample, then exercises absent Navigation,
+all init phases before 9, actual native readiness, software download, power off,
+BAP down, native defect, failed context, renderer loss/reconnect, TMDevice bounce
+and disconnect. The generated stock FctID 15 serializer is exercised too.
+
+The test adds 10000 deterministic state mutations (seed 47426351), comparing
+native readiness to the original superclass result. Run through
+`scripts/test_java_transports.sh` against US MU1316, EU MU1329 and CN MU1003.
+Original `InitializationManagerNavi.class` is byte-identical across those three
+stock JARs (SHA-256 `f675258fa7078df96d82bc01efabde3c59375bda4cb054cd85e14b4ecf963fec`).
+Validation passed the Java transport/startup/context/lifecycle/PDC suite,
+renderer monitor lifecycle tests and US/EU/CN stock linkage audit. The context
+fuzzer passed 11200 switch cases and 10000 lifecycle events per firmware with
+seed 47426351; the NAVSD test independently passed 10000 mutations per firmware.
+These are host results, not physical VC timing measurements. Logs are under
+ignored `build/cluster-startup-*.log`; the review snapshot is
+`build/nav-startup-review-20261018/`.
+
+[^nav_marker]: [kamgurgul NavReadyMarker at the compared revision](https://github.com/kamgurgul/mib2q-carplay/blob/1c3e07528b59bb424ff45b7d14ed7f44bd687efb/java_patch/com/luka/carplay/core/NavReadyMarker.java).
+[^nav_monitor]: [kamgurgul renderer monitor at the compared revision](https://github.com/kamgurgul/mib2q-carplay/blob/1c3e07528b59bb424ff45b7d14ed7f44bd687efb/deploy/smartphone_integrator/carplay_monitor.sh).
+[^up_alt]: [kamgurgul AltScreen heartbeat at the compared revision](https://github.com/kamgurgul/mib2q-carplay/blob/1c3e07528b59bb424ff45b7d14ed7f44bd687efb/java_patch/com/luka/carplay/core/AltScreenModule.java).
+[^up_gate]: [kamgurgul NavSD gate at the compared revision](https://github.com/kamgurgul/mib2q-carplay/blob/1c3e07528b59bb424ff45b7d14ed7f44bd687efb/java_patch/com/luka/carplay/core/ScreenNavStatusGate.java).
 
 ## 🖥️ The VC side
 
