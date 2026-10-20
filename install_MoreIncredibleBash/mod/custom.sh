@@ -435,6 +435,28 @@ patch_si() {
     return 0
 }
 
+# ---- Wi-Fi driver: Marvell 88W8787 RX-reorder + timer hardening, patched into THIS unit's
+# own driver (docs/wireless-carplay/WIFI_DRIVER_RE.md).  Three fragments found by their
+# surrounding code, so P5087/P5092/K1004 all get the fix and any other build keeps its stock.
+# Activation is a reboot (io-pkt reloads the driver from disk).  Non-fatal if it does not match.
+WIFI_SO=/mnt/app/armle/lib/dll/devnp-mrvl_wlan-sdiorm.so
+patch_wifi() {
+    find_mp || { echo "  WARN no M.I.B. micropython - Wi-Fi driver stays stock (no RX-reorder fix)"; return 0; }
+    [ -f "$WIFI_SO" ] || { echo "  WARN no $WIFI_SO"; return 0; }
+    src=$WIFI_SO; [ -f "$WIFI_SO.carplay-stock" ] && src=$WIFI_SO.carplay-stock
+    rm -f "$WIFI_SO.carplay-new"
+    "$mp" -X heapsize=8M "$RES/binpatch.py" wifi "$src" "$WIFI_SO.carplay-new"; rc=$?
+    case $rc in
+        0) backup_once "$WIFI_SO" "$WIFI_SO.carplay-stock" || { rm -f "$WIFI_SO.carplay-new"; return 1; }
+           chmod 755 "$WIFI_SO.carplay-new" && mv -f "$WIFI_SO.carplay-new" "$WIFI_SO" ||
+               { rm -f "$WIFI_SO.carplay-new"; echo "FAILED activate $WIFI_SO"; return 1; }
+           echo "  $WIFI_SO (RX-reorder + timer hardening patched in)" ;;
+        3) echo "  $WIFI_SO already carries the RX-reorder fix" ;;
+        *) rm -f "$WIFI_SO.carplay-new"; echo "  WARN Wi-Fi driver stays stock (no RX-reorder fix)" ;;
+    esac
+    return 0
+}
+
 echo "custom.sh: CarPlay $ACTION"
 echo "Remounting app and system read-write..."
 mount -uw /mnt/app    2>/dev/null || true
@@ -497,6 +519,7 @@ install)
         else echo "  WARN could not remove $j"; fi
     done
     patch_si || exit 1
+    patch_wifi || exit 1
     gate_audio || exit 1
     patch_json
     patch_ncm
@@ -522,6 +545,7 @@ uninstall)
     [ -e "$CFG.carplay-stock" ] && mv -f "$CFG.carplay-stock" "$CFG"
     [ -e "$DIO.carplay-stock" ] && mv -f "$DIO.carplay-stock" "$DIO"
     [ -e "$SI_BIN.carplay-stock" ] && mv -f "$SI_BIN.carplay-stock" "$SI_BIN"
+    [ -e "$WIFI_SO.carplay-stock" ] && mv -f "$WIFI_SO.carplay-stock" "$WIFI_SO"
     [ -e "$LANG_ZIP.carplay-stock" ] && mv -f "$LANG_ZIP.carplay-stock" "$LANG_ZIP" && echo "  restored $LANG_ZIP"
     for f in $NCM_FILES; do
         [ -e "$f.carplay-stock" ] && mv -f "$f.carplay-stock" "$f"

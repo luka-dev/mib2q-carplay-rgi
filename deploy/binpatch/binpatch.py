@@ -30,6 +30,24 @@ PATCHES = {
         (h('30 15 d6 e5 53 ce 86 e2 31 25 d6 e5 d8 00 84 e2'), h('00 30 a0 e3'),
          h('2e 33 09 e0'), h('08 c0 8c e2 04 e0 8d e5 08 b0 8d e5 00 c0 8d e5')),
     ],
+    # Marvell 88W8787 Wi-Fi driver RX-reorder + timer hardening (docs/wireless-carplay/WIFI_DRIVER_RE.md).
+    # Three fragments: a 50 ms expiry that releases a held packet so a lost seqno cannot stall the
+    # BA window, a wrapped-window fix, and a one-shot timer harden.  The driver is byte-identical on
+    # P5087/P5092 (both get the fix); K1004/MU1003 ships a different driver build and keeps its stock.
+    'wifi': [
+        (h('01 50 a0 e1 04 20 8d e5 00 40 a0 e1 14 a0 91 e5'),
+         h('02 00 5a e1 18 a0 91 a5 03 00 00 aa 02 a0 6a e0 18 30 91 e5 03 00 5a e1 03 a0 a0 a1'),
+         h('0a a0 42 e0 5a a0 eb e7 18 30 91 e5 03 00 5a e1 03 a0 a0 a1 00 00 5a e3 03 a0 a0 01'),
+         h('00 00 5a e3 1e 00 00 da 00 60 a0 e3 f4 87 01 e3')),
+        (h('00 00 51 e3 0f 00 00 0a 24 30 d4 e5 00 00 53 e3'),
+         h('05 00 00 0a'),
+         h('00 f0 20 e3'),
+         h('00 30 96 e5 ac 31 93 e5 00 00 95 e5 33 ff 2f e1')),
+        (h('01 30 53 e2 fa ff ff 5a 08 00 00 ea 14 20 91 e5'),
+         h('01 20 82 e2 0c 00 94 e5 02 2a a0 e1 22 2a a0 e1'),
+         h('03 20 82 e0 01 20 82 e2 0c 00 94 e5 52 20 eb e7'),
+         h('73 fe ff eb 0c 00 94 e5 08 10 94 e5 87 ff ff eb')),
+    ],
 }
 
 
