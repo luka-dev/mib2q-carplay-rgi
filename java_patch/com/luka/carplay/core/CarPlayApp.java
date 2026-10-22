@@ -76,6 +76,7 @@ public final class CarPlayApp {
             }
             /* the class itself may fail to link on an odd firmware: guard at the call */
             try { UpmixSetting.boot(fwRef.framework()); } catch (Throwable t) { Log.w(TAG, "upmix level: " + t); }
+            try { CockpitMapSetting.boot(fwRef.framework()); } catch (Throwable t) { Log.w(TAG, "cockpit map mode: " + t); }
         }
         Log.i(TAG, "transport up (bus always-on) build=" + BUILD_ID);
     }
@@ -279,6 +280,16 @@ public final class CarPlayApp {
      * invokes this from NavigationJobs; the small worker keeps teardown/start outside that
      * dispatcher and coalesces rapid remove+add pairs. */
     public static void onNavigationServiceChanged() {
+        rebindRgd("Navigation service changed");
+    }
+
+    /** CockpitMapSetting changed: AUDI releases CarPlay's route-guidance takeover, the other
+     *  modes take it again.  Same serialized RGD rebind as a Navigation service change. */
+    public static void onCockpitMapModeChanged(String reason) {
+        rebindRgd("cockpit map mode changed (" + reason + ")");
+    }
+
+    private static void rebindRgd(final String why) {
         final int generation;
         final int activeLifecycleGeneration;
         final IContext activeContext;
@@ -302,7 +313,7 @@ public final class CarPlayApp {
                     try { MODULES[RGD_MODULE_INDEX].stop(); }
                     catch (Throwable x) { Log.w(TAG, "rgd rebind stop: " + x); }
                     synchronized (lock) { started[RGD_MODULE_INDEX] = false; }
-                    Log.i(TAG, "Navigation service changed - rebinding RGD");
+                    Log.i(TAG, why + " - rebinding RGD");
                     if (!startPass(activeLifecycleGeneration)
                             && lifecycleCurrent(activeLifecycleGeneration, true,
                                                 activeContext)) {

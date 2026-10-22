@@ -14,7 +14,9 @@ for sh in $shells; do
     echo h > "$T/src/carplay_hook.log"; echo a > "$T/src/spatial_apap_1.bin"; echo s > "$T/src/shmem_obj"
     rm -rf "$T/core"; mkdir "$T/core"; echo j > "$T/core/j9.core.gz"; : > "$T/core/EBNavFreezeLog.9"
     for k in 1 2 3 4 5 6 7; do echo e > "$T/src/smartphone_integrator_error_$k.tar.gz"; done
-    CP_LOG_SRC=$T/src CP_CORE_SRC=$T/core "$sh" "$T/card/mod/custom.sh" > /dev/null || fail "$sh" "run 1"
+    echo z > "$T/lang_data.zip"
+    CP_LANGZIP_SRC=$T/lang_data.zip CP_LOG_SRC=$T/src CP_CORE_SRC=$T/core "$sh" "$T/card/mod/custom.sh" > /dev/null || fail "$sh" "run 1"
+    [ -f "$T/card/carplay_logs/lang_data.zip" ] || fail "$sh" "lang_data.zip not copied"
     CP_LOG_SRC=$T/src CP_CORE_SRC=$T/core "$sh" "$T/card/mod/custom.sh" > /dev/null || fail "$sh" "run 2"
     L=$T/card/carplay_logs
     [ -f "$L/001/tmp/carplay_hook.log" ] && [ -f "$L/002/tmp/spatial_apap_1.bin" ] || fail "$sh" "logs not copied"
@@ -30,4 +32,4 @@ for sh in $shells; do
     CP_LOG_SRC=$T/src CP_CORE_SRC=$T/core "$sh" "$T/card/mod/custom.sh" > /dev/null || fail "$sh" "run 3"
     [ -d "$L/010" ] && [ ! -e "$L/001" ] || fail "$sh" "next save is not highest+1: $(ls "$L" | tr '\n' ' ')"
 done
-echo "logging M.I.B.: highest+1 numbering, /tmp logs, SI dumps, cores once, verbose marker:$shells PASS"
+echo "logging M.I.B.: highest+1 numbering, /tmp logs, SI dumps, cores once, lang_data once, verbose marker:$shells PASS"

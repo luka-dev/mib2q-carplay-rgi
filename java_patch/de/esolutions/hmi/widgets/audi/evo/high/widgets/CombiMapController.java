@@ -350,12 +350,18 @@ public class CombiMapController extends DisplayControllerEvo implements NaviMoKo
          * clusterActive (set only after the first switch settles) — else a View press during the first
          * ~180ms switch slips the pin and strands the cluster on the stock map.  isConnected() clears
          * on disconnect, so the stock map returns then. */
-        if (this.kombiTerminal == CLUSTER_TERMINAL && com.luka.carplay.core.AltScreenModule.isConnected()) {
+        int target = this.getTargetContextID();
+        if (this.kombiTerminal == CLUSTER_TERMINAL) {
+            /* AUDI_ARROWS mirrors the stock map plane (33/58) of this target, also while pinned. */
+            com.luka.carplay.core.AltScreenModule.onStockMapTarget(target);
+        }
+        /* The pin follows the cockpit map mode (CockpitMapSetting): always in PHONE, only while
+         * CarPlay guides in AUDI_ARROWS, never in AUDI - there the stock map and View button work. */
+        if (this.kombiTerminal == CLUSTER_TERMINAL && com.luka.carplay.core.AltScreenModule.isClusterPinned()) {
             logDisplay.log(10000000, "CombiMapController#switchToTargetContext SKIPPED — CarPlay owns cluster (ctx 80)");
             return;
         }
 
-        int target = this.getTargetContextID();
         if (this.kombiTerminal != 0 && !this.isMapContext(target)) {
             logDisplay.log(10000,
                 "CombiMapController#switchToTargetContext not switching to context: %1 because it is no valid map context",

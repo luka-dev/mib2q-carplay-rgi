@@ -110,6 +110,11 @@ features below follow it automatically.
   route. The **Audi View** button switches the cluster between its classic and large layouts as
   with the stock navigation, and the **steering-wheel roller** zooms the cluster map. A short
   animation fills the cluster until the first video frame arrives.
+- **Choose the cockpit map (this fork).** A long press on the left steering-wheel roller, on the
+  cockpit's map tab, steps between the phone's map, the Audi map with CarPlay's arrows over it,
+  and the full Audi navigation (its own route and guidance, while Waze or Maps stays on the main
+  screen). The choice is kept across restarts
+  ([details](docs/cluster-and-rgi/CLUSTER_CONTEXTS.md#-cockpit-map-modes-this-fork)).
 - **Turn-by-turn on the cluster.** During CarPlay navigation the cluster shows a 3D maneuver
   arrow beside the map. Its distance bar fills as the turn approaches and blinks just before it.
   The cluster also shows lane arrows, distance to the turn, arrival time and remaining distance.

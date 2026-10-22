@@ -33,10 +33,12 @@ public class DisplayManagerMIB2High extends DisplayManager implements IDisplayLi
     private static final int CTX_MAP_ALT_KDK = 77;   // alt map + KDK + backings
     private static final int CTX_CARPLAY_NAV = 80;   // CarPlay: maneuver + backing + map
     private static final int CTX_CARPLAY_MAP = 81;   // CarPlay: map only
+    private static final int CTX_ARROWS_MAP     = 82;   // cockpit mode AUDI_ARROWS: maneuver + backing + stock map 33
+    private static final int CTX_ARROWS_ALT_MAP = 83;   // the same over the stock alternative map 58
     private static final int FIRST_CARPLAY_CONTEXT = 80;   // every stock context id is < this
 
     /* ---- context-table sizing / G24 KDK variants ---- */
-    private static final int DC_SIZE_A5  = 82;    // stock 0..78 + CarPlay 80/81
+    private static final int DC_SIZE_A5  = 84;    // stock 0..78 + CarPlay 80/81 + cockpit-mode 82/83
     private static final int DC_SIZE_G24 = 158;   // stock + the +79 KDK-hoisted variants
     private static final int G24_KDK_CTX_OFFSET = 79;
     private int lastBlockedCarPlayContext = -1;
@@ -177,6 +179,11 @@ public class DisplayManagerMIB2High extends DisplayManager implements IDisplayLi
         if (this.framework.getKombiType() != KOMBI_TYPE_G24) {
             this.dc[CTX_CARPLAY_NAV] = new DisplayContext(CTX_CARPLAY_NAV, new int[]{98, 101, 102, 99});
             this.dc[CTX_CARPLAY_MAP] = new DisplayContext(CTX_CARPLAY_MAP, new int[]{99});
+            /* CockpitMapSetting.AUDI_ARROWS: CarPlay's maneuver box (98) and the stock KDK
+             * backings over the STOCK map instead of the phone video - stock context 74/77 with
+             * our maneuver window in place of the stock KDK (20). */
+            this.dc[CTX_ARROWS_MAP] = new DisplayContext(CTX_ARROWS_MAP, new int[]{98, 101, 102, 33});
+            this.dc[CTX_ARROWS_ALT_MAP] = new DisplayContext(CTX_ARROWS_ALT_MAP, new int[]{98, 101, 102, 58});
         } else {
             this.defineContextsForG24();
         }
@@ -304,7 +311,7 @@ public class DisplayManagerMIB2High extends DisplayManager implements IDisplayLi
          * from AltScreenModule's one serialized worker.  The logical FwHMI main-context still
          * changes normally and RouteGuidance uses it to choose ctx80 vs ctx81. */
         if (terminal == CLUSTER_TERMINAL
-                && com.luka.carplay.core.AltScreenModule.isConnected()
+                && com.luka.carplay.core.AltScreenModule.isClusterPinned()
                 && !com.luka.carplay.core.AltScreenModule.isClusterContextWriterThread()) {
             if (lastBlockedCarPlayContext != ctx) {
                 lastBlockedCarPlayContext = ctx;

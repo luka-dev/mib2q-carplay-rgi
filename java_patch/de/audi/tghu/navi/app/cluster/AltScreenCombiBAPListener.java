@@ -51,6 +51,8 @@ public final class AltScreenCombiBAPListener extends CombiBAPListener {
      * which bypass the two-argument BAP request setter. */
     protected void updateMapVisibility() {
         com.luka.carplay.cluster.ClusterLayerController.onVcVisibility(this.supplementaryMapViewVisible);
+        /* Bit 0 of the same FctID 44: the cockpit's map tab, which gates the cockpit-map shortcut. */
+        AltScreenModule.onVcMapTabVisible(this.lvdsMapVisible);
         super.updateMapVisibility();
     }
 
@@ -60,7 +62,7 @@ public final class AltScreenCombiBAPListener extends CombiBAPListener {
     }
 
     public void setMapScale(int steps) {
-        if (AltScreenModule.isConnected()) {
+        if (AltScreenModule.isPhoneMapShown()) {
             AltScreenModule.consumeSteeringWheelScale(steps);
             /* Complete the BAP SetGet with the unchanged native-map status. */
             this.updateMapScale();
@@ -70,7 +72,7 @@ public final class AltScreenCombiBAPListener extends CombiBAPListener {
     }
 
     public void setMapScaleSetting(int setting) {
-        if (AltScreenModule.isConnected()) {
+        if (AltScreenModule.isPhoneMapShown()) {
             /* This is autoZoom, not the steering-wheel OK key.  Do not mutate
              * the hidden Audi map; setMapScale() sends the one Status ACK. */
             return;

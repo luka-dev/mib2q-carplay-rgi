@@ -379,7 +379,7 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
              * CarPlay sends FctID 18 directly through BAPBridge/AppConnectorNavi, and
              * the audited AU491 HMI independently hides distance when BargraphOn != 0.
              * See docs/cluster-and-rgi/DISTANCE_BARGRAPH.md. */
-            if (flag && i > 0 && (!this.showBargraph || com.luka.carplay.core.AltScreenModule.isConnected())) {
+            if (flag && i > 0 && (!this.showBargraph || com.luka.carplay.core.AltScreenModule.ownsRouteGuidance())) {
                 Util.setModelStatus(metricsmodelapp, MODEL_STATUS_VALID);
             } else {
                 Util.setModelStatus(metricsmodelapp, MODEL_STATUS_INVALID);

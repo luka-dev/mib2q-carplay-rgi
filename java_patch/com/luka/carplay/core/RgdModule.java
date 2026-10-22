@@ -30,6 +30,14 @@ final class RgdModule implements Module {
             return true;
         }
 
+        /* Cockpit map mode AUDI (CockpitMapSetting): the stock navigation keeps its route, its
+         * cockpit guidance and the HUD.  Report "started" without taking over; switching the mode
+         * rebinds this module (CarPlayApp.onCockpitMapModeChanged). */
+        if (CockpitMapSetting.mode() == CockpitMapSetting.AUDI) {
+            Log.i(TAG, "cockpit map mode audi-navigation: CarPlay route guidance idle, stock navigation keeps the cluster");
+            return true;
+        }
+
         if (naviHandle == null) naviHandle = fw.getServiceHandle(CombiBAPServiceNavi.class);
         Object navi = naviHandle != null ? naviHandle.service() : null;
         if (navi == null) {

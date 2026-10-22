@@ -37,6 +37,11 @@ public final class SteeringWheelInputModule implements Module {
     private static final int KEY_MFW_ROLLER_LEFT = 40;
     private static final int KST_RELEASED = 0;
     private static final int KST_PRESSED = 1;
+    /* Long-press states of the same key (DSIKeyPanel): 3 long pressed, 4 long started,
+     * 5 long released.  The first of 3/4 fires the cockpit-map shortcut once per press. */
+    private static final int KST_LONG_PRESSED = 3;
+    private static final int KST_LONG_STARTED = 4;
+    private static final int KST_LONG_RELEASED = 5;
     private static final int ATTR_VALID = 1;
     private static final long COLLAPSED_SELECT_WINDOW_MS = 600L;
 
@@ -52,6 +57,10 @@ public final class SteeringWheelInputModule implements Module {
     private volatile IMMICombiScreenChangeManager combiManager;
     private ServiceRegistration listenerRegistration;
     private volatile boolean running;
+    /* Short press = OK (route info), long press = cockpit map shortcut.  The short action now
+     * runs on release, once it is clear the press did not become a long one. */
+    private boolean okArmed;
+    private boolean longFired;
 
     public String name() { return "mfw-input"; }
 
@@ -192,7 +201,7 @@ public final class SteeringWheelInputModule implements Module {
         IMMICombiScreenChangeManager manager = combiManager;
         /* No combi manager on this variant: CarPlay owning the cluster with RGI up IS the
          * "map tab" here, and that is exactly what the handler below verifies. */
-        if (manager == null) return AltScreenModule.isConnected() && AltScreenModule.isNavActive();
+        if (manager == null) return AltScreenModule.ownsRouteGuidance() && AltScreenModule.isNavActive();
         try {
             MMICombiDisplayStatus status = manager.getLastConfirmedDisplayStatus();
             return status != null
@@ -201,6 +210,23 @@ public final class SteeringWheelInputModule implements Module {
             Log.w(TAG, "cannot read confirmed VC context: " + t);
             return false;
         }
+    }
+
+    /* The cockpit shows its map tab: the "MMI in the cluster" screen manager when this variant
+     * has it, otherwise the cockpit's own FctID 44 lvdsMapIsVisible.  Unknown = no. */
+    private boolean isCockpitMapTab() {
+        if (!running) return false;
+        IMMICombiScreenChangeManager manager = combiManager;
+        if (manager != null) {
+            try {
+                MMICombiDisplayStatus status = manager.getLastConfirmedDisplayStatus();
+                return status != null
+                    && status.getMainContext() == MMICombiDisplayStatus.MAIN_CONTEXT_NAVIGATION_MAP;
+            } catch (Throwable t) {
+                Log.w(TAG, "cannot read confirmed VC context: " + t);
+            }
+        }
+        return AltScreenModule.vcMapTabState() == 1;
     }
 
     private final class RawKeyListener implements DSIKeyPanelListener {
@@ -213,16 +239,47 @@ public final class SteeringWheelInputModule implements Module {
                 return;
             }
             if (keyCode != KEY_MFW_ROLLER_LEFT
-                    || (keyboardId != KBD_MFW && keyboardId != KBD_MFW_3GP)
-                    || (keyState != KST_PRESSED && keyState != KST_RELEASED)) return;
+                    || (keyboardId != KBD_MFW && keyboardId != KBD_MFW_3GP)) return;
+
+            if (keyState == KST_LONG_PRESSED || keyState == KST_LONG_STARTED) {
+                if (longFired) return;
+                longFired = true;
+                okArmed = false;
+                onLongPress(keyboardId);
+                return;
+            }
+            if (keyState == KST_LONG_RELEASED) {
+                okArmed = false;
+                return;
+            }
+            if (keyState != KST_PRESSED && keyState != KST_RELEASED) return;
 
             armCollapsedSelect(keyState);
-            if (keyState != KST_PRESSED) return;
+            if (keyState == KST_PRESSED) {
+                okArmed = true;
+                longFired = false;
+                return;
+            }
+            boolean shortPress = okArmed && !longFired;
+            okArmed = false;
+            if (!shortPress) return;
 
             boolean mapTab = isConfirmedMapTab();
             Log.i(TAG, "MFW OK pressed board=" + keyboardId + " mapTab=" + mapTab);
             if (!mapTab) return;
             AltScreenModule.onSteeringWheelOkPressed();
+        }
+
+        /* Long press on the cockpit's map tab while CarPlay is connected: next cockpit map
+         * mode (CockpitMapSetting).  Never on another tab, where the stock cockpit uses long
+         * presses (trip data reset). */
+        private void onLongPress(int keyboardId) {
+            boolean mapTab = isCockpitMapTab();
+            Log.i(TAG, "MFW OK long press board=" + keyboardId + " mapTab=" + mapTab
+                + " connected=" + AltScreenModule.isConnected());
+            if (!mapTab || !AltScreenModule.isConnected()) return;
+            int next = CockpitMapSetting.next(CockpitMapSetting.mode());
+            CockpitMapSetting.select(next, "steering-wheel long press");
         }
 
         public void asyncException(int errorCode, String errorString, int requestType) { }

@@ -1,6 +1,6 @@
 # Cluster Contexts
 
-*How the CarPlay cluster gets its own DisplayManager contexts (74 stock, 80 nav, 81 map), why we reuse stock backings, and the single writer that switches between them.*
+*How the CarPlay cluster gets its own DisplayManager contexts (74 stock, 80 nav, 81 map, 82/83 CarPlay arrows over the Audi map), why we reuse stock backings, the single writer that switches between them, and the cockpit map modes that choose among them.*
 
 ---
 
@@ -13,10 +13,28 @@ The Audi cluster (LVDS2, terminal 1, 1440×542 visible) composites a set of disp
 | `74` | `{20, 102, 101, 33}` | Stock map + KDK maneuver, used when CarPlay does not own the cluster (`DisplayManagerMIB2High.java:156-164`) |
 | `80` | `{98, 101, 102, 99}` | CarPlay nav active: our `maneuver_render` (98) over the KDK backings (101/102) over the CarPlay map plane (99) (`:178`) |
 | `81` | `{99}` | CarPlay connected, not navigating: the CarPlay map plane only (`:179`) |
+| `82` | `{98, 101, 102, 33}` | Cockpit map mode "Audi map + CarPlay arrows" while CarPlay guides: our maneuver over the KDK backings over the **stock** map 33 (this fork) |
+| `83` | `{98, 101, 102, 58}` | The same over the stock alternative map 58, chosen when the stock map controller targets 76/77 (this fork) |
 
 Displayables: `98` is our `maneuver_render` window (Software, 328×181), `99` is the `altscreen_render` CarPlay plane, `101`/`102` are the stock 987 KDK Image backings, `20` is the stock KDK maneuver, and `33` is the stock cluster map. `[code]` (`java_patch/com/luka/carplay/cluster/ClusterLayerController.java:8-10`, `maneuver_render/protocol.h:108`)
 
 On G24 (`kombiType == 4`) there is no ctx 80/81. `AltScreenModule.start()` disables itself there. `[code]` (`java_patch/com/luka/carplay/core/AltScreenModule.java:119-122`, `:386-390`)
+
+## 🗺️ Cockpit map modes (this fork)
+
+`CockpitMapSetting` chooses what the Virtual Cockpit shows while CarPlay is connected. The mode is stored in the HMI persistence (namespace 1009, key 1001, next to the UpMix level), survives restarts, and applies at once. `[code]` (`java_patch/com/luka/carplay/core/CockpitMapSetting.java`, `tests/CockpitMapModeTest.java`), `[open]` until car-tested
+
+| Mode | Cluster context | Route guidance on the cluster and HUD | Roller zoom | Stock route at connect |
+|---|---|---|---|---|
+| **Phone map** (default, luka's behaviour) | 81, 80 while CarPlay guides | CarPlay (BAP + our maneuver box) | phone map | cancelled (`BAPBridge.engageTakeover`) |
+| **Audi map + CarPlay arrows** (Allemon's arrow-over-stock-map idea) | stock contexts, 82/83 while CarPlay guides | CarPlay | Audi map | cancelled |
+| **Audi navigation** | stock contexts throughout | the stock navigation (its own route, KDK, route text, HUD) | Audi map | kept: `RgdModule` does not take over |
+
+"Audi navigation" works like M.I.B.'s NavActiveIgnore without its side effect: luka's narrow seam in `CarplayDSILifecycleController.convertAppState` already hides CarPlay's NAVI ownership from the HMI, and with no takeover the stock route keeps guiding in the cockpit and HUD while Waze or Maps runs on the main screen (two voice guidances if both talk). Switching into or out of "Audi navigation" rebinds the RGD module through the same serialized path as a Navigation-service change (`CarPlayApp.onCockpitMapModeChanged`); switching back to a CarPlay mode takes over again, which cancels a running stock route as at connect.
+
+What follows the mode: `AltScreenModule.computeDesiredCtxLocked()` is the single place that maps session state + mode to a context. `isClusterPinned()` (stock context writes blocked: `CombiMapController.switchToTargetContext`, `DisplayManagerMIB2High.switchContext`) is always true in phone mode, only while CarPlay guides in arrows mode, never in Audi mode. `ownsRouteGuidance()` (KDK planes in `ClusterLayerController`, the HU distance model in `ClusterService`, the OK fallback) is false only in Audi mode. `isPhoneMapShown()` (roller zoom to the phone) is true only in phone mode. Contexts 82/83 do not wait for the phone video's first frame. `[code]`
+
+**Steering-wheel shortcut.** A long press on the left roller (DSIKeyPanel key 40, states 3/4 long pressed/started) steps phone map → Audi map + arrows → Audi navigation → phone map, once per press, only while CarPlay is connected and the cockpit shows its map tab (FctID 44 bit 0 `lvdsMapIsVisible`, or the "MMI in the cluster" screen manager where present); other tabs keep their own long-press use. The short press (OK, route info) now acts on release, so one press is never both. No on-screen confirmation yet: the cockpit switches visibly. `[code]`
 
 ## ⚠️ Displayable 103 is not creatable, so reuse 101/102
 

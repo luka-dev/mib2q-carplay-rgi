@@ -276,7 +276,9 @@ public final class ClusterLayerController {
     private static void applyNow(IDisplayManagerKombiControl dm, int terminal, Geometry geometry,
                                  boolean stockVisible, int stockOpacity) {
         boolean popup;
-        boolean carplayOwnsCluster = com.luka.carplay.core.AltScreenModule.isConnected();
+        /* The maneuver box and its backings are CarPlay's in every cockpit map mode but AUDI
+         * (CockpitMapSetting), where the stock navigation keeps its own KDK. */
+        boolean carplayOwnsCluster = com.luka.carplay.core.AltScreenModule.ownsRouteGuidance();
         int permittedOpacity;
         synchronized (LOCK) {
             popup = carplayOwnsCluster && haveVcStage ? vcPopup : lastStockPopup;

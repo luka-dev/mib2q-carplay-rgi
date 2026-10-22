@@ -98,6 +98,13 @@ for f in "$SRC"/*.log "$SRC"/*.log.* "$SRC"/carplay_* "$SRC"/spatial_* "$SRC"/*.
     cp "$f" "$OUT/tmp/" 2>/dev/null || echo "copy failed: $f" >> "$OUT/info.txt"
 done
 
+# ---- the MMI's text tables, once per card (carplay_logs/lang_data.zip): the labels of the stock
+# menus a CarPlay settings row is placed next to (docs/cluster-and-rgi/CLUSTER_CONTEXTS.md) ----
+LANGZIP=${CP_LANGZIP_SRC:-/mnt/app/eso/hmi/lsd/jars/lang_data.zip}   # override only for a host test
+if [ ! -f "$BASE/lang_data.zip" ] && [ -f "$LANGZIP" ]; then
+    cp "$LANGZIP" "$BASE/lang_data.zip" 2>/dev/null || echo "copy failed: $LANGZIP" >> "$OUT/info.txt"
+fi
+
 # ---- configs we patch ----
 mkdir "$OUT/config"
 for f in /mnt/system/etc/eso/production/dio_manager.json \

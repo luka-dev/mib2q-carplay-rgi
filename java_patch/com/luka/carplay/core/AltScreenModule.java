@@ -42,6 +42,11 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
     public static final int CTX_CLUSTER       = 80;   /* nav active: {98 maneuver, 101/102 backing, 99 map} */
     public static final int CTX_CLUSTER_MAP   = 81;   /* no nav: {99 map} only (no backing box, no maneuver) */
     public static final int CTX_STOCK_CLUSTER = 74;
+    /* Cockpit map mode AUDI_ARROWS (CockpitMapSetting): our maneuver box over the stock map,
+     * defined in DisplayManagerMIB2High: 82 = {98,101,102,33}, 83 = {98,101,102,58}, mirroring
+     * the stock map context (72/74 use map 33, 76/77 the alternative map 58). */
+    public static final int CTX_ARROWS_MAP     = 82;
+    public static final int CTX_ARROWS_ALT_MAP = 83;
     private static final int CTX_BOUNCE       = 72;   /* kombi map — never ours; forces a real ctx change */
     private static final int BOUNCE_SLEEP_MS  = 180;  /* preContextSwitchHook settle (proven driver) */
     private static final long CONTEXT_RECONCILE_MS = 250L;
@@ -89,7 +94,7 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
      * even if the bus is momentarily reconnecting.
      */
     public static boolean consumeSteeringWheelScale(int steps) {
-        if (!isConnected()) return false;
+        if (!isPhoneMapShown()) return false;
 
         if (steps != 0) {
             if (steps > 127) steps = 127;
@@ -107,6 +112,79 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
      * terminal 1 to the stock map (worker then thinks it still owns ctx → stuck).  Intent-based pin
      * closes that window from t0. */
     public static boolean isConnected() { return platformSupported && (connected || videoAvailable); }
+
+    /* ---- cockpit map mode (CockpitMapSetting) ----
+     * isConnected() stays "a CarPlay session runs"; these say what CarPlay owns on the cluster. */
+    private static volatile int stockMapTarget = CTX_STOCK_CLUSTER;
+
+    /** The phone's map is the cockpit map (mode PHONE): roller zoom goes to the phone. */
+    public static boolean isPhoneMapShown() {
+        return isConnected() && CockpitMapSetting.mode() == CockpitMapSetting.PHONE;
+    }
+
+    /** CarPlay drives the route guidance on the cluster and HUD (BAP, maneuver box): every mode
+     *  but AUDI, where the stock navigation keeps all of it. */
+    public static boolean ownsRouteGuidance() {
+        return isConnected() && CockpitMapSetting.mode() != CockpitMapSetting.AUDI;
+    }
+
+    /** CarPlay owns the physical cluster context, so stock context writes are blocked: always in
+     *  PHONE, only while CarPlay guides in AUDI_ARROWS, never in AUDI. */
+    public static boolean isClusterPinned() {
+        if (!isConnected()) return false;
+        int m = CockpitMapSetting.mode();
+        if (m == CockpitMapSetting.PHONE) return true;
+        return m == CockpitMapSetting.AUDI_ARROWS && navActive;
+    }
+
+    /** CombiMapController reports the stock map context it would switch to, also while pinned,
+     *  so AUDI_ARROWS mirrors the stock map plane (33 or 58). */
+    public static void onStockMapTarget(int ctx) {
+        if (ctx == stockMapTarget) return;
+        stockMapTarget = ctx;
+        if (isConnected() && CockpitMapSetting.mode() == CockpitMapSetting.AUDI_ARROWS) republish();
+    }
+
+    /* VC FctID 44 bit 0 (lvdsMapIsVisible): the cockpit shows its map tab.  -1 = not reported. */
+    private static volatile int vcMapTab = -1;
+
+    public static void onVcMapTabVisible(boolean visible) {
+        int v = visible ? 1 : 0;
+        if (vcMapTab == v) return;
+        vcMapTab = v;
+        Log.i(TAG, "VC map tab visible=" + visible);
+    }
+
+    /** 1 = the cockpit reported its map tab, 0 = another tab, -1 = not reported yet. */
+    public static int vcMapTabState() { return vcMapTab; }
+
+    static void onCockpitMapModeChanged(int mode) {
+        Log.i(TAG, "cockpit map mode -> " + CockpitMapSetting.name(mode));
+        republish();
+        com.luka.carplay.cluster.ClusterLayerController.reapply();
+    }
+
+    /* Caller holds LOCK.  The one place that turns session state + cockpit mode into a context. */
+    private static int computeDesiredCtxLocked() {
+        if (!(connected || videoAvailable)) return CTX_STOCK_CLUSTER;
+        int m = CockpitMapSetting.mode();
+        if (m == CockpitMapSetting.AUDI) return CTX_STOCK_CLUSTER;
+        if (m == CockpitMapSetting.AUDI_ARROWS) {
+            if (!navActive) return CTX_STOCK_CLUSTER;
+            int t = stockMapTarget;
+            return (t == 76 || t == 77) ? CTX_ARROWS_ALT_MAP : CTX_ARROWS_MAP;
+        }
+        return navActive ? CTX_CLUSTER : CTX_CLUSTER_MAP;
+    }
+
+    /** Contexts that show the phone video (plane 99) need the renderer's first frame. */
+    private static boolean needsVideo(int ctx) {
+        return ctx == CTX_CLUSTER || ctx == CTX_CLUSTER_MAP;
+    }
+
+    private static boolean isOwnContext(int ctx) {
+        return ctx == CTX_CLUSTER || ctx == CTX_CLUSTER_MAP || ctx == CTX_ARROWS_MAP || ctx == CTX_ARROWS_ALT_MAP;
+    }
 
     /** DisplayManagerMIB2High uses this to distinguish our serialized 72/80/81/74
      * writes from stock screen-controller requests while CarPlay owns terminal 1. */
@@ -302,7 +380,7 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
         boolean rgiQueued;
         synchronized (LOCK) {
             ownCluster = connected || videoAvailable;
-            desiredCtx = !ownCluster ? CTX_STOCK_CLUSTER : (navActive ? CTX_CLUSTER : CTX_CLUSTER_MAP);
+            desiredCtx = computeDesiredCtxLocked();
             rgi = ownCluster && navActive;
             rgiQueued = sendRgiStateLocked();
             LOCK.notifyAll();
@@ -420,7 +498,7 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
             clusterActive = false;
             acceptVideoFallback = true;
             lifecycleGeneration++;
-            desiredCtx = CTX_CLUSTER_MAP;
+            desiredCtx = computeDesiredCtxLocked();   /* 81, or 74 in the Audi map modes */
             sendRgiStateLocked();   /* navActive is false here: reset the hook's URL state */
         }
         synchronized (LOCK) {
@@ -492,18 +570,18 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
                 /* Readiness gates only physical takeover. Ownership, input pinning
                  * and the stock NAVSD bypass remain active from session start.
                  * A stop must still restore stock if the renderer never came up. */
-                while (dm == null || (isConnected() && !rendererReady)) {
+                while (dm == null || (isConnected() && needsVideo(desiredCtx) && !rendererReady)) {
                     try { LOCK.wait(); } catch (InterruptedException e) { /* persistent worker */ }
                 }
                 if (desiredCtx == currentCtx) {
                     try {
-                        if (desiredCtx == CTX_CLUSTER || desiredCtx == CTX_CLUSTER_MAP)
+                        if (isOwnContext(desiredCtx))
                             LOCK.wait(CONTEXT_RECONCILE_MS);
                         else
                             LOCK.wait();
                     } catch (InterruptedException e) { /* persistent worker */ }
                     if (dm == null || desiredCtx != currentCtx) continue;
-                    if (desiredCtx != CTX_CLUSTER && desiredCtx != CTX_CLUSTER_MAP) continue;
+                    if (!isOwnContext(desiredCtx)) continue;
                     reconcileOnly = true;
                 }
                 target = desiredCtx; d = dm;
@@ -565,7 +643,7 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
                     /* Coalesce: if the desired target or the DM changed during the settle, abandon THIS
                      * switch (cluster is on the bounce ctx) and let the loop apply the latest desired. */
                     synchronized (LOCK) {
-                        if (dm != d || desiredCtx != ctx || !rendererReady) {
+                        if (dm != d || desiredCtx != ctx || (needsVideo(ctx) && !rendererReady)) {
                             currentCtx = -1;
                             clusterActive = false;
                             Log.i(TAG, "switch(" + ctx + ") superseded during bounce → " + desiredCtx);
@@ -576,7 +654,7 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
                 d.switchContext(ctx, TERMINAL_CLUSTER, null);
                 boolean stillValid;
                 synchronized (LOCK) {
-                    stillValid = (dm == d && desiredCtx == ctx && rendererReady);
+                    stillValid = (dm == d && desiredCtx == ctx && (!needsVideo(ctx) || rendererReady));
                     currentCtx = stillValid ? ctx : -1;
                     clusterActive = stillValid;
                     if (!stillValid)
