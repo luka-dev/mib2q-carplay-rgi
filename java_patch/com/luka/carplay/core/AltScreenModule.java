@@ -27,6 +27,7 @@ package com.luka.carplay.core;
 
 import com.luka.carplay.bus.CarplayBus;
 import com.luka.carplay.cluster.ClusterLayerController;
+import com.luka.carplay.cluster.ClusterLayoutConfig;
 import com.luka.carplay.framework.Log;
 
 import de.audi.atip.hmi.view.IDisplayManager;
@@ -152,6 +153,16 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
      * all normal skin-0 operation as Classic.  Unknown falls back to Sport
      * geometry until the stock store becomes available. */
     private static int clusterStyle = AltscreenControlServer.STYLE_UNKNOWN;
+    /* What the stock store last said, before the optional "compact" override of
+     * /mnt/app/carplay_layout.cfg; clusterStyle above is the effective value. */
+    private static int stockStyle = AltscreenControlServer.STYLE_UNKNOWN;
+    private static int stockSkin = AltscreenControlServer.STYLE_UNKNOWN;
+    /* The two View-state inputs (0 = fullscreen, 1 = smallscreen, -1 = not reported yet) and
+     * which one reported last.  ClusterLayoutConfig.viewSource() decides how they combine. */
+    private static final int VIEW_INPUT_NONE = 0, VIEW_INPUT_CHOICE = 1, VIEW_INPUT_VC = 2;
+    private static int choiceViewMode = -1;
+    private static int vcViewMode = -1;
+    private static int lastViewInput = VIEW_INPUT_NONE;
     private static volatile ILastmodeStorage layoutStorage;
     private static volatile ViewAreaModeListener viewAreaModeListener;
     private static volatile InfoModeListener infoModeListener;
@@ -214,7 +225,49 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
 
     /** Called by the stock NAV_VIEW_SIZE_CHOICE model: value 0=fullscreen, value 1=smallscreen. */
     public static void setViewAreaMode(int mode) {
+        setViewAreaModeFromChoice(mode, false);
+    }
+
+    /** NAV_VIEW_SIZE_CHOICE through CombiMapController.syncViewSize().  initial = the forced
+     *  read on connect: with view_source auto it does not override a stage the cockpit has
+     *  already reported, because the choice model may have frozen during an earlier session. */
+    public static void setViewAreaModeFromChoice(int mode, boolean initial) {
         mode = (mode == VIEWAREA_SMALLSCREEN) ? VIEWAREA_SMALLSCREEN : VIEWAREA_FULLSCREEN;
+        int resolved;
+        synchronized (LOCK) {
+            choiceViewMode = mode;
+            if (!(initial && vcViewMode >= 0)) lastViewInput = VIEW_INPUT_CHOICE;
+            resolved = resolveViewModeLocked();
+        }
+        applyViewAreaMode(resolved, initial ? "NAV_VIEW_SIZE_CHOICE-initial" : "NAV_VIEW_SIZE_CHOICE");
+    }
+
+    /** NavSD FctID 54 Map_Presentation.largeMapView, sent by the cockpit at the midpoint of its
+     *  stage animation (AltScreenCombiBAPListener.setMapPresentation).  The same event already
+     *  selects the KDK stage (ClusterLayerController.onVcPresentation). */
+    public static void onVcMapPresentation(boolean largeMapView) {
+        int mode = largeMapView ? VIEWAREA_FULLSCREEN : VIEWAREA_SMALLSCREEN;
+        int resolved;
+        synchronized (LOCK) {
+            vcViewMode = mode;
+            lastViewInput = VIEW_INPUT_VC;
+            resolved = resolveViewModeLocked();
+        }
+        applyViewAreaMode(resolved, "VC_FCT54");
+    }
+
+    /* Caller holds LOCK.  -1 = no usable input yet (keep the current mode). */
+    private static int resolveViewModeLocked() {
+        int source = ClusterLayoutConfig.viewSource();
+        if (source == ClusterLayoutConfig.VIEW_SOURCE_CHOICE) return choiceViewMode;
+        if (source == ClusterLayoutConfig.VIEW_SOURCE_VC)
+            return vcViewMode >= 0 ? vcViewMode : choiceViewMode;
+        if (lastViewInput == VIEW_INPUT_VC && vcViewMode >= 0) return vcViewMode;
+        return choiceViewMode >= 0 ? choiceViewMode : vcViewMode;
+    }
+
+    private static void applyViewAreaMode(int mode, String reason) {
+        if (mode < 0) return;
         /* Renderer starts before RTSP 111 and needs the mode independently of
          * the hook so its loader uses the correct physical safe area. */
         AltscreenControlServer.setViewAreaMode(mode);
@@ -222,7 +275,7 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
             if (desiredViewAreaMode == mode) return;
             desiredViewAreaMode = mode;
         }
-        sendViewAreaMode("NAV_VIEW_SIZE_CHOICE");
+        sendViewAreaMode(reason);
         /* KDK geometry/visibility follow incoming VC Fct54/Fct44. The requested
          * phone View mode must not move or reveal the KDK plane early. */
         ViewAreaModeListener listener = viewAreaModeListener;
@@ -230,6 +283,16 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
             try { listener.onViewAreaModeChanged(mode); }
             catch (Throwable t) { Log.w(TAG, "viewArea listener failed: " + t); }
         }
+    }
+
+    /** Re-read /mnt/app/carplay_layout.cfg (stat at most every 2 s) and apply a changed
+     *  view_source or compact override at once.  Runs on the context-reconcile worker. */
+    private static void refreshLayoutConfig(boolean force, String reason) {
+        if (!ClusterLayoutConfig.refresh(force)) return;
+        int resolved;
+        synchronized (LOCK) { resolved = resolveViewModeLocked(); }
+        applyViewAreaMode(resolved, "LAYOUT_CFG");
+        applyClusterStyle(reason);
     }
 
     /** Refresh from the same stock value DisplayManagerEvo uses to choose its
@@ -251,18 +314,34 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
             Log.w(TAG, "unknown stock VC skin=" + skin + "; preserving geometry");
             return;
         }
+        synchronized (LOCK) {
+            if (stockStyle == style && stockSkin == skin) return;
+            stockStyle = style;
+            stockSkin = skin;
+        }
+        applyClusterStyle(reason);
+    }
+
+    /** Effective compact placement: the stock skin, unless carplay_layout.cfg forces one. */
+    private static void applyClusterStyle(String reason) {
+        int override = ClusterLayoutConfig.compact();
+        int style;
+        int skin;
         boolean resend;
         synchronized (LOCK) {
-            resend = clusterStyle != style &&
-                desiredViewAreaMode == VIEWAREA_SMALLSCREEN;
-            if (clusterStyle == style) return;
+            skin = stockSkin;
+            if (override == ClusterLayoutConfig.COMPACT_SPORT) style = AltscreenControlServer.STYLE_SPORT;
+            else if (override == ClusterLayoutConfig.COMPACT_CLASSIC) style = AltscreenControlServer.STYLE_CLASSIC;
+            else style = stockStyle;
+            if (style == AltscreenControlServer.STYLE_UNKNOWN || clusterStyle == style) return;
+            resend = desiredViewAreaMode == VIEWAREA_SMALLSCREEN;
             clusterStyle = style;
         }
         AltscreenControlServer.setClusterStyle(style, skin);
         Log.i(TAG, "VC style="
             + (style == AltscreenControlServer.STYLE_CLASSIC ? "classic" : "sport")
-            + " stockSkin=" + skin + " reason=" + reason
-            + " resendCompact=" + resend);
+            + " stockSkin=" + skin + " compact=" + ClusterLayoutConfig.compactName(override)
+            + " reason=" + reason + " resendCompact=" + resend);
         if (resend) sendViewAreaMode("VC_SKIN_CHANGE");
     }
 
@@ -399,6 +478,7 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
                 layoutStorage = fw.framework().getLastmodeHandler().getLastmodeStorage();
         } catch (Throwable t) {
         }
+        refreshLayoutConfig(true, "module-start");
         refreshClusterStyleFromStock("module-start");
         if (d instanceof IDisplayManagerKombiControl) {
             com.luka.carplay.cluster.ClusterLayerController.bind(
@@ -486,6 +566,7 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
     private void switchLoop() {
         contextWriterThread = Thread.currentThread();
         while (true) {
+            refreshLayoutConfig(false, "context-reconcile");
             refreshClusterStyleFromStock("context-reconcile");
             int target; IDisplayManager d; boolean reconcileOnly = false;
             synchronized (LOCK) {

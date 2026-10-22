@@ -163,10 +163,11 @@ public class CombiMapController extends DisplayControllerEvo implements NaviMoKo
          * Publish it to the altScreen hook even while its RTSP session is not up; both Java and C
          * cache the desired mode.  setViewAreaMode() is the single writer of the view-size cache and
          * fans out to the renderer, the hook bus and ClusterLayerController.reapply(). */
-        com.luka.carplay.core.AltScreenModule.setViewAreaMode(
+        com.luka.carplay.core.AltScreenModule.setViewAreaModeFromChoice(
             smallStage
                 ? com.luka.carplay.core.AltScreenModule.VIEWAREA_SMALLSCREEN
-                : com.luka.carplay.core.AltScreenModule.VIEWAREA_FULLSCREEN);
+                : com.luka.carplay.core.AltScreenModule.VIEWAREA_FULLSCREEN,
+            force);
         this.positionMap(dm, layout, smallStage);
     }
 

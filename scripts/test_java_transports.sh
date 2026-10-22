@@ -22,6 +22,17 @@ trap 'rm -rf "$TEST_DIR"' EXIT
     -d "$TEST_DIR" "$PROJECT_DIR/tests/UpmixSettingTest.java"
 "$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar:$PROJECT_DIR/java_stock/US_MU1316_lsd.jar" \
     com.luka.carplay.core.UpmixSettingTest
+# Cluster layout options (/mnt/app/carplay_layout.cfg): parser, View-state source, compact override.
+"$TEST_JDK/bin/javac" -encoding UTF-8 -nowarn -cp "$PROJECT_DIR/build/carplay_hook.jar:$PROJECT_DIR/java_stock/US_MU1316_lsd.jar" \
+    -d "$TEST_DIR" "$PROJECT_DIR/tests/ClusterLayoutOptionsTest.java"
+for variant in us eu cn; do
+    case "$variant" in
+        us) patch=carplay_hook.jar; stock=US_MU1316_lsd.jar ;;
+        eu) patch=carplay_hook.jar; stock=EU_MU1329_lsd.jar ;;
+        cn) patch=carplay_hook_cn.jar; stock=CN_MU1003_lsd.jar ;;
+    esac
+    "$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/$patch:$PROJECT_DIR/java_stock/$stock" ClusterLayoutOptionsTest
+done
 for variant in us eu cn; do
     case "$variant" in
         us) patch=carplay_hook.jar; stock=US_MU1316_lsd.jar ;;

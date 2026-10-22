@@ -104,7 +104,8 @@ for f in /mnt/system/etc/eso/production/dio_manager.json \
          /mnt/system/etc/eso/production/smartphone_integrator.json \
          /mnt/system/etc/pf.conf /mnt/system/etc/pf.ecm0.conf \
          /mnt/system/etc/usblauncher_otg.lua* \
-         /mnt/system/etc/scripts/startncm.sh* /mnt/system/etc/scripts/stopncm.sh*; do
+         /mnt/system/etc/scripts/startncm.sh* /mnt/system/etc/scripts/stopncm.sh* \
+         /mnt/app/carplay_layout.cfg; do
     [ -f "$f" ] && cp "$f" "$OUT/config/" 2>/dev/null
 done
 

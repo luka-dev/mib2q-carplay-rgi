@@ -1,6 +1,6 @@
 # VC Layout and Fonts
 
-*What the Virtual Cockpit (VC 0379, AU491 A4/A5/Q5 2018) can draw as text and where: the extracted fonts and their glyph coverage, the CurrentPosition label budget (359 px, AudiTypeDisplay-Normal 27), our FctID 19 scrolling, the chosen route-text symbols, and the Classic/Sport layout seam.*
+*What the Virtual Cockpit (VC 0379, AU491 A4/A5/Q5 2018) can draw as text and where: the extracted fonts and their glyph coverage, the CurrentPosition label budget (359 px, AudiTypeDisplay-Normal 27), our FctID 19 scrolling, the chosen route-text symbols, the Classic/Sport layout seam, and the layout options file.*
 
 ---
 
@@ -129,7 +129,7 @@ The VC design (Classic or Sport skin) and the CarPlay fullscreen/compact View st
 
 - **VC side** (`…/stage2_fs/STAGE2.1/bin/gtf2`): `0x18F4B4` handles data-pool message `0x0100004E` (`INTERN_Designated_LayoutVariant_Choice`) and passes the raw variant to `sub_12D208`, which maps raw 0 → design 0 and raw 256 → design 1 (other values → unknown fallback); `0x190124` publishes the confirmed change; labels Classic `0xA5104F`, Sport `0xA51082`; `isSportDesign@0x176740` reads GTF condition values 4, 5, 14, 15, 16 = Sport (a VC template condition, not an HU API).
 - **HU side:** `DSICarKombi.DCDISPLAYPRESETSTYPE_CLASSIC = 2` is real, but `DCDISPLAYPRESETSTYPE_DRIVINGPROFILE = 3` is a drive-profile preset class, **not** Sport. The authoritative value is `LastmodeStorage.getSkin()`: `DisplayManagerEvo.isSportSkin(skin)` is true only for 1, KDK setup picks Sport assets for 1 and Classic for 0, and `DSICarTimeUnitsLanguageManager.updateSkin()` writes live changes there.
-- **Our code:** `AltScreenModule` reads `getSkin()` on start and in its 250 ms connected-context reconcile (1 → Sport, 0 → Classic, anything else keeps the geometry), without a second DSI activator or a CarKombi listener override. `[code]` (`java_patch/com/luka/carplay/core/AltScreenModule.java:238-256`, `:49`)
+- **Our code:** `AltScreenModule` reads `getSkin()` on start and in its 250 ms connected-context reconcile (1 → Sport, 0 → Classic, anything else keeps the geometry), without a second DSI activator or a CarKombi listener override. `compact sport|classic` in the layout options file overrides the result (below). `[code]` (`java_patch/com/luka/carplay/core/AltScreenModule.java`, `refreshClusterStyleFromStock` / `applyClusterStyle`)
 
 The View button stays a logical fullscreen/compact choice; the skin picks the compact placement. All three view areas keep the full encoded/visible frame `(0,0) 1440×542`, and the same resolved area goes to iOS (`updateViewArea`) and to the local loader. `[code]` (`hook/altscreen/altscreen_hook.c:260-270`, `:454-470`)
 
@@ -142,6 +142,46 @@ The View button stays a logical fullscreen/compact choice; the skin picks the co
 The source note listed `900×362`, `(90,135) 360×317` and `(540,135) 360×317`. Those were cut back after the 2026-09-19 calibration-grid photos showed Maps anchoring bottom text under the VC's own translucent map bar (≈ y 390 down) and clock bar. The code values are current. See [Cluster Contexts](CLUSTER_CONTEXTS.md) and [AltScreen Cluster Video](../altscreen-and-video/ALTSCREEN_CLUSTER_VIDEO.md) for how the areas are used.
 
 Sources: `VC_LAYOUT_STYLE`
+
+<a id="layout-options"></a>
+
+## 🎛️ Layout options (`/mnt/app/carplay_layout.cfg`)
+
+One small text file changes the layout without a rebuild. No file means the built-in behaviour above, byte for byte (the hook's URLs and areas, and the Java decisions, are covered by tests for that case). It is written by the `layout_MoreIncredibleBash` card from the card's own `mod/carplay_layout.cfg`, which ships with every line commented and explains every key; running the card with that template removes the file again. The uninstall card removes it, the logging card copies it into `config/`. `[code]`
+
+| Key | Values | Read by | Applies |
+|---|---|---|---|
+| `full x y w h` | safe area of view area 0 | hook (`hook/altscreen/cluster_layout.h`) | next phone connection |
+| `sport x y w h` | safe area of view area 1 (compact, Sport) | hook | next phone connection |
+| `classic x y w h` | safe area of view area 2 (compact, Classic) | hook | next phone connection |
+| `cards right\|left\|center` | the phone's turn card + ETA column (`maneuverLayout` rightAligned / leftAligned / topAligned) when RGI is off | hook | next phone connection |
+| `eta yes\|no` | `showETA` in that scene | hook | next phone connection |
+| `car_profile auto\|off` | use the per-car safe areas (below) or ignore them | hook | next phone connection |
+| `speed_limit yes\|no` | `showSpeedLimit` in both scenes (whether Maps draws the sign here is [open], see [CarPlay speed limit](CARPLAY_SPEED_LIMIT.md)) | hook | next phone connection |
+| `compact auto\|sport\|classic` | which compact area the phone gets: the skin, or forced | Java (`ClusterLayoutConfig`) | within 2 s |
+| `view_source auto\|choice\|vc` | where full/compact comes from: see below | Java | within 2 s |
+
+**Why only at connection.** CarPlay has no live safe-area command: the receiver declares `viewAreas[]` with nested safe areas during display negotiation and `updateViewArea` only selects one of those indices (confirmed independently by harman-f, Allemon, joeyQuery TRACE-013 and the aberbic issue #5 review). The hook re-reads the file (and the car profile) on every cluster display build (each `/info`) and logs the result once per change: `layout cfg …, car profile …: full=(…)[car|cfg] … rejected=N first_bad_line=L` in `/tmp/carplay_hook.log`. The visible frame stays the full 1440×542 panel; nothing in the file can change it (CarKit rejects the stream otherwise). `[code]`
+
+**Validation.** Each line stands alone; a bad line is ignored and that setting keeps its built-in value. A rectangle must lie inside 1440×542, be at least 165 wide (CarPlaySupport's card platter is `clamp(safeW, 165, 300)`) and 203 high (ETA needs > 202), and at least 290 high when narrower than 498 px (otherwise CarPlaySupport picks "Undefined layout (0)" and third-party apps show no cluster content, see [Third-party Nav Apps](THIRD_PARTY_NAV_APPS.md)). The card refuses unknown keys, wrong field counts, non-numbers and unknown words before installing anything. `[code]` (`tests/altscreen_cluster_layout_test.c`, `scripts/test_layout_mib.sh`)
+
+**`view_source`.** The View button state used to come only from `NAV_VIEW_SIZE_CHOICE`. During CarPlay that model can stay silent or frozen ([KDK Geometry and Animation](KDK_GEOMETRY_AND_ANIMATION.md), reported on a US P5087 B9 and on a Q7 4M), while the cockpit still sends FctID 54 `largeMapView` at the midpoint of every stage change. `auto` (default) uses both and the one that reported last wins; at the connect-time seed a known FctID 54 stage beats the possibly stale choice model. `choice` is the old choice-only behaviour; `vc` uses FctID 54 once it has arrived. The decision line is `viewArea send mode=… reason=VC_FCT54 | NAV_VIEW_SIZE_CHOICE | NAV_VIEW_SIZE_CHOICE-initial | LAYOUT_CFG` in `/tmp/carplay_java.log`. `[code]` (`tests/ClusterLayoutOptionsTest.java`)
+
+**Car profile (Q7).** The Q7 firmware has its own `LayoutMIB2HighQ7` / `Q7Sport` classes ([KDK Geometry and Animation](KDK_GEOMETRY_AND_ANIMATION.md)), so the A5-measured areas above may not fit its gauges. `VehicleLayoutProfile` (`java_patch/com/luka/carplay/cluster/`) sees the live Layout class through `ClusterLayerController.updateLayout()` and, for the two Q7 classes, writes `/tmp/carplay_layout.vehicle` with the Q7 rectangles below; for every other class (B9 = the A5 this was measured on) it removes the file. The hook applies built-in < car profile < `/mnt/app/carplay_layout.cfg` per area, and `car_profile off` in that file skips the profile so both sets can be compared on one car (`cl_layout_build`; log tags `[car]` / `[cfg]`). Java logs `car profile=q7 layout=…` once. `[code]` (`tests/ClusterLayoutOptionsTest.java`, `tests/altscreen_cluster_layout_test.c`)
+
+Where the Q7 values come from: ganm-afk's review in aberbic issue #5 uses them on a Q7 4M with a retrofitted SQ7 cockpit (1440×540 canvas). The closed commercial package for A4/A5/Q5/Q7 on P5092 declares the identical three rectangles for every car (checked in its compiled library), so treat them as one source rather than an independent Q7 measurement; which car they were measured on is not stated. `[open]` on our car
+
+| Area | aberbic #5 review (Q7 4M) | Built-in (A5 B9) |
+|---|---|---|
+| full | `360 87 720 297` | `270 90 900 290` |
+| sport | `114 88 350 296` | `90 90 360 300` |
+| classic | `520 87 400 297` | `540 90 360 300` |
+
+**Testing the hypothesis: the car's own map layout.** The stock navigation places its own cockpit map with list model 176 (row 1, read by `LayoutProviderG22Kombi` and `GUIKombiFPK`): column 0/1 screen width/height, 8 info line at the bottom, 9 top (tab) line, 11/12 left/right gauge-tube distance, 13/14 the same for the "Kb" variant, 24/25 map offset, 26/27 map size. `getVisibleArea()` is the screen minus those margins: x = tubeLeft − mapOffsetLeft, y = topLine − mapOffsetTop, w = width − tubeLeft − tubeRight, h = height − topLine − infoLine. That table is filled at run time, per car and skin, so it cannot be read from the firmware files. `AltScreenCombiBAPListener.logScreenLayout()` writes the whole table, with both derived rectangles, to `/tmp/carplay_java.log` whenever it changes (at start, on FctID 44 and on FctID 54), as a warning line, so no verbose marker is needed: `screen layout list176 reason=… largeMap=… style=… audiVisible normal=(x,y wxh) kb=(x,y wxh) rows=… row0=[…] row1=[…]`. Read only. If the derived rectangles match what is clear on the cockpit, the car profile can be computed from this table for every car instead of hard-coded. `[code]` (`tests/ScreenLayoutLogTest.java`), `[open]` until the first car log
+
+Not ported from that review: its `adjacentViewAreas` naming the other two indices inside every view area. luka's display-level `adjacentViewAreas` plus `[0]` on compact switches works on the A5, and the commercial package sends an empty `adjacentViewAreas` with every `updateViewArea` and none in the view areas, so adjacency is evidently not required on these cockpits; if the Q7 ignores View switches even with `view_source auto`, it is still the next thing to try. The startup loader animation (`altscreen_render/loader/loader_layout.h`) keeps its own built-in placement.
+
+**Licensing.** Allemon's `cluster_viewarea.cfg` / `cluster_shift.cfg` / cluster-layout GEM entries inspired the idea (his repository has no licence file), so nothing was copied: this is a separate design on luka's three predeclared view areas. The Q7 numbers are quoted from a GPL-3.0 source (the aberbic issue #5 review).
 
 ## 🔗 Related
 

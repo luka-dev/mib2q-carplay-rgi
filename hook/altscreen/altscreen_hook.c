@@ -38,6 +38,7 @@
 #include "../../common/alt_timing_stats.h"
 #include "avcc_config.h"
 #include "command_policy.h"
+#include "cluster_layout.h"
 #include "../../common/alt_monotonic_condition.h"
 #ifdef MHI2Q_WIRELESS_ALT_QEMU
 #include "../wireless/media.h"
@@ -407,6 +408,98 @@ fail:
     return 0;
 }
 
+/* ---- cluster layout options (/mnt/app/carplay_layout.cfg, cluster_layout.h) ----
+ * Read on every cluster display build, i.e. at each phone negotiation, so a new file applies
+ * on the next connection.  The Maps URLs are published through a two-slot buffer: a slot is
+ * rewritten only when the options really changed, which never happens inside one session. */
+static const cl_rect_t k_cl_builtin_safe[CL_AREA_COUNT] = {
+    { FULL_SAFE_X, FULL_SAFE_Y, FULL_SAFE_W, FULL_SAFE_H },
+    { SMALLSCREEN_SAFE_X, SMALLSCREEN_SAFE_Y, SMALLSCREEN_SAFE_W, SMALLSCREEN_SAFE_H },
+    { CLASSICSCREEN_SAFE_X, SMALLSCREEN_SAFE_Y, SMALLSCREEN_SAFE_W, SMALLSCREEN_SAFE_H },
+};
+static cl_layout_t g_cl_layout = {
+    .safe = { { FULL_SAFE_X, FULL_SAFE_Y, FULL_SAFE_W, FULL_SAFE_H },
+              { SMALLSCREEN_SAFE_X, SMALLSCREEN_SAFE_Y, SMALLSCREEN_SAFE_W, SMALLSCREEN_SAFE_H },
+              { CLASSICSCREEN_SAFE_X, SMALLSCREEN_SAFE_Y, SMALLSCREEN_SAFE_W, SMALLSCREEN_SAFE_H } },
+    .car_profile = 1, .cards = CL_CARDS_RIGHT, .eta = 1
+};
+#define CL_URL_LEN 192
+static char g_cl_url[2][2][CL_URL_LEN] = {   /* [slot][0=RGI off, 1=RGI on] */
+    { "maps:/car/instrumentcluster?showETA=yes&maneuverLayout=rightAligned&showSpeedLimit=no",
+      "maps:/car/instrumentcluster/map?showETA=no&maneuverLayout=no&showSpeedLimit=no" },
+    { "", "" }
+};
+static volatile int g_cl_url_slot = 0;
+static unsigned long g_cl_signature = 0;
+
+static unsigned long cl_signature(const cl_layout_t *l)
+{
+    unsigned long h = 5381u;
+    const unsigned char *b = (const unsigned char *)l;
+    size_t i;
+    for (i = 0; i < sizeof(*l); i++) h = h * 33u + b[i];
+    return h;
+}
+
+/* Reads a whole small file into buf; returns its length, or -1 when it does not exist. */
+static ssize_t cl_read_file(const char *path, char *buf, size_t cap)
+{
+    size_t used = 0;
+    int fd = open(path, O_RDONLY);
+    if (fd < 0) return -1;
+    while (used < cap) {
+        ssize_t r = read(fd, buf + used, cap - used);
+        if (r < 0 && errno == EINTR) continue;
+        if (r <= 0) break;
+        used += (size_t)r;
+    }
+    close(fd);
+    return (ssize_t)used;
+}
+
+static void cluster_layout_load(cl_rect_t safe_out[CL_AREA_COUNT])
+{
+    static char user[CLUSTER_LAYOUT_MAX_FILE];
+    static char vehicle[1024];
+    static pthread_mutex_t mu = PTHREAD_MUTEX_INITIALIZER;
+    cl_layout_t l;
+    ssize_t ulen, vlen;
+    int have_file;
+    unsigned long sig;
+    pthread_mutex_lock(&mu);
+    ulen = cl_read_file(CLUSTER_LAYOUT_CFG, user, sizeof(user));
+    vlen = cl_read_file(CLUSTER_LAYOUT_VEHICLE, vehicle, sizeof(vehicle));
+    have_file = ulen >= 0;
+    cl_layout_build(&l, k_cl_builtin_safe,
+                    vlen >= 0 ? vehicle : NULL, vlen >= 0 ? (size_t)vlen : 0,
+                    ulen >= 0 ? user : NULL, ulen >= 0 ? (size_t)ulen : 0);
+    sig = cl_signature(&l);
+    if (sig != g_cl_signature) {
+        int next = g_cl_url_slot ^ 1;
+        if (cl_url_rgi_off(&l, g_cl_url[next][0], CL_URL_LEN) == 0 &&
+            cl_url_rgi_on(&l, g_cl_url[next][1], CL_URL_LEN) == 0) {
+            __atomic_store_n(&g_cl_url_slot, next, __ATOMIC_RELEASE);
+        }
+        g_cl_layout = l;
+        g_cl_signature = sig;
+        LOG_WARN(LOG_MODULE,
+                 "layout cfg %s, car profile %s: full=(%d,%d %dx%d)%s sport=(%d,%d %dx%d)%s classic=(%d,%d %dx%d)%s "
+                 "cards=%s eta=%d speed_limit=%d rejected=%d first_bad_line=%d",
+                 have_file ? CLUSTER_LAYOUT_CFG : "absent",
+                 vlen < 0 ? "none" : (l.car_profile ? CLUSTER_LAYOUT_VEHICLE : "off (car_profile off)"),
+                 l.safe[0].x, l.safe[0].y, l.safe[0].w, l.safe[0].h,
+                 (l.safe_from_file & 1u) ? "[cfg]" : ((l.safe_from_vehicle & 1u) ? "[car]" : ""),
+                 l.safe[1].x, l.safe[1].y, l.safe[1].w, l.safe[1].h,
+                 (l.safe_from_file & 2u) ? "[cfg]" : ((l.safe_from_vehicle & 2u) ? "[car]" : ""),
+                 l.safe[2].x, l.safe[2].y, l.safe[2].w, l.safe[2].h,
+                 (l.safe_from_file & 4u) ? "[cfg]" : ((l.safe_from_vehicle & 4u) ? "[car]" : ""),
+                 l.cards == CL_CARDS_LEFT ? "left" : (l.cards == CL_CARDS_CENTER ? "center" : "right"),
+                 l.eta, l.speed_limit, l.rejected, l.first_bad_line);
+    }
+    memcpy(safe_out, g_cl_layout.safe, sizeof(g_cl_layout.safe));
+    pthread_mutex_unlock(&mu);
+}
+
 static void *build_cluster_dict(int night)
 {
     int properties_ok = 0;
@@ -414,7 +507,9 @@ static void *build_cluster_dict(int night)
     int initial_stream_ok = 0;
     int adjacent_ok = 0;
     void *d = cf_dictm(0, 0, dict_keycb, dict_valcb);
+    cl_rect_t sa[CL_AREA_COUNT];
     if (!d) return 0;
+    cluster_layout_load(sa);
     if (set_str(d, "name", "Instrument Cluster") != 0 ||
         set_i64(d, "type", 111) != 0 ||
         /* 30, matching stock: dio_manager.json declares "screen": { "maxFPS": 30 } for the main
@@ -473,15 +568,17 @@ static void *build_cluster_dict(int night)
         void *k   = cf_str(0, "viewAreas", CFENC_UTF8);
         void *arr = cf_arrm(0, 3, arr_cb);
         if (arr) {
+            /* Safe areas: built-in values unless /mnt/app/carplay_layout.cfg overrides them
+             * (cluster_layout.h validates every rectangle; the visible frame never changes). */
             void *full = build_viewarea(0, 0, CLUSTER_W, CLUSTER_H,
-                                        FULL_SAFE_X, FULL_SAFE_Y,
-                                        FULL_SAFE_W, FULL_SAFE_H);
+                                        sa[CL_AREA_FULL].x, sa[CL_AREA_FULL].y,
+                                        sa[CL_AREA_FULL].w, sa[CL_AREA_FULL].h);
             void *split = build_viewarea(0, 0, CLUSTER_W, CLUSTER_H,
-                                         SMALLSCREEN_SAFE_X, SMALLSCREEN_SAFE_Y,
-                                         SMALLSCREEN_SAFE_W, SMALLSCREEN_SAFE_H);
+                                         sa[CL_AREA_SPORT].x, sa[CL_AREA_SPORT].y,
+                                         sa[CL_AREA_SPORT].w, sa[CL_AREA_SPORT].h);
             void *classic = build_viewarea(0, 0, CLUSTER_W, CLUSTER_H,
-                                           CLASSICSCREEN_SAFE_X, SMALLSCREEN_SAFE_Y,
-                                           SMALLSCREEN_SAFE_W, SMALLSCREEN_SAFE_H);
+                                           sa[CL_AREA_CLASSIC].x, sa[CL_AREA_CLASSIC].y,
+                                           sa[CL_AREA_CLASSIC].w, sa[CL_AREA_CLASSIC].h);
             if (full && split && classic && k) {
                 cf_arrapp(arr, full);
                 cf_arrapp(arr, split);
@@ -491,9 +588,9 @@ static void *build_cluster_dict(int night)
                 LOG_INFO(LOG_MODULE,
                          "declared viewAreas: visible=(0,0 %dx%d); fullscreen=(%d,%d %dx%d); sportscreen=(%d,%d %dx%d); classicscreen=(%d,%d %dx%d)",
                          CLUSTER_W, CLUSTER_H,
-                         FULL_SAFE_X, FULL_SAFE_Y, FULL_SAFE_W, FULL_SAFE_H,
-                         SMALLSCREEN_SAFE_X, SMALLSCREEN_SAFE_Y, SMALLSCREEN_SAFE_W, SMALLSCREEN_SAFE_H,
-                         CLASSICSCREEN_SAFE_X, SMALLSCREEN_SAFE_Y, SMALLSCREEN_SAFE_W, SMALLSCREEN_SAFE_H);
+                         sa[CL_AREA_FULL].x, sa[CL_AREA_FULL].y, sa[CL_AREA_FULL].w, sa[CL_AREA_FULL].h,
+                         sa[CL_AREA_SPORT].x, sa[CL_AREA_SPORT].y, sa[CL_AREA_SPORT].w, sa[CL_AREA_SPORT].h,
+                         sa[CL_AREA_CLASSIC].x, sa[CL_AREA_CLASSIC].y, sa[CL_AREA_CLASSIC].w, sa[CL_AREA_CLASSIC].h);
             }
             if (full && cf_rel) cf_rel(full);
             if (split && cf_rel) cf_rel(split);
@@ -2636,12 +2733,16 @@ static void alt_kick_viewarea(uint32_t gen)
  *   RGI on  -> /map = itemType 1 (map only): the root URL is "anyContent" and Maps keeps
  *              drawing its turn card + ETA there even with showETA=no (seen 2026-09-19);
  *              maneuvers and ETA come from BAP/KDK. */
-#define ALT_CLUSTER_URL_RGI_OFF "maps:/car/instrumentcluster?showETA=yes&maneuverLayout=rightAligned&showSpeedLimit=no"
-#define ALT_CLUSTER_URL_RGI_ON  "maps:/car/instrumentcluster/map?showETA=no&maneuverLayout=no&showSpeedLimit=no"
-
+/* Built-in URLs (no layout file):
+ *   RGI off: maps:/car/instrumentcluster?showETA=yes&maneuverLayout=rightAligned&showSpeedLimit=no
+ *   RGI on:  maps:/car/instrumentcluster/map?showETA=no&maneuverLayout=no&showSpeedLimit=no
+ * /mnt/app/carplay_layout.cfg may change the RGI-off card column (cards right|left|center),
+ * its ETA, and the speed-limit sign in both; RGI on always stays map-only
+ * (cluster_layout.h cl_url_rgi_off/on, tests/altscreen_cluster_layout_test.c). */
 static const char *alt_cluster_url(void)
 {
-    return alt_rgi_active_get() ? ALT_CLUSTER_URL_RGI_ON : ALT_CLUSTER_URL_RGI_OFF;
+    int slot = __atomic_load_n(&g_cl_url_slot, __ATOMIC_ACQUIRE);
+    return g_cl_url[slot][alt_rgi_active_get() ? 1 : 0];
 }
 
 static int alt_show_ui_for_mode(uint32_t gen, int mode, const char *reason)

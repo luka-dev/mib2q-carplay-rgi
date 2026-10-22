@@ -74,7 +74,7 @@ flowchart TB
 | [Maneuver Mapping](MANEUVER_MAPPING.md) | The 54-type iAP2 → BAP icon → HUD selector → renderer arrow table and the HUD firmware chain. |
 | [Distance Bargraph](DISTANCE_BARGRAPH.md) | Why the VC hides the distance while the bargraph is on, FctID 18 bytes, arrow fill instead of a column. |
 | [Lane Guidance](LANE_GUIDANCE.md) | Lanes as an independent event, the wire batch, the bottom panel, the QNX `fmin` hang, rejected approaches. |
-| [VC Layout and Fonts](VC_LAYOUT_AND_FONTS.md) | Extracted VC fonts and glyphs, the 359 px CurrentPosition budget, FctID 19 scrolling, Classic/Sport seam. |
+| [VC Layout and Fonts](VC_LAYOUT_AND_FONTS.md) | Extracted VC fonts and glyphs, the 359 px CurrentPosition budget, FctID 19 scrolling, Classic/Sport seam, and the layout options file (`/mnt/app/carplay_layout.cfg`: safe areas, View source, compact placement, phone cards). |
 | [PDC Small Stage](PDC_SMALL_STAGE.md) | Why CarPlay vanished beside the parking popup and the narrow Java guard that keeps it visible. |
 
 ## 💡 Truth levels

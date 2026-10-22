@@ -30,6 +30,7 @@ CLASSPATH="$PATCH_JAR:$STOCK_JAR:$OSGI_CP"
     "$PROJECT_DIR/tests/ClusterKdkSyncTest.java" \
     "$PROJECT_DIR/tests/ClusterKdkBapChainTest.java" \
     "$PROJECT_DIR/tests/ClusterKdkRendererLifecycleTest.java" \
+    "$PROJECT_DIR/tests/ScreenLayoutLogTest.java" \
     "$PROJECT_DIR/tests/BapShutdownFailureTest.java" \
     "$PROJECT_DIR/tests/ManeuverFieldArrivalTest.java" \
     "$PROJECT_DIR/tests/LaneGuidanceTransportTest.java" \
@@ -57,6 +58,7 @@ CLASSPATH="$PATCH_JAR:$STOCK_JAR:$OSGI_CP"
 "$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" ClusterKdkSyncTest
 "$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" ClusterKdkBapChainTest
 "$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" ClusterKdkRendererLifecycleTest
+"$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" ScreenLayoutLogTest
 for variant in us eu cn; do
     case "$variant" in
         us) patch=carplay_hook.jar; stock=US_MU1316_lsd.jar ;;

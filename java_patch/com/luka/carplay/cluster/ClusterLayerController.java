@@ -167,6 +167,8 @@ public final class ClusterLayerController {
             lastGeometry = geometry;
             haveLayout = true;
         }
+        /* Per-car CarPlay safe areas for the hook (no-op unless the Layout class changed). */
+        VehicleLayoutProfile.apply(geometry.layoutName);
         if (changed) {
             ViewportListener listener = viewportListener;
             if (listener != null) {

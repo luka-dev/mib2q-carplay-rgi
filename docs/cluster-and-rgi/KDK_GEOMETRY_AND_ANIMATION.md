@@ -33,6 +33,19 @@ The source of truth is `Layout.getIntegerConstant(id)`. The chain is `LayoutMIB2
 
 `ClusterLayerController` reads these slots live from the terminal's active `Layout`, so a skin switch is picked up without a restart. `[code]` (`java_patch/com/luka/carplay/cluster/ClusterLayerController.java:36-46`)
 
+**Q7 4M uses its own pair.** `HMITerminalImplMIB2High.generateLayoutClassic/Sport` picks `LayoutMIB2HighB9(Sport)` for B9, Q2 and Q5, and `LayoutMIB2HighQ7` / `LayoutMIB2HighQ7Sport` for the Q7 (A3, R8 and TT have their own). The Q7 values differ by a few pixels, and the KDK code follows them automatically because it reads the live `Layout`. Values resolved on EU MU1329 (`java_stock/EU_MU1329_lsd.jar`, SHA-256 `a965b75a…`): `[decompile]`
+
+| Layout id | Q7 Classic (`LayoutMIB2HighQ7`) | Q7 Sport (`LayoutMIB2HighQ7Sport`) |
+|---:|---:|---:|
+| 58 / 59 | 1045, 199 | 979, 133 |
+| 60 / 61 | 1083, 112 | 1083, 112 |
+| 122-125 | 59, 27, 210×153 | 0, 0, 328×180 |
+| 118-121 | 59, 27, 210×153 | 59, 27, 210×153 |
+| 108 / 109 | 0, 18 | 0, 18 |
+| 80 / 81 | 0, 0 | −460, 0 |
+
+The CarPlay **safe areas** in the hook are not taken from this table; they were measured on an A5 B9 cockpit. On a Q7 a car profile chosen from these Layout classes replaces them, see [Layout options](VC_LAYOUT_AND_FONTS.md#layout-options). `[open]` until checked on our Q7.
+
 Classic does have an in-tube stage. It inherits the 210×153 crop from Q7. `maneuver_render` is built for that rect: the popup crop is centred horizontally on the 328-wide canvas (59 + 210/2 = 164 = 328/2), and the projection is shifted by −0.15 to centre the junction vertically. `[code]` (`maneuver_render/render.c:1242-1252`)
 
 ## ⚙️ Stage selection and the small-stage offset
@@ -50,7 +63,8 @@ History of the stage bug:
 **Classic does not always raise `NAV_VIEW_SIZE_CHOICE`.** On a Classic (B9) cluster, toggling the Audi View button while CarPlay owns the cluster often produces no `NAV_VIEW_SIZE_CHOICE` model update at all: the VC restages, but the event never reaches `CombiMapController`. `[car]` (reported on a US MHI2Q P5087 with `LayoutMIB2HighB9`, public PR #15) Two things depend on that axis:
 
 - **The maneuver panel does not.** Its stage comes from VC FctID 54 (above), so a lost event cannot misplace it. On the old stage source it showed as the popup anchor `(1091,110)` in an in-tube view, 36 px right and 97 px up of the in-tube anchor `(1055,207)`. In the `ClusterLayers apply` log, a mismatched `view=single stage=popup` pair means a stale stage, not wrong anchors; do not "fix" the anchors for it.
-- **The map plane offset and the CarPlay safe area do.** `CombiMapController.syncViewSize()` is the single funnel: it reads the choice model, and only on a real change publishes it through `AltScreenModule.setViewAreaMode()` (renderer, hook `updateViewArea`, `ClusterLayerController.reapply()`) and repositions planes 33/58. It runs on the event **and** on every KDK model update as a backup, so a dropped event is caught on the next KDK delta; on Sport, where the event always arrives, the backup is a no-op compare. `[code]` (`CombiMapController.java:111`, `:121`, `:136-170`; commit `f005bfb`)
+- **The map plane offset and the CarPlay safe area do.** `CombiMapController.syncViewSize()` reads the choice model, and only on a real change publishes it through `AltScreenModule.setViewAreaModeFromChoice()` (renderer, hook `updateViewArea`, `ClusterLayerController.reapply()`) and repositions planes 33/58. It runs on the event **and** on every KDK model update as a backup; on Sport, where the event always arrives, the backup is a no-op compare. `[code]` (`CombiMapController.java:111`, `:121`, `:136-171`; commit `f005bfb`)
+- **The backup is not enough during CarPlay.** The stock navigator sends no KDK model updates while CarPlay owns the cluster (history item 1 above), and two other projects report the choice model itself staying frozen then: Allemon on the same US P5087, and ganm-afk on a Q7 4M (aberbic issue #5, which takes the view from `setMapPresentation`). So the CarPlay full/compact view area now also follows **FctID 54**: `AltScreenCombiBAPListener.setMapPresentation()` calls `AltScreenModule.onVcMapPresentation(largeMapView)` next to the KDK stage. With `view_source auto` (default) the input that reported last wins; at the connect-time seed a known FctID 54 stage beats the possibly stale choice model. `view_source choice` restores the choice-only behaviour. See [Layout options](VC_LAYOUT_AND_FONTS.md#layout-options). `[code]`, `[open]` on our Q7
 
 Our CarPlay map is plane 99, a full 1440×542 window, and must not be translated either. The content shift lives in the advertised safe area in `hook/altscreen/altscreen_hook.c` (see [Third-party Nav Apps](THIRD_PARTY_NAV_APPS.md)). `[code]`
 

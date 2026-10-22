@@ -204,7 +204,7 @@ URLs the hook sends today: `[code]` (`altscreen_hook.c:2599-2625`)
 - RGI off: `maps:/car/instrumentcluster?showETA=yes&maneuverLayout=rightAligned&showSpeedLimit=no` (map + cards, so the cluster shows guidance while our BAP/KDK path is idle).
 - RGI on: `maps:/car/instrumentcluster/map?showETA=no&maneuverLayout=no&showSpeedLimit=no`. The root URL is "anyContent", and Maps kept drawing its turn card and ETA there even with `showETA=no` (seen 2026-09-19); maneuvers and ETA come from BAP/KDK instead. `[car]`
 
-The runtime switch is `CMD_ALT_RGI 0x0116`, sent from `AltScreenModule.republish()` (`AltScreenModule.java:299-330`, `bus_protocol.h:115`). The hook re-sends `showUI` when the 111 stream first becomes decodable, after every accepted view-area switch, and on every RGI edge. The same URL is used for every zone. There is no env override; Luka rejected one. `[code]`
+The runtime switch is `CMD_ALT_RGI 0x0116`, sent from `AltScreenModule.republish()` (`AltScreenModule.java:299-330`, `bus_protocol.h:115`). The hook re-sends `showUI` when the 111 stream first becomes decodable, after every accepted view-area switch, and on every RGI edge. The same URL is used for every zone. There is no env override; Luka rejected one. In this fork the optional `/mnt/app/carplay_layout.cfg` can change the RGI-off card column (`cards right|left|center`), its ETA (`eta`) and `showSpeedLimit` in both URLs; without the file both URLs are exactly the two above. See [Layout options](VC_LAYOUT_AND_FONTS.md#layout-options). `[code]`
 
 ## 🔗 Related
 

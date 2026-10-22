@@ -182,7 +182,7 @@ features below follow it automatically.
 | `models/` | The scene renderer's mask net (`scene-masknet-c/`) |
 | `deploy/` | On-unit runtime scripts, SI child config, patched firmware and PF/deva recipes |
 | `scripts/` | Host build and test entry points |
-| `install_MoreIncredibleBash/`, `uninstall_MoreIncredibleBash/`, `logging_MoreIncredibleBash/` | M.I.B. SD install / remove / log-collection scripts |
+| `install_MoreIncredibleBash/`, `uninstall_MoreIncredibleBash/`, `logging_MoreIncredibleBash/`, `layout_MoreIncredibleBash/` | M.I.B. SD install / remove / log-collection / cluster-layout scripts |
 | `tools/` | Host tools (upmix renderer and benches, QSA emulator, amp model, …) |
 | `assets/` | RE working sets (`soundamp/`, `vc-fonts/`) and visual references |
 | `toolchain/qnx65-abi/` | QNX Screen/OpenMAX ABI headers used only for cross-compilation |
@@ -320,6 +320,12 @@ full restart. On boot `smartphone_integrator` starts everything; connect the pho
 **Uninstall.** Copy `uninstall_MoreIncredibleBash/` onto the card and run it the same way: it
 restores every `.carplay-stock` backup and deletes the files the installer added. Running it again
 changes nothing.
+
+**Cluster layout options.** Edit `layout_MoreIncredibleBash/mod/carplay_layout.cfg` (every key is
+explained in it), copy the card's contents onto the SD card and run it the same way. It sets the
+CarPlay safe areas per View state, forces the Sport or Classic compact placement, picks where the
+View state comes from, and places the phone's own turn card. The shipped template (all lines
+commented) puts the built-in layout back. Details: [Layout options](<docs/cluster-and-rgi/VC_LAYOUT_AND_FONTS.md#layout-options>).
 
 The runtime integration (renderer supervision, environment, spatial/upmix settings) lives in
 [`deploy/smartphone_integrator/`](deploy/smartphone_integrator/README.md); the shipped audio
