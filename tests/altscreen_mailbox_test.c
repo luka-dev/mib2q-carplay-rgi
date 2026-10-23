@@ -128,7 +128,7 @@ int main(void) {
     alarm(15);
     callback_thread = pthread_self();
     pthread_mutex_init(&g_ss.lock, NULL);
-    pthread_cond_init(&g_ss.cond, NULL);
+    _CondInit(&g_ss.cond); /* same clock as the sink's deadlines (CLOCK_MONOTONIC off macOS) */
     component.FillThisBuffer = recycle;
     g_ss.decoder = &component;
     burst(0, 0, 0);

@@ -66,7 +66,7 @@ grep -v '/com/luka/carplay/core/CarPlayApp.java$' "$SOURCES_LIST" > "$SOURCES_LI
 mv "$SOURCES_LIST.tmp" "$SOURCES_LIST"
 printf '%s\n' "$GEN_APP" >> "$SOURCES_LIST"
 
-"$JAVAC" -source 1.4 -target 1.4 \
+"$JAVAC" -encoding UTF-8 -source 1.4 -target 1.4 \
     -cp "$CLASSPATH" \
     -sourcepath "$GEN_SRC_DIR:$SRC_DIR" \
     -d "$OUTPUT_DIR" \
