@@ -2,6 +2,7 @@
   "id": "mhi2q_us_aug22_p3639_mu0918",
   "label": "MHI2Q_US_AUG22_P3639 MU0918",
   "status": "validated-on-car",
+  "installable": true,
   "files": {
     "gal": {
       "size": 1389617,
@@ -15,7 +16,8 @@
     },
     "lsd.jxe": {
       "size": 59183739,
-      "sha256": "62891a9b72ad86be709dfa8cfdfffb69ba5ad9b732850289eb07bc091ec4b7d0"
+      "sha256": "62891a9b72ad86be709dfa8cfdfffb69ba5ad9b732850289eb07bc091ec4b7d0",
+      "posix_cksum": 2387992447
     },
     "stock_jar": {
       "size": 40256281,

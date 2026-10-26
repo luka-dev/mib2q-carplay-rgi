@@ -52,6 +52,35 @@ def main():
         assert json.loads(exact.stdout)["result"] == "validated-profile"
         assert {path: entry(path) for path in files.values()} == before
 
+        profiles_dir = root / "profiles"
+        profiles_dir.mkdir()
+        (profiles_dir / "matching.json").write_text(json.dumps(profile), encoding="utf-8")
+        other = json.loads(json.dumps(profile))
+        other["id"] = "other_test"
+        other["label"] = "other test profile"
+        other["files"]["gal"]["sha256"] = "0" * 64
+        (profiles_dir / "other.json").write_text(json.dumps(other), encoding="utf-8")
+        auto_args = [value for index, value in enumerate(args) if index not in (args.index("--profile"), args.index("--profile") + 1)]
+        auto_args.extend(["--profiles-dir", str(profiles_dir)])
+        automatic = subprocess.run(auto_args, text=True, capture_output=True)
+        assert automatic.returncode == 0, automatic.stdout + automatic.stderr
+        automatic_report = json.loads(automatic.stdout)
+        assert automatic_report["profile_id"] == "synthetic_test"
+        assert automatic_report["result"] == "validated-profile"
+
+        pending = json.loads(json.dumps(profile))
+        pending["id"] = "pending_test"
+        pending["label"] = "pending Java profile"
+        pending["installable"] = False
+        pending_dir = root / "pending-profiles"
+        pending_dir.mkdir()
+        (pending_dir / "pending.json").write_text(json.dumps(pending), encoding="utf-8")
+        pending_args = [value for index, value in enumerate(args) if index not in (args.index("--profile"), args.index("--profile") + 1)]
+        pending_args.extend(["--profiles-dir", str(pending_dir)])
+        pending_result = subprocess.run(pending_args, text=True, capture_output=True)
+        assert pending_result.returncode == 0, pending_result.stdout + pending_result.stderr
+        assert json.loads(pending_result.stdout)["result"] == "java-port-ready"
+
         files["gal"].write_bytes(files["gal"].read_bytes() + b"changed")
         changed = subprocess.run(args, text=True, capture_output=True)
         assert changed.returncode == 3, changed.stdout + changed.stderr

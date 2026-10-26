@@ -23,6 +23,15 @@ Confirmed behavior:
 
 Host coverage includes encoded-ring ownership and resynchronization, navigation translation, UiConfig
 encoding, rotary reports, Qualcomm tile conversion, menu geometry, Java member preservation, cluster
-state transitions and installer refusal/rollback cases.
+state transitions and multi-profile installer selection/refusal/rollback cases.
+
+MU1316 P5145 development validation (not on-car installation approval):
+
+- supplied `lsd.jxe` and derived JARs match the public pending profile;
+- four firmware-specific Java overrides compile as Java 1.4 bytecode;
+- all 13 replaced class headers and public/protected stock members are preserved;
+- cockpit switching, map-view gating, turn-card and menu suites pass 162 host assertions;
+- installation remains blocked until exact `gal` and `libautoreceiver.so` fingerprints and native ABI
+  validation are available.
 
 Personal drive logs, recorded navigation video and firmware files are intentionally excluded.

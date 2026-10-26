@@ -1,6 +1,8 @@
 # Porting another firmware
 
-The MU0918 implementation is a reference port, not a universal binary patch.
+The repository uses a shared implementation with profile-selected Java overrides and exact native
+fingerprints. MU0918 is installable. MU1316 P5145 already has its four differing Java classes ported,
+but its native gate remains intentionally incomplete.
 
 ## 1. Collect without modifying
 
@@ -17,7 +19,12 @@ unchanged before advertising the cluster sink.
 
 ## 3. Java seams
 
-Decompile these classes from the user's firmware and pass the source root with `--firmware-source`:
+First compare all 13 replaced classes with the nearest profile. Put only differing implementations
+under `android_auto/java/firmware/<profile-id>/src` at their normal package paths. The MU1316 P5145
+profile needs four overrides: `ClusterService`, `DisplayManagerMIB2High`, `ExternalEventsListener` and
+`PartialPopupManagerEvoHigh`.
+
+Regenerate these Android Auto seams from the user's firmware only when they differ:
 
 - `AndroidAuto2ListenerDistributor`
 - `AndroidAuto2NavHandler`
@@ -35,6 +42,11 @@ Android Auto centre-screen window to the cockpit display.
 
 ## 5. Add a profile
 
-After on-car validation, add a JSON profile containing full SHA-256 hashes, file sizes and POSIX cksums
-where the on-unit installer uses them. Test it with `scripts/check_firmware.py --profile your-profile.json`
-and add a separate installer profile instead of weakening existing checks.
+Add a JSON profile as soon as the firmware is identified, with `installable: false` while work remains.
+After native ABI review and on-car validation, add full SHA-256 hashes, file sizes and POSIX cksums for
+`gal`, `libautoreceiver.so` and `lsd.jxe`, then mark it installable. Test it with automatic detection and
+an explicit `--profile`. Never promote a profile from file size alone.
+
+The staged card contains a generated `profiles.list` and one JAR per supplied profile. The M.I.B.
+script requires an exact three-file native match before choosing a JAR. It can identify a pending
+profile for diagnostics, but cannot install it.

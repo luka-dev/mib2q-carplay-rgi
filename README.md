@@ -20,9 +20,9 @@
 
 > [!CAUTION]
 > The ready installation profile is validated specifically on `MHI2Q_US_AUG22_P3639` **MU0918**.
-> Other Audi MHI2Q releases should need only a focused compatibility port, but the included installer
-> will refuse them until their native/Java seams and hashes are verified. Make a complete M.I.B. backup
-> before modifying a head unit.
+> `MHI2Q_US_AUG22_P5145` **MU1316** is recognized and its firmware-specific Java overlay is implemented
+> and API-gated, but installation remains blocked until exact `gal` and `libautoreceiver.so` copies are
+> captured and their native ABI is verified. Make a complete M.I.B. backup before modifying a head unit.
 
 This project brings native Android Auto map video, route guidance and HUD integration to Audi MHI2Q.
 It was developed and validated on a 2018 B9 SQ5 with the first-generation Virtual Cockpit.
@@ -174,7 +174,7 @@ Android Auto additions.
 | **MMI touchpad** | Menu swipes with handwriting retained | Not published | Not published |
 | **Album art** | Android Auto cover art in Audi's media screens | Not published | Yes for CarPlay; this implementation builds on LuKa's work |
 | **Navigation apps tested** | Google Maps and Waze | Google Maps | Apple Maps |
-| **Firmware represented** | MU0918, tested on the car | MU1316 package examined | MU1316 releases; firmware-specific rebuilds may be required |
+| **Firmware represented** | MU0918 tested on-car; MU1316 P5145 Java port included with native install gate pending | MU1316 package examined | MU1316 releases; firmware-specific rebuilds may be required |
 | **Installation** | M.I.B. SD card; audit, logs, off switch and exact rollback | SD card and rollback package; examined package tied to vehicle VIN | M.I.B. SD card |
 | **Price and licence** | Free, GPL-3.0-or-later | Commercial, €100 when examined | Free; GPL-3.0 announced upstream and publication permission granted |
 
@@ -190,9 +190,9 @@ sharp. Size changes apply on the next phone connection.
 | Path | Purpose |
 | --- | --- |
 | `android_auto/hook/` | GAL/libautoreceiver hook, channel transport, OMX/FFmpeg player and host tests |
-| `android_auto/java/` | Android Auto event bridge, cockpit/HUD integration, controls and Java seams |
+| `android_auto/java/` | Shared Android Auto logic plus small firmware-specific Java source overrides |
 | `android_auto/deploy/` | Standalone GAL launcher and renderer supervision |
-| `firmware/profiles/` | Public hashes and sizes for validated firmware; no firmware binaries |
+| `firmware/profiles/` | Public fingerprints and installability state for known firmware; no firmware binaries |
 | `install_AndroidAuto_MoreIncredibleBash/` | M.I.B. audit/install/uninstall entrypoint |
 | `scripts/` | Compatibility checker, reproducible builds and SD-card staging |
 | `common/`, `maneuver_render/`, `toolchain/` | Shared LuKa renderer and QNX build foundation |
@@ -208,6 +208,7 @@ installer never deploys the CarPlay hook.
 | Firmware | Status | Work required |
 | --- | --- | --- |
 | `MHI2Q_US_AUG22_P3639` MU0918 | **Validated on the car; ready profile included** | Build with the owner's matching firmware JARs, stage and install |
+| `MHI2Q_US_AUG22_P5145` MU1316 | **Java port compiled and API-gated; installer recognizes but blocks it** | Capture exact `gal` and `libautoreceiver.so`, audit native ABI, add their hashes, then validate on-car |
 | Other Audi MHI2Q releases | **Framework-compatible; profile verification required** | Verify native/Java seams, add hashes and test on that firmware |
 
 ### Already reusable across ports
@@ -225,8 +226,8 @@ installer never deploys the CarPlay hook.
 1. Run the checker against `gal`, `libautoreceiver.so`, `lsd.jxe` and JARs obtained from that unit.
 2. Confirm the receiver's interposed symbols, C++ object layouts and callback signatures. When they
    match MU0918, the native change may be profile-only.
-3. Regenerate and review the three firmware-facing Android Auto Java seams. The build compares every
-   replaced class header and public/protected member with the supplied stock JAR.
+3. Add only the firmware-specific Java overrides that differ. The build selects them by profile and
+   compares every replaced class header and public/protected member with the supplied stock JAR.
 4. Confirm the Virtual Cockpit terminal, window IDs and display contexts, add hashes and POSIX
    checksums to a profile, then run the existing host and on-car validation sequence.
 
@@ -245,8 +246,9 @@ python scripts/check_firmware.py \
   --compile-jar /path/to/lsd_ic.jar
 ```
 
-It reports `validated-profile`, `port-required`, `unsupported` or `incomplete`, and lists every change
-the installer would make. Firmware binaries and converted stock JARs are never stored in this project.
+It automatically identifies known profiles and distinguishes a complete `validated-profile` from
+`java-build-compatible`, `java-port-ready`, `native-verification-required`, `port-required`,
+`unsupported` or `incomplete`. Firmware binaries and converted stock JARs are never stored here.
 
 ## Build
 
@@ -262,6 +264,11 @@ once, then run:
   --compile-jar /private/path/lsd_ic.jar
 python scripts/stage_android_auto.py
 ```
+
+The Java builder identifies the profile from the supplied JARs and writes its result under
+`build/android_auto/profiles/<profile-id>/`. To make one card containing multiple completed profiles,
+repeat `--profile-jar PROFILE_ID=PATH` when staging. The on-unit script fingerprints stock `gal`,
+`libautoreceiver.so` and `lsd.jxe`, then installs only the JAR for the exact matching profile.
 
 The Java inputs must be created locally from firmware the builder is entitled to use. The build checks
 every replaced class against the stock JAR and fails when a class header or public/protected member
@@ -279,8 +286,9 @@ inputs are ignored by Git.
 3. Copy `install_AndroidAuto_MoreIncredibleBash` from `dist/android-auto-card` to the M.I.B. SD root.
 4. Run M.I.B. → Advanced settings → Run custom script with no marker present. This is a read-only audit
    that prints firmware identity, current GAL launcher and the exact installation plan.
-5. Continue only when the audit reports `VALIDATED MU0918 PROFILE` or the exact validated profile made
-   for the unit. Create empty `mib2q_aa_install` in the SD root and run the custom script again.
+5. Continue only when the audit reports `EXACT INSTALLABLE PROFILE`. Create empty
+   `mib2q_aa_install` in the SD root and run the custom script again. A recognized pending profile is
+   still refused.
 6. Remove the marker, disconnect Android Auto and reboot the MMI.
 7. Connect the phone and start a navigation route. With no Android Auto route, Audi's native map stays.
 
@@ -309,7 +317,9 @@ HUD/cockpit guidance, controls, reconnect recovery, stock-GAL fallback and packa
 
 Host coverage includes encoded-ring ownership/resynchronization, navigation translation, UiConfig
 encoding, rotary input, Qualcomm tile conversion, menu geometry, Java member preservation, cluster
-state transitions and installer refusal/rollback. See the [validation record](docs/android-auto/validation.md).
+state transitions and multi-profile installer dispatch/refusal/rollback. The MU1316 Java overlay also
+passes all 13 stock-class API gates and 162 cockpit/HUD host assertions. See the
+[validation record](docs/android-auto/validation.md).
 
 ## Known limits
 

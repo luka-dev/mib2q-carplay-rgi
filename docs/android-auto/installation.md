@@ -24,6 +24,19 @@ python scripts/stage_android_auto.py
 
 The Java build compiles target 1.4 bytecode for the unit's IBM J9 runtime. It verifies every replaced
 class header and public/protected member against the supplied stock JAR. Any mismatch fails the build.
+The matching profile is selected automatically. Its JAR is written to
+`build/android_auto/profiles/<profile-id>/mib2q_android_auto_cluster.jar`.
+
+For a combined card, pass each built overlay explicitly:
+
+```bash
+python scripts/stage_android_auto.py \
+  --profile-jar mhi2q_us_aug22_p3639_mu0918=/builds/mu0918.jar \
+  --profile-jar another_validated_profile=/builds/other.jar
+```
+
+The unit fingerprints its own stock files and chooses the matching JAR. A missing JAR, partial match,
+pending profile or unknown firmware is refused before remounting a filesystem read-write.
 
 ## SD card
 

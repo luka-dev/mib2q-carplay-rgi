@@ -1,0 +1,28 @@
+{
+  "id": "mhi2q_us_aug22_p5145_mu1316",
+  "label": "MHI2Q_US_AUG22_P5145 MU1316",
+  "status": "java-port-verified-native-pending",
+  "installable": false,
+  "notes": [
+    "The firmware-facing Java overlay compiles and passes the stock member/header gate against the supplied MU1316 lsd.jxe extraction.",
+    "Installation remains blocked until exact stock gal and libautoreceiver.so files are captured and their native ABI seams are reviewed."
+  ],
+  "detection": {
+    "gal_size_observed": 1405891
+  },
+  "files": {
+    "lsd.jxe": {
+      "size": 60604861,
+      "sha256": "abaf73d1e72e7178770e8a2b553cfd7afc954785b59f6db77bbb4c8700d3244b",
+      "posix_cksum": 1150742065
+    },
+    "stock_jar": {
+      "size": 41194795,
+      "sha256": "3346a30f3043a8c3bfcb724fa7316edd86f74e88c1408db67e30d7c469d48e3a"
+    },
+    "compile_jar": {
+      "size": 41589248,
+      "sha256": "8026e3f53b243e1e0ae7dee5b046638818ef5979fd19614cf2d8577ad93a85ce"
+    }
+  }
+}

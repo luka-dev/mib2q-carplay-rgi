@@ -8,6 +8,8 @@ ROOT=../..
 LSD=${STOCK_JAR:?set STOCK_JAR to the firmware-derived compatibility jar}
 LSDIC=${COMPILE_JAR:-$LSD}
 DRIVE_LOG=${DRIVE_LOG:-}
+FIRMWARE_PROFILE_ID=${FIRMWARE_PROFILE_ID:-mhi2q_us_aug22_p3639_mu0918}
+PROFILE_SOURCE_DIR=firmware/$FIRMWARE_PROFILE_ID/src
 JAR=build/mib2q_android_auto_cluster.jar
 export LC_ALL=C
 
@@ -27,13 +29,29 @@ else
     cp -R generated-mu0918/. build/gen/
 fi
 
-# 2. luka's CarPlayApp with a build id (the source tree is never edited)
-BUILD_ID=${AA_BUILD_ID:-android-auto-$(cat $(find src generated-mu0918 -name '*.java' | sort) gen_*.py | sha1sum | cut -c1-10)}
+# 2. Common Android Auto sources plus the small set of firmware-specific replacements.
+#    A profile override wins by relative path; the common source with that path is excluded.
+PROFILE_SOURCES=
+if [ -d "$PROFILE_SOURCE_DIR" ]; then
+    find "$PROFILE_SOURCE_DIR" -name '*.java' | sort > build/check/profile-sources.txt
+    PROFILE_SOURCES=$(cat build/check/profile-sources.txt)
+else
+    : > build/check/profile-sources.txt
+fi
+
+# luka's CarPlayApp with a build id (the source tree is never edited)
+HASH_INPUTS="src generated-mu0918"
+[ -d "$PROFILE_SOURCE_DIR" ] && HASH_INPUTS="$HASH_INPUTS $PROFILE_SOURCE_DIR"
+BUILD_ID=${AA_BUILD_ID:-android-auto-$FIRMWARE_PROFILE_ID-$(cat $(find $HASH_INPUTS -name '*.java' | sort) gen_*.py | sha1sum | cut -c1-10)}
 mkdir -p build/gen/com/luka/carplay/core
 sed "s/@BUILD_ID@/$BUILD_ID/g" src/com/luka/carplay/core/CarPlayApp.java > build/gen/com/luka/carplay/core/CarPlayApp.java
-find src -name '*.java' | grep -v '/com/luka/carplay/core/CarPlayApp.java$' > build/check/sources.txt
+find src -name '*.java' | grep -v '/com/luka/carplay/core/CarPlayApp.java$' | while read -r SOURCE; do
+    REL=${SOURCE#src/}
+    [ -f "$PROFILE_SOURCE_DIR/$REL" ] || echo "$SOURCE"
+done > build/check/sources.txt
+[ -z "$PROFILE_SOURCES" ] || printf '%s\n' "$PROFILE_SOURCES" >> build/check/sources.txt
 find build/gen -name '*.java' >> build/check/sources.txt
-echo "Compiling $(wc -l < build/check/sources.txt | tr -d ' ') sources (Java 1.4 bytecode) build=$BUILD_ID"
+echo "Compiling $(wc -l < build/check/sources.txt | tr -d ' ') sources (Java 1.4 bytecode) profile=$FIRMWARE_PROFILE_ID build=$BUILD_ID"
 # compile-only stand-ins for stock classes the rebuilt key controller references but lsd.jar lacks
 # (present on the unit, e.g. TerminalModeUtils): first on -cp, never packaged
 rm -rf build/cstubs; mkdir -p build/cstubs
@@ -43,7 +61,7 @@ javac -source 1.4 -target 1.4 -Xlint:-options -nowarn -encoding UTF-8 \
 	-cp "build/cstubs:$LSDIC" -d build/classes @build/check/sources.txt
 for s in de/audi/app/terminalmode/TerminalModeUtils de/audi/atip/utils/generics/Consumer \
 	de/audi/atip/utils/reactive/observables/Observable de/audi/atip/utils/reactive/properties/LoggingPropertyFactory \
-	de/audi/app/terminalmode/audio/IAudioManager; do
+	de/audi/app/terminalmode/audio/IAudioManager de/audi/app/terminalmode/statemachine/TMState; do
 	if [ -f build/classes/$s.class ]; then echo "ERROR: compile stub $s leaked into build/classes"; exit 1; fi
 done
 cp -R resources/. build/classes/
@@ -91,7 +109,7 @@ if [ -s build/check/gate-errors.txt ]; then
 fi
 echo "leak gate OK: $(wc -l < build/check/our-classes.txt | tr -d ' ') classes, $(wc -l < build/check/shipped-stock.txt | tr -d ' ') replace stock classes"
 
-# 3b. Replaced stock classes: every public/protected member of the MU0918 original must still be
+# 3b. Replaced stock classes: every public/protected member of the selected firmware original must still be
 #     there with the same signature (additions allowed); class header must match.
 FAIL=0
 while read -r C; do
