@@ -224,6 +224,10 @@ installer never deploys the CarPlay hook.
 
 ### Focused work for another firmware
 
+Download the ready-to-run [read-only M.I.B. firmware collector](mib2q-aa-firmware-collector.zip),
+extract its folder to the SD-card root, and run it through M.I.B. Advanced settings. It copies and
+verifies the five required firmware files without changing the head unit.
+
 1. Run the checker against `gal`, `libautoreceiver.so`, `lsd.jxe` and JARs obtained from that unit.
 2. Confirm the receiver's interposed symbols, C++ object layouts and callback signatures. When they
    match MU0918, the native change may be profile-only.
