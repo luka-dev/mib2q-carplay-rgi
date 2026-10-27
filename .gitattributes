@@ -1,3 +1,16 @@
+# Repository-wide text and binary handling for the Android Auto fork.
+*.sh text eol=lf
+*.py text eol=lf
+*.c text eol=lf
+*.h text eol=lf
+*.java text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.rgba binary
+*.jar binary
+*.so binary
+*.zip binary
+
 # Keep captured audit evidence byte-for-byte, including CSV line endings.
 /output/maneuver-audit/*.csv -text whitespace=cr-at-eol
 /output/maneuver-parity/*.csv -text whitespace=cr-at-eol

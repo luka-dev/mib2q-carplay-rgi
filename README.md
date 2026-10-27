@@ -1,464 +1,401 @@
-# MHI2Q CarPlay cluster integration
+# MIB2Q Android Auto Cluster
 
-_CarPlay for the Audi MHI2Q head unit: the map and route guidance in the Virtual Cockpit, calls on the cluster, and 5.1 sound._
+<p align="center">
+  <img src="assets/android_auto_port_header.png" alt="W4R's Android Auto port for the Audi SQ5 Virtual Cockpit" />
+</p>
 
-> [!WARNING]
-> **Please update the head unit to the latest firmware available for your region first, and only
-> then install the patch.** Much older firmware may not be compatible: the MMI can stay on the Audi
-> logo after the first reboot. Latest versions:
+> [!IMPORTANT]
+> This is an **Android Auto** project built from two earlier open-source foundations:
 >
-> - `MHI2Q_US_AUG22_P5087` (MU1316)
-> - `MHI2Q_ER_AUG22_P5092` or `MHI2Q_ER_AUG22_P5152` (both MU1329)
-> - `MHI2Q_CN_AUG22_K1004` (MU1003)
+> - **[LuKa's stack](https://github.com/luka-dev/mib2q-carplay-rgi)** is the foundation for the HUD,
+>   turn arrows, lane guidance, maneuver renderer and Virtual Cockpit window/context handling.
+> - **[OneB1t/chopinwong01's approach](https://github.com/chopinwong01/mhi2-android-auto-video-vc)**
+>   came first for Android Auto cluster video: hook the stock receiver, advertise a second cockpit
+>   display and accept the phone's independent H.264 stream.
 >
-> Already stuck on the logo? Follow the
-> [recovery guide](https://github.com/luka-dev/mib2q-carplay-rgi/issues/24#issuecomment-5849641990).
+> This fork combines and ports those foundations to Audi MHI2Q, then adds the Qualcomm decoder,
+> 1080p 1:1 viewport, live cockpit layouts, Android Auto event bridge, steering-wheel controls and a
+> firmware-gated M.I.B. installer. Both upstream projects are credited, and LuKa's Git history remains
+> connected through this fork.
 
-> [!WARNING]
-> **Remove any other CarPlay cluster / AltScreen mod before installing** (MIBSI, the CarPlay AltScreen
-> toolbox, mibr and similar), with its own uninstaller or by reflashing the stock firmware. Only one mod
-> can own the cluster: another one takes the cluster video and rewrites the CarPlay configuration, so you
-> get only the loading logo on the cluster or CarPlay does not connect at all. Its leftovers break this
-> patch the same way ([#39](https://github.com/luka-dev/mib2q-carplay-rgi/issues/39),
-> [#53](https://github.com/luka-dev/mib2q-carplay-rgi/issues/53)).
+> [!CAUTION]
+> The ready installation profile is validated specifically on `MHI2Q_US_AUG22_P3639` **MU0918**.
+> `MHI2Q_US_AUG22_P5145` **MU1316** is recognized and its firmware-specific Java overlay is implemented
+> and API-gated, but installation remains blocked until exact `gal` and `libautoreceiver.so` copies are
+> captured and their native ABI is verified. Make a complete M.I.B. backup before modifying a head unit.
 
----
+> [!NOTE]
+> **Firmware support is profile-based and expands as versions are verified.** This is not permanently
+> limited to MU0918: every Audi MHI2Q firmware that we later collect, audit, port and validate can be
+> added as a first-class profile using the same stream, decoder, cockpit, HUD and installer framework.
+> The compatibility table below is the source of truth for what is supported today. Unknown or
+> incomplete firmware is identified and safely refused instead of being flashed with a guessed build.
 
-Production implementation for Audi MHI2Q (MU1316, QNX 6.5 ARMv7):
+This project brings native Android Auto map video, route guidance and HUD integration to Audi MHI2Q.
+It was developed and validated on a 2018 B9 SQ5 with the first-generation Virtual Cockpit.
 
-- stock `libairplay.so` 210.81 inside `dio_manager`;
-- `LD_PRELOAD` hook for CarPlay negotiation, route guidance, telephony (recents/favorites,
-  signal, hold and mute), altScreen stream 111 and the buffered/upmixed 5.1 audio path;
-- external QNX renderers for maneuver graphics and cluster video;
-- one Java patch for cluster context, BAP/RGI, the cluster telephone tab (CarPlay calls), cover art
-  and steering-wheel input.
+The phone creates a real second Android Auto display and sends an independent H.264 stream on channel
+64. The centre screen remains available for music, calls, messages or Android Auto's guidance list.
+The cockpit picture is not a copy of the centre-screen framebuffer.
 
-The shipped path always keeps stock `libairplay.so`. From-source libairplay/dio experiments are
-research records, not production dependencies or authorities for stock 210 behavior.
+The hard reusable work is already implemented. Adapting another MHI2Q firmware normally means
+verifying a small set of GAL/receiver ABI seams, regenerating the firmware-facing Java seams and adding
+that firmware's hashes to a profile. The stream, decoder, layouts, HUD integration, controls, renderer,
+tests and installer do not need to be reinvented.
 
-**Disclaimer:** use at your own risk. These patches modify firmware binaries and system
-configuration on your infotainment unit. The installer keeps a `.carplay-stock` backup of every
-file it replaces, but back up anything you change by hand as well. The authors are not
-responsible for any damage, bricked units or warranty issues resulting from their use.
+## Contents
 
-<a id="gallery"></a>
+- [Gallery](#gallery)
+- [Features](#features)
+- [Comparison](#comparison)
+- [Repository layout](#repository-layout)
+- [Firmware compatibility and porting](#firmware-compatibility-and-porting)
+- [Build](#build)
+- [Deployment and installation](#deployment-and-installation)
+- [Validation](#validation)
+- [Known limits](#known-limits)
+- [FAQ](#faq)
+- [Attribution and license](#attribution-and-license)
+- [Safety and rollback](#safety-and-rollback)
 
-## 🎨 Gallery
+## Gallery
 
-**Virtual Cockpit: CarPlay map on the cluster, route guidance beside it**
+### Google Maps and Waze in action
 
-<p align="center">
-  <img src="assets/gallery/vc_rs4_night_nav.jpeg" width="39%" />
-  <img src="assets/gallery/maneuver_demo.gif" width="52%" />
-</p>
-<p align="center">
-  <img src="assets/gallery/vc_day_nav.jpeg" width="45%" />
-  <img src="assets/gallery/vc_night_nav.jpeg" width="45%" />
-</p>
-<p align="center">
-  <img src="assets/gallery/vc_full_map.jpeg" width="52%" />
-  <img src="assets/gallery/vc_lane_guidance.jpeg" width="39%" />
-</p>
-
-**Audi front PDC no longer hides CarPlay** · **Cover art on the cluster**
-
-<p align="center">
-  <img src="assets/gallery/pdc_over_carplay.jpeg" width="45%" />
-  <img src="assets/gallery/cover_art.jpeg" width="45%" />
-</p>
-
-**CarPlay calls on the cluster phone tab**
+Every photo and animation below is from Google Maps or Waze running through Android Auto on the
+tested 2018 SQ5 with MU0918.
 
 <p align="center">
-  <img src="assets/gallery/vc_incoming_call.jpeg" width="31%" />
-  <img src="assets/gallery/vc_call_list.jpeg" width="28%" />
-  <img src="assets/gallery/vc_phone_favorites.jpeg" width="33%" />
+  <img src="assets/gallery/cockpit_layout_switching.gif" alt="Android Auto map continuing while the Virtual Cockpit switches between full-map and Sport layouts" />
+  <br />
+  <sub><b>Live cockpit switching</b> — the independent Android Auto map follows the active Audi layout</sub>
 </p>
 
-**5.1 sound: CarPlay UpMix level in the MMI · Spatial Audio from Apple Music**
+<table>
+  <tr>
+    <td width="33%" align="center">
+      <img src="assets/gallery/android_auto_sport_guidance.jpeg" alt="Android Auto guidance in the Sport cockpit view" /><br />
+      <sub><b>Sport view</b> — independent map and compact guidance card</sub>
+    </td>
+    <td width="33%" align="center">
+      <img src="assets/gallery/android_auto_large_guidance.jpeg" alt="Android Auto guidance in the Large cockpit view with Audi arrow tile" /><br />
+      <sub><b>Large view</b> — Google card beside Audi's arrow tile</sub>
+    </td>
+    <td width="33%" align="center">
+      <img src="assets/gallery/android_auto_full_map.jpeg" alt="Android Auto full map layout in the Virtual Cockpit" /><br />
+      <sub><b>Full map</b> — native 1:1 cockpit viewport</sub>
+    </td>
+  </tr>
+</table>
 
-<p align="center">
-  <img src="assets/gallery/upmix_mmi_level.jpeg" width="55%" />
-  <img src="assets/gallery/spatial_audio_now_playing.jpeg" width="31%" />
-</p>
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <img src="assets/gallery/cockpit_options_menu.jpeg" alt="Steering-wheel Android Auto cockpit options menu" /><br />
+      <sub><b>Cockpit options</b> — size, position, arrow tile and resolution</sub>
+    </td>
+    <td width="50%" align="center">
+      <img src="assets/gallery/android_auto_album_art.jpeg" alt="Android Auto album art in Audi's media display" /><br />
+      <sub><b>Audi media integration</b> — Android Auto metadata and album art</sub>
+    </td>
+  </tr>
+</table>
 
-**Head-up display**
+<details>
+  <summary><b>M.I.B. logging and SD-card workflow</b></summary>
+  <p align="center">
+    <img src="assets/gallery/mib_log_collection.jpeg" height="500" alt="M.I.B. custom script saving Android Auto logs to the SD card" />
+  </p>
+</details>
 
-<p align="center">
-  <img src="assets/gallery/IMG_6302.jpeg" width="45%" />
-  <img src="assets/gallery/IMG_0599.jpeg" width="45%" />
-</p>
+The inherited CarPlay gallery remains in the repository as upstream history but is intentionally not
+presented here as Android Auto evidence.
 
-<a id="contents"></a>
+## Features
 
-## 📍 Contents
+### Feature highlights
 
-- [Gallery](#gallery) · [Features](#features)
-- [Repository layout](#repository-layout) · [Build](#build)
-- [Deployment](#deployment): [install with M.I.B.](#install-with-mib) · [manual install](#manual-install) · [reboot and check](#reboot-and-check) · [uninstall](#uninstall)
-- [Logging](#logging) · [Documentation](#documentation) · [Help wanted](#help-wanted) · [License](#license) · [References](#references)
+| | |
+| --- | --- |
+| 🖥️ **1080p independent cockpit stream**<br />A real second Android Auto display, separate from the centre screen. | ⚡ **30 fps hardware-decoded video**<br />Qualcomm H.264 decoding with automatic FFmpeg fallback. |
+| 🔎 **Native cockpit sharpness**<br />1440×540 viewport shown 1:1 at the panel's physical 125 DPI. | 🧭 **HUD guidance**<br />Turn arrows, distance and lane information in Audi's head-up display. |
+| 🎵 **Android Auto album art**<br />Cover art and metadata appear through Audi's native media screens. | 🎛️ **Hidden steering-wheel menu**<br />Change size, map position, arrow tile and resolution. |
+| 🔄 **Live Audi layouts**<br />Large, Classic and Sport layouts switch without restarting Android Auto. | 🗺️ **Google Maps and Waze**<br />Both navigation apps are tested with live cockpit guidance. |
+| ➡️ **Cockpit arrow tile**<br />Street, maneuver and 16-step distance bars with selectable behavior. | 🔌 **Wired and wireless**<br />Tested over direct USB and through a wireless Android Auto adapter. |
 
-<a id="features"></a>
+### Independent Android Auto cockpit display
 
-## 🎯 Features
+- Separate 1920×1080 Android Auto cluster stream negotiated through GAL protocol 4.3.
+- Google Maps and Waze render their own cockpit output while the centre screen remains independent.
+- A 1440×540 phone viewport is presented 1:1 in the Virtual Cockpit without image scaling.
+- Large, Classic and Sport views each receive their own layout and switch live through Android Auto
+  message `0x8009`.
 
-There is nothing to switch on: plug in the iPhone and CarPlay starts as usual; the cluster
-features below follow it automatically.
+### Video pipeline
 
-- **CarPlay map in the Virtual Cockpit.** The phone streams its own map to the cluster (Apple's
-  second-screen "altScreen" stream). It shows while CarPlay is connected, even without an active
-  route. The **Audi View** button switches the cluster between its classic and large layouts as
-  with the stock navigation, and the **steering-wheel roller** zooms the cluster map. A short
-  animation fills the cluster until the first video frame arrives.
-- **Turn-by-turn on the cluster.** During CarPlay navigation the cluster shows a 3D maneuver
-  arrow beside the map. Its distance bar fills as the turn approaches and blinks just before it.
-  The cluster also shows lane arrows, distance to the turn, arrival time and remaining distance.
-  With an app that sends CarPlay route guidance (Apple Maps, recent AMap) the cluster draws all
-  of this itself and the phone streams the map alone, so nothing appears twice. Apps that do not
-  (Waze) still show guidance on the cluster: the phone then draws its own turn card and arrival
-  time into the cluster map, as far as the app provides them
-  ([details](docs/cluster-and-rgi/THIRD_PARTY_NAV_APPS.md)).
-- **Route text in the Virtual Cockpit.** A text line under the map names the exit sign or the
-  next road (the current road when there is nothing else); long names scroll. Press **OK** (the
-  left steering-wheel roller) to switch it to arrival time and time left, and press again to go
-  back ([details](docs/cluster-and-rgi/RGI_AND_BAP_BRIDGE.md#-route-text-eta-and-the-mfw-ok-key)).
-- **Head-up display.** The same maneuver icons, lane arrows and distance appear on the HUD.
-- **Cover art on the cluster.** The now-playing album art shows on the cluster media screen.
-- **CarPlay calls on the cluster phone tab.** Instead of the stock "Your iPhone is in Apple
-  CarPlay mode" note, the Virtual Cockpit telephone tab works as with a Bluetooth phone: caller
-  name and number, call state and timer, accept / hang up (tab or steering wheel), hold, mute and
-  dialling, recents and favorites, the missed-call indication, signal and carrier. There is no
-  caller photo: iPhone does not send one to the car
-  ([details](docs/cluster-and-rgi/CARPLAY_TELEPHONY.md)).
-- **MMI touchpad moves the CarPlay focus.** Stock only highlighted the focused item; a swipe on
-  the touchpad now steps the focus through lists and buttons, faster swipes stepping further.
-  It runs as a D-pad bridge in Java, because iOS's native trackpad mode crashes Apple Music on
-  iOS 27.2 beta ([details](docs/reference/ARCHITECTURE.md#mmi-touchpad)).
-- **Car data to the iPhone.** The phone receives wheel speed (one PASCD sentence per second, for
-  apps that use it alongside GPS), the remaining range, the outside temperature and the low-fuel
-  warning. The iPhone battery on the cluster phone tab does not show yet: the phone does not
-  send its level ([details](docs/connect-and-usb/VEHICLE_DATA_TO_PHONE.md)).
-- **Siri on a short press.** A short press of the steering-wheel voice key opens Siri instead
-  of the car's own voice control while CarPlay is connected (long press already did)
-  ([details](docs/connect-and-usb/VEHICLE_DATA_TO_PHONE.md)).
-- **Parking popups no longer hide CarPlay.** When the Audi front PDC / parking view pops up,
-  CarPlay stays on screen beside it instead of being replaced.
-- **5.1 surround for CarPlay music (B&O).** The head unit feeds the external B&O amplifier six
-  channels instead of two, and the amplifier's own Virtual Cabin processing spreads them over the
-  cabin speakers ([details](docs/audio/README.md)).
-  - *Spatial input:* Spatial Audio / Dolby Atmos tracks from Apple Music arrive as real 5.1 in
-    Apple's APAC codec. The head unit decodes them and plays each channel on its own speaker
-    group, with no upmix.
-  - *Stereo input* (most music, and apps such as Spotify): the head unit's scene renderer
-    upmixes it. It reads the stereo image itself: instruments the mix places off-centre move to
-    the rear speakers as whole objects, the room ambience goes behind as a wide layer, vocals,
-    bass and drums stay anchored in front, and a small network (the mask net) decides per band
-    which parts may move; the subwoofer gets its own bass feed. Calls and Siri stay plain stereo
-    ([details](docs/audio/STEREO_TO_5_1_UPMIX.md)).
-  - *UpMix level in the MMI:* a **CarPlay UpMix** row in the Sound effects menu sets Off,
-    Moderate, Normal, Full or Aggressive; the change applies live with a short fade and is kept
-    across restarts. The levels above Off differ subtly; they are easiest to hear with the fader
-    to the rear
-    ([details](docs/reference/HOOK_TO_JAVA_BUS.md)).
-  - *Recommended MMI sound settings to start with:* every equalizer band at 0 (dials centred),
-    **Surround level** at 0, which is the far-left end of the slider, **3D effect** Off,
-    **Focus** All, and **CarPlay UpMix** to taste.
-  - Only on an external amplifier. The installer reads the amplifier coding (RCC EEPROM 0xFC):
-    on the head unit's own amplifier, which has no six-channel route, CarPlay audio stays stock
-    stereo and the CarPlay UpMix row is not shown. Developed on B&O; Bose has not been tried yet.
+- Qualcomm `OMX.qcom.video.decoder.avc` hardware H.264 decoding.
+- Automatic FFmpeg software-decoder fallback.
+- Bounded encoded-frame queue, session recovery and reconnect handling.
+- Approximately 29–30 frames per second decoded and 24–27 displayed in the normal 1:1 view.
 
-<a id="repository-layout"></a>
+### Cockpit and HUD guidance
 
-## 🗂️ Repository layout
+- Turn arrows, street text, distance and lane information in the Virtual Cockpit and HUD.
+- Cockpit arrow tile with 16-step approach bars and selectable always-on or Audi-style behavior.
+- Route-start and route-end gating: Audi's native map remains when Android Auto is not navigating.
+- LuKa's maneuver renderer, BAP guidance and cockpit context handling driven by Android Auto events.
+
+### Driver controls and Audi integration
+
+- Steering-wheel menu for UI size, map position, arrow tile and resolution.
+- Five 1080p UI sizes: 95, 110, 125, 140 and 160 DPI; 125 DPI is the default.
+- Steering-wheel roller adjusts car position in Large view and card layout in Sport view.
+- MMI touchpad swipes navigate Android Auto while handwriting remains available.
+- Android Auto album art appears through Audi's media picture path.
+- Front PDC/parking behavior, automatic logging, per-feature off switches and exact uninstall rollback.
+- Direct wired USB Android Auto and wireless Android Auto through a USB adapter are both tested.
+
+## Comparison
+
+Figures for this project are measured on the SQ5 or verified in its source and logs. RoadKernel details
+are limited to the package and demonstrations examined during this research; unpublished values are
+identified as such. LuKa's column describes the upstream CarPlay project rather than this fork's
+Android Auto additions.
+
+| Capability | This project | RoadKernel | [LuKa (CarPlay)](https://github.com/luka-dev/mib2q-carplay-rgi) |
+| --- | --- | --- | --- |
+| **Phone system** | Android Auto | Android Auto | CarPlay |
+| **Live map in the cockpit** | Android Auto's own stream, independent of the centre screen | Independent of the centre screen | No projected map; guidance is drawn over Audi's native map |
+| **Stream** | 1080p at 30 fps; 1440×540 viewport shown 1:1 | 720p at 30 fps, scaled | n/a |
+| **Video decoding** | Qualcomm hardware decoder with automatic FFmpeg fallback | Hardware decoder | n/a |
+| **Frames shown** | Approximately 24–27 of the 30 frames sent each second | Not published | n/a |
+| **Sharpness and UI size** | 95/110/125/140/160 DPI at 1080p; 125 DPI default | Not published | n/a |
+| **Cockpit views** | Large, Classic and Sport with live layout switching | Large, Classic and Sport | Guidance overlay follows supported Audi layouts |
+| **Google card beside Audi's arrow tile** | Yes | Yes | n/a |
+| **HUD** | Turn arrows, distance and lanes | No | Turn arrows and distance from CarPlay |
+| **Cockpit arrow tile** | Arrow, street and 16-step distance bars; always-on or Audi-style | Stock Audi tile | Stock Audi tile |
+| **Lane guidance** | Cockpit and HUD | Not published | Yes, from CarPlay |
+| **Steering-wheel menu** | Size, position, arrow tile and resolution | No | No |
+| **Day/night map** | Dark map only: Android Auto crashes on the Light theme for the cockpit display | Not published | n/a |
+| **Map roller** | Adjusts car position in Large and card layout in Sport | No zoom | n/a |
+| **MMI touchpad** | Menu swipes with handwriting retained | Not published | Not published |
+| **Album art** | Android Auto cover art in Audi's media screens | Not published | Yes for CarPlay; this implementation builds on LuKa's work |
+| **Navigation apps tested** | Google Maps and Waze | Google Maps | Apple Maps |
+| **Firmware represented** | MU0918 tested on-car; MU1316 P5145 Java port included with native install gate pending | MU1316 package examined | MU1316 releases; firmware-specific rebuilds may be required |
+| **Installation** | M.I.B. SD card; audit, logs, off switch and exact rollback | SD card and rollback package; examined package tied to vehicle VIN | M.I.B. SD card |
+| **Price and licence** | Free, GPL-3.0-or-later | Commercial, €100 when examined | Free; GPL-3.0 announced upstream and publication permission granted |
+
+### Why 125 DPI
+
+The first-generation Virtual Cockpit panel is 12.3 inches at 1440×540, approximately 125 pixels per
+inch. The phone's viewport is shown 1:1, so 125 DPI puts Google's text, icons and lines on the panel at
+their intended physical size without rescaling. The other size levels remain natively rendered and
+sharp. Size changes apply on the next phone connection.
+
+## Repository layout
 
 | Path | Purpose |
 | --- | --- |
-| `hook/` | Shipping native `libcarplay_hook.so` source |
-| `java_patch/` | The only Java patch source |
-| `maneuver_render/` | GLES maneuver overlay renderer (cluster plane 98) |
-| `altscreen_render/` | OMX/GLES altScreen video renderer and PRISM loader (cluster plane 99) |
-| `apac_decoder/` | APAC decoder behind the optional `libcarplay_apac.so` |
-| `common/` | Shared QNX Screen surface code |
-| `models/` | The scene renderer's mask net (`scene-masknet-c/`) |
-| `deploy/` | On-unit runtime scripts, SI child config, patched firmware and PF/deva recipes |
-| `scripts/` | Host build and test entry points |
-| `install_MoreIncredibleBash/`, `uninstall_MoreIncredibleBash/`, `logging_MoreIncredibleBash/` | M.I.B. SD install / remove / log-collection scripts |
-| `tools/` | Host tools (upmix renderer and benches, QSA emulator, amp model, …) |
-| `assets/` | RE working sets (`soundamp/`, `vc-fonts/`) and visual references |
-| `toolchain/qnx65-abi/` | QNX Screen/OpenMAX ABI headers used only for cross-compilation |
-| `docs/` | The documentation (GitHub-rendered; also opens as an Obsidian vault) |
-| `build/` | Build outputs (untracked, empty in git) |
-| `logs/` | Ignored local evidence: vehicle captures, HU logs, iPhone sysdiagnose, state traces |
+| `android_auto/hook/` | GAL/libautoreceiver hook, channel transport, OMX/FFmpeg player and host tests |
+| `android_auto/java/` | Shared Android Auto logic plus small firmware-specific Java source overrides |
+| `android_auto/deploy/` | Standalone GAL launcher and renderer supervision |
+| `firmware/profiles/` | Public fingerprints and installability state for known firmware; no firmware binaries |
+| `collect_AndroidAutoFirmware_MoreIncredibleBash/` | Read-only M.I.B. collector for exact firmware inputs |
+| `install_AndroidAuto_MoreIncredibleBash/` | M.I.B. audit/install/uninstall entrypoint |
+| `scripts/` | Compatibility checker, reproducible builds and SD-card staging |
+| `common/`, `maneuver_render/`, `toolchain/` | Shared LuKa renderer and QNX build foundation |
+| `assets/gallery/` | Android Auto evidence plus inherited upstream visual history |
+| `docs/android-auto/` | Architecture, installation, porting and validation notes |
 
-Build output, raw unit logs and generated class trees are intentionally kept outside Git.
+The inherited CarPlay implementation remains in the working tree as upstream reference so fixes can
+still be contributed cleanly to LuKa. Android Auto packaging is isolated under the paths above; its
+installer never deploys the CarPlay hook.
 
-<a id="build"></a>
+## Firmware compatibility and porting
 
-## 🔧 Build
-
-Native code needs the QNX 6.5 ARMv7 cross-toolchain image from
-[luka-dev/qnx65-armv7-toolchain](https://github.com/luka-dev/qnx65-armv7-toolchain). Build it once:
-
-```sh
-git clone https://github.com/luka-dev/qnx65-armv7-toolchain
-cd qnx65-armv7-toolchain
-./host-scripts/qnx-run.sh build        # qnx65-armv7-toolchain:latest (GCC 8.5)
-./host-scripts/qnx-run.sh build 4.9    # optional: :4.9 (GCC 4.9.4)
-```
-
-Then run from this repository's root:
-
-```sh
-./scripts/build_java.sh
-./scripts/build_hook.sh
-./scripts/build_renderers.sh
-```
-
-The Java patch needs a JDK 8 (set `JAVA8_HOME`, see `scripts/java_env.sh`) and compiles against the
-stock HMI jars in `java_stock/`. Native builds run in the `qnx65-armv7-toolchain` Docker image; `:latest` (the default) is GCC 8.5,
-`QNX_TOOLCHAIN_VARIANT=4.9` selects GCC 4.9.4. Renderer import libraries are generated during the
-build; the resulting ELFs resolve the real Screen/EGL/GLES/OpenMAX libraries on the unit.
-
-| Variant | Command | Output |
+| Firmware | Status | Work required |
 | --- | --- | --- |
-| Production | `./scripts/build_hook.sh` | the one image: WARN/ERROR log only; `touch /mnt/app/carplay_verbose` turns on INFO, audio captures and pace reports for the next session |
-| No audio module | `HOOK_AUDIO=0 ./scripts/build_hook.sh` | hook without the type-103 audio path, no codec |
-| State trace | `AUDIO_STATE_TRACE=1 ./scripts/build_hook.sh` | compact `/tmp/carplay_state_trace.log` ledger (see `scripts/carplay_state_trace.sh`) |
+| `MHI2Q_US_AUG22_P3639` MU0918 | **Validated on the car; ready profile included** | Build with the owner's matching firmware JARs, stage and install |
+| `MHI2Q_US_AUG22_P5145` MU1316 | **Java port compiled and API-gated; installer recognizes but blocks it** | Capture exact `gal` and `libautoreceiver.so`, audit native ABI, add their hashes, then validate on-car |
+| `MHI2Q_KR_AUG22_P1201` MU1201 | **Read-only collector completed successfully; no install profile yet** | Privately review the collected files, port the firmware seams and validate on-car |
+| Other Audi MHI2Q releases | **Framework-compatible; profile verification required** | Verify native/Java seams, add hashes and test on that firmware |
 
-Build outputs (binaries only; `scripts/prepare_install.sh` assembles the install zip from them):
+### Already reusable across ports
 
-```text
-build/carplay_hook.jar
-build/unprotected/libcarplay_hook.so
-build/unprotected/libcarplay_apac.so
-build/maneuver_render
-build/altscreen_render
+The items below are shared by every firmware profile we support now or add later. A new profile does
+not require rebuilding the Android Auto cluster design from scratch.
+
+- Secondary-display negotiation, channel 64 transport and channel 65 input.
+- 1080p/720p configuration and live `0x8009` layouts.
+- Hardware/software decode, frame queue and 1:1 presentation.
+- Large, Classic and Sport viewport logic, menu and steering-wheel controls.
+- Android Auto route-event translation into the cockpit, lane and HUD stack.
+- Renderer, album art, touchpad and parking integration.
+- Firmware checker, API/member gates, host tests, installer and rollback.
+
+### Focused work for another firmware
+
+Download the ready-to-run [read-only M.I.B. firmware collector](mib2q-aa-firmware-collector.zip),
+extract its folder to the SD-card root, and run it through M.I.B. Advanced settings. It copies and
+verifies the five required firmware files without changing the head unit.
+
+1. Run the checker against `gal`, `libautoreceiver.so`, `lsd.jxe` and JARs obtained from that unit.
+2. Confirm the receiver's interposed symbols, C++ object layouts and callback signatures. When they
+   match MU0918, the native change may be profile-only.
+3. Add only the firmware-specific Java overrides that differ. The build selects them by profile and
+   compares every replaced class header and public/protected member with the supplied stock JAR.
+4. Confirm the Virtual Cockpit terminal, window IDs and display contexts, add hashes and POSIX
+   checksums to a profile, then run the existing host and on-car validation sequence.
+
+See [porting another firmware](docs/android-auto/firmware-porting.md). The installer refuses an
+unverified version until this compatibility pass is complete; that protects the head unit and does
+not mean the framework must be rewritten.
+
+Run the read-only checker with files from the target unit:
+
+```bash
+python scripts/check_firmware.py \
+  --gal /path/to/gal \
+  --receiver /path/to/libautoreceiver.so \
+  --lsd-jxe /path/to/lsd.jxe \
+  --stock-jar /path/to/lsd.jar \
+  --compile-jar /path/to/lsd_ic.jar
 ```
 
-Models are versioned in `models/`: `scene-masknet-c/scene_masknet_c.bin`, the scene
-renderer's fine mask net c, with its manifest and the knob settings it was measured at.
+It automatically identifies known profiles and distinguishes a complete `validated-profile` from
+`java-build-compatible`, `java-port-ready`, `native-verification-required`, `port-required`,
+`unsupported` or `incomplete`. Firmware binaries and converted stock JARs are never stored here.
 
-Tests: `./scripts/run_tests.sh`.
+## Build
 
-AltScreen pacing offline checks (ASan/UBSan, fault injection, Clang analysis and libFuzzer):
-`bash scripts/test_altscreen_pacing.sh`; the report lands in `build/altscreen-pacing-validation/`
-and `FUZZ_SECONDS` sets the budget per target. Contracts and limits:
-[frame rate](docs/altscreen-and-video/ALTSCREEN_FRAME_RATE.md),
-[input commands](docs/altscreen-and-video/ALTSCREEN_INPUT_COMMANDS.md) and
-[validation](docs/altscreen-and-video/ALTSCREEN_PACING_VALIDATION.md).
+The native build uses the QNX 6.5 ARMv7 Docker toolchain from
+[`luka-dev/qnx65-armv7-toolchain`](https://github.com/luka-dev/qnx65-armv7-toolchain). Build that image
+once, then run:
 
-<a id="deployment"></a>
-
-## 🚀 Deployment
-
-**Compatibility.** Audi MHI2Q only: the installer reads the firmware version from E2P and stops on
-anything else. On a firmware other than the verified ones (US P5087, ER P5092 and P5152, CN K1004, JP P1017)
-it stops once with a warning and changes nothing; running it again before the next reboot installs
-anyway. It does the same when another CarPlay cluster mod is installed (MIBSI, the CarPlay AltScreen
-toolbox, mibr): such a mod takes the cluster video and rewrites the CarPlay configuration, so remove it
-with its own uninstaller (or reflash the stock firmware) first. The Java part replaces whole stock HMI classes, so it ships per firmware family and
-is chosen by the region in that version string: US, ER and JP (verified on MU1316 P5087, MU1329
-P5092, MU1017 P1017) get `carplay_hook.jar`, CN (verified on MU1003 K1004) gets
-`carplay_hook_cn.jar`. Any other region installs CarPlay without the Java part (no cluster/HUD
-features) until it is added. Also needed:
-
-- a fully digital instrument cluster (Audi virtual cockpit); cars with an analog cluster are not
-  supported;
-- preferably, the latest firmware available for the unit, flashed before installing the patch;
-- for 5.1 sound, an external amplifier (B&O, verified; Bose untested). With the head unit's own
-  amplifier everything else installs and CarPlay audio stays stock stereo.
-
-With these in place it should almost certainly work, as long as nothing went wrong during the
-install itself.
-
-**What gets installed.** Everything the installer replaces or edits keeps a `.carplay-stock`
-backup; files it adds have none and are simply removed on uninstall.
-
-| On the unit | What |
-| --- | --- |
-| `/mnt/app/root/hooks/` | the hook (`libcarplay_hook.so`, `libcarplay_apac.so`), both renderers (`maneuver_render`, `altscreen_render`), `flag_atlas.rgba`, the upmix mask net `scene_masknet_c.bin` and the `carplay_*.sh` runtime scripts |
-| `/mnt/app/eso/hmi/lsd/jars/` | the Java patch for this firmware family (one jar, see above) |
-| `/mnt/app/eso/bin/apps/smartphone_integrator` | the unit's own file, patched in place by `binpatch.py` (one instruction, the USB reconnect fix: after a failed session CarPlay comes back on the next plug-in); a firmware without that code keeps it stock |
-| `/mnt/app/armle/lib/dll/deva-ctrl-qc.so` | the six-channel audio driver, always replaced by the patched P5087 driver (P5092 ships the same file, CN K1004 the same code) |
-| `/mnt/system/etc/eso/production/smartphone_integrator.json` | the `carplay` child replaced by [`carplay_child.json`](deploy/smartphone_integrator/carplay_child.json) |
-| `/mnt/system/etc/eso/production/dio_manager.json` | iAP2 route-guidance, telephony and vehicle-data message IDs (without them iOS sends route guidance and the SDK silently drops it), and the PASCD bit |
-| `/mnt/system/etc/pf*.conf` | the CarPlay rule widened in all four PF profiles |
-| `/mnt/system/etc/scripts/{start,stop}ncm.sh`, `/mnt/system/etc/usblauncher_otg.lua` | the NCM fence for USB replug recovery |
-| `/mnt/app/eso/hmi/lsd/jars/lang_data.zip` | the texts of the CarPlay UpMix row |
-
-<a id="install-with-mib"></a>
-
-**With M.I.B. (recommended).**
-
-1. Get an install zip (`install_*.zip`) or build one with `scripts/prepare_install.sh` (see
-   [Build](#build)), and copy the **contents** of its `install_MoreIncredibleBash/` onto the M.I.B.
-   SD card, so the card holds `mod/custom.sh` and `mod/carplay/`.
-2. Disconnect CarPlay, then run **GEM → M.I.B. → Advanced Settings → Run Custom Script**.
-3. `custom.sh` checks the firmware and that the whole payload is on the card (a partial copy stops
-   before anything is written), reads the amplifier coding, copies with atomic renames and patches
-   the configs in place. It never stops processes or reboots the unit. It also deletes M.I.B.'s
-   NavActiveIgnore jar, which breaks CarPlay's app state.
-
-<a id="manual-install"></a>
-
-**Manually** (no M.I.B.; needs a root shell on the unit over SSH or Telnet): `mount -uw /mnt/app`
-and `/mnt/system`, copy the files and edit the configs as text (`dio_manager.json` has `##`
-comment lines, so no JSON tools). What to copy where and every config change are in
-[Manual install](<docs/build-and-deploy/DEPLOY_AND_RELEASE.md#-manual-install-without-mib>); the
-source-to-unit map, file modes and hashes are in
-[Deploy and Release](<docs/build-and-deploy/DEPLOY_AND_RELEASE.md>).
-
-<a id="reboot-and-check"></a>
-
-**Reboot and check.** The installer runs `sync` itself; still wait a few seconds after it prints
-`DONE`, then reboot the head unit with CarPlay disconnected. The jar is on j9's boot classpath, so it only loads after a
-full restart. On boot `smartphone_integrator` starts everything; connect the phone and look at
-`/tmp/carplay_hook.log` and `/tmp/carplay_java.log` (see [Logging](#logging)).
-
-<a id="uninstall"></a>
-
-**Uninstall.** Copy `uninstall_MoreIncredibleBash/` onto the card and run it the same way: it
-restores every `.carplay-stock` backup and deletes the files the installer added. Running it again
-changes nothing.
-
-The runtime integration (renderer supervision, environment, spatial/upmix settings) lives in
-[`deploy/smartphone_integrator/`](deploy/smartphone_integrator/README.md); the shipped audio
-calibration is set in `deploy/smartphone_integrator/carplay_startup.sh` and documented in
-[Stereo to 5.1 Upmix](<docs/audio/STEREO_TO_5_1_UPMIX.md>).
-
-<a id="logging"></a>
-
-## 📝 Logging
-
-Everything logs to `/tmp` on the unit, which is RAM: pull the logs before a reboot.
-
-| File | Source |
-| --- | --- |
-| `/tmp/carplay_hook.log` | native hook (inside `dio_manager`) |
-| `/tmp/carplay_java.log` | Java patch (bounded at 512 KB and rotated, `.1` = previous) |
-| `/tmp/maneuver_render.log` | cluster maneuver renderer |
-| `/tmp/altscreen_render.log` | cluster CarPlay video renderer (rotated, `.1` = previous) |
-| `/tmp/carplay_wrapper.log` | startup wrapper and renderer monitor |
-
-By default only warnings and errors are recorded. To capture **everything** (hook and Java at
-`INFO`, plus the audio and pacing diagnostics), drop a marker file on the unit; no rebuild needed:
-
-```sh
-touch /mnt/app/carplay_verbose        # survives a reboot; /tmp/carplay_verbose does not
+```bash
+./scripts/build_android_auto_native.sh
+./scripts/build_renderers.sh
+./scripts/build_android_auto_java.sh \
+  --stock-jar /private/path/lsd.jar \
+  --compile-jar /private/path/lsd_ic.jar
+python scripts/stage_android_auto.py
 ```
 
-It takes effect at the next phone connection. Remove the marker to return to the quiet default.
-Builds with extra traces (raw route-guidance packets, the audio state ledger) are listed under
-[Build](#build).
+The Java builder identifies the profile from the supplied JARs and writes its result under
+`build/android_auto/profiles/<profile-id>/`. To make one card containing multiple completed profiles,
+repeat `--profile-jar PROFILE_ID=PATH` when staging. The on-unit script fingerprints stock `gal`,
+`libautoreceiver.so` and `lsd.jxe`, then installs only the JAR for the exact matching profile.
 
-**No shell? Use M.I.B.** Copy `logging_MoreIncredibleBash/` onto the card and run it like the
-installer. Each run saves the logs, process list, mounts, network, PF rules and the MMX and RCC
-`sloginfo` to `<card>/carplay_logs/NNN/`, then creates `/tmp/carplay_verbose`. Run it once,
-reconnect the phone and drive with CarPlay, run it again: the second folder holds the verbose
-session. Attach that folder to a bug report. Nothing on the unit is deleted.
+The Java inputs must be created locally from firmware the builder is entitled to use. The build checks
+every replaced class against the stock JAR and fails when a class header or public/protected member
+differs. Compile-only stubs are checked so they cannot enter the shipped overlay.
 
-<a id="documentation"></a>
+The staged SD-card tree is written to `dist/android-auto-card`. Build outputs and private firmware
+inputs are ignored by Git.
 
-## 📚 Documentation
+## Deployment and installation
 
-All documentation is one linked Markdown tree in [`docs/`](docs/README.md). Start at
-[`docs/README.md`](docs/README.md), then the per-domain maps.
+### Install with M.I.B.
 
-> 🗺️ **Looking for a note?** The [documentation home](docs/README.md) has every note in one mindmap and, below it, [the same notes as links by topic](docs/README.md#notes-by-topic).
+1. Make a complete M.I.B. backup of the unit.
+2. Build and stage the package, or obtain a package built against your exact validated profile.
+3. Copy `install_AndroidAuto_MoreIncredibleBash` from `dist/android-auto-card` to the M.I.B. SD root.
+4. Run M.I.B. → Advanced settings → Run custom script with no marker present. This is a read-only audit
+   that prints firmware identity, current GAL launcher and the exact installation plan.
+5. Continue only when the audit reports `EXACT INSTALLABLE PROFILE`. Create empty
+   `mib2q_aa_install` in the SD root and run the custom script again. A recognized pending profile is
+   still refused.
+6. Remove the marker, disconnect Android Auto and reboot the MMI.
+7. Connect the phone and start a navigation route. With no Android Auto route, Audi's native map stays.
 
-_What the project covers, at a glance._
+### Uninstall
 
-```mermaid
-mindmap
-  root((MHI2Q CarPlay))
-    🔊 Audio
-      UpMix 5.1
-      SCENE renderer
-      ML Training
-      Virtual Cabin
-      B&O J525 amp
-      Dolby Atmos
-      APAC codec
-      Calls and Siri
-    📊 Virtual Cockpit
-      Route Guidance
-      Maneuver arrows
-      Lane Guidance
-      Distance bargraph
-      Head-up display
-      Telephony
-      Third-party nav
-    🖥️ AltScreen
-      CarPlay map in the cluster
-      Frame pacing
-      Zoom and View button
-      Cover Art
-      Enhanced Siri
-    🔌 Connect
-      USB NCM
-      Replug recovery
-      iOS 26 and 27
-      Vehicle data to phone
-      PF firewall
-    📶 Wireless CarPlay
-      Stock210 hook
-      Bluetooth graft
-      iAP2 and MFi
-      2.4 GHz radio
-    🧪 Emulator Lab
-      vphone sender
-      QNX receiver in QEMU
-      Virtual MFi
-    📦 Build and Deploy
-      QNX toolchain
-      M.I.B. installer
-      Release audits
-```
+Remove the install marker, create empty `mib2q_aa_uninstall` in the SD root and run the same custom
+script. It verifies that the active configuration has not been externally changed, restores its saved
+configuration and removes only files it installed. Remove the marker and reboot.
 
-| Domain | Entry point |
-| --- | --- |
-| Audio (upmix, scene renderer, J525 amp, codecs, 5.1 routing) | [`docs/audio/README.md`](<docs/audio/README.md>) |
-| Cluster and route guidance (contexts, BAP/RGI, HUD renderer, CarPlay telephony) | [`docs/cluster-and-rgi/README.md`](<docs/cluster-and-rgi/README.md>) |
-| AltScreen and video (stream 111, OMX pipeline, loader) | [`docs/altscreen-and-video/README.md`](<docs/altscreen-and-video/README.md>) |
-| Connect and USB (NCM, replug recovery, PF, session lifecycle) | [`docs/connect-and-usb/README.md`](<docs/connect-and-usb/README.md>) |
-| Wireless CarPlay (stock210 hook, btstack graft, iAP2/MFi; parked) | [`docs/wireless-carplay/README.md`](<docs/wireless-carplay/README.md>) |
-| CarPlay laboratory (vphone sender, native video, QNX timing) | [`docs/carplay-lab/README.md`](<docs/carplay-lab/README.md>) |
-| Build and deploy (toolchain, release map) | [`docs/build-and-deploy/README.md`](<docs/build-and-deploy/README.md>) |
-| Architecture overview | [`docs/reference/ARCHITECTURE.md`](docs/reference/ARCHITECTURE.md) |
+See [installation details](docs/android-auto/installation.md) and
+[the exact on-unit change list](docs/android-auto/on-unit-changes.md).
 
-Read [`docs/LANDMINES.md`](docs/LANDMINES.md) before touching a subsystem. Long-form white papers
-are in `docs/research/`; primary evidence (papers, manuals, data files, decompiled stock Java) is in
-`docs/sources/`.
+## Validation
 
-<a id="help-wanted"></a>
+Validated on:
 
-## 🤝 Help wanted
+- 2018 Audi B9 SQ5 with first-generation Virtual Cockpit;
+- `MHI2Q_US_AUG22_P3639`, MU0918;
+- direct wired USB Android Auto;
+- wireless Android Auto through a USB adapter;
+- Google Maps and Waze.
 
-PRs are welcome: bug fixes, new maneuver cases, docs and on-car test reports, especially from
-cars this was not developed on (internal amplifier, Bose, other regions and trains).
+Confirmed behavior includes the independent channel 64 stream, channel 65 input, GAL 4.3 negotiation,
+1920×1080 video, 1440×540 1:1 viewport, Qualcomm decoding, live cockpit-view changes, route gating,
+HUD/cockpit guidance, controls, reconnect recovery, stock-GAL fallback and package rollback.
 
-**Reporting a bad maneuver icon.** The iAP2 → BAP mapping covers all CarPlay maneuver types but has
-been exercised on a limited set of real routes. A snippet of `/tmp/carplay_hook.log` from the moment
-and a note on what was expected help a lot. The hook logs a route-guidance message it does not handle
-as `Unknown 0x52xx msgid=0xNNNN dir=IN len=N`; that line is the best starting point.
+Host coverage includes encoded-ring ownership/resynchronization, navigation translation, UiConfig
+encoding, rotary input, Qualcomm tile conversion, menu geometry, Java member preservation, cluster
+state transitions and multi-profile installer dispatch/refusal/rollback. The MU1316 Java overlay also
+passes all 13 stock-class API gates and 162 cockpit/HUD host assertions. See the
+[validation record](docs/android-auto/validation.md).
 
-<a id="license"></a>
+## Known limits
 
-## 📄 License
+- **No true map zoom.** Android Auto does not expose a vehicle command for zooming its cockpit map.
+  Resizing the layout moves the car in Large view or changes the card/layout in Sport view. Overall
+  map and text scale comes from the Size setting.
+- **Display rate.** The phone sends 30 fps and hardware decoding keeps up; approximately 24–27 fps
+  reach the cockpit in normal use.
+- **Reconnect-required settings.** Size and Resolution are negotiated when the phone connects. Arrow
+  tile and map position apply live.
+- **Arrow-button overlap.** Holding the right arrow to open the project menu can also open Audi's side
+  menu because the cockpit receives that button independently.
+- **Dark map only.** Android Auto on the phone crashes when the cockpit display is switched to the Light
+  or Automatic theme (on-car test: the phone stopped answering and the whole link restarted), so the
+  cockpit map always uses the Dark theme and the theme option was removed.
+- **Android Auto audio fidelity.** The stock receiver negotiates 48 kHz/16-bit/stereo PCM. A compatible
+  six-channel upmix and an optional 24-bit companion-player path are separate planned features; changing
+  `gal.json` to advertise unsupported high-resolution formats is not safe. See the
+  [audio-quality roadmap](docs/android-auto/audio-quality-roadmap.md).
 
-GNU General Public License v3.0 or later ([LICENSE](LICENSE)): use, change and share it, also
-commercially, as long as the source of what you distribute stays open under the same license and
-the copyright notices stay in place. Stock firmware files, jars, fonts and other third-party
-material in the repository keep their owners' terms; [NOTICE](NOTICE.md) lists them.
+## FAQ
 
-<a id="references"></a>
+**Does it work on MHI2 rather than MHI2Q?** No. MHI2 is the older Nvidia-based K-train platform, such
+as `MHI2_US_AUG22_K2162`. This project targets Qualcomm-based MHI2Q P-train firmware, and its receiver
+hook and hardware decoder are specific to that platform.
 
-## 📚 References
+**Does it work with another MHI2Q firmware?** The framework should transfer with a focused port. Run
+the checker, verify the listed native/Java seams and create a validated profile before installation.
 
-Thanks for the prior work and knowledge that helped figure this out:
+**Does it support CarPlay or MIB3?** This branch targets Android Auto on MHI2Q. For CarPlay guidance,
+see [LuKa's project](https://github.com/luka-dev/mib2q-carplay-rgi). MIB3 is a different platform.
 
-- https://github.com/ludwig-v/wireless-carplay-dongle-reverse-engineering
-- https://github.com/EthanArbuckle/iPhone18-3_26.1_23B85_Restore
-- https://github.com/adi961/mib2-android-auto-vc
-- [@fifthBro](https://t.me/fifthBro)
-- https://github.com/xPaiiN for telephony magic
+**Wired or wireless Android Auto?** Both are tested and use the same receiver/cockpit-stream pipeline.
+
+**Which navigation applications are tested?** Google Maps and Waze. Other apps must implement Android
+Auto's cluster-display interface to provide a cockpit map.
+
+## Attribution and license
+
+This repository is a fork of [`luka-dev/mib2q-carplay-rgi`](https://github.com/luka-dev/mib2q-carplay-rgi).
+LuKa's project supplied the MHI2Q cockpit integration, renderer, build foundation and selected assets.
+LuKa gave written permission on 2026-09-30 to publish and distribute these Android Auto modifications
+as a fork.
+
+The receiver hook adapts GPL-3.0 work from
+[`chopinwong01/mhi2-android-auto-video-vc`](https://github.com/chopinwong01/mhi2-android-auto-video-vc).
+FFmpeg is used under LGPL-2.1-or-later.
+
+This project is published under GPL-3.0-or-later, subject to the third-party notices in
+[`LICENSES/README.md`](LICENSES/README.md) and [`android_auto/THIRD_PARTY.md`](android_auto/THIRD_PARTY.md).
+The private permission correspondence and email addresses are intentionally not published; its scope
+is recorded in [`LICENSES/UPSTREAM-PERMISSION.md`](LICENSES/UPSTREAM-PERMISSION.md).
+
+## Safety and rollback
+
+The installer does not replace `gal`, `libautoreceiver.so`, `lsd.jxe` or `gal.json`. It adds the
+Android Auto runtime under `/mnt/app/root/sq5_android_auto`, adds the Java overlay JAR and changes only
+`children.gal.exec` and `children.gal.path` in `smartphone_integrator.json`.
+
+Unknown firmware, a damaged payload, an existing third-party GAL launcher or an externally edited
+installed configuration causes a refusal before activation or rollback. The stock-GAL off switch and
+exact uninstall path remain available. Review [the on-unit change list](docs/android-auto/on-unit-changes.md)
+before installation.

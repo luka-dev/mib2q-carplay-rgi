@@ -76,3 +76,16 @@ install_MoreIncredibleBash/mod/carplay/carplay_child.json
 
 # Obsidian per-user UI state (open panes, last file) — changes on every open
 docs/.obsidian/
+
+# Android Auto fork build outputs and private firmware inputs.
+/dist/
+/.build-cache/
+/android_auto/java/build/
+/android_auto/java/firmware-source/
+/firmware/private/
+*.jxe
+*.h264
+*.raw
+*.ppm
+.obsidian-mcp/
+**/.obsidian/
