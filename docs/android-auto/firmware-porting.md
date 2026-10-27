@@ -4,6 +4,11 @@ The repository uses a shared implementation with profile-selected Java overrides
 fingerprints. MU0918 is installable. MU1316 P5145 already has its four differing Java classes ported,
 but its native gate remains intentionally incomplete.
 
+This profile model is how the mod covers additional Audi MHI2Q firmware over time. Once a version's
+exact files, native ABI, Java seams and on-car behavior are verified, it becomes another supported
+profile using the same Android Auto stream, decoder, cockpit, HUD and installer framework. Until then,
+the installer recognizes a pending profile for diagnostics or refuses an unknown version.
+
 ## 1. Collect without modifying
 
 Collect `gal`, `libautoreceiver.so`, `lsd.jxe`, `smartphone_integrator.json` and `gal.json` from the

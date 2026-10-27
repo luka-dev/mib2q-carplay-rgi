@@ -24,6 +24,13 @@
 > and API-gated, but installation remains blocked until exact `gal` and `libautoreceiver.so` copies are
 > captured and their native ABI is verified. Make a complete M.I.B. backup before modifying a head unit.
 
+> [!NOTE]
+> **Firmware support is profile-based and expands as versions are verified.** This is not permanently
+> limited to MU0918: every Audi MHI2Q firmware that we later collect, audit, port and validate can be
+> added as a first-class profile using the same stream, decoder, cockpit, HUD and installer framework.
+> The compatibility table below is the source of truth for what is supported today. Unknown or
+> incomplete firmware is identified and safely refused instead of being flashed with a guessed build.
+
 This project brings native Android Auto map video, route guidance and HUD integration to Audi MHI2Q.
 It was developed and validated on a 2018 B9 SQ5 with the first-generation Virtual Cockpit.
 
@@ -210,9 +217,13 @@ installer never deploys the CarPlay hook.
 | --- | --- | --- |
 | `MHI2Q_US_AUG22_P3639` MU0918 | **Validated on the car; ready profile included** | Build with the owner's matching firmware JARs, stage and install |
 | `MHI2Q_US_AUG22_P5145` MU1316 | **Java port compiled and API-gated; installer recognizes but blocks it** | Capture exact `gal` and `libautoreceiver.so`, audit native ABI, add their hashes, then validate on-car |
+| `MHI2Q_KR_AUG22_P1201` MU1201 | **Read-only collector completed successfully; no install profile yet** | Privately review the collected files, port the firmware seams and validate on-car |
 | Other Audi MHI2Q releases | **Framework-compatible; profile verification required** | Verify native/Java seams, add hashes and test on that firmware |
 
 ### Already reusable across ports
+
+The items below are shared by every firmware profile we support now or add later. A new profile does
+not require rebuilding the Android Auto cluster design from scratch.
 
 - Secondary-display negotiation, channel 64 transport and channel 65 input.
 - 1080p/720p configuration and live `0x8009` layouts.
