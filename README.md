@@ -351,6 +351,10 @@ passes all 13 stock-class API gates and 162 cockpit/HUD host assertions. See the
 - **Dark map only.** Android Auto on the phone crashes when the cockpit display is switched to the Light
   or Automatic theme (on-car test: the phone stopped answering and the whole link restarted), so the
   cockpit map always uses the Dark theme and the theme option was removed.
+- **Android Auto audio fidelity.** The stock receiver negotiates 48 kHz/16-bit/stereo PCM. A compatible
+  six-channel upmix and an optional 24-bit companion-player path are separate planned features; changing
+  `gal.json` to advertise unsupported high-resolution formats is not safe. See the
+  [audio-quality roadmap](docs/android-auto/audio-quality-roadmap.md).
 
 ## FAQ
 
