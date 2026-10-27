@@ -1,0 +1,56 @@
+08:59:59.900 [WRN] [STATE] ST ev=0 mono_ms=900 pid=4242 gen=0 name=RUNTIME_INIT process=dio_manager
+09:00:00.000 [WRN] [STATE] ST ev=1 mono_ms=1000 pid=4242 gen=1 name=IAP_IDENTIFY_START physical_generation=1
+09:00:00.010 [WRN] [STATE] ST ev=2 mono_ms=1010 pid=4242 gen=1 name=IAP_IDENTIFY_ACCEPTED msg=0x1d02
+09:00:00.020 [WRN] [STATE] ST ev=3 mono_ms=1020 pid=4242 gen=1 name=IAP_NOW_PLAYING_START dir=out msg=0x5000 payload_bytes=20 payload_hash=12345678 media_groups=1 media_attrs=17 playback_groups=1 playback_attrs=17 unknown_groups=0
+09:00:00.030 [WRN] [STATE] ST ev=4 mono_ms=1030 pid=4242 gen=1 name=IAP_LINK_TX msg=0x5000 result=0 sent=64 header=1 ctrl=0x40 seq=17 ack=8 session=7 packet_len=64
+09:00:00.040 [WRN] [STATE] ST ev=5 mono_ms=1040 pid=4242 gen=1 name=IAP_LINK_RX_AFTER_5000 tx_seq=17 tx_session=7 ctrl=0x80 seq=34 ack=18 session=7 packet_len=9 semantic_msg=-1 ack_eq_seq=0 ack_eq_next=1 observation=1
+09:00:00.050 [WRN] [STATE] ST ev=6 mono_ms=1050 pid=4242 gen=1 name=IAP_NOW_PLAYING_UPDATE dir=in msg=0x5001 payload_bytes=30 payload_hash=87654321 media_groups=1 media_attrs=5 playback_groups=1 playback_attrs=3 unknown_groups=0
+09:00:00.060 [WRN] [STATE] ST ev=7 mono_ms=1060 pid=4242 gen=1 name=AIRPLAY_SETUP_BEGIN setup_seq=1 air_gen=1 setup_ordinal=1 session_edge=new session=0x1 request=1
+09:00:00.070 [WRN] [STATE] ST ev=8 mono_ms=1070 pid=4242 gen=1 name=AUDIO_SETUP_STREAM phase=request setup_seq=1 ordinal=0 type=103 format_index=23 format=-1 sample_rate=-1 spf=1024 stream_id=9 data_port=-1 buffer_size=-1
+09:00:00.072 [WRN] [STATE] ST ev=9 mono_ms=1072 pid=4242 gen=1 name=BUFFERED_RENDER_START setup_index=23 state=waiting-for-cookie key=1 output_channels=6 upmix=scene lfe=1
+09:00:00.075 [WRN] [STATE] ST ev=10 mono_ms=1075 pid=4242 gen=1 name=IAP_NOW_PLAYING_RETRY action=queued generation=1 attempt=1 payload_bytes=144
+09:00:00.078 [WRN] [STATE] ST ev=11 mono_ms=1078 pid=4242 gen=1 name=AUDIO_ROUTE action=request owner=cold_buffered audio_type=1 result=queued symbol=_ZN3dio11CDIOManager19s_audioTypeCallbackEiPv
+09:00:00.080 [WRN] [STATE] ST ev=11 mono_ms=1080 pid=4242 gen=1 name=QSA_OPEN sink=mpl5_dio_ent action=cold_buffered result=0 handle_valid=1 handle=0x2 mode=0x1
+09:00:00.085 [WRN] [STATE] ST ev=10 mono_ms=1085 pid=4242 gen=1 name=HID_REMOTE_FILL usage=0xb5 asserted=1 result=0 resolved=1 report_valid=1 report_byte=0x10
+09:00:00.087 [WRN] [STATE] ST ev=11 mono_ms=1087 pid=4242 gen=1 name=HID_REPORT_POST ordinal=1 len=1 result=0 resolved=1 device_valid=1 report_valid=1 first=0x10 report_hash=150c764f
+09:00:00.090 [WRN] [STATE] ST ev=12 mono_ms=1090 pid=4242 gen=1 name=QSA_FIRST_WRITE owner=stock write=1 result=9216 target_bytes=9216 source_bytes=3072 source_channels=2 target_channels=6 buffered_frames=768 total_frames=768
+09:00:00.100 [WRN] [STATE] ST ev=13 mono_ms=1100 pid=4242 gen=1 name=BUFFERED_PACKET_ANOMALY stage=zero-pcm count=1 status=0
+09:00:00.105 [WRN] [STATE] ST ev=14 mono_ms=1105 pid=4242 gen=1 name=BUFFERED_SEQUENCE_GAP expected=14595202 actual=14595206 count=1
+09:00:00.110 [WRN] [STATE] ST ev=14 mono_ms=1110 pid=4242 gen=1 name=APAP_FRAME_GAP apap_frame=257 gap_ms=141 count=1 ring_fill_before=256 playing=1 primed=1 frames_in=262144 frames_out=261888 decode_fail=0 zero_pcm=1
+09:00:00.120 [WRN] [STATE] ST ev=15 mono_ms=1120 pid=4242 gen=1 name=QSA_RING_WAIT owner=detached gap_ms=143 pending=256 wait_count=1 ring_fill=256 frames_in=262144 frames_out=261888 auth_fail=0 tlv_fail=0 decode_fail=0 zero_pcm=1 state_only=0
+09:00:00.130 [WRN] [STATE] ST ev=16 mono_ms=1130 pid=4242 gen=1 name=QSA_CADENCE_GAP owner=detached gap_ms=146 writes=257 clock_resets=1 auto_recovery=0 ring_fill=512 frames_in=263168 frames_out=262656 decode_fail=0 zero_pcm=1
+09:00:00.140 [WRN] [STATE] ST ev=17 mono_ms=1140 pid=4242 gen=1 name=BUFFERED_HEALTH apap_frames=512 interval_max_gap_ms=141 frame_gaps=1 state=running playing=1 primed=1 ring_fill=512 ring_capacity=24000 frames_in=524288 frames_out=523776 dropped=0 auth_fail=0 tlv_fail=0 decode_calls=512 decode_fail=0 zero_pcm=1 state_only=0 sequence_gaps=1 upmix_fail=0
+09:00:00.150 [WRN] [STATE] ST ev=18 mono_ms=1150 pid=4242 gen=1 name=QSA_HEALTH owner=detached writes=256 zero=0 short=0 recoveries=0 status=1 device_underruns=1 odd_periods=0 ring_waits=1 clock_resets=1 ring_fallbacks=0 software_underrun_frames=0 ring_fill=512 frames_in=524288 frames_out=523776 decode_fail=0 zero_pcm=1
+09:00:00.160 [WRN] [STATE] ST ev=19 mono_ms=1160 pid=4242 gen=1 name=QSA_DEVICE_UNDERRUN owner=detached writes=256 status=1 device_underruns=1
+09:00:01.000 [WRN] [STATE] ST ev=13 mono_ms=2000 pid=4242 gen=2 name=IAP_IDENTIFY_START physical_generation=2
+09:00:01.100 [WRN] [STATE] ST ev=1 mono_ms=2100 pid=4343 gen=1 name=IAP_IDENTIFY_START physical_generation=1
+09:00:02.000 [WRN] [STATE] ST ev=20 mono_ms=3000 pid=4242 gen=3 name=IAP_NOW_PLAYING_START dir=out msg=0x5000 payload_bytes=20 payload_hash=11111111
+09:00:02.010 [WRN] [STATE] ST ev=21 mono_ms=3010 pid=4242 gen=3 name=IAP_LINK_TX msg=0x5000 result=0 sent=64
+09:00:02.020 [WRN] [STATE] ST ev=22 mono_ms=3020 pid=4242 gen=3 name=IAP_NOW_PLAYING_UPDATE dir=in msg=0x5001 payload_bytes=30 payload_hash=22222222
+09:00:02.030 [WRN] [STATE] ST ev=23 mono_ms=3030 pid=4242 gen=3 name=AIRPLAY_SETUP_BEGIN setup_seq=2 air_gen=3 setup_ordinal=1 session_edge=new session=0x3 request=1
+09:00:02.040 [WRN] [STATE] ST ev=24 mono_ms=3040 pid=4242 gen=3 name=AUDIO_SETUP_STREAM phase=request setup_seq=2 ordinal=0 type=103 format_index=23
+09:00:02.050 [WRN] [STATE] ST ev=25 mono_ms=3050 pid=4242 gen=3 name=QSA_OPEN sink=mpl5_dio_ent action=real result=0
+09:00:02.060 [WRN] [STATE] ST ev=26 mono_ms=3060 pid=4242 gen=3 name=QSA_FIRST_WRITE owner=stock result=9216
+09:00:02.070 [WRN] [STATE] ST ev=27 mono_ms=3070 pid=4242 gen=3 name=QSA_CLOSE owner=stock action=retain_for_buffered result=0 handoff=continuous
+09:00:02.080 [WRN] [STATE] ST ev=28 mono_ms=3080 pid=4242 gen=3 name=QSA_DETACHED_FIRST_WRITE result=9216 expected=9216
+09:00:03.000 [WRN] [STATE] ST ev=29 mono_ms=4000 pid=4242 gen=4 name=IAP_NOW_PLAYING_START dir=out msg=0x5000 payload_bytes=20 payload_hash=33333333
+09:00:03.010 [WRN] [STATE] ST ev=30 mono_ms=4010 pid=4242 gen=4 name=IAP_LINK_TX msg=0x5000 result=0 sent=64
+09:00:03.020 [WRN] [STATE] ST ev=31 mono_ms=4020 pid=4242 gen=4 name=IAP_NOW_PLAYING_UPDATE dir=in msg=0x5001 payload_bytes=30 payload_hash=44444444
+09:00:03.030 [WRN] [STATE] ST ev=32 mono_ms=4030 pid=4242 gen=4 name=AIRPLAY_SETUP_BEGIN setup_seq=3 air_gen=4 setup_ordinal=1 session_edge=new session=0x4 request=1
+09:00:03.040 [WRN] [STATE] ST ev=33 mono_ms=4040 pid=4242 gen=4 name=AUDIO_SETUP_STREAM phase=request setup_seq=3 ordinal=0 type=103 format_index=23
+09:00:03.050 [WRN] [STATE] ST ev=34 mono_ms=4050 pid=4242 gen=4 name=QSA_OPEN sink=mpl5_dio_ent action=real result=0
+09:00:03.060 [WRN] [STATE] ST ev=35 mono_ms=4060 pid=4242 gen=4 name=QSA_FIRST_WRITE owner=stock result=9216
+09:00:03.070 [WRN] [STATE] ST ev=36 mono_ms=4070 pid=4242 gen=4 name=QSA_CLOSE owner=stock action=retain_for_buffered result=0 handoff=continuous
+09:00:03.080 [WRN] [STATE] ST ev=37 mono_ms=4080 pid=4242 gen=4 name=QSA_DETACHED_FIRST_WRITE result=9216 expected=9216
+09:00:03.130 [WRN] [STATE] ST ev=38 mono_ms=4130 pid=4242 gen=4 name=AUDIO_ROUTE action=request owner=detached_buffered reason=stock_type100_torn_down audio_type=1 result=queued
+09:00:03.990 [WRN] [STATE] ST ev=38 mono_ms=4990 pid=4242 gen=5 name=QSA_WRITE_ANOMALY owner=detached result=9216 expected=9216 auto_recovery=0 clock_reset=1 gap_ms=0
+09:00:04.000 [WRN] [STATE] ST ev=39 mono_ms=5000 pid=4242 gen=5 name=BUFFERED_CONTROL method=FLUSHBUFFERED until_seq=1878632 reprime_frames=7680
+09:00:06.700 [WRN] [STATE] ST ev=40 mono_ms=7700 pid=4242 gen=5 name=BUFFERED_CONTROL method=SETRATE rate=1
+09:00:06.750 [WRN] [STATE] ST ev=41 mono_ms=7750 pid=4242 gen=5 name=BUFFERED_FLUSH_BOUNDARY sequence=1878633 rtp=1234 discarded=497
+09:00:06.751 [WRN] [STATE] ST ev=42 mono_ms=7751 pid=4242 gen=5 name=BUFFERED_SEQUENCE_GAP expected=1875138 actual=1878633 count=1
+09:00:06.800 [WRN] [STATE] ST ev=43 mono_ms=7800 pid=4242 gen=5 name=APAP_FRAME_GAP apap_frame=2000 gap_ms=612 count=1 ring_fill_before=0 playing=1 primed=0 prime_target=7680 decode_fail=0 zero_pcm=1
+09:00:06.810 [WRN] [STATE] ST ev=44 mono_ms=7810 pid=4242 gen=5 name=QSA_CADENCE_GAP owner=detached gap_ms=1167 writes=1900 clock_resets=1 auto_recovery=1 ring_fill=18688 decode_fail=0 zero_pcm=1
+09:00:06.810 [WRN] [STATE] ST ev=44 mono_ms=7810 pid=4242 gen=5 name=QSA_BUFFERED_SILENCE periods=1 frames=768 ready_frames=0 requested_frames=768
+09:00:06.811 [WRN] [STATE] ST ev=45 mono_ms=7811 pid=4242 gen=5 name=QSA_WRITE_ANOMALY owner=detached result=9216 expected=9216 auto_recovery=1 clock_reset=1 gap_ms=1167
+09:00:06.820 [WRN] [STATE] ST ev=46 mono_ms=7820 pid=4242 gen=5 name=BUFFERED_PACKET_ANOMALY stage=zero-pcm count=1 status=0
+09:00:06.830 [WRN] [STATE] ST ev=47 mono_ms=7830 pid=4242 gen=5 name=BUFFERED_HEALTH apap_frames=2001 interval_max_gap_ms=612 frame_gaps=1 state=running playing=1 primed=1 prime_target=7680 ring_fill=17920 ring_capacity=24000 decode_calls=2001 decode_fail=0 zero_pcm=1 sequence_gaps=1

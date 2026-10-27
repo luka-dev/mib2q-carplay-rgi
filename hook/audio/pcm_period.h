@@ -1,0 +1,163 @@
+/*
+ * pcm_period.h — whole-period selection for the buffered CarPlay PCM rail.
+ *
+ * A QSA period must never contain a decoded prefix followed by synthesized
+ * silence.  If the producer has fewer frames than the sink requests, leave
+ * every buffered frame queued and use the realtime fallback for the entire
+ * period.  Keeping this decision tiny and pure also makes the 1024-frame
+ * codec / 768-frame sink cadence directly regression-testable.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+#ifndef PCM_PERIOD_H
+#define PCM_PERIOD_H
+
+#include <stddef.h>
+#include <stdint.h>
+
+static inline size_t spa_pcm_whole_period_frames(size_t available,
+                                                  size_t requested)
+{
+    return requested && available >= requested ? requested : 0;
+}
+
+/* A successful flush stops the playback channel.  If its paired prepare was
+ * unavailable or failed, the next writer must prepare before it consumes any
+ * buffered PCM.  A failed flush does not prove that the handle was stopped. */
+static inline int spa_pcm_prepare_pending_after_flush(int flush_result,
+                                                       int prepare_result)
+{
+    return flush_result == 0 && prepare_result != 0;
+}
+
+/* A buffered period is only offered to QSA here; ownership changes after the
+ * device reports how many complete interleaved frames it accepted. */
+static inline size_t spa_pcm_write_accepted_frames(int64_t written_bytes,
+                                                   size_t frame_bytes,
+                                                   size_t offered_frames)
+{
+    size_t accepted;
+
+    if (written_bytes <= 0 || !frame_bytes || !offered_frames)
+        return 0;
+    accepted = (size_t)written_bytes / frame_bytes;
+    return accepted < offered_frames ? accepted : offered_frames;
+}
+
+static inline int spa_pcm_ring_reserve(size_t fill, size_t requested,
+                                       size_t *reserved)
+{
+    if (!reserved || *reserved || !requested || fill < requested)
+        return 0;
+    *reserved = requested;
+    return 1;
+}
+
+/* Commit only the accepted prefix and release the rest of the reservation.
+ * A zero/error therefore leaves the full period at the ring head; a short
+ * write leaves its exact whole-frame tail for the caller's retry. */
+static inline size_t spa_pcm_ring_commit(size_t capacity,
+                                         size_t *head, size_t *fill,
+                                         size_t *reserved,
+                                         size_t accepted_frames)
+{
+    size_t accepted;
+
+    if (!head || !fill || !reserved)
+        return 0;
+    accepted = accepted_frames;
+    if (accepted > *reserved) accepted = *reserved;
+    if (accepted > *fill) accepted = *fill;
+    if (!capacity) accepted = 0;
+    if (accepted)
+        *head = (*head + accepted) % capacity;
+    *fill -= accepted;
+    *reserved = 0;
+    return accepted;
+}
+
+static inline int spa_pcm_prime_ready(size_t available, size_t target)
+{
+    return target != 0 && available >= target;
+}
+
+/* Rate-zero packets are retained compressed and may already fill the FIFO
+ * when SETRATE=1 arrives.  Draining that FIFO used to stop at the steady-state
+ * high-water mark even before the initial prime target was reached.  With the
+ * production defaults (250 ms high-water, 400 ms cold prime) that made QSA
+ * bootstrap mathematically unreachable: no sink existed to consume PCM, and
+ * queued decode refused to produce the remaining cushion.  Before the first
+ * prime, the effective decode limit must therefore be at least prime_target;
+ * afterwards the ordinary high-water policy resumes. */
+static inline int spa_pcm_queue_should_decode(size_t available,
+                                               size_t high_water,
+                                               size_t prime_target,
+                                               int primed)
+{
+    size_t limit = high_water;
+
+    if (!primed && prime_target > limit) limit = prime_target;
+    return !limit || available < limit;
+}
+
+/* The detached APAP receiver is both the source pump and the QSA render
+ * clock.  Keep reading while the software cushion is below its high-water
+ * mark, but never stop below one writable QSA period (important when someone
+ * selects a very small AUDIO_HIGH_MS).  At/above high water, one blocking QSA
+ * write is the whole loop iteration and TCP backpressure retains the source
+ * data on the phone instead of overflowing this ring. */
+static inline int spa_pcm_pump_should_read_source(int detached,
+                                                   size_t available,
+                                                   size_t period,
+                                                   size_t high_water)
+{
+    if (!detached) return 1;
+    if (!period || available < period) return 1;
+    return !high_water || available < high_water;
+}
+
+/* Once a complete sink period is queued, polling the nonblocking APAP socket
+ * must not delay rendering.  A zero-time poll opportunistically ingests one
+ * source record; if none is ready, the blocking QSA write advances playback.
+ * Below a period, wait for the producer instead of spinning. */
+static inline int spa_pcm_pump_poll_timeout_ms(int detached,
+                                               size_t available,
+                                               size_t period,
+                                               int source_wait_ms)
+{
+    return detached && period && available >= period ? 0 : source_wait_ms;
+}
+
+/* Stock-owned playback normally paces a backpressured APAP source at the
+ * codec frame duration.  During FLUSHBUFFERED that would make the receiver
+ * discard an already-queued stale item in real time: every 1024 old frames
+ * would cost another 21.33 ms, and repeated seeks would move the boundary
+ * faster than it is reached.  Flush draining is the one safe exception because
+ * none of those authenticated records can be rendered. */
+static inline int spa_pcm_source_should_pace(int backpressure,
+                                             int detached,
+                                             int flush_pending)
+{
+    return backpressure && !detached && !flush_pending;
+}
+
+enum spa_pcm_period_source {
+    SPA_PCM_PERIOD_FROM_REALTIME = 0,
+    SPA_PCM_PERIOD_FROM_BUFFERED = 1,
+    SPA_PCM_PERIOD_FROM_SILENCE = 2
+};
+
+/* Type 100 and buffered type 103 are separate sender timelines.  The stock
+ * source is a valid bridge only before/after buffered media ownership.  Once
+ * type 103 owns the media rail, substituting type-100 PCM during a pause,
+ * flush/re-prime, or underrun can play a different item under the current
+ * metadata.  Keep QSA clocked with a whole silent period instead. */
+static inline enum spa_pcm_period_source spa_pcm_period_source(
+    int buffered_owns_media, size_t buffered_frames)
+{
+    if (!buffered_owns_media) return SPA_PCM_PERIOD_FROM_REALTIME;
+    return buffered_frames ? SPA_PCM_PERIOD_FROM_BUFFERED
+                           : SPA_PCM_PERIOD_FROM_SILENCE;
+}
+
+#endif /* PCM_PERIOD_H */

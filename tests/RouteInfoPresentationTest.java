@@ -1,4 +1,4 @@
-import com.luka.carplay.core.ScreenModule;
+import com.luka.carplay.core.AltScreenModule;
 import com.luka.carplay.rgd.BAPBridge;
 import com.luka.carplay.rgd.RouteGuidance;
 import de.audi.atip.interapp.combi.bap.navi.CombiBAPServiceNavi;
@@ -71,7 +71,9 @@ public final class RouteInfoPresentationTest {
 
     private static Output render(BAPBridge bridge, Output output,
             RouteGuidance.State state, boolean small, int phase) throws Exception {
-        set(ScreenModule.class, null, "smallScreenViewArea", Boolean.valueOf(small)); // target: boolean flag
+        set(AltScreenModule.class, null, "desiredViewAreaMode",
+            Integer.valueOf(small ? AltScreenModule.VIEWAREA_SMALLSCREEN
+                                  : AltScreenModule.VIEWAREA_FULLSCREEN));
         output.position = output.turnTo = output.signPost = "STALE";
         output.positionCalls = output.turnCalls = output.timeCalls = 0;
         bridge.refreshInfoPresentation(state, phase);

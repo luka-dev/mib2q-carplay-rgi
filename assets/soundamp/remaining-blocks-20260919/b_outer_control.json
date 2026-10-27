@@ -1,0 +1,312 @@
+{
+  "source_sha256": "8776fdb84d05571cf4addf42655bc875da7c47cc35166e3cee6c60bc5841fe4b",
+  "scope": "static request reachability, not delivery, current vehicle state or a bass diagnosis",
+  "format": "raw LE V850/32 base0; byte addresses; payload words are BE32",
+  "ranges": {
+    "coefficient_matrix_writer": {
+      "start": "0xa903c",
+      "end_exclusive": "0xa91c4",
+      "sha256": "d4acf6944eae812b9873ed9c8b53ef6cbe5b5dca1cb5125c125cbe1985d5afbc"
+    },
+    "coefficient_transport": {
+      "start": "0xa8bb4",
+      "end_exclusive": "0xa8d5c",
+      "sha256": "660552bac544577d20f29728f968dc150efc86a445d4f2b8c9455d1759c8ed29"
+    },
+    "outer_main_dispatch": {
+      "start": "0x99774",
+      "end_exclusive": "0x99bd2",
+      "sha256": "90c14b3dde4ea958ea20f545b25853a0ccb90bb8753bec02c67b19da7a99a3a9"
+    },
+    "outer_main_response": {
+      "start": "0x99be0",
+      "end_exclusive": "0x99cd4",
+      "sha256": "60712ae192addc2560476e72ef518fef678ddf12a224b0b68ca4216f3eae5667"
+    },
+    "outer_alt_request": {
+      "start": "0xa2874",
+      "end_exclusive": "0xa2a98",
+      "sha256": "5892ab215463f22200ae4eb60607742ec912be0d61f0fef6bf1c9e209cd24d94"
+    },
+    "outer_alt_dispatch": {
+      "start": "0xd57c8",
+      "end_exclusive": "0xd58ec",
+      "sha256": "0bb06f13a81d1a7553fdcc42a8837c914c14505544589984a243febc70fae84e"
+    },
+    "outer_be_codec": {
+      "start": "0x99cd4",
+      "end_exclusive": "0x99de8",
+      "sha256": "11d01a5b3d52f1942e2204d2e5ad2bcb444bfd515e6bca3647f5b747733f59d8"
+    },
+    "outer_generic_handlers": {
+      "start": "0xd40c8",
+      "end_exclusive": "0xd41dc",
+      "sha256": "5949dcbfab7afef564f304ce213a91def9ecd8216155c0fa875ffc155dc57d06"
+    },
+    "outer_alt_read_handler": {
+      "start": "0xd42dc",
+      "end_exclusive": "0xd433c",
+      "sha256": "beeed9c196d3ae57e9266bfb2abe9addfb2ecb87224b37d19cedc6d7776ea197"
+    },
+    "outer_read_senders": {
+      "start": "0xac6cc",
+      "end_exclusive": "0xac818",
+      "sha256": "7fc366c39b3510682b12b3785ca841fd67cb9438153db0e1c973fa5928e9d726"
+    },
+    "outer_event_dispatch": {
+      "start": "0xa76b0",
+      "end_exclusive": "0xa7d28",
+      "sha256": "292336f80047a56e5e743fbdb0476c55ed68368c60f261ba7d20ea56849f2c58"
+    },
+    "outer_api18_writer": {
+      "start": "0xaa644",
+      "end_exclusive": "0xaa898",
+      "sha256": "3662645be7d043aea99080f355bf72afd8b3f57329ab4e791289631eddb2e22d"
+    },
+    "outer_api18_request": {
+      "start": "0xca4b4",
+      "end_exclusive": "0xca8bc",
+      "sha256": "aa988680b72a42d291edf79f711f2f3f185096d0b1246c6c75ae9d52382bc064"
+    },
+    "outer_api18_init": {
+      "start": "0xb6dd0",
+      "end_exclusive": "0xb6dd8",
+      "sha256": "a132833363d28d28b08ddd316a0a61ca9da1d4568ef34320fa174a6540a02d45"
+    },
+    "outer_event_enqueue": {
+      "start": "0xb5cfc",
+      "end_exclusive": "0xb5d88",
+      "sha256": "19a61050d65c56e0e4c98e8ddb2f77f5cd8a0b6ac94b0638f763419b52bb7e07"
+    },
+    "outer_event_schedule": {
+      "start": "0xc3990",
+      "end_exclusive": "0xc39bc",
+      "sha256": "6f814352bc12ce888f9bea5e25eaac6e196e8323fdd9c7f98a1c0b13b79862f1"
+    },
+    "outer_sync_wrappers": {
+      "start": "0xdd814",
+      "end_exclusive": "0xdd84c",
+      "sha256": "f594e57cf8e5efc84044cbfb6eadadf3a6a5cf0ad27296b9972858179eaa0102"
+    },
+    "outer_sync_kernel": {
+      "start": "0xeaadc",
+      "end_exclusive": "0xeaba4",
+      "sha256": "b576c6399d9794288921d4c1a1deeaf63d0665c52264cdd01c010c919df9cba7"
+    }
+  },
+  "main": {
+    "dispatch": "0x99774",
+    "block_table": "0x401f8",
+    "block_record": "0x4021c",
+    "block_id": 245,
+    "instance_pointer": "0x3ff29f7",
+    "directory": "0x965e4",
+    "function_id": 2593,
+    "directory_record": "0x966cc",
+    "table": "0x96458",
+    "operations": [
+      {
+        "record": "0x96458",
+        "operation": 1,
+        "flags": 2,
+        "reserved": 0,
+        "first": "0x0",
+        "second": "0xd4180"
+      },
+      {
+        "record": "0x96464",
+        "operation": 2,
+        "flags": 208,
+        "reserved": 0,
+        "first": "0xd40c8",
+        "second": "0x0"
+      }
+    ],
+    "descriptor_fields": {
+      "payload_pointer": 0,
+      "length_s16": 4,
+      "function_u16": 8,
+      "block_u8": 10,
+      "instance_u8": 11,
+      "operation_u8": 12
+    },
+    "binding": "997E4 selects block table;99918 reads directory+8;99954 reads operation table; D0 calls first(response,request), low2 calls second(response,request)",
+    "boundary": "instance/broadcast matching exists; full ingress/authentication/vehicle caller not bound"
+  },
+  "alternate": {
+    "dispatch": "0xd57c8",
+    "directory": "0x96734",
+    "function_id": 2593,
+    "directory_record": "0x96814",
+    "table": "0x965a8",
+    "operations": [
+      {
+        "record": "0x965a8",
+        "operation": 0,
+        "flags": 208,
+        "reserved": 0,
+        "first": "0xd4130",
+        "second": "0x0"
+      },
+      {
+        "record": "0x965b4",
+        "operation": 1,
+        "flags": 2,
+        "reserved": 0,
+        "first": "0x0",
+        "second": "0xd42dc"
+      }
+    ],
+    "caller": "0xa2874",
+    "calls": [
+      "0xa29c8",
+      "0xa29e2"
+    ],
+    "gate": "gp-17868==1 rejects; BE16(message+6)>=14; BE16(message+20)==A018 selects this branch",
+    "operation": "message[19]&7F:1 -> inner0 write;3 -> inner1 read;2 does not call D57C8",
+    "function": "BE16(message+22)",
+    "payload": "message+24",
+    "boundary": "internal message offsets, not a complete wire packet; dispatcher does not initialize input descriptor length; do not infer 8-byte length validation"
+  },
+  "write": {
+    "handlers": [
+      "0xd40c8",
+      "0xd4130"
+    ],
+    "payload_words": 2,
+    "byte_order": "big",
+    "command_gp": -15936,
+    "value_gp": -15932,
+    "event": 369,
+    "consumer": "0xa782e",
+    "sequence": [
+      "DD814(3)",
+      "decode two BE32 via99D98",
+      "C3990(369)",
+      "consumer reads shared staging words",
+      "AC648(command,raw_value)",
+      "DD830(3) in consumer"
+    ],
+    "validation": "no inner-ID whitelist or payload-float conversion in either write handler",
+    "main_response": "D40C8 copies staging value via99D44, length4, return12; no dedicated DSP-result wait here",
+    "alternate_response": "D4130 returns0",
+    "synchronization": "DD814/DD830 wrap EAADC/EAB44: count decrement/block and increment/wake; full scheduler/init not emulated",
+    "queue": "C3990 calls B5CFC to enqueue/deduplicate a u16 event in a 376-slot ring, then signals(1,10); staging is NOT copied into each event",
+    "boundary": "no claim about concurrency, request completion or resulting audio frame"
+  },
+  "read": {
+    "handlers": [
+      "0xd4180",
+      "0xd42dc"
+    ],
+    "payload_words": 1,
+    "byte_order": "big",
+    "event": 370,
+    "consumer": "0xac6cc",
+    "command_gp": -15936,
+    "sent_payload_raw": 0,
+    "result_dsp_address": "0xb95e8",
+    "result_gp": -15708,
+    "main_wait": "DCFB8(12,70)",
+    "alternate_wait": "DD0A4(16,70)",
+    "completion": "AC6CC reads one DSP word, stores result, signals(2,12) or(7,16) based on gp-15711",
+    "response": "BE32(result), length4, return12; handlers do not branch on wait return",
+    "boundary": "unrestricted command word is forwarded with zero payload; do not treat this entry as guaranteed side-effect-free for arbitrary IDs"
+  },
+  "sender_census": {
+    "range": [
+      "0x80000",
+      "0xe0000"
+    ],
+    "target": "0xac648",
+    "direct_lp_candidates": [
+      "0xa7842",
+      "0xaa3bc",
+      "0xaa3ee",
+      "0xaa410",
+      "0xaa438",
+      "0xaa460",
+      "0xaa49c",
+      "0xaa4c6",
+      "0xaa4f4",
+      "0xaa51a",
+      "0xaa53e",
+      "0xaa562",
+      "0xaa594",
+      "0xaa5f6",
+      "0xaa886",
+      "0xac6de",
+      "0xac756"
+    ],
+    "fixed_api18": "AA886: R6=18, R7=float(s8(gp-15840))",
+    "generic_write": "A7842: command and value from shared request staging",
+    "generic_zero_payload": "AC6DE: command from staging, payload raw0",
+    "fixed_extended": "AC756: command0800AFFE, payload raw0; event371 bulk read, not canonical indexed-write/source-store header",
+    "boundary": "no fixed 14000000/12000000/10000000/20000003 sender found among these17 candidates; indirect/other transport writers not excluded"
+  },
+  "api18": {
+    "sender": "0xaa886",
+    "events": [
+      22,
+      368
+    ],
+    "value_gp": -15840,
+    "formula": "float(s8(gp-15840))",
+    "init": "B6DD0 stores0",
+    "request_handler": "0xca4b4",
+    "block_id": 34,
+    "function_id": 3368,
+    "directory_record": "0x95b9c",
+    "table": "0x959c4",
+    "operations": [
+      {
+        "record": "0x959c4",
+        "operation": 0,
+        "flags": 208,
+        "reserved": 0,
+        "first": "0xca4b4",
+        "second": "0x0"
+      },
+      {
+        "record": "0x959d0",
+        "operation": 1,
+        "flags": 2,
+        "reserved": 0,
+        "first": "0x0",
+        "second": "0xca8bc"
+      },
+      {
+        "record": "0x959dc",
+        "operation": 2,
+        "flags": 210,
+        "reserved": 0,
+        "first": "0xca4b4",
+        "second": "0xca8bc"
+      }
+    ],
+    "payload": "selector5: length3, coordinate s8(payload[2]); selector0: length8, coordinate s8(payload[6]) after prior fields succeed",
+    "coordinate_domain": [
+      -12,
+      12
+    ],
+    "stored_raw_gp": -14973,
+    "api_clamp": [
+      -9,
+      9
+    ],
+    "stores": [
+      "CA728 raw signed coordinate",
+      "CA732/CA73E/CA744 clamped coordinate"
+    ],
+    "event_condition": "unchanged mode bytes gp-17771/-17770/-16783 -> event22 atCA834; changed-mode paths are conditional",
+    "zero": "request coordinate0 maps to API18 float0 on this path; not a +9.5dB offset",
+    "other_effects": "AA644 also sends a 20-word coefficient block before API18; event22 additionally callsA903C. Same byte is read atAA7F2/A90B6/A9106",
+    "boundary": "not labelled Bass/LFE/MMI percent; partial multi-field writes before later validation errors are possible; no current state inference"
+  },
+  "remaining": [
+    "outermost caller/authentication and actual external request sequence",
+    "coefficient side effects of API18 source byte, API29 sender and UI mapping",
+    "indirect/other transport senders, extended error lifecycle and scheduler timing",
+    "pointer consumers1162..1165, target composition, nonzero EQ designer, physical routing"
+  ]
+}

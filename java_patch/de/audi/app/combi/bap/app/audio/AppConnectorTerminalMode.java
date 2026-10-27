@@ -12,8 +12,7 @@ import de.vw.mib.bap.generated.audiosd.serializer.PlayPosition_Status;
 import org.dsi.ifc.global.ResourceLocator;
 
 public class AppConnectorTerminalMode extends AbstractAppConnectorAudio implements CombiBAPServiceTerminalMode {
-    /* CarPlay cover art (ported from the working old impl; the stock class delivers no CarPlay
-     * artwork): register an IPictureProvider for cluster re-requests + push the artwork to the VC
+    /* CarPlay cover art (the stock class delivers no CarPlay artwork): register an IPictureProvider for cluster re-requests + push the artwork to the VC
      * on each station update. */
     private static final int SOURCE_TYPE_VC = 21;
     private final AppConnectorTerminalMode$CoverArtProvider pictureProvider;

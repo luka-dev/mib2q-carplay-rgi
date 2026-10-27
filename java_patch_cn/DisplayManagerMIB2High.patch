@@ -1,0 +1,10 @@
+--- a/de/audi/tghu/fwhmi/DisplayManagerMIB2High.java
++++ b/de/audi/tghu/fwhmi/DisplayManagerMIB2High.java
+@@ -98,6 +98,7 @@
+         this.dc[29] = new DisplayContext(29, new int[]{16, 50, 19});
+         this.dc[30] = new DisplayContext(30, new int[]{16, 50, 39});
+         this.dc[31] = new DisplayContext(31, new int[]{16, 51});
++        this.dc[34] = new DisplayContext(34, new int[]{16, 50, 51});
+         this.dc[32] = new DisplayContext(32, new int[]{16, 21});
+         this.dc[35] = new DisplayContext(35, new int[]{36});
+         this.dc[36] = new DisplayContext(36, new int[]{36, 26});

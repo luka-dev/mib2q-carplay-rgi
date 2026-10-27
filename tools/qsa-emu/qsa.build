@@ -1,0 +1,71 @@
+# qsa.build - MHI2Q audio stack under QEMU virt/armle, with the ADSP stubbed out.
+#
+# io-audio + deva-ctrl-qc.so are the real firmware binaries.  The only substitute
+# is libcsdIpcClient.so: deva imports eight symbols from it and builds every
+# higher-level CSD call on top of them, so standing in for those eight runs the
+# whole driver on a machine with no Qualcomm DSP.  Preloading the stand-in also
+# lets it capture io-audio's resource-manager copies into deva's DMA ring.
+[linker="(40;1;)qcc -bootstrap -nostdlib -Wl,--no-keep-memory -o%o %i -Vgcc_nto%(m==40,arm%)"]
+[linker="(40;2;)cp %i %o"]
+
+[image=0x40200000]
+[virtual=armle-v7,raw] .bootstrap = {
+    startup-virt -S
+    PATH=/proc/boot
+    LD_LIBRARY_PATH=/proc/boot
+    procnto-smp
+}
+[+script] .script = {
+    procmgr_symlink ../../proc/boot/libc.so.3 /usr/lib/ldqnx.so.2
+    devc-serdebug -F -S
+    waitfor /dev/ser1 4
+    reopen /dev/ser1
+    slogger
+
+    display_msg "=== MHI2Q audio stack, ADSP stubbed ==="
+    LD_LIBRARY_PATH=/proc/boot
+
+    display_msg ">>> is the binary actually in the image?"
+    ls -l /proc/boot/io-audio /proc/boot/deva-ctrl-qc.so /proc/boot/libcsdIpcClient.so
+    display_msg ">>> /dev/audio_service stub (deva blocks on it before it will mount a card)"
+    devstub /dev/audio_service
+    waitfor /dev/audio_service 5
+
+    display_msg ">>> io-audio -d qc -vvvvv"
+    MEASURE_ENV LD_PRELOAD=/proc/boot/libcsdIpcClient.so CACHE_NOP=1 io-audio -vvvvv -d qc platform_id=mib2,log_level=high,default_device=six_channel_speakerp,data_dump_path=/var/log/
+    waitfor /dev/snd 15
+    display_msg ">>> wait for a real device node, not just the directory"
+    waitfor /dev/snd/pcmPreferredp 25
+
+    display_msg ">>> drive playback device PROBE_DEVICE: S16 in, PROBE_VOICES voices"
+    MEASURE_ENV LD_PRELOAD=/proc/boot/libtap.so qsa_probe PROBE_DEVICE -1 PROBE_VOICES
+    display_msg "=== AUDIO STACK PROBE DONE ==="
+    TOPOLOGY_SLOG_COMMAND
+}
+[type=link] /usr/lib/ldqnx.so.2=/proc/boot/libc.so.3
+[type=link] /dev/console=/dev/ser1
+[type=link] /tmp=/dev/shmem
+[type=link] /var/log=/dev/shmem
+
+# --- boot + base runtime (QEMU virt BSP) ---
+/proc/boot/libc.so.3=BSP/libc.so.3
+/proc/boot/devc-serdebug=BSP/devc-serdebug
+/proc/boot/waitfor=BSP/waitfor
+/proc/boot/slogger=BSP/slogger
+/proc/boot/pidin=SDP/bin/pidin
+/proc/boot/ls=SDP/bin/ls
+/proc/boot/cat=SDP/bin/cat
+/proc/boot/sloginfo=SDP/bin/sloginfo
+/proc/boot/devstub=OUT/devstub
+/proc/boot/qsa_probe=OUT/qsa_probe
+/proc/boot/music6.s16=OUT/music6.s16
+/proc/boot/libtap.so=OUT/libtap.so
+/proc/boot/libm.so.2=SDP/lib/libm.so.2
+
+# --- the firmware audio stack itself ---
+/proc/boot/io-audio=FW/app/armle/sbin/io-audio
+/proc/boot/deva-ctrl-qc.so=FW/app/armle/lib/dll/deva-ctrl-qc.so
+/proc/boot/libasound.so.2=FW/ifs2/ifs_coreservices3/lib/libasound.so.2
+
+# --- the ADSP stand-in ---
+/proc/boot/libcsdIpcClient.so=OUT/libcsdIpcClient.so

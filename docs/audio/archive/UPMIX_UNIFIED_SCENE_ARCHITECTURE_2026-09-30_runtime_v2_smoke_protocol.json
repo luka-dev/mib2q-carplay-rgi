@@ -1,0 +1,9 @@
+{
+  "script_sha256": "43985a6a331f32adc89c97fe791853d6fbf2d69c02ba3211561f5706da557d77",
+  "original_fixture_sha256": "2ba8a3532b28e9eba6454a6bdc6b4b8515cbadedc4d2901228acc6a41eaf5e9e",
+  "fixture_sha256": "b50772267e6a537c7978be4732fa84164f161b4595970ecc758a8f491b387a84",
+  "selection": "first64 frames of each already inspected TRAIN8s crop, fixed before replay",
+  "float_gates": "all source spectral reconstruction NSE<=1e-9; each scene maxabs<=1e-4; exact expected dense count; default C output bit exact to same-compiler v1",
+  "selection_gate": "all versus selected eligible, scene and full padded state bit exact, protected masks zero; four states interleaved; both float/int8",
+  "scope": "expanded initial graph port preparation, no capacity terminal/DEV/acoustic int8 recovery, Audi deadline, FFT/DSP or hook claim"
+}

@@ -1,0 +1,80 @@
+{
+  "complete": true,
+  "float_verified": true,
+  "protocol_sha256": "f4b163d71eba58b3f43713fb41e170146e2a553d8fe8bca857ffc8dc1c0535e6",
+  "results": {
+    "identity": {
+      "nse": 1.437874936360647e-14,
+      "performance": {
+        "frames": 3012,
+        "identity": true,
+        "audio_state_bytes": 163760,
+        "algorithmic_array_delay_samples": 1536,
+        "hop_acquisition_max_samples": 512,
+        "stream_ms_mean": 0.056617463,
+        "stream_ms_p99": 0.08649996,
+        "stream_ms_max": 0.177799957,
+        "scope": "standalone FFT+neural+eligible iFFT/WOLA; no renderer, scheduling, transport, int8-quality or device qualification"
+      },
+      "output_sha256": "f6a3ed27d874578815255aaf4b3ad0efc6635cb86ed4e80e3afd7e7fdf03c4a3"
+    },
+    "float": {
+      "waveform_vs_torch_nse": 8.547182949133305e-10,
+      "output_sha256": "e7013da86842ad27e7c4693fdf1c4770933e40e63fee133ec55cc162ae5a4a73",
+      "performance": {
+        "frames": 3012,
+        "identity": false,
+        "audio_state_bytes": 163760,
+        "algorithmic_array_delay_samples": 1536,
+        "hop_acquisition_max_samples": 512,
+        "stream_ms_mean": 0.718077623,
+        "stream_ms_p99": 1.024800004,
+        "stream_ms_max": 4.482400022,
+        "scope": "standalone FFT+neural+eligible iFFT/WOLA; no renderer, scheduling, transport, int8-quality or device qualification"
+      },
+      "eligible_sdr_db": [
+        8.454236030578613,
+        11.429427146911621,
+        2.9895129203796387,
+        5.0072221755981445
+      ],
+      "maximum_sample_difference": 1.642853021621704e-05,
+      "reset_max_abs_error": 0.0,
+      "future_emitted_prefix_max_abs_error": 0.0,
+      "eligible_sdr_max_delta_db": 5.435943603515625e-05,
+      "gates": {
+        "identity": true,
+        "pcm_parity": true,
+        "reset_exact": true,
+        "future_prefix_exact": true,
+        "eligible_sdr_delta": true
+      }
+    },
+    "int8": {
+      "waveform_vs_torch_nse": 0.0018812360162115548,
+      "output_sha256": "f23c5c50f8925b493d266bb0e77e8d0351fbe6eadaf6f2695b7bdbdfce4183fd",
+      "performance": {
+        "frames": 3012,
+        "identity": false,
+        "audio_state_bytes": 163760,
+        "algorithmic_array_delay_samples": 1536,
+        "hop_acquisition_max_samples": 512,
+        "stream_ms_mean": 0.814385523,
+        "stream_ms_p99": 1.05229998,
+        "stream_ms_max": 1.398799941,
+        "scope": "standalone FFT+neural+eligible iFFT/WOLA; no renderer, scheduling, transport, int8-quality or device qualification"
+      },
+      "eligible_sdr_db": [
+        8.400606155395508,
+        11.376487731933594,
+        2.9072041511535645,
+        5.0048828125
+      ],
+      "maximum_sample_difference": 0.01548541709780693,
+      "waveform_vs_previous_int8_neural_nse": 0.00010839302057950132,
+      "neural_only_int8_screen_pass": false,
+      "neural_only_check_sha256": "ffa82a43f50685042cb75f4e8e6c12efb6628e87c54be8e0481067f28405c6c6"
+    }
+  },
+  "limits": "TRAIN only. Int8 original quality failure remains. Dormant scene is not used to render. No C renderer, NEON execution, device latency/deadlines or owner ears. Array delay1536samples; hop acquisition<=512samples; measured PC execution is separate."
+}

@@ -1,0 +1,17 @@
+{
+  "v1": {
+    "verified": false,
+    "fixture_samples": 8192,
+    "analyzed_frames": 19,
+    "failure": "Existing temporal_audit slices0:1,1:64,64:65,65:145; short synthetic fixture produced an empty slice, rejected by nonempty-input assertion. No training/data run or passing v1 report."
+  },
+  "v2": {
+    "verified": true,
+    "fixture_samples": 65536,
+    "analyzed_frames": 131,
+    "recovery": "Longer disposable synthetic fixture; same model/objective/gradients, no threshold or active source change.",
+    "boot_script_sha256": "63db09928c7e59f8bf5eba67c753b183b5d42bdf7accc51dd2ac68f6388ba27e"
+  },
+  "template_guards": "Local copy-generation guards caught an FT.load substring match and stale expanded monitor key before file deployment; source imports and final graph tags validated on PC.",
+  "scope": "Broad-source preparation/loader boot recovery only, no GPU/data/acoustic result"
+}

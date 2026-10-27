@@ -52,7 +52,8 @@ WLOG=$TEST_DIR/wrapper.log
 OWNER_FILE=$TEST_DIR/owner
 DIO_PID=100
 printf '#!/bin/sh\nexit 0\n' > "$H/maneuver_render"
-chmod +x "$H/maneuver_render"
+cp "$H/maneuver_render" "$H/altscreen_render"
+chmod +x "$H/maneuver_render" "$H/altscreen_render"
 
 monitor_dio_alive() { [ "$ALIVE" = 1 ]; }
 cp_renderer_running() { [ "$RENDERER_LIVE" = 1 ]; }
@@ -70,7 +71,7 @@ sleep() {
     esac
 }
 
-for RENDERER in maneuver_render; do
+for RENDERER in maneuver_render altscreen_render; do
     for SCENARIO in replace death adopted; do
         ALIVE=1
         RENDERER_LIVE=0
@@ -98,13 +99,13 @@ wait
 # Healthy adoption is preserved; an unhealthy initial adoption is replaced.
 RENDERER_LIVE=1
 rm -f "$TEST_DIR/spawns" "$TEST_DIR/replaced"
-start_renderer maneuver_render initial
+start_renderer altscreen_render initial
 [ ! -e "$TEST_DIR/spawns" ] && [ ! -e "$TEST_DIR/replaced" ]
 cp_renderer_healthy() { return 1; }
-start_renderer maneuver_render initial
+start_renderer altscreen_render initial
 wait
-[ "$(cat "$TEST_DIR/replaced")" = maneuver_render ]
-[ "$(cat "$TEST_DIR/spawns")" = maneuver_render ]
+[ "$(cat "$TEST_DIR/replaced")" = altscreen_render ]
+[ "$(cat "$TEST_DIR/spawns")" = altscreen_render ]
 
 # Runtime supervisor code must remain out of USB/OTG and dio ownership.
 if grep -E 'media-con-ctrl|reset port|start_stack|kill .*DIO_PID' \

@@ -1,0 +1,18 @@
+{
+  "passed": true,
+  "script_sha256": "4c2b18067e0bc73b1626410902651be05dd4b844ec1fac34e72566353394c9a6",
+  "parent_fixture_checkpoint_sha256": "5699c9b5a08492f805b9d02f68a336f4350e3faa435a7815c87928db7a2f7354",
+  "arms": {
+    "control": {
+      "fixed_decoder_exact": true,
+      "reload_exact": true,
+      "trunk_gradient_squared_sum": 7.050607545329023e-07
+    },
+    "spectral": {
+      "fixed_decoder_exact": true,
+      "reload_exact": true,
+      "trunk_gradient_squared_sum": 9.321901708531696e-07
+    }
+  },
+  "scope": "CPU synthetic one-update frozen-decoder/optimizer/architecture-tagged reload check, not frozen run preparation or acoustic result"
+}

@@ -1,0 +1,31 @@
+{
+  "source_hashes": {
+    "mask_net.py": "5caae687105ae492f5bbb5de5843593882da43c73e6cf90878bf28af8f54be40",
+    "sep_net.py": "11e0c4fe89c82d3be3814e5d2a421c5fd73c40d4e3fa505904c57ae1d7dba905",
+    "separator_causal_reference_probe.py": "e514fff84f29b0cc52236b6f4a2095cccd79b5c1777a77eb5f29a60347f37ccc",
+    "separator_fit_probe.py": "ceb3c158d1955e3a384c1f21317d00282f50e1c52b3e56ecb698aa5c05fcea0d",
+    "unified_upmix_net.py": "c7aa0abc74dda830a5c306a5f61c30ae95ece5f8bdf61cd693ee4db57ff3fc46",
+    "train_unified_upmix_fit.py": "8b777f2ed4914b8184e94f728d47c98f08550f04e69e98d18dcc85746a86bb78",
+    "unified_upmix_audio.py": "0692531b4290d12adb114648fbd072f1cc781a36ce03fe8510816e9f67a051b2",
+    "audit_unified_upmix_fit.py": "46b8d80f3f84f51f2daa89393357e838e361766f767be7f8c37ba48a011a0574",
+    "extend_unified_upmix_fit.py": "71c1ebbfd49ebc84f7bdf4be6c482d05beeb0d770e481d991304e1c3963ecf30"
+  },
+  "parent_protocol_sha256": "1a9e23e12df9dd80d1e587d01e00688cc131fd871e851e9645589b537f20c805",
+  "parent_audit_sha256": "8e0b3d427bb36cec5df9256cde00d16265f71f33249eb86835e8e3414284c15b",
+  "parent_prepared_sha256": "1e53fc80c14e6484b1bf36f2fc339232b6cc0aea6abd6b6a68160e513dcc8fdc",
+  "split_sha256": "3972aa752b44d872c84b002c217735ca2ff5da0653bdeeb8c1003262f0bd265f",
+  "fixture_manifest_sha256": "95edc076b2bf10fb0019b440da147d64046dcea16128bb038f4022c6b72bbc99",
+  "initial_checkpoints": {
+    "eligible_only": "550cca224cea3605e7e8e95cd36166e19551cf0470be21e0afe5418bd461f636",
+    "joint_audio": "3c672d0103b92aad95e143a586fd70af1c5c0b2a69f3a7795758469659364a10"
+  },
+  "steps": 20000,
+  "added_steps": 10000,
+  "optimizer": "preserved AdamW states; constant3e-4, wd1e-4, clip5, TF32 off",
+  "targets": "same exact4 natural TRAIN8s crops, sources and fixed TRAIN coefficient",
+  "synthesis": "explicit real DC/Nyquist endpoints before every inverse real FFT; historical spectral loss retained",
+  "selection": "terminal20k both; original10k retained as failed gate; no DEV/scene/data/architecture change",
+  "rationale": "joint6.9138dB misses7dB absolute by.086; all relative/protected fitting gates pass; bounded extension, not broad promotion",
+  "gates": "joint eligible loss <=1.05 control; median SDR >=control-.3 and >=7dB; no crop delta below-1dB; each protected source median SDR>=0dB",
+  "scope": "TRAIN fitting only; correction and additional steps confounded across phases"
+}

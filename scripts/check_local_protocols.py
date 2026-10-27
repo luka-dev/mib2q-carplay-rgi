@@ -59,7 +59,10 @@ for name, value in constants("hook/framework/bus_protocol.h").items():
 compare("maneuver_render/protocol.h", "java_patch/com/luka/carplay/rgd/RendererServer.java", {
     "CR_TCP_PORT": "PORT", "CR_PKT_SIZE": "PKT_SIZE",
 }, ("CMD_", "EVT_", "MAN_FLAG_"))
-# ponytail: altscreen_render/AltscreenControlServer compare dropped (RGI-only fork has no altscreen).
+compare("altscreen_render/protocol.h", "java_patch/com/luka/carplay/core/AltscreenControlServer.java", {
+    "ALTCTL_PORT": "PORT", "ALTEVT_VIDEO_ON": "EVT_VIDEO_ON", "ALTEVT_VIDEO_OFF": "EVT_VIDEO_OFF",
+    "ALTCMD_VIEW_AREA": "CMD_VIEW_AREA",
+})
 print(f"Local transport constants: {checks} matching Java/C ports, opcodes, flags, sizes and limits")
 jar = ROOT / "build/carplay_hook.jar"
 if not jar.exists():

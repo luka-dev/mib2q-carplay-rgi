@@ -1,0 +1,209 @@
+{
+  "complete": true,
+  "passed": true,
+  "gates": {
+    "float_selected_dense_count": true,
+    "float_old_nn_absent": true,
+    "float_single_worker_stack": true,
+    "float_source_nse": true,
+    "float_source_max_lsb": true,
+    "pcm16_source_nse": true,
+    "pcm16_source_max_lsb": true,
+    "float_repeat_reset_exact": true,
+    "float_future_prefix_exact": true,
+    "float_all6_renderer_nse": true,
+    "float_all6_renderer_max_lsb": true,
+    "int8_selected_dense_count": true,
+    "int8_old_nn_absent": true,
+    "int8_single_worker_stack": true,
+    "int8_repeat_reset_exact": true,
+    "int8_future_prefix_exact": true,
+    "int8_all6_renderer_nse": true,
+    "int8_all6_renderer_max_lsb": true,
+    "identity_source_array_delay": true
+  },
+  "arms": {
+    "float": {
+      "performance": {
+        "frames": 3016,
+        "identity": false,
+        "streams": 4,
+        "causal_front_alignment_samples": 1536,
+        "hop_acquisition_samples": 512,
+        "neural_dense_macs_s": 116712000,
+        "chain_ms_mean": 0.625986737,
+        "chain_ms_p99": 0.714999973,
+        "chain_ms_max": 0.840000052,
+        "hops_over_10_667ms": 0,
+        "state_bytes": 581536,
+        "worker_stack_bytes": 262144,
+        "output_checksum": 17508356696778924371,
+        "old_neural_invocations": 0,
+        "old_blobs": 0,
+        "scope": "standalone causal FFT+one model+WOLA+copied NN-free real C renderer; IO excluded, no hook transport, loaded-worker or CarPlay proof"
+      },
+      "hashes": {
+        "input": "e194972a0ca62d3d033b4f19072223547a6cddafe643de5f1a06a6ba6c15dda7",
+        "output": "f8dc35d20bc374276ca2dfb8a76bf3ed7d9f5917a6139f2bab70ee1489d8e42b",
+        "source": "6198091e0bd6dbb2717ef0124c48fd6c86712d0f13eddefc2e045de33db4e615"
+      },
+      "source_float_nse": 3.071136226324577e-10,
+      "source_float_max_lsb": 0.2099609375,
+      "source_pcm16_nse": 1.2702479707407696e-08,
+      "source_pcm16_max_lsb": 1,
+      "source_pcm16_vs_unrounded_nse": 1.6901640316069357e-07,
+      "independent_renderer": [
+        {
+          "nse": 0.0,
+          "max_lsb": 0,
+          "by_channel_nse": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "reference_sha256": "2cfbe8716434ad810ac6448d7def93d61355ffc9184835737be041f4a35b3669"
+        },
+        {
+          "nse": 0.0,
+          "max_lsb": 0,
+          "by_channel_nse": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "reference_sha256": "8c31eed6f9ea0b7cf004356923ac21faea28693257cc0e69241693184426f483"
+        },
+        {
+          "nse": 0.0,
+          "max_lsb": 0,
+          "by_channel_nse": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "reference_sha256": "930656b87d41593d90385487c9b9d6b06c09599a3680e0e4348f166289b3c94d"
+        },
+        {
+          "nse": 0.0,
+          "max_lsb": 0,
+          "by_channel_nse": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "reference_sha256": "40156fdb3abc87eb36b5300645b59db19af0d9b469fe0cdbd9ec96a634ddc270"
+        }
+      ]
+    },
+    "int8": {
+      "performance": {
+        "frames": 3016,
+        "identity": false,
+        "streams": 4,
+        "causal_front_alignment_samples": 1536,
+        "hop_acquisition_samples": 512,
+        "neural_dense_macs_s": 116712000,
+        "chain_ms_mean": 0.633759615,
+        "chain_ms_p99": 0.731999986,
+        "chain_ms_max": 0.870000047,
+        "hops_over_10_667ms": 0,
+        "state_bytes": 581536,
+        "worker_stack_bytes": 262144,
+        "output_checksum": 7478125158001181266,
+        "old_neural_invocations": 0,
+        "old_blobs": 0,
+        "scope": "standalone causal FFT+one model+WOLA+copied NN-free real C renderer; IO excluded, no hook transport, loaded-worker or CarPlay proof"
+      },
+      "hashes": {
+        "input": "e194972a0ca62d3d033b4f19072223547a6cddafe643de5f1a06a6ba6c15dda7",
+        "output": "7fb64f7bf3fcf55cfcbc1fcf3d4499a473d089b832c1f89965b9d20b9116b585",
+        "source": "b79d53f3fdbf6780d1072cb2fe9ba3cb91be1e70cafc617f04bbb79e6a50dcf0"
+      },
+      "independent_renderer": [
+        {
+          "nse": 0.0,
+          "max_lsb": 0,
+          "by_channel_nse": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "reference_sha256": "828ce89b8ca3b0cdfd44ce7ff117a2f28fe9f95f20f76ad539b7907d985787e5"
+        },
+        {
+          "nse": 0.0,
+          "max_lsb": 0,
+          "by_channel_nse": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "reference_sha256": "21843e4cf19f10e8e02ad2c907df8ddc211ca513bcfa77436647b54580ca9b46"
+        },
+        {
+          "nse": 0.0,
+          "max_lsb": 0,
+          "by_channel_nse": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "reference_sha256": "fee27f039cda1d0f7b648fed11d0a70dbe6ff2427b0d62b3733b586913c9ece4"
+        },
+        {
+          "nse": 0.0,
+          "max_lsb": 0,
+          "by_channel_nse": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "reference_sha256": "88bdb174fd3922472a220e9c355193732ac90ac6d7d18e0c6ffc9513f75cfd57"
+        }
+      ]
+    }
+  },
+  "identity_delays": {
+    "source": {
+      "first_nonzero_offset_samples": 1536,
+      "peak_offset_samples": 1536,
+      "peak_amplitude": 6554
+    },
+    "front": {
+      "first_nonzero_offset_samples": 2048,
+      "peak_offset_samples": 2048,
+      "peak_amplitude": 2991
+    },
+    "rear": {
+      "first_nonzero_offset_samples": 2624,
+      "peak_offset_samples": 2624,
+      "peak_amplitude": 3480
+    }
+  },
+  "protocol_sha256": "8e2148ca1eafaa25c9d9f0e3df0053faccdf40cef8d1af70e424211b94797ba8",
+  "limits": "pipeline execution/matching only, TRAIN4 int8 reconstruction screen is separate; no terminal source quality/DEV/device/owner claim; identity pulse records sample-onset/peak delay including front alignment/renderer; acquisition and measured execution remain separate; no physical-unit/loaded-worker85ms proof"
+}

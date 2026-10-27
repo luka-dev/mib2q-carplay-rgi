@@ -1,0 +1,21 @@
+{
+  "version": "spectral-context-runtime-train64-v1",
+  "checkpoint_sha256": "ff072970aef01749f44afc0c8bc010c542eb7e2384cdf88d8b7473b6a3854da2",
+  "fixture_sha256": "9ff0c2407c52d43dccacd82cc6707d62d7a24b6569be4e7eed23699fee4d25ab",
+  "fixture_manifest_sha256": "fef04d77139caea06265e59f022a74b7c92ee58088f769e8fee0d8a3e9b09d7f",
+  "asset_manifest_sha256": "3d0336b6bdac32a3c7ac75866e2213e38947631d70453c5b34c35ef2d4efb54c",
+  "executable_sha256": "853ff90ab0be8a80f3c0031e42515bf79466eb933d240fc221ea24083fc46599",
+  "checker_sha256": "3aec916f934be747f2c4090491f7c0253aa0036d0bf07e9c593a215e7dd45efc",
+  "script_sha256": "962f41184d6e480efc212a289a14f1b7d903f07065437bb61cce23bbef11d224",
+  "runtime_sources": {
+    "unified_runtime.c": "b7899528e67f3d3f06e5d2d300fe74ec2f3b0a943e1b8eb42232cf7536415644",
+    "unified_runtime.h": "7e6fa4e220ea70b59ac676238e06ac14fdfb80e90799d128cfa3a1faf4f3b1c3",
+    "unified_runtime_cli.c": "8723ddec43af6bfafc605439e65c71a623b0a1b38176850019d83c8efe4e9bf6",
+    "unified_runtime_prune_check.c": "a7f7b0f74486526bd22bd0744e6c2a56c7e0d3e0c96f3dc4a36456d82108c8ab"
+  },
+  "selection": "Four original already inspected TRAIN crops; first64 GPU-saved STFT frames, no holdout",
+  "float_gate": "All-source spectral reconstruction NSE<=1e-9; each scene maxabs<=1e-4; exact declared dense count",
+  "state_gate": "All/selected eligible+scene+full padded state bit exact with four interleaved streams; protected rows zero; repeat/reset and changed-future first32 frames exact, float and int8",
+  "int8_limits": "Per-row weights and dynamic activations only; int8-vs-float errors are diagnostics, not acoustic quality success",
+  "scope": "Standalone neural native-host numeric/selection checks; no FFT/DSP, bright rear, broad quality, Audi timing, trained scene, int8 acoustic or live hook claim"
+}

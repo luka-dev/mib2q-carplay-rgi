@@ -6,12 +6,12 @@ Replace `children.carplay` in
 
 The important ownership rule is that `children.carplay.envs` contains **no**
 `LD_PRELOAD`. `carplay_startup.sh` applies the hook only to its direct
-`dio_manager` child. This prevents the hook from loading into `/bin/sh` or
-`maneuver_render`.
+`dio_manager` child. This prevents the hook from loading into `/bin/sh`,
+`maneuver_render` or `altscreen_render`.
 
 Keep `IPL_CONFIG_DIR_DIO_MANAGER=/etc/eso/production` in the child environment.
 The supervisor inherits it and passes it unchanged to `dio_manager`; only the
-hook variable is added on the final `dio_manager` command.
+hook and altScreen variables are added on the final `dio_manager` command.
 
 Install these executable files under `/mnt/app/root/hooks`:
 
@@ -20,49 +20,93 @@ Install these executable files under `/mnt/app/root/hooks`:
 - `carplay_cleanup.sh`
 - `carplay_processes.sh`
 - `libcarplay_hook.so`
+- `libcarplay_apac.so`
+- `scene_masknet_c.bin` (the upmix mask net; without it the renderer runs spatial-only)
 - `maneuver_render`
+- `altscreen_render`
 - `flag_atlas.rgba`
 
 Do not overwrite `/etc/scripts/carplay_cleanup.sh`: the custom cleanup calls that
-stock script only for Audi's mdnsd/PPS cleanup. The renderer is a persistent
-service; it exits only on its own failure, a reboot or an explicit maintenance action.
+stock script only for Audi's mdnsd/PPS cleanup. Renderers are persistent services
+and are not tied to an identity-less SI cleanup callback.
+
+The checked-in audio policy advertises APAC/48 kHz/5.1 index 65 plus
+AAC-LC/48 kHz/stereo index 23 on the buffered stream. APAP packets carry no
+format index: the decoder that accepts each changed inline cookie and its PCM
+geometry select the render action. Native APAC 5.1 keeps its measured
+six-channel reorder; decoded stereo uses the fixed PCM6 route with
+`AUDIO_STEREO_UPMIX=on` and the explicitly enabled `AUDIO_STEREO_LFE=assist`
+Cabin-Aware LFE V2 feed. ON selects the sole `scene` renderer
+([Scene Backend Deploy](<../../docs/build-and-deploy/SCENE_BACKEND_DEPLOY.md>));
+there is no build-time profile selector. The exact compatibility rollback is
+`AUDIO_STEREO_UPMIX=off`, followed by a `dio_manager`/CarPlay child restart
+because the toggle is parsed once at process start. See
+[`../../docs/audio/STEREO_TO_5_1_UPMIX.md`](<../../docs/audio/STEREO_TO_5_1_UPMIX.md>)
+for the signal path, SoundAmp row bounds and required stationary A/B.
+
+The renderer reads `AUDIO_SCENE_MASK_BLOB` (`/mnt/app/root/hooks/scene_masknet_c.bin`)
+once at audio init; a missing, short or wrong-magic file is logged once and the
+renderer runs spatial-only (no instrument transfer, no duck). Its 1024/256 STFT
+delays fronts, rears and LFE together by 1024 frames (the buffered SETUP response
+reports the extra 512 over the matched latency the car was tuned with). Digital C
+remains zero and native APAC multichannel bypasses the upmix. The HSSR Universal
+renderer and its three model files were retired on 2026-10-09 (git tag
+`upmix-universal-last-2026-10-09`).
 
 Lifecycle semantics:
 
-- `carplay_startup.sh` checks `dio_manager`, the hook and both helper scripts,
-  atomically writes its PID to `/tmp/carplay_supervisor.owner`, starts
-  `carplay_monitor.sh` in the background with `LD_PRELOAD` cleared, then `exec`s
-  `dio_manager`, so smartphone_integrator tracks the exact dio PID;
-- the monitor acts only while the owner file names its dio PID and that PID is
-  alive; a newer generation takes over by rewriting the file;
-- if `maneuver_render` already exists it is adopted, not restarted; an adopted
-  renderer that fails the identity check is re-checked after 2 s, then replaced;
-- the renderer PID is kept in `/tmp/carplay_maneuver_render.pid`; one finite
-  `pidin ar` scan adopts a renderer from an older generation, then the monitor uses
-  constant-time `/proc/<pid>` checks every 2 s;
-- only a missing/crashed renderer is restarted, after a 5 s backoff;
-- every `dio_manager` exit leaves `maneuver_render` alive, so a replacement
-  inherits the existing EGL allocations instead of re-entering fragile Qualcomm
-  `eglInitialize`;
-- `maneuver_render` is a client of Java's route-scoped `:19800` listener, so it is
-  preserved by process identity while RGI/Java intentionally has the listener closed;
+- **PF ports (deploy prerequisite, no runtime logic):** altScreen needs carplay0 TCP 6031 and
+  buffered audio uses TCP 6032 beside stock 6030. `SETMAGICCOOKIE` and buffered controls reuse the
+  existing RTSP connection, so 6033 is not needed. The single
+  [`M.I.B./SSH installer`](../../install_MoreIncredibleBash/mod/custom.sh) widens
+  `6030` to `6030:6032` in all four
+  `/mnt/system/etc/pf*.conf` profiles (idempotent, `.stock` backup, `mount -uw` first). That is a real
+  qnx6 flash partition (`/dev/fs0p1`); boot's `move_etc_to_ramdisk` copies it into the ramdisk
+  `/etc`, so `start_network` loads the selected profile with all three ports and no runtime race. The
+  wrapper does **no** firewall work — it assumes the port is open, exactly like it assumes the
+  child JSON and the hook are installed. Reverted only by an OTA rewriting `fs0p1`; re-run the
+  installer. See `NCM_AND_FIREWALL_IDEAL_START.md`.
+- `carplay_startup.sh` performs only local file checks, an atomic owner-file
+  publish, a monitor fork and immediate `exec dio_manager`; no `pidin`, network
+  probe, renderer initialization or USB recovery runs in SI's startup path;
+- `carplay_monitor.sh` waits one second so `exec` wins scheduling, then adopts or
+  starts the persistent renderers. A replacement generation atomically replaces
+  the owner PID; obsolete monitors stop acting as soon as they observe it;
+- renderer PIDs are kept under `/tmp`. The healthy recurring path uses only a
+  numeric check and `/proc/<pid>`. A finite `pidin ar` scan runs only for initial
+  adoption or after a missing/stale PID, so a stale registry cannot create a
+  duplicate renderer;
+- initial adoption validates exact executable identity. `altscreen_render` also
+  owns `LISTEN :19831`, which detects a process wedged before serving the hook.
+  `maneuver_render` is a client of Java's optional `:19800`, so its live exact
+  process identity is the only valid non-invasive readiness check;
+- the wrapper `exec`s `dio_manager`, so smartphone_integrator tracks the exact
+  process it started. The monitor never signals dio, touches OTG/USB state, or
+  participates in SI retry policy;
+- every ordinary `dio_manager` exit leaves both renderers alive. Only a genuinely
+  missing renderer is restarted, after a five-second backoff. Cold boot starts
+  `altscreen_render`, then gives its EGL initialization a one-second head start
+  before `maneuver_render` to avoid a dual Qualcomm `eglInitialize` burst;
 - external cleanup is identity-less (smartphone_integrator does not tell it which dio
-  generation it runs for), so it does NOT stop renderers by the shared PID file,
-  which could hit an already-started replacement generation. Cleanup only invokes
+  generation it runs for), so it does NOT create the global stop marker and does NOT
+  stop renderers by the shared PID files — either could damage an already-started
+  replacement generation. Cleanup only invokes
   Audi's `/etc/scripts/carplay_cleanup.sh` for the stock mdnsd/PPS cleanup;
-- the supervisor never signals `dio_manager` and never touches USB/OTG.
+- physical USB recovery is deliberately absent from these scripts. Rapid-replug
+  recovery belongs to the matching NCM generation fence and the exact-version
+  `smartphone_integrator` A/B candidate under `deploy/experimental/usb_replug_recovery`.
 
-Verify on the unit in `/tmp/carplay_wrapper.log`: `[monitor] adopted maneuver_render`
-or `[monitor] starting maneuver_render`, followed on dio exit by
-`renderer remains persistent`.
+Verify on the unit in `/tmp/carplay_wrapper.log`: startup must log `exec dio_manager`
+before the monitor logs `generation=... active`, followed by `adopted ...` or
+`starting ...`. Ordinary dio exit logs that persistent renderers remain alive.
 
 CarPlay uses `restartDelay: 3000`, `stopTimeout: 8000`; `portResetTime` remains 250 ms.
 The full settling delay is intentional: rapid OTG stop/start cycles can leave the
 iAP2 NCM accessory with only one of its two interfaces enabled. Renderer ownership
-is independent of it and must not be used as a reason to shorten the USB/device-stack
-delay.
+is independent of USB/device-stack recovery and must not be used as a reason to
+shorten this delay.
 
-## 🔍 MU1316 QNX 6.5 compatibility audit
+## MU1316 QNX 6.5 compatibility audit
 
 The supervisor deliberately uses only facilities present in the extracted P5087
 firmware:
@@ -71,15 +115,18 @@ firmware:
   traps, command substitution, background jobs, `read`, and `exec` used here;
 - `kill` is a shell builtin; the scripts use **numeric** signals (`kill -15`, `kill -9`)
   because that form is accepted by every kill implementation. Stock scripts kill by name
-  via `slay -f -s SIGTERM -m name` and, in one spot, `kill -sigkill <pid>`; we kill one
-  recorded PID after an identity check instead (slay-by-name would also hit the replacement
-  generation), so only the signal token had to be a universally-accepted numeric one;
-- `pidin ar` / `pidin -p <pid> ar` supply finite process snapshots; no blocking
-  `/proc/*/cmdline` walk and no GNU process utilities are used. They are used only
-  to adopt a pre-existing renderer and to confirm identity before a signal; normal
-  checks use the recorded PID;
+  via `slay -f -s SIGTERM -m name`; the monitor signals only an exact PID whose renderer
+  identity was positively verified, and only when initial altScreen adoption proves it wedged;
+- `pidin ar` supplies a finite process snapshot; no blocking `/proc/*/cmdline`
+  walk and no GNU process utilities are used. The full snapshot is only for
+  adoption after a missing/stale registry entry. Targeted `pidin -p <pid> ar`
+  checks identity before replacing an adopted renderer; recurring monitor checks
+  use recorded PIDs only;
 - `rm -f` and integer `sleep` are stock facilities; the original firmware uses
   `sleep` throughout `startup.sh` and `/etc/scripts`;
+- `/armle/sbin/pfctl`, `/usr/bin/sed`, and `/usr/bin/grep` are stock MU1316
+  binaries. The generated PF file is syntax-checked before load, and a missing
+  exact stock `6030,` token leaves the live ruleset untouched;
 - the shared process helper appends a safe subset of the stock MMX command search
   locations and retains the inherited head, so its utilities do not depend on
   `smartphone_integrator` preserving `PATH` and dio keeps its original resolution order.

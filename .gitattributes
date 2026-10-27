@@ -1,3 +1,4 @@
+# Repository-wide text and binary handling for the Android Auto fork.
 *.sh text eol=lf
 *.py text eol=lf
 *.c text eol=lf
@@ -8,3 +9,35 @@
 *.rgba binary
 *.jar binary
 *.so binary
+*.zip binary
+
+# Keep captured audit evidence byte-for-byte, including CSV line endings.
+/output/maneuver-audit/*.csv -text whitespace=cr-at-eol
+/output/maneuver-parity/*.csv -text whitespace=cr-at-eol
+/output/maneuver-selection/*.csv -text whitespace=cr-at-eol
+
+# Preserve PC source-audio evaluation exports and their recorded SHA-256 values.
+/docs/audio/UPMIX_BSRNN_REAL_C_CHECK_2026-09-29*.json -text whitespace=cr-at-eol
+/docs/audio/UPMIX_BSRNN_REAL_C_CHECK_2026-09-29*.csv -text whitespace=cr-at-eol
+/docs/audio/UPMIX_CAUSAL_REFERENCE_ENCODER_2026-09-29*.json -text whitespace=cr-at-eol
+/docs/audio/UPMIX_CAUSAL_GENERALIZATION_2026-09-29*.json -text whitespace=cr-at-eol
+/docs/audio/UPMIX_CAUSAL_GENERALIZATION_2026-09-29*.csv -text whitespace=cr-at-eol
+
+# Decompiler/disassembler exports preserve the tools' original formatting.
+/output/ios-sentinel/*.asm -text -whitespace
+/output/r2/hud-ramps-2026-09-11/*.c -text -whitespace
+/output/r2/hud-ramps-2026-09-11/mcu-verified/*.c -text -whitespace
+
+# SWDL files copied byte-for-byte from M.I.B. (metainfo2.txt is CRLF; FinalScript is checksummed).
+/rescue_Swdlautorun/** -text -whitespace
+
+# Byte-preserved unified fitting and current Track A PC evidence.
+/docs/audio/UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30*.json -text whitespace=cr-at-eol
+/docs/audio/UPMIX_TRACKA_MATCHED40_2026-09-30*.json -text whitespace=cr-at-eol
+/docs/audio/UPMIX_TRACKA_MATCHED40_2026-09-30*.csv -text whitespace=cr-at-eol
+
+# Preserve unified ARM serial logs and their recorded raw SHA-256.
+/docs/audio/UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30*.log.txt -text whitespace=cr-at-eol
+
+# Preserve unified full-C stem rows and their recorded hashes.
+/docs/audio/UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30*.csv -text whitespace=cr-at-eol

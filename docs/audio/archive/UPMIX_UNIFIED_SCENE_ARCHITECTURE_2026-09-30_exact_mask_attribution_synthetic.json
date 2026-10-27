@@ -1,0 +1,22 @@
+{
+  "verified": true,
+  "parity": {
+    "target_waveform_nse": 4.4856468099207925e-15,
+    "attribution_sum_nse": 1.4010341295294971e-32,
+    "zero_mixture_bins": 0,
+    "mask_abs_max": 1.5055661179514013,
+    "target_spectral_nse": 6.201407821473277e-33
+  },
+  "row": {
+    "ret_pre": 0.999776322374226,
+    "ret_post": 0.11164920171551446,
+    "duck": 0.11167418073112065,
+    "leak_pre": 2.9382613950543455,
+    "leak_0_2": 0.11126574344103167,
+    "leak_steady": 0.11111110566244684,
+    "actual_target_ret_pre": 0.9999999509455287,
+    "actual_target_ret_post": 0.9999999509537751,
+    "actual_target_duck": 1.0000000000082465
+  },
+  "scope": "synthetic collinear component counterexample; not real-data gate failure"
+}

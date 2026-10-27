@@ -1,0 +1,60 @@
+apac_bench: 3980 records, 33 byte cookie, clock = CLOCK_UPTIME_RAW ns
+apac_bench: clock read overhead 0 ticks; spin2 587250, spin4 585625, ratio 0.997
+apac_bench: -0.0004 ticks per instruction (from the loop difference); spin2 implies 0.1468
+apac_bench: 16 MB stride walk, taken as 4 instructions/iteration (the compiler's real number is higher): 0.3025 ticks per instruction (0.00x the arithmetic loop) [acc=3014515712]
+apac_bench: exact loops agree to -100.00%, memory bound loop 0.0x dearer - this clock is measuring TIME, not instructions; no conversion is applied
+apac_bench: sizeof Decoder=1637272 ASPDecoder=1637272 SynthesisFilterBank=94832 LPMDCTFilter=49312 LRVQDecoder=58740
+apac_bench: 48000 Hz, 6 channels, 1024 frames per packet -> 46.88 packets/s
+
+apac_bench: 10 repetitions, per-packet minimum across them; 3980 records, 3977 carrying audio
+  (a packet is 1024 frames at 48000 Hz, so the deadline is 21.333 ms and the budget is 1/46.9 of a core)
+
+  whole chain/packet     n=3980  mean      30160  p50      28708  p90      36417  p99      39875  p99.9      41250  max      42916
+  decode/packet          n=3977  mean      28618  p50      27041  p90      35208  p99      38667  p99.9      40333  max      41125
+    frame layer          n=3977  mean       5396  p50       3791  p90      12000  p99      15583  p99.9      16417  max      16625
+    transform+output     n=3977  mean      17978  p50      17916  p90      18041  p99      19250  p99.9      19291  max      19292
+
+  per stage, clock read between each (attribution only):
+    framer               n=3980  mean          0  p50          0  p90          0  p99          0  p99.9          0  max          0
+    AEAD (2 x poly1305)  n=3980  mean        522  p50        541  p90        667  p99        750  p99.9        875  max       1167
+    ChaCha20 payload     n=3980  mean        311  p50        333  p90        458  p99        541  p99.9        625  max       1000
+    TLV split            n=3980  mean          7  p50          0  p90         41  p99         41  p99.9         42  max         42
+    decode               n=3980  mean      28601  p50      27042  p90      35125  p99      38625  p99.9      40042  max      41125
+    channel permute      n=3980  mean        539  p50        541  p90        542  p99        583  p99.9        584  max        708
+
+  the eight most expensive packets (decode), by record index:
+    #3038(41125, 95 B) #3039(40625, 101 B) #2137(40584, 185 B) #3214(40333, 100 B) #438(39708, 123 B) #3799(39666, 151 B) #2551(39583, 134 B) #3221(39500, 162 B)
+
+  inside one packet, six long blocks driven directly:
+    6 x MDCT(1024)             15375   =  53.7 % of a mean decode
+    6 x ComplexFFT(512)        12458   =  43.5 % of a mean decode,  81.0 % of the MDCT above
+
+  the two paths this capture never takes (synthetic cases, NOT packets):
+  BWE header/channel     n=29    mean          1  p50          0  p90          0  p99         41  p99.9         41  max         41
+  LRVQ spectrum/element  n=55    mean        907  p50         83  p90       2667  p99       4166  p99.9       4166  max       4166
+    29 of 44 cases change the spectrum, 15 leave it identical; the latter, with their synthesis cost:
+      #4:5500* #5:5500* #6:125 #7:83 #17:125 #18:166 #19:166 #26:1750* #27:125 #28:125 #30:1708* #37:166 #39:167 #42:0 #43:0 
+      11 gated before the arithmetic, cost nothing;  4 (*) run every FFT and write zeros - FULL PRICE, so a memcmp is a
+      correctness criterion and not a cost one
+    55 LRVQ elements (12 SCE, 16 CPE, 27 LFE)
+    BWE synthesis per channel, 48 kHz, dearest case of each shape,
+    repeated so the filter cache is warm (steady state):
+      long narrow   case #0  maxSfb 30        5458 ticks
+      long wide     case #11 maxSfb 31        6375 ticks
+      short narrow  case #22 maxSfb 8         1708 ticks
+      short wide    case #32 maxSfb 9         2416 ticks
+      ALTERNATING   long wide <-> narrow        9708   (+52 % on the dearest steady shape)
+
+  composed onto the measured worst packet (41125 ticks), five BWE channels   [ticks/instruction now reads 0, calibration said 0.0627]:
+    + BWE x4, steady (realistic)           25664  ->      66789  (1.62x)
+    + BWE x5, steady (ceiling)             32080  ->      73205  (1.78x)
+    + BWE x5, alternating (bound)          48745  ->      89870  (2.19x)
+    + LRVQ on SCE + CPE + CPE + LFE        11082  ->      52207  (1.27x)
+    + both, BWE alternating                59827  ->     100952  (2.45x)
+  integrity: 9 probes, constant intact, canaries untouched
+
+  stack below the caller: decode 5152 bytes, whole chain 5472 bytes (paint 131072)
+
+  the same chain over the capture's own encrypted bytes, with the
+  session's own key (3980 frames; the key is read here and goes nowhere):
+  real chain/packet      n=3980  mean      30006  p50      28584  p90      36166  p99      39708  p99.9      41375  max      42334

@@ -1,0 +1,12 @@
+{
+  "checkpoint_sha256": "ff072970aef01749f44afc0c8bc010c542eb7e2384cdf88d8b7473b6a3854da2",
+  "fixture_sha256": "a0b1e18ca30136fb7a9c94fc954540a471372110a69081de2115ef7d0a5d4069",
+  "original_fixture_sha256": "9ff0c2407c52d43dccacd82cc6707d62d7a24b6569be4e7eed23699fee4d25ab",
+  "reference_executable_sha256": "853ff90ab0be8a80f3c0031e42515bf79466eb933d240fc221ea24083fc46599",
+  "reference_outputs": {
+    "float": "80dee9f720b3da8d5149a2a096459a3a1923148d36f34b42422c9d5aafed3816",
+    "int8": "6212266586058df0a2cf76c8b9746736fa4053aadfcc9b5a2f36d29287d84db7"
+  },
+  "selection": "First16 frames of each inspected TRAIN64 replay; native float/int8 reference, four streams",
+  "scope": "ARM numeric parity input only; no device timing or int8 acoustic claim"
+}

@@ -1,0 +1,163 @@
+#!/bin/bash
+# The whole M.I.B. installer (the staged mod/custom.sh) on a fake unit built from the real
+# MU1316 P5087 system files, with /mnt and /tmp redirected into a temp dir and the
+# E2P train fed through E2P_READ.  Checks: the firmware gate (only Audi MHI2Q proceeds,
+# nothing is touched otherwise, also when E2P cannot be read; an unverified train is refused once,
+# untouched, and installed on the second run), exactly one Java variant
+# stays per E2P region (the other is removed), and the 6-channel audio path stays on only
+# when the amplifier coding (E2P 0xFC, fed through E2P_AMP_READ) says external.  Needs the staged install tree
+# (scripts/prepare_install.sh) and the unpacked firmware; skips without them.
+set -euo pipefail
+ROOT=$(cd "$(dirname "$0")/.." && pwd)
+MOD=${MOD:-$ROOT/build/install_unprotected/install_MoreIncredibleBash/mod}
+UNPACKED=$ROOT/../../Tools/mhi2q-qemu/out/unpacked
+FW=$UNPACKED/MHI2Q_US_AUG22_P5087_MU1316/qnx6/MMX2QC/efs-sys/10/default/system
+APP_SI=qnx6/MMX2QC/app/10/default/app/eso/bin/apps/smartphone_integrator
+US_SI=$UNPACKED/MHI2Q_US_AUG22_P5087_MU1316/$APP_SI
+APP_AIRPLAY=qnx6/MMX2QC/app/10/default/app/eso/lib/libairplay.so
+US_AIRPLAY=$UNPACKED/MHI2Q_US_AUG22_P5087_MU1316/$APP_AIRPLAY
+CN_AIRPLAY=$UNPACKED/MHI2Q_CN_AUG22_K1004_MU1003_4M0906961EG/$APP_AIRPLAY
+CN_SI=$UNPACKED/MHI2Q_CN_AUG22_K1004_MU1003_4M0906961EG/$APP_SI
+MP=$(command -v micropython || command -v python3)
+SH=$(command -v mksh || command -v ksh)
+[ -f "$MOD/custom.sh" ] && [ -d "$FW" ] && [ -f "$US_SI" ] && [ -f "$CN_SI" ] ||
+    { echo "SKIP (no staged install tree or unpacked P5087/K1004)"; exit 0; }
+T=$(mktemp -d); trap '[ -n "${KEEP:-}" ] && echo "kept $T" || rm -rf "$T"' EXIT
+JARS=mnt/app/eso/hmi/lsd/jars
+fail() { echo "FAIL ($1): $2"; sed -n '1,60p' "$T/log"; exit 1; }
+
+# E2P dumps as modifyE2P prints them (0x19 = 25 bytes, as M.I.B. reads 0x3A0: the train, NUL-padded)
+e2p() { printf '0x000003a0 '; { printf '%s' "$1"; head -c $((25 - ${#1})) /dev/zero; } | od -An -tx1 | tr -s ' \n' ' '; echo; }
+
+unit() {   # unit [stock SI file] [stock deva size]: a fresh fake unit, BOTH jars left over from an older install
+    U=$T/u; rm -rf "$U" "$T/mod"; mkdir -p "$U/$JARS" "$U/mnt/app/eso/bin/apps" "$U/mnt/app/armle/lib/dll" \
+        "$U/mnt/app/root/hooks" "$U/mnt/app/eso/lib" "$U/mnt/system/etc/scripts" "$U/mnt/system/etc/eso/production" "$U/tmp"
+    cp "$FW/etc/eso/production/smartphone_integrator.json" "$FW/etc/eso/production/dio_manager.json" "$U/mnt/system/etc/eso/production/"
+    cp "$FW"/etc/pf.*conf "$FW/etc/usblauncher_otg.lua" "$U/mnt/system/etc/"
+    cp "$FW/etc/scripts/startncm.sh" "$FW/etc/scripts/stopncm.sh" "$U/mnt/system/etc/scripts/"
+    cp "${1:-$US_SI}" "$U/mnt/app/eso/bin/apps/smartphone_integrator"
+    cp "${3:-$US_AIRPLAY}" "$U/mnt/app/eso/lib/libairplay.so"
+    head -c "${2:-694904}" /dev/zero > "$U/mnt/app/armle/lib/dll/deva-ctrl-qc.so"
+    echo old > "$U/$JARS/carplay_hook.jar"; echo old > "$U/$JARS/carplay_hook_cn.jar"
+    cp -R "$MOD" "$T/mod"
+    # the installer and the startup are sources: test the checked-in ones, binaries come from the stage
+    cp "$ROOT/deploy/smartphone_integrator/carplay_startup.sh" "$T/mod/carplay/root/mnt/app/root/hooks/carplay_startup.sh"
+    cp "$ROOT/deploy/binpatch/binpatch.py" "$T/mod/carplay/"
+    rm -f "$T/mod/carplay/root/mnt/app/eso/bin/apps/smartphone_integrator"   # an older stage still carried it
+    grep -v '/eso/bin/apps/smartphone_integrator$' "$MOD/carplay/manifest.txt" > "$T/mod/carplay/manifest.txt"
+    sed -e "s#/mnt/#$U/mnt/#g" -e "s#dest=/\${f\#./}#dest=$U/\${f\#./}#" -e "/carlife_active/!s#/tmp/#$U/tmp/#g" "$ROOT/install_MoreIncredibleBash/mod/custom.sh" > "$T/mod/custom.sh"
+    grep -q "dest=$U/" "$T/mod/custom.sh" || { echo "FAIL: harness could not redirect the install root"; exit 1; }
+}
+run() { CARPLAY_SAVE_WAIT=0 CARPLAY_MICROPYTHON=$MP E2P_READ="$1" E2P_AMP_READ="${2:-echo 0x000000fc 02}" "$SH" "$T/mod/custom.sh" install > "$T/log" 2>&1; }
+spatial() { grep '^export AUDIO_SPATIAL=' "$U/mnt/app/root/hooks/carplay_startup.sh"; }
+has() { [ -f "$U/$JARS/$1" ] && ! grep -qx old "$U/$JARS/$1"; }
+
+e2p MHI2Q_US_AUG22_P5087 > "$T/us"; e2p MHI2Q_CN_AUG22_K1004 > "$T/cn"
+e2p MHI2Q_JP_AUG22_P1017 > "$T/jp"; e2p MHI2Q_KR_AUG22_P5000 > "$T/kr"
+e2p MHI2_ER_VWG13_P4521 > "$T/vw"; e2p MHI2Q_ER_POG24_P5000 > "$T/po"; e2p MHI2Q_US_AUG22_P4246 > "$T/old"
+
+unit; run "cat $T/us" || fail us "install failed"
+grep -q 'Firmware: MHI2Q_US_AUG22_P5087 (platform MHI2Q, region US, brand AU)' "$T/log" || fail us "train not read"
+has carplay_hook.jar && [ ! -e "$U/$JARS/carplay_hook_cn.jar" ] || fail us "want only carplay_hook.jar"
+grep -q DONE "$T/log" || fail us "no DONE"
+cmp -s "$U/mnt/app/eso/bin/apps/smartphone_integrator" "$ROOT/deploy/smartphone_integrator/smartphone_integrator" &&
+    cmp -s "$U/mnt/app/eso/bin/apps/smartphone_integrator.carplay-stock" "$US_SI" || fail us "SI not patched in place"
+run "cat $T/us" && cmp -s "$U/mnt/app/eso/bin/apps/smartphone_integrator" "$ROOT/deploy/smartphone_integrator/smartphone_integrator" &&
+    cmp -s "$U/mnt/app/eso/bin/apps/smartphone_integrator.carplay-stock" "$US_SI" || fail us-again "reinstall changed the SI or its stock copy"
+
+# Decoder library install is byte-exact, keeps the original across reinstall,
+# and uninstall restores that original rather than deleting a firmware library.
+LIB=mnt/app/eso/lib/libairplay.so
+python3 - "$US_AIRPLAY" "$U/$LIB" <<'PY'
+import sys
+from pathlib import Path
+stock, new = (Path(p).read_bytes() for p in sys.argv[1:])
+assert [i for i, (a,b) in enumerate(zip(stock,new)) if a != b] == [0x8c694, 0x8c6f4]
+assert len(stock) == len(new) and new[0x8c694] == new[0x8c6f4] == 2
+PY
+cmp -s "$U/$LIB.carplay-stock" "$US_AIRPLAY" || fail decoder "original backup changed"
+cp "$U/$LIB" "$T/decoder-installed"
+CARPLAY_SAVE_WAIT=0 "$SH" "$T/mod/custom.sh" uninstall > "$T/log" 2>&1 || fail decoder "uninstall failed"
+cmp -s "$U/$LIB" "$US_AIRPLAY" && [ ! -e "$U/$LIB.carplay-stock" ] || fail decoder "uninstall did not restore original"
+run "cat $T/us" || fail decoder "reinstall after uninstall failed"
+cmp -s "$U/$LIB" "$T/decoder-installed" || fail decoder "reinstall differs"
+# Restore the original reinstall log for existing idempotence assertions below.
+run "cat $T/us" || fail decoder "second reinstall failed"
+
+# usblauncher_otg.lua: only its two NCM command lines are patched - stock, an older fence of ours
+# (start line only) and the current one all end as the payload; a file without the lines is left alone
+LUA=mnt/system/etc/usblauncher_otg.lua; PAY=$MOD/carplay/ncm/payload/usblauncher_otg.lua
+cmp -s "$U/$LUA" "$PAY" && cmp -s "$U/$LUA.carplay-stock" "$FW/etc/usblauncher_otg.lua" || fail lua-stock "stock lua not fenced or backup wrong"
+cmp -s "$U/$LUA" "$PAY" && grep -q "$LUA already fenced" "$T/log" || fail lua-again "reinstall changed the fenced lua"
+unit; sed 's#iopkt_instance)$#iopkt_instance .. " $(busno) $(devno) $(iface)")#' "$FW/etc/usblauncher_otg.lua" > "$U/$LUA"
+cmp -s "$U/$LUA" "$FW/etc/usblauncher_otg.lua" && fail lua-old "harness: the older fence equals the stock"
+run "cat $T/us" || fail lua-old "install failed"
+cmp -s "$U/$LUA" "$PAY" && cmp -s "$U/$LUA.carplay-stock" "$FW/etc/usblauncher_otg.lua" || fail lua-old "older fence not brought to the payload or backup not the stock"
+unit; grep -v 'startncm.sh' "$FW/etc/usblauncher_otg.lua" > "$U/$LUA"; cp "$U/$LUA" "$T/lua.before"
+run "cat $T/us" || fail lua-unknown "install failed"
+cmp -s "$U/$LUA" "$T/lua.before" && [ ! -e "$U/$LUA.carplay-stock" ] && grep -q 'its fence skipped' "$T/log" || fail lua-unknown "an unknown lua was touched"
+
+# amplifier gate: only an external amp (E2P 0xFC = 02) keeps the 6-channel path
+spatial | grep -qx 'export AUDIO_SPATIAL=1' && grep -q 'Amplifier: external' "$T/log" || fail amp-ext "external amp lost AUDIO_SPATIAL=1"
+unit; run "cat $T/us" "echo 0x000000fc 01" || fail amp-int "install failed"
+spatial | grep -q '^export AUDIO_SPATIAL=0 ' && grep -q '^export AUDIO_SPATIAL_ATMOS=0$' "$U/mnt/app/root/hooks/carplay_startup.sh" &&
+    grep -q 'Amplifier: internal' "$T/log" || fail amp-int "internal amp kept the 6-channel path"
+unit; run "cat $T/us" false || fail amp-none "install failed"
+spatial | grep -q '^export AUDIO_SPATIAL=0 ' && grep -q 'amplifier coding unreadable' "$T/log" || fail amp-none "unreadable coding kept the 6-channel path"
+
+unit "$CN_SI" 694860 "$CN_AIRPLAY"; run "cat $T/cn" || fail cn "install failed"
+cmp -s "$U/$LIB" "$CN_AIRPLAY" && [ ! -e "$U/$LIB.carplay-stock" ] || fail decoder-cn "unsupported library changed"
+grep -q 'region CN, brand AU' "$T/log" || fail cn "train not read"
+[ "$(cmp -l "$U/mnt/app/eso/bin/apps/smartphone_integrator" "$CN_SI" | wc -l | tr -d ' ')" = 4 ] &&
+    [ -f "$U/mnt/app/eso/bin/apps/smartphone_integrator.carplay-stock" ] || fail cn "CN SI not patched in place"
+cmp -s "$U/mnt/app/armle/lib/dll/deva-ctrl-qc.so" "$T/mod/carplay/root/mnt/app/armle/lib/dll/deva-ctrl-qc.so" &&
+    spatial | grep -qx 'export AUDIO_SPATIAL=1' || fail cn "CN deva not replaced or 5.1 off"
+has carplay_hook_cn.jar && [ ! -e "$U/$JARS/carplay_hook.jar" ] || fail cn "want only carplay_hook_cn.jar"
+
+unit; run "cat $T/jp" || fail jp "install failed"
+has carplay_hook.jar && [ ! -e "$U/$JARS/carplay_hook_cn.jar" ] || fail jp "JP: want carplay_hook.jar"
+
+# another CarPlay mod on the unit (MIBSI, the yuedizhibo AltScreen, mibr): the first run only
+# warns and changes nothing, the second installs
+for mod in mnt/app/root/mibsi mnt/app/eso/lib/libmhi2qcarplaycluster.so mnt/app/root/carplay-altscreen \
+           mnt/app/root/hooks/libaltscreen111_mhi2q.so mnt/app/mibr-carplay111.noadvertise; do
+    unit; mkdir -p "$U/${mod%/*}"
+    case $mod in */mibsi|*/carplay-altscreen) mkdir "$U/$mod" ;; *) : > "$U/$mod" ;; esac
+    cp -R "$U" "$T/before"
+    run "cat $T/us" && fail "$mod" "installer did not stop on another CarPlay mod"
+    grep -q 'ANOTHER CARPLAY MOD IS INSTALLED' "$T/log" && grep -q 'RUN THE INSTALL AGAIN' "$T/log" || fail "$mod" "no warning"
+    rm "$U/tmp/carplay_foreign_mod_ok" || fail "$mod" "no marker"
+    diff -r "$T/before" "$U" > /dev/null || fail "$mod" "the unit was changed"
+    rm -rf "$T/before"; : > "$U/tmp/carplay_foreign_mod_ok"
+    run "cat $T/us" || fail "$mod" "second run failed"
+    grep -q 'another CarPlay mod is installed (.*) - installing anyway' "$T/log" && grep -q DONE "$T/log" || fail "$mod" "second run did not install"
+done
+
+# an unverified train (an older US one, or KR): the first run only warns, the second installs
+for f in old kr; do
+    unit; cp -R "$U" "$T/before"
+    run "cat $T/$f" && fail $f "installer did not stop on an unverified train"
+    grep -q 'IS NOT VERIFIED WITH THIS PATCH' "$T/log" && grep -q 'RUN THE INSTALL AGAIN' "$T/log" || fail $f "no warning"
+    rm "$U/tmp/carplay_unverified_fw_ok" || fail $f "no marker"
+    diff -r "$T/before" "$U" > /dev/null || fail $f "the unit was changed"
+    rm -rf "$T/before"; : > "$U/tmp/carplay_unverified_fw_ok"
+    run "cat $T/$f" || fail $f "second run failed"
+    grep -q 'not verified - installing anyway' "$T/log" && grep -q DONE "$T/log" || fail $f "second run did not install"
+    case $f in
+    old) has carplay_hook.jar && [ ! -e "$U/$JARS/carplay_hook_cn.jar" ] || fail old "US: want carplay_hook.jar" ;;
+    kr)  [ ! -e "$U/$JARS/carplay_hook.jar" ] && [ ! -e "$U/$JARS/carplay_hook_cn.jar" ] || fail kr "a jar stayed on an unverified region"
+         grep -q 'no Java patch is installed' "$T/log" || fail kr "no Java warning" ;;
+    esac
+done
+
+for brand in vw po none; do
+    unit; cp -R "$U" "$T/before"
+    if [ $brand = none ]; then run false && fail none "installer did not stop without E2P"
+        grep -q 'could not read the firmware version' "$T/log" || fail none "no refusal message"
+    else run "cat $T/$brand" && fail $brand "installer did not stop"
+        grep -q 'Audi MHI2Q units only' "$T/log" || fail $brand "no refusal message"; fi
+    diff -r "$T/before" "$U" > /dev/null || fail $brand "the unit was changed"
+    rm -rf "$T/before"
+done
+
+echo "installer end-to-end: US/JP -> carplay_hook.jar, CN -> carplay_hook_cn.jar, SI patched in place on US and CN, NCM lua line-patched (stock/old fence/unknown), deva always replaced, other jar removed, unverified train and another CarPlay mod (MIBSI/AltScreen/mibr) refused untouched then installed on the second run, other region -> none, VW/Porsche/no E2P refused untouched, 5.1 only on an external amp ($SH) PASS"

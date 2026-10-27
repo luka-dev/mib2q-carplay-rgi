@@ -192,7 +192,7 @@ public final class SteeringWheelInputModule implements Module {
         IMMICombiScreenChangeManager manager = combiManager;
         /* No combi manager on this variant: CarPlay owning the cluster with RGI up IS the
          * "map tab" here, and that is exactly what the handler below verifies. */
-        if (manager == null) return ScreenModule.isConnected() && ScreenModule.isNavActive();
+        if (manager == null) return AltScreenModule.isConnected() && AltScreenModule.isNavActive();
         try {
             MMICombiDisplayStatus status = manager.getLastConfirmedDisplayStatus();
             return status != null
@@ -222,7 +222,7 @@ public final class SteeringWheelInputModule implements Module {
             boolean mapTab = isConfirmedMapTab();
             Log.i(TAG, "MFW OK pressed board=" + keyboardId + " mapTab=" + mapTab);
             if (!mapTab) return;
-            ScreenModule.onSteeringWheelOkPressed();
+            AltScreenModule.onSteeringWheelOkPressed();
         }
 
         public void asyncException(int errorCode, String errorString, int requestType) { }

@@ -1,0 +1,19 @@
+--- /tmp/MU1316k/java/de/audi/app/terminalmode/combi/TerminalModeBapCombi.java	2026-06-11 04:20:29
++++ /tmp/MU1439k/java/de/audi/app/terminalmode/combi/TerminalModeBapCombi.java	2026-06-11 04:20:29
+@@ -96,12 +96,12 @@
+         return terminalModeBapCombi.eventListener;
+     }
+ 
+-    static /* synthetic */ LogChannel access$700(TerminalModeBapCombi terminalModeBapCombi) {
+-        return terminalModeBapCombi.lc;
++    static /* synthetic */ IContext access$700(TerminalModeBapCombi terminalModeBapCombi) {
++        return terminalModeBapCombi.context;
+     }
+ 
+-    static /* synthetic */ IContext access$800(TerminalModeBapCombi terminalModeBapCombi) {
+-        return terminalModeBapCombi.context;
++    static /* synthetic */ LogChannel access$800(TerminalModeBapCombi terminalModeBapCombi) {
++        return terminalModeBapCombi.lc;
+     }
+ 
+     static /* synthetic */ CombiBAPServiceTerminalMode access$502(TerminalModeBapCombi terminalModeBapCombi, CombiBAPServiceTerminalMode combiBAPServiceTerminalMode) {

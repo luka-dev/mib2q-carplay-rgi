@@ -1,0 +1,34 @@
+{
+  "complete": true,
+  "mermaid": "11.12.0",
+  "renderer": "Installed Playwright core with isolated headless Chrome; documented CLI wrapper lacked executable",
+  "results": [
+    {
+      "theme": "default",
+      "diagramType": "timeline",
+      "svg": true,
+      "width": 1690,
+      "height": 605,
+      "textNodes": 25
+    },
+    {
+      "theme": "dark",
+      "diagramType": "timeline",
+      "svg": true,
+      "width": 1690,
+      "height": 605,
+      "textNodes": 25
+    }
+  ],
+  "document_sha256": "168ef52a35871477b671b7f8ff3fa35e36ca9aa28b537ce6c28a6f0785f4b08f",
+  "visual_inspection": "Light and dark screenshots inspected; labels readable, no overlaps",
+  "style": {
+    "single_h1": true,
+    "h2_emoji_only": true,
+    "timeline_accessibility_caption": true,
+    "inline_theme_directives": false
+  },
+  "notes": "PNG previews are temporary QA artifacts; committed Markdown/Mermaid remains canonical. Counts below include all existing links in updated entrypoints, not only new links.",
+  "internal_links_checked": 846,
+  "unresolved_internal_links": 0
+}

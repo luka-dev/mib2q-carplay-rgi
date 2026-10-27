@@ -1,0 +1,18 @@
+{
+  "version": "spectral-chain-arm-fixture-v1",
+  "checkpoint_sha256": "ff072970aef01749f44afc0c8bc010c542eb7e2384cdf88d8b7473b6a3854da2",
+  "fixture_sha256": "4a596cd721628bdc53caa120586501790a819014ce7f89a355c206659431758d",
+  "native_audit_sha256": "5f80a41a5b3c743aacca28d61e48eeb3aeaa80524641470e81cd0810ed5e0bed",
+  "native_protocol_sha256": "8e2148ca1eafaa25c9d9f0e3df0053faccdf40cef8d1af70e424211b94797ba8",
+  "source_identities": {
+    "float.input": "e194972a0ca62d3d033b4f19072223547a6cddafe643de5f1a06a6ba6c15dda7",
+    "float.output": "f8dc35d20bc374276ca2dfb8a76bf3ed7d9f5917a6139f2bab70ee1489d8e42b",
+    "float.source": "6198091e0bd6dbb2717ef0124c48fd6c86712d0f13eddefc2e045de33db4e615",
+    "int8.output": "7fb64f7bf3fcf55cfcbc1fcf3d4499a473d089b832c1f89965b9d20b9116b585",
+    "int8.source": "b79d53f3fdbf6780d1072cb2fe9ba3cb91be1e70cafc617f04bbb79e6a50dcf0"
+  },
+  "selection": "First64 consecutive512sample PCM hops of each of four previously inspected TRAIN8s full-chain inputs; same native fitting20k checkpoint float/int8 references",
+  "gates": "ARM float all6+source PCM16 NSE<=1e-7/max<=4LSB; ARM int8 all6+source PCM16 NSE<=1e-4 to native int8; selected count exact; four independent interleaved streams; record every channel and peak error",
+  "scope": "ARM/QNX arithmetic integration only; no native-vs-GT int8 qualification, physical loaded deadline/latency, holdout quality, scene semantics or owner listening",
+  "script_sha256": "2258433c92440f55233d5e2bf51bfd6ff97617cc66f349e066a861d683fe1b41"
+}

@@ -1,0 +1,34 @@
+{
+  "scope": "Direct IDA decompilation of iOS27 beta24A5418b validator; not an iOS26.4.2 incident trace",
+  "input_sha256": "379fb232ff228287d3b11d1253b1b942e6c50dd633d150cfab6acb9d063bead1",
+  "validator": {
+    "addr": "0x25108b10c",
+    "code": "__int64 __fastcall carEndpoint_validateInfoResponseKeyPresentForFeature(__int64 a1, __int64 a2, __int64 a3, int a4)\n{\n  int v5; // w0\n  __int64 v6; // x21\n  const char *v7; // x3\n  __int64 v8; // x19\n\n  v5 = MEMORY[0x25810CFA0](a2, a3); /*0x25108b138*/\n  if ( a4 ) /*0x25108b13c*/\n  {\n    if ( !v5 ) /*0x25108b140*/\n    {\n      if ( gLogCategory_APEndpointCarPlay > 90 ) /*0x25108b150*/\n      {\n        v6 = 2273; /*0x25108b1cc*/\n        goto LABEL_19; /*0x25108b1d0*/\n      }\n      if ( gLogCategory_APEndpointCarPlay == -1 ) /*0x25108b158*/\n      {\n        v6 = 2273; /*0x25108b208*/\n        if ( !(unsigned int)MEMORY[0x258100DC0](&gLogCategory_APEndpointCarPlay, 33554522) ) /*0x25108b204*/\n          goto LABEL_19; /*0x25108b20c*/\n      }\n      else\n      {\n        v6 = 2273; /*0x25108b15c*/\n      }\n      v7 = \"[%{ptr}] Info response validation failed; entry for %@ expected but not found.\\n\"; /*0x25108b160*/\n      goto LABEL_12; /*0x25108b168*/\n    }\n  }\n  else if ( v5 == 1 ) /*0x25108b170*/\n  {\n    if ( gLogCategory_APEndpointCarPlay > 90 ) /*0x25108b180*/\n    {\n      v6 = 2282; /*0x25108b1c4*/\n      goto LABEL_19; /*0x25108b1c8*/\n    }\n    if ( gLogCategory_APEndpointCarPlay == -1 ) /*0x25108b188*/\n    {\n      v6 = 2282; /*0x25108b1e8*/\n      if ( !(unsigned int)MEMORY[0x258100DC0](&gLogCategory_APEndpointCarPlay, 33554522) ) /*0x25108b1e4*/\n        goto LABEL_19; /*0x25108b1ec*/\n    }\n    else\n    {\n      v6 = 2282; /*0x25108b18c*/\n    }\n    v7 = \"[%{ptr}] Info response validation failed; entry for %@ found but not negotiated.\\n\"; /*0x25108b190*/\nLABEL_12:\n    MEMORY[0x258100F00]( /*0x25108b198*/\n      &gLogCategory_APEndpointCarPlay,\n      \"OSStatus carEndpoint_validateInfoResponseKeyPresentForFeature(FigEndpointRef, CFDictionaryRef, CFStringRef, _Bool)\",\n      33554522,\n      v7);\nLABEL_19:\n    v8 = 4294950576LL; /*0x25108b210*/\n    MEMORY[0x25810C360](4294950576LL, \"carEndpoint_validateInfoResponseKeyPresentForFeature\", v6, 0); /*0x25108b228*/\n    return v8; /*0x25108b228*/\n  }\n  return 0; /*0x25108b240*/\n}",
+    "refs": [
+      {
+        "addr": "0x26e755490",
+        "name": "_gLogCategory_APEndpointCarPlay"
+      },
+      {
+        "addr": "0x2511db752",
+        "name": "aPtrInfoRespons",
+        "string": "[%{ptr}] Info response validation failed; entry for %@ expected but not found.\n"
+      },
+      {
+        "addr": "0x2511db7d7",
+        "name": "aPtrInfoRespons_0",
+        "string": "[%{ptr}] Info response validation failed; entry for %@ found but not negotiated.\n"
+      },
+      {
+        "addr": "0x2511db6df",
+        "name": "aOsstatusCarend_40",
+        "string": "OSStatus carEndpoint_validateInfoResponseKeyPresentForFeature(FigEndpointRef, CFDictionaryRef, CFStringRef, _Bool)"
+      },
+      {
+        "addr": "0x2511db7a2",
+        "name": "aCarendpointVal_3",
+        "string": "carEndpoint_validateInfoResponseKeyPresentForFeature"
+      }
+    ]
+  }
+}

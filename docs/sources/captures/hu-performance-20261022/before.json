@@ -1,0 +1,120 @@
+{
+  "window": {
+    "start_unix": 1792635653.7834518,
+    "end_unix": 1792635690.4829388,
+    "returncode": 0
+  },
+  "source": "physical HU QNX mmx 6.5.0; wired CarPlay after manual reboot",
+  "cpu": {
+    "dio_manager": {
+      "pid": 1646706,
+      "runtime_ms_samples": [
+        1340,
+        1332,
+        1283,
+        1336,
+        1362,
+        1349
+      ],
+      "interval_seconds_nominal": 3,
+      "percent_of_one_core_mean": 44.455555555555556,
+      "min": 42.766666666666666,
+      "max": 45.4
+    },
+    "altscreen_render": {
+      "pid": 1966200,
+      "runtime_ms_samples": [
+        213,
+        214,
+        194,
+        198,
+        210,
+        218
+      ],
+      "interval_seconds_nominal": 3,
+      "percent_of_one_core_mean": 6.927777777777778,
+      "min": 6.466666666666667,
+      "max": 7.2666666666666675
+    },
+    "maneuver_render": {
+      "pid": 2551930,
+      "runtime_ms_samples": [
+        2,
+        5,
+        4,
+        4,
+        3,
+        4
+      ],
+      "interval_seconds_nominal": 3,
+      "percent_of_one_core_mean": 0.12222222222222223,
+      "min": 0.06666666666666667,
+      "max": 0.16666666666666669
+    },
+    "mcd": {
+      "pid": 983127,
+      "runtime_ms_samples": [
+        264,
+        287,
+        115,
+        216,
+        252,
+        232
+      ],
+      "interval_seconds_nominal": 3,
+      "percent_of_one_core_mean": 7.588888888888889,
+      "min": 3.833333333333333,
+      "max": 9.566666666666666
+    },
+    "videoencoderservice": {
+      "pid": 1265774,
+      "runtime_ms_samples": [
+        465,
+        443,
+        300,
+        356,
+        446,
+        444
+      ],
+      "interval_seconds_nominal": 3,
+      "percent_of_one_core_mean": 13.633333333333333,
+      "min": 10.0,
+      "max": 15.5
+    }
+  },
+  "cpu_caveat": "Approximate per-core percentages from runtime milliseconds and hogs configured 3s interval. PIDS column is selected-process-relative and is not used. Diagnostics sloginfo/grep also active; no paired baseline.",
+  "total_cpu_busy_samples": [
+    98.9,
+    95.0,
+    88.3,
+    95.69999999999999,
+    90.3,
+    91.9,
+    95.8
+  ],
+  "total_cpu_busy_mean": 93.7,
+  "alt_socket_intervals_us": [
+    45998,
+    49013,
+    48868
+  ],
+  "alt_socket_fps": [
+    21.74007565546328,
+    20.402750290739192,
+    20.463288859785546
+  ],
+  "alt_source_pts_intervals_us": [
+    45999,
+    48999,
+    48777
+  ],
+  "full_present_mean_us": [
+    7980,
+    7278
+  ],
+  "ppid_advertised": "bf889dfdaea54096",
+  "effective_phone_profile_verified": false,
+  "decoder_optimization": "Refused anchor validation; stock queue depths retained",
+  "temporary_verbose_marker_restored": true,
+  "stable_30_fps_confirmed": false
+}

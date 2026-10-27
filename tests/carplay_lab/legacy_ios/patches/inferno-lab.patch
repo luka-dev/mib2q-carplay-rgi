@@ -1,0 +1,439 @@
+diff --git a/hw/arm/apple-silicon/boot.c b/hw/arm/apple-silicon/boot.c
+index 2e56568..e2e78e2 100644
+--- a/hw/arm/apple-silicon/boot.c
++++ b/hw/arm/apple-silicon/boot.c
+@@ -272,6 +272,11 @@ static void apple_boot_process_dt_node(AppleDTNode *node, AppleDTNode *parent)
+                 break;
+             }
+         }
++        if (!found && !g_strcmp0(g_getenv("MHI2_IOS_VM_TRISTAR"), "1") &&
++            prop->len == sizeof("tristar,cbtl1612") &&
++            !memcmp(prop->data, "tristar,cbtl1612", prop->len)) {
++            found = true;
++        }
+         if (!found) {
+             assert_nonnull(parent);
+             DINFO(
+@@ -313,7 +318,17 @@ static void apple_boot_process_dt_node(AppleDTNode *node, AppleDTNode *parent)
+         }
+     }
+
++    if (!g_strcmp0(g_getenv("MHI2_IOS_VM_TRISTAR"), "1") &&
++        !strcmp(apple_dt_get_prop_str_or(node, "name", "", &error_fatal), "tristar")) {
++        /* Its audio-codec provider is pruned by the normal laboratory DT. */
++        apple_dt_del_prop_named(node, "function-ldcm_bypass_en");
++    }
++
+     for (i = 0; i < ARRAY_SIZE(REM_PROPS); i++) {
++        if (!strcmp(REM_PROPS[i], "function-dock_parent") &&
++            !g_strcmp0(g_getenv("MHI2_IOS_VM_TRISTAR"), "1")) {
++            continue;
++        }
+         if (apple_dt_del_prop_named(node, REM_PROPS[i])) {
+             DINFO(
+                 "Removing prop `%s` from node `%s`", REM_PROPS[i],
+@@ -606,6 +621,12 @@ void apple_boot_populate_dt(AppleDTNode *root, AppleBootInfo *info,
+     assert_nonnull(child);
+     apple_dt_set_prop_u32(child, "allow-hactivation", 1);
+
++    // Local research-lab opt-in: the simulated SEP has no provisioned system keybag.
++    if (g_strcmp0(g_getenv("MHI2_IOS_VM_DIAGNOSTICS"), "1") == 0) {
++        apple_dt_set_prop_u32(child, "boot-ios-diagnostics", 1);
++        info_report("Offline lab: boot-ios-diagnostics enabled; keybag init is bypassed");
++    }
++
+     apple_boot_init_mem_ranges(root);
+
+     apple_boot_process_dt_node(root, NULL);
+diff --git a/hw/arm/apple-silicon/sep.c b/hw/arm/apple-silicon/sep.c
+index 6edb65a..8d359ff 100644
+--- a/hw/arm/apple-silicon/sep.c
++++ b/hw/arm/apple-silicon/sep.c
+@@ -19,6 +19,7 @@
+  */
+
+ #include "qemu/osdep.h"
++#include "qemu/error-report.h"
+ #include "block/aio.h"
+ #include "crypto/cipher.h"
+ #include "exec/cputlb.h"
+@@ -3763,6 +3764,20 @@ static void progress_reg_write(void *opaque, hwaddr addr, uint64_t data,
+     AppleSEPState *s = opaque;
+     SEPMessage sep_msg = { 0 };
+
++    static unsigned trace_events;
++    if (trace_events < 512 &&
++        g_strcmp0(g_getenv("MHI2_SEP_BOOT_TRACE"), "1") == 0 &&
++        (addr == 0 || addr == 8 || addr == 0x3370)) {
++        trace_events++;
++        info_report("SEP boot trace: register=0x%" HWADDR_PRIx
++                    " value=0x%" PRIx64 " pc=0x%" VADDR_PRIX,
++                    addr, data, CPU_GET_CLASS(s->cpu)->get_pc(CPU(s->cpu)));
++        static unsigned trace_dumps;
++        if (addr == 0x3370 || trace_dumps++ < 2) {
++            cpu_dump_state(CPU(s->cpu), stderr, 0);
++        }
++    }
++
+ #ifdef ENABLE_CPU_DUMP_STATE
+     cpu_dump_state(CPU(s->cpu), stderr, CPU_DUMP_CODE);
+ #endif
+diff --git a/hw/arm/apple-silicon/t8030.c b/hw/arm/apple-silicon/t8030.c
+index 565f02e..fa63e7c 100644
+--- a/hw/arm/apple-silicon/t8030.c
++++ b/hw/arm/apple-silicon/t8030.c
+@@ -2994,6 +2994,17 @@ static void t8030_init(MachineState *machine)
+     t8030_create_mipi_dsim(t8030);
+     t8030_create_scaler(t8030);
+     t8030_create_accbuck(t8030);
++    if (!g_strcmp0(g_getenv("MHI2_IOS_VM_TRISTAR"), "1")) {
++        AppleDTNode *tristar = apple_dt_get_node(
++            t8030->device_tree, "arm-io/smc-i2c1/tristar");
++        assert_nonnull(tristar);
++        AppleDTProp *reg = apple_dt_get_prop(tristar, "reg");
++        AppleI2CState *i2c = APPLE_I2C(object_property_get_link(
++            OBJECT(t8030), "smc-i2c1", &error_fatal));
++        assert_nonnull(reg);
++        assert_cmpuint(reg->len, >=, 1);
++        i2c_slave_create_simple(i2c->bus, "mhi2-lab-tristar", *(uint8_t *)reg->data);
++    }
+     t8030_create_misc(t8030);
+
+     t8030_create_tempsensor(t8030, "tempsensor0", false);
+diff --git a/hw/display/apple_displaypipe_v4.c b/hw/display/apple_displaypipe_v4.c
+index 8e77db8..e1c0176 100644
+--- a/hw/display/apple_displaypipe_v4.c
++++ b/hw/display/apple_displaypipe_v4.c
+@@ -177,6 +177,7 @@ struct AppleDisplayPipeV4State {
+     QemuConsole *console;
+     QEMUBH *update_disp_image_bh;
+     QEMUTimer *boot_splash_timer;
++    QEMUTimer *headless_refresh_timer;
+ };
+
+ static const VMStateDescription vmstate_adp_v4 = {
+@@ -676,6 +677,20 @@ static void adp_v4_gfx_update(void *opaque)
+     adp_v4_update_irqs(adp);
+ }
+
++/* A headless frontend does not poll gfx_update. The guest still needs
++ * OUTPUT_READY interrupts to finish IOMobileFramebufferSwapWaitWithTimeout.
++ * Keep this opt-in for the offline laboratory. */
++static void adp_v4_headless_refresh(void *opaque)
++{
++    AppleDisplayPipeV4State *adp = opaque;
++
++    qatomic_or(&adp->int_status, R_CONTROL_INT_OUTPUT_READY_MASK);
++    adp_v4_update_irqs(adp);
++    timer_mod(adp->headless_refresh_timer,
++              qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) +
++                  NANOSECONDS_PER_SECOND / 60);
++}
++
+ static const GraphicHwOps adp_v4_ops = {
+     .invalidate = adp_v4_invalidate,
+     .gfx_update = adp_v4_gfx_update,
+@@ -847,6 +862,11 @@ static void adp_v4_reset_hold(Object *obj, ResetType type)
+     adp_v4_blend_reset(&adp->blend_unit);
+
+     adp_v4_read_and_draw_boot_splash(adp);
++    if (adp->headless_refresh_timer) {
++        timer_mod(adp->headless_refresh_timer,
++                  qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) +
++                      NANOSECONDS_PER_SECOND / 60);
++    }
+ }
+
+ static void adp_v4_realize(DeviceState *dev, Error **errp)
+@@ -854,6 +874,20 @@ static void adp_v4_realize(DeviceState *dev, Error **errp)
+     AppleDisplayPipeV4State *adp = APPLE_DISPLAY_PIPE_V4(dev);
+
+     adp->console = graphic_console_init(dev, 0, &adp_v4_ops, adp);
++    if (g_strcmp0(g_getenv("MHI2_IOS_VM_HEADLESS_DISPLAY"), "1") == 0) {
++        adp->headless_refresh_timer =
++            timer_new_ns(QEMU_CLOCK_VIRTUAL, adp_v4_headless_refresh, adp);
++    }
++}
++
++static void adp_v4_unrealize(DeviceState *dev)
++{
++    AppleDisplayPipeV4State *adp = APPLE_DISPLAY_PIPE_V4(dev);
++
++    if (adp->headless_refresh_timer) {
++        timer_free(adp->headless_refresh_timer);
++        adp->headless_refresh_timer = NULL;
++    }
+ }
+
+ static const Property adp_v4_props[] = {
+@@ -871,6 +905,7 @@ static void adp_v4_class_init(ObjectClass *klass, const void *data)
+     dc->desc = "Apple Display Pipe V4";
+     device_class_set_props(dc, adp_v4_props);
+     dc->realize = adp_v4_realize;
++    dc->unrealize = adp_v4_unrealize;
+     dc->vmsd = &vmstate_adp_v4;
+     set_bit(DEVICE_CATEGORY_DISPLAY, dc->categories);
+ }
+diff --git a/hw/misc/apple-silicon/meson.build b/hw/misc/apple-silicon/meson.build
+index 58721d7..0f1ceee 100644
+--- a/hw/misc/apple-silicon/meson.build
++++ b/hw/misc/apple-silicon/meson.build
+@@ -17,6 +17,7 @@ system_ss.add(when: 'CONFIG_APPLE_SOC', if_true: files(
+     'tempsensor.c',
+     'mic_tempsensor.c',
+     'fan53740.c',
++    'tristar-lab.c',
+ ))
+ system_ss.add(when: 'CONFIG_APPLE_SPMI_PMU', if_true: files('spmi-pmu.c'))
+ system_ss.add(when: 'CONFIG_APPLE_SPMI_BASEBAND', if_true: files('spmi-baseband.c'))
+diff --git a/hw/misc/apple-silicon/smc.c b/hw/misc/apple-silicon/smc.c
+index 4b69eb5..6528e10 100644
+--- a/hw/misc/apple-silicon/smc.c
++++ b/hw/misc/apple-silicon/smc.c
+@@ -594,8 +594,12 @@ SysBusDevice *apple_smc_create(AppleDTNode *node, AppleA7IOPVersion version,
+     apple_smc_add_sensor(s, 'TQ0j', 8, SMC_KEY_TYPE_IOFLT, SMC_ATTR_R_LE, NULL);
+     apple_smc_add_sensor(s, 'VQ0l', 8, SMC_KEY_TYPE_IOFLT, SMC_ATTR_R_LE, NULL);
+     for (uint32_t i = 0; i < 2; ++i) {
++        const uint64_t virtual_vbus = cpu_to_le64(5ULL << 16);
++        const void *vbus = i == 0 &&
++            !g_strcmp0(g_getenv("MHI2_IOS_VM_TRISTAR"), "1") ?
++            &virtual_vbus : NULL;
+         apple_smc_add_sensor(s, 'VQ0u' + (i << 8), 8, SMC_KEY_TYPE_IOFLT,
+-                             SMC_ATTR_R_LE, NULL);
++                             SMC_ATTR_R_LE, vbus);
+     }
+     apple_smc_add_sensor(s, 'WQ0u', 8, SMC_KEY_TYPE_IOFLT, SMC_ATTR_R_LE, NULL);
+     apple_smc_add_sensor(s, 'VQDD', 8, SMC_KEY_TYPE_IOFLT, SMC_ATTR_R_LE, NULL);
+@@ -609,6 +613,17 @@ SysBusDevice *apple_smc_create(AppleDTNode *node, AppleA7IOPVersion version,
+     apple_smc_add_sensor(s, 'Tarc', 8, SMC_KEY_TYPE_IOFLT, SMC_ATTR_R_LE, NULL);
+     // ---------
+
++    if (!g_strcmp0(g_getenv("MHI2_IOS_VM_TRISTAR"), "1")) {
++        const uint32_t present = cpu_to_le32(1);
++        apple_smc_add_key(s, 'VBUS', 4, SMC_KEY_TYPE_UINT32, SMC_ATTR_R_LE,
++                          &present);
++        /* _checkConnection uses the low bit of D<port>AP; Lightning is port 1. */
++        apple_smc_add_key(s, 'D1AP', 4, SMC_KEY_TYPE_UINT32, SMC_ATTR_R_LE,
++                          &present);
++        apple_smc_add_key(s, 'D1BD', 1, SMC_KEY_TYPE_UINT8, SMC_ATTR_RW_LE,
++                          NULL);
++    }
++
+     apple_smc_add_key(s, 'D0VR', 2, SMC_KEY_TYPE_UINT16, SMC_ATTR_R_LE, NULL);
+     apple_smc_add_key(s, 'D1VR', 2, SMC_KEY_TYPE_UINT16, SMC_ATTR_R_LE, NULL);
+     apple_smc_add_key(s, 'D2VR', 2, SMC_KEY_TYPE_UINT16, SMC_ATTR_R_LE, NULL);
+diff --git a/hw/misc/apple-silicon/tristar-lab.c b/hw/misc/apple-silicon/tristar-lab.c
+new file mode 100644
+index 0000000..a2bb494
+--- /dev/null
++++ b/hw/misc/apple-silicon/tristar-lab.c
+@@ -0,0 +1,98 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later */
++/* Opt-in register-level Tristar bring-up model; no accessory authentication. */
++#include "qemu/osdep.h"
++#include "hw/i2c/i2c.h"
++#include "hw/qdev-core.h"
++#include "migration/vmstate.h"
++#include "qemu/module.h"
++#include "tristar-lab-regs.h"
++
++typedef struct LabTristar {
++    I2CSlave parent_obj;
++    LabTristarRegs state;
++    unsigned trace_count;
++} LabTristar;
++
++static void tristar_trace(LabTristar *s, const char *op, uint8_t reg, uint8_t value)
++{
++    if (!g_strcmp0(g_getenv("MHI2_IOS_VM_TRISTAR_TRACE"), "1") &&
++        s->trace_count < 256) {
++        s->trace_count++;
++        fprintf(stderr, "lab-tristar: %s reg=%02x value=%02x\n", op, reg, value);
++    }
++}
++
++static uint8_t tristar_read(I2CSlave *dev)
++{
++    LabTristar *s = (LabTristar *)dev;
++    uint8_t reg = s->state.index;
++    uint8_t value = lab_tristar_read(&s->state);
++    tristar_trace(s, "read", reg, value);
++    return value;
++}
++
++static int tristar_write(I2CSlave *dev, uint8_t value)
++{
++    LabTristar *s = (LabTristar *)dev;
++    if (!s->state.address_pending) {
++        tristar_trace(s, "write", s->state.index, value);
++    }
++    lab_tristar_write(&s->state, value);
++    return 0;
++}
++
++static int tristar_event(I2CSlave *dev, enum i2c_event event)
++{
++    LabTristar *s = (LabTristar *)dev;
++    if (event == I2C_START_SEND) {
++        lab_tristar_start_send(&s->state);
++    }
++    return 0;
++}
++
++static void tristar_reset(DeviceState *dev)
++{
++    LabTristar *s = (LabTristar *)dev;
++    /* AppleCBTL1610::readSystemID reads 5d..5f and checks the 74 marker. */
++    lab_tristar_reset(&s->state);
++    s->trace_count = 0;
++}
++
++static const VMStateDescription tristar_vmstate = {
++    .name = "mhi2-lab-tristar",
++    .version_id = 1,
++    .minimum_version_id = 1,
++    .fields = (const VMStateField[]) {
++        VMSTATE_I2C_SLAVE(parent_obj, LabTristar),
++        VMSTATE_UINT8_ARRAY(state.regs, LabTristar, 256),
++        VMSTATE_UINT8(state.index, LabTristar),
++        VMSTATE_BOOL(state.address_pending, LabTristar),
++        VMSTATE_END_OF_LIST()
++    }
++};
++
++static void tristar_class_init(ObjectClass *klass, const void *data)
++{
++    DeviceClass *dc = DEVICE_CLASS(klass);
++    I2CSlaveClass *i2c = I2C_SLAVE_CLASS(klass);
++    dc->desc = "Opt-in synthetic Tristar register probe";
++    dc->user_creatable = false;
++    dc->vmsd = &tristar_vmstate;
++    device_class_set_legacy_reset(dc, tristar_reset);
++    i2c->recv = tristar_read;
++    i2c->send = tristar_write;
++    i2c->event = tristar_event;
++}
++
++static const TypeInfo tristar_type = {
++    .name = "mhi2-lab-tristar",
++    .parent = TYPE_I2C_SLAVE,
++    .instance_size = sizeof(LabTristar),
++    .class_init = tristar_class_init
++};
++
++static void tristar_register_types(void)
++{
++    type_register_static(&tristar_type);
++}
++type_init(tristar_register_types);
+diff --git a/hw/misc/apple-silicon/tristar-lab-regs.h b/hw/misc/apple-silicon/tristar-lab-regs.h
+new file mode 100644
+index 0000000..430e6f4
+--- /dev/null
++++ b/hw/misc/apple-silicon/tristar-lab-regs.h
+@@ -0,0 +1,43 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later */
++#ifndef MHI2_TRISTAR_LAB_REGS_H
++#define MHI2_TRISTAR_LAB_REGS_H
++#include <stdbool.h>
++#include <stdint.h>
++#include <string.h>
++
++typedef struct LabTristarRegs {
++    uint8_t regs[256];
++    uint8_t index;
++    bool address_pending;
++} LabTristarRegs;
++
++static inline void lab_tristar_reset(LabTristarRegs *s)
++{
++    memset(s, 0, sizeof(*s));
++    s->regs[0x5f] = 0x74;
++    s->address_pending = true;
++}
++
++static inline void lab_tristar_start_send(LabTristarRegs *s)
++{
++    s->address_pending = true;
++}
++
++static inline void lab_tristar_write(LabTristarRegs *s, uint8_t value)
++{
++    if (s->address_pending) {
++        s->index = value;
++        s->address_pending = false;
++    } else {
++        uint8_t reg = s->index++;
++        if (reg != 0x5f) {
++            s->regs[reg] = value;
++        }
++    }
++}
++
++static inline uint8_t lab_tristar_read(LabTristarRegs *s)
++{
++    return s->regs[s->index++];
++}
++#endif
+
+diff --git a/hw/arm/apple-silicon/mt-spi.c b/hw/arm/apple-silicon/mt-spi.c
+index eb86618..f20abd9 100644
+--- a/hw/arm/apple-silicon/mt-spi.c
++++ b/hw/arm/apple-silicon/mt-spi.c
+@@ -32,6 +32,7 @@
+ #include "qemu/timer.h"
+ #include "ui/console.h"
+ #include "ui/input.h"
++#include "mt-spi-motion.h"
+
+ typedef struct AppleMTSPIBuffer {
+     uint8_t *data;
+@@ -76,6 +77,7 @@ static const VMStateDescription vmstate_apple_mt_spi_ll_packet = {
+
+ struct AppleMTSPIState {
+     SSIPeripheral parent_obj;
++    bool accurate_velocity;
+
+     QemuMutex lock;
+     /// IRQ of the Multi Touch Controller is Active Low.
+@@ -854,8 +856,10 @@ static void apple_mt_spi_send_path_update(AppleMTSPIState *s, uint64_t ts,
+     apple_mt_spi_buf_push_byte(&packet->buf, 1); // Hand ID
+     apple_mt_spi_buf_push_word(&packet->buf, s->x);
+     apple_mt_spi_buf_push_word(&packet->buf, s->y);
+-    apple_mt_spi_buf_push_word(&packet->buf, ABS(x_delta) / ts_delta * 1000);
+-    apple_mt_spi_buf_push_word(&packet->buf, ABS(y_delta) / ts_delta * 1000);
++    apple_mt_spi_buf_push_word(&packet->buf, s->accurate_velocity ?
++        apple_mt_spi_velocity_ns(x_delta, ts_delta) : ABS(x_delta) / ts_delta * 1000);
++    apple_mt_spi_buf_push_word(&packet->buf, s->accurate_velocity ?
++        apple_mt_spi_velocity_ns(y_delta, ts_delta) : ABS(y_delta) / ts_delta * 1000);
+     apple_mt_spi_buf_push_word(&packet->buf, 660); // rad0
+     apple_mt_spi_buf_push_word(&packet->buf,
+                                580); // rad1
+@@ -1006,6 +1010,7 @@ static void apple_mt_spi_realize(SSIPeripheral *dev, Error **errp)
+
+     s = container_of(dev, AppleMTSPIState, parent_obj);
+
++    s->accurate_velocity = g_strcmp0(g_getenv("MHI2_IOS_VM_INPUT_CONTROL"), "1") == 0;
+     entry = qemu_add_mouse_event_handler(apple_mt_spi_mouse_event, s, 1,
+                                          "Apple Multitouch HID SPI");
+     qemu_activate_mouse_event_handler(entry);
+diff --git a/hw/arm/apple-silicon/mt-spi-motion.h b/hw/arm/apple-silicon/mt-spi-motion.h
+new file mode 100644
+--- /dev/null
++++ b/hw/arm/apple-silicon/mt-spi-motion.h
+@@ -0,0 +1,15 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later */
++#ifndef APPLE_MT_SPI_MOTION_H
++#define APPLE_MT_SPI_MOTION_H
++#include <stdint.h>
++
++static inline uint16_t apple_mt_spi_velocity_ns(int32_t delta, uint64_t dt_ns)
++{
++    uint64_t magnitude = delta < 0 ? (uint64_t)-(int64_t)delta : (uint64_t)delta;
++    if (!dt_ns) {
++        return 0;
++    }
++    uint64_t velocity = magnitude * 1000000000ULL / dt_ns;
++    return velocity > UINT16_MAX ? UINT16_MAX : (uint16_t)velocity;
++}
++#endif

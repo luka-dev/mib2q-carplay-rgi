@@ -31,7 +31,7 @@ public final class CarPlayApp {
 
     /* Modules, in start order. */
     private static final Module[] MODULES = new Module[] {
-        new ScreenModule(), new RgdModule(), new SteeringWheelInputModule()
+        new AltScreenModule(), new RgdModule(), new SteeringWheelInputModule(), new VehicleDataModule()
     };
 
     private static final Object lock = new Object();
@@ -68,11 +68,14 @@ public final class CarPlayApp {
      *  fwRef so framework() is available before the first activate. */
     public static void startTransport(Object context) {
         CarplayBus.getInstance().start();            /* idempotent */
+        AltscreenControlServer.start();              /* always-on :19832 — altscreen_render reports video on/off */
         if (context instanceof IContext) {
             synchronized (lock) {
                 if (fwRef == null) fwRef = new FrameworkRef((IContext) context);
                 ensureLifecycleWorkerLocked();
             }
+            /* the class itself may fail to link on an odd firmware: guard at the call */
+            try { UpmixSetting.boot(fwRef.framework()); } catch (Throwable t) { Log.w(TAG, "upmix level: " + t); }
         }
         Log.i(TAG, "transport up (bus always-on) build=" + BUILD_ID);
     }
@@ -325,8 +328,8 @@ public final class CarPlayApp {
 
         /* Every caller holds lifecycleLock, which serializes module start/stop and
          * keeps active/fwRef stable for this pass.  Never hold the smaller state
-         * lock across Module.start(): ScreenModule/RgdModule enter the static
-         * ScreenNavStatusGate monitor, while NavigationJobs enters that monitor
+         * lock across Module.start(): AltScreenModule/RgdModule enter the static
+         * AltScreenNavStatusGate monitor, while NavigationJobs enters that monitor
          * before calling onNavigationServiceChanged() (which takes this lock).
          * Holding both in the old order made cold boot an ABBA deadlock. */
         boolean allUp = true;
@@ -357,8 +360,7 @@ public final class CarPlayApp {
                 Log.i(TAG, "started " + MODULES[i].name());
             } else {
                 /* MODULES is an ordered dependency chain: RGI must not consume/replay a
-                 * snapshot before the cluster module has reset navActive and taken cluster
-                 * ownership (stock ctx 74, ready to switch to ctx 80 on the first maneuver). */
+                 * snapshot before altScreen has reset navActive and physically owns ctx 81. */
                 allUp = false;
                 break;
             }

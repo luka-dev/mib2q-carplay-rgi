@@ -1,5 +1,5 @@
 #!/bin/sh
-# maneuver_render monitor for one smartphone_integrator/dio generation.
+# Persistent-renderer monitor for one smartphone_integrator/dio generation.
 # It never controls USB, OTG, dio_manager or the SI retry state machine.
 
 H=${H:-/mnt/app/root/hooks}
@@ -35,6 +35,15 @@ monitor_dio_alive()
 monitor_current()
 {
     monitor_owns_generation && monitor_dio_alive
+}
+
+monitor_renderer_log()
+{
+    case "$1" in
+        maneuver_render) echo /tmp/maneuver_render.log ;;
+        altscreen_render) echo /tmp/altscreen_render.log ;;
+        *) return 1 ;;
+    esac
 }
 
 start_renderer()
@@ -75,13 +84,14 @@ start_renderer()
     # spawning so a live renderer hidden by a stale PID file is adopted.
     monitor_current || return 0
     cp_renderer_running "$MON_NAME" && return 0
+    MON_LOG=`monitor_renderer_log "$MON_NAME"` || return 1
     echo "[monitor] starting $MON_NAME reason=$MON_REASON" >> "$WLOG"
 
     (
         cd "$H" || exit 1
         monitor_current || exit 0
         LD_PRELOAD= GRAPHICS_ROOT=/proc/boot exec "$H/$MON_NAME" \
-            </dev/null >>"/tmp/$MON_NAME.log" 2>&1
+            </dev/null >>"$MON_LOG" 2>&1
     ) &
     MON_NEW_PID=$!
 
@@ -97,19 +107,21 @@ monitor_main()
 {
     trap 'exit 0' 1 2 15
 
-    # No settle sleeps: the renderer is a separate process and never gates dio.
+    # No settle sleeps: the renderers are separate processes and never gate dio.
     # SI's 10 s budget ends at the phone's control SETUP, which waits on USB/NCM/
-    # mDNS, not CPU; the renderer must instead be ready before Java selects the
-    # cluster context, so it starts at once (GL programs load from the
+    # mDNS, not CPU; the renderers must instead be ready before Java selects the
+    # cluster context, so they start at once (GL programs load from the
     # persistent binary cache after the first boot).
     monitor_current || exit 0
     echo "[monitor] generation=$DIO_PID active" >> "$WLOG"
 
     cp_seed_renderer_pid_files
+    start_renderer altscreen_render initial
     start_renderer maneuver_render initial
 
     MON_TICKS=0
     while monitor_current; do
+        start_renderer altscreen_render restart
         start_renderer maneuver_render restart
         sleep 2
         MON_TICKS=`expr "$MON_TICKS" + 1`
@@ -119,7 +131,7 @@ monitor_main()
     done
 
     if monitor_owns_generation; then
-        echo "[monitor] dio_manager pid=$DIO_PID exited; renderer remains persistent" >> "$WLOG"
+        echo "[monitor] dio_manager pid=$DIO_PID exited; renderers remain persistent" >> "$WLOG"
     else
         echo "[monitor] generation=$DIO_PID superseded" >> "$WLOG"
     fi

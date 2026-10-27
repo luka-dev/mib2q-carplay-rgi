@@ -1,0 +1,83 @@
+{
+  "complete": true,
+  "passed": true,
+  "protocol_sha256": "963c76d167c93d76600d7398f49f066791be3d633fdf4a87dfc6ffa28d8dcc77",
+  "arms": {
+    "default": {
+      "checkpoint_sha256": "ea4133f8983898d0b728b7aa969875b0574092cdcbe0bce1fbf7df33f3092a48",
+      "assets_manifest_sha256": "d4e14d58c06d41463f36096cffe7a5a9ba8370551f0d0dac65d089e45ff52e14",
+      "source_nse": {
+        "eligible": 6.370767983861698e-14,
+        "vocal": 9.429751230172875e-14,
+        "drums": 8.302646270481838e-14,
+        "bass": 8.082182788224932e-14
+      },
+      "scene_maxabs": {
+        "family_presence": 3.5762786865234375e-07,
+        "membership": 2.682209014892578e-07,
+        "family_pan": 9.834766387939453e-07,
+        "membership_update": 3.5762786865234375e-07
+      },
+      "performance": {
+        "frames": 256,
+        "dense_macs_per_frame": 1173392,
+        "dense_macs_s_at_93_75fps": 110005500,
+        "neural_ms_mean": 0.332156249,
+        "neural_ms_p50": 0.33000001,
+        "neural_ms_p99": 0.363999978,
+        "neural_ms_max": 0.399000011,
+        "state_bytes": 16240,
+        "scope": "standalone neural path only; excludes FFT, synthesis, DSP, scheduler, IO; no device or acoustic claim"
+      },
+      "gates": {
+        "sources": true,
+        "scene": true,
+        "dense_macs": true,
+        "pruning": true,
+        "default_old_output_bit_exact": true
+      },
+      "pruning_raw_stdout": "UNIFIED_PRUNE_CHECK {\"mode\":\"float\",\"passed\":true,\"streams_interleaved\":4,\"frames_per_stream\":64,\"eligible_scene_state_bit_exact\":true,\"protected_fields_zero\":true,\"all_dense_macs_frame\":1173392,\"selected_dense_macs_frame\":976592,\"selected_dense_macs_s\":91555500,\"scope\":\"exact output-selection equivalence on inspected TRAIN, not original quantization quality recovery or device deadlines\"}\nUNIFIED_PRUNE_CHECK {\"mode\":\"int8\",\"passed\":true,\"streams_interleaved\":4,\"frames_per_stream\":64,\"eligible_scene_state_bit_exact\":true,\"protected_fields_zero\":true,\"all_dense_macs_frame\":1173392,\"selected_dense_macs_frame\":976592,\"selected_dense_macs_s\":91555500,\"scope\":\"exact output-selection equivalence on inspected TRAIN, not original quantization quality recovery or device deadlines\"}\n",
+      "output_sha256": "6c94fbbe846bd7530ed329809c4c769d9c97a1b64d560fb2e6b96fa982440c47",
+      "executable_sha256": "44c1beee82c24ea08919688fcf1f9dac685511afc5e938e0631ae1a4cf68561b",
+      "checker_sha256": "c15f7f27f08ded3ccdb5d0f3ff9558d8f54c48d41185ac0af49dce1f353d3a62"
+    },
+    "expanded": {
+      "checkpoint_sha256": "5699c9b5a08492f805b9d02f68a336f4350e3faa435a7815c87928db7a2f7354",
+      "assets_manifest_sha256": "1b2984d559c0795e0097fdb472072e1f92e2088352848f8b8595beec753d65fe",
+      "source_nse": {
+        "eligible": 6.875787141607587e-14,
+        "vocal": 8.647660629237705e-14,
+        "drums": 1.102794253932219e-13,
+        "bass": 9.857493211566782e-14
+      },
+      "scene_maxabs": {
+        "family_presence": 3.5762786865234375e-07,
+        "membership": 2.980232238769531e-07,
+        "family_pan": 9.648501873016357e-07,
+        "membership_update": 2.980232238769531e-07
+      },
+      "performance": {
+        "frames": 256,
+        "dense_macs_per_frame": 1705872,
+        "dense_macs_s_at_93_75fps": 159925500,
+        "neural_ms_mean": 0.478113279,
+        "neural_ms_p50": 0.477000023,
+        "neural_ms_p99": 0.548999989,
+        "neural_ms_max": 0.676999975,
+        "state_bytes": 16240,
+        "scope": "standalone neural path only; excludes FFT, synthesis, DSP, scheduler, IO; no device or acoustic claim"
+      },
+      "gates": {
+        "sources": true,
+        "scene": true,
+        "dense_macs": true,
+        "pruning": true
+      },
+      "pruning_raw_stdout": "UNIFIED_PRUNE_CHECK {\"mode\":\"float\",\"passed\":true,\"streams_interleaved\":4,\"frames_per_stream\":64,\"eligible_scene_state_bit_exact\":true,\"protected_fields_zero\":true,\"all_dense_macs_frame\":1705872,\"selected_dense_macs_frame\":1410672,\"selected_dense_macs_s\":132250500,\"scope\":\"exact output-selection equivalence on inspected TRAIN, not original quantization quality recovery or device deadlines\"}\nUNIFIED_PRUNE_CHECK {\"mode\":\"int8\",\"passed\":true,\"streams_interleaved\":4,\"frames_per_stream\":64,\"eligible_scene_state_bit_exact\":true,\"protected_fields_zero\":true,\"all_dense_macs_frame\":1705872,\"selected_dense_macs_frame\":1410672,\"selected_dense_macs_s\":132250500,\"scope\":\"exact output-selection equivalence on inspected TRAIN, not original quantization quality recovery or device deadlines\"}\n",
+      "output_sha256": "643d2f3535953c5fc20ec0424ef1267d6677be85edffd632e9a6c97f810b7809",
+      "executable_sha256": "44c1beee82c24ea08919688fcf1f9dac685511afc5e938e0631ae1a4cf68561b",
+      "checker_sha256": "bbebef79610f369d4c32a6181e84735395a418999e9eafe0497f0510f72e1b83"
+    }
+  },
+  "scope": "expanded initial graph port preparation, no capacity terminal/DEV/acoustic int8 recovery, Audi deadline, FFT/DSP or hook claim"
+}

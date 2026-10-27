@@ -1,9 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 PROJECT_DIR=$(cd "$(dirname "$0")/.." && pwd)
-TOOLS_DIR="$PROJECT_DIR/../../Tools/jxe2jar"
-JDK="$TOOLS_DIR/jvms/zulu8.78.0.19-ca-jdk8.0.412-macosx_aarch64/zulu-8.jdk/Contents/Home"
-ASM="$TOOLS_DIR/tools/uninline/lib/asm-9.7.jar:$TOOLS_DIR/tools/uninline/lib/asm-tree-9.7.jar"
+. "$PROJECT_DIR/scripts/java_env.sh"; TOOLS_DIR=$JXE2JAR; java_need_jxe2jar audit_java_stock
+JDK="$JAVA8_HOME"
+ASM="$ASM_CP"
 bash "$PROJECT_DIR/scripts/build_java.sh"
 python3 "$PROJECT_DIR/tests/audit_java_sources.py" "$PROJECT_DIR" \
     "$TOOLS_DIR/out/MU1316-vf" "$PROJECT_DIR/build/java-stock-audit"

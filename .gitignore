@@ -3,22 +3,81 @@
 .venv*/
 **/.DS_Store
 *.o
-# build/ ships empty (just .gitkeep); artifacts are generated, never committed
+
+# Build output. Everything under build/ is produced by scripts/build_*.sh, so the
+# tree carries the empty directory and nothing else.
 /build/*
 !/build/.gitkeep
+# Trained runtime weights live in models/ (not build/): they cannot be
+# reproduced on a clean checkout.  Keep only the shipping binaries; any training
+# checkpoints dropped into these dirs stay ignored.
+!/models/scene-masknet-c/
+/models/scene-masknet-c/*
+!/models/scene-masknet-c/scene_masknet_c.bin
+!/models/scene-masknet-c/manifest.json
+!/models/scene-masknet-c/settings.json
 /local_logs/
-/log/
-tools/loader_preview/loader_preview
 
 # Phone-side captures: sysdiagnose tarballs and log archives are hundreds of MB
 # and contain the owner's device logs. Keep them local.
 /logs/
 
-# Obsidian MCP transaction journal + per-user workspace state
-.obsidian-mcp/
-**/.obsidian/
+# tools/keys holds analysis key material. Default is to keep it out of history —
+# live AirPlay session keys (`shk`) must never be committed. Public values
+# extracted from donor firmware are opted back in individually.
+/tools/keys/*
+!/tools/keys/README.md
+!/tools/keys/*_rsa_modulus.hex
 __pycache__/
-output/
+.ida-mcp/
+
+# Live CarPlay session captures. The SETUP plist carries the 32-byte `shk`
+# session key in plaintext — never commit it. Keep captures local, mode 0600.
+/captures/apac_format76_10ch_20260930/
+
+# IDA unpacks its database beside the .i64 while a session is open
+*.id0
+*.id1
+*.id2
+*.nam
+*.til
+
+# Clang diagnostic artifacts and scratch downloads, never part of a build.
+/stereo_upmix.plist
+/stereo_upmix_render.plist
+tmp/
+
+# Local editor/compiler state, not project data.
+~$*.xlsx
+*.tsbuildinfo
+*.dSYM/
+
+# Experiment/render/tuning output. Like build/, everything here is tool scratch;
+# the durable knowledge was consolidated into docs/ (see docs/README.md). The tree carries the
+# empty directory and nothing else.
+/output/*
+!/output/.gitkeep
+
+# PRISM host preview/test output.
+tools/loader_preview/.prism-test-*
+tools/loader_preview/prism_preview
+
+
+# Installer diagnostics copied back to the SD card.
+/install_MoreIncredibleBash/mod/last-carplay-*.log
+/uninstall_MoreIncredibleBash/mod/last-carplay-*.log
+
+
+# Hand-staged release payload (docs/build-and-deploy/DEPLOY_AND_RELEASE.md) — never commit binaries.
+install_MoreIncredibleBash/mod/carplay/root/
+
+install_MoreIncredibleBash/mod/carplay/carplay_child.json
+*.i64
+
+# Obsidian per-user UI state (open panes, last file) — changes on every open
+docs/.obsidian/
+
+# Android Auto fork build outputs and private firmware inputs.
 /dist/
 /.build-cache/
 /android_auto/java/build/
@@ -28,9 +87,5 @@ output/
 *.h264
 *.raw
 *.ppm
-
-# M.I.B. release payload is staged by hand from build/ and deploy/ (see docs/deploy/install.md)
-install_MoreIncredibleBash/mod/carplay/*
-!install_MoreIncredibleBash/mod/carplay/.gitkeep
-/install_MoreIncredibleBash/mod/last-carplay-*.log
-/uninstall_MoreIncredibleBash/mod/last-carplay-*.log
+.obsidian-mcp/
+**/.obsidian/

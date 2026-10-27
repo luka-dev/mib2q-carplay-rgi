@@ -1,0 +1,652 @@
+Proceedings of the 19th International Conference on Digital Audio Effects (DAFx-16), Brno, Czech Republic, September 5–9, 2016
+
+
+
+    TIME-DOMAIN IMPLEMENTATION OF A STEREO TO SURROUND SOUND UPMIX
+                             ALGORITHM
+
+                                                           Sebastian Kraft, Udo Zölzer
+                                             Department of Signal Processing and Communications
+                                                         Helmut-Schmidt-University
+                                                             Hamburg, Germany
+                                                    sebastian.kraft@hsu-hh.de
+
+
+                           ABSTRACT                                      simple directional steering are required. But due to full-band pro-
+                                                                         cessing of the input signal the capability to separate multiple con-
+This paper describes a time-domain algorithm to upmix stereo             current sources is quite limited.
+recordings for an enhanced playback on a surround sound loud-
+                                                                              The idea behind the approach presented in this paper and its
+speaker setup. It is mainly the simplified version of a previously
+                                                                         derivation is similar to the previous work in [6, 7] but all deriva-
+published frequency-domain algorithm where the standard short-
+                                                                         tions are rewritten to yield an equivalent time-domain formulation.
+time Fourier transform is now replaced by an IIR filter bank. The
+                                                                         This allows to replace the short-time Fourier transform (STFT),
+design of complementary filter blocks and their arrangement in a
+                                                                         previously used to create a time-frequency representation of the
+tree structure to form a filter bank are derived. The arithmetic com-
+                                                                         input signal, by a non-subsampling filter bank as in [8]. It is build
+plexity of the filter bank itself and of the complete upmix algorithm
+                                                                         of complementary IIR filters arranged in a tree structure and allows
+is analysed and compared to the frequency-domain approach. The
+                                                                         a perfect allpass reconstruction. In [2, 7] it was already pointed out
+time-domain upmix is less flexible in its configuration but achieves
+                                                                         that the STFT spectra resolution could be reduced to Bark bands
+an audio quality comparable to the frequency-domain implemen-
+                                                                         without impairments. Hence, a low-resolution filter bank would
+tation at a fraction of its computational cost.
+                                                                         be well suited to search for an optimal trade-off between complex-
+                                                                         ity and frequency resolution and to analyse the influence of the
+                      1. INTRODUCTION                                    time-frequency resolution on the quality of the resulting upmix.
+                                                                              The underlying stereo signal model and estimation of source
+Upmixing is a process to generate additional channels when an            positions as well as the direct and ambient component separation
+audio source is intended to be played back over a setup with more        will be introduced in Sec. 2. Afterwards, the design of the filter
+loudspeakers than source channels. Ideally, a good upmix should          bank is described in Sec. 3 together with an analysis of its arith-
+redistribute the input signal to all available loudspeakers provid-      metic complexity. Section 4 shows the application of the proposed
+ing an immersive listening experience without compromising the           separation in the context of a stereo to multi-channel surround
+original character of the stereo track. For example, the azimuth         sound upmix and compares the results with its frequency-domain
+position of sources in a stereo mix as well as the overall timbre        counterpart.
+and spatial character should be preserved.
+     Most algorithms in this area are based on the same processing
+principles applied to a time-frequency-domain representation of
+the input signal. The channels of a stereo or multi-channel record-                         2. SIGNAL SEPARATION
+ing are described as a weighted sum of direct signal sources over-
+laid by an uncorrelated ambient signal [1, 2]. First, the azimuth        2.1. Stereo signal model
+positions or panning coefficients of the sources are estimated un-
+der the assumption that only one dominant source is active at a sin-     The left and right channels of a stereo signal
+gle time-frequency instant. Next, the direct and ambient compo-
+nents are separated with the knowledge of the panning coefficients.                                 " I             #
+Having the separated signals with their related source positions it                                  X
+is possible to remix the original content considering any different                      xL (n) =         gLi · si (n) + aL (n)            (1)
+                                                                                                    i=1
+target loudspeaker configuration.                                                                   " I             #
+     Other algorithms mainly focus on a direct and ambient signal                                    X
+                                                                                         xR (n) =         gRi · si (n) + aR (n)            (2)
+separation [3, 4], where [3] is one of the few examples for a time-
+                                                                                                    i=1
+domain approach. However, as a normalised least mean squares
+(NLMS) method is used to adapt an FIR extraction filter with sev-
+eral hundreds of coefficients it is computationally quite demand-        can be described as a weighted sum of I source signals si (n) and
+ing. Further examples for time-domain approaches are Dolby Pro           additive uncorrelated ambient signals aL (n) and aR (n) in the left
+Logic I and II [5] which were widely spread in the consumer area         and right channel, respectively. The weightings gLi and gRi of the
+a decade ago and were optimised for a cost effective implementa-         individual sources are called panning coefficients and are bound
+tion using simple time-domain operations. Basically, only a few          between zero and one. Their squared sum should be equal to one
+subtractions and additions of the left and right channels with ad-       (gL
+                                                                           2
+                                                                             i
+                                                                               + gR2
+                                                                                     i
+                                                                                       = 1) to achieve a constant power and loudness of a
+ditional phase shifts and VCAs (voltage controlled amplifiers) for       panned source independent of its current position. By applying a
+
+
+
+
+                                                                   DAFX-113
+Proceedings of the 19th International Conference on Digital Audio Effects (DAFx-16), Brno, Czech Republic, September 5–9, 2016
+
+
+filter bank, the signal model                                                With a time-domain filter bank, the application of the ambi-
+                         " I                 #                          ence decorrelation filters HAL and HAR is not as trivial as in the
+                          X                                             frequency-domain. An equivalent time-domain formulation of the
+            xL (b, k) =       gLi · si (b, k) + aL (b, k)        (3)    filter in (8) with a corresponding signal model could look like
+                          i=1
+                         " I
+                          X
+                                               #                              haL/R (k) = γ(k) · ±1,          0 < γ(k) < 1             (11)
+           xR (b, k) =          gRi · si (b, k) + aR (b, k)      (4)
+                         i=1                                                  xL (n, k) = gL (n, k) · s(n, k) + haL (k) · a(n, k)      (12)
+is transformed into a time-frequency representation. The variables            xR (n, k) = gR (n, k) · s(n, k) + haR (k) · a(n, k)      (13)
+b and k denote the time and band index, whereas b is equal to n for
+                                                                        where the filter is modelled with a band-wise gain γ(k) and a phase
+non sub-sampling filter banks and will be used in the following.
+                                                                        shift of π can be achieved by choosing opposite sign coefficients in
+     Two simplifications are required to invert the signal model and    each channel. Other phase shifts would require a time-domain fil-
+to recover sufficient approximations of the source signals and their    tering of each sub-band and would impose the problem of inverse
+panning parameters. First, it is a typical assumption that at a cer-    filtering when extracting the direct and ambient signal in Sec. 2.3.
+tain time instant n and in a frequency band k only a single dom-
+inant source suPis active and the contribution of other sources is
+close to zero ( ∀i6=u |si (n, k)| ≈ 0) if the time and frequency        2.2. Estimation of source directions
+resolution is not too small [9]. This allows to summarise the time-     For typical music mixes the amplitude of the ambient signal a(n, k)
+frequency representations of the individual sources                     can be assumed to be far less than the amplitude of the direct sig-
+                                      I
+                                                                        nal s(n, k). This also means that the power of the left and right
+                                      X                                 channels
+             gL (n, k) · s(n, k) ≈          gLi · si (n, k)      (5)
+                                                                                                      2
+                                      i=1                                               PxL (n, k) ≈ gL (n, k) · Ps (n, k)             (14)
+                                                                                                      2
+into a single source s(n, k) and panning coefficients gL/R (n, k).                      PxR (n, k) ≈ gR (n, k) · Ps (n, k).            (15)
+    Second, the left and right ambient signal can be expected to
+                                                                        is mainly depending on the weighted direct signal power. Rear-
+sound similar but due to different paths and reflections in the room,
+                                                                        ranging and solving equations (14)-(15) with the constraint gL
+                                                                                                                                     2
+                                                                                                                                       +
+they are decorrelated. Hence, the left and right ambient signals
+                                                                        gR = 1, the panning coefficients
+                                                                          2
+
+
+       aL (n) = HAL {a(n)},            aR (n) = HAR {a(n)}                                       s
+                                                                                                          PxL (n, k)
+                                                                                    ĝL (n, k) =                                     (16)
+originate from a single ambient signal a(n) which has been modi-                                   PxL (n, k) + PxR (n, k)
+fied by an abstract filter operation H(·). Combining both assump-
+tions, a simplified time-frequency signal model                                                     s
+                                                                                                              PxR (n, k)
+                                                                                     ĝR (n, k) =                               .      (17)
+        xL (n, k) = gL (n, k) · s(n, k) + HAL {a(n, k)},         (6)                                    PxL (n, k) + PxR (n, k)
+        xR (n, k) = gR (n, k) · s(n, k) + HAR {a(n, k)}          (7)    can be estimated from the power of the left and right stereo chan-
+                                                                        nels. A simple estimate of the power of a sub-band signal x(n, k)
+with a reduced number of unknowns can be obtained.
+     If a STFT would be used for the time-frequency transform, the            Px (n, k) = α · Px (n − 1, k) + (1 − α) · x(n, k)2       (18)
+abstract filter operation in the signal model could be implemented
+as a multiplication of A(n, k) with a frequency response                can be determined by recursive averaging with a coefficient 0 <
+                                                                        α < 1. Other power estimates, in particular with signal adaptive
+          HA (k) = γ(k) · ejφ(k) ,           0 < γ(k) < 1        (8)    coefficients, may be investigated in the future and could for exam-
+                                                                        ple improve processing of transients.
+                                             0 < φ(k) ≤ π                    The "stereophonic law of sines" [13]
+consisting of a band-wise magnitude γ(k) and phase φ(k) coeffi-                           gL − gR    sin(θ)
+                                                                                                  =           = −Ψ                     (19)
+cient. This leads to a signal model                                                       gL + gR   sin(θ0/2)
+     XL (b, k) = gL (b, k) · S(b, k) + HAL (k) · A(b, k)         (9)    describes the perceived angle θ of a source if its amplitude is
+                                                                        weighted by gL/R for playback on a left and right loudspeaker
+     XR (b, k) = gR (b, k) · S(b, k) + HAR (k) · A(b, k)        (10)
+                                                                        with an angle θ0 between both. The normalised position index Ψ,
+in the time-frequency domain. The actual decorrelation filter pa-       ranging from −1 for left and +1 for right positions, combines the
+rameters are usually not known for general music material and are       coefficients gL/R in a single value. From (14)-(15) and (19) one
+difficult to estimate. However, a coarse approximation of a decor-      can derive estimates for the position index and angle
+relation filter response by a random distribution can lead to real-                              p               p
+                                                                                                   Px (n, k) − PxL (n, k)
+istically sounding decorrelated signals [10, 11, 12] and was also                    Ψ̂(n, k) = p R              p                   (20)
+successfully used for ambience extraction in [7]. Furthermore,                                     PxR (n, k) + PxL (n, k)
+the desired correlation of the left and right ambient signal can be                                                        
+nicely adjusted by the phase angle φ where φ = π/2 would yield a                           θ̂ = arcsin sin(θ0/2) · Ψ̂(n, k)            (21)
+broadband correlation of 0 and with φ = π the resulting ambient
+signals are out of phase (correlation is −1).                           based on the power of the left and right stereo channel.
+
+
+
+
+                                                                   DAFX-114
+Proceedings of the 19th International Conference on Digital Audio Effects (DAFx-16), Brno, Czech Republic, September 5–9, 2016
+
+
+2.3. Direct and ambient signal separation
+When the panning coefficients or their estimates from the previous
+section are known, the signal model (12)-(13) can be transformed
+mathematically to get the direct and ambient signal components
+                haR (k) · xL (n, k) − haL (k) · xR (n, k)                                                              (a)
+   ŝ(n, k) =                                                       (22)
+                haR (k) · ĝL (n, k) − haL (k) · ĝR (n, k)
+                                                                                                 0
+
+
+
+                                                                            Magnitude in dB
+              ĝL (n, k) · xR (n, k) − ĝR (n, k) · xL (n, k)
+   â(n, k) =                                                 .     (23)                       −10        F
+                ĝL (n, k) · haR (k) − ĝR (n, k) · haL (k)
+                                                                                               −20        F̃
+For low-resolution filter banks as used in the upmix application the                                      Sum
+random decorrelation filter gains γ(k) from (11) would cause an                                −30
+audible band-wise panning instead of the desired diffuse decorre-
+                                                                                                 0                                          F
+lation. Hence, the decorrelation filters are set to
+
+                                                                                   Phase φ/π
+                                                                                                                                            F̃
+                  haL (k) = 1,           haR (k) = −1               (24)                       −1
+
+and in this case the extraction formula can be further simplified to                           −2
+              xL (n, k) + xR (n, k)                                                                       102                 103         104
+   ŝ(n, k) =                                                       (25)
+              ĝL (n, k) + ĝR (n, k)                                                                               Frequency in Hz
+
+                                                                                                                        (b)
+                ĝL (n, k) · xR (n, k) − ĝR (n, k) · xL (n, k)
+   â(n, k) =                                                   .   (26)
+                             ĝL (n, k) + ĝR (n, k)                       Figure 1: Doubly complementary allpass filter structure (a) with
+As already pointed out in [6], the above equations are very simi-          exemplary magnitude and phase response for a 5th order butter-
+lar to a classical mid-side decomposition performed in sub-bands.          worth lowpass (b).
+The main difference is the weighting with the estimated panning
+coefficients to allow proper separation of ambient and direct com-
+ponents in case the direct signal is not panned to the center.                                3.1.1. Allpass Decomposition
+                                                                           An IIR filter F (z) can be split into a parallel sum
+           3. COMPLEMENTARY FILTERBANK                                                                                          
+                                                                                                  P (z)      1
+                                                                                         F (z) =         =       A1 (z) + A2 (z)                 (29)
+An IIR filter bank as in [8, 14] is used to create a time-frequency                               D(z)       2
+representation of the input signal. It consists of complementary           of two allpass filters A1 (z) and A2 (z) in case the following re-
+filter blocks arranged in a tree structure and additional allpass sec-     quirements are met:
+tions are inserted to achieve an overall allpass reconstruction prop-
+                                                                               1. the order N of F (z) is odd
+erty. The individual bands will not be downsampled, hence the
+reconstruction can be a simple summation of the sub-bands.                     2. P (z) is a mirror symmetric polynomial, P (z −1 ) = z N P (z)
+                                                                               3. F (z) has real coefficients and |F (ejω )| ≤ ∞ (bounded
+3.1. Complementary allpass filter structure                                       real transfer function)
+                                                                           This holds true for typical IIR filter designs like Butterworth, Cheby-
+The basic building block of the filter bank is a filter pair F and F̃      shev and elliptic filters. Furthermore, a complementary filter
+which split an input signal into a lower and higher complementary                                                                 
+band. The two filters are power complementary if their transfer                                     Q(z)      1
+                                                                                         F̃ (z) =         =       A1 (z) − A2 (z)            (30)
+functions satisfy                                                                                  D(z)       2
+                                2                 2                        can be easily obtained by the difference of the allpass filters as
+                     F (ejω )       + F̃ (ejω )       =1            (27)   depicted in Fig. 1. The summed transfer function of a comple-
+and if the sum of the transfer functions additionally yields an all-       mentary filter stage formed by (29) and (30)
+pass magnitude response                                                                                  H(z) = F (z) + F̃ (z) = A1 (z)          (31)
+                           jω             jω
+                       F (e ) + F̃ (e ) = 1                         (28)   has the required allpass characteristic. This means that perfect
+                                                                           magnitude reconstruction is possible but the phase shift and group
+they are doubly complementary [15]. Therefore, by summation of             delay of A1 (z) will remain in the reconstructed signal.
+both filter outputs it is possible to recover the input signal except            The respective order of the allpass sections is N1 = (N −1)/2
+for a certain phase shift.                                                 and N2 = (N + 1)/2 where N1 + N2 = N . Table 1 gives
+     The pair of filters could be directly designed with standard          an overview of the required instructions per sample for a comple-
+methods allowing for above constraints. However, by decompos-              mentary allpass filter structure compared to a direct form imple-
+ing a single filter prototype F in two parallel allpass sections it is     mentation with two separate filters. It can be seen that the comple-
+possible to obtain a second complementary output with just one             mentary filter created with the allpass decomposition requires only
+further subtraction. The detailed derivation can be found in [16]          little more than half of the instructions as a direct-form implemen-
+and will be shortly summarised in the following sections.                  tation with two filters.
+
+
+
+
+                                                                      DAFX-115
+Proceedings of the 19th International Conference on Digital Audio Effects (DAFx-16), Brno, Czech Republic, September 5–9, 2016
+
+
+                                 Mult.         Add.    Overall
+    Compl. Allpass struct.      N +2          2N + 2   3N + 4
+    2x Direct-Form filters     3N + 1          4N      7N + 1
+
+Table 1: Number of multiplications, additions and overall opera-                            (a) M = 3 filters, 4 output bands
+tions for a single complementary filter stage per sample.
+
+
+
+
+                                                                                            (b) M = 5 filters, 6 output bands
+
+                                                                        Figure 3: Two exemplary filter bank structures consisting of 3 and
+                                                                        5 complementary filters.
+
+
+                                                                        3.2. Filter bank tree structure
+                                                                        In the following, Hk (z) = Yk (z)/X(z) will denote the transfer
+Figure 2: Alternating selection of poles in the z-plane to create an    function of a filter bank channel k. Overall M complementary
+allpass decomposition.                                                  filters Fm (z)/F̃m (z) are used and Am,1 (z) and Am,2 (z) are the
+                                                                        corresponding allpass decompositions.
+                                                                             The complementary filter stages are cascaded in a tree struc-
+    3.1.2. Filter design                                                ture to successively divide the bands and to create M + 1 outputs.
+                                                                        An exemplary filter bank with 4 outputs and 3 complementary fil-
+The general form of the two allpass filters                             ters is shown in Fig. 3 a). The additional allpass sections A3,1 (z)
+                                                                        and A1,1 (z) are required to guarantee an overall allpass transfer
+                                 N1
+                                 Y        z −1 − pk                     function after summing the sub-band outputs for reconstruction.
+                A1 (z)     =                                            For example, when summing the individual output transfer func-
+                                         1 − z −1 pk
+                                k=1
+                                                                        tions without the allpass sections it appears that
+                                 N
+                                 Y        z −1 − pk
+                A2 (z)     =                                     (32)   H(z) = H0 (z) + H1 (z) + H2 (z) + H3 (z)
+                                         1 − z −1 pk
+                               k=N1 +1                                                                                             
+                                                                             = F2 (z) · F1 (z) + F̃1 (z) + F̃2 (z) · F3 (z) + F̃3 (z)
+is fully defined by the knowledge of the poles pk , as the zeros
+zk = 1/pk are the inverse of the poles. From (29) and (30) it is                = F2 (z) · A1,1 (z) + F̃2 (z) · A3,1 (z),
+apparent that F (z) or F̃ (z) feature the same poles as the sum or
+difference of A1 (z) and A2 (z). Hence, the poles of the allpass        is not an allpass. However, by adding additional allpass sections
+filters are just subgroups of the poles already contained in F (z).     after F2 /F̃2 the overall transfer function
+     An algorithm to derive a suitable grouping of the poles from
+a filter transfer function F (z) is described in [16] where first the    H(z) = F2 (z) · A3,1 (z) · A1,1 (z) + F̃2 (z) · A1,1 (z) · A3,1 (z)
+polynomial Q(z) is determined and then the zeros of P (z) + Q(z)              = A2,1 (z) · A1,1 (z) · A3,1 (z)
+are calculated. The zeros outside the unit circle will form the first
+allpass A1 (z) and the zeros inside the unit circle will form the       becomes allpass. Another exemplary filter bank structure to yield
+second allpass A2 (z). The algorithm to calculate Q(z) is recur-        six doubly complementary bands is given in Fig. 3 b). If a recon-
+sive and requires several polynomial multiplications which may          struction is not required in the desired application and the filter
+become numerically unstable for high order filters. In particular       bank is only used for signal analysis, the additional allpass sec-
+Butterworth designs lead to very small valued coefficient sets and      tions can be omitted without altering the power of the sub-band
+it may become difficult to find a stable decomposition for filter       signals.
+orders above 5.                                                              More details about the general setup of tree-structured recur-
+     A more simple graphical allpass decomposition is given in          sive filter banks and in particular about the placement of the ad-
+[17] which directly makes use of the poles typically derived in the     ditional allpass sections to yield allpass reconstruction properties
+IIR design procedure and hence is less prone to numerical errors.       can be found in [14]. In a summary, the basic rules are:
+The poles of Butterworth, Chebyshev and elliptic lowpass filters
+are placed on an ellipsoid curve inside the unit circle. An alter-            • The overall transfer function for a bank of M filters is
+nating separation as depicted in Fig. 2 yields two groups of poles,                                  M                M
+whereas the smaller group with (N − 1)/2 poles is assigned to
+                                                                                                     X                Y
+                                                                                           H(z) =          Hk (z) =         Am,1 (z).      (33)
+A1 (z) and the remaining (N + 1)/2 poles are assigned to A2 (z).                                     k=0              m=1
+
+
+
+
+                                                                   DAFX-116
+Proceedings of the 19th International Conference on Digital Audio Effects (DAFx-16), Brno, Czech Republic, September 5–9, 2016
+
+
+                                            Mult.           Add.            Overall
+                      Compl. filters        N +2           2N + 2        M · (3 N + 4)
+                      Add. allpass             N1           2 N1           MA · 3 N1
+
+Table 2: Number of multiplications, additions and overall opera-
+tions per sample for a filter bank with M filters of order N . MA
+denotes the required number of allpass sections for perfect magni-
+tude reconstruction.
+
+                                        FB (M = 3, N = 3)              FB (M = 5, N = 5)
+                                        FB (M = 7, N = 5)              FFT (NF = 2048)
+
+
+                            800
+
+
+
+
+    Instructions / sample
+                            600                                                                                 Figure 5: Stereo to 5 channel upmix.
+                            400
+
+                            200
+                                                                                                                M     MA     N     Frequencies [Hz]
+                                                                                                      FB I      3      2      3    220, 1000, 4000
+                               0
+                                   2       3           4           5            6      7              FB II     5      6      3    220, 500, 1000, 2000, 5000
+                                               Number of synthesis channels C
+                                                                                                      FB III    5      6      5    220, 500, 1000, 2000, 5000
+Figure 4: Arithmetic complexity for filter banks with 2 analysis and                                  STFT      NF = 2048, NH = 512
+C synthesis channels compared to an STFT analysis/synthesis.
+                                                                                                               Table 3: Chosen filter bank parameters.
+
+                            Hence, the overall group delay only depends on the Am,1 (z)
+                            sections and can be minimised by always applying the lower          sub-sampled filter banks, an equal complexity synthesis step is re-
+                            number of poles to Am,1 (z) during the allpass decomposi-           quired and the complexity increases linearly with the number of
+                            tion.                                                               synthesis channels. It can be seen that a filter bank may be in par-
+                                                                                                ticular advantageous if the application only requires a few bands
+       • It has to be assured that every sub-band signal passes all                             with low filter orders but arbitrary frequency resolution and if more
+         possible allpass sections (Am,1 (z), m = [1 . . . M ]) on its                          output than input channels are to be generated.
+         way through the filter bank. Missing allpass sections have
+         to be inserted into the signal path.
+                                                                                                                    4. UPMIX APPLICATION
+       • The required number of additional allpass sections can be
+         minimised with a simple rule: At every branch we have to                               The estimated direct signal source positions and the separated di-
+         add the corresponding allpass sections of all filters in the                           rect and ambient signals can be used to create a stereo to surround
+         opposite branch.                                                                       upmix following a signal flow as depicted in Fig. 5. The direct
+                                                                                                signal is repanned on the front loudspeakers, for example by us-
+3.3. Arithmetic complexity                                                                      ing Vector Base Amplitude Panning (VBAP) [18], while the am-
+                                                                                                bient signals are added to the corner loudspeakers. To decorrelate
+The arithmetic complexity in terms of required multiplications and                              the front from the rear ambient signals, a short delay is included
+additions for a filter bank with M filters of order N is given in                               but it would also be possible to apply more advanced time-domain
+Table 2. It can be seen that the complexity linearly increases with                             decorrelators as described in [19].
+the number of bands and filter order.
+     The STFT is the standard transform for analysis/synthesis sys-                             4.1. Filter bank configuration
+tems and the question is how it would compare to a filter bank
+based approach in terms of arithmetic complexity. The number                                    Several combinations of filter order as well as corner frequencies
+of operations to transform a block of length NF with a standard                                 and number of bands were tested and the corresponding parame-
+Cooley-Tukey FFT (radix-2) can be estimated to be in the range                                  ters are given in Table 3. The magnitude response for configura-
+of ∼ 5 log(NF ) NF . With a typical overlap of 75 % and real                                    tion FB II is depicted in Fig. 6 a) and the group delay for all given
+valued time-domain signals this yields ∼ 10 log(NF ) instructions                               configurations is plotted in Fig. 6 b). The coefficient α for the re-
+per sample and transform.                                                                       cursive power estimation per sub-band was set to α = 5 · 10−4 in
+     Figure 4 compares several recursive filter banks and a STFT                                the following experiments.
+variant with a block size of NF = 2048 samples. The complex-                                         It turned out, that the positions estimated from the lowest and
+ity of the filter bank analysis/synthesis system is mainly indepen-                             highest band of the filter bank are not reliable as there is too much
+dent of the number of output channels as the synthesis is a simple                              overlap of individual sources in these frequency regions. There-
+summation of all sub-bands. In contrast for the STFT, as well as                                fore, in the following only filter bank outputs 1 up to M − 1 will
+
+
+
+
+                                                                                           DAFX-117
+Proceedings of the 19th International Conference on Digital Audio Effects (DAFx-16), Brno, Czech Republic, September 5–9, 2016
+
+
+                                     0                                                                            0.5                           Γ = −60 dB       Γ = −20 dB
+
+
+
+
+   Magnitude in dB
+                                                                                                                                                Γ = −10 dB       Γ = −3 dB
+
+
+
+                                                                                               mean/std (∆Ψi )
+                                −10
+
+                                −20                                                                                 0
+
+                                −30
+                                                                                                                 −0.5
+                                          102                103             104
+                                                                                                                        −1        −0.5           0            0.5          1
+                                          (a) Magnitude response of FB II
+                                                                                                                                                Ψi
+
+                                 4                                          FB I                                                  (a) Filter bank FB II
+
+
+
+            Group delay in ms
+                                                                            FB II
+                                                                            FB III                                0.5                            FB I     FB II FB III   STFT
+                                 2
+
+
+
+
+                                                                                               mean/std (∆Ψi )
+                                 0                                                                                  0
+                                         102                103             104
+                                                     Frequency in Hz
+
+                                                 (b) Group delay                                                 −0.5
+                                                                                                                        −1        −0.5           0            0.5          1
+Figure 6: Magnitude response and group delay for several filter
+                                                                                                                                                Ψi
+bank configurations.
+                                                                                                                 (b) Comparison of filter banks and STFT at Γ = −10 dB
+
+
+be processed by the upmix and channel 0 and M will be directly                              Figure 7: Mean and standard deviation of ∆Ψi for various con-
+fed to the front left and right loudspeakers. In the end, this cor-                         figurations.
+responds to a band-limiting of the extracted ambient and center
+channels.
+                                                                                            position estimation the mean error for strongly panned sources is
+                                                                                            higher, however, the standard deviation is considerably lower for
+4.2. Evaluation of estimated positions
+                                                                                            all source positions.
+It was assumed in Sec. 2.2 that a low power ambient signal will not
+influence the estimation of the panning coefficients. However, the                          4.3. Ambient signal quality
+question is how the accuracy of the panning estimation is impaired
+if the ambient signal power is increased. To further investigate                            Although the extracted ambient signals sound realistic they are too
+this, a single direct signal has been panned to various positions Ψi                        different from the real signals which were added in the mixing
+and ambience was added with a Large Hall impulse response from                              process and a direct comparison, e.g. by error energy, is usually
+a Bricasti M7 stereo reverb unit. The ambient to direct power ratio                         not significant. Therefore, only signal characteristics can be com-
+(ADR)                                                                                       pared and it is well known that ambient signals should be diffuse
+                                                                                            and decorrelated to create an immersive sound field. The diffuse-
+                                                
+                                    P AL + P AR
+                   Γ = 10 log10                                 (34)                        ness and uniformity of an ambient signal can be measured by inter-
+                                         PS
+                                                                                            channel cross-correlation (ICC) and inter-channel level differences
+describes the ratio between the overall ambient and direct signal
+                                                                                            (ICLD), whereas for real ambient signals both are observed to be
+power where
+                                                                                            close to zero. With a high-resolution frequency-domain imple-
+                              X                                                             mentation it is possible to apply versatile decorrelation filters with
+                        Px =       x(n)2
+                                                                                            little effort as described in detail in [7]. With a low-resolution filter
+                                                        n
+                                                                                            bank this is not feasible and with the simple filters as in (24) the
+denotes power of a signal x(n). The resulting mean and standard                             left and right ambient signals are just phase-inverse copies of each
+deviation of the position error                                                             other. Hence, the ICC is −1 and the ICLD is 0. Listening to the
+                                                                                            isolated ambient sound field, the out of phase character creates an
+                                          ∆Ψi (n, k) = Ψ̂i (n, k) − Ψi               (35)   impression of width but it can also evoke unpleasant cancellation
+                                                                                            artefacts in particular during head movements. This is the main
+is plotted for several ADR values in Fig. 7 a) and it can be seen that                      difference to the frequency-domain implementation [7] where the
+stronger ambient components directly lead to a higher error. As the                         resulting ICC was freely adjustable.
+ambient signal has near equal power in the left and right channel
+the estimated positions will be biased towards the center and the                           4.4. Arithmetic complexity
+error further increases for strongly panned sources. In Fig. 7 b)
+the error for Γ = −10 dB is compared between the different fil-                             A detailed analysis of the arithmetic complexity of the frequency-
+ter bank configurations from Table 3 and also to the STFT based                             domain upmix algorithm was done in [7] and the numbers in Ta-
+method from [6]. It is apparent that the error is relatively indepen-                       ble 4 a) are based on these findings. However, for a fair compari-
+dent of the filter bank configuration. Compared to the STFT based                           son with the simplified time-domain approach, the ambient decor-
+
+
+
+
+                                                                                       DAFX-118
+Proceedings of the 19th International Conference on Digital Audio Effects (DAFx-16), Brno, Czech Republic, September 5–9, 2016
+
+
+relation filters in the frequency-domain were set to HAL (k) = 1         based DSPs where no block-based processing is possible or FFT
+and HAR (k) = −1 according to (24) and no further decorrelation          implementations are not available.
+between front and rear channels is applied. This partly reduces the
+arithmetic complexity of the direct and ambient decomposition.                                  5. CONCLUSION
+     A corresponding analysis of the arithmetic complexity of the
+filter bank based upmix algorithm is given in Table 4 b). As ex-         The goal of this study was to develop a low-complexity time-
+pected, the base cost for analysis and synthesis is drastically re-      domain upmix algorithm. First, an equivalent time-domain for-
+duced for typical filter bank configurations. In contrast, the num-      mulation to a previously described frequency-domain method for
+ber of operations required for the upmix processing has increased        estimation of source positions and separation of direct and ambient
+as all sub-bands are processed at full rate. Processing an upmix         signal components has been derived. A filter bank is then used to
+from stereo to 5-channel surround in the frequency-domain re-            create a time-frequency representation of the input signal and its
+quires about 38 MFlops, whereas the corresponding time-domain            design based on complementary IIR filters is described.
+variant with a low-resolution filter bank is in a range between 8             The arithmetic complexity of the filter bank and the filter bank-
+and 20 MFlops. This could be further reduced by a lowered up-            based upmix is compared to a STFT based approach. The time-
+date rate of the estimated positions and repanning coefficients but      domain variant is less flexible in its possible configurations but
+was out of the scope of this study due to the large amount of pos-       achieves an audio quality comparable to the frequency-domain ap-
+sible solutions and parameters.                                          proach at a fraction of computational cost. This makes it in par-
+     It has to be noted that highly optimised FFT implementations        ticular well suited for low-cost and sample-by-sample DSP im-
+(e.g. the FFTW library1 ) are widely available and can easily re-        plementations where no highly optimised FFT implementation is
+duce the processing time for a transform by a factor of three up to      available or for low-delay applications.
+five. Of course, similar optimization strategies like code vectori-           Sound examples of both the frequency-domain and time-domain
+sation could be applied to the filter bank. But as no ready to run       approach can be found on the website of the department2 .
+solutions are available this would require a comparably high effort
+and programming expertise.                                                                      6. REFERENCES
+
+4.5. Discussion                                                           [1] Carlos Avendano and Jean-Marc Jot, “A frequency-domain
+                                                                              approach to multichannel upmix,” Journal of the Audio En-
+Informal listening tests confirm that the generated 5-channel sur-            gineering Society, vol. 52, no. 7, pp. 740–749, 2004.
+round upmix is convincing and works well with typical commer-             [2] Christof Faller, “Multiple-loudspeaker playback of stereo
+cial studio music recordings. Compared to the stereo input, the               signals,” Journal of the Audio Engineering Society, vol. 54,
+source positions are well retained and no timbral coloration or               no. 11, pp. 1051–1064, 2006.
+other artefacts are audible. The center loudspeaker successfully
+stabilises the front image, in particular for listeners outside of the    [3] John Usher and Jacob Benesty, “Enhancement of Spatial
+sweet spot and the out of phase artefacts observed with the isolated          Sound Quality: A New Reverberation-Extraction Audio Up-
+ambient signal are masked by the usually quite strong direct signal           mixer,” IEEE Transactions on Audio, Speech and Language
+and are not annoying. However, in a direct A/B comparison with                Processing, vol. 15, no. 7, pp. 2141–2150, sep 2007.
+the STFT based frequency-domain upmix it is possible to spot sub-         [4] Jianjun He, Ee-Leng Tan, and Woon-Seng Gan, “Linear Esti-
+tle differences. The ambient signal is weaker and does not create a           mation Based Primary-Ambient Extraction for Stereo Audio
+sound field as diffuse as experienced from the STFT approach.                 Signals,” IEEE/ACM Transactions on Audio, Speech, and
+     First tests with discrete stereo microphone recordings showed            Language Processing, vol. 22, no. 2, pp. 505–517, feb 2014.
+good results for coincident microphone arrangements. In contrast,         [5] Roger Dressler, “Dolby Surround Pro Logic II decoder prin-
+with non-conincident microphone setups a proper estimation of                 ciples of operation,” Dolby White paper, 2000.
+directions and a separation of direct and ambient components is
+                                                                          [6] Sebastian Kraft and Udo Zölzer, “Stereo signal separation
+not possible at the same quality. The reason is that phase shifts are
+                                                                              and upmixing by mid-side decomposition in the frequency-
+introduced in the direct signals between both channels violating
+                                                                              domain,” in Proc. of the 18th Int. Conference on Digital
+the basic signal model assumptions in Sec. 2.1.
+                                                                              Audio Effects, 2015.
+     Overall, the time-domain implementation upmix offers obvi-
+ous benefits compared to a simple stereo playback even with the           [7] Sebastian Kraft and Udo Zölzer, “Low-complexity stereo
+lowest resolution filter bank FB I. The actual configuration of the           signal decomposition and source separation for application
+filter bank does not seem to have a strong influence on the results.          in stereo to 3D upmixing,” in Proc. of the 140th AES Con-
+More important seems the fact that low and high frequency con-                vention, 2016.
+tent is separated by the filter bank and will not interfere with the      [8] Alexis Favrot and Christof Faller, “Complementary N-band
+estimation in the important mid frequency regions.                            IIR filterbank based on 2-band complementary filters,” in
+     Another interesting aspect is the filter bank group delay of less        Proc. of the Intl. Workshop on Acoustic Echo and Noise Con-
+than 5 ms which is quite low compared to the blocking delay of a              trol (IWAENC), 2010.
+STFT based analysis and synthesis. A STFT configuration with a            [9] Alexander Jourjine, Scott Rickard, and Özgür Yilmaz,
+block size NF = 2048 at 44.1 kHz sample rate would yield about                “Blind separation of disjoint orthogonal signals: demixing
+46 ms delay. Therefore, the time-domain upmix is well suited for              N sources from 2 mixtures,” in Proc. of the IEEE Int. Con-
+real-time applications and implementations on low-cost stream-                ference on Acoustics, Speech and Signal Processing, 2000.
+   1 http://www.fftw.org/                                                   2 http://ant.hsu-hh.de/upmix
+
+
+
+
+                                                                    DAFX-119
+Proceedings of the 19th International Conference on Digital Audio Effects (DAFx-16), Brno, Czech Republic, September 5–9, 2016
+
+
+                                                                 a) Frequency Domain
+
+                                                                  Operations per block
+                                                         ADD                 MULT                   SQRT                     Overall (2 → C)
+      STFT                                                                                                                 2 · 5 log2 (NF ) · NF
+      Inv. STFT                                                                                                            C · 5 log2 (NF ) · NF
+      Pos. Estimation                                   5 · NF               7 · NF                 3 · NF                       15 · NF
+      Dir./Amb. Separation                              5 · NF               8 · NF                                              13 · NF
+      Repanning                                    (2 C1 + 4) · NF       (2 C1 + 9) · NF            2 · NF                  (4 C1 + 15) · NF
+
+      Overall per block
+                                                                                                                                    
+                                                                                         C · 5 log2 (NF ) + 4 C1 + 10 log2 (NF ) + 43 · NF
+
+      Overall per sample
+                                                                                                                                        
+                                                                                             C · 5 log2 (NF ) + 4 C1 + 10 log2 (NF ) + 43 · 2
+          - Sample rate 44.1 kHz, NF = 2048                                                         13.5 MFlops + C · 4.85 + C1 · 0.35 MFlops
+                                                                                                                                     
+
+          - Transforms + Upmix                                                                (C + 2) · 4.85 MFlops + 3.8 + C1 · 0.35 MFlops
+                                                                                                                                   
+
+          - C = 5, C1 = 3                                                                                                  34.0 MFlops + 4.85 MFlops
+
+                                                                   b) Time Domain
+
+                                                  Operations per sample and band
+                                                  ADD          MULT        SQRT                         Overall (2 → C)
+                        Filterbank
+                                                                                                                                     
+                                                                                             2 · M · (3 N + 4) + MA · 3 N1
+                        Power estimation            2             6                                          8 · (M − 1)
+                        Synthesis                   C                                                        C · (M − 1)
+                        Pos. Estimation             3             3          3                               9 · (M − 1)
+                        Dir./Amb. Separation        3             4                                          7 · (M − 1)
+                        Repanning               (C1 + 4)     (C1 + 9)        2                       (2 C1 + 15) · (M − 1)
+
+                        Overall at sample rate 44.1 kHz, C = 5, C1 = 3
+                            - FB I + Upmix                                                                   5.1 MFlops + 3.3 MFlops
+                            - FB II + Upmix                                                                  9.6 MFlops + 6.5 MFlops
+                            - FB III + Upmix                                                               13.8 MFlops + 6.5 MFlops
+
+Table 4: Required operations for an upmix from 2 to C channels where direct signal repanning is limited to a subset of C1 loudspeakers
+(e.g. front loudspeakers only).
+
+
+[10] Gary S. Kendall, “The Decorrelation of Audio Signals and                            IEEE International Conference on Acoustics, Speech and
+     Its Impact on Spatial Imagery,” Computer Music Journal,                             Signal Processing, 1985.
+     vol. 19, no. 4, pp. 71–87, 1995.                                            [16] Palghat P. Vaidyanathan, Sanjit K. Mitra, and Yrjö Neuvo,
+[11] Tapani Pihlajamäki, Olli Santala, and Ville Pulkki, “Synthe-                     “A new approach to the realization of low-sensitivity IIR dig-
+     sis of spatially extended virtual sources with time-frequency                    ital filters,” IEEE Transactions on Acoustics, Speech, and
+     decomposition of mono signals,” Journal of the Audio Engi-                       Signal Processing, vol. 34, no. 2, pp. 350–361, 1986.
+     neering Society, vol. 62, no. 7-8, pp. 467–484, 2014.                       [17] Lajos Gazsi, “Explicit formulas for lattice wave digital fil-
+[12] Marco Fink, Sebastian Kraft, and Udo Zölzer, “Downmix-                           ters,” IEEE Transactions on Circuits and Systems, vol. 32,
+     compatibe conversion from mono to stereo in time- and                            no. 1, pp. 68–88, 1985.
+     frequency-domain,” in Proc. of the 18th Int. Conference on                  [18] Ville Pulkki, “Virtual sound source positioning using vector
+     Digital Audio Effects, 2015.                                                     base amplitude panning,” Journal of the Audio Engineering
+[13] Benjamin B. Bauer, “Phasor analysis of some stereophonic                         Society, vol. 45, no. 6, pp. 456–466, 1997.
+     phenomena,” IRE Transactions on Audio, vol. 10, no. 1, pp.
+                                                                                 [19] Franz Zotter, Matthias Frank, Georgios Marentakis, and
+     143–146, 1962.
+                                                                                      Alois Sontacchi, “Phantom source widening with determin-
+[14] Alexis Favrot and Christof Faller, “Designing sets of N dou-                     istic frequency dependent time delays,” in Proc. of the 14th
+     bly complementary IIR filter,” in Proc. of the 130th AES                         Int. Conference on Digital Audio Effects, 2011.
+     Convention, 2011.
+[15] Sanjit K. Mitra, Yrjö Neuvo, and Palghat P. Vaidyanathan,
+     “Complementary IIR digital filter banks,” in Proc. of the
+
+
+
+
+                                                                         DAFX-120
+

@@ -1,5 +1,5 @@
 /*
- * A CarPlay feature module (route guidance, cover art, screen, ...).
+ * A CarPlay feature module (route guidance, cover art, altScreen, ...).
  * Lifecycle owned by CarPlayApp: start() on CarPlay-connect, stop() on disconnect.
  *
  * Copyright (c) 2026 LuKa (@LuKa_dev)

@@ -1,0 +1,147 @@
+# Commented out since mounting is done by usblauncher
+# [/dev/umass/umass*]
+#Callout	= PATH_MEDIA_PROCMGR
+#Argument	= /proc/mount
+#Priority	= 11,10
+#Start Rule	= MOUNT
+#Stop Rule	= UNMOUNT
+
+[/dev/sda*]
+Callout		= PATH_MEDIA_PROCMGR
+Argument	= /proc/mount
+Priority	= 11,3
+Start Rule	= MOUNT
+Stop Rule	= UNMOUNT
+
+[/dev/sdb*]
+Callout		= PATH_MEDIA_PROCMGR
+Argument	= /proc/mount
+Priority	= 11,3
+Start Rule	= MOUNT
+Stop Rule	= UNMOUNT
+
+[/fs/online]
+Callout		= PATH_MEDIA_PROCMGR
+Argument	= /proc/mount
+Priority	= 11,3
+Start Rule	= INSERTED
+Stop Rule	= EJECTED
+
+[MOUNT]
+Callout		= MOUNT_FSYS
+Argument	= /etc/mcd.mnt
+
+[UNMOUNT]
+Callout		= UNMOUNT_FSYS
+
+
+# Assumption is that /fs/cd* is already mounted
+#[/dev/cd*]
+#Callout		= CD_MEDIA_IOBLK
+#Argument	= 1000,2000
+#Priority	= 11,9
+#Start Rule	= INSERTED
+#Stop Rule	= EJECTED
+
+# If mcd is used to mount/unmount /fs/cd*, the previous description should be
+# commented out and the following two descriptions uncommented.
+[/dev/cd*]
+Callout		= CD_MEDIA_IOBLK
+Argument	= 250,500
+Priority	= 11,3
+Start Rule  = MOUNT
+Stop Rule   = UNMOUNT
+
+[/fs/cd*]
+Callout		= PATH_MEDIA_PROCMGR
+Argument	= /proc/mount
+Priority	= 11,3
+Start Rule	= AUTORUN
+Stop Rule	= EJECTED
+
+[/fs/usb*]
+Callout		= PATH_MEDIA_PROCMGR
+Argument	= /proc/mount
+Priority	= 11,3
+Start Rule	= AUTORUN
+Stop Rule	= EJECTED
+
+[/fs/ipod*]
+Callout		= PATH_MEDIA_PROCMGR
+Argument	= /proc/mount
+Priority	= 11,3
+Start Rule	= INSERTED
+Stop Rule	= EJECTED
+
+[/fs/pfs*]
+Callout		= PATH_MEDIA_PROCMGR
+Argument	= /proc/mount
+Priority	= 11,3
+Start Rule	= INSERTED
+Stop Rule	= EJECTED
+
+[/fs/sda0]
+Callout = PATH_MEDIA_PROCMGR
+Argument	= /proc/mount
+Priority	= 11,3
+Start Rule	= AUTORUN
+Stop Rule = EJECTED
+
+[/fs/sdb0]
+Callout = PATH_MEDIA_PROCMGR
+Argument	= /proc/mount
+Priority	= 11,3
+Start Rule	= AUTORUN
+Stop Rule = EJECTED
+
+[/fs/upnp*]
+Callout		= PATH_MEDIA_PROCMGR
+Argument	= /proc/mount
+Priority	= 11,3
+Start Rule	= INSERTED
+Stop Rule	= EJECTED
+
+[/mnt/media]
+Callout		= PATH_MEDIA_PROCMGR
+Argument	= /proc/mount
+Priority	= 11,3
+Start Rule	= INSERTED
+Stop Rule	= EJECTED
+
+[/dev/ipod*]
+Callout         = PATH_MEDIA_PROCMGR
+Argument        = /proc/mount
+Priority        = 11,3
+Start Rule      = INSERTED
+Stop Rule       = EJECTED
+
+[AUTORUN]
+Callout     = FNAME_MATCH
+Argument    = /autorun
+Match Rule  = INSERTED
+Fail Rule   = SW_UPDATE
+
+[SW_UPDATE]
+Callout     = FNAME_MATCH
+Argument    = /metainfo2.txt,/metainfo2.iso
+Match Rule  = INSERTED
+Fail Rule   = CHALLENGE
+
+[CHALLENGE]
+Callout     = FNAME_MATCH
+Argument    = /mib_mmx_ultimate_challenge.txt
+Match Rule  = INSERTED
+Fail Rule   = NAVDB
+
+[NAVDB]
+Callout     = FNAME_MATCH
+Argument    = /dbinfo.txt,/db/DBInfo.txt
+Match Rule  = INSERTED
+Fail Rule   = INSERTED
+
+[INSERTED]
+
+[EJECTED]
+
+[AVAILABLE]
+

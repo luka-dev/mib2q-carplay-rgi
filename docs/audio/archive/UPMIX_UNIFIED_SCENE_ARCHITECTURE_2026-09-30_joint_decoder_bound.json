@@ -1,0 +1,1489 @@
+{
+  "complete": true,
+  "checkpoint_sha256": "4eacc7d14c91856d92434c2c11eff210324fb401b93fa766fc5ab17850e2c672",
+  "script_sha256": "8c1351a02f9509f36c68e1f31f70589fc09419eb6263d7740ea3bc96f06580ac",
+  "fixture_manifest_sha256": "95edc076b2bf10fb0019b440da147d64046dcea16128bb038f4022c6b72bbc99",
+  "prepared_sha256": "1e53fc80c14e6484b1bf36f2fc339232b6cc0aea6abd6b6a68160e513dcc8fdc",
+  "weights_squared_spectral": [
+    1.0,
+    0.163317112854118,
+    0.0650244236873562,
+    0.120659814201899
+  ],
+  "scope": "four exact TRAIN8s crops; saved four-source decoder, one shared bounded16-feature vector per band/frame; privileged targets; no weights trained or DEV accessed",
+  "projection": "source-normalized weighted squared spectral proxy, not training L1/multires loss;64 exact-coordinate cycles starting at saved tanh features; total band error nonincreasing, individual source can trade off",
+  "limits": "Feasible outputs do not prove a causal encoder can infer features. Finite optimization is not a certified optimum/upper quality ceiling. No rear, holdout, int8, device or ears proof.",
+  "quality": {
+    "saved_encoder": {
+      "eligible": {
+        "sdr_db": [
+          8.454290390014648,
+          11.42943000793457,
+          2.9895076751708984,
+          5.007209777832031
+        ],
+        "waveform_nse": [
+          0.12513298629436914,
+          0.07016618443225807,
+          0.32184546611608883,
+          0.2382972326963694
+        ],
+        "spectral_nse": 0.2261817354980651
+      },
+      "vocal": {
+        "sdr_db": [
+          6.798681259155273,
+          11.972782135009766,
+          9.574663162231445,
+          6.341219902038574
+        ],
+        "waveform_nse": [
+          0.17500125380078846,
+          0.0629594348700768,
+          0.0998369389193872,
+          0.18846979808763512
+        ],
+        "spectral_nse": 0.1771847363253319
+      },
+      "drums": {
+        "sdr_db": [
+          8.695618629455566,
+          12.542535781860352,
+          11.598037719726562,
+          7.458291053771973
+        ],
+        "waveform_nse": [
+          0.11907850472572046,
+          0.05310037593179442,
+          0.06510861257735417,
+          0.15221161660983212
+        ],
+        "spectral_nse": 0.13752250782841782
+      },
+      "bass": {
+        "sdr_db": [
+          6.019890785217285,
+          null,
+          5.378313064575195,
+          5.320700645446777
+        ],
+        "waveform_nse": [
+          0.2000356916365515,
+          null,
+          0.22946008796626208,
+          0.22980627102721848
+        ],
+        "spectral_nse": 0.26188932593094566
+      }
+    },
+    "privileged_joint_bounded": {
+      "eligible": {
+        "sdr_db": [
+          15.902448654174805,
+          20.302806854248047,
+          11.93552017211914,
+          13.84503173828125
+        ],
+        "waveform_nse": [
+          0.026917361068516932,
+          0.009765768041859753,
+          0.06298739169605133,
+          0.04124927874472458
+        ],
+        "spectral_nse": 0.06039059999625677
+      },
+      "vocal": {
+        "sdr_db": [
+          10.873796463012695,
+          15.06322193145752,
+          12.002214431762695,
+          10.166629791259766
+        ],
+        "waveform_nse": [
+          0.07607851723498889,
+          0.031791347947119554,
+          0.06032346257436902,
+          0.09035118033818126
+        ],
+        "spectral_nse": 0.10102068515064384
+      },
+      "drums": {
+        "sdr_db": [
+          11.549664497375488,
+          13.628629684448242,
+          15.3187894821167,
+          11.778142929077148
+        ],
+        "waveform_nse": [
+          0.06610740190211258,
+          0.04190314654017879,
+          0.028733109033163198,
+          0.06356704856372346
+        ],
+        "spectral_nse": 0.07770616110122869
+      },
+      "bass": {
+        "sdr_db": [
+          11.244003295898438,
+          null,
+          10.70135498046875,
+          11.758715629577637
+        ],
+        "waveform_nse": [
+          0.0716741929654097,
+          null,
+          0.08032067554125602,
+          0.06488825302326186
+        ],
+        "spectral_nse": 0.10582286094105624
+      }
+    }
+  },
+  "bands": [
+    {
+      "index": 0,
+      "lo_bin": 0,
+      "hi_bin": 4,
+      "affine_mapping_nse": 2.4126488522685836e-14,
+      "saved_weighted_nse": 0.21407536097764068,
+      "bounded_weighted_nse": 0.03269180447293173,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.9548718846718022,
+          "bounded_nse": 0.12422652437834249
+        },
+        "vocal": {
+          "saved_nse": 1.0428754144712808,
+          "bounded_nse": 5.297013039965269
+        },
+        "drums": {
+          "saved_nse": 0.1375814444520455,
+          "bounded_nse": 0.03136599583453462
+        },
+        "bass": {
+          "saved_nse": 0.23862621286178606,
+          "bounded_nse": 0.02753647790108701
+        }
+      },
+      "projected_coordinate_step_max": 0.01631509270999909,
+      "projected_coordinate_step_p95": 0.0026486040283039713
+    },
+    {
+      "index": 1,
+      "lo_bin": 4,
+      "hi_bin": 8,
+      "affine_mapping_nse": 2.163329749629938e-14,
+      "saved_weighted_nse": 0.375885523778431,
+      "bounded_weighted_nse": 0.11799551089502144,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.6576889598738874,
+          "bounded_nse": 0.1400624273666604
+        },
+        "vocal": {
+          "saved_nse": 0.8569431446902204,
+          "bounded_nse": 0.332842451667297
+        },
+        "drums": {
+          "saved_nse": 0.11592237316431235,
+          "bounded_nse": 0.07566714858210905
+        },
+        "bass": {
+          "saved_nse": 0.23259211835302704,
+          "bounded_nse": 0.11154234633415874
+        }
+      },
+      "projected_coordinate_step_max": 0.03244610504305534,
+      "projected_coordinate_step_p95": 0.0021326014385191906
+    },
+    {
+      "index": 2,
+      "lo_bin": 8,
+      "hi_bin": 12,
+      "affine_mapping_nse": 9.624939643152842e-15,
+      "saved_weighted_nse": 0.2208176670630805,
+      "bounded_weighted_nse": 0.08263027770443272,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.20483671260071934,
+          "bounded_nse": 0.05929558406892181
+        },
+        "vocal": {
+          "saved_nse": 0.3166599233776463,
+          "bounded_nse": 0.21938801857985477
+        },
+        "drums": {
+          "saved_nse": 0.1822102574489161,
+          "bounded_nse": 0.16136234780764744
+        },
+        "bass": {
+          "saved_nse": 0.6249875782886299,
+          "bounded_nse": 0.47885046934322806
+        }
+      },
+      "projected_coordinate_step_max": 0.02624590906725148,
+      "projected_coordinate_step_p95": 0.002978546458476576
+    },
+    {
+      "index": 3,
+      "lo_bin": 12,
+      "hi_bin": 16,
+      "affine_mapping_nse": 8.178127493398737e-15,
+      "saved_weighted_nse": 0.1404018508781884,
+      "bounded_weighted_nse": 0.0508410424284815,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.13396309629290298,
+          "bounded_nse": 0.04015362237784736
+        },
+        "vocal": {
+          "saved_nse": 0.1687564696554593,
+          "bounded_nse": 0.10623489521562228
+        },
+        "drums": {
+          "saved_nse": 0.3849694232587389,
+          "bounded_nse": 0.3926114136613993
+        },
+        "bass": {
+          "saved_nse": 0.9993887585282943,
+          "bounded_nse": 1.3033679011978596
+        }
+      },
+      "projected_coordinate_step_max": 0.025964360946434728,
+      "projected_coordinate_step_p95": 0.003140085665450726
+    },
+    {
+      "index": 4,
+      "lo_bin": 16,
+      "hi_bin": 20,
+      "affine_mapping_nse": 7.665161388120546e-15,
+      "saved_weighted_nse": 0.27644548653613704,
+      "bounded_weighted_nse": 0.05270096064728522,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.30815814472979447,
+          "bounded_nse": 0.04824748649238542
+        },
+        "vocal": {
+          "saved_nse": 0.1584286217598616,
+          "bounded_nse": 0.04770848783163078
+        },
+        "drums": {
+          "saved_nse": 0.27584071173724295,
+          "bounded_nse": 0.23227831010111455
+        },
+        "bass": {
+          "saved_nse": 0.8735591121539857,
+          "bounded_nse": 1.024864862583866
+        }
+      },
+      "projected_coordinate_step_max": 0.03527514434088236,
+      "projected_coordinate_step_p95": 0.0030513684755459555
+    },
+    {
+      "index": 5,
+      "lo_bin": 20,
+      "hi_bin": 24,
+      "affine_mapping_nse": 6.998897828368265e-15,
+      "saved_weighted_nse": 0.13174769463278405,
+      "bounded_weighted_nse": 0.03301336752537338,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.12978608407897546,
+          "bounded_nse": 0.025529410768466446
+        },
+        "vocal": {
+          "saved_nse": 0.11417426650378976,
+          "bounded_nse": 0.054789248610597335
+        },
+        "drums": {
+          "saved_nse": 0.4603904332892051,
+          "bounded_nse": 0.33864127029655283
+        },
+        "bass": {
+          "saved_nse": 0.8653432741012305,
+          "bounded_nse": 1.08886431026243
+        }
+      },
+      "projected_coordinate_step_max": 0.060528921541072034,
+      "projected_coordinate_step_p95": 0.00397215168883713
+    },
+    {
+      "index": 6,
+      "lo_bin": 24,
+      "hi_bin": 28,
+      "affine_mapping_nse": 1.0849686234619458e-14,
+      "saved_weighted_nse": 0.10285709658124957,
+      "bounded_weighted_nse": 0.03474182473687889,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.2062552889816202,
+          "bounded_nse": 0.05623184649222574
+        },
+        "vocal": {
+          "saved_nse": 0.02413718882870339,
+          "bounded_nse": 0.012984557467930143
+        },
+        "drums": {
+          "saved_nse": 0.5604597209311621,
+          "bounded_nse": 0.5048700353029915
+        },
+        "bass": {
+          "saved_nse": 0.44000263993662475,
+          "bounded_nse": 0.5253679774223838
+        }
+      },
+      "projected_coordinate_step_max": 0.028983384234621656,
+      "projected_coordinate_step_p95": 0.001871292012461286
+    },
+    {
+      "index": 7,
+      "lo_bin": 28,
+      "hi_bin": 32,
+      "affine_mapping_nse": 8.898009087738641e-15,
+      "saved_weighted_nse": 0.07885948881245525,
+      "bounded_weighted_nse": 0.023203489091949508,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.07793272477941185,
+          "bounded_nse": 0.018468226068150094
+        },
+        "vocal": {
+          "saved_nse": 0.06815633965263303,
+          "bounded_nse": 0.03389666773210533
+        },
+        "drums": {
+          "saved_nse": 0.6277553425735929,
+          "bounded_nse": 0.5809636630054555
+        },
+        "bass": {
+          "saved_nse": 0.7310168444976926,
+          "bounded_nse": 0.6532284472875933
+        }
+      },
+      "projected_coordinate_step_max": 0.06673039000461595,
+      "projected_coordinate_step_p95": 0.00463132678903862
+    },
+    {
+      "index": 8,
+      "lo_bin": 32,
+      "hi_bin": 36,
+      "affine_mapping_nse": 7.589357754005359e-15,
+      "saved_weighted_nse": 0.12899690629468608,
+      "bounded_weighted_nse": 0.04384694218983415,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.14971108960011859,
+          "bounded_nse": 0.03996713426858977
+        },
+        "vocal": {
+          "saved_nse": 0.058149174934463616,
+          "bounded_nse": 0.03519254869336043
+        },
+        "drums": {
+          "saved_nse": 0.6896275614955095,
+          "bounded_nse": 0.646875731864921
+        },
+        "bass": {
+          "saved_nse": 0.45437065690787204,
+          "bounded_nse": 0.44256200018073777
+        }
+      },
+      "projected_coordinate_step_max": 0.020459325422146735,
+      "projected_coordinate_step_p95": 0.0021622046939681586
+    },
+    {
+      "index": 9,
+      "lo_bin": 36,
+      "hi_bin": 40,
+      "affine_mapping_nse": 7.79639846576565e-15,
+      "saved_weighted_nse": 0.14281395678405806,
+      "bounded_weighted_nse": 0.04862134059263926,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.15374118912301205,
+          "bounded_nse": 0.04397603599453831
+        },
+        "vocal": {
+          "saved_nse": 0.08463266042021526,
+          "bounded_nse": 0.044976517250639086
+        },
+        "drums": {
+          "saved_nse": 0.5185225322613302,
+          "bounded_nse": 0.462504846473912
+        },
+        "bass": {
+          "saved_nse": 0.46057312232839315,
+          "bounded_nse": 0.38622810290696663
+        }
+      },
+      "projected_coordinate_step_max": 0.04286149912217263,
+      "projected_coordinate_step_p95": 0.0019679844973377234
+    },
+    {
+      "index": 10,
+      "lo_bin": 40,
+      "hi_bin": 44,
+      "affine_mapping_nse": 8.815686191801374e-15,
+      "saved_weighted_nse": 0.04075899181241987,
+      "bounded_weighted_nse": 0.012646434898987022,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.036842490859473394,
+          "bounded_nse": 0.008906600958668996
+        },
+        "vocal": {
+          "saved_nse": 0.07109396769887953,
+          "bounded_nse": 0.04101597011589427
+        },
+        "drums": {
+          "saved_nse": 0.5846942679384404,
+          "bounded_nse": 0.5944908010519793
+        },
+        "bass": {
+          "saved_nse": 0.7778077436935114,
+          "bounded_nse": 0.6735966379541807
+        }
+      },
+      "projected_coordinate_step_max": 0.03242014870950327,
+      "projected_coordinate_step_p95": 0.002949954925923955
+    },
+    {
+      "index": 11,
+      "lo_bin": 44,
+      "hi_bin": 52,
+      "affine_mapping_nse": 7.686626203841915e-15,
+      "saved_weighted_nse": 0.18215399611455022,
+      "bounded_weighted_nse": 0.08622468018197123,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.19281499395669568,
+          "bounded_nse": 0.08146406794817958
+        },
+        "vocal": {
+          "saved_nse": 0.11383338987290631,
+          "bounded_nse": 0.06948447976620976
+        },
+        "drums": {
+          "saved_nse": 0.4207760708449449,
+          "bounded_nse": 0.3819521120578899
+        },
+        "bass": {
+          "saved_nse": 0.3201015267600259,
+          "bounded_nse": 0.22869117688767995
+        }
+      },
+      "projected_coordinate_step_max": 0.028512094334742,
+      "projected_coordinate_step_p95": 0.0006539281133238766
+    },
+    {
+      "index": 12,
+      "lo_bin": 52,
+      "hi_bin": 60,
+      "affine_mapping_nse": 8.25263684457641e-15,
+      "saved_weighted_nse": 0.1538478558005363,
+      "bounded_weighted_nse": 0.06589339378315594,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.16382780942750985,
+          "bounded_nse": 0.06267419435194786
+        },
+        "vocal": {
+          "saved_nse": 0.0851587306006512,
+          "bounded_nse": 0.044846995882890234
+        },
+        "drums": {
+          "saved_nse": 0.5154618560539528,
+          "bounded_nse": 0.46344744561632395
+        },
+        "bass": {
+          "saved_nse": 0.568787843959315,
+          "bounded_nse": 0.41661525346006456
+        }
+      },
+      "projected_coordinate_step_max": 0.029956903960551673,
+      "projected_coordinate_step_p95": 0.00230481886497063
+    },
+    {
+      "index": 13,
+      "lo_bin": 60,
+      "hi_bin": 68,
+      "affine_mapping_nse": 9.200122746891324e-15,
+      "saved_weighted_nse": 0.19659818108739208,
+      "bounded_weighted_nse": 0.09465957123588396,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.22110954175942618,
+          "bounded_nse": 0.0916935916692395
+        },
+        "vocal": {
+          "saved_nse": 0.10225041102587326,
+          "bounded_nse": 0.07015734233234143
+        },
+        "drums": {
+          "saved_nse": 0.48287433312746625,
+          "bounded_nse": 0.42872026766711413
+        },
+        "bass": {
+          "saved_nse": 0.44728767218051485,
+          "bounded_nse": 0.44130582845333777
+        }
+      },
+      "projected_coordinate_step_max": 0.016254057429441526,
+      "projected_coordinate_step_p95": 0.001958544266164827
+    },
+    {
+      "index": 14,
+      "lo_bin": 68,
+      "hi_bin": 76,
+      "affine_mapping_nse": 7.212027322463224e-15,
+      "saved_weighted_nse": 0.21747731608326396,
+      "bounded_weighted_nse": 0.0884230953822416,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.24525766960861514,
+          "bounded_nse": 0.08532894610707856
+        },
+        "vocal": {
+          "saved_nse": 0.10714675607011154,
+          "bounded_nse": 0.06820559350134753
+        },
+        "drums": {
+          "saved_nse": 0.419787708245211,
+          "bounded_nse": 0.40929973638289985
+        },
+        "bass": {
+          "saved_nse": 0.5481424847417271,
+          "bounded_nse": 0.5269770647627059
+        }
+      },
+      "projected_coordinate_step_max": 0.015677336602840874,
+      "projected_coordinate_step_p95": 0.0004966833390640687
+    },
+    {
+      "index": 15,
+      "lo_bin": 76,
+      "hi_bin": 84,
+      "affine_mapping_nse": 9.221640253351462e-15,
+      "saved_weighted_nse": 0.2490866251697434,
+      "bounded_weighted_nse": 0.12424754743909563,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.3099756394185681,
+          "bounded_nse": 0.1402299526518511
+        },
+        "vocal": {
+          "saved_nse": 0.11470059787352253,
+          "bounded_nse": 0.07033567184511125
+        },
+        "drums": {
+          "saved_nse": 0.2656658258572778,
+          "bounded_nse": 0.20336778456663643
+        },
+        "bass": {
+          "saved_nse": 0.48889692962945974,
+          "bounded_nse": 0.39390301584603077
+        }
+      },
+      "projected_coordinate_step_max": 0.02241883072904824,
+      "projected_coordinate_step_p95": 0.0005168908512980406
+    },
+    {
+      "index": 16,
+      "lo_bin": 84,
+      "hi_bin": 92,
+      "affine_mapping_nse": 9.682543761127671e-15,
+      "saved_weighted_nse": 0.2172633945967244,
+      "bounded_weighted_nse": 0.11264551937539205,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.24002945442332393,
+          "bounded_nse": 0.1128875350034874
+        },
+        "vocal": {
+          "saved_nse": 0.12950228595982488,
+          "bounded_nse": 0.08691965518235995
+        },
+        "drums": {
+          "saved_nse": 0.27425007529627204,
+          "bounded_nse": 0.225064929011856
+        },
+        "bass": {
+          "saved_nse": 0.6769468227798255,
+          "bounded_nse": 0.6350940884849299
+        }
+      },
+      "projected_coordinate_step_max": 0.029592394635316488,
+      "projected_coordinate_step_p95": 0.0034669826949397676
+    },
+    {
+      "index": 17,
+      "lo_bin": 92,
+      "hi_bin": 100,
+      "affine_mapping_nse": 1.007296069642142e-14,
+      "saved_weighted_nse": 0.18311021408841147,
+      "bounded_weighted_nse": 0.09602390083874279,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.17659904021010994,
+          "bounded_nse": 0.08213440576041618
+        },
+        "vocal": {
+          "saved_nse": 0.20500018411444879,
+          "bounded_nse": 0.15218633625549824
+        },
+        "drums": {
+          "saved_nse": 0.23634851206832358,
+          "bounded_nse": 0.22167957061576463
+        },
+        "bass": {
+          "saved_nse": 0.9018356336124641,
+          "bounded_nse": 0.9743622417708856
+        }
+      },
+      "projected_coordinate_step_max": 0.046872847518898704,
+      "projected_coordinate_step_p95": 0.0023126742357452035
+    },
+    {
+      "index": 18,
+      "lo_bin": 100,
+      "hi_bin": 108,
+      "affine_mapping_nse": 8.793830041134962e-15,
+      "saved_weighted_nse": 0.20645626922211943,
+      "bounded_weighted_nse": 0.10306411196818632,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.218187417090335,
+          "bounded_nse": 0.0957648419490174
+        },
+        "vocal": {
+          "saved_nse": 0.14971488533677704,
+          "bounded_nse": 0.10179784379591063
+        },
+        "drums": {
+          "saved_nse": 0.23781223746209904,
+          "bounded_nse": 0.20433499573509437
+        },
+        "bass": {
+          "saved_nse": 0.9180422583106234,
+          "bounded_nse": 1.018754974292885
+        }
+      },
+      "projected_coordinate_step_max": 0.02166400371010363,
+      "projected_coordinate_step_p95": 0.0015887723445746364
+    },
+    {
+      "index": 19,
+      "lo_bin": 108,
+      "hi_bin": 116,
+      "affine_mapping_nse": 9.003950621214538e-15,
+      "saved_weighted_nse": 0.2137846386771991,
+      "bounded_weighted_nse": 0.1027769109548945,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.22652960758189677,
+          "bounded_nse": 0.09664518706653247
+        },
+        "vocal": {
+          "saved_nse": 0.15621092296868067,
+          "bounded_nse": 0.10255440934414965
+        },
+        "drums": {
+          "saved_nse": 0.25552527652109097,
+          "bounded_nse": 0.2094449869566877
+        },
+        "bass": {
+          "saved_nse": 0.9881364240338996,
+          "bounded_nse": 1.003950116366671
+        }
+      },
+      "projected_coordinate_step_max": 0.019272115283471447,
+      "projected_coordinate_step_p95": 0.0014376068280262883
+    },
+    {
+      "index": 20,
+      "lo_bin": 116,
+      "hi_bin": 124,
+      "affine_mapping_nse": 7.754222630919717e-15,
+      "saved_weighted_nse": 0.2719348861022766,
+      "bounded_weighted_nse": 0.12319570980128595,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.32742024073001197,
+          "bounded_nse": 0.1286000637097268
+        },
+        "vocal": {
+          "saved_nse": 0.14519154361026962,
+          "bounded_nse": 0.09710229262576896
+        },
+        "drums": {
+          "saved_nse": 0.20342816831885482,
+          "bounded_nse": 0.15805197012145497
+        },
+        "bass": {
+          "saved_nse": 0.9887862591547834,
+          "bounded_nse": 1.0077506368276263
+        }
+      },
+      "projected_coordinate_step_max": 0.022650476726008728,
+      "projected_coordinate_step_p95": 0.0013908087023191524
+    },
+    {
+      "index": 21,
+      "lo_bin": 124,
+      "hi_bin": 132,
+      "affine_mapping_nse": 1.0995782974941432e-14,
+      "saved_weighted_nse": 0.1721985727357321,
+      "bounded_weighted_nse": 0.0815708785215954,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.19249986021828663,
+          "bounded_nse": 0.08163869457968588
+        },
+        "vocal": {
+          "saved_nse": 0.1047198457102843,
+          "bounded_nse": 0.06756676967763801
+        },
+        "drums": {
+          "saved_nse": 0.1862978307585968,
+          "bounded_nse": 0.14684925450109176
+        },
+        "bass": {
+          "saved_nse": 0.9947586458470936,
+          "bounded_nse": 1.0157589104392124
+        }
+      },
+      "projected_coordinate_step_max": 0.013571384723225,
+      "projected_coordinate_step_p95": 0.000476705955651257
+    },
+    {
+      "index": 22,
+      "lo_bin": 132,
+      "hi_bin": 148,
+      "affine_mapping_nse": 9.322141209345194e-15,
+      "saved_weighted_nse": 0.27742609952037095,
+      "bounded_weighted_nse": 0.17605691922907157,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.3964398391959238,
+          "bounded_nse": 0.23861397520235594
+        },
+        "vocal": {
+          "saved_nse": 0.13785311717392912,
+          "bounded_nse": 0.09668713704261016
+        },
+        "drums": {
+          "saved_nse": 0.19379444356131856,
+          "bounded_nse": 0.15278392001212512
+        },
+        "bass": {
+          "saved_nse": 0.9885541006785176,
+          "bounded_nse": 0.9968556429229343
+        }
+      },
+      "projected_coordinate_step_max": 0.010056224659469981,
+      "projected_coordinate_step_p95": 0.0005299801858047194
+    },
+    {
+      "index": 23,
+      "lo_bin": 148,
+      "hi_bin": 164,
+      "affine_mapping_nse": 1.0822151788546824e-14,
+      "saved_weighted_nse": 0.19101723227298836,
+      "bounded_weighted_nse": 0.12648984772309063,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.2217141304194614,
+          "bounded_nse": 0.13957437832869302
+        },
+        "vocal": {
+          "saved_nse": 0.12053194831216105,
+          "bounded_nse": 0.0870139938600548
+        },
+        "drums": {
+          "saved_nse": 0.2806088751970895,
+          "bounded_nse": 0.2170749381576137
+        },
+        "bass": {
+          "saved_nse": 1.0069180548638992,
+          "bounded_nse": 1.0388075862668247
+        }
+      },
+      "projected_coordinate_step_max": 0.013219330951394603,
+      "projected_coordinate_step_p95": 0.0004683142411972189
+    },
+    {
+      "index": 24,
+      "lo_bin": 164,
+      "hi_bin": 180,
+      "affine_mapping_nse": 1.4419346127527296e-14,
+      "saved_weighted_nse": 0.2898880764860664,
+      "bounded_weighted_nse": 0.18625535087251996,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.4801431735997302,
+          "bounded_nse": 0.29509582717275246
+        },
+        "vocal": {
+          "saved_nse": 0.19711560067991404,
+          "bounded_nse": 0.13338327180142293
+        },
+        "drums": {
+          "saved_nse": 0.11930010033524699,
+          "bounded_nse": 0.08800187923500645
+        },
+        "bass": {
+          "saved_nse": 1.0139179635771807,
+          "bounded_nse": 1.0789749475263863
+        }
+      },
+      "projected_coordinate_step_max": 0.008191272986262016,
+      "projected_coordinate_step_p95": 0.00019469672556384756
+    },
+    {
+      "index": 25,
+      "lo_bin": 180,
+      "hi_bin": 196,
+      "affine_mapping_nse": 1.3389009715261796e-14,
+      "saved_weighted_nse": 0.2742586355181678,
+      "bounded_weighted_nse": 0.17743325277368505,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.4317319536001677,
+          "bounded_nse": 0.2707814417804831
+        },
+        "vocal": {
+          "saved_nse": 0.19783879518040043,
+          "bounded_nse": 0.12973552977939487
+        },
+        "drums": {
+          "saved_nse": 0.12565359485158056,
+          "bounded_nse": 0.09267287962610105
+        },
+        "bass": {
+          "saved_nse": 1.0041856978467167,
+          "bounded_nse": 1.05722923777397
+        }
+      },
+      "projected_coordinate_step_max": 0.010384781013791256,
+      "projected_coordinate_step_p95": 6.335310584778539e-05
+    },
+    {
+      "index": 26,
+      "lo_bin": 196,
+      "hi_bin": 212,
+      "affine_mapping_nse": 1.3867395432099454e-14,
+      "saved_weighted_nse": 0.24000299261750413,
+      "bounded_weighted_nse": 0.1546938480463798,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.408759050241042,
+          "bounded_nse": 0.2484332140302796
+        },
+        "vocal": {
+          "saved_nse": 0.15770371491872257,
+          "bounded_nse": 0.10744371865231525
+        },
+        "drums": {
+          "saved_nse": 0.11018630022738708,
+          "bounded_nse": 0.08457578003375746
+        },
+        "bass": {
+          "saved_nse": 1.0056047444479255,
+          "bounded_nse": 1.3837423647580964
+        }
+      },
+      "projected_coordinate_step_max": 0.011795457206480224,
+      "projected_coordinate_step_p95": 2.0269277449058687e-05
+    },
+    {
+      "index": 27,
+      "lo_bin": 212,
+      "hi_bin": 228,
+      "affine_mapping_nse": 1.4134931998591059e-14,
+      "saved_weighted_nse": 0.1941908088073944,
+      "bounded_weighted_nse": 0.12414543074953875,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.5742106346593706,
+          "bounded_nse": 0.34898072203274205
+        },
+        "vocal": {
+          "saved_nse": 0.07371633565819946,
+          "bounded_nse": 0.04994584922868746
+        },
+        "drums": {
+          "saved_nse": 0.10068628290479772,
+          "bounded_nse": 0.07712080942078275
+        },
+        "bass": {
+          "saved_nse": 1.014245607974798,
+          "bounded_nse": 1.2984580958205798
+        }
+      },
+      "projected_coordinate_step_max": 0.015784558152932893,
+      "projected_coordinate_step_p95": 0.0009033174176947485
+    },
+    {
+      "index": 28,
+      "lo_bin": 228,
+      "hi_bin": 244,
+      "affine_mapping_nse": 1.4076434003533691e-14,
+      "saved_weighted_nse": 0.15423943109645152,
+      "bounded_weighted_nse": 0.10621254608028782,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.7203372240895451,
+          "bounded_nse": 0.4454029743268853
+        },
+        "vocal": {
+          "saved_nse": 0.053630143940329125,
+          "bounded_nse": 0.04300480630937214
+        },
+        "drums": {
+          "saved_nse": 0.10297796459287686,
+          "bounded_nse": 0.08650972191113737
+        },
+        "bass": {
+          "saved_nse": 1.0777872276736664,
+          "bounded_nse": 6.947160413804275
+        }
+      },
+      "projected_coordinate_step_max": 0.002041145937098766,
+      "projected_coordinate_step_p95": 7.425375906616735e-06
+    },
+    {
+      "index": 29,
+      "lo_bin": 244,
+      "hi_bin": 260,
+      "affine_mapping_nse": 1.5243211649672434e-14,
+      "saved_weighted_nse": 0.11813054633757042,
+      "bounded_weighted_nse": 0.0671337956167143,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.7664849271382367,
+          "bounded_nse": 0.36594702827598174
+        },
+        "vocal": {
+          "saved_nse": 0.02788051627940807,
+          "bounded_nse": 0.022149181055011895
+        },
+        "drums": {
+          "saved_nse": 0.14031168174610628,
+          "bounded_nse": 0.10831178008994612
+        },
+        "bass": {
+          "saved_nse": 1.2514559791811248,
+          "bounded_nse": 13.616344884095373
+        }
+      },
+      "projected_coordinate_step_max": 0.005820884601248008,
+      "projected_coordinate_step_p95": 1.1564470658231833e-05
+    },
+    {
+      "index": 30,
+      "lo_bin": 260,
+      "hi_bin": 276,
+      "affine_mapping_nse": 1.486393451951451e-14,
+      "saved_weighted_nse": 0.10291391589202127,
+      "bounded_weighted_nse": 0.07501424848860447,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.5259302750235987,
+          "bounded_nse": 0.35097699051781844
+        },
+        "vocal": {
+          "saved_nse": 0.03299882638120853,
+          "bounded_nse": 0.0276094252359256
+        },
+        "drums": {
+          "saved_nse": 0.1427179613236526,
+          "bounded_nse": 0.11538802668110623
+        },
+        "bass": {
+          "saved_nse": 1.2962141476965134,
+          "bounded_nse": 7.105584273134402
+        }
+      },
+      "projected_coordinate_step_max": 0.006090914516522106,
+      "projected_coordinate_step_p95": 6.611879148909199e-05
+    },
+    {
+      "index": 31,
+      "lo_bin": 276,
+      "hi_bin": 292,
+      "affine_mapping_nse": 1.4268824984107162e-14,
+      "saved_weighted_nse": 0.19041108693712394,
+      "bounded_weighted_nse": 0.13269312113676876,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.662560725074458,
+          "bounded_nse": 0.4220550171141165
+        },
+        "vocal": {
+          "saved_nse": 0.05657188693023512,
+          "bounded_nse": 0.04746726926265891
+        },
+        "drums": {
+          "saved_nse": 0.1289975924493582,
+          "bounded_nse": 0.10733604205140485
+        },
+        "bass": {
+          "saved_nse": 1.2260856148961412,
+          "bounded_nse": 18.283997730893056
+        }
+      },
+      "projected_coordinate_step_max": 0.01188887946223699,
+      "projected_coordinate_step_p95": 0.0002330895646798402
+    },
+    {
+      "index": 32,
+      "lo_bin": 292,
+      "hi_bin": 308,
+      "affine_mapping_nse": 1.2811074364054791e-14,
+      "saved_weighted_nse": 0.16072262159316933,
+      "bounded_weighted_nse": 0.11518864788349746,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.5747655760310189,
+          "bounded_nse": 0.37940440929073943
+        },
+        "vocal": {
+          "saved_nse": 0.044890913259059174,
+          "bounded_nse": 0.0380104342762424
+        },
+        "drums": {
+          "saved_nse": 0.12612043405105877,
+          "bounded_nse": 0.10932782710679727
+        },
+        "bass": {
+          "saved_nse": 1.0966788383091313,
+          "bounded_nse": 24.794405341334297
+        }
+      },
+      "projected_coordinate_step_max": 0.0030957263838853333,
+      "projected_coordinate_step_p95": 2.604025442077685e-05
+    },
+    {
+      "index": 33,
+      "lo_bin": 308,
+      "hi_bin": 324,
+      "affine_mapping_nse": 1.2610113531874798e-14,
+      "saved_weighted_nse": 0.12999843175094233,
+      "bounded_weighted_nse": 0.09288814092423686,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.4257483582719735,
+          "bounded_nse": 0.2777403005930278
+        },
+        "vocal": {
+          "saved_nse": 0.03225966901059909,
+          "bounded_nse": 0.02873529079523437
+        },
+        "drums": {
+          "saved_nse": 0.13458972089766966,
+          "bounded_nse": 0.11909001180667861
+        },
+        "bass": {
+          "saved_nse": 1.2320116575346047,
+          "bounded_nse": 29.938455006080957
+        }
+      },
+      "projected_coordinate_step_max": 0.005095487136114407,
+      "projected_coordinate_step_p95": 1.3024507922454451e-05
+    },
+    {
+      "index": 34,
+      "lo_bin": 324,
+      "hi_bin": 340,
+      "affine_mapping_nse": 1.1820765761675807e-14,
+      "saved_weighted_nse": 0.12519506882638487,
+      "bounded_weighted_nse": 0.08905811485170363,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.3789379770767999,
+          "bounded_nse": 0.24956478327598042
+        },
+        "vocal": {
+          "saved_nse": 0.03169354634174807,
+          "bounded_nse": 0.027663418254069032
+        },
+        "drums": {
+          "saved_nse": 0.14045464187524526,
+          "bounded_nse": 0.11446161691145698
+        },
+        "bass": {
+          "saved_nse": 1.4350483686788502,
+          "bounded_nse": 11.297596856945201
+        }
+      },
+      "projected_coordinate_step_max": 0.0037792730391913443,
+      "projected_coordinate_step_p95": 3.17220051775811e-05
+    },
+    {
+      "index": 35,
+      "lo_bin": 340,
+      "hi_bin": 372,
+      "affine_mapping_nse": 1.2054183262597406e-14,
+      "saved_weighted_nse": 0.11867522657932147,
+      "bounded_weighted_nse": 0.09806095799804956,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.3952412391559177,
+          "bounded_nse": 0.31527989609355367
+        },
+        "vocal": {
+          "saved_nse": 0.03344270055536278,
+          "bounded_nse": 0.02980258094355304
+        },
+        "drums": {
+          "saved_nse": 0.12077849144759228,
+          "bounded_nse": 0.10817946346349736
+        },
+        "bass": {
+          "saved_nse": 1.1151169873315303,
+          "bounded_nse": 5.750681702391094
+        }
+      },
+      "projected_coordinate_step_max": 0.0009901835187145491,
+      "projected_coordinate_step_p95": 1.4681921511883154e-08
+    },
+    {
+      "index": 36,
+      "lo_bin": 372,
+      "hi_bin": 404,
+      "affine_mapping_nse": 1.3159594685960991e-14,
+      "saved_weighted_nse": 0.15821920189737274,
+      "bounded_weighted_nse": 0.11866554556357957,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.597924416471784,
+          "bounded_nse": 0.4147675059228445
+        },
+        "vocal": {
+          "saved_nse": 0.046944333182149224,
+          "bounded_nse": 0.04101860994992186
+        },
+        "drums": {
+          "saved_nse": 0.1260148693576919,
+          "bounded_nse": 0.11118674138038345
+        },
+        "bass": {
+          "saved_nse": 1.091923218822418,
+          "bounded_nse": 9.338783633318265
+        }
+      },
+      "projected_coordinate_step_max": 0.00013003538457867503,
+      "projected_coordinate_step_p95": 2.929157788544851e-09
+    },
+    {
+      "index": 37,
+      "lo_bin": 404,
+      "hi_bin": 436,
+      "affine_mapping_nse": 1.2192831242785725e-14,
+      "saved_weighted_nse": 0.13993370639255046,
+      "bounded_weighted_nse": 0.10827903173254283,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.5396556671779845,
+          "bounded_nse": 0.3991645809342892
+        },
+        "vocal": {
+          "saved_nse": 0.03876593240745228,
+          "bounded_nse": 0.03236304453298028
+        },
+        "drums": {
+          "saved_nse": 0.09743298131233863,
+          "bounded_nse": 0.08785830581565371
+        },
+        "bass": {
+          "saved_nse": 1.0865726775413669,
+          "bounded_nse": 13.507560517435332
+        }
+      },
+      "projected_coordinate_step_max": 0.0015525059329513091,
+      "projected_coordinate_step_p95": 2.9328219370624982e-05
+    },
+    {
+      "index": 38,
+      "lo_bin": 436,
+      "hi_bin": 468,
+      "affine_mapping_nse": 1.3632320760235457e-14,
+      "saved_weighted_nse": 0.13400370645925846,
+      "bounded_weighted_nse": 0.1006788585409172,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.5566371476254889,
+          "bounded_nse": 0.39157358757473987
+        },
+        "vocal": {
+          "saved_nse": 0.029317236371726264,
+          "bounded_nse": 0.02586472102432418
+        },
+        "drums": {
+          "saved_nse": 0.10195110489462798,
+          "bounded_nse": 0.09422457379364459
+        },
+        "bass": {
+          "saved_nse": 1.2773253582986979,
+          "bounded_nse": 23.649576357108877
+        }
+      },
+      "projected_coordinate_step_max": 0.00017681648044043374,
+      "projected_coordinate_step_p95": 8.918841957861181e-07
+    },
+    {
+      "index": 39,
+      "lo_bin": 468,
+      "hi_bin": 500,
+      "affine_mapping_nse": 1.4214911716196194e-14,
+      "saved_weighted_nse": 0.13530578979851085,
+      "bounded_weighted_nse": 0.10249610929816738,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.5519301137273553,
+          "bounded_nse": 0.39833600851090045
+        },
+        "vocal": {
+          "saved_nse": 0.027261846570976758,
+          "bounded_nse": 0.02357449313390023
+        },
+        "drums": {
+          "saved_nse": 0.0772380090612375,
+          "bounded_nse": 0.07041680314453554
+        },
+        "bass": {
+          "saved_nse": 1.287956563421204,
+          "bounded_nse": 14.143473532065235
+        }
+      },
+      "projected_coordinate_step_max": 0.0024716137396034177,
+      "projected_coordinate_step_p95": 1.7012708554264838e-05
+    },
+    {
+      "index": 40,
+      "lo_bin": 500,
+      "hi_bin": 532,
+      "affine_mapping_nse": 1.3745552892931853e-14,
+      "saved_weighted_nse": 0.1550121105217346,
+      "bounded_weighted_nse": 0.11425229956039461,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.5063895626293783,
+          "bounded_nse": 0.35373340129596176
+        },
+        "vocal": {
+          "saved_nse": 0.03459817028326719,
+          "bounded_nse": 0.030416058906647423
+        },
+        "drums": {
+          "saved_nse": 0.05093488304589304,
+          "bounded_nse": 0.046826574841706624
+        },
+        "bass": {
+          "saved_nse": 1.1395473139811862,
+          "bounded_nse": 10.389973130955068
+        }
+      },
+      "projected_coordinate_step_max": 0.0002772095645204864,
+      "projected_coordinate_step_p95": 4.9913603658580096e-08
+    },
+    {
+      "index": 41,
+      "lo_bin": 532,
+      "hi_bin": 564,
+      "affine_mapping_nse": 1.2675244688617309e-14,
+      "saved_weighted_nse": 0.1663053719979019,
+      "bounded_weighted_nse": 0.11395585685053757,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.5580958836680812,
+          "bounded_nse": 0.3626471763655152
+        },
+        "vocal": {
+          "saved_nse": 0.039746522610709795,
+          "bounded_nse": 0.03237153741274618
+        },
+        "drums": {
+          "saved_nse": 0.047291448596654156,
+          "bounded_nse": 0.04018346270436344
+        },
+        "bass": {
+          "saved_nse": 1.1440871871203233,
+          "bounded_nse": 9.858375092591764
+        }
+      },
+      "projected_coordinate_step_max": 0.012374598349092214,
+      "projected_coordinate_step_p95": 0.0008002938319111713
+    },
+    {
+      "index": 42,
+      "lo_bin": 564,
+      "hi_bin": 596,
+      "affine_mapping_nse": 1.6958560040779513e-14,
+      "saved_weighted_nse": 0.19951144279488336,
+      "bounded_weighted_nse": 0.1197977111272317,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.6976685362543232,
+          "bounded_nse": 0.37969892584629744
+        },
+        "vocal": {
+          "saved_nse": 0.06599197709314568,
+          "bounded_nse": 0.0572089250983198
+        },
+        "drums": {
+          "saved_nse": 0.030860901127028183,
+          "bounded_nse": 0.026730825952659645
+        },
+        "bass": {
+          "saved_nse": 1.3232540996964697,
+          "bounded_nse": 12.879390001699747
+        }
+      },
+      "projected_coordinate_step_max": 0.00048475588246654766,
+      "projected_coordinate_step_p95": 8.894018375948907e-07
+    },
+    {
+      "index": 43,
+      "lo_bin": 596,
+      "hi_bin": 681,
+      "affine_mapping_nse": 2.1471576515190772e-14,
+      "saved_weighted_nse": 0.14031335050628263,
+      "bounded_weighted_nse": 0.10252499978610989,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.7250734290861778,
+          "bounded_nse": 0.5037507156487957
+        },
+        "vocal": {
+          "saved_nse": 0.07284354604067621,
+          "bounded_nse": 0.06117772327927517
+        },
+        "drums": {
+          "saved_nse": 0.01650761785788185,
+          "bounded_nse": 0.01576739405059582
+        },
+        "bass": {
+          "saved_nse": 1.1409242554102121,
+          "bounded_nse": 3.2030995500213058
+        }
+      },
+      "projected_coordinate_step_max": 4.922923972294768e-05,
+      "projected_coordinate_step_p95": 6.8225849969571964e-09
+    },
+    {
+      "index": 44,
+      "lo_bin": 681,
+      "hi_bin": 766,
+      "affine_mapping_nse": 2.3213686068358848e-14,
+      "saved_weighted_nse": 0.07603808241014452,
+      "bounded_weighted_nse": 0.05402308547454385,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.8126229208171653,
+          "bounded_nse": 0.5576609152793981
+        },
+        "vocal": {
+          "saved_nse": 0.09769579951561687,
+          "bounded_nse": 0.07905935464611195
+        },
+        "drums": {
+          "saved_nse": 0.006013362039670932,
+          "bounded_nse": 0.005350478989576043
+        },
+        "bass": {
+          "saved_nse": 1.2590998184045084,
+          "bounded_nse": 2.478396968765413
+        }
+      },
+      "projected_coordinate_step_max": 0.0014178039867879244,
+      "projected_coordinate_step_p95": 7.262707054767048e-06
+    },
+    {
+      "index": 45,
+      "lo_bin": 766,
+      "hi_bin": 851,
+      "affine_mapping_nse": 1.835472569358632e-14,
+      "saved_weighted_nse": 0.03194811566888752,
+      "bounded_weighted_nse": 0.01907647199991944,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.9561432713879847,
+          "bounded_nse": 0.5411030574045556
+        },
+        "vocal": {
+          "saved_nse": 0.04739680330670342,
+          "bounded_nse": 0.033508786049948974
+        },
+        "drums": {
+          "saved_nse": 0.0027774339570266577,
+          "bounded_nse": 0.0020702105594877346
+        },
+        "bass": {
+          "saved_nse": 1.0697362170627285,
+          "bounded_nse": 1.4463930697561949
+        }
+      },
+      "projected_coordinate_step_max": 4.9506406159527394e-05,
+      "projected_coordinate_step_p95": 1.1123705082882723e-06
+    },
+    {
+      "index": 46,
+      "lo_bin": 851,
+      "hi_bin": 936,
+      "affine_mapping_nse": 2.3858446862172366e-14,
+      "saved_weighted_nse": 0.007201483039175437,
+      "bounded_weighted_nse": 0.004582982732847727,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.5875260604535725,
+          "bounded_nse": 0.37755224763421424
+        },
+        "vocal": {
+          "saved_nse": 0.024859173966113583,
+          "bounded_nse": 0.01382490097494277
+        },
+        "drums": {
+          "saved_nse": 0.0006616023209225832,
+          "bounded_nse": 0.0004122290985045209
+        },
+        "bass": {
+          "saved_nse": 1.0614311985528218,
+          "bounded_nse": 1.054094046103948
+        }
+      },
+      "projected_coordinate_step_max": 0.003142565421685749,
+      "projected_coordinate_step_p95": 0.0001093629798099181
+    },
+    {
+      "index": 47,
+      "lo_bin": 936,
+      "hi_bin": 1025,
+      "affine_mapping_nse": 1.4574087162275625e-14,
+      "saved_weighted_nse": 0.024388123396194006,
+      "bounded_weighted_nse": 0.00978693810632612,
+      "sources": {
+        "eligible": {
+          "saved_nse": 0.7762692057799313,
+          "bounded_nse": 0.30017440269367496
+        },
+        "vocal": {
+          "saved_nse": 0.052552817096642876,
+          "bounded_nse": 0.01776188315935013
+        },
+        "drums": {
+          "saved_nse": 0.0022114029027190158,
+          "bounded_nse": 0.0007875259918057833
+        },
+        "bass": {
+          "saved_nse": 1.0807174145944465,
+          "bounded_nse": 0.8989458264704319
+        }
+      },
+      "projected_coordinate_step_max": 0.003603859835915324,
+      "projected_coordinate_step_p95": 0.00015814874222940212
+    }
+  ],
+  "seconds": 19.115985399927013
+}

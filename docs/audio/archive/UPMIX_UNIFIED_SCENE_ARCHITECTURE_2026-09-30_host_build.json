@@ -1,0 +1,45 @@
+{
+  "scope": "isolated audio-only host, no scene/int8/unit port",
+  "builder_sha256": "470754a575cdbeaabe6ebd8d7c5c909e6838cb74cde874a844d792d5145756fb",
+  "helper_sha256": "92223b87e1ac73b0c501e58ec2963d50fad25c35e3331c19e77e261fcd25fb57",
+  "originals": {
+    "tools/stereo-upmix-render/stereo_upmix_render.c": "8b615d59dfe9101f101781c1769530ac4b3d41adefd7df17ba4f9c68a47d4d4a",
+    "hook/audio/stereo_upmix.c": "24866e80d4a74b6bdae4800ab496827a728bac3c4f8339f4921f3738066c458b",
+    "hook/audio/hssr_dsp.c": "d071d8c77c38b810c061ca4812ee6c289b00780ae5b76fcad95acd28e90610d8",
+    "hook/audio/hssr_neon.c": "09d6b2b09e484270e952e705684e48c1eff85d783a662fee9fbb5f66cbed1883",
+    "hook/audio/hssr_mask.c": "9aef01c0313b325f18ae5b0bcd3d77cde8eeb42a60408b415af5cdf68fc914af",
+    "hook/audio/soundcheck.c": "09590fe3f5bca59c9a6224b40e4bb6d9aea275c05d4b2c1da3959d339582fdc9"
+  },
+  "copied": {
+    "stereo_upmix_render.c": "ed58ab22807b0d585f45dd6f815aa4215a3833c054ede4c10d093120a9128952",
+    "stereo_upmix.c": "4fca2a5fa594132d2ec7c05c37de81b4db4d9cd4ea36b5e25ab2b07f26ce60c9",
+    "hssr_dsp.c": "7b7f9710f18129a9a6af75a962dc2048304738c4d316c1a0ff71f03624e0ea18",
+    "hssr_neon.c": "a9b9cd6910806594d07b8c456439da2484f6a5716ee8782363aff382888a82fa",
+    "hssr_mask.c": "63bf34125859f0562f6c217fc94260dcb9da7147b1f8e7db53596ad94ba9f56c"
+  },
+  "compiler": "/opt/homebrew/bin/x86_64-w64-mingw32-gcc",
+  "command": [
+    "/opt/homebrew/bin/x86_64-w64-mingw32-gcc",
+    "-std=c99",
+    "-O2",
+    "-ffp-contract=off",
+    "-DSPA_HSSR_TEST_MASK",
+    "-DSPA_HSSR_TEST_DIRECT_NO_BED",
+    "-I",
+    "hook/audio",
+    "-o",
+    "/tmp/upmix_unified_audio_windows_v2/upmix_unified_audio.exe",
+    "/tmp/upmix_unified_audio_windows_v2/stereo_upmix_render.c",
+    "/tmp/upmix_unified_audio_windows_v2/stereo_upmix.c",
+    "/tmp/upmix_unified_audio_windows_v2/hssr_dsp.c",
+    "/tmp/upmix_unified_audio_windows_v2/hssr_neon.c",
+    "/tmp/upmix_unified_audio_windows_v2/hssr_mask.c",
+    "hook/audio/soundcheck.c",
+    "-lm"
+  ],
+  "binary_sha256": "6bc42871556e8bc1df94f13e1417d8f78c0c9be10d170e9044e73a8787184aa2",
+  "legacy_load_and_infer": "abort stubs",
+  "learned_controls": "none; reset controls remain zero; injected eligible spectra use direct/no-bed path",
+  "routing": "original deterministic front/LFE DSP; original rear body/gains supplied explicitly by caller",
+  "requirements": "HSSR backend; eligible stereo PCM16 WAV same length; all legacy model/mask arguments refused"
+}

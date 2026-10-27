@@ -1,5 +1,5 @@
 import com.luka.carplay.cluster.ClusterLayerController;
-import com.luka.carplay.core.ScreenModule;
+import com.luka.carplay.core.AltScreenModule;
 import com.luka.carplay.framework.Log;
 import de.audi.tghu.fwhmi.IDisplayManagerKombiControl;
 import java.lang.reflect.*;
@@ -11,7 +11,7 @@ public final class ClusterKdkSyncTest implements InvocationHandler {
     int cropWidth;
     static void check(boolean b, String message) { if (!b) throw new AssertionError(message); }
     static void field(String name, Object value) throws Exception {
-        Field f=ScreenModule.class.getDeclaredField(name); f.setAccessible(true);f.set(null,value);
+        Field f=AltScreenModule.class.getDeclaredField(name); f.setAccessible(true);f.set(null,value);
     }
     public Object invoke(Object proxy, Method method, Object[] args) {
         if (method.getName().equals("setOpacity")) opacity.put(args[0],args[2]);
@@ -37,10 +37,10 @@ public final class ClusterKdkSyncTest implements InvocationHandler {
         ClusterLayerController.onVcPresentation(true);
         ClusterLayerController.onVcVisibility(true);capture.visible(100,0,100);
         // View request is not the stage event; it must not expose the destination rectangle.
-        field("smallScreenViewArea",Boolean.TRUE); // target: boolean view-area flag
+        field("desiredViewAreaMode",Integer.valueOf(1));
         ClusterLayerController.reapply();capture.visible(100,0,100);
         ClusterLayerController.onVcVisibility(false);capture.visible(0,0,0);
-        check(ScreenModule.isNavActive(),"View fade must preserve active-route context");
+        check(AltScreenModule.isNavActive(),"View fade must preserve active-route context");
         ClusterLayerController.onVcPresentation(false);capture.visible(0,0,0);
         check(capture.cropWidth==328,"VC midpoint moves hidden inTube crop");
         ClusterLayerController.onVcVisibility(true);capture.visible(100,100,0);
@@ -49,21 +49,21 @@ public final class ClusterKdkSyncTest implements InvocationHandler {
         ClusterLayerController.onVcVisibility(false);
         ClusterLayerController.onVcPresentation(true);capture.visible(0,0,0);
         ClusterLayerController.onVcVisibility(true);capture.visible(100,0,100);
-        ScreenModule.setNavActive(false);
-        check(ScreenModule.isNavActive(),"route end retains context until VC hide");
+        AltScreenModule.setNavActive(false);
+        check(AltScreenModule.isNavActive(),"route end retains context until VC hide");
         ClusterLayerController.reapply();capture.visible(100,0,100);
         // A restarted route cancels pending release; later View hide cannot stop it.
-        ScreenModule.setNavActive(true);
+        AltScreenModule.setNavActive(true);
         ClusterLayerController.onVcVisibility(false);
-        check(ScreenModule.isNavActive(),"restart cancels old release");
+        check(AltScreenModule.isNavActive(),"restart cancels old release");
         ClusterLayerController.onVcVisibility(true);
-        ScreenModule.setNavActive(false);
+        AltScreenModule.setNavActive(false);
         ClusterLayerController.onVcVisibility(false);capture.visible(0,0,0);
-        check(!ScreenModule.isNavActive(),"VC hide releases ended route");
+        check(!AltScreenModule.isNavActive(),"VC hide releases ended route");
         ClusterLayerController.onVcVisibility(true);capture.visible(0,0,0);
-        check(!ScreenModule.isNavActive(),"late visibility cannot resurrect ended route");
+        check(!AltScreenModule.isNavActive(),"late visibility cannot resurrect ended route");
         // Release restores the stock hint-selected backing, not the CarPlay destination.
-        field("connected",Boolean.FALSE); // target: no altscreen videoAvailable
+        field("connected",Boolean.FALSE);field("videoAvailable",Boolean.FALSE);
         ClusterLayerController.apply(dm,1,null,true,100,true);capture.visible(0,100,0);
         System.out.println("ClusterKdkSyncTest: VC hide/midpoint/show, route end/restart, stale show, stock restore PASS");
     }

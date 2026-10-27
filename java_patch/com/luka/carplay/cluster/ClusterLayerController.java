@@ -11,7 +11,7 @@
  *
  * CarPlay ownership/navigation gates eligibility; VC FctID44 gates actual visibility,
  * and VC FctID54 selects the KDK stage. The requested View mode never reveals a layer.
- * Stock hints are retained for restoration when CarPlay releases the cluster.  ctx 80/81 (ScreenModule) already removes the layers from composition on nav-off; the
+ * Stock hints are retained for restoration when CarPlay releases the cluster.  ctx 80/81 (AltScreenModule) already removes the layers from composition on nav-off; the
  * opacity=0 here is the belt to that suspenders.
  *
  * Geometry comes from the terminal's active stock Layout.  This is important on B9: Classic and
@@ -213,7 +213,7 @@ public final class ClusterLayerController {
         }
         Log.i("ClusterLayers", "VC Fct44 KDK visible=" + visible);
         reapply();
-        com.luka.carplay.core.ScreenModule.onVcKdkVisibility(visible);
+        com.luka.carplay.core.AltScreenModule.onVcKdkVisibility(visible);
     }
 
     /** Receive VC FctID54, emitted at the stage animation midpoint. */
@@ -251,7 +251,7 @@ public final class ClusterLayerController {
         reapply();
     }
 
-    /** Re-apply the last stock KDK geometry after ScreenModule changes ctx 80/81. */
+    /** Re-apply the last stock KDK geometry after AltScreenModule changes ctx 80/81. */
     public static void reapply() {
         synchronized (APPLY_LOCK) { reapplySerialized(); }
     }
@@ -276,7 +276,7 @@ public final class ClusterLayerController {
     private static void applyNow(IDisplayManagerKombiControl dm, int terminal, Geometry geometry,
                                  boolean stockVisible, int stockOpacity) {
         boolean popup;
-        boolean carplayOwnsCluster = com.luka.carplay.core.ScreenModule.isConnected();
+        boolean carplayOwnsCluster = com.luka.carplay.core.AltScreenModule.isConnected();
         int permittedOpacity;
         synchronized (LOCK) {
             popup = carplayOwnsCluster && haveVcStage ? vcPopup : lastStockPopup;
@@ -288,7 +288,7 @@ public final class ClusterLayerController {
          * (positionKDKBackgrounds / handleKdkDualTerminal read no view size).  Moving the panel
          * by -476 in Sport singlescreen was measured on the car to break a view that stock keeps
          * correct.  The offset is logged below for diagnosis, never applied. */
-        boolean navActive = com.luka.carplay.core.ScreenModule.isNavActive();
+        boolean navActive = com.luka.carplay.core.AltScreenModule.isNavActive();
         int carplayOpacity = carplayOwnsCluster && navActive ? permittedOpacity : 0;
         logDecision(geometry, popup, carplayOpacity);
         try {
@@ -351,7 +351,8 @@ public final class ClusterLayerController {
         int dstY  = popup ? g.popupY     : g.inTubeY;
 
         String line = "apply " + g.layoutName
-            + " view=" + (com.luka.carplay.core.ScreenModule.isSmallScreenViewArea()
+            + " style=" + com.luka.carplay.core.AltScreenModule.styleLabel()
+            + " view=" + (com.luka.carplay.core.AltScreenModule.isSmallScreenViewArea()
                           ? "single" : "full")
             + " stage=" + (popup ? "popup" : "inTube")
             + " backing=" + (popup ? BACKING_POPUP : BACKING_SPORT)

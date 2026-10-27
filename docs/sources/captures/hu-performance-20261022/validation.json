@@ -1,0 +1,200 @@
+{
+  "full_present": [
+    {
+      "n": 300,
+      "mean_us": 6237,
+      "max_us": 26187,
+      "over33": 0,
+      "over66": 0
+    },
+    {
+      "n": 300,
+      "mean_us": 6043,
+      "max_us": 19137,
+      "over33": 0,
+      "over66": 0
+    },
+    {
+      "n": 300,
+      "mean_us": 6882,
+      "max_us": 25180,
+      "over33": 0,
+      "over66": 0
+    },
+    {
+      "n": 300,
+      "mean_us": 6613,
+      "max_us": 24173,
+      "over33": 0,
+      "over66": 0
+    }
+  ],
+  "decode_queue": [
+    {
+      "n": 300,
+      "mean_us": 26,
+      "max_us": 1000,
+      "over33": 0,
+      "over66": 0
+    },
+    {
+      "n": 300,
+      "mean_us": 30,
+      "max_us": 2000,
+      "over33": 0,
+      "over66": 0
+    },
+    {
+      "n": 300,
+      "mean_us": 53,
+      "max_us": 1000,
+      "over33": 0,
+      "over66": 0
+    },
+    {
+      "n": 300,
+      "mean_us": 36,
+      "max_us": 1000,
+      "over33": 0,
+      "over66": 0
+    },
+    {
+      "n": 300,
+      "mean_us": 333,
+      "max_us": 81000,
+      "over33": 1,
+      "over66": 1
+    }
+  ],
+  "input_wait": [
+    {
+      "n": 5,
+      "mean_us": 0,
+      "max_us": 0,
+      "over33": 0,
+      "over66": 0
+    },
+    {
+      "n": 303,
+      "mean_us": 0,
+      "max_us": 0,
+      "over33": 0,
+      "over66": 0
+    },
+    {
+      "n": 303,
+      "mean_us": 0,
+      "max_us": 0,
+      "over33": 0,
+      "over66": 0
+    },
+    {
+      "n": 305,
+      "mean_us": 3,
+      "max_us": 1008,
+      "over33": 0,
+      "over66": 0
+    },
+    {
+      "n": 305,
+      "mean_us": 3,
+      "max_us": 1008,
+      "over33": 0,
+      "over66": 0
+    }
+  ],
+  "sender_gaps": [
+    {
+      "n": 300,
+      "mean_us": 33333,
+      "max_us": 33333,
+      "over33": 0,
+      "over66": 0
+    },
+    {
+      "n": 300,
+      "mean_us": 33333,
+      "max_us": 33333,
+      "over33": 0,
+      "over66": 0
+    },
+    {
+      "n": 300,
+      "mean_us": 33333,
+      "max_us": 33333,
+      "over33": 0,
+      "over66": 0
+    },
+    {
+      "n": 300,
+      "mean_us": 34888,
+      "max_us": 66666,
+      "over33": 14,
+      "over66": 0
+    },
+    {
+      "n": 300,
+      "mean_us": 33777,
+      "max_us": 66666,
+      "over33": 4,
+      "over66": 0
+    }
+  ],
+  "activation_log": "00:30:16.600 [WRN] [DECODER_OPTIMIZE] queue depth 2 already installed (decode feed +0x8c6f4, present +0x8c694)",
+  "audio_status_last": "00:32:18.988 [WRN] [audio] audio sink: writes=7168 buffered=0 underrunFrames=0 shortRingFallbacks=0 avoidedSilenceFrames=0 lastReady=0 bufferedSilence=0/0 zeroWrites=0 shortWrites=0 last=9216 source=2ch target=6ch ringRead=0/768 odd=0 lastOdd=0 devStatus=3 devUnderruns=0 handoffFlush=0 reclaim=0/0/0",
+  "original_artifacts": {
+    "before": "hu-perf-20261022-022053",
+    "after": "hu-perf-decoder-20261022-024253"
+  },
+  "summary_sha256": {
+    "before": "99acd47819ed7918df4c322f7a86095b1c146ce57bb5289231a7947f71059aa4",
+    "after": "7f5ab3fe49cfa7a19baaf16c8b9a1d1e3403ae487a569b9df33032e0f55cacd8"
+  },
+  "mailbox_reports": [
+    {
+      "owner_gen": 1,
+      "last_seq": 2704,
+      "mailbox": 1,
+      "superseded": 4
+    },
+    {
+      "owner_gen": 1,
+      "last_seq": 3004,
+      "mailbox": 1,
+      "superseded": 4
+    },
+    {
+      "owner_gen": 1,
+      "last_seq": 3307,
+      "mailbox": 1,
+      "superseded": 7
+    },
+    {
+      "owner_gen": 1,
+      "last_seq": 3608,
+      "mailbox": 1,
+      "superseded": 8
+    },
+    {
+      "owner_gen": 1,
+      "last_seq": 3917,
+      "mailbox": 1,
+      "superseded": 17
+    }
+  ],
+  "cpu_cores_observed": 4,
+  "process_identity_unchanged": true,
+  "operator_confirmed_workload": {
+    "concurrent": true,
+    "altscreen": "screen in motion at approximately 30 FPS",
+    "main_screen": "main screen in motion; main FPS not independently measured",
+    "audio": "5.1 playback / six-channel output active",
+    "confirmation_source": "Operator clarification in the documentation request, 2026-10-21"
+  },
+  "audio_path_observation": {
+    "source_channels": 2,
+    "output_channels": 6,
+    "realtime_upmix": true,
+    "original_media_channel_layout_verified": false
+  }
+}

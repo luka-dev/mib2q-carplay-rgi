@@ -1,0 +1,23 @@
+[linker="(40;1;)qcc -bootstrap -nostdlib -Wl,--no-keep-memory -Vgcc_ntoarmv7%(m!=3,%(m!=6,%(e==0, -EL%)%(e==1, -EB%)%)%)%(h!=0, -Wl,-Ttext -Wl,0x%t%)%(d!=0, -Wl,-Tdata -Wl,0x%d%) -o%o %i %[M -L%^i -Wl,-uinit_%n -lmod_%n%] /w/libstartup.a -L/opt/qnx650/target/qnx6/armle-v7/lib -L/opt/qnx650/target/qnx6/armle-v7/usr/lib -llzo -lucl -ldrvr"]
+[linker="(40;2;)cp %i %o"]
+[image=0x40200000]
+[virtual=armle-v7,raw] .bootstrap = {
+    startup-virt -v -S
+    PATH=:/proc/boot LD_LIBRARY_PATH=:/proc/boot procnto-smp -vvv
+}
+[+script] .script = {
+    procmgr_symlink ../../proc/boot/libc.so.3 /usr/lib/ldqnx.so.2
+    devc-serdebug -e -F -S
+    waitfor /dev/ser1 4
+    reopen /dev/ser1
+    display_msg "@@CUPGAN-START@@"
+    cupgan_bench @BENCH_ARGS@
+    display_msg "@@CUPGAN-END@@"
+}
+[type=link] /usr/lib/ldqnx.so.2=/proc/boot/libc.so.3
+[perms=+r,+x]
+libc.so.3
+libm.so.2
+procnto-smp
+devc-serdebug
+cupgan_bench

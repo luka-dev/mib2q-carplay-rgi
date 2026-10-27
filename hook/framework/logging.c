@@ -6,6 +6,29 @@
 
 #include "logging.h"
 
+/* CoreUtils OSStatus names.  The list lives in ap_status.h; here it becomes
+ * the ready-to-append " (kFooErr)" strings, indexed by (-6700 - status).
+ * Compiled unconditionally - the LOG_* macros drop the call with its
+ * arguments when logging is off, so this only ever costs the table. */
+
+#define AP_STATUS_SUFFIX(v, n) " (" #n ")",
+static const char *const k_ap_status_suffix[] = { AP_STATUS_LIST(AP_STATUS_SUFFIX) };
+#undef AP_STATUS_SUFFIX
+
+#define AP_STATUS_COUNT ((int)(sizeof(k_ap_status_suffix) / \
+                               sizeof(k_ap_status_suffix[0])))
+
+const char *ap_status(int status)
+{
+    int i;
+    /* Range-check before the subtraction: kGenericErrorBase - INT_MIN overflows. */
+    if (status > kGenericErrorBase || status < kGenericErrorBase - AP_STATUS_COUNT + 1)
+        return "";
+    i = kGenericErrorBase - status;
+    /* The list is contiguous; stay safe if an edit ever leaves a hole. */
+    return k_ap_status_suffix[i] ? k_ap_status_suffix[i] : "";
+}
+
 #if ENABLE_LOGGING || ENABLE_STATE_TRACE || ENABLE_ALTSCREEN_PACE_TRACE
 
 /* Maximum tracked dump files for once-only dumps */

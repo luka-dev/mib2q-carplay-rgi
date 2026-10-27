@@ -79,6 +79,13 @@
 #define EVT_COVERART            0x0010  /* text: crc:n:<u32> path:s:<path>   */
 #define EVT_RGD_UPDATE          0x0020  /* text: route_state + all fields    */
 #define EVT_DEVICE_STATE        0x0030  /* reserved                          */
+#define EVT_TEL_LISTS           0x0040  /* sticky text: r.n / r.<i>.a|b|type|ts|occ, */
+                                        /* f.n / f.<i>.a|b (iAP2 ListUpdate)  */
+#define EVT_TEL_COMM            0x0041  /* sticky text: signal, registration,  */
+                                        /* airplane, carrier (iAP2 0x4158);   */
+                                        /* battery (0-100, -1 unknown) and    */
+                                        /* charging (0 off/1 charging/2 full, */
+                                        /* -1 unknown) from PowerUpdate 0xAE01 */
 
 /* ============================================================
  * Command types (Java -> Hook)
@@ -108,6 +115,23 @@
 #define CMD_ALT_RGI             0x0116  /* binary [u8 0=off 1=on] — Java's     */
                                         /* confirmed RGI presentation; hook    */
                                         /* picks the Maps cluster URL (showUI) */
+#define CMD_TEL                 0x0117  /* binary [u8 action][u8 on]: 1 = mute */
+                                        /* (0x4160), 2 = hold (0x415F)         */
+#define CMD_VEHICLE             0x0118  /* binary, Java->hook, little-endian:  */
+                                        /* [u8 version=1][u8 valid bits: b0    */
+                                        /* speed, b1 gear, b2 range, b3 outside */
+                                        /* temp, b4 range warning][u16 speed   */
+                                        /* cm/s][u8 gear 0 unknown 1 D 2 R 3 N */
+                                        /* 4 P][u16 range km][i16 outside temp */
+                                        /* 0.1 C][u8 range warning 0/1][u32    */
+                                        /* Java monotonic ms] = 14 bytes.      */
+                                        /* Speed at most 10 Hz, slow fields on */
+                                        /* change. Hook: $PASCD (0xFFFB) and   */
+                                        /* VehicleStatusUpdate (0xA101).       */
+#define CMD_UPMIX               0x0119  /* binary [u8 level 0 off 1 moderate 2  */
+                                        /* normal 3 full 4 aggressive], the    */
+                                        /* MMI "CarPlay UpMix" row (Java keeps */
+                                        /* it; boot value via /tmp file)       */
 /* NOTE: dispatchable inbound types must be < MAX_TYPES in bus.c (grown to      */
 /* cover this 0x11x block).                                                     */
 

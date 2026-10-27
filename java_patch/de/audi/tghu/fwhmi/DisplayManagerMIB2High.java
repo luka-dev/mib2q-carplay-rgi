@@ -31,11 +31,12 @@ public class DisplayManagerMIB2High extends DisplayManager implements IDisplayLi
     private static final int CTX_BLANK       = 75;   // empty
     private static final int CTX_MAP_ALT     = 76;   // alt map only
     private static final int CTX_MAP_ALT_KDK = 77;   // alt map + KDK + backings
-    private static final int CTX_CARPLAY_NAV = 80;   // CarPlay: maneuver + backing + stock native map
+    private static final int CTX_CARPLAY_NAV = 80;   // CarPlay: maneuver + backing + map
+    private static final int CTX_CARPLAY_MAP = 81;   // CarPlay: map only
     private static final int FIRST_CARPLAY_CONTEXT = 80;   // every stock context id is < this
 
     /* ---- context-table sizing / G24 KDK variants ---- */
-    private static final int DC_SIZE_A5  = 82;    // stock 0..78 + CarPlay 80
+    private static final int DC_SIZE_A5  = 82;    // stock 0..78 + CarPlay 80/81
     private static final int DC_SIZE_G24 = 158;   // stock + the +79 KDK-hoisted variants
     private static final int G24_KDK_CTX_OFFSET = 79;
     private int lastBlockedCarPlayContext = -1;
@@ -61,7 +62,7 @@ public class DisplayManagerMIB2High extends DisplayManager implements IDisplayLi
         if (this.framework.getKombiType() == KOMBI_TYPE_G24) {
             this.dc = new DisplayContext[DC_SIZE_G24];
         } else {
-            this.dc = new DisplayContext[DC_SIZE_A5];   // stock contexts + CarPlay ctx 80
+            this.dc = new DisplayContext[DC_SIZE_A5];   // stock contexts + CarPlay ctx 80/81
         }
 
         this.dc[0] = new DisplayContext(0, new int[]{16});
@@ -164,19 +165,18 @@ public class DisplayManagerMIB2High extends DisplayManager implements IDisplayLi
         this.dc[75] = new DisplayContext(75, new int[0]);
         this.dc[78] = new DisplayContext(78, new int[]{16, 59});
 
-        /* --- CarPlay cluster: one custom context, A5-class only (not G24) ---
+        /* --- CarPlay cluster: two custom contexts, A5-class only (not G24) ---
          *   z-order = array order (index 0 = front):
-         *     dc[80] = {98, 101, 102, 33}  nav active: maneuver(98) over the two KDK 987 backings
-         *                                  (101 = 328x180 sport, 102 = 210x153 popup) over the stock
-         *                                  native map (33)
-         *   98 = maneuver overlay (maneuver_render, transparent when idle); there is NO CarPlay video
-         *   plane — the maneuver overlay composites over the head unit's own native map (33), the same
-         *   displayable the stock cluster context 74 already carries.
+         *     dc[80] = {98, 101, 102, 99}  nav active: maneuver(98) over the two KDK 987 backings
+         *                                  (101 = 328x180 sport, 102 = 210x153 popup) over base(99)
+         *     dc[81] = {99}                no nav: base only
+         *   98 = maneuver overlay (maneuver_render, transparent when idle); 99 = base (altscreen_render).
          *   Displayable 103 is NOT creatable (unregistered DSI id); 101/102 already exist as the 987
          *   Image backings, so we reuse those.  Plane geometry lives in ClusterLayerController; the
-         *   74<->80 switch is driven by ScreenModule (no-nav state is plain stock ctx 74). */
+         *   80<->81 switch is driven by AltScreenModule. */
         if (this.framework.getKombiType() != KOMBI_TYPE_G24) {
-            this.dc[CTX_CARPLAY_NAV] = new DisplayContext(CTX_CARPLAY_NAV, new int[]{98, 101, 102, 33});
+            this.dc[CTX_CARPLAY_NAV] = new DisplayContext(CTX_CARPLAY_NAV, new int[]{98, 101, 102, 99});
+            this.dc[CTX_CARPLAY_MAP] = new DisplayContext(CTX_CARPLAY_MAP, new int[]{99});
         } else {
             this.defineContextsForG24();
         }
@@ -301,11 +301,11 @@ public class DisplayManagerMIB2High extends DisplayManager implements IDisplayLi
         this.log.log(1000000, "DisplayManager#switchContext visibleKDK %1 terminal %2 ", this.visibleKDKs[terminal], terminal);
         /* Every stock VC screen controller eventually funnels through this method, not only
          * CombiMapController.  While CarPlay owns terminal 1, accept physical context writes only
-         * from ScreenModule's one serialized worker.  The logical FwHMI main-context still
-         * changes normally and RouteGuidance uses it to enter ctx80 while CarPlay owns the cluster. */
+         * from AltScreenModule's one serialized worker.  The logical FwHMI main-context still
+         * changes normally and RouteGuidance uses it to choose ctx80 vs ctx81. */
         if (terminal == CLUSTER_TERMINAL
-                && com.luka.carplay.core.ScreenModule.isConnected()
-                && !com.luka.carplay.core.ScreenModule.isClusterContextWriterThread()) {
+                && com.luka.carplay.core.AltScreenModule.isConnected()
+                && !com.luka.carplay.core.AltScreenModule.isClusterContextWriterThread()) {
             if (lastBlockedCarPlayContext != ctx) {
                 lastBlockedCarPlayContext = ctx;
                 this.log.log(1000000,
@@ -317,7 +317,7 @@ public class DisplayManagerMIB2High extends DisplayManager implements IDisplayLi
         lastBlockedCarPlayContext = -1;
         /* Stock KDK-20 remap: while a KDK maneuver is visible, a switch to a stock map context is
          * redirected to its KDK-carrying twin (addKDKToContext).  Our CarPlay contexts (>= 80) are
-         * self-composed — they already carry planes 98/101/102/33 — and MUST skip the remap, else
+         * self-composed — they already carry planes 98/99/101/102 — and MUST skip the remap, else
          * addKDKToContext's default case would hijack the switch to ctx 73.  Every stock context id
          * is < 80, so this guard is a no-op for all stock/RGI paths. */
         if (this.visibleKDKs[terminal] == DISPLAYABLE_KDK && ctx < FIRST_CARPLAY_CONTEXT) {

@@ -1,0 +1,22 @@
+--- a/com/luka/carplay/core/KombiListenerBase.java	2026-10-10 19:15:20
++++ b/com/luka/carplay/core/KombiListenerBase.java	2026-10-10 19:15:20
+@@ -1,5 +1,5 @@
+ /*
+- * GENERATED from org.dsi.ifc.carkombi.DSICarKombiListener (+ org.dsi.ifc.base.DSIListener) of the stock MU1329 lsd.jar:
++ * GENERATED from org.dsi.ifc.carkombi.DSICarKombiListener (+ org.dsi.ifc.base.DSIListener) of the stock MU1003 (CN) lsd.jar:
+  * every method empty, so a listener only overrides what it reads.
+  *
+  * Why not the stock adapters: on the car (2026-10-10) a subclass of
+@@ -113,12 +113,6 @@
+     public void updateHUDInfo(boolean a0, int a1) { }
+     public void updateHUDSystemOnOff(boolean a0, int a1) { }
+     public void updateHUDRotationAdjustment(int a0, int a1) { }
+-    public void updateHUDPresets(int a0, int a1, int a2) { }
+-    public void updateHUDCollectiveTopics(org.dsi.ifc.carkombi.HUDCollectiveTopics a0, int a1) { }
+-    public void updateHUDAutoSkinSwitch(boolean a0, int a1) { }
+-    public void responseHUDSectionConfigList(org.dsi.ifc.global.CarArrayListUpdateInfo a0, org.dsi.ifc.carkombi.HUDSectionConfigListRecord[] a1) { }
+-    public void updateHUDSectionConfigListUpdateInfo(org.dsi.ifc.global.CarArrayListUpdateInfo a0, int[] a1, int a2) { }
+-    public void updateHUDSectionConfigListTotalNumberOfElements(int a0, int a1) { }
+     public void updateDCViewOptions(org.dsi.ifc.carkombi.DCViewOptions a0, int a1) { }
+     public void updateDCBrightness(int a0, int a1) { }
+     public void updateDCVolume(int a0, int a1) { }

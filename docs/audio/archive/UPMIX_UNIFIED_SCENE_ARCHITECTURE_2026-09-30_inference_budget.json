@@ -1,0 +1,43 @@
+{
+  "scope": "deterministic architecture dense-operation count only; no GPU/DEV/data or recipe change",
+  "options": [
+    {
+      "width": 24,
+      "depth": 2,
+      "local": 16,
+      "global_width": 16,
+      "decoder": 16,
+      "training_parameters": 483086,
+      "all_source_dense_macs_s": 110005500.0,
+      "eligible_and_scene_dense_macs_s": 91555500.0,
+      "dense_screen_150m": true,
+      "model_status": "default24 trained; wider options have no checkpoint, fitting, generalization or C port"
+    },
+    {
+      "width": 28,
+      "depth": 2,
+      "local": 16,
+      "global_width": 16,
+      "decoder": 16,
+      "training_parameters": 513286,
+      "all_source_dense_macs_s": 135999750.0,
+      "eligible_and_scene_dense_macs_s": 117549750.0,
+      "dense_screen_150m": true,
+      "model_status": "default24 trained; wider options have no checkpoint, fitting, generalization or C port"
+    },
+    {
+      "width": 32,
+      "depth": 2,
+      "local": 16,
+      "global_width": 16,
+      "decoder": 16,
+      "training_parameters": 544286,
+      "all_source_dense_macs_s": 165594000.0,
+      "eligible_and_scene_dense_macs_s": 147144000.0,
+      "dense_screen_150m": true,
+      "model_status": "default24 trained; wider options have no checkpoint, fitting, generalization or C port"
+    }
+  ],
+  "output_policy": "same jointly trained four-source network, use only eligible output plus all scene heads at inference; protected training heads share the trunk but unused terminal rows can be skipped",
+  "limits": "No device measurement. Excludes FFT/iFFT, norms/nonlinearities, features, DSP, memory/scheduler. Current C format/structs accept24 only; wider options require explicit runtime/state/export updates. Width32 margin is small and not a full-chain fit claim. Wider architecture is not selected by this table."
+}

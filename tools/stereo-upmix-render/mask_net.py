@@ -1,0 +1,1547 @@
+#!/usr/bin/env python3
+"""Per-bin protect/rear mask network at the car's STFT geometry (Phase 0 of
+docs/audio/UPMIX_SOURCE_SEPARATION_PLAN.md).
+
+  cache   MoisesDB songs -> 48 kHz int16 waveforms of four groups
+          (vocals / drums+percussion / bass / other) + the artist split
+  train   per-band GRU context + per-bin MLP -> four sigmoid masks per bin,
+          asymmetric loss (protected material sent rear costs 4x), CUDA
+  eval    mask-space report on DEV: how much vocal energy the "other" mask
+          would send rear vs how much rearable energy it keeps
+  export  per-control masks of a DEV excerpt for the renderer's --protect-mask
+
+STFT = FFT 512, hop 128, half-sine window, 48 kHz, exactly hook/audio/hssr_dsp.c,
+so the mask never needs a second transform in the DSP.  Runs on the training
+PC (Windows, RTX 5080); numpy/scipy/soundfile/torch only.
+"""
+import argparse
+import json
+import math
+import os
+import re
+import sys
+import time
+
+import numpy as np
+
+# Windows consoles default to cp1252: never let a song title kill a run.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
+SR = 48000
+N_FFT = 512
+HOP = 128
+N_BINS = N_FFT // 2 + 1
+CONTROL = 4                                   # the DSP's control cadence, hops
+# Cached groups (v2, 2026-09-25 after the Codex review): keep the musical roles
+# apart in the cache and MERGE at training time, so a grouping change never
+# rebuilds 65 GB.  The original (stemName, trackType) labels are kept per song.
+GROUPS = ("lead_vocal", "other_vocal", "drum_core", "cymbals", "percussion", "bass", "other")
+# First model (conservative): vocals whole and in front, percussion with the
+# drum core in front (congas/claps anchor the foreground), only cymbals/hi-hat
+# and "other" may go rear.
+DEFAULT_MERGE = "vocals=lead_vocal+other_vocal;drum_core=drum_core+percussion;cymbals=cymbals;bass=bass;other=other"
+PROTECT = ("vocals", "drum_core", "bass")          # never rear
+ELIGIBLE = ("other", "cymbals")                     # rear candidates (the DSP's spatial gates decide how much)
+
+
+def group_of(stem_name, track_type):
+    t = (track_type or "").lower()
+    if stem_name == "vocals":
+        return 0 if "lead" in t else 1
+    if stem_name == "drums":
+        return 3 if any(k in t for k in ("hi_hat", "hihat", "cymbal", "ride", "crash", "overhead")) else 2
+    if stem_name == "percussion":
+        return 4
+    if stem_name == "bass":
+        return 5
+    return 6
+
+
+def parse_merge(spec):
+    """'name=g1+g2;...' -> (names, index lists into GROUPS)."""
+    names, idx = [], []
+    for part in spec.split(";"):
+        name, members = part.split("=")
+        names.append(name)
+        idx.append([GROUPS.index(m) for m in members.split("+")])
+    return names, idx
+BAND_EDGES_HZ = [0, 60, 90, 125, 170, 220, 280, 350, 440, 550, 680, 830, 1000, 1200, 1450, 1750,
+                 2100, 2500, 3000, 3600, 4300, 5100, 6000, 7000, 8200, 9600, 11200, 13000, 15000,
+                 17500, 20000, 22000, 24001]
+N_BANDS = 32
+
+
+def bin_band():
+    """Same rounding as hssr_dsp.c: bin frequency = (bin*48000 + 256) // 512."""
+    band = np.zeros(N_BINS, np.int64)
+    for b in range(N_BINS):
+        hz = (b * SR + N_FFT // 2) // N_FFT
+        k = 0
+        while k + 1 < N_BANDS and hz >= BAND_EDGES_HZ[k + 1]:
+            k += 1
+        band[b] = k
+    return band
+
+
+# ---------------------------------------------------------------- cache
+def cache(a):
+    import soundfile as sf
+    from scipy.signal import resample_poly
+    from concurrent.futures import ProcessPoolExecutor
+    os.makedirs(a.out, exist_ok=True)
+    tracks = sorted(d for d in os.listdir(a.moisesdb) if os.path.isdir(os.path.join(a.moisesdb, d)))
+    # artist-disjoint split, seeded like the q6d one (181/40/19 on 240 songs)
+    metas = {t: json.load(open(os.path.join(a.moisesdb, t, "data.json"))) for t in tracks}
+    artists = sorted({m["artist"] for m in metas.values()})
+    rng = np.random.default_rng(20260911)
+    rng.shuffle(artists)
+    n = len(artists)
+    dev_a = set(artists[: max(1, round(n * 0.17))])
+    test_a = set(artists[len(dev_a): len(dev_a) + max(1, round(n * 0.12))])
+    split = {t: ("dev" if metas[t]["artist"] in dev_a else "test" if metas[t]["artist"] in test_a else "train")
+             for t in tracks}
+    json.dump({"split": split, "groups": GROUPS, "sr": SR}, open(os.path.join(a.out, "split.json"), "w"), indent=1)
+    jobs = [(os.path.join(a.moisesdb, t), os.path.join(a.out, t + ".npy"), metas[t]) for t in tracks
+            if not os.path.exists(os.path.join(a.out, t + ".npy"))]
+    print(f"{len(tracks)} songs, {len(jobs)} to cache; split train/dev/test = "
+          f"{sum(v == 'train' for v in split.values())}/{sum(v == 'dev' for v in split.values())}/"
+          f"{sum(v == 'test' for v in split.values())}")
+    with ProcessPoolExecutor(a.jobs) as ex:
+        for i, r in enumerate(ex.map(_cache_one, jobs)):
+            print(f"  [{i + 1}/{len(jobs)}] {r}", flush=True)
+
+
+def _cache_one(job):
+    import soundfile as sf
+    from scipy.signal import resample_poly
+    track_dir, out, meta = job
+    groups = [None] * len(GROUPS)
+    labels = []
+    for stem in meta["stems"]:
+        for t in stem["tracks"]:
+            g = group_of(stem["stemName"], t.get("trackType"))
+            p = os.path.join(track_dir, stem["stemName"], t["id"] + ".wav")
+            if not os.path.exists(p):
+                continue
+            labels.append({"stem": stem["stemName"], "type": t.get("trackType"), "group": GROUPS[g]})
+            x, sr = sf.read(p, dtype="float32", always_2d=True)
+            if x.shape[1] == 1:
+                x = np.repeat(x, 2, 1)
+            x = x.T
+            if groups[g] is None:
+                groups[g] = x.copy()
+            else:
+                m = min(groups[g].shape[1], x.shape[1])
+                groups[g] = groups[g][:, :m] + x[:, :m]
+    n = min(g.shape[1] for g in groups if g is not None)
+    stack = np.zeros((len(GROUPS), 2, n), np.float32)
+    for gi, g in enumerate(groups):
+        if g is not None:
+            stack[gi] = g[:, :n]
+    stack = resample_poly(stack, 160, 147, axis=2).astype(np.float32)
+    peak = np.abs(stack.sum(0)).max() + 1e-9
+    stack *= 0.7 / peak                                  # the harness level
+    np.save(out, (np.clip(stack, -1, 1) * 32767).astype(np.int16))     # [7, 2, n] int16, mmap-able
+    json.dump({"present": [g is not None for g in groups], "labels": labels, "artist": meta["artist"],
+               "song": meta["song"], "genre": meta.get("genre")}, open(out[:-4] + ".json", "w"))
+    return f"{meta['artist']} - {meta['song']}: {stack.shape[2] / SR:.0f} s"
+
+
+# ---------------------------------------------------------------- torch side
+def _torch():
+    import torch
+    return torch
+
+
+def stft(torch, x):
+    """x: [..., n] float -> complex [..., frames, 257] with the DSP's half-sine window."""
+    win = torch.sin(math.pi * (torch.arange(N_FFT, device=x.device, dtype=x.dtype) + 0.5) / N_FFT)
+    shp = x.shape
+    X = torch.stft(x.reshape(-1, shp[-1]), N_FFT, HOP, N_FFT, win, center=False, return_complex=True)
+    return X.reshape(*shp[:-1], N_BINS, -1).transpose(-1, -2)
+
+
+N_FFT_FINE = 2048           # mask-net-only analysis: 23.4 Hz bins, hop 512 = the control cadence
+N_BINS_FINE = N_FFT_FINE // 2 + 1
+
+
+def stft_fine(torch, x):
+    """x [..., n] -> complex [..., frames, 1025] at hop 512 (= one DSP control), Hann, centred."""
+    win = torch.hann_window(N_FFT_FINE, device=x.device, dtype=x.dtype)
+    shp = x.shape
+    X = torch.stft(x.reshape(-1, shp[-1]), N_FFT_FINE, HOP * CONTROL, N_FFT_FINE, win, center=True, return_complex=True)
+    return X.reshape(*shp[:-1], N_BINS_FINE, -1).transpose(-1, -2)
+
+
+def features(torch, L, R):
+    """Per-bin [log|L|^2, log|R|^2, cos IPD, sin IPD] and per-band context [32 x 5]."""
+    pl = (L.real ** 2 + L.imag ** 2)
+    pr = (R.real ** 2 + R.imag ** 2)
+    cross = L * torch.conj(R)
+    mag = torch.sqrt(pl * pr) + 1e-9
+    f = torch.stack([torch.log(pl + 1e-7), torch.log(pr + 1e-7), cross.real / mag, cross.imag / mag], -1)
+    return f
+
+
+def out_act(net, torch, lg):
+    """The sigmoid nets (mlp / tf / conv2048) trained under a softmax loss must be read
+    through the softmax too, else evaluate() and the DSP see uncalibrated eligibilities."""
+    return torch.softmax(lg, -1) if getattr(net, "softmax_out", False) else torch.sigmoid(lg)
+
+
+class MaskNet:
+    """Per-band GRU context + per-bin MLP.  ~0.18 M MAC per control."""
+
+    def __init__(self, torch, band, ctx=64, proj=8, hidden=32, n_out=4, neigh=0, **_):
+        nn = torch.nn
+        self.torch = torch
+        self.band = torch.as_tensor(band)
+        bins_per_band = torch.zeros(N_BANDS).scatter_add_(0, self.band, torch.ones(N_BINS))
+        self.pool = torch.zeros(N_BANDS, N_BINS).scatter_(0, self.band[None], torch.ones(1, N_BINS))
+        self.pool = self.pool / bins_per_band.clamp(min=1)[:, None]
+        self.gru = nn.GRU(N_BANDS * 5, ctx, batch_first=True)
+        self.ctx_proj = nn.Linear(ctx, N_BANDS * proj)
+        self.neigh = neigh                                   # +-neigh bins of per-bin features as extra inputs
+        self.mlp = nn.Sequential(nn.Linear(4 * (1 + 2 * neigh) + proj + 1, hidden), nn.Tanh(), nn.Linear(hidden, n_out))
+        self.n_out = n_out
+        self.proj = proj
+        self.modules = nn.ModuleList([self.gru, self.ctx_proj, self.mlp])
+        self.pos = (torch.arange(N_BINS, dtype=torch.float32) / N_BINS)
+
+    def to(self, dev):
+        self.modules.to(dev); self.band = self.band.to(dev); self.pool = self.pool.to(dev); self.pos = self.pos.to(dev)
+        return self
+
+    def parameters(self):
+        return self.modules.parameters()
+
+    def forward(self, f):
+        """f: [B, T, 257, 4] at control cadence -> masks [B, T, 257, n_out] in (0,1)."""
+        torch = self.torch
+        f = standardize(torch, f).clamp(-6, 6)
+        B, T = f.shape[:2]
+        e = f[..., :2].mean(-1)                                   # log energy per bin
+        bandf = torch.einsum("kn,btnf->btkf", self.pool, f)       # [B,T,32,4]
+        bande = torch.einsum("kn,btn->btk", self.pool, e)[..., None]
+        ctx_in = torch.cat([bandf, bande], -1).reshape(B, T, -1)
+        h, _ = self.gru(ctx_in)                                    # [B,T,ctx]
+        c = self.ctx_proj(h).reshape(B, T, N_BANDS, self.proj)    # [B,T,32,proj]
+        cb = c[:, :, self.band]                                   # [B,T,257,proj]
+        parts = [f]
+        for d in range(1, self.neigh + 1):                        # a partial's neighbours: frequency context
+            parts.append(torch.cat([f[:, :, d:], f[:, :, -1:].expand(B, T, d, 4)], 2))
+            parts.append(torch.cat([f[:, :, :1].expand(B, T, d, 4), f[:, :, :-d]], 2))
+        x = torch.cat(parts + [cb, self.pos.expand(B, T, N_BINS)[..., None]], -1)
+        return out_act(self, torch, self.mlp(x))
+
+    def _logits(self, f):
+        torch = self.torch
+        f = standardize(torch, f).clamp(-6, 6)
+        B, T = f.shape[:2]
+        e = f[..., :2].mean(-1)
+        bandf = torch.einsum("kn,btnf->btkf", self.pool, f)
+        bande = torch.einsum("kn,btn->btk", self.pool, e)[..., None]
+        h, _ = self.gru(torch.cat([bandf, bande], -1).reshape(B, T, -1))
+        cb = self.ctx_proj(h).reshape(B, T, N_BANDS, self.proj)[:, :, self.band]
+        parts = [f]
+        for d in range(1, self.neigh + 1):
+            parts.append(torch.cat([f[:, :, d:], f[:, :, -1:].expand(B, T, d, 4)], 2))
+            parts.append(torch.cat([f[:, :, :1].expand(B, T, d, 4), f[:, :, :-d]], 2))
+        return self.mlp(torch.cat(parts + [cb, self.pos.expand(B, T, N_BINS)[..., None]], -1))
+
+
+class TFNet(MaskNet):
+    """v5: the per-bin MLP cannot tell a vocal partial from a guitar partial
+    from four numbers and a band context (v2-v4 protected everything).  Give
+    every bin its own memory and its harmonic neighbourhood: a bidirectional
+    GRU across the 257 bins per control (harmonic structure) and a causal GRU
+    over time per bin (vibrato, syllables vs held partials), weights shared
+    across bins.  ~1.9 M MAC per control at hidden 16 (Q3 was 3.9 M/frame at
+    4x the frame rate)."""
+
+    def __init__(self, torch, band, ctx=64, proj=8, hidden=16, n_out=4, neigh=2, **_):
+        MaskNet.__init__(self, torch, band, ctx=ctx, proj=proj, hidden=hidden, n_out=n_out, neigh=neigh)
+        nn = torch.nn
+        n_in = 4 * (1 + 2 * neigh) + proj + 1
+        self.inp = nn.Linear(n_in, 24)
+        self.freq = nn.GRU(24, hidden, batch_first=True, bidirectional=True)
+        self.time = nn.GRU(2 * hidden, hidden, batch_first=True)
+        self.head = nn.Linear(3 * hidden, n_out)
+        self.modules = nn.ModuleList([self.gru, self.ctx_proj, self.inp, self.freq, self.time, self.head])
+        self.hidden = hidden
+
+    def forward(self, f):
+        return out_act(self, self.torch, self._logits(f))
+
+    def _logits_tf(self, f):
+        torch = self.torch
+        f = standardize(torch, f).clamp(-6, 6)
+        B, T = f.shape[:2]
+        e = f[..., :2].mean(-1)
+        bandf = torch.einsum("kn,btnf->btkf", self.pool, f)
+        bande = torch.einsum("kn,btn->btk", self.pool, e)[..., None]
+        h, _ = self.gru(torch.cat([bandf, bande], -1).reshape(B, T, -1))
+        cb = self.ctx_proj(h).reshape(B, T, N_BANDS, self.proj)[:, :, self.band]
+        parts = [f]
+        for d in range(1, self.neigh + 1):
+            parts.append(torch.cat([f[:, :, d:], f[:, :, -1:].expand(B, T, d, 4)], 2))
+            parts.append(torch.cat([f[:, :, :1].expand(B, T, d, 4), f[:, :, :-d]], 2))
+        x = torch.tanh(self.inp(torch.cat(parts + [cb, self.pos.expand(B, T, N_BINS)[..., None]], -1)))   # [B,T,257,24]
+        fq, _ = self.freq(x.reshape(B * T, N_BINS, -1))                                   # over bins
+        fq = fq.reshape(B, T, N_BINS, 2 * self.hidden)
+        tm, _ = self.time(fq.permute(0, 2, 1, 3).reshape(B * N_BINS, T, 2 * self.hidden))  # over time, per bin
+        tm = tm.reshape(B, N_BINS, T, self.hidden).permute(0, 2, 1, 3)
+        return self.head(torch.cat([fq, tm], -1))
+
+    def _logits(self, f):
+        return self._logits_tf(f)
+
+
+class ConvNet:
+    """v8: the fine 2048-point analysis (23 Hz bins) seen through a frequency
+    convolution with stride 4, so every DSP bin's decision is made from the
+    harmonic structure of its 187 Hz neighbourhood at 23 Hz resolution, plus a
+    small causal GRU per bin over time.  ~0.6 M MAC per control (~55 M MAC/s)
+    on top of one 2048-point FFT per control."""
+
+    FINE = True
+
+    def __init__(self, torch, band, ch=16, hidden=8, n_out=5, **_):
+        nn = torch.nn
+        self.torch = torch
+        self.c1 = nn.Conv1d(4, ch, kernel_size=8, stride=4, padding=4)    # 1025 -> 257
+        self.c2 = nn.Conv1d(ch, ch, kernel_size=5, padding=2)
+        self.c3 = nn.Conv1d(ch, ch, kernel_size=5, padding=2)
+        self.time = nn.GRU(ch, hidden, batch_first=True)
+        self.head = nn.Linear(ch + hidden, n_out)
+        self.modules = nn.ModuleList([self.c1, self.c2, self.c3, self.time, self.head])
+        self.hidden = hidden; self.n_out = n_out; self.ch = ch
+
+    def to(self, dev):
+        self.modules.to(dev); return self
+
+    def parameters(self):
+        return self.modules.parameters()
+
+    def _logits(self, f):
+        """f [B, T, 1025, 4] fine features -> logits [B, T, 257, n_out]."""
+        torch = self.torch
+        f = standardize(torch, f).clamp(-6, 6)
+        B, T = f.shape[:2]
+        x = f.reshape(B * T, N_BINS_FINE, 4).transpose(1, 2)              # [BT, 4, 1025]
+        x = torch.tanh(self.c1(x))[:, :, :N_BINS]                          # [BT, ch, 257]
+        x = torch.tanh(self.c2(x) + x)
+        x = torch.tanh(self.c3(x) + x)
+        x = x.transpose(1, 2).reshape(B, T, N_BINS, self.ch)               # [B, T, 257, ch]
+        tm, _ = self.time(x.permute(0, 2, 1, 3).reshape(B * N_BINS, T, self.ch))
+        tm = tm.reshape(B, N_BINS, T, self.hidden).permute(0, 2, 1, 3)
+        return self.head(torch.cat([x, tm], -1))
+
+    def forward(self, f):
+        return out_act(self, self.torch, self._logits(f))
+
+
+def probe_descriptor(torch, f, neigh=2):
+    """The probe's per-bin descriptor from the 512 features [B,T,257,4]:
+    log power (L+R) of the +-neigh bins relative to their local mean, the local
+    mean, cos/sin IPD, bin position -> [B,T,257, 2*neigh+1 + 1 + 2 + 1]."""
+    B, T = f.shape[:2]
+    lp = torch.log(torch.exp(f[..., 0]) + torch.exp(f[..., 1]))                # [B,T,257]
+    pad = torch.nn.functional.pad(lp, (neigh, neigh), mode="replicate")
+    idx = torch.arange(N_BINS, device=f.device) + neigh
+    offs = torch.arange(-neigh, neigh + 1, device=f.device)
+    desc = pad[..., (idx[:, None] + offs[None])]                                # [B,T,257,2n+1]
+    mean = desc.mean(-1, keepdim=True)
+    pos = (torch.arange(N_BINS, device=f.device).float() / N_BINS).expand(B, T, N_BINS)[..., None]
+    return torch.cat([desc - mean, mean, f[..., 2:4], pos], -1)
+
+
+class ProbeCtxNet:
+    """v13: the probe descriptor per bin PLUS a per-band GRU context (the band's
+    recent history: is this register currently vocal-dominated?) projected to
+    `proj` values per band and appended to every bin of the band.  The probe
+    showed per-cell information is the limit (train AUC = DEV AUC); the band
+    context is the cheapest evidence a single cell cannot see.  Stateful
+    (GRU over controls): the streaming-state gate applies."""
+
+    def __init__(self, torch, band, hidden=64, neigh=2, n_out=5, ctx=64, proj=8, tctx=0, **_):
+        nn = torch.nn
+        self.torch = torch
+        self.neigh, self.tctx, self.proj = neigh, tctx, proj
+        self.band = torch.as_tensor(band)
+        bins_per_band = torch.zeros(N_BANDS).scatter_add_(0, self.band, torch.ones(N_BINS))
+        self.pool = torch.zeros(N_BANDS, N_BINS).scatter_(0, self.band[None], torch.ones(1, N_BINS)) / bins_per_band.clamp(min=1)[:, None]
+        n_desc = (2 * neigh + 1 + 1 + 2 + 1) * (1 + tctx)
+        self.gru = nn.GRU(N_BANDS * 5, ctx, batch_first=True)
+        self.ctx_proj = nn.Linear(ctx, N_BANDS * proj)
+        self.mlp = nn.Sequential(nn.Linear(n_desc + proj, hidden), nn.Tanh(), nn.Linear(hidden, hidden), nn.Tanh(), nn.Linear(hidden, n_out))
+        self.modules = nn.ModuleList([self.gru, self.ctx_proj, self.mlp])
+        self.n_out = n_out
+
+    def to(self, dev):
+        self.modules.to(dev); self.band = self.band.to(dev); self.pool = self.pool.to(dev); return self
+
+    def parameters(self):
+        return self.modules.parameters()
+
+    def _logits(self, f):
+        torch = self.torch
+        B, T = f.shape[:2]
+        d = standardize(torch, probe_descriptor(torch, f, self.neigh)).clamp(-6, 6)
+        if self.tctx:
+            parts = [d]
+            for k in range(1, self.tctx + 1):
+                parts.append(torch.cat([torch.zeros_like(d[:, :k]), d[:, :-k]], 1))
+            d = torch.cat(parts, -1)
+        fs = f.clamp(-30, 30)
+        e = fs[..., :2].mean(-1)
+        bandf = torch.einsum("kn,btnf->btkf", self.pool, fs)
+        bande = torch.einsum("kn,btn->btk", self.pool, e)[..., None]
+        ctx_in = torch.cat([bandf, bande], -1).reshape(B, T, -1)
+        ctx_in = (ctx_in - ctx_in.mean(-1, keepdim=True)) / (ctx_in.std(-1, keepdim=True) + 1e-3)
+        h, _ = self.gru(ctx_in)
+        cb = self.ctx_proj(h).reshape(B, T, N_BANDS, self.proj)[:, :, self.band]
+        return self.mlp(torch.cat([d, cb], -1))
+
+    def forward(self, f):
+        return self.torch.softmax(self._logits(f), -1)
+
+
+class ProbeNet:
+    """v10: exactly the probe's recipe inside the training pipeline (astra
+    review 3): the descriptor above, a 64-64 tanh MLP per bin, ONE eligibility
+    logit, plain BCE on owned cells, no ambiguous term, no contamination
+    penalty, no clamp.  Reproduce the probe's DEV AUC first; extend after."""
+
+    SINGLE = True
+
+    def __init__(self, torch, band, hidden=64, neigh=2, n_out=1, tctx=0, **_):
+        nn = torch.nn
+        self.torch = torch
+        self.neigh = neigh
+        self.tctx = tctx                                      # previous controls stacked (causal, stateless)
+        n_in = (2 * neigh + 1 + 1 + 2 + 1) * (1 + tctx)
+        self.mlp = nn.Sequential(nn.Linear(n_in, hidden), nn.Tanh(), nn.Linear(hidden, hidden), nn.Tanh(), nn.Linear(hidden, n_out))
+        self.modules = nn.ModuleList([self.mlp])
+        self.n_out = n_out
+        self.SINGLE = n_out == 1
+
+    def to(self, dev):
+        self.modules.to(dev); return self
+
+    def parameters(self):
+        return self.modules.parameters()
+
+    def _logits(self, f):
+        torch = self.torch
+        d = standardize(torch, probe_descriptor(torch, f, self.neigh)).clamp(-6, 6)
+        if self.tctx:
+            parts = [d]
+            for k in range(1, self.tctx + 1):                 # frame t-k, zero-padded at the start
+                parts.append(torch.cat([torch.zeros_like(d[:, :k]), d[:, :-k]], 1))
+            d = torch.cat(parts, -1)
+        return self.mlp(d)
+
+    def forward(self, f):
+        lg = self._logits(f)
+        return self.torch.sigmoid(lg) if self.n_out == 1 else self.torch.softmax(lg, -1)
+
+
+class FullNet:
+    """v17 (astra review 4, point 1): the whole spectrum at once.  Every net so
+    far decided a cell from its 5-bin neighbourhood (+ its own band's history)
+    and sat on one frontier, guitars ~1.4 x voice: at that scale a vocal
+    partial and a guitar partial are the same thing.  What tells them apart
+    is spread over the spectrum (formants, the harmonic comb moving together)
+    and over time (phrasing): a strided frequency conv over all 257 cells to a
+    33-position map, flattened into a 64-wide causal GRU over controls, and a
+    per-cell decoder fed by three things: the full-resolution stem output (the
+    skip path that keeps localisation), the local 33-map context interpolated
+    back to the cell, and the global GRU state.  ~0.92 M MAC per control
+    (~86 M MAC/s), stateful."""
+
+    def __init__(self, torch, band, n_out=5, ch=16, hidden=64, dec=24, probe=False, layers=1, bidir=False, **_):
+        nn = torch.nn
+        self.torch = torch
+        self.layers, self.bidir = layers, bidir  # bidir = NON-causal: ceiling studies only, never the car
+        self.probe = probe                       # full_probe: the proven per-cell descriptor joins the decoder input
+        n_desc = 9 if probe else 0
+        c1, c2, c3 = 2 * ch, 3 * ch, 4 * ch
+        self.stem = nn.Sequential(nn.Conv1d(5, ch, 5, padding=2), nn.Tanh())
+        self.down = nn.ModuleList([nn.Sequential(nn.Conv1d(ci, ci, 5, stride=2, padding=2, groups=ci), nn.Conv1d(ci, co, 1), nn.Tanh())
+                                   for ci, co in ((ch, c1), (c1, c2), (c2, c3))])
+        n_pos = (((N_BINS + 1) // 2 + 1) // 2 + 1) // 2                    # 257 -> 129 -> 65 -> 33
+        self.flat = nn.Sequential(nn.Linear(n_pos * c3, hidden), nn.Tanh())
+        self.gru = nn.GRU(hidden, hidden, num_layers=layers, batch_first=True, bidirectional=bidir)
+        self.gproj = nn.Linear(hidden * (2 if bidir else 1), ch)
+        self.lproj = nn.Conv1d(c3, ch, 1)
+        self.dec = (nn.Sequential(nn.Linear(3 * ch + n_desc, dec), nn.Tanh(), nn.Linear(dec, dec), nn.Tanh(), nn.Linear(dec, n_out)) if probe
+                    else nn.Sequential(nn.Linear(3 * ch, dec), nn.Tanh(), nn.Linear(dec, n_out)))
+        # astra review 4, point 2: a band-level vocal PRESENCE head off the same state, applied at routing as
+        # e * (1 - alpha * presence).  Listed before `dec` so load_model still reads n_out from the last Linear.
+        self.pres = nn.Linear(hidden * (2 if bidir else 1), N_BANDS)
+        self.modules = nn.ModuleList([self.stem, self.down, self.flat, self.gru, self.gproj, self.lproj, self.pres, self.dec])
+        self.last_presence = None
+        self.n_out, self.n_pos, self.ch = n_out, n_pos, ch
+        self.pos = torch.arange(N_BINS, dtype=torch.float32) / N_BINS * 2 - 1
+        self.macs = (5 * 5 * ch * N_BINS + (5 * ch + ch * c1) * 129 + (5 * c1 + c1 * c2) * 65 + (5 * c2 + c2 * c3) * 33
+                     + n_pos * c3 * hidden + 3 * 2 * hidden * hidden + hidden * ch + c3 * ch * n_pos
+                     + ((3 * ch + n_desc) * dec + (dec * dec if probe else 0) + dec * n_out) * N_BINS)
+
+    def to(self, dev):
+        self.modules.to(dev); self.pos = self.pos.to(dev); return self
+
+    def parameters(self):
+        return self.modules.parameters()
+
+    def _logits(self, f):
+        torch = self.torch
+        B, T = f.shape[:2]
+        s = standardize(torch, f).clamp(-6, 6)                                          # [B,T,257,4]
+        x = torch.stack([s[..., 0] + s[..., 1], s[..., 0] - s[..., 1], s[..., 2], s[..., 3],
+                         self.pos.expand(B, T, N_BINS)], -1)                            # level, ILD, IPD, position
+        x = x.reshape(B * T, N_BINS, 5).transpose(1, 2)                                  # [BT,5,257]
+        skip = self.stem(x)                                                             # [BT,ch,257]
+        h = skip
+        for d in self.down:
+            h = d(h)                                                                    # [BT,c3,33]
+        g = self.flat(h.reshape(B * T, -1)).reshape(B, T, -1)
+        g, _ = self.gru(g)                                                              # [B,T,hidden] causal
+        self.last_presence = self.pres(g)                                               # [B,T,32] logits
+        g = self.gproj(g).reshape(B * T, self.ch, 1).expand(-1, -1, N_BINS)
+        loc = torch.nn.functional.interpolate(self.lproj(h), size=N_BINS, mode="linear", align_corners=True)
+        z = torch.cat([skip, loc, g], 1).transpose(1, 2)                                # [BT,257,3ch]
+        if self.probe:
+            d = standardize(torch, probe_descriptor(torch, f, 2), DESC_STATS).clamp(-6, 6)
+            z = torch.cat([z, d.reshape(B * T, N_BINS, -1)], -1)
+        return self.dec(z).reshape(B, T, N_BINS, self.n_out)
+
+    def forward(self, f):
+        return self.torch.softmax(self._logits(f), -1)
+
+
+class FreqNet:
+    """astra review 6, point 2 — the ~230 M MAC/s student built for FREQUENCY modelling, the one
+    untested lever after every per-cell student sat on the same line: (1) strided frequency convs
+    257 -> 129 -> 65 over the standardised cell features + the probe descriptor (12 inputs/cell);
+    (2) a bidirectional GRU ACROSS the 65 bins per control (partial-level evidence across the
+    spectrum, no future time needed); (3) a causal GRU over controls shared across bins (state per
+    bin); (4) a full-resolution decoder: the 65-map interpolated back to 257 + the 12 local
+    descriptors -> per-cell roles.  Stateful (65 x hidden_t per stream)."""
+
+    def __init__(self, torch, band, n_out=5, c1=24, c2=32, hf=40, ht=16, dec=16, **_):
+        nn = torch.nn
+        self.torch = torch
+        self.n_in = 4 + 9                                            # standardised f + descriptor
+        self.conv1 = nn.Sequential(nn.Conv1d(self.n_in, c1, 5, stride=2, padding=2), nn.Tanh())     # 257 -> 129
+        self.conv2 = nn.Sequential(nn.Conv1d(c1, c2, 3, stride=2, padding=1), nn.Tanh())            # 129 -> 65
+        self.fgru = nn.GRU(c2, hf, batch_first=True, bidirectional=True)                            # across the 65 bins
+        self.tgru = nn.GRU(2 * hf, ht, batch_first=True)                                            # over controls, per bin
+        self.dec = nn.Sequential(nn.Linear(2 * hf + ht + self.n_in, dec), nn.Tanh(), nn.Linear(dec, n_out))
+        self.pres = nn.Linear(2 * hf + ht, 1)                                                     # per-bin vocal logit (unused for now)
+        self.modules = nn.ModuleList([self.conv1, self.conv2, self.fgru, self.tgru, self.pres, self.dec])
+        self.n_out, self.c1, self.c2, self.hf, self.ht = n_out, c1, c2, hf, ht
+        self.last_presence = None
+        n65 = 65
+        self.macs = (5 * self.n_in * c1 * 129 + 3 * c1 * c2 * n65 + 2 * 3 * (c2 * hf + hf * hf) * n65
+                     + 3 * (2 * hf * ht + ht * ht) * n65 + ((2 * hf + ht + self.n_in) * dec + dec * n_out) * N_BINS)
+
+    def to(self, dev):
+        self.modules.to(dev); return self
+
+    def parameters(self):
+        return self.modules.parameters()
+
+    def _logits(self, f):
+        torch = self.torch
+        B, T = f.shape[:2]
+        s = standardize(torch, f).clamp(-6, 6)
+        d = standardize(torch, probe_descriptor(torch, f, 2), DESC_STATS).clamp(-6, 6)
+        x = torch.cat([s, d], -1)                                                  # [B,T,257,13]
+        h = self.conv2(self.conv1(x.reshape(B * T, N_BINS, self.n_in).transpose(1, 2)))   # [BT,c2,65]
+        fq, _ = self.fgru(h.transpose(1, 2))                                        # [BT,65,2hf]
+        tm, _ = self.tgru(fq.reshape(B, T, 65, 2 * self.hf).permute(0, 2, 1, 3).reshape(B * 65, T, 2 * self.hf))
+        tm = tm.reshape(B, 65, T, self.ht).permute(0, 2, 1, 3)                       # [B,T,65,ht]
+        ctx = torch.cat([fq.reshape(B, T, 65, 2 * self.hf), tm], -1)                 # [B,T,65,2hf+ht]
+        up = torch.nn.functional.interpolate(ctx.reshape(B * T, 65, -1).transpose(1, 2), size=N_BINS,
+                                             mode="linear", align_corners=True).transpose(1, 2).reshape(B, T, N_BINS, -1)
+        return self.dec(torch.cat([up, x], -1))
+
+    def forward(self, f):
+        return self.torch.softmax(self._logits(f), -1)
+
+
+def build_net(torch, arch, band, **kw):
+    if arch == "freq":
+        return FreqNet(torch, band, n_out=kw.get("n_out", 5), hf=kw.get("hidden", 40), ht=kw.get("ctx", 16), dec=kw.get("dec", 16))
+    if arch in ("full", "full_probe"):
+        return FullNet(torch, band, n_out=kw.get("n_out", 5), ch=kw.get("proj", 16), hidden=kw.get("hidden", 64),
+                       dec=kw.get("dec", 24), probe=arch == "full_probe", layers=kw.get("layers", 1), bidir=kw.get("bidir", False))
+    if arch == "probe":
+        return ProbeNet(torch, band, hidden=kw.get("hidden", 64), neigh=kw.get("neigh", 2), n_out=kw.get("n_out", 1), tctx=kw.get("tctx", 0))
+    if arch == "probe_roles":
+        return ProbeNet(torch, band, hidden=kw.get("hidden", 64), neigh=kw.get("neigh", 2), n_out=kw["n_out"], tctx=kw.get("tctx", 0))
+    if arch == "probe_ctx":
+        return ProbeCtxNet(torch, band, hidden=kw.get("hidden", 64), neigh=kw.get("neigh", 2), n_out=kw["n_out"],
+                           ctx=kw.get("ctx", 64), proj=kw.get("proj", 8), tctx=kw.get("tctx", 0))
+    if arch == "conv2048":
+        return ConvNet(torch, band, ch=kw.get("ctx", 16), hidden=kw.get("hidden", 8), n_out=kw.get("n_out", 5))
+    return (TFNet if arch == "tf" else MaskNet)(torch, band, **kw)
+
+
+def net_is_fine(net):
+    return getattr(net, "FINE", False)
+
+
+def master(torch, mix, rng):
+    """Cheap 'mastering': gain, tilt, soft limiter.  mix [B,2,n]."""
+    B = mix.shape[0]
+    g = 10 ** (torch.empty(B, 1, 1, device=mix.device).uniform_(0, 6) / 20)
+    y = mix * g
+    return torch.tanh(y * 1.2) / 1.2                              # soft knee near 0.8
+
+
+def load_split(cache_dir):
+    s = json.load(open(os.path.join(cache_dir, "split.json")))["split"]
+    return {k: [t for t, v in s.items() if v == k and os.path.exists(os.path.join(cache_dir, t + ".npy"))]
+            for k in ("train", "dev", "test")}
+
+
+def npy_header(path):
+    """(shape, dtype, data offset) of a .npy without touching its data."""
+    with open(path, "rb") as f:
+        version = np.lib.format.read_magic(f)
+        shape, _, dtype = (np.lib.format.read_array_header_1_0 if version == (1, 0) else np.lib.format.read_array_header_2_0)(f)
+        return shape, dtype, f.tell()
+
+
+def read_window(path, s, n, slots=None):
+    """[G,C,N] .npy -> [len(slots),C,n] for samples s..s+n with plain file reads.  No mmap: on the
+    PC's WinBtrfs volume page-ins of a mmapped cache file fault under load (access violation in a
+    prefetch thread, the second death of v20)."""
+    shape, dtype, off = npy_header(path)
+    G, C, N = shape
+    slots = range(G) if slots is None else slots
+    out = np.zeros((len(slots), C, n), dtype)
+    isz = dtype.itemsize
+    with open(path, "rb") as f:
+        for i, g in enumerate(slots):
+            for c in range(C):
+                f.seek(off + ((g * C + c) * N + s) * isz)
+                out[i, c] = np.frombuffer(f.read(n * isz), dtype)
+    return out
+
+
+def merge_groups(w, merge_idx):
+    """[7, 2, n] cached groups -> [G, 2, n] merged (numpy, int16 sums in int32)."""
+    return np.stack([w[idx].astype(np.int32).sum(0) for idx in merge_idx]).astype(np.float32)
+
+
+def expand_slots(win):
+    """Teacher caches -> the seven-slot layout: [vocals, rest] or [vocals, drums, bass, other]."""
+    if win.shape[0] == len(GROUPS):
+        return win
+    full = np.zeros((len(GROUPS), 2, win.shape[2]), np.int16)
+    if win.shape[0] == 2:
+        full[0] = win[0]; full[6] = win[1]
+    else:
+        full[0] = win[0]; full[2] = win[1]; full[5] = win[2]; full[6] = win[3]
+    return full
+
+
+def batch_windows(torch, cache_dir, tracks, seconds, batch, rng, dev, merge_idx):
+    n = int(seconds * SR)
+    wavs = []
+    for _ in range(batch):
+        t = tracks[rng.integers(len(tracks))]
+        path = os.path.join(cache_dir, t + ".npy")
+        shape = npy_header(path)[0]
+        if shape[2] <= n:
+            continue
+        s = rng.integers(0, shape[2] - n)
+        wavs.append(merge_groups(expand_slots(read_window(path, s, n)), merge_idx))
+    return torch.as_tensor(np.stack(wavs), device=dev) / 32768         # [B,G,2,n]
+
+
+TARGET_HOP = "mean"   # "mean" = IRM averaged over the control's 4 hops; "single" = the control hop only (aligned with the features)
+
+
+def targets_and_features(torch, x, rng, augment, fine=False):
+    """x [B,G,2,n] group waveforms -> f [B,Tc,257,4], irm [B,Tc,257,G], weight [B,Tc,257], power [B,Tc,257,G]."""
+    B, G = x.shape[:2]
+    if augment:
+        gains = 10 ** (torch.empty(B, G, 1, 1, device=x.device).uniform_(-6, 6) / 20)
+        x = x * gains
+    mix = x.sum(1)                                                # [B,2,n]
+    if augment:
+        mix_in = master(torch, mix, rng)
+    else:
+        mix_in = mix
+    X = stft(torch, mix_in)                                       # [B,2,T,257]
+    Gs = stft(torch, x)                                           # [B,G,2,T,257]
+    P = (Gs.real ** 2 + Gs.imag ** 2).sum(2)                      # [B,G,T,257]
+    irm = P / (P.sum(1, keepdim=True) + 1e-9)
+    f = features(torch, X[:, 0], X[:, 1])                         # [B,T,257,4]
+    T = (f.shape[1] // CONTROL) * CONTROL
+    f = f[:, CONTROL - 1:T:CONTROL]                               # the control hop's features
+    if fine:
+        Xf = stft_fine(torch, mix_in)                             # [B,2,Tf,1025], frame k centred on k*512
+        ff = features(torch, Xf[:, 0], Xf[:, 1])[:, 1:]           # frame k+1 ~ the DSP's control k (hop 4k-1 ends at 512k+384)
+        n_t = min(ff.shape[1], f.shape[1])
+        f = ff[:, :n_t]
+        f_cut = n_t
+    else:
+        f_cut = f.shape[1]
+    if TARGET_HOP == "single":
+        irm = irm[:, :, CONTROL - 1:T:CONTROL].permute(0, 2, 3, 1)
+        Pc = P[:, :, CONTROL - 1:T:CONTROL].permute(0, 2, 3, 1)
+    elif TARGET_HOP == "ewmean":                                  # energy-weighted mean over the held hops = ratio of summed powers
+        Pc = P[:, :, :T].reshape(B, G, T // CONTROL, CONTROL, N_BINS).sum(3).permute(0, 2, 3, 1)
+        irm = Pc / (Pc.sum(-1, keepdim=True) + 1e-9)
+    else:
+        irm = irm[:, :, :T].reshape(B, G, T // CONTROL, CONTROL, N_BINS).mean(3).permute(0, 2, 3, 1)
+        Pc = P[:, :, :T].reshape(B, G, T // CONTROL, CONTROL, N_BINS).mean(3).permute(0, 2, 3, 1)   # [B,Tc,257,G]
+    irm, Pc = irm[:, :f_cut], Pc[:, :f_cut]
+    Pm = Pc.sum(-1)
+    weight = torch.clamp(torch.log10(Pm + 1e-9) + 6, 0, 6) / 6    # salience: silent cells count nothing
+    return f, irm, weight, Pc
+
+
+class Roles:
+    """Indices of the protected / rear-eligible outputs for a merge config."""
+
+    def __init__(self, names):
+        self.names = names
+        self.protect = [names.index(n) for n in PROTECT if n in names]
+        self.eligible = [names.index(n) for n in ELIGIBLE if n in names]
+        self.vocals = names.index("vocals") if "vocals" in names else names.index("lead_vocal")
+
+
+def rear_eligibility(m, roles):
+    """What the DSP may send rear: the eligible masks summed, bounded to 1 (or
+    the single eligibility output of a ProbeNet)."""
+    if m.shape[-1] == 1:
+        return m[..., 0]
+    return torch_clamp_sum(m, roles.eligible)
+
+
+def torch_clamp_sum(m, idx):
+    return m[..., idx].sum(-1).clamp(max=1.0)
+
+
+# Input standardisation (v9).  The probe showed the cells are separable (DEV
+# AUC 0.81 on the local spectrum alone) while every mask net produced the same
+# eligibility in vocal- and other-owned cells: the nets saw raw log powers
+# (-16..+8) through tanh/GRU gates and saturated.  The C runtime standardises
+# its features too (hssr_neon.c).  Stats are measured on the first training
+# batches, frozen, and saved in the checkpoint.
+FEAT_STATS = {"mean": None, "std": None}
+DESC_STATS = {"mean": None, "std": None}     # full_probe: the raw features AND the descriptor need their own stats
+
+
+def standardize(torch, f, stats=FEAT_STATS):
+    if stats["mean"] is None:
+        return f
+    mu = torch.as_tensor(stats["mean"], device=f.device, dtype=f.dtype)
+    sd = torch.as_tensor(stats["std"], device=f.device, dtype=f.dtype)
+    return (f - mu) / sd
+
+
+def fit_feat_stats(torch, f, stats=FEAT_STATS):
+    """f [B,T,bins,4] -> per-feature mean/std (over batch, time, bins), clamped ±6 at use."""
+    flat = f.reshape(-1, f.shape[-1])
+    stats["mean"] = flat.mean(0).tolist()
+    stats["std"] = (flat.std(0) + 1e-3).tolist()
+
+
+LOSS_W = {"leak": 3.0, "leakp": 1.0, "missed": 2.0}   # overridden by --w-leak/--w-leakp/--w-missed
+LOSS_MODE = "own"     # "own" = v4 ownership loss on probabilities; "balanced" = v7 (Codex review 2)
+
+
+def loss_probe(torch, logits, irm, w, roles):
+    """One eligibility logit [B,T,257,1]; positives = cells an eligible group owns
+    (> 0.6 of the power), negatives = cells a protected group owns; each side
+    averaged (the probe's balanced sampling); nothing else."""
+    valid = (w > 0.15).float()
+    elig_t = irm[..., roles.eligible].sum(-1)
+    prot_t = irm[..., roles.protect].sum(-1)
+    pos = (elig_t > 0.6).float() * valid
+    neg = (prot_t > 0.6).float() * valid
+    bce = torch.nn.functional.binary_cross_entropy_with_logits(logits[..., 0], (elig_t > 0.6).float(), reduction="none")
+    return (bce * pos).sum() / (pos.sum() + 1.0) + (bce * neg).sum() / (neg.sum() + 1.0)
+
+
+CE_WEIGHT = "valid"   # "valid" = every audible cell counts once; "salience" = the log-level weight (loud cells matter more, like the DSP metric)
+CE_PURITY_BALANCE = False   # astra 7 arm c: pure (max share > 0.8) and mixed cells get equal total weight within every dominant role
+CE_LAST = {}                # diagnostics of the last loss_softmax call: weighted target entropy, ce - entropy
+
+
+def loss_softmax(torch, logits, irm, w, P, roles):
+    """astra review 3, point 4: roles as a softmax over fractional stem-power
+    targets (the IRMs of a cell sum to 1), soft-target cross-entropy weighted
+    by salience.  Eligibility = p_other + p_cymbals, no clamp needed."""
+    valid = w * (w > 0.15).float() if CE_WEIGHT == "salience" else (w > 0.15).float()
+    if CE_PURITY_BALANCE:
+        dom = irm.argmax(-1); pure = (irm.max(-1).values > 0.8)
+        total = valid.sum()
+        strata = []
+        for r in range(irm.shape[-1]):
+            for pm in (True, False):
+                sel = ((dom == r) & (pure == pm)).float() * valid
+                if sel.sum() > 0:
+                    strata.append(sel / sel.sum())
+        if strata:
+            valid = torch.stack(strata).sum(0) * (total / len(strata))
+    logp = torch.log_softmax(logits, -1)
+    ce = -(irm * logp).sum(-1)
+    ent = -(irm * torch.log(irm.clamp(min=1e-9))).sum(-1)
+    loss = (ce * valid).sum() / (valid.sum() + 1.0)
+    CE_LAST.update(entropy=float((ent * valid).sum() / (valid.sum() + 1.0)), excess=float(loss) - float((ent * valid).sum() / (valid.sum() + 1.0)),
+                   logit_std=float(logits.detach().std()))
+    return loss
+
+
+def loss_softmax_ramp(torch, logits, irm, w, P, roles, ramp):
+    """astra review 3, point 5: discrimination first (softmax CE), then protection
+    ramped in with an explicit retention constraint: vocal energy admitted rear
+    in vocal-owned cells (leak) against eligible energy held back in
+    eligible-owned cells (missed), both energy-weighted."""
+    ce = loss_softmax(torch, logits, irm, w, P, roles)
+    m = torch.softmax(logits, -1)
+    elig = rear_eligibility(m, roles)
+    valid = (w > 0.15).float()
+    Pv = P[..., roles.vocals] * (irm[..., roles.vocals] > 0.3).float() * valid
+    leak = (Pv * elig).sum() / (Pv.sum() + 1e-9)
+    Pp = P[..., roles.protect].sum(-1) * (irm[..., roles.protect].sum(-1) > 0.5).float() * valid
+    leak_p = (Pp * elig).sum() / (Pp.sum() + 1e-9)
+    missed = 0.0
+    for g in roles.eligible:
+        Pg = P[..., g] * (irm[..., g] > 0.6).float() * valid
+        missed = missed + (Pg * (1 - elig)).sum() / (Pg.sum() + 1e-9)
+    missed = missed / max(1, len(roles.eligible))
+    # the retention term rides the same ramp: unramped (v20, v24a-c) it alone drove eligibility to 0.8-0.9
+    # everywhere for the 5000 pre-ramp steps - every "distillation drift" of 26.09 was this term, not the teacher
+    # (v25t, teacher-only with plain CE: 0.34 in vocal-owned cells)
+    return ce + ramp * (LOSS_W["leak"] * leak + LOSS_W["leakp"] * leak_p + LOSS_W["missed"] * missed)
+
+
+def band_pool(torch, dev):
+    band = torch.as_tensor(bin_band(), device=dev)
+    return torch.zeros(N_BANDS, N_BINS, device=dev).scatter_(0, band[None], torch.ones(1, N_BINS, device=dev))
+
+
+def loss_presence(torch, pres_logits, irm, w, P, roles, pool):
+    """Band-level vocal presence: BCE on 'the band's vocal power share > 0.5',
+    weighted by the band's salience so silent bands teach nothing."""
+    Pv = torch.einsum("kn,btn->btk", pool, P[..., roles.vocals])
+    Pt = torch.einsum("kn,btn->btk", pool, P.sum(-1)) + 1e-9
+    valid = (torch.clamp(torch.log10(Pt) + 6, 0, 6) / 6 > 0.15).float()
+    bce = torch.nn.functional.binary_cross_entropy_with_logits(pres_logits, (Pv / Pt > 0.5).float(), reduction="none")
+    return (bce * valid).sum() / (valid.sum() + 1.0)
+
+
+def loss_teacher_vocal(torch, logits, irm, w, roles):
+    """Teacher songs, 'vocal' mode: the student's vocal probability against the teacher's vocal
+    power fraction in EVERY audible cell (soft BCE, salience-weighted).  htdemucs is a 40 M-param
+    separator that reaches at the car's STFT what none of our nets can fit even on TRAIN (train AUC =
+    DEV AUC ~0.8 for all of them, v22 included): it supplies the sharp cross-spectrum voice evidence
+    over 220 h of real masters; the roles other than vocals still come from MoisesDB only."""
+    p = torch.softmax(logits, -1)[..., roles.vocals].clamp(1e-4, 1 - 1e-4)
+    valid = w * (w > 0.15).float()
+    bce = torch.nn.functional.binary_cross_entropy(p, irm[..., roles.vocals], reduction="none")
+    return (bce * valid).sum() / (valid.sum() + 1.0)
+
+
+def loss_teacher_elig(torch, logits, irm, w, roles, bce_w=0.2):
+    """astra review 6: distil the rendered quantity.  The student's eligibility (p_other) against the
+    teacher's other-share: Huber on the amplitudes sqrt(e) (what multiplies the audio) + a small BCE,
+    every audible cell, salience-weighted."""
+    io = roles.names.index("other")
+    e_hat = torch.softmax(logits, -1)[..., io]
+    e_t = irm[..., io]
+    valid = w * (w > 0.15).float()
+    h = torch.nn.functional.smooth_l1_loss(e_hat.clamp(min=1e-6).sqrt(), e_t.clamp(min=1e-6).sqrt(), reduction="none", beta=0.1)
+    b = torch.nn.functional.binary_cross_entropy(e_hat.clamp(1e-4, 1 - 1e-4), e_t, reduction="none")
+    return ((h + bce_w * b) * valid).sum() / (valid.sum() + 1.0)
+
+
+def dev_auc_vo(torch, score, irm, w, roles):
+    """The probe's AUC: vocal-owned vs other-owned cells on the eligibility score."""
+    valid = w > 0.15
+    io = roles.names.index("other")
+    pos = score[(irm[..., io] > 0.6) & valid]
+    neg = score[(irm[..., roles.vocals] > 0.6) & valid]
+    if len(pos) == 0 or len(neg) == 0:
+        return float("nan")
+    pos = pos[torch.randperm(len(pos), device=pos.device)[:4000]]; neg = neg[torch.randperm(len(neg), device=neg.device)[:4000]]
+    return float((pos[:, None] > neg[None, :]).float().mean())
+
+
+def dev_auc(torch, logits, irm, w, roles):
+    """AUC of the eligibility logit, eligible-owned vs protected-owned cells."""
+    valid = w > 0.15
+    sc = logits[..., 0] if logits.shape[-1] == 1 else rear_eligibility(torch.softmax(logits, -1), roles)
+    pos = sc[(irm[..., roles.eligible].sum(-1) > 0.6) & valid]
+    neg = sc[(irm[..., roles.protect].sum(-1) > 0.6) & valid]
+    if len(pos) == 0 or len(neg) == 0:
+        return float("nan")
+    pos = pos[torch.randperm(len(pos), device=pos.device)[:4000]]; neg = neg[torch.randperm(len(neg), device=neg.device)[:4000]]
+    return float((pos[:, None] > neg[None, :]).float().mean())
+
+
+def loss_balanced(torch, logits, irm, w, P, roles, ramp):
+    """v7 (Codex review 2): per-output BCE-with-logits on CONFIDENT cells only
+    (owned > 0.6 = positive, < 0.2 = negative), positives and negatives of every
+    output normalised separately so the sparse eligible cells weigh as much as
+    the plentiful protected ones; a soft regression on the ambiguous cells at
+    low weight; silent cells excluded by a validity mask.  The contamination
+    penalty (vocal energy admitted rear in vocal-owned cells) is ramped in by
+    `ramp` (0..1) only after support is established."""
+    valid = (w > 0.15).float()
+    bce = torch.nn.functional.binary_cross_entropy_with_logits(logits, irm, reduction="none")   # [B,T,257,G]
+    total = 0.0
+    for g in range(irm.shape[-1]):
+        pos = (irm[..., g] > 0.6).float() * valid
+        neg = (irm[..., g] < 0.2).float() * valid
+        total = total + (bce[..., g] * pos).sum() / (pos.sum() + 1.0) + (bce[..., g] * neg).sum() / (neg.sum() + 1.0)
+    amb = ((irm > 0.2) & (irm < 0.6)).float() * valid[..., None]
+    total = total + 0.25 * (bce * amb).sum() / (amb.sum() + 1.0)
+    m = torch.sigmoid(logits)
+    elig = rear_eligibility(m, roles)
+    Pv = P[..., roles.vocals] * (irm[..., roles.vocals] > 0.3).float() * valid
+    leak = (Pv * elig).sum() / (Pv.sum() + 1e-9)
+    smooth = (m[:, 1:] - m[:, :-1]).abs().mean(-1)
+    return total / irm.shape[-1] + ramp * LOSS_W["leak"] * leak + 0.05 * (smooth * valid[:, 1:]).sum() / (valid[:, 1:].sum() + 1e-9)
+
+
+def loss_fn(torch, m, irm, w, P, roles):
+    """Asymmetric BCE on the ideal ratio masks (protected cells 4x) + a leak term on
+    the vocal ENERGY the eligible masks would admit rear, normalised per frame so
+    quiet vocal passages (consonants, breath) matter as much as loud ones
+    (Codex review 2026-09-25) + temporal smoothness."""
+    protect = irm[..., roles.protect].sum(-1)
+    bce = -(irm * torch.log(m + 1e-6) + (1 - irm) * torch.log(1 - m + 1e-6))
+    per_cell = bce.mean(-1) * (1 + 3 * protect)
+    elig = rear_eligibility(m, roles)                              # [B,T,257]
+    # v4: placement is decided where a source DOMINATES a cell.  Vocal bleed
+    # sits in nearly every cell at 93.75 Hz bins, so an energy-accounting leak
+    # over all cells punished eligibility everywhere and the net protected
+    # everything (v2 0.016, v3 0.047 of "other" admitted).  Leak = vocal energy
+    # admitted rear in cells the voice owns (share > 0.3), per frame; missed
+    # support = eligible energy held back in cells an eligible group owns (> 0.6).
+    Pv = P[..., roles.vocals] * (irm[..., roles.vocals] > 0.3).float()
+    frame_voc = Pv.sum(-1)                                         # [B,T]
+    active = (frame_voc > 1e-4 * P.sum(-1).sum(-1).mean()).float()
+    leak_frame = (Pv * elig).sum(-1) / (frame_voc + 1e-9)
+    leak = (leak_frame * active).sum() / (active.sum() + 1e-9)
+    Pp = P[..., roles.protect].sum(-1) * (irm[..., roles.protect].sum(-1) > 0.5).float()
+    leak_p = (Pp * elig).sum() / (Pp.sum() + 1e-9)
+    missed = 0.0
+    for g in roles.eligible:
+        Pg = P[..., g] * (irm[..., g] > 0.6).float()
+        missed = missed + (Pg * (1 - elig)).sum() / (Pg.sum() + 1e-9)
+    missed = missed / max(1, len(roles.eligible))
+    smooth = (m[:, 1:] - m[:, :-1]).abs().mean(-1)
+    core = ((per_cell * w).sum() / (w.sum() + 1e-9) + LOSS_W["leak"] * leak +
+            LOSS_W["leakp"] * leak_p + LOSS_W["missed"] * missed)
+    return core + 0.05 * (smooth * w[:, 1:]).sum() / (w[:, 1:].sum() + 1e-9)
+
+
+def mask_space_metrics(torch, m, irm, w, P, roles):
+    """vocal_to_rear = per-frame-normalised vocal energy admitted rear (the leak);
+    *_kept_rear = share of that group's energy the eligible masks keep for the rear."""
+    elig = rear_eligibility(m, roles)
+    Pv = P[..., roles.vocals]; fv = Pv.sum(-1); act = (fv > 1e-4 * P.sum(-1).sum(-1).mean()).float()
+    out = {"vocal_to_rear": float((((Pv * elig).sum(-1) / (fv + 1e-9)) * act).sum() / (act.sum() + 1e-9))}
+    for name in roles.names:
+        if name == "vocals":
+            continue
+        Pg = P[..., roles.names.index(name)]
+        out[f"{name}_to_rear"] = float((Pg * elig).sum() / (Pg.sum() + 1e-9))
+    # dominant-cell versions (what the stem harness measures: cells a stem owns)
+    Pv = P[..., roles.vocals] * (irm[..., roles.vocals] > 0.5).float()
+    out["vocal_own_to_rear"] = float((Pv * elig).sum() / (Pv.sum() + 1e-9))
+    for g in roles.eligible:
+        Pg = P[..., g] * (irm[..., g] > 0.6).float()
+        out[f"{roles.names[g]}_own_to_rear"] = float((Pg * elig).sum() / (Pg.sum() + 1e-9))
+    if m.shape[-1] == irm.shape[-1]:
+        out["irm_mae"] = float(((m - irm).abs().mean(-1) * w).sum() / (w.sum() + 1e-9))
+    else:
+        out["irm_mae"] = float(((elig - irm[..., roles.eligible].sum(-1)).abs() * w).sum() / (w.sum() + 1e-9))
+    return out
+
+
+def prefetch(make_batch, depth=3):
+    """Prepare the next batches on worker threads while the GPU trains on this one
+    (the mmap reads and the numpy merge dominate a step otherwise)."""
+    from concurrent.futures import ThreadPoolExecutor
+    ex = ThreadPoolExecutor(depth)
+    pending = [ex.submit(make_batch) for _ in range(depth)]
+    while True:
+        fut = pending.pop(0)
+        pending.append(ex.submit(make_batch))
+        yield fut.result()
+
+
+def train(a):
+    torch = _torch()
+    dev = "cuda" if torch.cuda.is_available() else "cpu"
+    torch.manual_seed(a.seed)
+    rng = np.random.default_rng(a.seed)
+    split = load_split(a.cache)
+    names, merge_idx = parse_merge(a.merge)
+    roles = Roles(names)
+    print(f"device {dev}; train {len(split['train'])} dev {len(split['dev'])} songs; outputs {names}; "
+          f"protect {[names[i] for i in roles.protect]} eligible {[names[i] for i in roles.eligible]}", flush=True)
+    net = build_net(torch, a.arch, bin_band(), ctx=a.ctx, proj=a.proj, hidden=a.hidden, n_out=len(names), neigh=a.neigh, tctx=a.tctx, dec=a.dec,
+                    layers=a.layers, bidir=a.bidir).to(dev)
+    net.softmax_out = LOSS_MODE in ("softmax", "softmax_ramp")
+    if a.init:
+        ck0 = torch.load(a.init, map_location=dev)
+        net.modules.load_state_dict(ck0["state"])
+        if ck0.get("feat_stats"):
+            FEAT_STATS.update(ck0["feat_stats"])
+        if ck0.get("desc_stats"):
+            DESC_STATS.update(ck0["desc_stats"])
+        print(f"warm start from {a.init} (step {ck0.get('step')})", flush=True)
+    n_par = sum(p.numel() for p in net.parameters())
+    n_in = 4 * (1 + 2 * a.neigh) + a.proj + 1
+    if hasattr(net, "macs"):
+        macs = net.macs
+    elif a.arch in ("probe", "probe_roles", "probe_ctx"):
+        n_in = (2 * a.neigh + 1 + 1 + 2 + 1) * (1 + a.tctx) + (a.proj if a.arch == "probe_ctx" else 0)
+        macs = N_BINS * (n_in * a.hidden + a.hidden * a.hidden + a.hidden * (1 if a.arch == "probe" else len(names)))
+        if a.arch == "probe_ctx":
+            macs += 3 * (N_BANDS * 5 * a.ctx + a.ctx * a.ctx) + a.ctx * N_BANDS * a.proj
+    elif a.arch == "conv2048":
+        ch, hd = a.ctx, a.hidden
+        macs = N_BINS * (8 * 4 * ch + 2 * 5 * ch * ch + 3 * (ch * hd + hd * hd) + (ch + hd) * len(names))
+    elif a.arch == "tf":
+        macs = (3 * (N_BANDS * 5 * a.ctx + a.ctx * a.ctx) + a.ctx * N_BANDS * a.proj +
+                N_BINS * (n_in * 24 + 2 * 3 * (24 * a.hidden + a.hidden ** 2) + 3 * (2 * a.hidden * a.hidden + a.hidden ** 2)
+                          + 3 * a.hidden * len(names)))
+    else:
+        macs = (3 * (N_BANDS * 5 * a.ctx + a.ctx * a.ctx) + a.ctx * N_BANDS * a.proj +
+                N_BINS * (n_in * a.hidden + a.hidden * len(names)))
+    print(f"params {n_par}, ~{macs} MAC per control = {macs * SR / HOP / CONTROL / 1e6:.1f} M MAC/s", flush=True)
+    opt = torch.optim.AdamW(net.parameters(), lr=a.lr, weight_decay=a.weight_decay)
+    _GN = []
+    pool = band_pool(torch, dev)
+    sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, a.steps)
+    if a.init and a.start_step:                       # crash-restart (the PC's GPU/driver dies mid-run): continue the schedule
+        ck0 = torch.load(a.init, map_location=dev)
+        if ck0.get("opt"):
+            opt.load_state_dict(ck0["opt"])
+        for _ in range(a.start_step):
+            sched.step()
+        print(f"resuming at step {a.start_step}", flush=True)
+    os.makedirs(a.out, exist_ok=True)
+    best = 1e9
+    if a.init and a.start_step:
+        best = torch.load(a.init, map_location="cpu").get("best", 1e9)
+    t0 = time.time()
+    batches = prefetch(lambda: batch_windows(torch, a.cache, split["train"], a.seconds, a.batch, rng, "cpu", merge_idx))
+    teacher = None
+    if a.teacher_cache and a.teacher_only:
+        # diagnostic: train on the teacher's labels ALONE (softmax CE everywhere), evaluate on MoisesDB DEV.
+        # If this alone puts 0.8 eligibility into truth-vocal cells, the teacher's labels at the car's STFT
+        # systematically call those cells "other" and role distillation is biased for this target.
+        t_tracks = sorted(f[:-4] for f in os.listdir(a.teacher_cache)
+                          if f.endswith(".npy") and os.path.exists(os.path.join(a.teacher_cache, f[:-4] + ".json")))
+        if a.teacher_songs:
+            t_tracks = t_tracks[:a.teacher_songs]
+        batches = prefetch(lambda: batch_windows(torch, a.teacher_cache, t_tracks, a.seconds, a.batch, rng, "cpu", merge_idx))
+        print(f"TEACHER-ONLY training on {len(t_tracks)} songs from {a.teacher_cache}", flush=True)
+        if a.eval_on_train:                                  # the overfit test: can the student COMMIT on songs it memorises?
+            split["dev"] = [os.path.join(a.teacher_cache, t + ".npy") for t in t_tracks]
+    elif a.teacher_cache:
+        # astra review 4, point 3: real masters through htdemucs_ft, protection-only. Only the cells the
+        # teacher calls vocal with share > 0.9 (94 % precise vs real stems) carry a target; the rest of the
+        # song is masked out of the loss, so teacher silence never becomes rear permission.
+        # the .json is written after the .npy: a song without it is still being written by the teacher
+        # (mmap of a growing file = access violation in c10.dll, v20's first death)
+        t_tracks = sorted(f[:-4] for f in os.listdir(a.teacher_cache)
+                          if f.endswith(".npy") and os.path.exists(os.path.join(a.teacher_cache, f[:-4] + ".json")))
+        teacher = prefetch(lambda: batch_windows(torch, a.teacher_cache, t_tracks, a.seconds, a.batch, rng, "cpu", merge_idx))
+        print(f"teacher songs {len(t_tracks)} from {a.teacher_cache}, every {a.teacher_every} steps at weight {a.w_teacher}", flush=True)
+    if FEAT_STATS["mean"] is None:
+        with torch.no_grad():                             # feature statistics from 8 batches, then frozen
+            fs = [targets_and_features(torch, next(batches).to(dev), rng, augment=True, fine=net_is_fine(net))[0] for _ in range(8)]
+            fs = torch.cat(fs)
+            fit_feat_stats(torch, probe_descriptor(torch, fs, net.neigh) if isinstance(net, (ProbeNet, ProbeCtxNet)) else fs)
+            if a.arch in ("full_probe", "freq"):
+                fit_feat_stats(torch, probe_descriptor(torch, fs, 2), DESC_STATS)
+    print("feature mean", [round(v, 2) for v in FEAT_STATS["mean"]], "std", [round(v, 2) for v in FEAT_STATS["std"]], flush=True)
+    for step in range(a.start_step + 1, a.steps + 1):
+        x = next(batches).to(dev)          # synchronous: the prefetch thread's array must not be reused mid-copy
+        with torch.no_grad():
+            f, irm, w, P = targets_and_features(torch, x, rng, augment=not a.no_augment, fine=net_is_fine(net))
+        if LOSS_MODE == "probe":
+            loss = loss_probe(torch, net._logits(f), irm, w, roles)
+        elif LOSS_MODE == "softmax":
+            loss = loss_softmax(torch, net._logits(f), irm, w, P, roles)
+        elif LOSS_MODE == "softmax_ramp":
+            ramp = min(1.0, max(0.0, (step - a.ramp_start) / max(1, a.ramp_steps)))
+            loss = loss_softmax_ramp(torch, net._logits(f), irm, w, P, roles, ramp)
+        elif LOSS_MODE == "balanced":
+            logits = net._logits(f)
+            ramp = min(1.0, max(0.0, (step - a.ramp_start) / max(1, a.ramp_steps)))
+            loss = loss_balanced(torch, logits, irm, w, P, roles, ramp)
+        else:
+            m = net.forward(f)
+            loss = loss_fn(torch, m, irm, w, P, roles)
+        if getattr(net, "last_presence", None) is not None and a.w_pres > 0:
+            loss = loss + a.w_pres * loss_presence(torch, net.last_presence, irm, w, P, roles, pool)
+        if teacher is not None and step % a.teacher_every == 0:
+            xt = next(teacher).to(dev)
+            with torch.no_grad():
+                ft, irm_t, wt, Pt = targets_and_features(torch, xt, rng, augment=True, fine=net_is_fine(net))
+            if a.teacher_mode == "vocal":
+                loss = loss + a.w_teacher * loss_teacher_vocal(torch, net._logits(ft), irm_t, wt, roles)
+            elif a.teacher_mode == "elig":                    # astra 6: eligibility directly + 0.1 x role CE on confident cells
+                lg_t = net._logits(ft)
+                wc = wt * (irm_t.max(-1).values > a.teacher_conf).float()
+                loss = loss + a.w_teacher * (loss_teacher_elig(torch, lg_t, irm_t, wt, roles) + 0.1 * loss_softmax(torch, lg_t, irm_t, wc, Pt, roles))
+            elif a.teacher_mode == "roles":                   # four-stem teacher: the full softmax target (cymbals fold into drum_core)
+                # only where the teacher is confident: its "other" is a residual (master - stems) that carries the
+                # leakage of every source, so unconfident cells teach "other is everywhere" (v20 / v24: eligibility
+                # 0.8-0.9 in vocal-owned cells from step 250)
+                wt = wt * (irm_t.max(-1).values > a.teacher_conf).float()
+                if a.teacher_balance:
+                    # a real master is mostly instrumental cells: unbalanced, the teacher adds a flood of "other"
+                    # positives and shifts the class prior (v24b: eligibility 0.8-0.9 in vocal-owned DEV cells even
+                    # with the confidence mask).  Give every role the same total weight per batch.
+                    dom = irm_t.argmax(-1)
+                    for r in range(irm_t.shape[-1]):
+                        sel = (dom == r).float() * wt
+                        tot = sel.sum()
+                        if tot > 0:
+                            wt = wt * (1 - (dom == r).float()) + sel / tot * (wt.sum() / irm_t.shape[-1])
+                loss = loss + a.w_teacher * loss_softmax(torch, net._logits(ft), irm_t, wt, Pt, roles)
+            else:
+                wt = wt * (irm_t[..., roles.vocals] > 0.9).float()          # protection-only: confident-vocal cells
+                loss = loss + a.w_teacher * loss_softmax(torch, net._logits(ft), irm_t, wt, Pt, roles)
+            if getattr(net, "last_presence", None) is not None and a.w_pres > 0:
+                loss = loss + a.w_teacher * a.w_pres * loss_presence(torch, net.last_presence, irm_t, wt, Pt, roles, pool)
+        opt.zero_grad(); loss.backward()
+        gnorm = float(torch.nn.utils.clip_grad_norm_(net.parameters(), 2.0))
+        _GN.append(gnorm)
+        opt.step(); sched.step()
+        if step % a.eval_every == 0 or step == a.steps:
+            import gc; gc.collect()                       # the PC ran out of host RAM mid-run (54 GB working set, cause unknown)
+            met = evaluate(torch, net, a.cache, split["dev"], dev, a.seconds, merge_idx, roles, songs=a.eval_songs)
+            diag = (f" | H={CE_LAST.get('entropy', 0):.3f} ce-H={CE_LAST.get('excess', 0):.3f} logit_std={CE_LAST.get('logit_std', 0):.2f}"
+                    f" gnorm={np.mean(_GN[-a.eval_every:]):.2f} clipped={np.mean([g > 2.0 for g in _GN[-a.eval_every:]]):.2f}") if _GN else ""
+            _GN = _GN[-a.eval_every:]
+            line = f"step {step} loss {loss.item():.4f} dev " + " ".join(f"{k}={v:.3f}" for k, v in met.items()) + f"  {time.time() - t0:.0f}s" + diag
+            print(line, flush=True)
+            score = (met["vocal_own_to_rear"] * 4 + (1 - met["other_own_to_rear"]) +
+                     0.5 * (1 - met.get("cymbals_own_to_rear", 1.0)) + met["irm_mae"]) if LOSS_MODE not in ("probe", "softmax") else -met["auc"]
+            if LOSS_MODE == "softmax_ramp" and step > a.ramp_start:      # after the ramp: the milestone's own trade
+                score = met["vocal_own_to_rear"] * 4 + (1 - met["other_own_to_rear"])
+            elif LOSS_MODE == "softmax_ramp":
+                score = 1e9
+            ck = {"state": net.modules.state_dict(), "ctx": a.ctx, "proj": a.proj, "hidden": a.hidden,
+                  "neigh": a.neigh, "arch": a.arch, "names": names, "merge": a.merge, "step": step, "dev": met,
+                  "feat_stats": dict(FEAT_STATS), "desc_stats": dict(DESC_STATS), "tctx": a.tctx, "loss": a.loss, "dec": a.dec,
+                  "layers": a.layers, "bidir": a.bidir}
+            torch.save({**ck, "opt": opt.state_dict(), "best": best}, os.path.join(a.out, "last.pt"))   # for a crash-restart
+            if score < best:
+                best = score
+                torch.save(ck, os.path.join(a.out, "mask_net.pt"))
+                with open(os.path.join(a.out, "best.txt"), "w") as fh:
+                    fh.write(line + "\n")
+    if os.path.exists(os.path.join(a.out, "best.txt")):
+        print("best", open(os.path.join(a.out, "best.txt")).read().strip())
+    with open(os.path.join(a.out, "train_done.txt"), "w") as fh:
+        fh.write(f"{a.steps}\n")
+
+
+_EVAL_START = {}
+
+
+def evaluate(torch, net, cache_dir, tracks, dev, seconds, merge_idx, roles, songs=20):
+    net.modules.eval()
+    acc = {}
+    rng = np.random.default_rng(0)
+    with torch.no_grad():
+        for t in tracks[:songs]:
+            path = t if t.endswith(".npy") else os.path.join(cache_dir, t + ".npy")
+            n = int(seconds * SR)
+            if npy_header(path)[0][2] <= n:
+                continue
+            if (t, n) not in _EVAL_START:
+                _EVAL_START[(t, n)] = dev_excerpt(path, n)     # the loudest-vocal window, like the harness; found once
+            s = _EVAL_START[(t, n)]
+            x = torch.as_tensor(merge_groups(expand_slots(read_window(path, s, n)), merge_idx)[None], device=dev) / 32768
+            f, irm, wt, P = targets_and_features(torch, x, rng, augment=False, fine=net_is_fine(net))
+            lg = net._logits(f)
+            m = net.forward(f)
+            for k, val in mask_space_metrics(torch, m, irm, wt, P, roles).items():
+                acc.setdefault(k, []).append(val)
+            acc.setdefault("auc", []).append(dev_auc(torch, lg, irm, wt, roles))
+            acc.setdefault("auc_vo", []).append(dev_auc_vo(torch, rear_eligibility(m, roles), irm, wt, roles))
+    net.modules.train()
+    return {k: float(np.median(v)) for k, v in acc.items()}
+
+
+def load_model(model_path):
+    """-> (torch, net, roles, device).  Old 4-output checkpoints map to vocals/drum_core/bass/other."""
+    torch = _torch()
+    dev = "cuda" if torch.cuda.is_available() else "cpu"
+    ck = torch.load(model_path, map_location=dev)
+    names = ck.get("names", ["vocals", "drum_core", "bass", "other"])
+    if ck.get("feat_stats"):
+        FEAT_STATS.update(ck["feat_stats"])
+    if ck.get("desc_stats"):
+        DESC_STATS.update(ck["desc_stats"])
+    # output width from the saved head (a ProbeNet has one eligibility logit, role nets len(names))
+    # the head is the last Linear in the ModuleList (keys like "0.4.weight", "5.weight")
+    heads = [(tuple(int(t) for t in k[:-7].split(".") if t.isdigit()), v.shape[0])
+             for k, v in ck["state"].items() if k.endswith(".weight") and v.dim() == 2]
+    n_out = max(heads)[1] if heads else len(names)
+    net = build_net(torch, ck.get("arch", "mlp"), bin_band(), ctx=ck["ctx"], proj=ck["proj"], hidden=ck["hidden"],
+                    n_out=n_out, neigh=ck.get("neigh", 0), tctx=ck.get("tctx", 0), dec=ck.get("dec", 24),
+                    layers=ck.get("layers", 1), bidir=ck.get("bidir", False)).to(dev)
+    net.modules.load_state_dict(ck["state"]); net.modules.eval()
+    net.softmax_out = ck.get("loss", "") in ("softmax", "softmax_ramp")
+    net.calib = ck.get("calib")
+    return torch, net, Roles(names), dev
+
+
+PRESENCE_ALPHA = 0.0      # routing: e * (1 - alpha * presence), presence held with a ~300 ms release
+PRESENCE_RELEASE = 28     # controls (10.7 ms each)
+
+
+def apply_presence(torch, net, elig):
+    """elig [Tc, 257] -> elig * (1 - alpha * p_band), p = sigmoid(presence) with instant attack, exponential release."""
+    p = torch.sigmoid(net.last_presence[0]).cpu().numpy()                     # [Tc, 32]
+    decay = np.exp(-1.0 / PRESENCE_RELEASE)
+    held = np.zeros(N_BANDS, np.float32)
+    for t in range(p.shape[0]):
+        held = np.maximum(p[t], held * decay); p[t] = held
+    return elig * (1 - PRESENCE_ALPHA * torch.as_tensor(p[:, bin_band()], device=elig.device))
+
+
+def protect_mask(torch, net, roles, dev, x):
+    """x [2, n] float stereo -> per-control protect mask [Tc, 257] = 1 - rear eligibility."""
+    with torch.no_grad():
+        xt = torch.as_tensor(x[None], device=dev, dtype=torch.float32)
+        if net_is_fine(net):
+            Xf = stft_fine(torch, xt)
+            f = features(torch, Xf[:, 0], Xf[:, 1])[:, 1:]
+        else:
+            X = stft(torch, xt)
+            f = features(torch, X[:, 0], X[:, 1])
+            T = (f.shape[1] // CONTROL) * CONTROL
+            f = f[:, CONTROL - 1:T:CONTROL]
+        m = net.forward(f)[0]
+        elig = rear_eligibility(m, roles)
+        if getattr(net, "calib", None):
+            elig = torch.sigmoid(net.calib["a"] * torch.logit(elig.clamp(1e-4, 1 - 1e-4)) + net.calib["b"])
+        if PRESENCE_ALPHA > 0 and getattr(net, "last_presence", None) is not None:
+            elig = apply_presence(torch, net, elig)
+        return (1 - elig).cpu().numpy().astype(np.float32)
+
+
+def write_mask(path, prot):
+    with open(path, "wb") as fh:
+        fh.write(b"HSSRMSK0"); fh.write(np.array([prot.shape[0], N_BINS], np.uint32).tobytes()); fh.write(prot.tobytes())
+
+
+def dev_excerpt(path, n):
+    """Start of the loudest-vocal window of a cached song, like the harness / evaluate()."""
+    N = npy_header(path)[0][2]
+    v = read_window(path, 0, N, slots=(0, 1)).astype(np.float32).sum(0)
+    e = np.cumsum((v ** 2).sum(0)); idx = np.arange(0, N - n, 5 * SR)
+    return idx[int(np.argmax(e[idx + n - 1] - e[idx]))] if len(idx) else 0
+
+
+def calibrate(a):
+    """astra review 3 point 3 / review 4 point 5: the conv nets (v16, v17) RANK the cells
+    better than anything before (vocal-vs-other AUC 0.82) but leave the probabilities flat
+    (0.43 / 0.51 in vocal- / other-owned cells).  Ranking is the hard part; calibration is
+    two numbers: e' = sigmoid(a * logit(e) + b) fitted on DEV to the true eligible power
+    fraction (weighted soft-target BCE), stored in the checkpoint, applied by protect_mask."""
+    torch, net, roles, dev = load_model(a.model)
+    if a.eligible:
+        roles.eligible = [roles.names.index(n) for n in a.eligible.split("+")]
+    split = load_split(a.cache)
+    names, merge_idx = parse_merge(a.merge)
+    rng = np.random.default_rng(0)
+    Z, Tt, W, PV, PE, OV, OE = [], [], [], [], [], [], []
+    n = int(a.seconds * SR)
+    with torch.no_grad():
+        for t in split["dev"][:a.songs]:
+            path = os.path.join(a.cache, t + ".npy")
+            if npy_header(path)[0][2] <= n:
+                continue
+            s0 = dev_excerpt(path, n)
+            x = torch.as_tensor(merge_groups(read_window(path, s0, n), merge_idx)[None], device=dev) / 32768
+            f, irm, wt, P = targets_and_features(torch, x, rng, augment=False, fine=net_is_fine(net))
+            e = rear_eligibility(net.forward(f), roles)[0]
+            Z.append(torch.logit(e.clamp(1e-4, 1 - 1e-4)).flatten()); Tt.append(irm[0][..., roles.eligible].sum(-1).flatten())
+            W.append(wt[0].flatten())
+            PV.append((P[0][..., roles.vocals] * (irm[0][..., roles.vocals] > 0.5)).flatten())
+            PE.append((P[0][..., roles.eligible].sum(-1) * (irm[0][..., roles.eligible].sum(-1) > 0.6)).flatten())
+    z, tt, w, pv, pe = (torch.cat(v) for v in (Z, Tt, W, PV, PE))
+    valid = (w > 0.15).float()
+    if a.dominant:
+        valid = valid * ((pv > 0) | (pe > 0)).float()      # vocal-owned or eligible-owned cells only
+    ab = torch.tensor([1.0, 0.0], device=dev, requires_grad=True)
+    opt = torch.optim.Adam([ab], lr=0.05)
+    for _ in range(400):
+        q = torch.sigmoid(ab[0] * z + ab[1])
+        loss = (torch.nn.functional.binary_cross_entropy(q, tt, reduction="none") * valid).sum() / valid.sum()
+        opt.zero_grad(); loss.backward(); opt.step()
+    def report(tag, e):
+        print(f"{tag}: vocal-owned -> rear {float((pv * e).sum() / pv.sum()):.3f}   eligible-owned -> rear {float((pe * e).sum() / pe.sum()):.3f}   "
+              f"mean |e - t| {float(((e - tt).abs() * valid).sum() / valid.sum()):.3f}")
+    with torch.no_grad():
+        report("before", torch.sigmoid(z)); report("after ", torch.sigmoid(ab[0] * z + ab[1]))
+        print(f"a = {float(ab[0]):.3f}  b = {float(ab[1]):.3f}  (logit std {float(z[valid > 0].std()):.2f})")
+    ck = torch.load(a.model, map_location="cpu")
+    ck["calib"] = {"a": float(ab[0]), "b": float(ab[1]), "eligible": [roles.names[i] for i in roles.eligible]}
+    torch.save(ck, a.model)
+    print("saved calib into", a.model)
+
+
+def audit(a):
+    """Codex review 2: before any wider net, overfit ONE balanced excerpt with the
+    pure supervised loss and check the eligible-owned cells actually open.  If
+    they do not, the collapse is an objective/implementation bug, not capacity."""
+    torch = _torch()
+    dev = "cuda" if torch.cuda.is_available() else "cpu"
+    torch.manual_seed(0)
+    rng = np.random.default_rng(0)
+    split = load_split(a.cache)
+    names, merge_idx = parse_merge(a.merge); roles = Roles(names)
+    LOSS_W.update(leak=0.0, leakp=0.0, missed=0.0)
+    # a window where both the voice and "other" are present
+    best = None
+    for t in split["train"][:60]:
+        w = np.load(os.path.join(a.cache, t + ".npy"), mmap_mode="r")
+        n = int(a.seconds * SR)
+        if w.shape[2] <= n:
+            continue
+        for _ in range(4):
+            st = rng.integers(0, w.shape[2] - n)
+            g = merge_groups(np.asarray(w[:, :, st:st + n]), merge_idx)
+            ev = (g[roles.vocals] ** 2).sum(); eo = (g[names.index("other")] ** 2).sum(); et = (g ** 2).sum()
+            score = min(ev, eo) / (et + 1e-9)
+            if best is None or score > best[0]:
+                best = (score, t, st, g)
+    score, t, st, g = best
+    print(f"excerpt {t[:8]} @ {st / SR:.1f}s: vocal {100 * (g[roles.vocals] ** 2).sum() / (g ** 2).sum():.0f} % / other "
+          f"{100 * (g[names.index('other')] ** 2).sum() / (g ** 2).sum():.0f} % of energy", flush=True)
+    x = torch.as_tensor(g[None], device=dev) / 32768
+    net = build_net(torch, a.arch, bin_band(), ctx=a.ctx, proj=a.proj, hidden=a.hidden, n_out=len(names), neigh=a.neigh).to(dev)
+    f, irm, wt, P = targets_and_features(torch, x, rng, augment=False, fine=net_is_fine(net))
+    own_o = (irm[..., names.index("other")] > 0.6); own_v = (irm[..., roles.vocals] > 0.5)
+    print(f"cells: other-owned {int(own_o.sum())}, vocal-owned {int(own_v.sum())}, total {irm.shape[1] * N_BINS}; "
+          f"IRM_other mean in other-owned cells {float(irm[..., names.index('other')][own_o].mean()):.3f}", flush=True)
+    opt = torch.optim.Adam(net.parameters(), lr=3e-3)
+    for step in range(1, a.steps + 1):
+        m = net.forward(f)
+        loss = loss_fn(torch, m, irm, wt, P, roles)
+        opt.zero_grad(); loss.backward()
+        gn = float(sum(p.grad.norm() ** 2 for p in net.parameters() if p.grad is not None) ** 0.5)
+        opt.step()
+        if step % 50 == 0 or step == 1:
+            with torch.no_grad():
+                mo = m[..., names.index("other")]
+                print(f"step {step:4d} loss {loss.item():.4f} grad {gn:.3f}  m_other in other-owned cells {float(mo[own_o].mean()):.3f} "
+                      f"(target {float(irm[..., names.index('other')][own_o].mean()):.3f}); m_other in vocal-owned {float(mo[own_v].mean()):.3f}; "
+                      f"elig(other+cymb) own-other {float(rear_eligibility(m, roles)[own_o].mean()):.3f}", flush=True)
+
+
+def probe(a):
+    """Decisive separability check, independent of the training pipeline: gather
+    balanced cells (vocal-owned vs other-owned) from TRAIN songs, describe each
+    cell by its local spectrum only, fit a small classifier, report the AUC on
+    DEV cells.  AUC ~0.5 = the features cannot tell the two apart per cell;
+    AUC >> 0.5 with the mask nets at 0.74/0.79 = the training path is broken."""
+    torch = _torch()
+    dev = "cuda" if torch.cuda.is_available() else "cpu"
+    rng = np.random.default_rng(0)
+    split = load_split(a.cache)
+    names, merge_idx = parse_merge(a.merge); roles = Roles(names)
+    io = names.index("other")
+
+    def gather(tracks, per_song, fine):
+        Xs, ys = [], []
+        for t in tracks:
+            w = np.load(os.path.join(a.cache, t + ".npy"), mmap_mode="r")
+            n = int(a.seconds * SR)
+            if w.shape[2] <= n:
+                continue
+            st = rng.integers(0, w.shape[2] - n)
+            x = torch.as_tensor(merge_groups(np.asarray(w[:, :, st:st + n]), merge_idx)[None], device=dev) / 32768
+            f, irm, wt, P = targets_and_features(torch, x, rng, augment=False, fine=fine)
+            f = f[0]; irm = irm[0]; wt = wt[0]
+            valid = wt > 0.15
+            own_v = (irm[..., roles.vocals] > 0.6) & valid
+            own_o = (irm[..., io] > 0.6) & valid
+            if fine:                                        # describe DSP bin b by fine bins 4b-8 .. 4b+8 (log power L+R) + IPD at 4b
+                lp = torch.log(torch.exp(f[..., 0]) + torch.exp(f[..., 1]))          # [T,1025]
+                pad = torch.nn.functional.pad(lp, (8, 8), value=lp.min().item())
+                idx = torch.arange(N_BINS, device=dev) * 4 + 8
+                offs = torch.arange(-8, 9, device=dev)
+                desc = pad[:, (idx[:, None] + offs[None]).clamp(0, pad.shape[1] - 1)]  # [T,257,17]
+                ipd = f[:, idx.clamp(0, N_BINS_FINE - 1), 2:4]
+                desc = torch.cat([desc - desc.mean(-1, keepdim=True), desc.mean(-1, keepdim=True), ipd], -1)
+            else:
+                lp = torch.log(torch.exp(f[..., 0]) + torch.exp(f[..., 1]))          # [T,257]
+                pad = torch.nn.functional.pad(lp, (2, 2), value=lp.min().item())
+                idx = torch.arange(N_BINS, device=dev) + 2
+                offs = torch.arange(-2, 3, device=dev)
+                desc = pad[:, idx[:, None] + offs[None]]
+                desc = torch.cat([desc - desc.mean(-1, keepdim=True), desc.mean(-1, keepdim=True), f[..., 2:4]], -1)
+            posb = torch.arange(N_BINS, device=dev).float()[None].expand(desc.shape[0], -1)[..., None] / N_BINS
+            desc = torch.cat([desc, posb], -1)
+            for sel, y in ((own_v, 0.0), (own_o, 1.0)):
+                d = desc[sel]
+                if len(d) > per_song:
+                    d = d[torch.randperm(len(d), device=dev)[:per_song]]
+                Xs.append(d); ys.append(torch.full((len(d),), y, device=dev))
+        return torch.cat(Xs), torch.cat(ys)
+
+    for fine in (False, True):
+        Xtr, ytr = gather(split["train"][:a.songs], 3000, fine)
+        Xdv, ydv = gather(split["dev"][:20], 3000, fine)
+        mu, sd = Xtr.mean(0), Xtr.std(0) + 1e-6
+        Xtr, Xdv = (Xtr - mu) / sd, (Xdv - mu) / sd
+        clf = torch.nn.Sequential(torch.nn.Linear(Xtr.shape[1], 64), torch.nn.Tanh(), torch.nn.Linear(64, 64), torch.nn.Tanh(), torch.nn.Linear(64, 1)).to(dev)
+        opt = torch.optim.Adam(clf.parameters(), lr=3e-3)
+        for step in range(a.steps):
+            i = torch.randint(0, len(Xtr), (4096,), device=dev)
+            loss = torch.nn.functional.binary_cross_entropy_with_logits(clf(Xtr[i])[:, 0], ytr[i])
+            opt.zero_grad(); loss.backward(); opt.step()
+        with torch.no_grad():
+            def auc(X, y):
+                sc = clf(X)[:, 0]
+                pos, neg = sc[y > 0.5], sc[y < 0.5]
+                return float((pos[:, None] > neg[None, :5000]).float().mean()) if len(pos) and len(neg) else float("nan")
+            acc = float(((clf(Xdv)[:, 0] > 0).float() == ydv).float().mean())
+            print(f"{'2048 fine (17 bins @23 Hz + IPD)' if fine else '512 (5 bins @94 Hz + IPD)':34s} train AUC {auc(Xtr[:20000], ytr[:20000]):.3f}  "
+                  f"DEV AUC {auc(Xdv, ydv):.3f}  DEV acc {acc:.3f}  (n train {len(Xtr)}, dev {len(Xdv)})", flush=True)
+
+
+def export(a):
+    """Write the per-control protect mask of one excerpt for the renderer's --protect-mask."""
+    torch, net, roles, dev = load_model(a.model)
+    import soundfile as sf
+    x, sr = sf.read(a.wav, dtype="float32", always_2d=True)
+    assert sr == SR and x.shape[1] == 2
+    prot = protect_mask(torch, net, roles, dev, x.T)
+    write_mask(a.out, prot)
+    print(f"{a.out}: {prot.shape[0]} controls x {N_BINS} bins, mean protect {prot.mean():.3f}")
+
+
+def export_blob(a):
+    """full_probe checkpoint -> HSSRMSK1 float blob in the order hook/audio/hssr_mask.c reads it."""
+    torch, net, roles, dev = load_model(a.model)
+    if not isinstance(net, FullNet) or not net.probe:
+        raise SystemExit("export-blob: the runtime implements full_probe only")
+    sd = {k: v.detach().cpu().numpy().astype(np.float32) for k, v in net.modules.state_dict().items()}
+    parts = [np.asarray(FEAT_STATS["mean"], np.float32), np.asarray(FEAT_STATS["std"], np.float32),
+             np.asarray(DESC_STATS["mean"], np.float32), np.asarray(DESC_STATS["std"], np.float32),
+             sd["0.0.weight"], sd["0.0.bias"]]
+    for i in range(3):
+        parts += [sd[f"1.{i}.0.weight"].reshape(-1), sd[f"1.{i}.0.bias"], sd[f"1.{i}.1.weight"].reshape(sd[f"1.{i}.1.weight"].shape[0], -1), sd[f"1.{i}.1.bias"]]
+    parts += [sd["2.0.weight"], sd["2.0.bias"], sd["3.weight_ih_l0"], sd["3.weight_hh_l0"], sd["3.bias_ih_l0"], sd["3.bias_hh_l0"],
+              sd["4.weight"], sd["4.bias"], sd["5.weight"].reshape(sd["5.weight"].shape[0], -1), sd["5.bias"], sd["6.weight"], sd["6.bias"],
+              sd["7.0.weight"], sd["7.0.bias"], sd["7.2.weight"], sd["7.2.bias"], sd["7.4.weight"], sd["7.4.bias"]]
+    flat = np.concatenate([p.reshape(-1) for p in parts]).astype("<f4")
+    with open(a.out, "wb") as fh:
+        fh.write(b"HSSRMSK1"); fh.write(np.array([len(flat)], "<u4").tobytes()); fh.write(flat.tobytes())
+    print(f"wrote {a.out}: {len(flat)} floats ({len(flat) * 4 / 1e6:.2f} MB)")
+
+
+def dump_features(a):
+    """stereo wav -> control-hop features [T,257,4] (float32, u32 T header) + the model's eligibility [T,257]
+    (no calibration, no presence) for the C parity test."""
+    import wave
+    torch, net, roles, dev = load_model(a.model)
+    net.calib = None
+    roles.eligible = [roles.names.index("other")]
+    with wave.open(a.wav, "rb") as w:
+        x = np.frombuffer(w.readframes(w.getnframes()), "<i2").reshape(-1, w.getnchannels()).T.astype(np.float32) / 32768
+    with torch.no_grad():
+        X = stft(torch, torch.as_tensor(x[None], device=dev))
+        f = features(torch, X[:, 0], X[:, 1])
+        T = (f.shape[1] // CONTROL) * CONTROL
+        f = f[:, CONTROL - 1:T:CONTROL]
+        e = rear_eligibility(net.forward(f), roles)[0].cpu().numpy().astype("<f4")
+    f = f[0].cpu().numpy().astype("<f4")
+    with open(a.out + ".feat", "wb") as fh:
+        fh.write(np.array([f.shape[0]], "<u4").tobytes()); fh.write(f.tobytes())
+    with open(a.out + ".ref", "wb") as fh:
+        fh.write(e.tobytes())
+    print(f"{f.shape[0]} controls; reference eligibility mean {e.mean():.3f}")
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    c = sub.add_parser("cache"); c.add_argument("--moisesdb", required=True); c.add_argument("--out", required=True); c.add_argument("--jobs", type=int, default=6)
+    t = sub.add_parser("train"); t.add_argument("--cache", required=True); t.add_argument("--out", required=True)
+    t.add_argument("--steps", type=int, default=3000); t.add_argument("--batch", type=int, default=16); t.add_argument("--seconds", type=float, default=6.0)
+    t.add_argument("--lr", type=float, default=1e-3); t.add_argument("--seed", type=int, default=1)
+    t.add_argument("--ctx", type=int, default=64); t.add_argument("--proj", type=int, default=8); t.add_argument("--hidden", type=int, default=32)
+    t.add_argument("--eval-every", type=int, default=250); t.add_argument("--eval-songs", type=int, default=20)
+    t.add_argument("--merge", default=DEFAULT_MERGE, help="output groups as name=cached+cached;...")
+    t.add_argument("--neigh", type=int, default=0, help="+-bins of per-bin features fed to the MLP")
+    t.add_argument("--arch", default="mlp", choices=("mlp", "tf", "conv2048", "probe", "probe_roles", "probe_ctx", "full", "full_probe", "freq"),
+                   help="tf = per-bin GRUs over frequency and time; conv2048 = 2048-point analysis + frequency conv (ctx=channels, hidden=time GRU); "
+                        "full = whole-spectrum strided conv + GRU bottleneck + per-cell decoder (proj=channels, hidden=GRU)")
+    t.add_argument("--teacher-cache", help="htdemucs cache (teacher_label.py separate): protection-only supervision on confident vocal cells")
+    t.add_argument("--teacher-every", type=int, default=2); t.add_argument("--w-teacher", type=float, default=0.3)
+    t.add_argument("--teacher-conf", type=float, default=0.8, help="roles: teacher cells count only when a role holds more than this share")
+    t.add_argument("--teacher-balance", type=int, default=1, help="roles: equal total weight per dominant role in every teacher batch")
+    t.add_argument("--teacher-only", action="store_true", help="diagnostic: training windows from the teacher cache only")
+    t.add_argument("--no-augment", action="store_true"); t.add_argument("--weight-decay", type=float, default=1e-4)
+    t.add_argument("--purity-balance", action="store_true", help="astra 7 arm c: equal weight for pure and mixed cells within each role")
+    t.add_argument("--teacher-songs", type=int, default=0, help="teacher-only: limit to the first N songs (overfit test)")
+    t.add_argument("--eval-on-train", action="store_true", help="teacher-only: evaluate on the training songs themselves")
+    t.add_argument("--teacher-mode", default="protect", choices=("protect", "vocal", "roles", "elig"),
+                   help="protect = confident vocal cells only; vocal = soft vocal target everywhere; roles = full softmax target (4-stem teacher cache)")
+    t.add_argument("--w-pres", type=float, default=0.5, help="full: weight of the band vocal-presence head")
+    t.add_argument("--dec", type=int, default=24, help="full: decoder width"); t.add_argument("--loss-weight", default="valid", choices=("valid", "salience"))
+    t.add_argument("--layers", type=int, default=1); t.add_argument("--bidir", action="store_true", help="full: non-causal GRU (ceiling study only)")
+    t.add_argument("--loss", default="own", choices=("own", "balanced", "probe", "softmax", "softmax_ramp"))
+    t.add_argument("--init", help="warm start: checkpoint whose weights and feature stats to load (same arch)")
+    t.add_argument("--start-step", type=int, default=0, help="with --init last.pt: continue the schedule from this step")
+    t.add_argument("--target-hop", default="mean", choices=("mean", "single", "ewmean"))
+    t.add_argument("--tctx", type=int, default=0, help="probe nets: previous controls stacked as extra inputs (causal, stateless)")
+    t.add_argument("--ramp-start", type=int, default=1200, help="balanced: step where the leak penalty starts ramping in")
+    t.add_argument("--ramp-steps", type=int, default=1000)
+    e = sub.add_parser("export"); e.add_argument("--model", required=True); e.add_argument("--wav", required=True); e.add_argument("--out", required=True)
+    pr = sub.add_parser("probe"); pr.add_argument("--cache", required=True); pr.add_argument("--songs", type=int, default=60)
+    pr.add_argument("--seconds", type=float, default=30.0); pr.add_argument("--steps", type=int, default=3000); pr.add_argument("--merge", default=DEFAULT_MERGE)
+    cb = sub.add_parser("calib"); cb.add_argument("--model", required=True); cb.add_argument("--cache", required=True)
+    cb.add_argument("--songs", type=int, default=20); cb.add_argument("--seconds", type=float, default=60.0)
+    cb.add_argument("--eligible", default="other"); cb.add_argument("--merge", default=DEFAULT_MERGE)
+    cb.add_argument("--dominant", action="store_true", help="fit the temperature on cells one role owns > 0.6 (astra 7)")
+    eb = sub.add_parser("export-blob"); eb.add_argument("--model", required=True); eb.add_argument("--out", required=True)
+    df = sub.add_parser("dump-features"); df.add_argument("--model", required=True); df.add_argument("--wav", required=True); df.add_argument("--out", required=True)
+    u = sub.add_parser("audit"); u.add_argument("--cache", required=True); u.add_argument("--steps", type=int, default=400); u.add_argument("--seconds", type=float, default=6.0)
+    u.add_argument("--ctx", type=int, default=64); u.add_argument("--proj", type=int, default=8); u.add_argument("--hidden", type=int, default=32)
+    u.add_argument("--neigh", type=int, default=0); u.add_argument("--arch", default="mlp", choices=("mlp", "tf", "conv2048")); u.add_argument("--merge", default=DEFAULT_MERGE)
+    for k in ("leak", "leakp", "missed"):
+        t.add_argument(f"--w-{k}", type=float, default=LOSS_W[k])
+    a = ap.parse_args()
+    if a.cmd == "train":
+        LOSS_W.update(leak=a.w_leak, leakp=a.w_leakp, missed=a.w_missed)
+        global LOSS_MODE, TARGET_HOP, CE_WEIGHT
+        LOSS_MODE = a.loss; CE_WEIGHT = a.loss_weight
+        global CE_PURITY_BALANCE
+        CE_PURITY_BALANCE = a.purity_balance
+        TARGET_HOP = a.target_hop
+    {"cache": cache, "train": train, "export": export, "audit": audit, "probe": probe, "calib": calibrate,
+     "export-blob": export_blob, "dump-features": dump_features}[a.cmd](a)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

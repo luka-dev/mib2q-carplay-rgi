@@ -1,0 +1,86 @@
+{
+  "scope": "Read-only process and existing marker snapshot; no training, queue, lease or environment mutation",
+  "gpu_supervisor": [
+    {
+      "ProcessId": 45888,
+      "ParentProcessId": 35768
+    }
+  ],
+  "runner_failure_exists": false,
+  "evaluation_processes": [],
+  "control": {
+    "step": 40000,
+    "seconds": 6538.498741899966,
+    "loss": 0.40026187896728516,
+    "grad_norm": 0.3304736018180847,
+    "decoder_grad_norm": 0.055213529234051366,
+    "lr": 3e-05,
+    "distinct_train_songs": 156,
+    "windows": 160000,
+    "audible_source_windows": [
+      159014,
+      136331,
+      151742,
+      151110
+    ],
+    "sample_sequence_sha256": "57c2e4a48bd581634700f868e90f327664418eb6124770101692194f2380e26d"
+  },
+  "full40_complete_exists": false,
+  "terminal_audit_exists": false,
+  "run_root": "D:\\upmix\\runs\\spectral_context_generalization_v1",
+  "utc": "2026-10-01T01:38:36.9304050Z",
+  "gpu_lease_exists": true,
+  "train_processes": [
+    {
+      "ProcessId": 37976,
+      "ParentProcessId": 45888
+    },
+    {
+      "ProcessId": 18188,
+      "ParentProcessId": 37976
+    }
+  ],
+  "spectral": {
+    "step": 37000,
+    "seconds": 6996.8155492000515,
+    "loss": 0.18362298607826233,
+    "grad_norm": 0.12247596681118011,
+    "decoder_grad_norm": 0.05060006680265285,
+    "lr": 3.41309640981904e-05,
+    "distinct_train_songs": 156,
+    "windows": 148000,
+    "audible_source_windows": [
+      147096,
+      126080,
+      140325,
+      139712
+    ],
+    "sample_sequence_sha256": "17637d6a6a3751152d5feef2581f73c8d522e65f0e564aaabdf3d56b217e4411"
+  },
+  "rapid_daemon_live": false,
+  "control_training_complete": {
+    "complete": true,
+    "mode": "control",
+    "smoke": false,
+    "step": 40000,
+    "last": {
+      "step": 40000,
+      "seconds": 6538.498741899966,
+      "loss": 0.40026187896728516,
+      "grad_norm": 0.3304736018180847,
+      "decoder_grad_norm": 0.055213529234051366,
+      "lr": 3e-05,
+      "distinct_train_songs": 156,
+      "windows": 160000,
+      "audible_source_windows": [
+        159014,
+        136331,
+        151742,
+        151110
+      ],
+      "sample_sequence_sha256": "57c2e4a48bd581634700f868e90f327664418eb6124770101692194f2380e26d"
+    },
+    "checkpoint_sha256": "5aaed6380ad35b59dcb30ea3446088d0550218590c0daeeea969a50796f2e841",
+    "protocol_sha256": "dc884c742d10dbd26d9488e8a914c30e5805d5000dd6e1020b22e5bca37ea5c0"
+  }
+}

@@ -1,0 +1,97 @@
+--- /tmp/MU1316k/java/de/audi/app/combi/bap/app/navi/AppConnectorNavi.java	2026-06-11 04:20:29
++++ /tmp/MU1439k/java/de/audi/app/combi/bap/app/navi/AppConnectorNavi.java	2026-06-11 04:20:29
+@@ -8,7 +8,6 @@
+  *  de.audi.app.bap.fw.functiontypes.BAPFunctionArrayFSG
+  *  de.audi.app.bap.fw.functiontypes.BAPFunctionMethodFSG
+  *  de.audi.app.bap.fw.functiontypes.BAPFunctionPropertyFSG
+- *  de.audi.app.bap.utils.BAPStringUtilities
+  *  de.audi.app.combi.bap.AbstractCombiConnector
+  *  de.audi.app.combi.bap.app.navi.CombiModuleNavi
+  *  de.audi.app.combi.bap.app.navi.list.AddressListArrayHandler
+@@ -65,7 +64,6 @@
+ import de.audi.app.bap.fw.functiontypes.BAPFunctionArrayFSG;
+ import de.audi.app.bap.fw.functiontypes.BAPFunctionMethodFSG;
+ import de.audi.app.bap.fw.functiontypes.BAPFunctionPropertyFSG;
+-import de.audi.app.bap.utils.BAPStringUtilities;
+ import de.audi.app.combi.bap.AbstractCombiConnector;
+ import de.audi.app.combi.bap.app.navi.CombiModuleNavi;
+ import de.audi.app.combi.bap.app.navi.list.AddressListArrayHandler;
+@@ -232,15 +230,10 @@
+     }
+ 
+     public void updateRGStatus(int n) {
+-        RG_Status_Status rG_Status_Status;
+         this.logChannel.log(1000000, "[AppConnectorNavi#updateRGStatus] called (rgStatus=%1)", (long)n);
+-        RG_Status_Status rG_Status_Status2 = (RG_Status_Status)this.moduleFsg.getBAPFunctionPropertyFSG(17).getLastStatus();
+-        if (rG_Status_Status2.rg_Status != n) {
+-            this.logChannel.log(1000000, "[AppConnectorNavi#updateRGStatus] changed -> trigger FctSync");
+-            rG_Status_Status = this.moduleFsg.getFunctionSynchronizationHandler();
+-            rG_Status_Status.startSync(0);
+-        }
+-        rG_Status_Status = new RG_Status_Status();
++        IFunctionSynchronizationHandler iFunctionSynchronizationHandler = this.moduleFsg.getFunctionSynchronizationHandler();
++        iFunctionSynchronizationHandler.startSync(0);
++        RG_Status_Status rG_Status_Status = new RG_Status_Status();
+         rG_Status_Status.rg_Status = n;
+         this.moduleFsg.getBAPFunctionPropertyFSG(17).sendStatusIfChanged((StatusProperty)rG_Status_Status);
+     }
+@@ -357,7 +350,7 @@
+             return;
+         }
+         ManeuverDescriptor_Status maneuverDescriptor_Status = this.createManeuverDescriptorStatus(combiBAPNaviManeuverDescriptorArray);
+-        if (AppConnectorNavi.maneuverDescriptorNeedsToBeSynchronized(maneuverDescriptor_Status) && !(iFunctionSynchronizationHandler = this.moduleFsg.getFunctionSynchronizationHandler()).isSyncActive() && !iFunctionSynchronizationHandler.isSyncPending()) {
++        if (AppConnectorNavi.maneuverDescriptorNeedsToBeSynchronized(maneuverDescriptor_Status) && (!(iFunctionSynchronizationHandler = this.moduleFsg.getFunctionSynchronizationHandler()).isSyncActive() || iFunctionSynchronizationHandler.getCurrentSyncType() != 0)) {
+             iFunctionSynchronizationHandler.startSync(1);
+         }
+         this.moduleFsg.getBAPFunctionPropertyFSG(23).sendStatusIfChanged((StatusProperty)maneuverDescriptor_Status);
+@@ -367,6 +360,10 @@
+         return maneuverDescriptor_Status.maneuver_1.mainElement != 6 && maneuverDescriptor_Status.maneuver_1.mainElement != 9 && maneuverDescriptor_Status.maneuver_1.mainElement != 10;
+     }
+ 
++    public void updateManeuverDescriptorAndExitView(CombiBAPNaviManeuverDescriptor[] combiBAPNaviManeuverDescriptorArray, int n, int n2) {
++        this.logChannel.log(100000, "[AppConnectorNavi#updateManeuverDescriptorAndExitView] deprecated. variant=%1, exitviewID=%2", (long)n, (long)n2);
++    }
++
+     private ManeuverDescriptor_Status createManeuverDescriptorStatus(CombiBAPNaviManeuverDescriptor[] combiBAPNaviManeuverDescriptorArray) {
+         ManeuverDescriptor_Status maneuverDescriptor_Status = new ManeuverDescriptor_Status();
+         if (combiBAPNaviManeuverDescriptorArray.length > 0 && combiBAPNaviManeuverDescriptorArray[0] != null) {
+@@ -374,7 +371,7 @@
+             maneuverDescriptor_Status.maneuver_1.mainElement = AppConnectorNavi.getMappedManeuverMainElement(combiBAPNaviManeuverDescriptorArray[0].mainElement, combiBAPNaviManeuverDescriptorArray[0].direction);
+             maneuverDescriptor_Status.maneuver_1.direction = combiBAPNaviManeuverDescriptorArray[0].direction;
+             maneuverDescriptor_Status.maneuver_1.zLevelGuidance = combiBAPNaviManeuverDescriptorArray[0].zLevelGuidance;
+-            maneuverDescriptor_Status.maneuver_1.sidestreets.setContent(BAPStringUtilities.convertToRawString((byte[])combiBAPNaviManeuverDescriptorArray[0].sideStreets));
++            maneuverDescriptor_Status.maneuver_1.sidestreets.setContent(combiBAPNaviManeuverDescriptorArray[0].sideStreets);
+         } else {
+             this.logChannel.log(10000000, "[AppConnectorNavi#createManeuverDescriptorStatus] reset maneuver 1");
+             maneuverDescriptor_Status.maneuver_1.mainElement = 0;
+@@ -387,7 +384,7 @@
+             maneuverDescriptor_Status.maneuver_2.mainElement = AppConnectorNavi.getMappedManeuverMainElement(combiBAPNaviManeuverDescriptorArray[1].mainElement, combiBAPNaviManeuverDescriptorArray[1].direction);
+             maneuverDescriptor_Status.maneuver_2.direction = combiBAPNaviManeuverDescriptorArray[1].direction;
+             maneuverDescriptor_Status.maneuver_2.zLevelGuidance = combiBAPNaviManeuverDescriptorArray[1].zLevelGuidance;
+-            maneuverDescriptor_Status.maneuver_2.sidestreets.setContent(BAPStringUtilities.convertToRawString((byte[])combiBAPNaviManeuverDescriptorArray[1].sideStreets));
++            maneuverDescriptor_Status.maneuver_2.sidestreets.setContent(combiBAPNaviManeuverDescriptorArray[1].sideStreets);
+         } else {
+             this.logChannel.log(10000000, "[AppConnectorNavi#createManeuverDescriptorStatus] reset maneuver 2");
+             maneuverDescriptor_Status.maneuver_2.mainElement = 0;
+@@ -400,7 +397,7 @@
+             maneuverDescriptor_Status.maneuver_3.mainElement = AppConnectorNavi.getMappedManeuverMainElement(combiBAPNaviManeuverDescriptorArray[2].mainElement, combiBAPNaviManeuverDescriptorArray[2].direction);
+             maneuverDescriptor_Status.maneuver_3.direction = combiBAPNaviManeuverDescriptorArray[2].direction;
+             maneuverDescriptor_Status.maneuver_3.zLevelGuidance = combiBAPNaviManeuverDescriptorArray[2].zLevelGuidance;
+-            maneuverDescriptor_Status.maneuver_3.sidestreets.setContent(BAPStringUtilities.convertToRawString((byte[])combiBAPNaviManeuverDescriptorArray[2].sideStreets));
++            maneuverDescriptor_Status.maneuver_3.sidestreets.setContent(combiBAPNaviManeuverDescriptorArray[2].sideStreets);
+         } else {
+             this.logChannel.log(10000000, "[AppConnectorNavi#createManeuverDescriptorStatus] reset maneuver 3");
+             maneuverDescriptor_Status.maneuver_3.mainElement = 0;
+@@ -468,6 +465,12 @@
+         this.moduleFsg.getBAPFunctionPropertyFSG(40).sendStatusIfChanged((StatusProperty)trafficBlock_Indication_Status);
+     }
+ 
++    public void responseLastDestinationsList(int n, CombiBAPDestinationListEntry[] combiBAPDestinationListEntryArray) {
++    }
++
++    public void responseFavoriteDestinationsList(int n, CombiBAPDestinationListEntry[] combiBAPDestinationListEntryArray) {
++    }
++
+     public void updateLastDestinationsList(CombiBAPDestinationListEntry[] combiBAPDestinationListEntryArray) {
+         this.logChannel.log(1000000, "[AppConnectorNavi#updateLastDestinationsList] called (dataSize=%1)", combiBAPDestinationListEntryArray == null ? 0L : (long)combiBAPDestinationListEntryArray.length);
+         BAPFunctionArrayFSG bAPFunctionArrayFSG = this.moduleFsg.getBAPFunctionArrayFSG(29);

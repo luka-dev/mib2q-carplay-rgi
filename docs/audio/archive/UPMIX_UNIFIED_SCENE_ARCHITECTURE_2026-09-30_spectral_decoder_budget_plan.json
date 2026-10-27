@@ -1,0 +1,408 @@
+{
+  "scope": "Hypothetical variable-width output decoder, same spectral backbone/interface/scene; arithmetic planning only",
+  "implemented": false,
+  "device_measured": false,
+  "acoustic_pass": false,
+  "base_checkpoint_sha256": "ff072970aef01749f44afc0c8bc010c542eb7e2384cdf88d8b7473b6a3854da2",
+  "bands": [
+    [
+      0,
+      4
+    ],
+    [
+      4,
+      8
+    ],
+    [
+      8,
+      12
+    ],
+    [
+      12,
+      16
+    ],
+    [
+      16,
+      20
+    ],
+    [
+      20,
+      24
+    ],
+    [
+      24,
+      28
+    ],
+    [
+      28,
+      32
+    ],
+    [
+      32,
+      36
+    ],
+    [
+      36,
+      40
+    ],
+    [
+      40,
+      44
+    ],
+    [
+      44,
+      52
+    ],
+    [
+      52,
+      60
+    ],
+    [
+      60,
+      68
+    ],
+    [
+      68,
+      76
+    ],
+    [
+      76,
+      84
+    ],
+    [
+      84,
+      92
+    ],
+    [
+      92,
+      100
+    ],
+    [
+      100,
+      108
+    ],
+    [
+      108,
+      116
+    ],
+    [
+      116,
+      124
+    ],
+    [
+      124,
+      132
+    ],
+    [
+      132,
+      148
+    ],
+    [
+      148,
+      164
+    ],
+    [
+      164,
+      180
+    ],
+    [
+      180,
+      196
+    ],
+    [
+      196,
+      212
+    ],
+    [
+      212,
+      228
+    ],
+    [
+      228,
+      244
+    ],
+    [
+      244,
+      260
+    ],
+    [
+      260,
+      276
+    ],
+    [
+      276,
+      292
+    ],
+    [
+      292,
+      308
+    ],
+    [
+      308,
+      324
+    ],
+    [
+      324,
+      340
+    ],
+    [
+      340,
+      372
+    ],
+    [
+      372,
+      404
+    ],
+    [
+      404,
+      436
+    ],
+    [
+      436,
+      468
+    ],
+    [
+      468,
+      500
+    ],
+    [
+      500,
+      532
+    ],
+    [
+      532,
+      564
+    ],
+    [
+      564,
+      596
+    ],
+    [
+      596,
+      681
+    ],
+    [
+      681,
+      766
+    ],
+    [
+      766,
+      851
+    ],
+    [
+      851,
+      936
+    ],
+    [
+      936,
+      1025
+    ]
+  ],
+  "selection": "13 existing bands intersecting frequencies >8000Hz, bin340..1024 inclusive (685bins); all other bands remain24",
+  "base_selected_dense_macs_s": 116712000.0,
+  "fps": 93.75,
+  "candidates": [
+    {
+      "high_width": 48,
+      "per_band_width": [
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        48,
+        48,
+        48,
+        48,
+        48,
+        48,
+        48,
+        48,
+        48,
+        48,
+        48,
+        48,
+        48
+      ],
+      "selected_dense_per_frame": {
+        "input_projection": 295200,
+        "grouped_time_grus": 331776,
+        "time_projection": 221184,
+        "frequency_neighbours": 32256,
+        "full_band_down_up": 73728,
+        "full_band_matrix": 36864,
+        "interface": 55296,
+        "global_gru": 3456,
+        "decoder_bottleneck": 70272,
+        "scene_projection": 41472,
+        "source_projection": 164160
+      },
+      "selected_dense_macs_s": 124281000.0
+    },
+    {
+      "high_width": 64,
+      "per_band_width": [
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        64,
+        64,
+        64,
+        64,
+        64,
+        64,
+        64,
+        64,
+        64,
+        64,
+        64,
+        64,
+        64
+      ],
+      "selected_dense_per_frame": {
+        "input_projection": 295200,
+        "grouped_time_grus": 331776,
+        "time_projection": 221184,
+        "frequency_neighbours": 32256,
+        "full_band_down_up": 73728,
+        "full_band_matrix": 36864,
+        "interface": 55296,
+        "global_gru": 3456,
+        "decoder_bottleneck": 80256,
+        "scene_projection": 41472,
+        "source_projection": 208000
+      },
+      "selected_dense_macs_s": 129327000.0
+    },
+    {
+      "high_width": 96,
+      "per_band_width": [
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        24,
+        96,
+        96,
+        96,
+        96,
+        96,
+        96,
+        96,
+        96,
+        96,
+        96,
+        96,
+        96,
+        96
+      ],
+      "selected_dense_per_frame": {
+        "input_projection": 295200,
+        "grouped_time_grus": 331776,
+        "time_projection": 221184,
+        "frequency_neighbours": 32256,
+        "full_band_down_up": 73728,
+        "full_band_matrix": 36864,
+        "interface": 55296,
+        "global_gru": 3456,
+        "decoder_bottleneck": 100224,
+        "scene_projection": 41472,
+        "source_projection": 295680
+      },
+      "selected_dense_macs_s": 139419000.0
+    }
+  ],
+  "limits": "Dense formulas only; no observed graph count, runtime, device measurement, latency or quality. Not a queued experiment. Current broad decoder adapts and may fix saved-basis defects."
+}

@@ -1,5 +1,5 @@
 import com.luka.carplay.rgd.*;
-import com.luka.carplay.core.ScreenModule;
+import com.luka.carplay.core.AltScreenModule;
 import com.luka.carplay.cluster.ClusterLayerController;
 import com.luka.carplay.framework.Log;
 import java.lang.reflect.*;
@@ -17,11 +17,10 @@ public final class RendererViewportTest {
         ManeuverChainAudit a=new ManeuverChainAudit();
         a.set(a.renderer,"rendererReady",Boolean.TRUE);
         a.set(a.renderer,"sock",new java.net.Socket());
-        // target ScreenModule keeps the view area as a boolean (true = SMALLSCREEN)
-        Field stage=ScreenModule.class.getDeclaredField("smallScreenViewArea");stage.setAccessible(true);
-        boolean saved=stage.getBoolean(null);
+        Field stage=AltScreenModule.class.getDeclaredField("desiredViewAreaMode");stage.setAccessible(true);
+        int saved=stage.getInt(null);
         try {
-            stage.setBoolean(null,false);
+            stage.setInt(null,AltScreenModule.VIEWAREA_FULLSCREEN);
             ClusterLayerController.onVcPresentation(true);
             int[] area=ClusterLayerController.maneuverViewport();
             check(area[0]==59 && area[1]==27 && area[2]==210 && area[3]==153,"big-stage red frame crop");
@@ -30,7 +29,7 @@ public final class RendererViewportTest {
             check(b[0]==8 && u16(b,2)==59 && u16(b,4)==27 && u16(b,6)==210 && u16(b,8)==153,"crop command layout");
             check(a.bridge.refreshRendererViewport() && count(a)==1,"unchanged crop suppressed");
 
-            stage.setBoolean(null,true);
+            stage.setInt(null,AltScreenModule.VIEWAREA_SMALLSCREEN);
             check(ClusterLayerController.maneuverViewport()[2]==210,"requested View must not move KDK before VC Fct54");
             ClusterLayerController.onVcPresentation(false);
             RouteGuidance rg=new RouteGuidance();
@@ -61,7 +60,7 @@ public final class RendererViewportTest {
             clear(a);
             check(a.bridge.refreshRendererViewport(),"failed crop enqueue remains retryable");
             check(!a.renderer.sendVisibleArea(-1,0,328,180),"invalid unsigned wire coordinate rejected");
-        } finally { stage.setBoolean(null,saved); }
+        } finally { stage.setInt(null,saved); }
         System.out.println("RendererViewportTest: stage change, wire geometry, coalescing, reconnect and backpressure PASS");
     }
 }

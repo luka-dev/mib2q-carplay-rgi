@@ -1,0 +1,621 @@
+                                     Audio Engineering Society
+
+                          Convention Paper
+                                    Presented at the AES 2026 Convention
+                                      2026 July 29–31, Detroit, MI, USA
+This paper was peer-reviewed as a complete manuscript for presentation at this convention. This paper is available in the AES
+E-Library (http://www.aes.org/e-lib), all rights reserved. Reproduction of this paper, or any portion thereof, is not permitted
+without direct permission from the Journal of the Audio Engineering Society.
+
+
+Implementing Two Upmixing Concepts With One
+Conditional GAN
+Christian Uhle1,2 , Philipp Weyers1 , and Johannes Zimmermann1
+1 Fraunhofer IIS, Erlangen, Germany
+2 International Audio Laboratories Erlangen, Erlangen, Germany - A joint institution of the Friedrich-Alexander-University
+
+Erlangen-Nürnberg (FAU) and Fraunhofer IIS
+Correspondence should be addressed to Christian Uhle (christian.uhle@iis.fraunhofer.de)
+
+ABSTRACT
+Signal processing using artiﬁcial intelligence (AI) has gained increasing interest because it outperforms existing
+solutions in many ﬁelds. A signiﬁcant challenge for deep neural networks lies in meeting strict requirements
+regarding latency, computational load and memory, which is vital in automotive audio. This paper presents
+CUpGAN (Conditional Upmix GAN), a computationally efﬁcient method for extracting upmix signals with low
+latency, leveraging signal separation for two upmixing concepts using one conditional generative adversarial net-
+work (CGAN). One upmix approach utilize spatial positions of direct sources within the stereo image, allowing
+for the distribution of sources around the listener. The second approach separates direct and diffuse signals to
+create an ambience signal for rear surround loudspeakers.
+By employing phase-aware loss functions, integrating residual connections in the generator, and training with
+coherent input and target signals, we achieve high sound quality in the generated signals. The residual signals, i.e.,
+difference between input and generated signals can be used as complementary signals for both upmixing concepts.
+The proposed method reduces memory as most parameters are shared between both applications, allowing seam-
+less switching between upmixing approaches without the need for parameter loading; instead, a small number
+of parameters are computed by control network and used to modulate the latent variables. The GAN generator
+is trained on synthetically generated data, enabling control of separation characteristics that surpass traditional
+methods. We present an evaluation using listening tests and computational metrics, demonstrating the advantages
+of our approach compared to classical signal processing methods.
+
+1   Introduction                                                  tional signals, commonly referred to as upmixing [1].
+                                                                  Figure 1 illustrates two upmixing concepts used in au-
+Reproduction of audio signals in surround or immer-               tomotive audio: panorama upmix (PU) and ambience
+sive multi-channel formats ﬁnds wide adoption in cin-             upmix (AU).
+ema, broadcast, home entertainment, and automotive                   PU distributes sound sources around the listener,
+audio. Most musical recordings are available in two-              stretches the perceived source positions, and thereby
+channel stereo, and their reproduction in setups with             expands the stereo panorama. AU reproduces an ambi-
+additional loudspeakers requires the creation of addi-            ent signal using rear or lateral loudspeakers [2], while
+Uhle et al.                                                                      Upmixing With Conditional GAN
+
+
+                                              R
+
+
+                                                                  R
+              R
+
+
+
+                  Front                                                  Front
+          C
+
+
+
+              L                                                   L
+
+
+                                              L
+
+     (a) Panorama Upmix: Direct sources (circles) are          (b) Ambience Upmix: Ambience (ellipse) is repro-
+         stretched around listeners.                               duced by rear loudspeakers.
+
+Fig. 1: Schematic illustration of upmixing concepts with input signal (yellow) and after upmixing (blue), where
+        C, L, and R denote positions left, center, and right, respectivly.
+
+
+front loudspeakers reproduce the unprocessed input         2   Problem description
+or a signal with reduced ambience. These two con-
+cepts can be combined such that sound sources are
+re-panned while ambience is reproduced by dedicated        The input signal x[n] has two channels and is a mixture
+loudspeakers.                                              of direct signals d[n] (correlated in both channels) and
+Both concepts utilize the separation of upmix sig-         diffuse signals a[n], such as reverberation and other
+nals based on spatial cues and require low latency         ambient sounds.
+and memory requirements, and easy adaptation when          We generate a four-channel signal for reproduction
+users switch between different modes of sound repro-       with two frontal and two lateral loudspeakers, resem-
+duction. This paper proposes a DNN-based method            bling an entry level automotive set-up, based on one
+for separating upmix signals that meets these require-     of the two described upmixing concepts. The ﬁrst two-
+ments. Its main contributions is the separation based      channel signal is computed using a DNN, while the
+on spatial cues of the localization of direct sounds and   second two-channel signal is obtained as difference
+the diffuseness of ambient sounds, utilizing a CGAN.       signal between input and model output. The presented
+The generator network enables seamless switching be-       two-to-four-channel upmix can be extended to more
+tween both separations. The method operates with           channels with modiﬁcations of model architecture and
+memory requirements and computational loads com-           training data, but at this stage of research we restrict
+parable to those of a model designed for computing         our work to four output channels.
+a single upmix signal. Additional upmix signals can        For direct-ambient upmix, the output signal y0 [n] is the
+be generated by subtracting the produced upmix sig-        ambient signal â[n], and the direct signal is computed
+nals from the input, resulting in a cost-efﬁcient signal       ˆ = x[n] − â[n]. For the panorama upmix, the out-
+                                                           as d[n]
+generation for four distinct loudspeaker signals. The      put signal y1 [n] is the center signal ĉ[n].
+training data are created by mixing anechoic audio sig-    This center signal differs from commonly used single-
+nals with artiﬁcial reverberation, allowing for ﬂexible    channel signals designed for feeding the center loud-
+adjustment of separation characteristics. Our approach     speaker placed midway in front, as described in [3], as
+is evaluated through listening tests and computational     follows: we compute a center signal with two channels
+evaluation metrics and achieves higher sound quality       that can be downmixed to a single loudspeaker chan-
+compared to the methods we evaluated.                      nel or fed to left and right front loudspeaker.
+The paper is organized as follows: Sec. 2 describes the    Two-channels center signals have the additional ad-
+problem, Sec. 3 presents prior work, Sec. 4 explains       vantage over single channel signals when computing
+the proposed implementation, in Sec. 5 the method is       the difference signal ô[n] = x[n] − ĉ[n], which contains
+evaluated, and conclusions are provided in Sec. 6.         sources panned off-center.
+
+                                     AES 2026 Convention, Detroit, MI, USA
+                                              2026 July 29–31
+                                                Page 2 of 10
+Uhle et al.                                                                              Upmixing With Conditional GAN
+
+
+
+              user input      Control Net
+
+
+                                    parameter update
+
+
+              audio input      Generator                     Front
+
+
+
+                                    upmix signal
+
+
+                                                       loudspeaker signal
+                               Renderer
+
+
+
+Fig. 2: Upmix processing and rendering for a simpliﬁed loudspeaker set-up. The generator processes audio input
+        to obtain upmix signals. It is switchable between two upmixing concepts using a small parameter vector
+        computed by a control network given a binary user input. The renderer module applies post-processing to
+        input and upmix signal to compute loudspeaker signals.
+
+
+
+3     Prior Work                                                  [8, 9], especially when loudspeakers are not symmet-
+                                                                  rically positioned relative to the listener. Center ex-
+Upmixing can be categorized into two types: (i) blind             traction based on the sum and difference of spectral
+upmixing, which is addressed in this paper, and (ii)              coefﬁcients is proposed in [10]. Spectral weighting us-
+decoding that utilizes side information derived from              ing real-valued weights computed from functions of
+multi-channel content during encoding, which is not               the ratios of downmix and input signals is employed
+discussed here.                                                   in [11, 12], allowing for separate control of attenua-
+                                                                  tion for direct and diffuse signal components. A GAN-
+3.1   Extraction of direct signals for upmixing                   based approach has been proposed in [13]. Center
+                                                                  extraction is also utilized for dialog enhancement in
+Direct signals are localized in the stereo image, where           [14, 15, 16].
+level and time differences between the loudspeaker
+signals determine the perceived direction of the phan-            3.2       Direct-ambient decomposition
+tom source [4]. Signals panned to a speciﬁc posi-
+tional range can be extracted and reproduced by dedi-            Ambient signals are diffuse and non-coherent between
+cated loudspeakers. The algorithm proposed in [2] em-            channels, making them well-suited for generating sur-
+ploys a least-mean-square adaptive ﬁltering approach             round signals. They comprise reverberation, environ-
+applied to the time-domain signal. Processing in the             mental sounds and ensembles of sound sources cap-
+time-frequency domain is particularly effective, lever-          tured with multiple microphones.
+aging source sparsity [5], which assumes that only one           Various methods for ambience extraction and direct-
+source (or multiple sources with similar spatial cues)           ambient decomposition (DAD) have been proposed,
+contributes signiﬁcantly to a given time-frequency bin           utilizing spectral weighting based on inter-channel co-
+compared to other sources. In [6], the authors applied           herence (ICC) [17, 18] and estimates of the ambience
+spectral weighting with real-valued weights based on             power [19]. Predicting the direct signal component us-
+measures of similarity or correlation between the input          ing adaptive ﬁltering is described in [20], where am-
+channel signals. A multichannel Wiener ﬁlter (MWF)               bience is computed as the difference between input
+using a linear combination of input channels with                and direct signal estimate. Other approaches employ
+complex-valued weights has been proposed in [7].                 MWF [7] and principal component analysis (PCA)
+                                                                 [19, 2, 21]. An extensive comparison of MWF and
+Of particular interest are center loudspeakers placed            PCA approaches, along with a generic linear estima-
+midway in front to enhance stereo image reproduction             tion framework, is presented in [22]. Distortions of
+
+                                      AES 2026 Convention, Detroit, MI, USA
+                                               2026 July 29–31
+                                                 Page 3 of 10
+Uhle et al.                                                                            Upmixing With Conditional GAN
+
+
+spatial cues introduced by the MWF have been ana-            afﬁne transformation to the c-th latent variable xi,c at
+lyzed in [23], where a parametric MWF is proposed            layer index i,
+to keep these distortions below psychoacoustic thresh-
+olds.                                                            FiLM(xi,c |γi,c (z), βi,c (z)) = γi,c (z)xi,c + βi,c (z), (1)
+For single-channel input signals, methods based on
+non-negative matrix factorization [24] and shallow           where γi,c and βi,c are computed using a condition-
+neural networks [25] have been proposed. For ambi-           ing network given the integer conditioning variable z.
+ence extraction of multichannel signals, the authors of      FiLM has been employed for conditioned source sepa-
+[26] used a two-channel downmix and Wiener ﬁltering          ration [34], where it was suggested to apply same pa-
+to estimate the power spectral density of the ambient        rameters γi , βi to all features within each layer i.
+signal. In [27], pairwise correlations were proposed.        The authors of [35] extend this approach with gated
+                                                             point-wise convolutional modulations; however, we
+                                                             found the simple approach [34] to be effective for our
+3.3   Signal extraction for upmixing with AI
+                                                             purpose and preferable for its simplicity.
+
+Generating a center signal and surround signals based        4     Method
+on style transfer has been proposed in [28]. In [29],
+DAD is implemented using a feed-forward network
+                                                             4.1    Generator
+with three hidden layers that processes spectral coef-
+ﬁcients for two-channel inputs to predict a real-valued
+                                                             Figure 3 shows a block diagram of the generator
+spectral mask. In contrast to our work, training data
+                                                             used in the CGAN. It processes complex-valued
+consist of either purely direct or purely diffuse signals,
+                                                             short-time Fourier transform (STFT) coefﬁcients of
+which may limit performance. A method to predict sur-
+                                                             the two-channel input x(m, k) = [X0 (m, k), X1 (m, k)]T ,
+round and center signals is presented in [30], where
+                                                             computed using the discrete Fourier transform (DFT)
+training data are obtained from multichannel signals.
+                                                             with length 1024, hop size 512, and window size 1024
+The prediction of direction of arrival and a diffuse-
+                                                             from signals with a sampling rate of 44100 Hz.
+ness index for each time-frequency bin, which can be
+                                                             STFT coefﬁcients X (omitting time m and
+utilized for upmixing stereo recordings, is detailed in
+                                                             frequency indices k for brevity) of each
+[31]. The model was trained with synthesized Am-
+                                                             audio channel are represented as triplets
+bisonic sound scenes. This approach has drawbacks,
+                                                             [log(M + 10−7 ), real(X/M), imag(X/M)],            with
+as multichannel formats may contain phantom center
+                                                             magnitudes M = |X|, resulting in six channel inputs
+sources in the front channels and arbitrary mixtures of
+                                                             per time-frequency bin for two-channel audio signals.
+direct and diffuse signals in the surround channels.
+                                                             This representation enables to compress spectral
+In contrast to previous works, we propose a generative
+                                                             magnitudes to reduce the large dynamic range of
+adversarial network (GAN) to improve sound quality,
+                                                             audio signals and thereby to improve numerical
+along with a conditional method to reduce memory us-
+                                                             optimization during training.
+age, and generate training data with appropriate target
+                                                             It is ﬁrst expanded to 21 dimensions using an inverted
+signals.
+                                                             bottleneck (IBN) with grouped convolution for each
+                                                             audio channel, utilizing kernels of shape (3 × 3).
+3.4   Conditioned source separation                          The latent representation is then processed by four
+                                                             layers of conditional ConvNext blocks [36], as shown
+Conditioning in machine learning refers to modulating        in Figure 4. ConvNext blocks were initially applied
+the computation of a model by auxiliary information          for image classiﬁcation as a computationally efﬁcient
+and is used to combine input information with context.       alternative to Vision Transformers (ViTs) [37] and
+An effective way is to fuse input and context in the         were later used for generating audio signals from
+intermediary network layers using conditional normal-        Mel spectrograms in [38] using 1D convolutions. In
+ization [32].                                                contrast, we employ 2D convolutions with kernels
+Feature-wise linear modulation (FiLM) [33] is a gen-         operating along time and frequency, with kernel size
+eralization of conditional normalization. It was orig-       3 × 3.
+inally proposed for visual reasoning and applies an          ConvNext blocks are extended with FiLM layers
+
+                                      AES 2026 Convention, Detroit, MI, USA
+                                               2026 July 29–31
+                                                 Page 4 of 10
+Uhle et al.                                                                                                     Upmixing With Conditional GAN
+
+
+               z (ambience, center)
+
+                                                                            γc , βc
+                                                        Control Net
+
+
+                   (B, 6, 513, T )           (B, 21, 513, T )                                      (B, 21, 513, T )        (B, 6, 513, T )
+
+audio      iSTFT                      IBN                 LayerNorm       C-ConvNeXt         LayerNorm            Linear                     iSTFT   audio
+
+                                                                                 4x
+
+                                                                      residual connection
+
+Fig. 3: Block diagram of generator. Conditioned ConvNeXt is repeated 4 times. Tensor shapes with batch size B
+        and number of frames T .
+
+
+    conditioning parameter           input
+                                                                                      4.2   Discriminator
+
+                (B, 21, 513, T )                                                      The generator is trained alongside three instances
+                           DW Conv 2D (3x3)
+                                                                                      of complex-valued multi-resolution spectrogram dis-
+                                                                                      criminators (MRSDs) [40] with window lengths of
+                                                                                      [2048, 1024, 512] samples. This approach builds upon
+                               LayerNorm
+                                                                                      the method introduced in [41], which employs dis-
+                                                                                      criminators that operate on time-frequency representa-
+                        PW Conv (1x1) 21 → 84                                         tions at multiple resolutions, focusing on the real and
+                                                                                      imaginary components of complex-valued STFT coef-
+                                     GELU                                             ﬁcients rather than just their magnitudes. The discrim-
+                (B, 84, 513, T )                                                      inator uses 2D convolutional layers that independently
+                        PW Conv (1x1) 84 → 21                                         process STFT coefﬁcients in ﬁve frequency bands.
+                (B, 21, 513, T )                                                      We also explored combinations of MRSD with in-
+                               FiLM layer                                             stances of multi-scale waveform discriminator (MSD)
+                                                                                      [42] and multi-period waveform discriminator (MPD)
+                                                                                      [43], but did not notice signiﬁcant improvements.
+                                     output
+                                                                                      4.3   Training loss
+Fig. 4: ConvNeXt Blocks in generator, with pointwise
+        (PW) and depthwise (DW) convolutions. Ten-                                    The generator is trained using multiple loss functions
+        sor shapes with batch size B and number of                                    as in [13], which include reconstruction losses, as well
+        frames T .                                                                    as adversarial losses derived from the discriminator in-
+                                                                                      stances.
+                                                                                      Reconstruction loss is the weighted sum of multi-
+to apply (1). Conditioning parameters γc , βc are                                     resolution STFT loss [44], multi-resolution loss of
+computed with a control net with four linear layers                                   complex-valued STFT coefﬁcients, and mean squared
+with [2, 4, 8, 16] neurons given the binary index z for                               error (MSE) loss of time signal that has been high-pass
+switching between ambience extraction and center                                      ﬁltered at 50 Hz cut-off frequency with low Q factor.
+extraction.                                                                           The time signal loss provides a straightforward and ef-
+Layer normalization [39] is applied before the ﬁrst                                   fective way to adjust the spectral balance of the gen-
+and after the last ConvNeXt block to reduce sensitivity                               erated signal. Complex-valued multi-resolution STFT
+to weight initialization and speed up training. The                                   loss is calculated as sum of MSE of real part and MSE
+linear layer implements the bottleneck to obtain tensor                               of imaginary part.
+of same shape as X with six channels.                                                 Multi-resolution STFT loss utilizes DFT lengths of
+                                                                                      [2048, 1024, 512], hop size [240, 120, 50], and window
+
+                                                         AES 2026 Convention, Detroit, MI, USA
+                                                                  2026 July 29–31
+                                                                    Page 5 of 10
+Uhle et al.                                                                              Upmixing With Conditional GAN
+
+
+size [600, 1200, 240], while complex-valued multi-                 4.5   Optimizer settings for training
+resolution STFT loss operate at half of these lengths
+to enhance temporal resolution.                                    Models were trained for 400, 000 iterations using
+Adversarial loss is the weighted sum of least-square               the Adam optimizer with an initial learning rate of
+adversarial loss [45] and feature matching loss [46,               5 × 10−4, which exponentially decays with a decay
+42], computed as the L1 distance between discrimina-               factor of 0.9999995, with gradient clipping at max-
+tor feature maps obtained for target signals and gener-            imum norm of 5. Each training iteration utilizes
+ator output signals.                                               batches of 16 signals of length 0.5 seconds each.
+Generator (including the control net) and discrimina-
+tor are trained in an end-to-end manner.                           4.6   Computational load, latency, and memory
+                                                                         requirements
+
+                                                                   Training time per model is approximately 32 hours on
+4.4   Training data                                                an A100 GPU. The generator model has 14, 000 pa-
+                                                                   rameters and requires 264 × 106 MACs per second of
+                                                                   audio. The latency of the generator equals 23 ms, cor-
+Training data are synthetic mixtures of single-channel             responding to the window size of the STFT. It does
+signals panned with real-valued scalars and processed              not introduce additional latency when integrated into
+with convolution reverb. This procedure allows to                  processing pipelines using STFT, as all convolutional
+compute appropriate target signals for both separa-                layers are implemented with causal padding.
+tion concepts, because the panning of direct sources
+is known and diffuse and direct signals are separately             5     Evaluation
+available during data creation.
+Input signals were generated by mixing four source                 5.1   Objective assessment
+signals from MUSDB18 (vocals, drums, bass, other
+accompaniment) [47] and one source signal contain-                 We assess the proposed model using SI-SDR [49] and
+ing speech from various audiobooks.                                the 2F measure [50], both of which are commonly em-
+First, we add source signals si [n + o] to create the di-          ployed in source separation evaluations. SI-SDR quan-
+rect signals d[n] = ∑4i=0 [gi,0 si [n + o], gi,1si [n + o]] with   tiﬁes the distortion caused by interfering sources and
+random gains [gi,0 , gi,1 ], uniformly distributed in the          artifacts, while the 2F measure assesses sound quality
+range [−6, 6], with random time offset o.                          by predicting the mean score obtained in a MUSHRA
+The ambience signals a[n] are generated by applying                listening test. These metrics have been used for evalu-
+the same mixing as for direct signals d[n] and addi-               ating center extraction in [13], but their application to
+tionally convolving each source signal si [n] with dif-            ambience extraction is not common and, as results for
+ferent two-channel impulse response (IR) of reverber-              SI-SDR indicate, not always useful.
+ation r[n] taken from the training split of ReverbFX               The proposed condition is referred to as CUpGAN-C
+[48].                                                              for center extraction and CUpGAN-A for ambience
+The input signals are obtained by adding direct and                extraction. For comparison, we use two previous
+ambience signal x[n] = d[n] + a[n]. The target sig-                methods that do not utilize machine learning: the
+nals for ambience extraction are diffuse signal com-               center extraction with generalized signal-to-downmix
+ponents a[n]. Target signals for center extraction                 ratios (GSDR) [12] and the direct-ambient decom-
+are computed by using the same mixing as for di-                   position (DAD) from [23]. These conditions have
+rect signals d[n] and additionally scaling source sig-             been parametrized using one calibration item such
+nals si [n] with attenuation hi = f (ICLD), yielding               that residuals of interfering signals are perceived with
+c[n] = ∑4i=0 hi [gi,0 si [n] gi,1 si [n]]. They do not contain     equal loudness when comparing the proposed and the
+reverberation, and the scaling for panned signals is               previous method.
+h = 0.5 · 10 log10 (− 100.05·gi,0 /100.05·gi,1 )2 .                To investigate the effect of the conditioning mecha-
+The resulting training data set consists of 2,400 pairs            nism, we train dedicated models for each task that have
+of input signals x[n] and target signal y[n] of 6 sec              the same model complexity as CUpGAN without the
+length each with two channels sampled at 44.1 kHz.                 control net, referred to as GAN-C and GAN-A.
+
+                                          AES 2026 Convention, Detroit, MI, USA
+                                                   2026 July 29–31
+                                                     Page 6 of 10
+Uhle et al.                                                                       Upmixing With Conditional GAN
+
+
+
+                        SI-SDR [dB] ↑     2F ↑              unprocessed signals. We found it not helpful to apply
+                                                            loudness normalization, because signals with less
+ CUpGAN-C               9.6               45.1              separation and higher levels of residual signals will
+ GAN-C                 10.0               44.2              be attenuated more, thereby reducing the level of the
+ GSDR [12]             7.1                33.8              desired signals.
+ CUpGAN-A              -11.6              28.3
+ GAN-A                 -11.7              26.7              Figures 5 and 6 show median and conﬁdence in-
+ DAD [23]              -11.7              32.1              terval of listener ratings per item and for all items.
+                                                            The proposed method is rated signiﬁcantly better than
+Table 1: Objective evaluation for proposed center ex-       the other condition in both tests. The improvement
+         traction (CUpGAN-C) and ambience extrac-           is larger for center extraction than for ambience
+         tion (CUpGAN-A), unconditioned GAN-C               extraction. Some listeners reported that it was not
+         and GAN-A, and GSDR and DAD. SI-SDR                easy to compare the extracted ambience signals when
+         is not useful for evaluating ambience extrac-      sources in the mix have different attenuation of direct
+         tion.                                              components between conditions.
+
+
+Test items were generated with the same procedure           6   Conclusion
+as in the training phase, with modiﬁcations to create
+distinct data distributions between training and testing.   We introduced CUpGAN for the extraction of upmix
+We use the test split of MUSDB18 along with the test        signals with low computational load and no additional
+split of ReverbFX. Speech signals that were part of         latency, allowing for seamless switching between cen-
+the training data were excluded from the evaluation;        ter and ambience extraction through a conditioning
+instead, we ensured that all four source signals were       mechanism.
+active. Table 1 shows the results for SI-SDR and 2F         To our knowledge, this is the ﬁrst implementation of
+measure.                                                    center extraction and ambience extraction using condi-
+For center extraction, both GANs show better results        tional neural networks. A crucial aspect is the creation
+compared to GSDR. The unconditioned and the condi-          of training data, which involves pairs of input and ref-
+tioned models achieve similar scores.                       erence signals.
+For ambience extraction, we ﬁnd that SI-SDR does            The proposed approach results in difference signals
+not produce meaningful results. This is likely due to       that can be used to feed separate loudspeaker chan-
+the fact that reference and prediction are uncorrelated,    nels. The results of our evaluation indicate an improve-
+which results in large residual signals when computing      ment over methods based on classical signal process-
+SI-SDR. The previous method yields better 2F scores         ing in terms of listeners preference. Further work com-
+compared to the GAN.                                        prises the extension to more output channels with sim-
+                                                            ilar complexity and the improvement of the objective
+5.2   Listening test                                        evaluation for ambience extraction.
+
+We evaluate center extraction and ambience extraction       References
+with CUpGAN in two A/B listening tests comparing
+to the previous methods GSDR and DAD, respectively.          [1] Rumsey, F., “Signal processing for 3-D audio,” J.
+Input signals were eleven commercial recordings of               Audio Eng. Soc, 56(7/8), 2008.
+ﬁve to 13 seconds length each of various gengres.
+In both test, ten expert listeners were asked to com-        [2] Irwan, R. and Aarts, R., “Two-to-Five Channel
+pare the proposed method with the baseline using a               Sound Processing,” J. Audio Eng. Soc., 50, 2002.
+comparison category rating scale [51] according to
+two aspects: the separation effect and overall sound         [3] International Telecommunication Union, “Mul-
+quality of the signals. The tests were conducted                 tichannel stereophonic sound system with and
+using headphones, and listeners were free to choose              without accompanying picture.” Recommenda-
+the headphone model. Listeners could switch to                   tion ITU-R BS.775-2, 2006.
+
+                                      AES 2026 Convention, Detroit, MI, USA
+                                               2026 July 29–31
+                                                 Page 7 of 10
+Uhle et al.                                                                                   Upmixing With Conditional GAN
+
+
+
+   much better 3
+
+          better 2
+
+ slightly better 1
+
+                 0
+
+slightly worse -1
+
+         worse -2
+
+  much worse -3
+
+                     Arres   Body   David   Dont   Gigue   James   LayBi   Norah   QotSA   Staple   Strokes   all
+
+        Fig. 5: Results of listening test comparing center extraction with CUpGAN to method GSDR [12].
+                Positive ratings indicate preference of CUpGAN.
+
+
+   much better 3
+
+          better 2
+
+ slightly better 1
+
+                 0
+
+slightly worse -1
+
+         worse -2
+
+  much worse -3
+
+                     Arres   Body   David   Dont   Gigue   James   LayBi   Norah   QotSA   Staple   Strokes   all
+
+        Fig. 6: Results of listening test comparing ambience extraction with CUpGAN to method DAD [23].
+                Positive ratings indicate preference of CUpGAN.
+
+
+ [4] Wittek, H., Perceptual differences between wave-                      and multi-channel stereophony,” in Proc. AES
+     ﬁeld synthesis and stereophony, University of                         88th Conv., 1990.
+     Surrey (United Kingdom), 2007.
+                                                                      [9] Holman, T., “New factors in sound for cinema
+ [5] Jourjine, A., Rickard, S., and Yilmaz, O.,                           and television,” J. Audio Eng. Soc, 39(7-8), 1991.
+     “Blind Separation of Disjoint Orthogonal Sig-
+     nals: Demixing N Sources from 2 Mixtures,” in                   [10] Vickers, E., “Two-to-three Channel Upmix for
+     Proc. Int. Conf. Acoust., Speech, and Signal Pro-                    Center Channel Derivation and Speech Enhance-
+     cess., ICASSP, 2000.                                                 ment,” in Proc. AES 127th Conv., 2009.
+ [6] Avendano, C. and Jot, J.-M., “A frequency-                      [11] Uhle, C., “Center Signal Scaling using Signal-to-
+     domain approach to multi-channel upmix,” J. Au-                      Downmix Ratios,” in Proc. Int. Conf. Digital Au-
+     dio Eng. Soc., 52, 2004.                                             dio Effects, DAFx, 2013.
+ [7] Faller, C., “Multiple-loudspeaker playback of
+                                                                     [12] Uhle, C. and Habets, E., “Subband Center Signal
+     stereo signals,” J. Audio Eng. Soc., 54, 2006.
+                                                                          Scaling Using Power Ratios,” in Proc. AES 53rd
+ [8] Theile, G., “On the performance of two-channel                       Int. Conf. Semantic Audio, 2014.
+
+                                            AES 2026 Convention, Detroit, MI, USA
+                                                     2026 July 29–31
+                                                       Page 8 of 10
+Uhle et al.                                                                    Upmixing With Conditional GAN
+
+
+[13] Uhle, C., Klapp, J., Panter, P., and Walther, A.,         wih spatial cue control,” in Proc. Int. Conf. on
+     “Center Extraction GAN,” in Proc. AES 160th               Acoust., Speech and Signal Process., ICASSP,
+     Conv., 2026.                                              2015.
+
+[14] Härmä, A. and Park, M., “Extraction of Voice         [24] Uhle, C., Walther, A., Hellmuth, O., and Herre,
+     from the Center of the Stereo Image,” in Proc.            J., “Ambience Separation from Mono Record-
+     AES 130th Conv., 2011.                                    ings using Non-negative Matrix Factorization,”
+                                                               in Proc. AES 30th Int. Conf. on Intelligent Audio
+[15] Craciun, A., Uhle, C., and Bäckström, T., “An
+                                                               Environments, 2007.
+     Evaluation of Stereo Speech Enhancement Meth-
+     ods for Different Audio-Visual Scenarios,” in        [25] Uhle, C. and Paul, C., “A Supervised Learning
+     Proc. 23rd IEEE European Signal Process. Conf.,           Approach to Ambience Extraction from Mono
+     2015.                                                     Recordings for Blind Upmixing,” in Proc. Int.
+[16] Geiger, J., Grosche, P., and Parodi, Y., “Dialogue        Conf. Digital Audio Effects, DAFx, 2008.
+     Enhancement of Stereo Sound,” in Proc. 23rd
+                                                          [26] Walther, A. and Faller, C., “Direct-Ambient De-
+     IEEE European Signal Process. Conf., 2015.
+                                                               composition and Upmix of Surround sound sig-
+[17] Allen, J., Berkeley, D., and Blauert, J., “Multi-         nals,” in Proc. IEEE Workshop on Applications
+     microphone signal-processing technique to re-             of Signal Process. to Audio and Acoust., WAS-
+     move room reverberation from speech signals,”             PAA, 2011.
+     J. Acoust. Soc. Am., 62, 1977.
+                                                          [27] Thompson, J., Smith, B., Warner, A., and Jot,
+[18] Avendano, C. and Jot, J. M., “Ambience Ex-                J.-M., “Direct-Diffuse Decomposition of Multi-
+     traction and Synthesis from Stereo Signals for            channel Signals Using a System of Pairwise Cor-
+     Multi-channel Audio Upmix,” in Proc. IEEE Int.            relations,” in Proc. AES 133rd Conv., 2012.
+     Conf. on Acoust., Speech, and Signal Process.,
+     ICASSP, 2002.                                        [28] Yang, H., Wager, S., Russell, S., Luo, M., Kim,
+                                                               M., and Kim, W., “Upmixing Via Style Trans-
+[19] Merimaa, J., Goodwin, M., and Jot, J.-M.,                 fer: A Variational Autoencoder for Disentan-
+     “Correlation-Based Ambience Extraction from               gling Spatial Images And Musical Content,” in
+     Stereo Recordings,” in Proc. AES 123rd Conv.,             Proc. IEEE Int. Conf. on Acoust., Speech, and
+     2007.                                                     Signal Process., ICASSP, 2022.
+[20] Usher, J. and Benesty, J., “Enhancement of           [29] Ibrahim, K. M. and Allam, M., “Primary-
+     Spatial Sound Quality: A New Reverberation-               Ambient Source Separation for Upmixing to
+     Extraction Audio Upmixer,” IEEE Trans. Audio,             Surround Sound Systems,” in Proc. IEEE Int.
+     Speech, and Language Process., 15, pp. 2141–              Conf. on Acoust., Speech, and Signal Process.,
+     2150, 2007.                                               ICASSP, 2018.
+[21] Goodwin, M. and Jot, J.-M., “Primary-ambient
+                                                          [30] Park, S. Y., Chun, C. J., and Kim, H. K.,
+     signal decomposition and vector-based localiza-
+                                                               “Subband-based upmixing of stereo to 5.1-
+     tion for spatial audio coding and enhancement,”
+                                                               channel audio signals using deep neural net-
+     in Proc. IEEE Int. Conf. on Acoust., Speech, and
+                                                               works,” in IEEE Int. Conf. on Information and
+     Signal Process., ICASSP, 2007.
+                                                               Communication Technology Convergence, ICTC,
+[22] He, J., Tan, E.-L., and Gan, W.-S., “Linear Es-           IEEE, 2016.
+     timation Based Primary-Ambient Extraction for
+     Stereo Audio Signals,” IEEE/ACM Trans. Audio,        [31] Turner, D. and Murphy, D. T., “A deep learning
+     Speech, and Language Process., 22(2), 2014.               approach to the prediction of time-frequency spa-
+                                                               tial parameters for use in stereo upmixing,” in
+[23] Uhle, C. and Habets, E., “Direct-Ambient De-              Proc. 27th Int. Conf. on Digital Audio Effects,
+     composition using parametric Wiener ﬁltering              DAFx, pp. 428–435, DAFx, 2024.
+
+                                    AES 2026 Convention, Detroit, MI, USA
+                                             2026 July 29–31
+                                               Page 9 of 10
+Uhle et al.                                                                     Upmixing With Conditional GAN
+
+
+[32] Sheth, I., Rahman, A. A., Havaei, M., and Kahou,      [42] Kumar, K., Kumar, R., De Boissiere, T., Gestin,
+     S. E., “Pitfalls of conditional batch normaliza-           L., Teoh, W. Z., Sotelo, J., De Brebisson, A.,
+     tion for contextual multi-modal learning,” arXiv           Bengio, Y., and Courville, A. C., “MelGAN:
+     preprint arXiv:2211.15071, 2022.                           Generative adversarial networks for conditional
+                                                                waveform synthesis,” Advances in neural infor-
+[33] Perez, E., Strub, F., De Vries, H., Dumoulin, V.,          mation processing systems, 32, 2019.
+     and Courville, A., “Film: Visual reasoning with a
+     general conditioning layer,” in Proc. AAAI Conf.      [43] Kong, J., Kim, J., and Bae, J., “Hiﬁ-GAN: Gener-
+     on Artiﬁcial Intelligence, volume 32, 2018.                ative adversarial networks for efﬁcient and high
+                                                                ﬁdelity speech synthesis,” Advances in neural in-
+[34] Meseguer-Brocal, G. and Peeters,           G.,             formation processing systems, 33, 2020.
+     “Conditioned-U-Net: Introducing a control             [44] Yamamoto, R., Song, E., and Kim, J.-M.,
+     mechanism in the U-Net for multiple source                 “Parallel WaveGAN: A fast waveform genera-
+     separations,” arXiv preprint arXiv:1907.01277,             tion model based on generative adversarial net-
+     2019.                                                      works with multi-resolution spectrogram,” in
+                                                                Proc. IEEE Int. Conf. on Acoust., Speech, and
+[35] Choi, W., Kim, M., Chung, J., and Jung,
+                                                                Signal Process., ICASSP, 2020.
+     S., “LaSAFT: Latent source attentive frequency
+     transformation for conditioned source separa-         [45] Mao, X., Li, Q., Xie, H., Lau, R. Y., Wang, Z.,
+     tion,” in Proc. IEEE Int. Conf. on Acoust., Speech         and Paul Smolley, S., “Least squares generative
+     and Signal Process., ICASSP, IEEE, 2021.                   adversarial networks,” in Proc. IEEE Int. Conf.
+                                                                on Computer Vision, ICCV, 2017.
+[36] Liu, Z., Mao, H., Wu, C.-Y., Feichtenhofer, C.,
+     Darrell, T., and Xie, S., “A convnet for the          [46] Larsen, A. B. L., Sønderby, S. K., Larochelle, H.,
+     2020s,” in Proc. IEEE/CVF Conf. on Computer                and Winther, O., “Autoencoding beyond pixels
+     Vision and Pattern Recognition, CVPR, 2022.                using a learned similarity metric,” in Proc. Int.
+                                                                Conf. on Machine Learning, ICML, 2016.
+[37] Dosovitskiy, A., “An image is worth 16x16             [47] Raﬁi, Z., Liutkus, A., Stoeter, F.-R., Mimilakis,
+     words: Transformers for image recognition at               S. I., and Bittner, R., “MUSDB18-HQ - an un-
+     scale,” arXiv preprint arXiv:2010.11929, 2020.             compressed version of MUSDB18,” 2019, doi:
+                                                                10.5281/zenodo.3338373.
+[38] Siuzdak, H., “Vocos: Closing the gap between
+     time-domain and Fourier-based neural vocoders         [48] Richter, J., Svajda, T., and Gerkmann, T., “Re-
+     for high-quality audio synthesis,” in Int. Conf. on        verbFX: A Dataset of Room Impulse Responses
+     Representation Learning, 2024.                             Derived from Reverb Effect Plugins for Singing
+                                                                Voice Dereverberation,” in ITG Conference on
+[39] Ba, J. L., Kiros, J. R., and Hinton, G. E.,                Speech Communication, 2025.
+     “Layer    normalization,”  arXiv    preprint
+     arXiv:1607.06450, 2016.                               [49] Le Roux, J., Wisdom, S., Erdogan, H., and Her-
+                                                                shey, J. R., “SDR–half-baked or well done?” in
+[40] Kumar, R., Seetharaman, P., Luebs, A., Kumar,              Proc. IEEE Int. Conf. on Acoust., Speech, and
+     I., and Kumar, K., “High-ﬁdelity audio com-                Signal Process., ICASSP, 2019.
+     pression with improved RVQGAN,” Advances              [50] Kastner, T. and Herre, J., “An Efﬁcient Model for
+     in Neural Information Processing Systems, 36,              Estimating Subjective Quality of Separated Au-
+     2023.                                                      dio Source Signals,” in IEEE Workshop on Appli-
+                                                                cations of Signal Process. to Audio and Acoust.,
+[41] Jang, W., Lim, D., Yoon, J. E. S., Kim, B., and
+                                                                WASPAA, 2019.
+     Kim, J., “UnivNet: A neural vocoder with multi-
+     resolution spectrogram discriminators for high-       [51] International Telecommunication Union, “Meth-
+     ﬁdelity waveform generation,” arXiv preprint               ods for subjective determination of transmission
+     arXiv:2106.07889, 2021.                                    quality.” Recommendation ITU-T P.800, 1996.
+
+                                     AES 2026 Convention, Detroit, MI, USA
+                                              2026 July 29–31
+                                               Page 10 of 10
+

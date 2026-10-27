@@ -10,12 +10,14 @@ export PATH
 unset CP_QNX_PATH
 
 CP_MANEUVER_PID_FILE=${CP_MANEUVER_PID_FILE:-/tmp/carplay_maneuver_render.pid}
+CP_ALTSCREEN_PID_FILE=${CP_ALTSCREEN_PID_FILE:-/tmp/carplay_altscreen_render.pid}
 CP_LOG_MAX_BYTES=${CP_LOG_MAX_BYTES:-524288}
 
 cp_renderer_pid_file()
 {
     case "$1" in
         maneuver_render)  echo "$CP_MANEUVER_PID_FILE" ;;
+        altscreen_render) echo "$CP_ALTSCREEN_PID_FILE" ;;
         *) return 1 ;;
     esac
 }
@@ -104,11 +106,13 @@ cp_renderer_running()
 
 cp_seed_renderer_pid_files()
 {
+    cp_renderer_running altscreen_render >/dev/null 2>&1 || :
     cp_renderer_running maneuver_render >/dev/null 2>&1 || :
 }
 
-# maneuver_render is a client of Java's route-scoped :19800, so exact process
-# identity is the only non-invasive health check.
+# altscreen_render owns :19831, so its LISTEN socket is a useful adoption
+# health check. maneuver_render is a client of Java's route-scoped :19800; for
+# it, exact process identity is the only non-invasive check.
 cp_renderer_healthy()
 {
     CP_HEALTH_NAME=$1
@@ -123,10 +127,21 @@ cp_renderer_healthy()
         cp_forget_renderer_pid "$CP_HEALTH_NAME" "$CP_HEALTH_PID"
         return 1
     fi
-    return 0
+    [ "$CP_HEALTH_ID" != 2 ] || return 0
+
+    case "$CP_HEALTH_NAME" in
+        maneuver_render) return 0 ;;
+        altscreen_render) ;;
+        *) return 1 ;;
+    esac
+
+    CP_HEALTH_NETSTAT=`netstat -an 2>/dev/null`
+    [ -n "$CP_HEALTH_NETSTAT" ] || return 0
+    echo "$CP_HEALTH_NETSTAT" | grep -i listen | grep -q '[.:]19831 '
 }
 
-# Used only for an adopted renderer that is positively known to be wedged. Identity is rechecked before TERM and KILL; an unavailable query
+# Used only for an adopted altscreen process that is positively known to be
+# wedged. Identity is rechecked before TERM and KILL; an unavailable query
 # fails open and retains the process.
 cp_kill_renderer()
 {
@@ -171,5 +186,6 @@ cp_cap_log()
 cp_cap_all_logs()
 {
     cp_cap_log /tmp/maneuver_render.log
+    cp_cap_log /tmp/altscreen_render.log
     cp_cap_log "${1:-/tmp/carplay_wrapper.log}"
 }

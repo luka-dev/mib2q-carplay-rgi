@@ -1,0 +1,19 @@
+case  rate  seq maxSfb coreEnd   ours     library
+   4  48000    0     11      48   quiet   quiet    ran, wrote nothing
+   5  48000    0      1       4   quiet   quiet    ran, wrote nothing
+   6  48000    0     30     352   quiet   quiet    ran, wrote nothing
+   7  48000    0     30     352   quiet   quiet    ran, wrote nothing
+  17  48000    0     40     672   quiet   quiet    ran, wrote nothing
+  18  48000    0     40     672   quiet   quiet    ran, wrote nothing
+  19  48000    0     31     384   quiet   quiet    ran, wrote nothing
+  26  48000    2      4     128   quiet   quiet    ran, wrote nothing
+  27  48000    2      8     352   quiet   quiet    ran, wrote nothing
+  28  48000    2      8     352   quiet   quiet    ran, wrote nothing
+  30  48000    2      2      64   quiet   quiet    ran, wrote nothing
+  37  48000    2     14    1024   quiet   quiet    ran, wrote nothing
+  39  48000    2     12     768   quiet   quiet    ran, wrote nothing
+  42  48000    0      0       0   quiet   quiet    ran, wrote nothing
+  43  48000    2      0       0   quiet   quiet    ran, wrote nothing
+
+ours quiet on 15 of 44, library quiet on 15, both quiet on 15
+no disagreement: wherever our decoder writes nothing, the library writes nothing too, and vice versa.

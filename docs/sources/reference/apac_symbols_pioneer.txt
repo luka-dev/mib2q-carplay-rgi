@@ -1,0 +1,441 @@
+0x00070c6c .text            68  APACLRVQDecoder::LRVQLPC::Initialize(unsigned short)
+0x00070cb0 .text            68  APACLRVQDecoder::LRVQLPC::Initialize()
+0x00072000 .text           296  APACASPDecoder::DecodeFrame(unsigned char const*, unsigned int, apac::FrameOutRecord&)
+0x00072130 .text           416  APACASPDecoder::DecodeOneFrame(TBitstreamReader<unsigned int>&)
+0x000722d0 .text           228  APACASPDecoder::Initialize(apac::GlobalConfig const&)
+0x000723c0 .text           112  APACASPDecoder::~APACASPDecoder()
+0x000723c0 .text           112  APACASPDecoder::~APACASPDecoder()
+0x00072430 .text           120  APACASPDecoder::~APACASPDecoder()
+0x00072620 .text          1412  apac::AudioSceneConfig::Deserialize(TBitstreamReader<unsigned int>&)
+0x00072bb0 .text           272  apac::LoudnessDRCConfig::Deserialize(TBitstreamReader<unsigned int>&, apac::ParamList const&, mpddrc::HeaderPayloadType)
+0x00072cc0 .text            92  apac::AncillaryConfig::AncillaryConfig()
+0x00072cc0 .text            92  apac::AncillaryConfig::AncillaryConfig()
+0x00072d20 .text           212  apac::AncillaryConfig::~AncillaryConfig()
+0x00072d20 .text           212  apac::AncillaryConfig::~AncillaryConfig()
+0x00072e00 .text            84  apac::AncillaryConfig::~AncillaryConfig()
+0x00072e60 .text          1364  apac::AncillaryConfig::Deserialize(TBitstreamReader<unsigned int>&, unsigned int, unsigned int, unsigned int)
+0x00073590 .text           316  apac::drc::DynRangeCompressor::~DynRangeCompressor()
+0x000736d0 .text           360  apac::drc::DynRangeCompressor::~DynRangeCompressor()
+0x000736d0 .text           360  apac::drc::DynRangeCompressor::~DynRangeCompressor()
+0x00074120 .text          1172  apac::APACAncillaryFrameDecoder::~APACAncillaryFrameDecoder()
+0x00074120 .text          1172  apac::APACAncillaryFrameDecoder::~APACAncillaryFrameDecoder()
+0x000745c0 .text            84  apac::APACAncillaryFrameDecoder::~APACAncillaryFrameDecoder()
+0x00074620 .text           856  apac::APACDRCDecoder::Initialize(apac::ParamList const&, apac::drc::DynRangeCompressor&)
+0x00074980 .text            72  apac::APACDRCDecoder::Deserialize(TBitstreamReader<unsigned int>&)
+0x000749d0 .text            92  apac::APACDRCDecoder::DecodeFrame(float**)
+0x00074a30 .text            76  apac::APACAudioSceneDecoder::DecodeFrame(float**)
+0x00074a80 .text           644  apac::APACAncillaryFrameDecoder::APACAncillaryFrameDecoder(apac::AncillaryConfig const&)
+0x00074a80 .text           644  apac::APACAncillaryFrameDecoder::APACAncillaryFrameDecoder(apac::AncillaryConfig const&)
+0x00074d10 .text           580  apac::APACAncillaryFrameDecoder::DecodeFrame(TBitstreamReader<unsigned int>&, std::vector<apac::ASCAudioOutData, std::allocator<apac::ASCAudioOutData> >&, apac::FrameType)
+0x00074f60 .text          2164  apac::APACAudioSceneDecoder::Initialize(apac::ParamList const&, SC_AudioScenes*)
+0x000757e0 .text          2176  apac::APACAncillaryFrameDecoder::Initialize(apac::ParamList const&)
+0x000760b0 .text            88  apac::GlobalConfig::ASCConfigData::configs() const
+0x00076310 .text           676  apac::APACAudioSceneDecoder::~APACAudioSceneDecoder()
+0x00076310 .text           676  apac::APACAudioSceneDecoder::~APACAudioSceneDecoder()
+0x000765c0 .text           664  apac::APACAudioSceneDecoder::~APACAudioSceneDecoder()
+0x00076860 .text           424  apac::APACDRCDecoder::~APACDRCDecoder()
+0x00076860 .text           424  apac::APACDRCDecoder::~APACDRCDecoder()
+0x00076a10 .text           404  apac::APACDRCDecoder::~APACDRCDecoder()
+0x00078040 .text           260  apac::TrimmingData::Deserialize(TBitstreamReader<unsigned int>&)
+0x00078150 .text           544  unsigned int apac::GetEscBits<16u, 20u>(TBitstreamReader<unsigned int>&, unsigned int)
+0x00078490 .text          1484  APACBWE2Decoder::DecodeFrame(APACICSInfo const&, APACSpectralData&, unsigned int)
+0x00078a60 .text          1896  APACBWE2Decoder::Deserialize(TBitstreamReader<unsigned int>&, unsigned int, APACSyntacticElement&)
+0x000791d0 .text          1180  APACBWE2Decoder::InitInterFrameMemory(unsigned int)
+0x00079670 .text           192  APACBWE2Decoder::Initialize(unsigned int)
+0x00079730 .text            92  APACBWE2Decoder::GetActiveFlag(unsigned int) const
+0x00079790 .text           116  apac::Autocorr::~Autocorr()
+0x00079790 .text           116  apac::Autocorr::~Autocorr()
+0x00079810 .text           112  apac::Autocorr::~Autocorr()
+0x00079940 .text           116  apac::LPMDCTFilter::~LPMDCTFilter()
+0x000799c0 .text           888  APACBWE2Decoder::~APACBWE2Decoder()
+0x000799c0 .text           888  APACBWE2Decoder::~APACBWE2Decoder()
+0x00079ff0 .text           860  APACBWE2Decoder::~APACBWE2Decoder()
+0x0007a350 .text           100  apac::LPMDCTFilter::~LPMDCTFilter()
+0x0007a350 .text           100  apac::LPMDCTFilter::~LPMDCTFilter()
+0x0007b5a0 .text           792  APACCACDecoder::Deserialize(TBitstreamReader<unsigned int>&, APACICSInfo const&)
+0x0007b8c0 .text          1032  APACCACDecoder::ProcessCac(APACICSInfo const&, APACIndividualChannelStream&, APACIndividualChannelStream&) const
+0x0007bcd0 .text           176  APACChannelRemapper::Process(std::vector<float*, std::allocator<float*> >&)
+0x0007bd80 .text            84  APACChannelRemapper::Initialize(std::vector<unsigned char, std::allocator<unsigned char> > const&)
+0x0007bde0 .text           116  APACChannelRemapper::~APACChannelRemapper()
+0x0007bde0 .text           116  APACChannelRemapper::~APACChannelRemapper()
+0x0007be60 .text           112  APACChannelRemapper::~APACChannelRemapper()
+0x0007c030 .text            68  apac::chan::CoreDecoderConfig::GetChannelLayout() const
+0x0007c080 .text           120  apac::chan::CoreDecoderConfig::GetNumChannels() const
+0x0007c100 .text          1788  apac::chan::CoreDecoderConfig::Deserialize(TBitstreamReader<unsigned int>&)
+0x0007c800 .text            68  apac::TCEConfig::Deserialize(TBitstreamReader<unsigned int>&)
+0x0007c850 .text            64  apac::TCEConfig::~TCEConfig()
+0x0007c850 .text            64  apac::TCEConfig::~TCEConfig()
+0x0007c890 .text            64  apac::TCEConfig::~TCEConfig()
+0x0007c8d0 .text           268  apac::chan::CoreDecoderConfig::~CoreDecoderConfig()
+0x0007c8d0 .text           268  apac::chan::CoreDecoderConfig::~CoreDecoderConfig()
+0x0007c9e0 .text           256  apac::chan::CoreDecoderConfig::~CoreDecoderConfig()
+0x0007cd40 .text           524  void std::vector<apac::TCEConfig, std::allocator<apac::TCEConfig> >::_M_realloc_insert<apac::TCEConfig const&>(__gnu_cxx::__normal_iterator<apac::TCEConfig*, std::vector<apac::TCEConfig, std::allocator<apac::TCEConfig> > >, apac::TCEConfig const&)
+0x0007cf50 .text            68  APACCoreDecoder::Reset()
+0x0007cfa0 .text           120  APACCoreDecoder::Deserialize(unsigned char const*, unsigned int)
+0x0007d020 .text           352  APACCoreDecoder::~APACCoreDecoder()
+0x0007d020 .text           352  APACCoreDecoder::~APACCoreDecoder()
+0x0007d180 .text            84  APACCoreDecoder::~APACCoreDecoder()
+0x0007d1e0 .text          1476  APACCoreDecoder::Initialize(apac::ParamList const&, apac::observer_ptr<apac::IASCConfig>)
+0x0007d7b0 .text           256  APACCoreDecoder::APACCoreDecoder()
+0x0007d7b0 .text           256  APACCoreDecoder::APACCoreDecoder()
+0x0007d8b0 .text           148  APACCoreDecoder::DeserializeExtTools(TBitstreamReader<unsigned int>&)
+0x0007d950 .text           468  APACCoreDecoder::Deserialize(TBitstreamReader<unsigned int>&, bool)
+0x0007db30 .text           468  APACCoreDecoder::DecodeAPACFrame(TBitstreamReader<unsigned int>&, apac::FrameType, std::vector<float*, std::allocator<float*> >&)
+0x0007dd10 .text            88  APACCoreDecoder::GetBlockSize() const
+0x0007dd70 .text            68  APACCoreDecoder::GetNumChannels() const
+0x0007e160 .text           204  apac::lbr::DecoderConfig::Deserialize(TBitstreamReader<unsigned int>&)
+0x0007e230 .text           268  apac::lbr::DecoderConfig::~DecoderConfig()
+0x0007e230 .text           268  apac::lbr::DecoderConfig::~DecoderConfig()
+0x0007e340 .text           256  apac::lbr::DecoderConfig::~DecoderConfig()
+0x0007e440 .text           944  APACCoreLBRDecoder::Deserialize(TBitstreamReader<unsigned int>&, bool)
+0x0007e7f0 .text           304  APACCoreLBRDecoder::Initialize(apac::ParamList const&, apac::observer_ptr<apac::IASCConfig>)
+0x0007e920 .text           120  APACCoreLBRDecoder::~APACCoreLBRDecoder()
+0x0007e920 .text           120  APACCoreLBRDecoder::~APACCoreLBRDecoder()
+0x0007e9a0 .text           128  APACCoreLBRDecoder::~APACCoreLBRDecoder()
+0x0007ea20 .text           160  apac::drc::DynRangeCompressor::APACDRCExtensionPayload::Deserialize(TBitstreamReader<unsigned int>&, mpddrc::HeaderPayloadType)
+0x0007eac0 .text           500  apac::drc::DynRangeCompressor::AdjustForHostInput()
+0x0007ecc0 .text           100  apac::drc::DynRangeCompressor::Deserialize(TBitstreamReader<unsigned int>&, mpddrc::HeaderPayloadType)
+0x0007ed30 .text           240  apac::drc::DynRangeCompressor::ProcessUniDrc(float const**, float**, unsigned int&)
+0x0007ee20 .text            68  apac::drc::DynRangeCompressor::APACDRCExtensionPayload::~APACDRCExtensionPayload()
+0x0007ee20 .text            68  apac::drc::DynRangeCompressor::APACDRCExtensionPayload::~APACDRCExtensionPayload()
+0x0007ee70 .text          3796  apac::drc::DynRangeCompressor::APACDRCExtensionPayload::APACDRCExtensionPayload(apac::drc::DynRangeCompressor&, DRCConfiguration const&, unsigned int, unsigned int, unsigned int, unsigned int, mpddrc::UniDrcDomain)
+0x0007ee70 .text          3796  apac::drc::DynRangeCompressor::APACDRCExtensionPayload::APACDRCExtensionPayload(apac::drc::DynRangeCompressor&, DRCConfiguration const&, unsigned int, unsigned int, unsigned int, unsigned int, mpddrc::UniDrcDomain)
+0x0007fd50 .text           604  apac::drc::DynRangeCompressor::Initialize(DRCConfiguration*, float, unsigned int, unsigned int, unsigned int)
+0x0007ffb0 .text           712  apac::drc::DynRangeCompressor::Initialize(apac::ParamList const&)
+0x000802c0 .text            64  std::_Sp_counted_ptr_inplace<apac::drc::DynRangeCompressor::APACDRCExtensionPayload, std::allocator<apac::drc::DynRangeCompressor::APACDRCExtensionPayload>, (__gnu_cxx::_Lock_policy)2>::~_Sp_counted_ptr_inplace()
+0x000802c0 .text            64  std::_Sp_counted_ptr_inplace<apac::drc::DynRangeCompressor::APACDRCExtensionPayload, std::allocator<apac::drc::DynRangeCompressor::APACDRCExtensionPayload>, (__gnu_cxx::_Lock_policy)2>::~_Sp_counted_ptr_inplace()
+0x00080340 .text            64  std::_Sp_counted_ptr_inplace<apac::drc::DynRangeCompressor::APACDRCExtensionPayload, std::allocator<apac::drc::DynRangeCompressor::APACDRCExtensionPayload>, (__gnu_cxx::_Lock_policy)2>::~_Sp_counted_ptr_inplace()
+0x00080380 .text            64  std::_Sp_counted_ptr_inplace<apac::drc::DynRangeCompressor::APACDRCExtensionPayload, std::allocator<apac::drc::DynRangeCompressor::APACDRCExtensionPayload>, (__gnu_cxx::_Lock_policy)2>::_M_destroy()
+0x000803c0 .text           164  std::_Sp_counted_ptr_inplace<apac::drc::DynRangeCompressor::APACDRCExtensionPayload, std::allocator<apac::drc::DynRangeCompressor::APACDRCExtensionPayload>, (__gnu_cxx::_Lock_policy)2>::_M_get_deleter(std::type_info const&)
+0x00083a50 .text           576  unsigned int apac::ParamList::get<unsigned int>(int) const
+0x000884d0 .text            68  std::_Sp_counted_ptr_inplace<apac::drc::DynRangeCompressor::APACDRCExtensionPayload, std::allocator<apac::drc::DynRangeCompressor::APACDRCExtensionPayload>, (__gnu_cxx::_Lock_policy)2>::_M_dispose()
+0x00093ad0 .text           228  apac::ChanDecElement::Initialize(apac::ParamList const&, apac::observer_ptr<apac::IASCConfig>)
+0x00093bc0 .text           128  apac::ChanDecElement::~ChanDecElement()
+0x00093bc0 .text           128  apac::ChanDecElement::~ChanDecElement()
+0x00093c40 .text           120  apac::ChanDecElement::~ChanDecElement()
+0x00093cc0 .text           128  APACDecoder::Reset()
+0x00093d40 .text            68  APACDecoder::SetParameter(int, boost::any const&)
+0x00093d90 .text           192  APACDecoder::CreateDecoderElement(apac::ASCType)
+0x00093e50 .text           564  APACDecoder::DecodeFrame(unsigned char const*, unsigned int, apac::FrameOutRecord&)
+0x00094090 .text           292  APACDecoder::GetParameter(int, boost::any&) const
+0x000941c0 .text          1016  APACDecoder::~APACDecoder()
+0x000941c0 .text          1016  APACDecoder::~APACDecoder()
+0x000945c0 .text            84  APACDecoder::~APACDecoder()
+0x00094620 .text           128  APACDecoder::APACDecoder()
+0x00094620 .text           128  APACDecoder::APACDecoder()
+0x000946a0 .text          2836  APACDecoder::Initialize(apac::GlobalConfig const&)
+0x000951c0 .text            72  apac::GlobalConfig::CodecConfigData::configs() const
+0x000952d0 .text            64  boost::any::holder<apac::GlobalConfig const*>::~holder()
+0x000952d0 .text            64  boost::any::holder<apac::GlobalConfig const*>::~holder()
+0x00095450 .text            72  boost::any::holder<apac::GlobalConfig const*>::type() const
+0x00095560 .text            64  boost::any::holder<apac::GlobalConfig const*>::~holder()
+0x000955a0 .text            64  apac::ExtFrameUnkownDecoder::~ExtFrameUnkownDecoder()
+0x00095810 .text           104  boost::any::holder<apac::GlobalConfig const*>::clone() const
+0x00095b30 .text            64  apac::ExtFrameUnkownDecoder::~ExtFrameUnkownDecoder()
+0x00095b30 .text            64  apac::ExtFrameUnkownDecoder::~ExtFrameUnkownDecoder()
+0x00095cc0 .text           432  void std::vector<std::pair<unsigned int, std::unique_ptr<apac::DecElement, std::default_delete<apac::DecElement> > >, std::allocator<std::pair<unsigned int, std::unique_ptr<apac::DecElement, std::default_delete<apac::DecElement> > > > >::_M_realloc_insert<std::pair<unsigned int, std::unique_ptr<apac::DecElement, std::default_delete<apac::DecElement> > > >(__gnu_cxx::__normal_iterator<std::pair<unsigned int, std::unique_ptr<apac::DecElement, std::default_delete<apac::DecElement> > >*, std::vector<std::pair<unsigned int, std::unique_ptr<apac::DecElement, std::default_delete<apac::DecElement> > >, std::allocator<std::pair<unsigned int, std::unique_ptr<apac::DecElement, std::default_delete<apac::DecElement> > > > > >, std::pair<unsigned int, std::unique_ptr<apac::DecElement, std::default_delete<apac::DecElement> > >&&)
+0x00095e70 .text           500  apac::ExtFrameUnkownDecoder::Decode(TBitstreamReader<unsigned int>&)
+0x00096070 .text           148  APACExtFrameDecoder::DecodeFrame(TBitstreamReader<unsigned int>&)
+0x00096110 .text           376  APACExtFrameDecoder::APACExtFrameDecoder(apac::GlobalConfig const&)
+0x00096110 .text           376  APACExtFrameDecoder::APACExtFrameDecoder(apac::GlobalConfig const&)
+0x00096290 .text            68  apac::ExtFrameUnkownDecoder::Initialize(apac::IExtCfgElement const&)
+0x000962e0 .text           440  void std::vector<std::unique_ptr<apac::IExtFrameElementDecoder, std::default_delete<apac::IExtFrameElementDecoder> >, std::allocator<std::unique_ptr<apac::IExtFrameElementDecoder, std::default_delete<apac::IExtFrameElementDecoder> > > >::_M_realloc_insert<std::unique_ptr<apac::IExtFrameElementDecoder, std::default_delete<apac::IExtFrameElementDecoder> > >(__gnu_cxx::__normal_iterator<std::unique_ptr<apac::IExtFrameElementDecoder, std::default_delete<apac::IExtFrameElementDecoder> >*, std::vector<std::unique_ptr<apac::IExtFrameElementDecoder, std::default_delete<apac::IExtFrameElementDecoder> >, std::allocator<std::unique_ptr<apac::IExtFrameElementDecoder, std::default_delete<apac::IExtFrameElementDecoder> > > > >, std::unique_ptr<apac::IExtFrameElementDecoder, std::default_delete<apac::IExtFrameElementDecoder> >&&)
+0x000964a0 .text           388  apac::ExtensionConfig::Deserialize(TBitstreamReader<unsigned int>&)
+0x00096630 .text           536  unsigned int apac::GetEscBits<8u, 16u>(TBitstreamReader<unsigned int>&, unsigned int)
+0x00097300 .text            68  apac::BaseASCConfig::GetChannelLayout() const
+0x000975f0 .text           120  apac::BaseASCConfig::GetNumChannels() const
+0x000978c0 .text           220  apac::GlobalConfig::Reset()
+0x000979a0 .text           940  apac::GlobalConfig::SetChannelLayout()
+0x00097d50 .text          4516  apac::GlobalConfig::Deserialize(TBitstreamReader<unsigned int>&)
+0x00098f00 .text            68  apac::BaseASCConfig::Deserialize(TBitstreamReader<unsigned int>&)
+0x00098f50 .text           244  apac::BaseASCConfig::~BaseASCConfig()
+0x00099050 .text           256  apac::BaseASCConfig::~BaseASCConfig()
+0x00099050 .text           256  apac::BaseASCConfig::~BaseASCConfig()
+0x00099150 .text           204  std::vector<apac::TCEConfig, std::allocator<apac::TCEConfig> >::~vector()
+0x00099150 .text           204  std::vector<apac::TCEConfig, std::allocator<apac::TCEConfig> >::~vector()
+0x00099220 .text           536  unsigned int apac::GetEscBits<6u, 12u>(TBitstreamReader<unsigned int>&, unsigned int)
+0x00099650 .text           836  int GetEffectiveDecoderOutConfig<__gnu_cxx::__normal_iterator<std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> >*, std::vector<std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> >, std::allocator<std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> > > > > >(__gnu_cxx::__normal_iterator<std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> >*, std::vector<std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> >, std::allocator<std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> > > > >, __gnu_cxx::__normal_iterator<std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> >*, std::vector<std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> >, std::allocator<std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> > > > >, std::vector<apac::observer_ptr<apac::IASCConfig const>, std::allocator<apac::observer_ptr<apac::IASCConfig const> > >&)
+0x00099ba0 .text           400  void std::vector<std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> >, std::allocator<std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> > > >::_M_realloc_insert<std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> > >(__gnu_cxx::__normal_iterator<std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> >*, std::vector<std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> >, std::allocator<std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> > > > >, std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> >&&)
+0x00099d30 .text           132  void std::vector<std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> >, std::allocator<std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> > > >::emplace_back<std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> > >(std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> >&&)
+0x00099dc0 .text            76  apac::GetHuffmanTable(unsigned int)
+0x00099e10 .text            76  apac::GetSCFHuffmanTable()
+0x00099e60 .text           736  APACICSInfo::Deserialize(TBitstreamReader<unsigned int>&, apac::CodingType)
+0x0009a140 .text          1224  APACScaleFactorData::Deserialize(TBitstreamReader<unsigned int>&, APACICSInfo const&)
+0x0009a610 .text           200  APACIndividualChannelStream::Deserialize(TBitstreamReader<unsigned int>&, APACICSInfo&, bool)
+0x0009a6e0 .text            64  APACICSInfo::~APACICSInfo()
+0x0009a6e0 .text            64  APACICSInfo::~APACICSInfo()
+0x0009a720 .text            80  APACICSInfo::Reset()
+0x0009a770 .text            64  APACICSInfo::~APACICSInfo()
+0x0009a7b0 .text            96  APACIndividualChannelStream::~APACIndividualChannelStream()
+0x0009a7b0 .text            96  APACIndividualChannelStream::~APACIndividualChannelStream()
+0x0009a810 .text            96  APACIndividualChannelStream::~APACIndividualChannelStream()
+0x0009a870 .text           224  APACInstanceConfig::Create(unsigned int, unsigned int)
+0x0009a950 .text           184  APACLRVQDecoder::dequantizeLrvqGain(unsigned short, unsigned short, float*)
+0x0009aa10 .text          1232  APACLRVQDecoder::lsfsToMdctSpectralEnvelope(bool, apac::aligned_array<unsigned short, 5ul> const&, apac::aligned_array<float, 1024ul>&)
+0x0009aee0 .text           536  APACLRVQDecoder::ltpToMdctSpectralEnvelope(unsigned short, unsigned short, apac::aligned_array<float, 1024ul>&)
+0x0009b100 .text          3264  APACLRVQDecoder::LrvqDeserialize(TBitstreamReader<unsigned int>&, bool, bool, APACSpectralData&, apac::aligned_array<float, 1024ul>&, apac::aligned_array<float, 1024ul>&, apac::aligned_array<float, 256ul>&, apac::aligned_array<short, 64ul>&, unsigned short*)
+0x0009bdc0 .text           408  APACLRVQDecoder::SpectrumDeserializeSCE(TBitstreamReader<unsigned int>&, APACICSInfo&, APACIndividualChannelStream&)
+0x0009bf60 .text           644  APACLRVQDecoder::SpectrumDeserializeCPE(TBitstreamReader<unsigned int>&, APACICSInfo&, APACICSInfo&, APACIndividualChannelStream&, APACIndividualChannelStream&)
+0x0009c1f0 .text          1260  APACLRVQDecoder::SpectrumDeserializeLFE(TBitstreamReader<unsigned int>&, APACICSInfo&, APACIndividualChannelStream&)
+0x0009c6e0 .text            96  apac::LSFTools::ConditionLSFs(float*)
+0x0009c740 .text           108  apac::LPMDCTFilter::Initialize()
+0x0009c7b0 .text           116  apac::LPMDCTFilter::Initialize(unsigned short, unsigned short)
+0x0009c830 .text           100  APACLRVQDecoder::LPMDCT_LONG::~LPMDCT_LONG()
+0x0009c830 .text           100  APACLRVQDecoder::LPMDCT_LONG::~LPMDCT_LONG()
+0x0009c8a0 .text           116  APACLRVQDecoder::LPMDCT_LONG::~LPMDCT_LONG()
+0x0009c920 .text           100  APACLRVQDecoder::LPMDCT_LTP::~LPMDCT_LTP()
+0x0009c920 .text           100  APACLRVQDecoder::LPMDCT_LTP::~LPMDCT_LTP()
+0x0009c990 .text           116  APACLRVQDecoder::LPMDCT_LTP::~LPMDCT_LTP()
+0x0009ca10 .text           416  APACLRVQDecoder::LRVQLPC::~LRVQLPC()
+0x0009ca10 .text           416  APACLRVQDecoder::LRVQLPC::~LRVQLPC()
+0x0009cbb0 .text           392  APACLRVQDecoder::LRVQLPC::~LRVQLPC()
+0x0009cd40 .text           416  apac::LSFTools::~LSFTools()
+0x0009cd40 .text           416  apac::LSFTools::~LSFTools()
+0x0009cee0 .text           392  apac::LSFTools::~LSFTools()
+0x0009d070 .text            92  apac::GetProfileConfig(apac::Profile)
+0x0009d0d0 .text           524  apac::ProfileLevelConfig::GetLevelFromCodecConfigs(std::vector<std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> >, std::allocator<std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> > > > const&) const
+0x0009d2e0 .text          1412  apac::ProfileLevelConfig::InferProfileFromCodecConfigs(std::vector<std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> >, std::allocator<std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> > > > const&, apac::ConstParamArray<apac::ProfileLevel> const&)
+0x0009d870 .text           108  apac::ProfileLevelConfig::IsDecodable(apac::Profile, apac::Profile)
+0x0009d8e0 .text           228  apac::ProfileLevelConfig::ValidateProfileLevelData(std::vector<std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> >, std::allocator<std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> > > > const&) const
+0x0009d9d0 .text           152  apac::GetSFBOffsetTable(unsigned int, unsigned int)
+0x000a3170 .text           168  apac::scene::BCP47LanguageString::operator==(apac::scene::BCP47LanguageString const&) const
+0x000a3220 .text            76  apac::scene::BCP47LanguageString::Reset()
+0x000a3270 .text           940  apac::scene::BCP47LanguageString::BCP47LanguageChar::Deserialize(TBitstreamReader<unsigned int>&, char&, bool&)
+0x000a3620 .text           388  apac::scene::BCP47LanguageString::Deserialize(TBitstreamReader<unsigned int>&)
+0x000a37b0 .text           780  apac::scene::SC_Language::Deserialize(TBitstreamReader<unsigned int>&)
+0x000a3ac0 .text            84  apac::scene::SC_Language::Reset()
+0x000a3b20 .text           128  apac::scene::DecodeAngleOffset(unsigned short, unsigned short)
+0x000a3ba0 .text           144  apac::scene::DecodeDistanceRatio(unsigned short, unsigned short)
+0x000a3c30 .text           100  apac::scene::DecodeInteractivityGain(unsigned short, bool)
+0x000ab3b0 .text          3820  APACSpectralData::Deserialize(TBitstreamReader<unsigned int>&, APACICSInfo const&, APACScaleFactorData const&, apac::SFBOffsets const&)
+0x000ac2a0 .text           324  APACLFEElement::Deserialize(TBitstreamReader<unsigned int>&)
+0x000ac3f0 .text           528  APACSingleChannelElement::Deserialize(TBitstreamReader<unsigned int>&)
+0x000ac600 .text           712  APACChannelPairElement::DeserializeLrvqFrame(TBitstreamReader<unsigned int>&)
+0x000ac8d0 .text           844  APACChannelPairElement::DeserializeSQFrame(TBitstreamReader<unsigned int>&)
+0x000acc20 .text           176  APACSyntacticElement::DestroyList(std::vector<apac::ElementInstance<APACSyntacticElement*>, std::allocator<apac::ElementInstance<APACSyntacticElement*> > >&)
+0x000accd0 .text           132  APACSyntacticElement::NumberOfChannels(std::vector<apac::ElementInstance<APACSyntacticElement*>, std::allocator<apac::ElementInstance<APACSyntacticElement*> > > const&)
+0x000acd60 .text          1620  APACSyntacticElement::CreateList(std::vector<apac::ElementInstance<APACSyntacticElement*>, std::allocator<apac::ElementInstance<APACSyntacticElement*> > >&, APACInstanceConfig&, apac::observer_ptr<apac::IASCConfig>)
+0x000ad3c0 .text            72  APACSyntacticElement::ChannelData(bool)
+0x000ad410 .text            68  APACSyntacticElement::GetICSInfo(bool)
+0x000ad460 .text            96  APACChannelPairElement::ChannelData(bool)
+0x000ad4c0 .text            88  APACChannelPairElement::GetICSInfo(bool)
+0x000ad520 .text           176  APACSingleChannelElement::Reset()
+0x000ad5d0 .text           176  APACLFEElement::Reset()
+0x000ad680 .text           272  APACChannelPairElement::Reset()
+0x000ad790 .text           272  APACSingleChannelElement::~APACSingleChannelElement()
+0x000ad790 .text           272  APACSingleChannelElement::~APACSingleChannelElement()
+0x000ad8a0 .text           272  APACLFEElement::~APACLFEElement()
+0x000ad8a0 .text           272  APACLFEElement::~APACLFEElement()
+0x000ad9b0 .text           376  APACChannelPairElement::~APACChannelPairElement()
+0x000adb30 .text           216  APACSingleChannelElement::~APACSingleChannelElement()
+0x000adc10 .text           216  APACLFEElement::~APACLFEElement()
+0x000adcf0 .text           432  APACChannelPairElement::~APACChannelPairElement()
+0x000adcf0 .text           432  APACChannelPairElement::~APACChannelPairElement()
+0x000adea0 .text           228  APACChannelPairElement::Deserialize(TBitstreamReader<unsigned int>&)
+0x000adf90 .text           272  APACSyntacticElement::~APACSyntacticElement()
+0x000adf90 .text           272  APACSyntacticElement::~APACSyntacticElement()
+0x000ae0a0 .text           216  APACSyntacticElement::~APACSyntacticElement()
+0x000ae180 .text           380  std::vector<float, apac::AlignedAllocator<float, 16ul> >::_M_default_append(unsigned long)
+0x000ae300 .text           404  void std::vector<apac::ElementInstance<APACSyntacticElement*>, std::allocator<apac::ElementInstance<APACSyntacticElement*> > >::_M_realloc_insert<apac::ElementInstance<APACSyntacticElement*> >(__gnu_cxx::__normal_iterator<apac::ElementInstance<APACSyntacticElement*>*, std::vector<apac::ElementInstance<APACSyntacticElement*>, std::allocator<apac::ElementInstance<APACSyntacticElement*> > > >, apac::ElementInstance<APACSyntacticElement*>&&)
+0x000ae4a0 .text           136  void std::vector<apac::ElementInstance<APACSyntacticElement*>, std::allocator<apac::ElementInstance<APACSyntacticElement*> > >::emplace_back<apac::ElementInstance<APACSyntacticElement*> >(apac::ElementInstance<APACSyntacticElement*>&&)
+0x000ae530 .text           124  APACSynthesisFilterBank::Reset()
+0x000ae5b0 .text           964  APACSynthesisFilterBank::FrequencyToTimeInPlace(unsigned int, float*, unsigned int, unsigned int)
+0x000ae980 .text           408  APACSynthesisFilterBank::Initialize(unsigned int, unsigned int)
+0x000aeb20 .text           116  APACSynthesisFilterBank::~APACSynthesisFilterBank()
+0x000aeb20 .text           116  APACSynthesisFilterBank::~APACSynthesisFilterBank()
+0x000aeba0 .text           124  APACSynthesisFilterBank::~APACSynthesisFilterBank()
+0x000aed10 .text           168  APACTNSData::APACTNSData(APACInstanceConfig&)
+0x000aed10 .text           168  APACTNSData::APACTNSData(APACInstanceConfig&)
+0x000aedc0 .text          1140  APACTNSData::ParseTNSData(TBitstreamReader<unsigned int>&, APACICSInfo const&)
+0x000af240 .text           880  APACTNSData::Apply(APACICSInfo const&, apac::SFBOffsets const&, APACSpectralData&) const
+0x000af5b0 .text           448  apac::ASCChannelMap::InsertMap(std::tuple<apac::AudioDataType, apac::ASCChannelRange> const&)
+0x000af770 .text           112  apac::ASCChannelMap::AddMap(apac::AudioDataType, unsigned short, unsigned short)
+0x000af7e0 .text           408  void std::vector<std::tuple<apac::AudioDataType, apac::ASCChannelRange>, std::allocator<std::tuple<apac::AudioDataType, apac::ASCChannelRange> > >::_M_realloc_insert<std::tuple<apac::AudioDataType, apac::ASCChannelRange> const&>(__gnu_cxx::__normal_iterator<std::tuple<apac::AudioDataType, apac::ASCChannelRange>*, std::vector<std::tuple<apac::AudioDataType, apac::ASCChannelRange>, std::allocator<std::tuple<apac::AudioDataType, apac::ASCChannelRange> > > >, std::tuple<apac::AudioDataType, apac::ASCChannelRange> const&)
+0x000b0d20 .text            76  apac::ConvertToAudioDataType(apac::ASCType)
+0x000b1240 .text           496  void std::vector<std::unique_ptr<apac::LPMDCTFilter, std::default_delete<apac::LPMDCTFilter> >, std::allocator<std::unique_ptr<apac::LPMDCTFilter, std::default_delete<apac::LPMDCTFilter> > > >::_M_realloc_insert<std::unique_ptr<apac::LPMDCTFilter, std::default_delete<apac::LPMDCTFilter> > >(__gnu_cxx::__normal_iterator<std::unique_ptr<apac::LPMDCTFilter, std::default_delete<apac::LPMDCTFilter> >*, std::vector<std::unique_ptr<apac::LPMDCTFilter, std::default_delete<apac::LPMDCTFilter> >, std::allocator<std::unique_ptr<apac::LPMDCTFilter, std::default_delete<apac::LPMDCTFilter> > > > >, std::unique_ptr<apac::LPMDCTFilter, std::default_delete<apac::LPMDCTFilter> >&&)
+0x000b2500 .text           272  ContentOutBuffer::SetAudioData(apac::AudioDataType, unsigned int, __gnu_cxx::__normal_iterator<float* const*, std::vector<float*, std::allocator<float*> > >, __gnu_cxx::__normal_iterator<float* const*, std::vector<float*, std::allocator<float*> > >, unsigned int)
+0x000b2610 .text           312  ContentOutBuffer::GetAudioData(std::vector<std::pair<unsigned int, std::unique_ptr<apac::DecElement, std::default_delete<apac::DecElement> > >, std::allocator<std::pair<unsigned int, std::unique_ptr<apac::DecElement, std::default_delete<apac::DecElement> > > > > const&, apac::FrameOutRecord&)
+0x000b2750 .text           412  apac::CreateContentMixer(apac::GlobalConfig const&)
+0x000b28f0 .text          1032  ContentOutBuffer::Initialize(apac::GlobalConfig const&)
+0x000b30e0 .text           716  void std::vector<apac::ASCAudioOutData, std::allocator<apac::ASCAudioOutData> >::_M_realloc_insert<apac::ASCAudioOutData>(__gnu_cxx::__normal_iterator<apac::ASCAudioOutData*, std::vector<apac::ASCAudioOutData, std::allocator<apac::ASCAudioOutData> > >, apac::ASCAudioOutData&&)
+0x000b4190 .text           132  apac::LPCBase::LPC_Weighting(float const*, float*, float, unsigned short)
+0x000b4220 .text           268  apac::LSFTools::get_LSFWeightingFactors(float const*, float*, unsigned short, float)
+0x000b4330 .text            96  apac::LSFTools::LSP_To_LPC()
+0x000b4390 .text           200  apac::LSFTools::Condition_LSFs(float*, float, float)
+0x000b4460 .text           440  apac::LSFTools::LSP_To_LPC(float const*, float*, unsigned short)
+0x000b4620 .text           400  apac::LPCBase::LevinsonDurbin(float const*)
+0x000b47b0 .text           376  apac::LPMDCTFilter::AutocorrFromPSD(float const*, float*, unsigned int)
+0x000b4930 .text           676  apac::LPCBase::ComputeLPCs(float const*, bool)
+0x000b4be0 .text           244  apac::LPMDCTFilter::LPCToSpecEnvelope(float const*, float*, unsigned int)
+0x000b4ce0 .text           248  apac::LPMDCTFilter::LPImpulseToSpecEnvelope(float const*, float*, unsigned int)
+0x000b4de0 .text           328  apac::LPMDCTFilter::MDCTToAutoCorr(float const*, float*, unsigned int, unsigned int, unsigned int)
+0x000b4f30 .text           224  apac::LSFTools::DecodeLSF(unsigned short const*)
+0x000b5010 .text           216  apac::LSFTools::LSP_To_LSF(float const*, float*, unsigned short, float)
+0x000b50f0 .text           204  apac::LSFTools::LSF_To_LSP(float const*, float*, float)
+0x000b51c0 .text           204  apac::LSFTools::LSF_To_LSP(float*, float)
+0x000b5290 .text           212  apac::LSFTools::Reset()
+0x000b5370 .text           312  apac::LSFTools::LSF_To_LPC(float*, float*)
+0x000b54b0 .text           616  apac::LPCodeBook::VQSearch(float const*)
+0x000b5720 .text           332  apac::LPCodeBook::LSF_Quant_Weighting(float const*, short)
+0x000b5870 .text           404  apac::LSFTools::QuantizeLSF(unsigned short*)
+0x000b5a10 .text          1092  apac::LSFTools::Initialize()
+0x000b5fb0 .text           416  void std::vector<std::unique_ptr<apac::LPCodeBook, std::default_delete<apac::LPCodeBook> >, std::allocator<std::unique_ptr<apac::LPCodeBook, std::default_delete<apac::LPCodeBook> > > >::_M_realloc_insert<std::unique_ptr<apac::LPCodeBook, std::default_delete<apac::LPCodeBook> > >(__gnu_cxx::__normal_iterator<std::unique_ptr<apac::LPCodeBook, std::default_delete<apac::LPCodeBook> >*, std::vector<std::unique_ptr<apac::LPCodeBook, std::default_delete<apac::LPCodeBook> >, std::allocator<std::unique_ptr<apac::LPCodeBook, std::default_delete<apac::LPCodeBook> > > > >, std::unique_ptr<apac::LPCodeBook, std::default_delete<apac::LPCodeBook> >&&)
+0x00105bb0 .text           552  APACDecoder_DecodeFrame
+0x00105de0 .text           132  APACDecoder_Reset
+0x00105e70 .text           440  APACDecoder_GetParameter
+0x00106030 .text           124  APACDecoder_GetCookieOffset
+0x001060b0 .text            80  APACDecoder_GetVersion
+0x00106100 .text            80  APACDecoder_GetProfile
+0x00106150 .text            92  APACDecoder_SampleRate
+0x001061b0 .text            88  APACDecoder_FrameLength
+0x00106210 .text            80  APACDecoder_NumberOfChannels
+0x00106260 .text           552  APACDecoder_SetParameter
+0x00106490 .text           876  APACDecoder_Configure
+0x00106800 .text          1028  APACDecoder_Create
+0x00106c10 .text           492  APACDecoder_Dispose
+0x00106e00 .text            76  apac::GlobalConfig::ComponentConfigs::configs()
+0x00106e50 .text            64  apac::GlobalConfig::ASCConfigData::~ASCConfigData()
+0x00106e50 .text            64  apac::GlobalConfig::ASCConfigData::~ASCConfigData()
+0x00106e90 .text            64  apac::GlobalConfig::CodecConfigData::~CodecConfigData()
+0x00106e90 .text            64  apac::GlobalConfig::CodecConfigData::~CodecConfigData()
+0x00106ed0 .text            64  apac::GlobalConfig::CodecConfigData::~CodecConfigData()
+0x00106f10 .text            64  apac::GlobalConfig::ASCConfigData::~ASCConfigData()
+0x00106f50 .text           168  std::vector<std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> >, std::allocator<std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> > > >::~vector()
+0x00106f50 .text           168  std::vector<std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> >, std::allocator<std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> > > >::~vector()
+0x0013ba20 .text            84  CommunicationPluginProxy::setAPACChanel(unsigned char)
+0x00140610 .text            76  CarPlay::PluginWrapperStub::CarPlaySetAPACChanel(unsigned char)
+0x0014d7e0 .text            80  SetAPACChanel
+0x0030e7c0 .rodata          17  typeinfo name for APACASPDecoder
+0x0030e7f8 .rodata          31  typeinfo name for apac::drc::APACDRCConfigBase
+0x0030e818 .rodata          32  typeinfo name for apac::drc::DynRangeCompressor
+0x0030e838 .rodata          25  typeinfo name for apac::AncillaryConfig
+0x0030e930 .rodata          31  typeinfo name for apac::APACAudioSceneDecoder
+0x0030e950 .rodata          24  typeinfo name for apac::APACDRCDecoder
+0x0030e968 .rodata          35  typeinfo name for apac::APACAncillaryFrameDecoder
+0x0030ea78 .rodata          24  typeinfo name for apac::GlobalConfig const*
+0x0030ec38 .rodata          17  typeinfo name for apac::Autocorr
+0x0030ec50 .rodata          18  typeinfo name for IAPACBWEDecoder
+0x0030ec68 .rodata          18  typeinfo name for APACBWE2Decoder
+0x0030ed80 .rodata          22  typeinfo name for APACChannelRemapper
+0x0030edb0 .rodata          18  typeinfo name for apac::TCEConfig
+0x0030edc8 .rodata          20  typeinfo name for apac::IASCConfig
+0x0030ede0 .rodata          32  typeinfo name for apac::chan::CoreDecoderConfig
+0x0030ee08 .rodata          19  typeinfo name for IAPACBaseDecoder
+0x0030ee20 .rodata          18  typeinfo name for APACCoreDecoder
+0x0030ee38 .rodata          27  typeinfo name for apac::lbr::DecoderConfig
+0x0030ee58 .rodata          21  typeinfo name for APACCoreLBRDecoder
+0x0030ef50 .rodata         122  typeinfo name for std::_Sp_counted_ptr_inplace<apac::drc::DynRangeCompressor::APACDRCExtensionPayload, std::allocator<apac::drc::DynRangeCompressor::APACDRCExtensionPayload>, (__gnu_cxx::_Lock_policy)2>
+0x0030efe0 .rodata          20  typeinfo name for apac::DecElement
+0x0030eff8 .rodata          24  typeinfo name for apac::ChanDecElement
+0x0030f010 .rodata          22  typeinfo name for apac::GlobalConfig
+0x0030f088 .rodata          23  typeinfo name for APACDecoderInterface
+0x0030f0b0 .rodata          14  typeinfo name for APACDecoder
+0x0030f0c0 .rodata          45  typeinfo name for boost::any::holder<apac::GlobalConfig const*>
+0x0030f1a0 .rodata          33  typeinfo name for apac::IExtFrameElementDecoder
+0x0030f1c8 .rodata          31  typeinfo name for apac::ExtFrameUnkownDecoder
+0x0030f3a0 .rodata          23  typeinfo name for apac::BaseASCConfig
+0x00310250 .rodata          14  typeinfo name for APACICSInfo
+0x00310260 .rodata          30  typeinfo name for APACIndividualChannelStream
+0x0032fe90 .rodata          28  typeinfo name for APACLRVQDecoder::LRVQLPC
+0x0032feb0 .rodata          33  typeinfo name for APACLRVQDecoder::LPMDCT_LONG
+0x0032fed8 .rodata          32  typeinfo name for APACLRVQDecoder::LPMDCT_LTP
+0x00330080 .rodata           4  apac::kSupportedProfileLevels
+0x00330888 .rodata           3  apac::scene::BCP47LanguageString::BCP47LanguageChar::kCharacterDecodingTable_8Bit
+0x00330890 .rodata          23  apac::scene::BCP47LanguageString::BCP47LanguageChar::kCharacterDecodingTable_5Bit
+0x003318e0 .rodata          23  typeinfo name for APACSyntacticElement
+0x003318f8 .rodata          27  typeinfo name for APACSingleChannelElement
+0x00331918 .rodata          17  typeinfo name for APACLFEElement
+0x00331930 .rodata          25  typeinfo name for APACChannelPairElement
+0x00331950 .rodata          26  typeinfo name for APACSynthesisFilterBank
+0x00332f38 .rodata          22  typeinfo name for apac::LPMDCTFilter
+0x00332f50 .rodata          16  typeinfo name for apac::LPCBase
+0x00332f60 .rodata          17  typeinfo name for apac::LSFTools
+0x00348330 .rodata          40  typeinfo name for apac::GlobalConfig::ComponentConfigs
+0x00348358 .rodata          39  typeinfo name for apac::GlobalConfig::CodecConfigData
+0x00348380 .rodata          37  typeinfo name for apac::GlobalConfig::ASCConfigData
+0x0042a260 .data.rel.ro     24  typeinfo for APACASPDecoder
+0x0042a278 .data.rel.ro     88  vtable for APACASPDecoder
+0x0042a2e0 .data.rel.ro     16  typeinfo for apac::drc::APACDRCConfigBase
+0x0042a2f0 .data.rel.ro     24  typeinfo for apac::drc::DynRangeCompressor
+0x0042a308 .data.rel.ro     16  typeinfo for apac::AncillaryConfig
+0x0042a330 .data.rel.ro     32  vtable for apac::drc::DynRangeCompressor
+0x0042a350 .data.rel.ro     32  vtable for apac::AncillaryConfig
+0x0042a3d8 .data.rel.ro     16  typeinfo for apac::APACAudioSceneDecoder
+0x0042a3e8 .data.rel.ro     16  typeinfo for apac::APACDRCDecoder
+0x0042a3f8 .data.rel.ro     16  typeinfo for apac::APACAncillaryFrameDecoder
+0x0042a508 .data.rel.ro     32  vtable for apac::APACAudioSceneDecoder
+0x0042a528 .data.rel.ro     32  vtable for apac::APACDRCDecoder
+0x0042a548 .data.rel.ro     48  vtable for apac::APACAncillaryFrameDecoder
+0x0042a7f0 .data.rel.ro     16  typeinfo for apac::Autocorr
+0x0042a800 .data.rel.ro     16  typeinfo for IAPACBWEDecoder
+0x0042a810 .data.rel.ro     24  typeinfo for APACBWE2Decoder
+0x0042a848 .data.rel.ro     32  vtable for apac::Autocorr
+0x0042a868 .data.rel.ro     64  vtable for APACBWE2Decoder
+0x0042a8a8 .data.rel.ro     16  typeinfo for APACChannelRemapper
+0x0042a8b8 .data.rel.ro     48  vtable for APACChannelRemapper
+0x0042a8e8 .data.rel.ro     16  typeinfo for apac::TCEConfig
+0x0042a8f8 .data.rel.ro     16  typeinfo for apac::IASCConfig
+0x0042a908 .data.rel.ro     24  typeinfo for apac::chan::CoreDecoderConfig
+0x0042a920 .data.rel.ro     40  vtable for apac::TCEConfig
+0x0042a948 .data.rel.ro     56  vtable for apac::IASCConfig
+0x0042a980 .data.rel.ro     56  vtable for apac::chan::CoreDecoderConfig
+0x0042a9b8 .data.rel.ro     16  typeinfo for IAPACBaseDecoder
+0x0042a9c8 .data.rel.ro     24  typeinfo for APACCoreDecoder
+0x0042a9e0 .data.rel.ro     88  vtable for APACCoreDecoder
+0x0042aa38 .data.rel.ro     24  typeinfo for apac::lbr::DecoderConfig
+0x0042aa50 .data.rel.ro     56  vtable for apac::lbr::DecoderConfig
+0x0042aa88 .data.rel.ro     24  typeinfo for APACCoreLBRDecoder
+0x0042aaa0 .data.rel.ro     88  vtable for APACCoreLBRDecoder
+0x0042ab58 .data.rel.ro     24  typeinfo for std::_Sp_counted_ptr_inplace<apac::drc::DynRangeCompressor::APACDRCExtensionPayload, std::allocator<apac::drc::DynRangeCompressor::APACDRCExtensionPayload>, (__gnu_cxx::_Lock_policy)2>
+0x0042abd0 .data.rel.ro     56  vtable for std::_Sp_counted_ptr_inplace<apac::drc::DynRangeCompressor::APACDRCExtensionPayload, std::allocator<apac::drc::DynRangeCompressor::APACDRCExtensionPayload>, (__gnu_cxx::_Lock_policy)2>
+0x0042ac08 .data.rel.ro     16  typeinfo for apac::DecElement
+0x0042ac18 .data.rel.ro     24  typeinfo for apac::ChanDecElement
+0x0042ac30 .data.rel.ro     40  vtable for apac::DecElement
+0x0042ac58 .data.rel.ro     40  vtable for apac::ChanDecElement
+0x0042ac80 .data.rel.ro     16  typeinfo for apac::GlobalConfig
+0x0042ad00 .data.rel.ro     32  typeinfo for apac::GlobalConfig const*
+0x0042ad20 .data.rel.ro     16  typeinfo for APACDecoderInterface
+0x0042ad40 .data.rel.ro     24  typeinfo for APACDecoder
+0x0042ad58 .data.rel.ro     24  typeinfo for boost::any::holder<apac::GlobalConfig const*>
+0x0042ae08 .data.rel.ro     80  vtable for APACDecoder
+0x0042ae58 .data.rel.ro     48  vtable for boost::any::holder<apac::GlobalConfig const*>
+0x0042af48 .data.rel.ro     16  typeinfo for apac::IExtFrameElementDecoder
+0x0042af58 .data.rel.ro     24  typeinfo for apac::ExtFrameUnkownDecoder
+0x0042af70 .data.rel.ro     48  vtable for apac::ExtFrameUnkownDecoder
+0x0042afa0 .data.rel.ro     24  typeinfo for apac::BaseASCConfig
+0x0042afb8 .data.rel.ro     56  vtable for apac::BaseASCConfig
+0x0042aff0 .data.rel.ro     16  typeinfo for APACICSInfo
+0x0042b000 .data.rel.ro     16  typeinfo for APACIndividualChannelStream
+0x0042b010 .data.rel.ro     48  vtable for APACICSInfo
+0x0042b040 .data.rel.ro     40  vtable for APACIndividualChannelStream
+0x0042b068 .data.rel.ro     24  typeinfo for APACLRVQDecoder::LRVQLPC
+0x0042b080 .data.rel.ro     24  typeinfo for APACLRVQDecoder::LPMDCT_LONG
+0x0042b098 .data.rel.ro     24  typeinfo for APACLRVQDecoder::LPMDCT_LTP
+0x0042b0b0 .data.rel.ro    168  vtable for APACLRVQDecoder::LRVQLPC
+0x0042b158 .data.rel.ro     80  vtable for APACLRVQDecoder::LPMDCT_LONG
+0x0042b1a8 .data.rel.ro     80  vtable for APACLRVQDecoder::LPMDCT_LTP
+0x0042b408 .data.rel.ro     24  typeinfo for APACSyntacticElement
+0x0042b420 .data.rel.ro     24  typeinfo for APACSingleChannelElement
+0x0042b438 .data.rel.ro     24  typeinfo for APACLFEElement
+0x0042b450 .data.rel.ro     24  typeinfo for APACChannelPairElement
+0x0042b468 .data.rel.ro     64  vtable for APACSyntacticElement
+0x0042b4a8 .data.rel.ro     64  vtable for APACSingleChannelElement
+0x0042b4e8 .data.rel.ro     64  vtable for APACLFEElement
+0x0042b528 .data.rel.ro     80  vtable for APACChannelPairElement
+0x0042b578 .data.rel.ro     16  typeinfo for APACSynthesisFilterBank
+0x0042b588 .data.rel.ro     56  vtable for APACSynthesisFilterBank
+0x0042b6c8 .data.rel.ro     16  typeinfo for apac::LPMDCTFilter
+0x0042b6d8 .data.rel.ro     16  typeinfo for apac::LPCBase
+0x0042b6e8 .data.rel.ro     24  typeinfo for apac::LSFTools
+0x0042b700 .data.rel.ro     80  vtable for apac::LPMDCTFilter
+0x0042b750 .data.rel.ro     72  vtable for apac::LPCBase
+0x0042b798 .data.rel.ro    160  vtable for apac::LSFTools
+0x0042b8c0 .data.rel.ro     16  typeinfo for apac::GlobalConfig::ComponentConfigs
+0x0042b8d0 .data.rel.ro     24  typeinfo for apac::GlobalConfig::CodecConfigData
+0x0042b8e8 .data.rel.ro     24  typeinfo for apac::GlobalConfig::ASCConfigData
+0x0042b900 .data.rel.ro     48  vtable for apac::GlobalConfig::CodecConfigData
+0x0042b930 .data.rel.ro     48  vtable for apac::GlobalConfig::ASCConfigData
+0x00431e70 .data            40  apac::kChannelBedProfileConfigs
+0x00431e98 .data            52  apac::scene::kBCP47CharacterCodeTableEntry
+0x00431ed0 .data            16  apac::scene::kBCP47CharacterCodeSection
+0x00433b68 .data             1  g_APAC_ch

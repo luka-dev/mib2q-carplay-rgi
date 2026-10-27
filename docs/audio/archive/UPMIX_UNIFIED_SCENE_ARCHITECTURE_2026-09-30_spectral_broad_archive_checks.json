@@ -1,0 +1,69 @@
+{
+  "scope": "Read-only independent aggregation of already completed original full40 artifacts; no new inference or gates",
+  "variants": {
+    "control_reference_03235": {
+      "rows": 231,
+      "songs": 40,
+      "summary_exact": true,
+      "original_11_renderer_gates_exact": true,
+      "swings": 0
+    },
+    "control_nominal_040": {
+      "rows": 231,
+      "songs": 40,
+      "summary_exact": true,
+      "original_11_renderer_gates_exact": true,
+      "swings": 33
+    },
+    "control_diagnostic_050": {
+      "rows": 231,
+      "songs": 40,
+      "summary_exact": true,
+      "original_11_renderer_gates_exact": true,
+      "swings": 38
+    },
+    "spectral_reference_03235": {
+      "rows": 231,
+      "songs": 40,
+      "summary_exact": true,
+      "original_11_renderer_gates_exact": true,
+      "swings": 1
+    },
+    "spectral_nominal_040": {
+      "rows": 231,
+      "songs": 40,
+      "summary_exact": true,
+      "original_11_renderer_gates_exact": true,
+      "swings": 31
+    },
+    "spectral_diagnostic_050": {
+      "rows": 231,
+      "songs": 40,
+      "summary_exact": true,
+      "original_11_renderer_gates_exact": true,
+      "swings": 37
+    }
+  },
+  "event_counts": {
+    "control": {
+      "entry": 84,
+      "exit": 79,
+      "sustained": 102
+    },
+    "spectral": {
+      "entry": 84,
+      "exit": 79,
+      "sustained": 102
+    }
+  },
+  "paired_dev_20s_sdr_median_delta_db": 0.13830161094665527,
+  "paired_dev_20s_nonworse_songs": 23,
+  "acoustic_promotion_pass": false,
+  "device_or_product_pass": false,
+  "original_relative_12_gates_exact": true,
+  "original_entry_gates_exact": true,
+  "terminal_audit_manifest_hash_exact": true,
+  "full40_protocol_hash_exact": true,
+  "all18_downloaded_file_hashes_exact": true,
+  "aggregation_helper_sha256": "1da71a53dbb740e5ee8d032ba58c7cfe970d7a3019b59a8a7c5bc487a29bbbde"
+}

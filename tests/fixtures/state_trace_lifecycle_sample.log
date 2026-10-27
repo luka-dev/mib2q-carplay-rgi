@@ -1,0 +1,7 @@
+09:00:00.100 [WRN] [STATE] ST ev=1 mono_ms=100 pid=5151 gen=1 name=BUFFERED_RENDER_START setup_index=23 state=waiting-for-cookie key=1 output_channels=6 upmix=scene lfe=1 initial_rate=0 compressed_limit=5000000
+09:00:00.110 [WRN] [STATE] ST ev=2 mono_ms=110 pid=5151 gen=1 name=BUFFERED_HEALTH apap_frames=4 state=waiting-for-cookie playing=0 primed=0 ring_fill=0 compressed_packets=4 compressed_bytes=400 compressed_limit=5000000 flush_pending=0 flush_dropped=0
+09:00:00.115 [WRN] [STATE] ST ev=3 mono_ms=115 pid=5151 gen=1 name=QSA_DETACHED_FIRST_WRITE result=9216 expected=9216
+09:00:00.120 [WRN] [STATE] ST ev=4 mono_ms=120 pid=5151 gen=1 name=BUFFERED_RATE_GATE old_playing=0 new_playing=1 queued_packets=4 queued_bytes=400
+09:00:00.130 [WRN] [STATE] ST ev=5 mono_ms=130 pid=5151 gen=1 name=BUFFERED_FLUSH_APPLIED kind=bounded removed_packets=2 removed_bytes=200 removed_pcm_frames=1024 queued_packets=2 queued_bytes=200
+09:00:00.140 [WRN] [STATE] ST ev=6 mono_ms=140 pid=5151 gen=1 name=BUFFERED_QUEUE_BACKPRESSURE queued_packets=10 state=paused
+09:00:00.150 [WRN] [STATE] ST ev=7 mono_ms=150 pid=5151 gen=1 name=BUFFERED_QUEUE_FAILURE sequence=5 status=-2

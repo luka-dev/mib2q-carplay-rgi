@@ -131,7 +131,7 @@ public class TerminalModeBapCombi implements ITerminalModeComponent {
              * a CarPlay device while we still think CarPlay is active.  All connect states (ATTACHED /
              * ACTIVATING / ACTIVE) report carplay=true, so this only fires on a genuine drop.  onDeactivate()
              * is idempotent (no-op unless active), so it is safe.  It also releases the cluster pin
-             * (ScreenModule.isConnected()), so the stock map and the View button work again. */
+             * (AltScreenModule.isConnected()), so the stock map and the View button work again. */
             if (!tmdevice.isCarplayDevice() && com.luka.carplay.core.CarPlayApp.isActive()) {
                 try {
                     com.luka.carplay.core.CarPlayApp.onDeactivate();

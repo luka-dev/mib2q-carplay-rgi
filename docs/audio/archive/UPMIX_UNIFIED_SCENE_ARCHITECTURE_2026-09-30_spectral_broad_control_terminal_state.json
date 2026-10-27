@@ -1,0 +1,79 @@
+{
+  "gpu_python": [
+    {
+      "ProcessId": 37976,
+      "ParentProcessId": 45888
+    },
+    {
+      "ProcessId": 18188,
+      "ParentProcessId": 37976
+    }
+  ],
+  "utc": "2026-09-30T23:51:45.3977526Z",
+  "spectral": {
+    "step": 3250,
+    "seconds": 570.2685282999882,
+    "loss": 0.41807499527931213,
+    "grad_norm": 0.9786256551742554,
+    "decoder_grad_norm": 0.12758567528258516,
+    "lr": 0.00029927977231528774,
+    "distinct_train_songs": 156,
+    "windows": 13000,
+    "audible_source_windows": [
+      12913,
+      11045,
+      12346,
+      12283
+    ],
+    "sample_sequence_sha256": "53711dc50459d1c7c88fdbb12fec44a82fa9a0fa54eb0d6c6341c762a2fc71e7"
+  },
+  "gpu_supervisor": [
+    {
+      "ProcessId": 45888,
+      "ParentProcessId": 35768
+    }
+  ],
+  "control_training_complete": {
+    "complete": true,
+    "mode": "control",
+    "smoke": false,
+    "step": 40000,
+    "last": {
+      "step": 40000,
+      "seconds": 6538.498741899966,
+      "loss": 0.40026187896728516,
+      "grad_norm": 0.3304736018180847,
+      "decoder_grad_norm": 0.055213529234051366,
+      "lr": 3e-05,
+      "distinct_train_songs": 156,
+      "windows": 160000,
+      "audible_source_windows": [
+        159014,
+        136331,
+        151742,
+        151110
+      ],
+      "sample_sequence_sha256": "57c2e4a48bd581634700f868e90f327664418eb6124770101692194f2380e26d"
+    },
+    "checkpoint_sha256": "5aaed6380ad35b59dcb30ea3446088d0550218590c0daeeea969a50796f2e841",
+    "protocol_sha256": "dc884c742d10dbd26d9488e8a914c30e5805d5000dd6e1020b22e5bca37ea5c0"
+  },
+  "control": {
+    "step": 40000,
+    "seconds": 6538.498741899966,
+    "loss": 0.40026187896728516,
+    "grad_norm": 0.3304736018180847,
+    "decoder_grad_norm": 0.055213529234051366,
+    "lr": 3e-05,
+    "distinct_train_songs": 156,
+    "windows": 160000,
+    "audible_source_windows": [
+      159014,
+      136331,
+      151742,
+      151110
+    ],
+    "sample_sequence_sha256": "57c2e4a48bd581634700f868e90f327664418eb6124770101692194f2380e26d"
+  },
+  "own_cpu": []
+}

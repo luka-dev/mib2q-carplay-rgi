@@ -1,0 +1,9 @@
+﻿{
+    "script_sha256":  "e1cca30786c0d51a60b45b334ab7e5eed402e3fc0347f49b2f23eefb271d1c76",
+    "started_utc":  "2026-10-01T00:30:24.2889257Z",
+    "zip_sha256":  "9ad639be51e14053b7366d61fb12c74e41e3ee3a0e37d9a3a2acc978f0b590fe",
+    "wrapper":  "C:\\Users\\LuKa\\AppData\\Local\\Temp\\upmix_spectral_native_train_wrapper_v1.ps1",
+    "return_value":  0,
+    "supervisor_pid":  22880,
+    "scope":  "CPU-only original true TRAIN4 plus one entry per TRAIN song, no DEV/GPU/shared lease"
+}

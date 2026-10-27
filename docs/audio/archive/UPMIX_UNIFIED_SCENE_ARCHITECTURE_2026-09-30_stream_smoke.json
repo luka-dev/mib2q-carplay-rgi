@@ -1,0 +1,18 @@
+{
+  "verified": true,
+  "scope": "CPU random-model waveform structure; no trained music/int8/device latency result",
+  "sr": 48000,
+  "fft": 2048,
+  "hop": 512,
+  "block_array_delay_samples": 1536,
+  "block_array_delay_ms": 32.0,
+  "max_frame_acquisition_ms": 10.666666666666666,
+  "excluded": "neural execution, scheduler, transport and additional C DSP/cabin delay",
+  "identity_nse": 1.826365156386376e-14,
+  "stream_identity_nse": 1.8107855099809382e-14,
+  "neural_offline_stream_nse": 5.0547819375286115e-14,
+  "chunk_nse": 0.0,
+  "future_input_prefix_error": 0.0,
+  "transform": "zero-start past-only Hann; three-hop zero flush; differs at startup from centered-reflect fitting transform",
+  "source_sha256": "cf23d41d9370ea6e807f1c5eadb4981afbf48f783dc19583ddc2e3c70ea08560"
+}

@@ -1,0 +1,18 @@
+{
+  "model": "scene-masknet-c",
+  "note": "knob values the net's operating point was measured at (docs/audio/UPMIX_SCENE_ALGORITHM_2026-10-08.md section 16); scripts/check_model_settings.py compares them with deploy/smartphone_integrator/carplay_startup.sh",
+  "knobs": {
+    "AUDIO_SCENE_MASK_BLOB": {
+      "value": "$H/scene_masknet_c.bin"
+    },
+    "AUDIO_SCENE_INST_ALPHA": {
+      "value": "0.9"
+    },
+    "AUDIO_SCENE_INST_GAMMA": {
+      "value": "1"
+    },
+    "AUDIO_SCENE_DUCK_DEPTH": {
+      "value": "0.25"
+    }
+  }
+}

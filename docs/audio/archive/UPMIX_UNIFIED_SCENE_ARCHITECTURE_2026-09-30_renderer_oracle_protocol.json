@@ -1,0 +1,16 @@
+{
+  "script_sha256": "961e27b75dcbd1bdbab1ba238b627600ac5ca9c93284a800e578c445d12414f9",
+  "c_sha256": "6bc42871556e8bc1df94f13e1417d8f78c0c9be10d170e9044e73a8787184aa2",
+  "points": {
+    "reference_03235": 0.3235,
+    "nominal_040": 0.4,
+    "diagnostic_050": 0.5
+  },
+  "helper_sha256": "09367324d9642466ab18305865ebdb140f6dd5d52dda2b89b0736b946d184b3c",
+  "nominal": "nominal_040",
+  "reference": "exact sum of labelled raw eligible stems; no network or inferred mask",
+  "input": "same60s raw cuts,.7/dry_peak,eligible injection unity,no clipping/gain rescue",
+  "renderer": "same copied NN-free direct/body0,frontret.5,frontbass-3,air-9,attackoff,LFEgain0",
+  "scope": "inspectedDEV40 CPU renderer/harness capability bound only; no target fitting, model/GPU change or reserved20",
+  "interpretation": "A protected proxy response on this exact labelled eligible rear is not literal forbidden source content. Per-song waveform hashes retained. No gate adjustment or owner-ear claim."
+}

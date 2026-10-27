@@ -75,8 +75,8 @@ grid:
 # EGL/GLES2/screen headers (real EGL/screen are BSP-only).  Host compiler.
 hostcheck:
 	cc -fsyntax-only -std=gnu99 -Wall -D__QNX__ -DPLATFORM_QNX \
-	   -Ihostcheck -I../common -I. platform_qnx.c
+	   -Ihostcheck -I../altscreen_render/hostcheck -I../common -I. platform_qnx.c
 	cc -fsyntax-only -std=gnu99 -Wall -D__QNX__ -DPLATFORM_QNX \
-	   -Ihostcheck -I../common ../common/cluster_surface.c
+	   -I../altscreen_render/hostcheck -I../common ../common/cluster_surface.c
 
 .PHONY: all clean run grid hostcheck

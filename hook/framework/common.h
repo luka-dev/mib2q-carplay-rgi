@@ -46,6 +46,13 @@
 #include <stdbool.h>
 #endif
 
+/* The owner helper sets this before exec. Flags alone must not turn a wired
+ * DIO into a paired receiver, or enable legacy AES streams in a wireless DIO. */
+static inline int cp_dio_owner_is_wireless(void) {
+    const char *mode = getenv("MHI2Q_DIO_OWNER_MODE");
+    return mode && !strcmp(mode, "wireless");
+}
+
 /* Result codes */
 typedef enum {
     HOOK_OK = 0,

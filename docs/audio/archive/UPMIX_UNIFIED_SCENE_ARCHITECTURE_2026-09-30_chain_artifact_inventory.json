@@ -1,0 +1,26 @@
+{
+  "/tmp/upmix_causal_chain_train_v2/int8.source_float": {
+    "bytes": 12353556,
+    "sha256": "5375f4a1547659896e193b53a1e1d772bda79b3e942c6a314c4b804c4057f5b6"
+  },
+  "/tmp/upmix_causal_chain_train_v2/float.source_float": {
+    "bytes": 12353556,
+    "sha256": "43ba14e16fdf19b635c375938973c0b235c30661e5ef3563436d90ecfc0ab7a7"
+  },
+  "/tmp/upmix_causal_chain_train_v2/float_repeat.source_float": {
+    "bytes": 12353556,
+    "sha256": "43ba14e16fdf19b635c375938973c0b235c30661e5ef3563436d90ecfc0ab7a7"
+  },
+  "/tmp/upmix_causal_chain_train_v2/float_future.source_float": {
+    "bytes": 3088404,
+    "sha256": "9330b9eca24511aadab2da60580bce8692fa987576e9e2e4588c4e17194a4589"
+  },
+  "/tmp/upmix_causal_chain_train_v2/identity_pulse.source_float": {
+    "bytes": 81940,
+    "sha256": "80b7d7510089e13000c33996d4f5dee7ab1c1894842de1e5980f3d6aceb42168"
+  },
+  "/tmp/upmix_chain_mac_build_v3/manifest.json": {
+    "bytes": 7339,
+    "sha256": "6b778540fc2c27c4ebd33d96c21eac7c9c099e9e42b94f49856e4b0cebcb581d"
+  }
+}

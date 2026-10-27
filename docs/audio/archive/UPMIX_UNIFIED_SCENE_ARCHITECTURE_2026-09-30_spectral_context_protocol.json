@@ -1,0 +1,11 @@
+{
+  "script_sha256": "5d67e9c5ab7b92b145887aac0ae754db96b10f99c9541bc66c0434e3e6494335",
+  "base_source_sha256": "c7aa0abc74dda830a5c306a5f61c30ae95ece5f8bdf61cd693ee4db57ff3fc46",
+  "torch_version": "2.10.0",
+  "device": "cpu",
+  "seed": 20260930,
+  "v1_limit": "Whole-network cross-band perturbation can propagate through running input level and global pooling, so it cannot isolate the new frequency mixer. Original result retained; graph and signal arithmetic unchanged.",
+  "v2_repair": "Perturb first-band features inside an isolated block and inspect last-band output. Independent module forward hooks count dense Linear/Conv1d/GRU operations from actual input shapes.",
+  "selection": "No training or GPU queue change. This is a prepared architecture hypothesis contingent on the frozen capacity full40 outcome. Never treat untrained structural gates as acoustic or device promotion.",
+  "comparison_requirement": "Different trunk cannot preserve the old function. Any source-fit comparison requires fresh matched trunks with the same fixed trained decoder, identical crops/objective/steps, not a fresh candidate against a trained incumbent. No run configuration or initial checkpoint is frozen yet."
+}

@@ -1,0 +1,1156 @@
+{
+  "complete": true,
+  "checkpoint_sha256": "3a0400e912b9a855fb40307ad12c2bfbb81e496d5c1072dbb44d17c9912a9d1b",
+  "source_summary": {
+    "source_tx": {
+      "eligible": 0.45069631361259865,
+      "vocal": 0.07726556048990835,
+      "drums": 0.02263218999286532,
+      "bass": 0.027399972539914205
+    },
+    "sdr_db": 0.7134265186650222,
+    "bands": {
+      "8-14k": 0.02140693112969573,
+      ">14k": 0.011576056109655031
+    }
+  },
+  "extraction": [
+    {
+      "song": "Ben James - 1973",
+      "transmission": {
+        "eligible": 0.29353720519958815,
+        "vocal": 0.05621490431735944,
+        "drums": 0.015097820625304677,
+        "bass": 0.01229495543427276
+      },
+      "other_nsdr_db": 3.1231802418134986,
+      "other_si_sdr_channel_mean_db": 0.3106025487642196,
+      "bands": {
+        "8-14k": 0.003951929081284188,
+        ">14k": 0.0025775756586938377
+      },
+      "track_id": "f97e0ccd-e2a1-4da9-b8b8-c58e11adc4d9",
+      "samples": 2880000,
+      "parity": {
+        "final_source_sum_nse": 1.8229863049332244e-14,
+        "scope": "continuous whole excerpt, causal fixed-STFT network; no 11s chunk resets/future mixing; waveform streaming latency unqualified"
+      }
+    },
+    {
+      "song": "Ben James - Home",
+      "transmission": {
+        "eligible": 0.47534861528526395,
+        "vocal": 0.13516850780024958,
+        "drums": 0.019079158807647552,
+        "bass": 0.019439300119276345
+      },
+      "other_nsdr_db": 4.405598369958968,
+      "other_si_sdr_channel_mean_db": 2.451332340453582,
+      "bands": {
+        "8-14k": 0.2315342494038027,
+        ">14k": 0.2894299019909195
+      },
+      "track_id": "2d39a32d-5993-4f66-89ff-bf9dabb8e45b",
+      "samples": 2880000,
+      "parity": {
+        "final_source_sum_nse": 1.972823197260955e-14,
+        "scope": "continuous whole excerpt, causal fixed-STFT network; no 11s chunk resets/future mixing; waveform streaming latency unqualified"
+      }
+    },
+    {
+      "song": "Ben James - Songbird",
+      "transmission": {
+        "eligible": 0.30277369606611293,
+        "vocal": 0.07011621003338092,
+        "drums": 0.015730523063298005,
+        "bass": 0.026946035980726108
+      },
+      "other_nsdr_db": 3.167568757308286,
+      "other_si_sdr_channel_mean_db": 0.2885228513268949,
+      "bands": {
+        "8-14k": 0.001957157870475873,
+        ">14k": 0.002277320556088902
+      },
+      "track_id": "92ba4404-76ff-4523-a787-652057e06c13",
+      "samples": 2880000,
+      "parity": {
+        "final_source_sum_nse": 2.014551842754399e-14,
+        "scope": "continuous whole excerpt, causal fixed-STFT network; no 11s chunk resets/future mixing; waveform streaming latency unqualified"
+      }
+    },
+    {
+      "song": "Ben James - The Bench",
+      "transmission": {
+        "eligible": 0.3636546152416387,
+        "vocal": 0.07473848017774448,
+        "drums": 0.004628026685844124,
+        "bass": 0.004572793066088955
+      },
+      "other_nsdr_db": 2.8144330348008624,
+      "other_si_sdr_channel_mean_db": -0.3903191208979371,
+      "bands": {
+        "8-14k": 0.01119372472085031,
+        ">14k": 0.009657265669266763
+      },
+      "track_id": "524ab371-f6c6-4ff7-b896-e83750c8bef7",
+      "samples": 2880000,
+      "parity": {
+        "final_source_sum_nse": 1.8566678744630814e-14,
+        "scope": "continuous whole excerpt, causal fixed-STFT network; no 11s chunk resets/future mixing; waveform streaming latency unqualified"
+      }
+    },
+    {
+      "song": "Ben James - We Were Young",
+      "transmission": {
+        "eligible": 0.6405718558885872,
+        "vocal": 0.1736631857153991,
+        "drums": 0.013355808657125484,
+        "bass": 0.01505316311512299
+      },
+      "other_nsdr_db": 3.671986392184217,
+      "other_si_sdr_channel_mean_db": 1.9054398734352966,
+      "bands": {
+        "8-14k": 0.05838849301111159,
+        ">14k": 0.029521454399298572
+      },
+      "track_id": "fc3c9e48-e2ac-4088-af65-68404baa7f12",
+      "samples": 2880000,
+      "parity": {
+        "final_source_sum_nse": 1.8833854105931547e-14,
+        "scope": "continuous whole excerpt, causal fixed-STFT network; no 11s chunk resets/future mixing; waveform streaming latency unqualified"
+      }
+    },
+    {
+      "song": "Ben James - Yesterday",
+      "transmission": {
+        "eligible": 0.5939279422724223,
+        "vocal": 0.2217906300145371,
+        "drums": 0.026506123581084055,
+        "bass": 0.06425856846945856
+      },
+      "other_nsdr_db": 2.6367009414671023,
+      "other_si_sdr_channel_mean_db": 0.47048657427645324,
+      "bands": {
+        "8-14k": 0.11065126848926077,
+        ">14k": 0.10902637365486298
+      },
+      "track_id": "bb6d72a2-63ba-405e-a2c1-c7442b4190bb",
+      "samples": 2880000,
+      "parity": {
+        "final_source_sum_nse": 2.0287779183892985e-14,
+        "scope": "continuous whole excerpt, causal fixed-STFT network; no 11s chunk resets/future mixing; waveform streaming latency unqualified"
+      }
+    },
+    {
+      "song": "Fake Eyes - I'm A Mess",
+      "transmission": {
+        "eligible": 0.5147166370604244,
+        "vocal": 0.19713800449394137,
+        "drums": 0.07652826316598497,
+        "bass": 0.044461018962707176
+      },
+      "other_nsdr_db": 1.8103940115565251,
+      "other_si_sdr_channel_mean_db": -0.9484099553804373,
+      "bands": {
+        "8-14k": 0.020693765626731694,
+        ">14k": 0.014991911339034058
+      },
+      "track_id": "bacbb01f-b877-4d62-8050-992f1d85543a",
+      "samples": 2880000,
+      "parity": {
+        "final_source_sum_nse": 2.0125722778599976e-14,
+        "scope": "continuous whole excerpt, causal fixed-STFT network; no 11s chunk resets/future mixing; waveform streaming latency unqualified"
+      }
+    },
+    {
+      "song": "Holy Magick - Below",
+      "transmission": {
+        "eligible": 0.353611997721281,
+        "vocal": 0.06321578140441036,
+        "drums": 0.07574547246434007,
+        "bass": 0.004032151058576087
+      },
+      "other_nsdr_db": 4.231331460617969,
+      "other_si_sdr_channel_mean_db": 2.4726860945694495,
+      "bands": {
+        "8-14k": 0.01013680527773874,
+        ">14k": 0.008766597885000204
+      },
+      "track_id": "731893c6-67b9-42f0-aea6-d1f70c2c9870",
+      "samples": 2880000,
+      "parity": {
+        "final_source_sum_nse": 2.3152188861120007e-14,
+        "scope": "continuous whole excerpt, causal fixed-STFT network; no 11s chunk resets/future mixing; waveform streaming latency unqualified"
+      }
+    },
+    {
+      "song": "Holy Magick - Can I Get A Minute",
+      "transmission": {
+        "eligible": 0.24828629420916343,
+        "vocal": 0.05640744717588785,
+        "drums": 0.0475542593136182,
+        "bass": 0.003264808795865837
+      },
+      "other_nsdr_db": 3.532231801674178,
+      "other_si_sdr_channel_mean_db": 1.6488762412062066,
+      "bands": {
+        "8-14k": 0.014715757448722064,
+        ">14k": 0.010774465661078435
+      },
+      "track_id": "2dc237cd-1637-46f0-8f58-ca68dc6f6031",
+      "samples": 2880000,
+      "parity": {
+        "final_source_sum_nse": 3.0660796739433665e-14,
+        "scope": "continuous whole excerpt, causal fixed-STFT network; no 11s chunk resets/future mixing; waveform streaming latency unqualified"
+      }
+    },
+    {
+      "song": "Holy Magick - Crystal Observatory",
+      "transmission": {
+        "eligible": 0.3410766846479941,
+        "vocal": 0.07217372527835801,
+        "drums": 0.07235772735049881,
+        "bass": 0.018299084460530624
+      },
+      "other_nsdr_db": 2.531182351368186,
+      "other_si_sdr_channel_mean_db": -0.9139488962742172,
+      "bands": {
+        "8-14k": 0.010942154841385854,
+        ">14k": 0.003994660765761774
+      },
+      "track_id": "d4df499c-e394-4753-b459-e167e6a58bad",
+      "samples": 2880000,
+      "parity": {
+        "final_source_sum_nse": 2.3191274060180672e-14,
+        "scope": "continuous whole excerpt, causal fixed-STFT network; no 11s chunk resets/future mixing; waveform streaming latency unqualified"
+      }
+    },
+    {
+      "song": "Holy Magick - Darkest Heart",
+      "transmission": {
+        "eligible": 0.26257744458129106,
+        "vocal": 0.04367350266374689,
+        "drums": 0.010616100741494158,
+        "bass": 0.010936834530642073
+      },
+      "other_nsdr_db": 2.4610727870932676,
+      "other_si_sdr_channel_mean_db": -1.0770158106280754,
+      "bands": {
+        "8-14k": 0.0021859008737940347,
+        ">14k": 0.002672556386618458
+      },
+      "track_id": "93dda0e8-dd76-49e4-b08f-54a82387cdf6",
+      "samples": 2880000,
+      "parity": {
+        "final_source_sum_nse": 2.235164882073668e-14,
+        "scope": "continuous whole excerpt, causal fixed-STFT network; no 11s chunk resets/future mixing; waveform streaming latency unqualified"
+      }
+    },
+    {
+      "song": "Holy Magick - Even Though",
+      "transmission": {
+        "eligible": 0.7048575075219541,
+        "vocal": 0.11241049282468625,
+        "drums": 0.02939624990187837,
+        "bass": 0.03206718899992435
+      },
+      "other_nsdr_db": 5.96784339426644,
+      "other_si_sdr_channel_mean_db": 4.780471128121821,
+      "bands": {
+        "8-14k": 0.2844734051606251,
+        ">14k": 0.2871021532548097
+      },
+      "track_id": "5640831d-7853-4d06-8166-988e2844b652",
+      "samples": 2880000,
+      "parity": {
+        "final_source_sum_nse": 3.249454296510843e-14,
+        "scope": "continuous whole excerpt, causal fixed-STFT network; no 11s chunk resets/future mixing; waveform streaming latency unqualified"
+      }
+    },
+    {
+      "song": "Holy Magick - Hold Your Own",
+      "transmission": {
+        "eligible": 0.3410581887142932,
+        "vocal": 0.014026206343461797,
+        "drums": 0.002825267136380448,
+        "bass": 0.003564289031023579
+      },
+      "other_nsdr_db": 2.4861421768354064,
+      "other_si_sdr_channel_mean_db": -1.0941591997850406,
+      "bands": {
+        "8-14k": 0.028225029148974092,
+        ">14k": 0.036136242967875855
+      },
+      "track_id": "fe3ae408-d35f-4c17-aa33-402238725a9d",
+      "samples": 2880000,
+      "parity": {
+        "final_source_sum_nse": 4.88029133875286e-14,
+        "scope": "continuous whole excerpt, causal fixed-STFT network; no 11s chunk resets/future mixing; waveform streaming latency unqualified"
+      }
+    },
+    {
+      "song": "Holy Magick - Hungry Mind",
+      "transmission": {
+        "eligible": 0.32906346226170713,
+        "vocal": 0.006323477225367289,
+        "drums": 0.0025943515479873026,
+        "bass": 0.0016744930274512156
+      },
+      "other_nsdr_db": 3.1664130343680394,
+      "other_si_sdr_channel_mean_db": 0.3951152492456892,
+      "bands": {
+        "8-14k": 0.00019186805704662227,
+        ">14k": 0.0005069721783297036
+      },
+      "track_id": "faad432d-6ad0-492d-96f1-321eeb9685b5",
+      "samples": 2880000,
+      "parity": {
+        "final_source_sum_nse": 2.521468699594329e-14,
+        "scope": "continuous whole excerpt, causal fixed-STFT network; no 11s chunk resets/future mixing; waveform streaming latency unqualified"
+      }
+    },
+    {
+      "song": "Holy Magick - Is It All On Me",
+      "transmission": {
+        "eligible": 0.42347669701351637,
+        "vocal": 0.09774961117514572,
+        "drums": 0.018414275455699822,
+        "bass": 0.03938758292907451
+      },
+      "other_nsdr_db": 4.085635493345245,
+      "other_si_sdr_channel_mean_db": 2.0492622780215966,
+      "bands": {
+        "8-14k": 0.03881385432699471,
+        ">14k": 0.02373958698707702
+      },
+      "track_id": "3e389000-8fdc-4b63-b8b8-ab044273790d",
+      "samples": 2880000,
+      "parity": {
+        "final_source_sum_nse": 2.045864525218121e-14,
+        "scope": "continuous whole excerpt, causal fixed-STFT network; no 11s chunk resets/future mixing; waveform streaming latency unqualified"
+      }
+    },
+    {
+      "song": "Holy Magick - It's Your Money",
+      "transmission": {
+        "eligible": 0.5947503973524846,
+        "vocal": 0.021851403594806446,
+        "drums": 0.01631378340112846,
+        "bass": 0.014703659018251146
+      },
+      "other_nsdr_db": 4.358401511191886,
+      "other_si_sdr_channel_mean_db": 1.91484594901587,
+      "bands": {
+        "8-14k": 0.0374679660021549,
+        ">14k": 0.01684310185243629
+      },
+      "track_id": "ebea0f1d-8e23-469e-8eed-5269a9c684f0",
+      "samples": 2880000,
+      "parity": {
+        "final_source_sum_nse": 2.8195591253314985e-14,
+        "scope": "continuous whole excerpt, causal fixed-STFT network; no 11s chunk resets/future mixing; waveform streaming latency unqualified"
+      }
+    },
+    {
+      "song": "Holy Magick - Lifeboat",
+      "transmission": {
+        "eligible": 0.39603529296271306,
+        "vocal": 0.0767186701292206,
+        "drums": 0.06648611007225101,
+        "bass": 0.041998291426297976
+      },
+      "other_nsdr_db": 2.751858525960098,
+      "other_si_sdr_channel_mean_db": -0.6590819657837025,
+      "bands": {
+        "8-14k": 0.002014808011558441,
+        ">14k": 0.005603571381112814
+      },
+      "track_id": "6ceda40a-88bc-4e98-87c3-dd5c91725d41",
+      "samples": 2880000,
+      "parity": {
+        "final_source_sum_nse": 1.890185492695161e-14,
+        "scope": "continuous whole excerpt, causal fixed-STFT network; no 11s chunk resets/future mixing; waveform streaming latency unqualified"
+      }
+    },
+    {
+      "song": "Holy Magick - Old Friends",
+      "transmission": {
+        "eligible": 0.6628838397059704,
+        "vocal": 0.16074165534542054,
+        "drums": 0.02100299313151532,
+        "bass": 0.018676999993541936
+      },
+      "other_nsdr_db": 6.7696507082735895,
+      "other_si_sdr_channel_mean_db": 5.736590191780202,
+      "bands": {
+        "8-14k": 0.036340002167785615,
+        ">14k": 0.010299120700897672
+      },
+      "track_id": "c70471f9-9c4a-41c9-b8f8-20ac38847a8e",
+      "samples": 2880000,
+      "parity": {
+        "final_source_sum_nse": 1.8684730961501722e-14,
+        "scope": "continuous whole excerpt, causal fixed-STFT network; no 11s chunk resets/future mixing; waveform streaming latency unqualified"
+      }
+    },
+    {
+      "song": "Holy Magick - Panic!",
+      "transmission": {
+        "eligible": 0.5432719924563593,
+        "vocal": 0.11313592271915138,
+        "drums": 0.0876504910581941,
+        "bass": 0.05649697129715398
+      },
+      "other_nsdr_db": 5.0016939699706615,
+      "other_si_sdr_channel_mean_db": 3.244543889632155,
+      "bands": {
+        "8-14k": 0.08025438789785197,
+        ">14k": 0.04255653453379776
+      },
+      "track_id": "0a589d65-50a3-4999-8f16-b5b6199bceee",
+      "samples": 2880000,
+      "parity": {
+        "final_source_sum_nse": 1.9958334239986373e-14,
+        "scope": "continuous whole excerpt, causal fixed-STFT network; no 11s chunk resets/future mixing; waveform streaming latency unqualified"
+      }
+    },
+    {
+      "song": "Holy Magick - Stolen Car",
+      "transmission": {
+        "eligible": 0.21810698848136123,
+        "vocal": 0.007352025977712139,
+        "drums": 0.002441968502367391,
+        "bass": 0.007421957782478863
+      },
+      "other_nsdr_db": 1.617882349455737,
+      "other_si_sdr_channel_mean_db": -3.7739011307936936,
+      "bands": {
+        "8-14k": 0.0024897803786168684,
+        ">14k": 0.0008420168604510222
+      },
+      "track_id": "28748b6e-6125-42f7-998d-2ad734e39b6c",
+      "samples": 2880000,
+      "parity": {
+        "final_source_sum_nse": 3.0077246691474436e-14,
+        "scope": "continuous whole excerpt, causal fixed-STFT network; no 11s chunk resets/future mixing; waveform streaming latency unqualified"
+      }
+    },
+    {
+      "song": "Holy Magick - Take Another Line",
+      "transmission": {
+        "eligible": 0.7710168457855142,
+        "vocal": 0.41661321847712446,
+        "drums": 0.16732889314227084,
+        "bass": 0.09894376058148732
+      },
+      "other_nsdr_db": 3.6891147461948837,
+      "other_si_sdr_channel_mean_db": 2.4785441615152894,
+      "bands": {
+        "8-14k": 0.025226540026839366,
+        ">14k": 0.020410934522420317
+      },
+      "track_id": "97b07e0e-274e-4212-a66b-44210a48724d",
+      "samples": 2880000,
+      "parity": {
+        "final_source_sum_nse": 1.867520449248918e-14,
+        "scope": "continuous whole excerpt, causal fixed-STFT network; no 11s chunk resets/future mixing; waveform streaming latency unqualified"
+      }
+    },
+    {
+      "song": "Holy Magick - The Death Of Me",
+      "transmission": {
+        "eligible": 0.32271986051642276,
+        "vocal": 0.1310041965098092,
+        "drums": 0.05066002157689456,
+        "bass": 0.05551816974431064
+      },
+      "other_nsdr_db": 3.5195715467725854,
+      "other_si_sdr_channel_mean_db": 0.7662128998372463,
+      "bands": {
+        "8-14k": 0.014539939506105586,
+        ">14k": 0.012377646558231627
+      },
+      "track_id": "e4de8632-6f69-4c63-8081-f4c2b77b40df",
+      "samples": 2880000,
+      "parity": {
+        "final_source_sum_nse": 2.3001913192657317e-14,
+        "scope": "continuous whole excerpt, causal fixed-STFT network; no 11s chunk resets/future mixing; waveform streaming latency unqualified"
+      }
+    },
+    {
+      "song": "Holy Magick - Too Much Information",
+      "transmission": {
+        "eligible": 0.5609760121545696,
+        "vocal": 0.0766976788922814,
+        "drums": 0.012104683529448332,
+        "bass": 0.040641056708659515
+      },
+      "other_nsdr_db": 5.064490918878439,
+      "other_si_sdr_channel_mean_db": 3.371428297812615,
+      "bands": {
+        "8-14k": 0.0034825155050237943,
+        ">14k": 0.0028543493601590384
+      },
+      "track_id": "737356b2-ce9c-448b-877b-e42b3ed94563",
+      "samples": 2880000,
+      "parity": {
+        "final_source_sum_nse": 1.764471683279013e-14,
+        "scope": "continuous whole excerpt, causal fixed-STFT network; no 11s chunk resets/future mixing; waveform streaming latency unqualified"
+      }
+    },
+    {
+      "song": "Holy Magick - Wake Up So",
+      "transmission": {
+        "eligible": 0.5153858587863671,
+        "vocal": 0.06328896775788628,
+        "drums": 0.09800275062068141,
+        "bass": 0.027853909099102306
+      },
+      "other_nsdr_db": 4.7094328719633065,
+      "other_si_sdr_channel_mean_db": 2.838572209474843,
+      "bands": {
+        "8-14k": 0.04573339016190619,
+        ">14k": 0.07178814442225866
+      },
+      "track_id": "8ce11544-9a6f-4f1e-ac2f-fc10343f15c8",
+      "samples": 2880000,
+      "parity": {
+        "final_source_sum_nse": 2.2969432814141957e-14,
+        "scope": "continuous whole excerpt, causal fixed-STFT network; no 11s chunk resets/future mixing; waveform streaming latency unqualified"
+      }
+    },
+    {
+      "song": "James Graydon - Our Love",
+      "transmission": {
+        "eligible": 0.7869276934331061,
+        "vocal": 0.611352477088273,
+        "drums": 0.31056217547948783,
+        "bass": 0.1315105929213908
+      },
+      "other_nsdr_db": 3.2914079324313867,
+      "other_si_sdr_channel_mean_db": 2.0750592871351574,
+      "bands": {
+        "8-14k": 0.7167312196190282,
+        ">14k": 0.6174792466060885
+      },
+      "track_id": "d7d28204-a8ac-4c2b-bb3c-c941f4a00b85",
+      "samples": 2880000,
+      "parity": {
+        "final_source_sum_nse": 2.1797349041954113e-14,
+        "scope": "continuous whole excerpt, causal fixed-STFT network; no 11s chunk resets/future mixing; waveform streaming latency unqualified"
+      }
+    },
+    {
+      "song": "Juniper - All I Want",
+      "transmission": {
+        "eligible": 0.33364791243098635,
+        "vocal": 0.06760009415905341,
+        "drums": 0.03457391862497042,
+        "bass": 0.015236938653408139
+      },
+      "other_nsdr_db": 2.0411949275130317,
+      "other_si_sdr_channel_mean_db": -2.297693059943777,
+      "bands": {
+        "8-14k": 0.09945830591626674,
+        ">14k": 0.07316000150405283
+      },
+      "track_id": "bdd109ec-d5dd-4d91-92ad-66b679518026",
+      "samples": 2880000,
+      "parity": {
+        "final_source_sum_nse": 2.712924850090059e-14,
+        "scope": "continuous whole excerpt, causal fixed-STFT network; no 11s chunk resets/future mixing; waveform streaming latency unqualified"
+      }
+    },
+    {
+      "song": "Juniper - God Knows",
+      "transmission": {
+        "eligible": 0.6967679108486137,
+        "vocal": 0.729222528254876,
+        "drums": 0.25328590778004967,
+        "bass": 0.46399868438245934
+      },
+      "other_nsdr_db": -1.620145076197842,
+      "other_si_sdr_channel_mean_db": -3.5042725854353507,
+      "bands": {
+        "8-14k": 0.10484234642723729,
+        ">14k": 0.05673796854799917
+      },
+      "track_id": "d890ff35-300d-49f2-8054-49ab47262987",
+      "samples": 2880000,
+      "parity": {
+        "final_source_sum_nse": 1.8436287733671424e-14,
+        "scope": "continuous whole excerpt, causal fixed-STFT network; no 11s chunk resets/future mixing; waveform streaming latency unqualified"
+      }
+    },
+    {
+      "song": "Juniper - Nexus",
+      "transmission": {
+        "eligible": 0.3171114811408469,
+        "vocal": 0.028787618589135637,
+        "drums": 0.010388370005055096,
+        "bass": 0.008644038557221486
+      },
+      "other_nsdr_db": 2.886083305456353,
+      "other_si_sdr_channel_mean_db": -0.24297054095951898,
+      "bands": {
+        "8-14k": 0.006780778912108258,
+        ">14k": 0.007664037391498503
+      },
+      "track_id": "8f36f17f-c033-4c1b-a793-80dce43d507b",
+      "samples": 2880000,
+      "parity": {
+        "final_source_sum_nse": 2.2691751761524845e-14,
+        "scope": "continuous whole excerpt, causal fixed-STFT network; no 11s chunk resets/future mixing; waveform streaming latency unqualified"
+      }
+    },
+    {
+      "song": "Juniper - Nice To Be Home",
+      "transmission": {
+        "eligible": 0.5526035928962868,
+        "vocal": 0.3863192194134693,
+        "drums": 0.0955522879303244,
+        "bass": 0.10220386672406681
+      },
+      "other_nsdr_db": 4.0228187888212465,
+      "other_si_sdr_channel_mean_db": 1.930442078636891,
+      "bands": {
+        "8-14k": 0.360764833184835,
+        ">14k": 0.29870622102513483
+      },
+      "track_id": "bc1f2967-f834-43bd-aadc-95afc897cfe7",
+      "samples": 2880000,
+      "parity": {
+        "final_source_sum_nse": 2.2607641497507502e-14,
+        "scope": "continuous whole excerpt, causal fixed-STFT network; no 11s chunk resets/future mixing; waveform streaming latency unqualified"
+      }
+    },
+    {
+      "song": "Juniper - Triangles",
+      "transmission": {
+        "eligible": 0.4442661849577442,
+        "vocal": 0.2246846720233187,
+        "drums": 0.09801158582207904,
+        "bass": 0.15630737098347028
+      },
+      "other_nsdr_db": 3.264911033330939,
+      "other_si_sdr_channel_mean_db": 0.6606401374927979,
+      "bands": {
+        "8-14k": 0.03536487140894499,
+        ">14k": 0.021603886076095025
+      },
+      "track_id": "e62afdcd-0c96-4bee-80c7-1c17b897a6d7",
+      "samples": 2880000,
+      "parity": {
+        "final_source_sum_nse": 1.8558577482931217e-14,
+        "scope": "continuous whole excerpt, causal fixed-STFT network; no 11s chunk resets/future mixing; waveform streaming latency unqualified"
+      }
+    },
+    {
+      "song": "Juniper - Utopia",
+      "transmission": {
+        "eligible": 0.45712644226745314,
+        "vocal": 0.02692425062498727,
+        "drums": 0.021336032135920252,
+        "bass": 0.013375290133512569
+      },
+      "other_nsdr_db": 4.57200719930675,
+      "other_si_sdr_channel_mean_db": 2.398901702510272,
+      "bands": {
+        "8-14k": 0.04527805455327134,
+        ">14k": 0.018541624190847355
+      },
+      "track_id": "69dff382-cfcb-457c-98e5-978450e1b76a",
+      "samples": 2880000,
+      "parity": {
+        "final_source_sum_nse": 2.0237923499403522e-14,
+        "scope": "continuous whole excerpt, causal fixed-STFT network; no 11s chunk resets/future mixing; waveform streaming latency unqualified"
+      }
+    },
+    {
+      "song": "Liquid Biscuit - Into The Well",
+      "transmission": {
+        "eligible": 0.510332523118493,
+        "vocal": 0.0949711272794262,
+        "drums": 0.057896721434336204,
+        "bass": 0.12535167322722734
+      },
+      "other_nsdr_db": 3.528318506145525,
+      "other_si_sdr_channel_mean_db": 1.1846215388458645,
+      "bands": {
+        "8-14k": 0.21614452579412752,
+        ">14k": 0.19245232207165613
+      },
+      "track_id": "cc3e4991-6cce-40fe-a917-81a4fbb92ea6",
+      "samples": 2880000,
+      "parity": {
+        "final_source_sum_nse": 2.1271294670165695e-14,
+        "scope": "continuous whole excerpt, causal fixed-STFT network; no 11s chunk resets/future mixing; waveform streaming latency unqualified"
+      }
+    },
+    {
+      "song": "Modified Freq - Camera",
+      "transmission": {
+        "eligible": 0.4332440934050629,
+        "vocal": 0.06842690658709538,
+        "drums": 0.02392834784981039,
+        "bass": 0.2059854249559097
+      },
+      "other_nsdr_db": 1.9554235326438372,
+      "other_si_sdr_channel_mean_db": -1.3357005027179047,
+      "bands": {
+        "8-14k": 0.005691671200635064,
+        ">14k": 0.003336854693577164
+      },
+      "track_id": "169628c5-266d-4e11-993b-440fa5fa2167",
+      "samples": 2880000,
+      "parity": {
+        "final_source_sum_nse": 1.7422627910160992e-14,
+        "scope": "continuous whole excerpt, causal fixed-STFT network; no 11s chunk resets/future mixing; waveform streaming latency unqualified"
+      }
+    },
+    {
+      "song": "Modified Freq - Demise Of Bruno",
+      "transmission": {
+        "eligible": 0.3535653278716324,
+        "vocal": 0.17307021365721906,
+        "drums": 0.020751783110393725,
+        "bass": 0.02952491594184513
+      },
+      "other_nsdr_db": 3.274878168898328,
+      "other_si_sdr_channel_mean_db": 0.473979248563675,
+      "bands": {
+        "8-14k": 0.0027483986197646493,
+        ">14k": 0.0003670539902500861
+      },
+      "track_id": "1f98fe4d-26c7-460f-9f68-33964bc4d8d3",
+      "samples": 2880000,
+      "parity": {
+        "final_source_sum_nse": 1.792671444778282e-14,
+        "scope": "continuous whole excerpt, causal fixed-STFT network; no 11s chunk resets/future mixing; waveform streaming latency unqualified"
+      }
+    },
+    {
+      "song": "Modified Freq - Fire",
+      "transmission": {
+        "eligible": 0.489199580726927,
+        "vocal": 0.07781245085059608,
+        "drums": 0.00542167353923006,
+        "bass": 0.008559856013490219
+      },
+      "other_nsdr_db": 4.1242480841241695,
+      "other_si_sdr_channel_mean_db": 1.770456402424485,
+      "bands": {
+        "8-14k": 0.011361634613766302,
+        ">14k": 0.0045222245907619325
+      },
+      "track_id": "dda2c057-6d73-43fa-a130-d7d6562c09ca",
+      "samples": 2880000,
+      "parity": {
+        "final_source_sum_nse": 2.5299445832488497e-14,
+        "scope": "continuous whole excerpt, causal fixed-STFT network; no 11s chunk resets/future mixing; waveform streaming latency unqualified"
+      }
+    },
+    {
+      "song": "Modified Freq - Real",
+      "transmission": {
+        "eligible": 0.6970871881394485,
+        "vocal": 0.19463968802079756,
+        "drums": 0.020412728322391983,
+        "bass": 0.025567833206629694
+      },
+      "other_nsdr_db": 3.3755328257332313,
+      "other_si_sdr_channel_mean_db": 1.8658669920246338,
+      "bands": {
+        "8-14k": 0.022120096632659764,
+        ">14k": 0.005424487636820193
+      },
+      "track_id": "215391aa-1168-42dd-9cab-f8b0c6ff566b",
+      "samples": 2880000,
+      "parity": {
+        "final_source_sum_nse": 1.9583132930378987e-14,
+        "scope": "continuous whole excerpt, causal fixed-STFT network; no 11s chunk resets/future mixing; waveform streaming latency unqualified"
+      }
+    },
+    {
+      "song": "Modified Freq - Sunspot",
+      "transmission": {
+        "eligible": 0.39854898879188305,
+        "vocal": 0.040894728098380156,
+        "drums": 0.0130838730656936,
+        "bass": 0.03656360045916163
+      },
+      "other_nsdr_db": 3.416067835303471,
+      "other_si_sdr_channel_mean_db": 0.5792606837047244,
+      "bands": {
+        "8-14k": 0.0016788713068443505,
+        ">14k": 0.0009541923317200708
+      },
+      "track_id": "014f3712-293b-42af-9f29-0ed1785be792",
+      "samples": 2880000,
+      "parity": {
+        "final_source_sum_nse": 2.0038052320280326e-14,
+        "scope": "continuous whole excerpt, causal fixed-STFT network; no 11s chunk resets/future mixing; waveform streaming latency unqualified"
+      }
+    },
+    {
+      "song": "Modified Freq - Take You Away",
+      "transmission": {
+        "eligible": 0.6182933793633354,
+        "vocal": 0.36732643811823634,
+        "drums": 0.06099853546332132,
+        "bass": 0.2900731653324757
+      },
+      "other_nsdr_db": 1.602009727728087,
+      "other_si_sdr_channel_mean_db": -0.7837345093694269,
+      "bands": {
+        "8-14k": 0.06171233772292006,
+        ">14k": 0.014162268297521794
+      },
+      "track_id": "dc61c44e-a771-47a9-8934-a0eb8f3e08ac",
+      "samples": 2880000,
+      "parity": {
+        "final_source_sum_nse": 1.8970652933380425e-14,
+        "scope": "continuous whole excerpt, causal fixed-STFT network; no 11s chunk resets/future mixing; waveform streaming latency unqualified"
+      }
+    },
+    {
+      "song": "Strugzy - RW",
+      "transmission": {
+        "eligible": 0.1096743195201586,
+        "vocal": 0.03097176026177566,
+        "drums": 0.0021031937427314303,
+        "bass": 0.0011573412894207943
+      },
+      "other_nsdr_db": 1.3199103758447694,
+      "other_si_sdr_channel_mean_db": -4.478311596047452,
+      "bands": {
+        "8-14k": 0.00015845099198773875,
+        ">14k": 0.0003158462977109851
+      },
+      "track_id": "765d5131-afd9-4ad7-8786-8bef5705c1c2",
+      "samples": 2880000,
+      "parity": {
+        "final_source_sum_nse": 2.16568626263326e-14,
+        "scope": "continuous whole excerpt, causal fixed-STFT network; no 11s chunk resets/future mixing; waveform streaming latency unqualified"
+      }
+    },
+    {
+      "song": "Strugzy - Reach Out",
+      "transmission": {
+        "eligible": 0.5101225810563935,
+        "vocal": 0.1705219232160234,
+        "drums": 0.1363769807604703,
+        "bass": 0.03726326423240807
+      },
+      "other_nsdr_db": 3.950994372568636,
+      "other_si_sdr_channel_mean_db": 1.7851636919356895,
+      "bands": {
+        "8-14k": 0.0017627308286087958,
+        ">14k": 0.000686929496580473
+      },
+      "track_id": "4999a0bf-a753-4e0e-85b1-690259dabf96",
+      "samples": 2880000,
+      "parity": {
+        "final_source_sum_nse": 1.85549842316548e-14,
+        "scope": "continuous whole excerpt, causal fixed-STFT network; no 11s chunk resets/future mixing; waveform streaming latency unqualified"
+      }
+    }
+  ],
+  "variants": {
+    "baseline": {
+      "summary": {
+        "songs": [
+          "Ben James - 1973",
+          "Ben James - Home",
+          "Ben James - Songbird",
+          "Ben James - The Bench",
+          "Ben James - We Were Young",
+          "Ben James - Yesterday",
+          "Fake Eyes - I'm A Mess",
+          "Holy Magick - Below",
+          "Holy Magick - Can I Get A Minute",
+          "Holy Magick - Crystal Observatory",
+          "Holy Magick - Darkest Heart",
+          "Holy Magick - Even Though",
+          "Holy Magick - Hold Your Own",
+          "Holy Magick - Hungry Mind",
+          "Holy Magick - Is It All On Me",
+          "Holy Magick - It's Your Money",
+          "Holy Magick - Lifeboat",
+          "Holy Magick - Old Friends",
+          "Holy Magick - Panic!",
+          "Holy Magick - Stolen Car",
+          "Holy Magick - Take Another Line",
+          "Holy Magick - The Death Of Me",
+          "Holy Magick - Too Much Information",
+          "Holy Magick - Wake Up So",
+          "James Graydon - Our Love",
+          "Juniper - All I Want",
+          "Juniper - God Knows",
+          "Juniper - Nexus",
+          "Juniper - Nice To Be Home",
+          "Juniper - Triangles",
+          "Juniper - Utopia",
+          "Liquid Biscuit - Into The Well",
+          "Modified Freq - Camera",
+          "Modified Freq - Demise Of Bruno",
+          "Modified Freq - Fire",
+          "Modified Freq - Real",
+          "Modified Freq - Sunspot",
+          "Modified Freq - Take You Away",
+          "Strugzy - RW",
+          "Strugzy - Reach Out"
+        ],
+        "swings": [
+          "Ben James - We Were Young",
+          "Fake Eyes - I'm A Mess",
+          "Holy Magick - Crystal Observatory",
+          "Holy Magick - Even Though",
+          "Holy Magick - Hold Your Own",
+          "Holy Magick - Hungry Mind",
+          "Holy Magick - Is It All On Me",
+          "Holy Magick - It's Your Money",
+          "Holy Magick - Lifeboat",
+          "Holy Magick - Panic!",
+          "Holy Magick - Stolen Car",
+          "Holy Magick - Too Much Information",
+          "James Graydon - Our Love",
+          "Juniper - Nice To Be Home",
+          "Modified Freq - Take You Away"
+        ],
+        "rows": 231,
+        "rear_rms_db": -38.99507369810825,
+        "shares": {
+          "guitar": 0.1210662599902566,
+          "other_keys": 0.13042071255983967,
+          "piano": 0.10175971529184763,
+          "bowed_strings": 0.08965170751280876,
+          "vocals": 0.015993327485780393,
+          "bass": 0.05285350169581801,
+          "drums": 0.09587577142948864
+        },
+        "slopes": {
+          "guitar": 0.01589842350927604,
+          "other_keys": 0.005773189781613811,
+          "wind": 0.02576766156041868
+        }
+      },
+      "gates": {
+        "rear_rms_within_half_db": true,
+        "any_stem_swing_at_most_five": false,
+        "share_guitar": false,
+        "share_other_keys": false,
+        "share_piano": true,
+        "share_bowed_strings": false,
+        "share_vocals": true,
+        "share_bass": true,
+        "share_drums": false,
+        "slope_guitar": true,
+        "slope_other_keys": true,
+        "slope_wind": true,
+        "entry_median": false,
+        "entry_p10": false
+      },
+      "observed_joint_gates": false
+    },
+    "direct_no_bed_body0_cal": {
+      "summary": {
+        "songs": [
+          "Ben James - 1973",
+          "Ben James - Home",
+          "Ben James - Songbird",
+          "Ben James - The Bench",
+          "Ben James - We Were Young",
+          "Ben James - Yesterday",
+          "Fake Eyes - I'm A Mess",
+          "Holy Magick - Below",
+          "Holy Magick - Can I Get A Minute",
+          "Holy Magick - Crystal Observatory",
+          "Holy Magick - Darkest Heart",
+          "Holy Magick - Even Though",
+          "Holy Magick - Hold Your Own",
+          "Holy Magick - Hungry Mind",
+          "Holy Magick - Is It All On Me",
+          "Holy Magick - It's Your Money",
+          "Holy Magick - Lifeboat",
+          "Holy Magick - Old Friends",
+          "Holy Magick - Panic!",
+          "Holy Magick - Stolen Car",
+          "Holy Magick - Take Another Line",
+          "Holy Magick - The Death Of Me",
+          "Holy Magick - Too Much Information",
+          "Holy Magick - Wake Up So",
+          "James Graydon - Our Love",
+          "Juniper - All I Want",
+          "Juniper - God Knows",
+          "Juniper - Nexus",
+          "Juniper - Nice To Be Home",
+          "Juniper - Triangles",
+          "Juniper - Utopia",
+          "Liquid Biscuit - Into The Well",
+          "Modified Freq - Camera",
+          "Modified Freq - Demise Of Bruno",
+          "Modified Freq - Fire",
+          "Modified Freq - Real",
+          "Modified Freq - Sunspot",
+          "Modified Freq - Take You Away",
+          "Strugzy - RW",
+          "Strugzy - Reach Out"
+        ],
+        "swings": [],
+        "rows": 231,
+        "rear_rms_db": -39.02764541725293,
+        "shares": {
+          "guitar": 0.1211416151619369,
+          "other_keys": 0.15937074386965455,
+          "piano": 0.13488963612025673,
+          "bowed_strings": 0.10898895361544839,
+          "vocals": 0.005917050615141211,
+          "bass": 0.05208574875158675,
+          "drums": 0.00854041520418969
+        },
+        "slopes": {
+          "guitar": 0.02111732569632909,
+          "other_keys": 0.02437075069232334,
+          "wind": 0.021009029356555235
+        }
+      },
+      "gates": {
+        "rear_rms_within_half_db": true,
+        "any_stem_swing_at_most_five": true,
+        "share_guitar": false,
+        "share_other_keys": true,
+        "share_piano": true,
+        "share_bowed_strings": false,
+        "share_vocals": true,
+        "share_bass": true,
+        "share_drums": true,
+        "slope_guitar": true,
+        "slope_other_keys": true,
+        "slope_wind": true,
+        "entry_median": false,
+        "entry_p10": false
+      },
+      "observed_joint_gates": false
+    }
+  },
+  "transitions": {
+    "entry": {
+      "count": 84,
+      "song_count": 36,
+      "ret_pre": {
+        "median": 0.6452179998159409,
+        "p10": 0.3674780804663897,
+        "p90": 0.9122628077864646
+      },
+      "ret_post": {
+        "median": 0.4907294085714966,
+        "p10": 0.244605321448762,
+        "p90": 0.6850984232500196
+      },
+      "duck": {
+        "median": 0.8037964902393702,
+        "p10": 0.41977393147440994,
+        "p90": 1.1663356805432037
+      },
+      "leak_pre": {
+        "median": 0.5176511220633984,
+        "p10": 0.09823848760686815,
+        "p90": 0.7994582056999207
+      },
+      "leak_0_2": {
+        "median": 0.11944141983985901,
+        "p10": 0.01961231554159895,
+        "p90": 0.37231226935982703
+      },
+      "peak_0_2": {
+        "median": 0.20310445874929428,
+        "p10": 0.030970624275505544,
+        "p90": 0.6547889828681946
+      },
+      "leak_steady": {
+        "median": 0.1648005668539554,
+        "p10": 0.04553724048892036,
+        "p90": 0.5384189328178763
+      }
+    },
+    "exit": {
+      "count": 79,
+      "song_count": 35,
+      "ret_pre": {
+        "median": 0.4756816625595093,
+        "p10": 0.1870137236546725,
+        "p90": 0.7191406201571227
+      },
+      "ret_post": {
+        "median": 0.6185884977458045,
+        "p10": 0.3245019996073097,
+        "p90": 0.8030302278697491
+      },
+      "duck": {
+        "median": 1.215189157034744,
+        "p10": 0.9405095288996985,
+        "p90": 2.05360429447433
+      },
+      "leak_pre": {
+        "median": 0.2105741216801107,
+        "p10": 0.03598347593215294,
+        "p90": 0.43785603586584343
+      },
+      "leak_0_2": {
+        "median": 0.5428703427314758,
+        "p10": 0.19847125187516212,
+        "p90": 0.8656173139810562
+      },
+      "peak_0_2": {
+        "median": 0.6652017831802368,
+        "p10": 0.2932068884372711,
+        "p90": 0.9316311359405518
+      },
+      "leak_steady": {
+        "median": 0.21849775838200003,
+        "p10": 0.05348238984588534,
+        "p90": 0.6324693217873573
+      }
+    },
+    "sustained": {
+      "count": 102,
+      "song_count": 37,
+      "ret_pre": {
+        "median": 0.4163932641968131,
+        "p10": 0.15363308750092988,
+        "p90": 0.6837213180959225
+      },
+      "ret_post": {
+        "median": 0.4199465326964855,
+        "p10": 0.16230233749374748,
+        "p90": 0.6735812453553082
+      },
+      "duck": {
+        "median": 0.993440783924136,
+        "p10": 0.7364527420923953,
+        "p90": 1.492369873733567
+      },
+      "leak_pre": {
+        "median": 0.11262297071516514,
+        "p10": 0.027942091401200745,
+        "p90": 0.35683583170175553
+      },
+      "leak_0_2": {
+        "median": 0.12827620096504688,
+        "p10": 0.018570612370967868,
+        "p90": 0.3478134710341692
+      },
+      "peak_0_2": {
+        "median": 0.19098471105098724,
+        "p10": 0.029617421887815,
+        "p90": 0.7233649611473087
+      },
+      "leak_steady": {
+        "median": 0.10277855629101396,
+        "p10": 0.023424454516498373,
+        "p90": 0.3545904633589089
+      }
+    }
+  }
+}

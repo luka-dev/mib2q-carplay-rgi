@@ -1,0 +1,22 @@
+sample(1) over the host build, 25 s, 21133 samples, top of stack
+
+ 54.49%   11515  apac::MDCT::InverseInPlaceTransform(float*, float*)
+ 14.01%    2960  spa_apac_decode_s16
+  9.36%    1979  apac::TNSData::Apply(apac::APACICSInfo const&, apac::SFBBandOffsets const&, apac::SpectralData&) const
+  5.95%    1258  apac::SpectralData::Deserialize(apac::BitstreamReader&, apac::APACICSInfo const&, apac::ScaleFactorData const&, apac::SFBBandOffsets const&)
+  5.63%    1189  apac::Decoder::DecodeBody(apac::BitstreamReader&, float*)
+  3.89%     823  apac::SynthesisFilterBank::FrequencyToTimeInPlace(unsigned int, float*, unsigned int, unsigned int)
+  1.61%     341  apac::BitstreamReader::GetBits(unsigned int)
+  0.86%     182  apac::ScaleFactorData::Deserialize(apac::BitstreamReader&, apac::APACICSInfo const&)
+  0.82%     174  spa_reorder_5_1_decoder_to_declared_s16
+  0.72%     153  spa_chacha20_xor
+  0.56%     118  _platform_memset
+  0.55%     116  spa_poly1305_blocks
+  0.50%     106  apac::CACDecoder::ProcessCac(apac::APACICSInfo const&, apac::SFBOffsets const&, float*, float*) const
+  0.25%      53  mach_absolute_time
+  0.15%      31  _platform_memmove
+  0.12%      26  apac::BitstreamReader::PutBack(unsigned int)
+  0.10%      22  apac::CACDecoder::Deserialize(apac::BitstreamReader&, apac::APACICSInfo const&)
+  0.09%      18  apac::BitstreamReader::GetBit()
+  0.08%      16  apac::CoreDecoder::DecodeAPACFrame(apac::BitstreamReader&, unsigned int, float**)
+  0.05%      11  apac::TNSData::ParseTNSData(apac::BitstreamReader&, apac::APACICSInfo const&)

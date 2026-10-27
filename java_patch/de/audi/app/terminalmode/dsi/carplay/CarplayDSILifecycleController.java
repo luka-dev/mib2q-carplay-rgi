@@ -1,5 +1,6 @@
 package de.audi.app.terminalmode.dsi.carplay;
 
+import com.luka.carplay.telephony.GatedPhoneService;
 import de.audi.app.terminalmode.IContext;
 import de.audi.app.terminalmode.ITerminalModeConfiguration;
 import de.audi.app.terminalmode.SmartphoneManager;
@@ -104,6 +105,13 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
         /* The same component object can be deinit/init'd; deinit clears the singleton sink. */
         ((CarplayDSILifecycleController.TerminalModeDSIKeyEventsController)this.keyEventController)
             .installTouchpadSink();
+        /* Cluster telephone tab actions -> CarPlay (GatedPhoneListener). */
+        final DSICarplaySafe dsi = this.dsiCarplaySafe;
+        GatedPhoneService.setCommands(new GatedPhoneService.Commands() {
+            public void dial(String number) {
+                dsi.requestUI2("tel:" + number);
+            }
+        });
     }
 
     public void deinit() {
@@ -112,6 +120,7 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
          * inject into the torn-down DSI proxy (stale-DSI injection) and accumulate across
          * connect cycles. */
         TouchpadController.getInstance().setTouchSink(null);
+        GatedPhoneService.setCommands(null);
         super.deinit();
         this.carPlayDsiController.deinit();
     }
@@ -256,6 +265,10 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
         }
 
         public void postDSICarplayButtonEvent(int i, int j) {
+            /* Stock MFL phone keys (CarPlayDSIManager hook/hangup/flash).  While the
+             * cluster tab shows CarPlay calls the VC may deliver the same Tel press
+             * over BAP; keep only the first of the two. */
+            if (GatedPhoneService.dropStockPhoneKey(i)) return;
             this.this$0.dsiCarplaySafe.postButtonEvent(i, j);
         }
 
@@ -724,6 +737,7 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
                             }
 
                             public void run() {
+                                GatedPhoneService.onCarPlayCalls(this.val$callState);
                                 GList glist = Generics.newArrayListWithCapacity(this.val$callState.length);
 
                                 for (int j = 0; j < this.val$callState.length; j++) {
@@ -979,11 +993,12 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
         }
 
         public void updateTouchEvents(de.audi.app.terminalmode.keyevents.TouchEvent[] atouchevent) {
-            /* CarPlay input override: real touchscreen events follow the stock conversion/sort
-             * path; MMI touchpad single-finger events route through TouchpadController as DPAD
-             * ticks. Partition by each event instead of trusting element 0, so a mixed batch can
-             * never inject touchpad coordinates into the DSI touchscreen stream (or vice versa).
-             * Active-finger count uses getTouchState()!=1 (1 = RELEASED). */
+            /* Touchscreen events follow the stock conversion/sort path on DSI input 1.  MMI
+             * touchpad single-finger events become DPAD ticks via TouchpadController: native
+             * trackpad focus mode crashes Apple Music on iOS 27.2 (UIKit "pan-gesture-based
+             * focus movement without a touchpad"), see docs/reference/ARCHITECTURE.md, "MMI
+             * touchpad".  Partition per event, never by element 0, so a mixed batch cannot
+             * inject pad coordinates into the touchscreen stream.  Active: getTouchState() != 1. */
             TouchpadController c = TouchpadController.getInstance();
             if (atouchevent == null || atouchevent.length == 0) { c.onTouchEnd(); return; }
 
@@ -1027,8 +1042,8 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
         public void updateRotary(int i) {
             this.this$0.logger.log(1000000, "[%1.updateRotary] %2", LOGCLASS, i);
             /* updateRotary = the CENTRAL console MMI knob → must drive the CarPlay Main UI
-             * (next/prev). The steering-wheel roller zooms the stock cluster map through its
-             * own MapScale BAP callback; it must never use this seam. */
+             * (next/prev). Cluster altScreen zoom comes from the steering-wheel MapScale BAP
+             * callback and is sent as changeMapZoomLevel; it must never use this seam. */
             this.this$0.dsiCarplaySafe.postRotaryEvent(i);
         }
 

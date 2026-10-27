@@ -1,8 +1,8 @@
 import com.luka.carplay.cluster.ClusterLayerController;
-import com.luka.carplay.core.ScreenModule;
+import com.luka.carplay.core.AltScreenModule;
 import com.luka.carplay.rgd.GatedCombiService;
 import com.luka.carplay.framework.Log;
-import de.audi.tghu.navi.app.cluster.ScreenCombiBAPListener;
+import de.audi.tghu.navi.app.cluster.AltScreenCombiBAPListener;
 import de.audi.tghu.navi.app.cluster.ClusterService;
 import de.audi.atip.interapp.combi.bap.navi.CombiBAPServiceNavi;
 import de.audi.atip.mmicombi.IViewSizeManager;
@@ -52,7 +52,7 @@ public final class ClusterKdkBapChainTest {
                 }
             });
         GatedCombiService gate=new GatedCombiService(sink);gate.setRouteGuidanceBlocked(true);
-        ScreenCombiBAPListener listener=(ScreenCombiBAPListener)u.allocateInstance(ScreenCombiBAPListener.class);
+        AltScreenCombiBAPListener listener=(AltScreenCombiBAPListener)u.allocateInstance(AltScreenCombiBAPListener.class);
         Constructor log=Class.forName("com.luka.carplay.rgd.BAPBridge$SilentLogChannel").getDeclaredConstructor();log.setAccessible(true);
         set(listener,"logChannel",log.newInstance());set(listener,"combiservice",gate);
         set(listener,"clusterservice",u.allocateInstance(Service.class));

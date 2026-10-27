@@ -1,0 +1,13 @@
+{
+  "script_sha256": "8b1499fc29771fc22e56af22c91cde3502179a429150399cb94284180345c59d",
+  "fixture_sha256": "47dc5768a7ff38100a7d7cfbfa209fd5ea95e43101382d6e5cbf7819400e7233",
+  "executable_sha256": "6ba27079615ee98579f1e558cbd99f15a28087cdafa723ce106842ac236e114a",
+  "renderer_sha256": "d3831ae407ea34a4ebd7020bb112d3f15a8c7749dbc34d8a77a9c1a40401fd82",
+  "checkpoint_sha256": "ff072970aef01749f44afc0c8bc010c542eb7e2384cdf88d8b7473b6a3854da2",
+  "assets_manifest_sha256": "3d0336b6bdac32a3c7ac75866e2213e38947631d70453c5b34c35ef2d4efb54c",
+  "numeric_gates": "unrounded native float source versus unrounded Torch and nativePCM16 versus once-rounded Torch source separately, each NSE<=1e-7,max<=4LSB; all6 output channels versus independent saved-source real-C rendering NSE<=1e-7,max<=4LSB; repeated/reset/future prefix bit exact",
+  "latency_scope": "identity pulse records sample-onset/peak delay including front alignment/renderer; acquisition and measured execution remain separate; no physical-unit/loaded-worker85ms proof",
+  "input": "same fixed4 TRAIN8s float mixtures rounded once to nativePCM16, no level adjustment or clipping rescue; source and front both causal, front delayed1536samples",
+  "renderer": "frozen settings .40,frontbass-3,frontretention.5,body0,air-9,bed delays enabled,attackoff,LFEassist default0dB,legacy inference traps",
+  "int8_scope": "pipeline execution/matching only, TRAIN4 int8 reconstruction screen is separate; no terminal source quality/DEV/device/owner claim"
+}

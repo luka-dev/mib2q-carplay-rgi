@@ -1,0 +1,166 @@
+{
+  "source": "physical HU after decoder fix ab2274e0",
+  "window_seconds": 47.343043088912964,
+  "cpu": {
+    "dio_manager": {
+      "pid": 32510076,
+      "runtime_ms_samples": [
+        1225,
+        1194,
+        1213,
+        1118,
+        1128,
+        1150,
+        1149,
+        1145,
+        1255,
+        1241
+      ],
+      "interval_seconds_nominal": 3,
+      "percent_of_one_core_mean": 39.39333333333333,
+      "min": 37.266666666666666,
+      "max": 41.833333333333336
+    },
+    "altscreen_render": {
+      "pid": 1966200,
+      "runtime_ms_samples": [
+        355,
+        364,
+        363,
+        335,
+        307,
+        384,
+        366,
+        323,
+        319,
+        313
+      ],
+      "interval_seconds_nominal": 3,
+      "percent_of_one_core_mean": 11.430000000000001,
+      "min": 10.233333333333333,
+      "max": 12.8
+    },
+    "maneuver_render": {
+      "pid": 2551930,
+      "runtime_ms_samples": [
+        271,
+        257,
+        259,
+        226,
+        249,
+        262,
+        264,
+        259,
+        250,
+        252
+      ],
+      "interval_seconds_nominal": 3,
+      "percent_of_one_core_mean": 8.496666666666666,
+      "min": 7.533333333333333,
+      "max": 9.033333333333333
+    },
+    "mcd": {
+      "pid": 983127,
+      "runtime_ms_samples": [
+        392,
+        351,
+        380,
+        198,
+        151,
+        366,
+        379,
+        342,
+        216,
+        233
+      ],
+      "interval_seconds_nominal": 3,
+      "percent_of_one_core_mean": 10.026666666666667,
+      "min": 5.033333333333333,
+      "max": 13.066666666666666
+    },
+    "videoencoderservice": {
+      "pid": 1265774,
+      "runtime_ms_samples": [
+        421,
+        448,
+        439,
+        358,
+        360,
+        444,
+        427,
+        466,
+        328
+      ],
+      "interval_seconds_nominal": 3,
+      "percent_of_one_core_mean": 13.670370370370371,
+      "min": 10.933333333333334,
+      "max": 15.533333333333333
+    }
+  },
+  "total_cpu_busy_samples": [
+    90.2,
+    84.0,
+    89.69999999999999,
+    86.6,
+    83.30000000000001,
+    94.3,
+    85.69999999999999,
+    89.4,
+    90.0
+  ],
+  "total_cpu_busy_mean": 88.13333333333333,
+  "alt_socket_intervals_us": [
+    33354,
+    33331,
+    33368,
+    34862,
+    33767
+  ],
+  "alt_socket_fps": [
+    29.98141152485459,
+    30.002100147010292,
+    29.96883241428914,
+    28.68452756583099,
+    29.61471258921432
+  ],
+  "alt_source_pts_intervals_us": [
+    33333,
+    33333,
+    33333,
+    34888,
+    33777
+  ],
+  "full_present_mean_us": [
+    6237,
+    6043,
+    6882,
+    6613
+  ],
+  "decode_mean_us": [
+    14906,
+    12693,
+    12657,
+    13126,
+    14064
+  ],
+  "hook_to_socket_mean_us": [
+    2534,
+    1826,
+    1557,
+    2585,
+    2477
+  ],
+  "hook_to_post_mean_us": [
+    28604,
+    21567,
+    21019,
+    23665,
+    23615
+  ],
+  "temporary_verbose_marker_restored": true,
+  "decoder_optimization": "Confirmed by new DIO: queue depth 2 already installed",
+  "effective_phone_profile_verified": false,
+  "cpu_caveat": "Approximate % of one CPU core, runtime ms / configured 3-second hogs window. Workload is not paired with prior run.",
+  "alt_socket_fps_weighted": 29.64157408615027,
+  "performance_caveat": "Short live sample: near 30 FPS with occasional 33/66ms source cadence; no controlled A/B attribution to queue patch."
+}

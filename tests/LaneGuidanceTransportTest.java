@@ -6,7 +6,7 @@ public class LaneGuidanceTransportTest {
     static int shortAt(byte[] p,int i) {return (short)(((p[i]&255)<<8)|(p[i+1]&255));}
     public static void main(String[] args) throws Exception {
         RouteGuidance.State state=new RouteGuidance.State();
-        state.laneGuidanceShowing=1;state.laneGuidanceIndex=73;state.laneGuidanceSlot=3;
+        state.laneGuidanceShowing=1;state.laneGuidanceIndex=73;
         state.lgIndex[3]=73;state.lgLaneComplete[3]=0;state.lgLaneCount[3]=8;
         state.lgLanePositions[3]=new int[8];state.lgLaneDirections[3]=new int[8];
         state.lgLaneStatus[3]=new int[8];state.lgLaneAngles[3]=new int[8][];
@@ -20,9 +20,8 @@ public class LaneGuidanceTransportTest {
         source.setAccessible(true);
         LaneGuidanceSnapshot a=(LaneGuidanceSnapshot)source.invoke(null,state,Boolean.TRUE);
         check(a.count==8 && a.showing && !a.complete && a.eventIndex==73,"incomplete raw event discarded");
-        // Maneuver/link/direction changes must not choose another lane event.
+        // Maneuver/direction changes must not choose another lane event.
         state.mType[0]=ManeuverMapper.MT_ROUNDABOUT_EXIT_1;state.mTurnAngle[0]=-180;
-        state.mLinkedLaneGuidanceIndex[0]=99;
         check(a.same((LaneGuidanceSnapshot)source.invoke(null,state,Boolean.TRUE)),"maneuver changed independent guidance");
         state.lgLaneAngles[3][0][0]=90;
         check(a.angles[0][0]==1000,"snapshot aliases mutable input");

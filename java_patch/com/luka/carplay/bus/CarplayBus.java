@@ -3,7 +3,7 @@
  *
  * Topology: Java is the long-lived TCP SERVER on 127.0.0.1:19810; the hook is the
  * client and (re)connects once per CarPlay session.  This half both RECEIVES hook
- * events (EVT_*) and SENDS commands (CMD_*).
+ * events (EVT_*) and SENDS commands (CMD_*, e.g. the altScreen CMD_ALT_* path).
  *
  * Wire frame (matches hook/framework/bus.c, all multi-byte big-endian):
  *   [u32 MAGIC][u32 seq][u16 type][u8 flags][u8 reserved][u32 len][payload]
@@ -47,6 +47,8 @@ public final class CarplayBus {
     public static final int EVT_SYNC_END    = 0x0003;
     public static final int EVT_COVERART    = 0x0010;
     public static final int EVT_RGD_UPDATE  = 0x0020;
+    public static final int EVT_TEL_LISTS   = 0x0040;   /* sticky text: r.* recents, f.* favorites */
+    public static final int EVT_TEL_COMM    = 0x0041;   /* sticky text: signal, registration, airplane, carrier */
 
     /* commands Java -> hook (mirror bus_protocol.h) */
     public static final int CMD_SYNC_REQ       = 0x0100;   /* replay all sticky state       */
@@ -54,6 +56,9 @@ public final class CarplayBus {
     public static final int CMD_ALT_ZONE       = 0x0111;   /* [u8 0=full/1=sport/2=classic][u16 LE durationMs] */
     public static final int CMD_ALT_ZONE_ACK   = 0x0112;   /* hook->Java [u8 mode][i32 LE status]       */
     public static final int CMD_ALT_RGI        = 0x0116;   /* [u8 0=off 1=on] confirmed RGI presentation */
+    public static final int CMD_TEL            = 0x0117;   /* [u8 action][u8 on]: 1 = mute, 2 = hold */
+    public static final int CMD_VEHICLE        = 0x0118;   /* LE [u8 ver=1][u8 valid][u16 speed cm/s][u8 gear][u16 range km][i16 temp 0.1C][u8 warn][u32 ms] */
+    public static final int CMD_UPMIX          = 0x0119;   /* [u8 level 0 off..4 aggressive], MMI Sound effects "CarPlay UpMix" */
 
     public interface Listener {
         void onFrame(int type, int flags, byte[] payload, int len);
@@ -74,8 +79,8 @@ public final class CarplayBus {
     private final Listener[] listeners = new Listener[MAX_TYPES];
     /* Last sticky frame of a type nobody listened to yet: the hook replays its sticky
      * state once per connection, and on a connected-phone cold boot that can come
-     * before a late listener registers (a module that starts after the bus is up),
-     * so on() hands it over.  [flags, payload].
+     * before a late listener registers (GatedPhoneService wraps the stock phone
+     * service long after the bus is up), so on() hands it over.  [flags, payload].
      * Valid only for the connection it came on (a new hook = a new session). */
     private final Object[][] unheard = new Object[MAX_TYPES][];
     private static final int WRITE_QUEUE_CAPACITY = 32;

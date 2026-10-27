@@ -1,0 +1,441 @@
+#!/usr/bin/env bash
+#
+# One command from the repo root:
+#
+#   ./apac_decoder/reference/run.sh
+#
+# Builds the arm64 container image if it is missing, decodes the captured
+# CarPlay APAC 5.1 stream with Pioneer's decoder running
+# NATIVELY on this Apple Silicon machine, decodes the same packets with macOS
+# AudioToolbox, and prints a per-channel comparison.
+#
+#   ./apac_decoder/reference/run.sh --count 64      # only the first 64 packets
+#   ./apac_decoder/reference/run.sh --f32           # float32 out, no Apple compare
+#   ./apac_decoder/reference/run.sh --probe         # just load the library
+#   ./apac_decoder/reference/run.sh --rebuild       # force an image rebuild
+#
+# The per-function oracle (apac_fn_ref.cpp) rides in the same image:
+#
+#   ./apac_decoder/reference/run.sh fn probe        # resolve every symbol
+#   ./apac_decoder/reference/run.sh fn sfb          # apac::GetSFBOffsetTable
+#   ./apac_decoder/reference/run.sh fn cookie CK    # the C cookie parsers
+#   ./apac_decoder/reference/run.sh fn gc CK        # GlobalConfig::Deserialize
+#   ./apac_decoder/reference/run.sh fn bs < cases   # TBitstreamReader, per call
+#
+# And the stage-d composition test - the whole capture decoded twice, once with
+# Pioneer's filter bank and once with ours patched into its place:
+#
+#   ./apac_decoder/reference/run.sh swap            # all 3977 packets
+#   ./apac_decoder/reference/run.sh swap 400        # the first 400
+#
+# And the stage-f/g acceptance test - the whole capture decoded by OUR decoder and
+# compared against the library, both as float32 PCM and, bit for bit, as the
+# spectra the frame layer hands the filter bank:
+#
+#   ./apac_decoder/reference/run.sh ours            # all 3977 packets
+#   ./apac_decoder/reference/run.sh ours 400        # the first 400
+#
+# and the stage-f/g COMPOSITION test, the counterpart of `swap`: our whole
+# frame layer patched into Pioneer's own decoder at APACCoreDecoder::
+# DecodeAPACFrame, with the library keeping the frame-type field, the trimming
+# record, ContentOutBuffer and the interleave:
+#
+#   ./apac_decoder/reference/run.sh swapframe       # all 3977 packets
+#   ./apac_decoder/reference/run.sh swapframe 400
+#
+# Paths given to `fn` are host paths and are bind-mounted read-only.
+#
+# Everything it writes lives in apac_decoder/reference/.build/ except
+# build/apple_apac_oracle.
+set -euo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$HERE/../.." && pwd)"
+WORK="$HERE/.build"
+IMAGE="${APAC_IMAGE:-apac-ref}"
+
+ROOTFS="${APAC_ROOTFS:-${AUDI_WORKSPACE:-$HOME/Desktop/AUDI_2}/Firmwares/Other/Pioneer_SPHERA_OTA/extracted_01030010/rootfs}"
+CAPTURE="${APAC_CAPTURE:-$ROOT/captures/apac_5_1_live_20260831_0205}"
+COOKIE="$CAPTURE/spatial_magiccookie_5_60100d08f9d19abb.bin"
+PACKETS="$CAPTURE/apac_packets"
+
+FN=0
+if [ "${1:-}" = "fn" ]; then FN=1; shift; fi
+SWAP=0
+if [ "${1:-}" = "swap" ]; then SWAP=1; shift; fi
+OURS=0
+if [ "${1:-}" = "ours" ]; then OURS=1; shift; fi
+SWAPFRAME=0
+if [ "${1:-}" = "swapframe" ]; then SWAPFRAME=1; shift; fi
+
+REBUILD=0
+PROBE=0
+FLOAT=0
+COUNT=""
+EXTRA=()
+# The `fn`, `swap` and `ours` modes take their own arguments; do not eat them.
+while [ "$FN" = 0 ] && [ "$SWAP" = 0 ] && [ "$OURS" = 0 ] && [ "$SWAPFRAME" = 0 ] && [ $# -gt 0 ]; do
+    case "$1" in
+        --rebuild) REBUILD=1 ;;
+        --probe)   PROBE=1 ;;
+        --f32)     FLOAT=1; EXTRA+=(--f32) ;;
+        --count)   COUNT="$2"; EXTRA+=(--count "$2"); shift ;;
+        *)         EXTRA+=("$1") ;;
+    esac
+    shift
+done
+
+# ---------------------------------------------------------------- staging ----
+# Only the DT_NEEDED closure of libSPF_CP_PlugInWrapper.so is copied.  Several
+# entries under the extracted rootfs are 10-12 byte broken symlink stubs left by
+# the macOS extraction (lib/libc.so.6, ld-linux-aarch64.so.1, libasound.so.2
+# ...); those are deliberately ignored and the container's own glibc / system
+# libraries are used instead.
+CLOSURE_LOCAL="libGparts.so libNDeviceLibAV.so libNEventBaseLib.so libNPCommonLib.so
+               libNStandardLib.so libNStorageLib.so libNSystemInfoLib.so
+               libSPF_CP_PlugInWrapper.so"
+CLOSURE_USR="libdns_sd.so libcrypto.so.3 libssl.so.3"
+
+stage_libs() {
+    mkdir -p "$WORK/libs"
+    local f missing=0
+    for f in $CLOSURE_LOCAL; do
+        [ -s "$WORK/libs/$f" ] || missing=1
+    done
+    for f in $CLOSURE_USR; do
+        [ -s "$WORK/libs/$f" ] || missing=1
+    done
+    [ "$missing" = 0 ] && return
+    echo "staging Pioneer libraries from $ROOTFS"
+    for f in $CLOSURE_LOCAL; do
+        cp "$ROOTFS/usr/local/lib/$f" "$WORK/libs/$f"
+    done
+    for f in $CLOSURE_USR; do
+        cp "$ROOTFS/usr/lib/$f" "$WORK/libs/$f"
+    done
+}
+
+stage_libs
+
+# ------------------------------------------------------------------ image ----
+if [ "$REBUILD" = 1 ] || ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
+    echo "building $IMAGE (linux/arm64)"
+    docker build --platform linux/arm64 -t "$IMAGE" -f "$HERE/Dockerfile" "$HERE"
+fi
+
+# Per-function oracle.  Any host path in the argument list is bind-mounted at
+# the same path inside the container so the arguments need no rewriting.
+run_fn() {
+    local mounts=() a
+    for a in "$@"; do
+        if [ -e "$a" ]; then
+            mounts+=(-v "$(cd "$(dirname "$a")" && pwd)/$(basename "$a"):$a:ro")
+        fi
+    done
+    docker run --rm -i --platform linux/arm64 \
+        -v "$HERE:/src:ro" "${mounts[@]+"${mounts[@]}"}" \
+        "$IMAGE" bash -c \
+        'g++ -std=c++11 -O2 -g -Wall -o /tmp/apac_fn_ref /src/apac_fn_ref.cpp -ldl && exec /tmp/apac_fn_ref "$@"' \
+        _ "$@"
+}
+
+if [ "$FN" = 1 ]; then
+    run_fn "$@"
+    exit $?
+fi
+
+run_ref() {
+    docker run --rm --platform linux/arm64 \
+        -v "$HERE:/src:ro" -v "$CAPTURE:/data:ro" -v "$WORK:/out" \
+        "$IMAGE" bash -c \
+        'g++ -std=c++11 -O2 -g -Wall -o /tmp/apac_ref /src/apac_ref.cpp -ldl && exec /tmp/apac_ref "$@"' \
+        _ "$@"
+}
+
+# ------------------------------------------------------- transform swap ----
+# Decode the whole capture twice: once with Pioneer's own filter bank and once
+# with ours patched into its place, then diff the two float32 streams.
+# This is the composition test for stage d - the per-function tests use
+# synthetic vectors, this one uses the coefficients the real stream produces.
+# See transform_swap_shim.cpp for how the substitution is made.
+run_swap() {
+    local dec; dec="$(cd "$HERE/.." && pwd)"
+    docker run --rm --platform linux/arm64 \
+        -v "$HERE:/src:ro" -v "$dec/src:/ours/src:ro" -v "$dec/include:/ours/include:ro" \
+        -v "$CAPTURE:/data:ro" -v "$WORK:/out" \
+        "$IMAGE" bash -c '
+            set -e
+            g++ -std=c++11 -O2 -g -Wall -o /tmp/apac_ref /src/apac_ref.cpp -ldl
+            g++ -std=c++11 -O2 -g -Wall -Wextra -fno-exceptions -fno-rtti \
+                -I/ours/include -shared -fPIC -o /tmp/swap.so \
+                /src/transform_swap_shim.cpp /ours/src/transform.cpp \
+                /ours/src/transform_tables.cpp /ours/src/filterbank.cpp -ldl
+            echo "=== Pioneer, unmodified ==="
+            /tmp/apac_ref --f32 "$@" /out/pioneer_plain.f32
+            /tmp/apac_ref       "$@" /out/pioneer_plain.pcm
+            echo
+            echo "=== Pioneer, with our transform patched in ==="
+            APAC_SWAP_TRANSFORM=1 LD_PRELOAD=/tmp/swap.so \
+                /tmp/apac_ref --f32 "$@" /out/pioneer_swapped.f32
+            APAC_SWAP_TRANSFORM=1 LD_PRELOAD=/tmp/swap.so \
+                /tmp/apac_ref       "$@" /out/pioneer_swapped.pcm
+        ' _ "$@"
+}
+
+# --------------------------------------------------------- ours acceptance ----
+# Decode the capture twice: once with the library, dumping the spectrum it hands
+# its own filter bank for every channel of every frame, and once with our decoder,
+# dumping the same thing.  The frame layer has no other observable output of its
+# own - everything below it is the transform, which cannot be bit exact because
+# the library's FFT is vDSP - so the spectra settle stages a..g on their own
+# terms and the PCM comparison shows what the transform then costs.
+#
+# The library's dump run substitutes OUR filter bank for its own, because
+# the hook has to overwrite the entry point to see the buffer at all; that
+# substitution is the one `run.sh swap` measures, and it does not touch the
+# spectra, which are read before the transform runs.
+run_port() {
+    local dec; dec="$(cd "$HERE/.." && pwd)"
+    docker run --rm --platform linux/arm64 \
+        -v "$HERE:/src:ro" -v "$dec/src:/ours/src:ro" -v "$dec/include:/ours/include:ro" \
+        -v "$CAPTURE:/data:ro" -v "$WORK:/out" \
+        "$IMAGE" bash -c '
+            set -e
+            g++ -std=c++11 -O2 -g -Wall -o /tmp/apac_ref /src/apac_ref.cpp -ldl
+            g++ -std=c++11 -O2 -g -Wall -Wextra -fno-exceptions -fno-rtti \
+                -I/ours/include -shared -fPIC -o /tmp/dump.so \
+                /src/spectrum_dump_shim.cpp /ours/src/transform.cpp \
+                /ours/src/transform_tables.cpp /ours/src/filterbank.cpp -ldl
+            APAC_DUMP_SPECTRA=/out/lib.spec LD_PRELOAD=/tmp/dump.so \
+                /tmp/apac_ref --f32 "$@" /out/pioneer_ours_ref.f32
+        ' _ "$@"
+}
+
+# ------------------------------------------------------- frame-layer swap ----
+# Our element and core-decoder layers patched into the library at
+# APACCoreDecoder::DecodeAPACFrame.  Everything above stays the library's, so
+# this measures stages f and g with our own top level taken out of the
+# picture - which the plain end-to-end run cannot do.
+run_swapframe() {
+    local dec; dec="$(cd "$HERE/.." && pwd)"
+    docker run --rm --platform linux/arm64 \
+        -v "$HERE:/src:ro" -v "$dec/src:/ours/src:ro" -v "$dec/include:/ours/include:ro" \
+        -v "$CAPTURE:/data:ro" -v "$WORK:/out" \
+        -e APAC_COOKIE="/data/$(basename "$COOKIE")" \
+        "$IMAGE" bash -c '
+            set -e
+            g++ -std=c++11 -O2 -g -Wall -o /tmp/apac_ref /src/apac_ref.cpp -ldl
+            g++ -std=c++11 -O2 -g -Wall -Wextra -fno-exceptions -fno-rtti \
+                -I/ours/include -shared -fPIC -o /tmp/frame.so \
+                /src/frame_swap_shim.cpp /ours/src/*.cpp -ldl
+            echo "=== Pioneer, unmodified ==="
+            /tmp/apac_ref --f32 "$@" /out/pioneer_plain.f32
+            /tmp/apac_ref       "$@" /out/pioneer_plain.pcm
+            echo
+            echo "=== Pioneer, with our frame layer patched in ==="
+            APAC_SWAP_COOKIE="$APAC_COOKIE" LD_PRELOAD=/tmp/frame.so \
+                /tmp/apac_ref --f32 "$@" /out/pioneer_frameswap.f32
+            APAC_SWAP_COOKIE="$APAC_COOKIE" LD_PRELOAD=/tmp/frame.so \
+                /tmp/apac_ref       "$@" /out/pioneer_frameswap.pcm
+        ' _ "$@"
+}
+
+if [ "$PROBE" = 1 ]; then
+    run_ref --probe
+    exit $?
+fi
+
+# ---------------------------------------------------------------- packets ----
+if [ ! -d "$PACKETS" ] || [ -z "$(ls -A "$PACKETS" 2>/dev/null)" ]; then
+    echo "regenerating APAC packets from the raw APAP capture"
+    # The session key never leaves this shell: pioneer_apap_decrypt.py reads it
+    # from shk.bin directly and nothing here echoes it.
+    python3 "$ROOT/tools/pioneer_apap_decrypt.py" \
+        --key-file "$CAPTURE/shk.bin" \
+        --output-dir "$WORK/decrypted" \
+        --keep-going \
+        "$CAPTURE/spatial_apap_5.trunc.bin" >/dev/null
+    mkdir -p "$WORK/apac_packets"
+    python3 - "$WORK/decrypted/manifest.tsv" "$WORK/apac_packets" <<'PY'
+import csv, json, os, sys
+manifest, outdir = sys.argv[1], sys.argv[2]
+with open(manifest) as fh:
+    for row in csv.DictReader(fh, delimiter='\t'):
+        blob = json.loads(row['extension_json']).get('trailing_hex', '')
+        with open(os.path.join(outdir, 'p%05d.bin' % int(row['index'])), 'wb') as out:
+            out.write(bytes.fromhex(blob))
+PY
+    PACKETS="$WORK/apac_packets"
+fi
+
+# Inside the container the capture is at /data and .build at /out.
+case "$PACKETS" in
+    "$WORK"/*) CTR_PREFIX="/out/apac_packets" ;;
+    *)         CTR_PREFIX="/data/apac_packets" ;;
+esac
+
+# One shared, deterministically ordered packet list for both decoders.  Three
+# frames in this capture carry an empty APAC payload; Apple's converter rejects
+# a zero-length packet, so they are excluded from both sides rather than
+# handled differently by each.
+find "$PACKETS" -name '*.bin' ! -size 0 | sort > "$WORK/host_list.txt"
+sed "s|.*/|$CTR_PREFIX/|" "$WORK/host_list.txt" > "$WORK/ctr_list.txt"
+echo "packets: $(wc -l < "$WORK/host_list.txt" | tr -d ' ') non-empty of $(ls "$PACKETS" | wc -l | tr -d ' ')"
+
+# ------------------------------------------------------------------- swap ----
+if [ "$SWAP" = 1 ]; then
+    COUNT_ARGS=()
+    [ $# -gt 0 ] && COUNT_ARGS=(--count "$1")
+    run_swap --list /out/ctr_list.txt "${COUNT_ARGS[@]+"${COUNT_ARGS[@]}"}" \
+        "/data/$(basename "$COOKIE")"
+    echo
+    echo "=== what our transform costs, end to end ==="
+    python3 "$HERE/compare_f32.py" "$WORK/pioneer_plain.f32" \
+        "$WORK/pioneer_swapped.f32" 6
+
+    # The acceptance question is not "how far is our decoder from Pioneer" but
+    # "does substituting it change how far Pioneer is from Apple".  Both are
+    # already 1-2 LSB apart on this capture (NOTES.md), so that is the bar.
+    ORACLE="$ROOT/build/apple_apac_oracle"
+    if [ ! -x "$ORACLE" ] && [ "$(uname -s)" = "Darwin" ]; then
+        mkdir -p "$ROOT/build"
+        clang -std=c11 -O2 "$ROOT/tools/apple_apac_oracle.c" \
+            -framework AudioToolbox -framework CoreFoundation -o "$ORACLE"
+    fi
+    if [ -x "$ORACLE" ]; then
+        echo
+        echo "=== Apple AudioToolbox (macOS), same packets ==="
+        # shellcheck disable=SC2046
+        "$ORACLE" "$COOKIE" "$WORK/apple.pcm" $(cat "$WORK/host_list.txt") | tail -n 1
+        echo
+        echo "=== Apple vs Pioneer, unmodified ==="
+        python3 "$HERE/compare_pcm.py" "$WORK/apple.pcm" "$WORK/pioneer_plain.pcm" 6
+        echo
+        echo "=== Apple vs Pioneer, with our transform ==="
+        python3 "$HERE/compare_pcm.py" "$WORK/apple.pcm" "$WORK/pioneer_swapped.pcm" 6
+    fi
+    exit 0
+fi
+
+# -------------------------------------------------------------- swapframe ----
+if [ "$SWAPFRAME" = 1 ]; then
+    COUNT_ARGS=()
+    [ $# -gt 0 ] && COUNT_ARGS=(--count "$1")
+    run_swapframe --list /out/ctr_list.txt "${COUNT_ARGS[@]+"${COUNT_ARGS[@]}"}" \
+        "/data/$(basename "$COOKIE")"
+    echo
+    echo "=== what our frame layer costs, end to end ==="
+    python3 "$HERE/compare_f32.py" "$WORK/pioneer_plain.f32" \
+        "$WORK/pioneer_frameswap.f32" 6
+
+    # The measure that decides whether a substitution is acceptable: not how
+    # close the two Pioneer runs are to each other, but whether swapping our
+    # decoder in changes how well the decoder matches APPLE.  Both sides here come
+    # out of the library's own S16 path, so the two tables are directly
+    # comparable and any change is ours.
+    ORACLE="$ROOT/build/apple_apac_oracle"
+    if [ ! -x "$ORACLE" ] && [ "$(uname -s)" = "Darwin" ]; then
+        mkdir -p "$ROOT/build"
+        clang -std=c11 -O2 "$ROOT/tools/apple_apac_oracle.c" \
+            -framework AudioToolbox -framework CoreFoundation -o "$ORACLE"
+    fi
+    if [ -x "$ORACLE" ]; then
+        if [ $# -gt 0 ]; then
+            head -n "$1" "$WORK/host_list.txt" > "$WORK/host_list_sf.txt"
+        else
+            cp "$WORK/host_list.txt" "$WORK/host_list_sf.txt"
+        fi
+        # shellcheck disable=SC2046
+        "$ORACLE" "$COOKIE" "$WORK/apple_sf.pcm" $(cat "$WORK/host_list_sf.txt") \
+            | tail -n 1
+        echo
+        echo "=== Pioneer, unmodified, against Apple AudioToolbox ==="
+        python3 "$HERE/compare_pcm.py" "$WORK/apple_sf.pcm" "$WORK/pioneer_plain.pcm" 6
+        echo
+        echo "=== Pioneer with our frame layer, against Apple AudioToolbox ==="
+        python3 "$HERE/compare_pcm.py" "$WORK/apple_sf.pcm" "$WORK/pioneer_frameswap.pcm" 6
+    fi
+    exit 0
+fi
+
+# ------------------------------------------------------------------- ours ----
+if [ "$OURS" = 1 ]; then
+    DEC="$(cd "$HERE/.." && pwd)"
+    COUNT_ARGS=()
+    HOST_LIST="$WORK/host_list.txt"
+    if [ $# -gt 0 ]; then
+        COUNT_ARGS=(--count "$1")
+        head -n "$1" "$WORK/host_list.txt" > "$WORK/host_list_port.txt"
+        HOST_LIST="$WORK/host_list_port.txt"
+    fi
+
+    echo
+    echo "=== the library, unmodified ==="
+    run_ref --list /out/ctr_list.txt "${COUNT_ARGS[@]+"${COUNT_ARGS[@]}"}" \
+        "/data/$(basename "$COOKIE")" /out/pioneer.f32 --f32
+
+    echo
+    echo "=== the library again, with the frame layer's spectra dumped ==="
+    run_port --list /out/ctr_list.txt "${COUNT_ARGS[@]+"${COUNT_ARGS[@]}"}" \
+        "/data/$(basename "$COOKIE")"
+
+    echo
+    echo "=== our decoder ==="
+    make -C "$DEC" tools >/dev/null
+    "$DEC/.build/apac_decode" "$COOKIE" "$WORK/ours.f32" \
+        --list "$HOST_LIST" --dump-spectra "$WORK/ours.spec"
+
+    echo
+    echo "=== stages a..g: the spectra the frame layer hands the filter bank ==="
+    python3 "$HERE/compare_spectra.py" "$WORK/lib.spec" "$WORK/ours.spec"
+
+    echo
+    echo "=== our decoder against the library, float32 (FFT-limited) ==="
+    python3 "$HERE/compare_f32.py" "$WORK/pioneer.f32" "$WORK/ours.f32" 6
+
+    echo
+    echo "=== our decoder against the library carrying our own transform,"
+    echo "    float32 (expect exactly zero: this isolates the FFT) ==="
+    python3 "$HERE/compare_f32.py" "$WORK/pioneer_ours_ref.f32" "$WORK/ours.f32" 6
+    exit 0
+fi
+
+# ---------------------------------------------------------------- pioneer ----
+PIONEER_OUT="pioneer.pcm"
+[ "$FLOAT" = 1 ] && PIONEER_OUT="pioneer.f32"
+echo
+echo "=== Pioneer / Apple APAC decoder, native AArch64 in Docker ==="
+run_ref --list /out/ctr_list.txt "${EXTRA[@]}" \
+    "/data/$(basename "$COOKIE")" "/out/$PIONEER_OUT"
+
+[ "$FLOAT" = 1 ] && exit 0
+
+# ------------------------------------------------------------------ apple ----
+ORACLE="$ROOT/build/apple_apac_oracle"
+if [ ! -x "$ORACLE" ] && [ "$(uname -s)" = "Darwin" ]; then
+    echo
+    echo "building the macOS AudioToolbox oracle"
+    mkdir -p "$ROOT/build"
+    clang -std=c11 -O2 "$ROOT/tools/apple_apac_oracle.c" \
+        -framework AudioToolbox -framework CoreFoundation -o "$ORACLE"
+fi
+if [ ! -x "$ORACLE" ]; then
+    echo "no macOS oracle available; skipping the comparison"
+    exit 0
+fi
+
+if [ -n "$COUNT" ]; then
+    head -n "$COUNT" "$WORK/host_list.txt" > "$WORK/host_list_n.txt"
+else
+    cp "$WORK/host_list.txt" "$WORK/host_list_n.txt"
+fi
+
+echo
+echo "=== Apple AudioToolbox (macOS) ==="
+# shellcheck disable=SC2046
+"$ORACLE" "$COOKIE" "$WORK/apple.pcm" $(cat "$WORK/host_list_n.txt") \
+    | tail -n 1
+
+echo
+echo "=== comparison ==="
+python3 "$HERE/compare_pcm.py" "$WORK/apple.pcm" "$WORK/$PIONEER_OUT" 6

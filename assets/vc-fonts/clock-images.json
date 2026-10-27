@@ -1,0 +1,86 @@
+[
+  {
+    "source": "<workspace>/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.2/data/gtf/atlas_early_LA.atlas",
+    "source_sha256": "8bfb121a4adc507a99228bd21e7f20fc5e2946738351c9f0167796ae753a1408",
+    "index": "<workspace>/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.1/data/gtf/atlas_early_LA.json",
+    "filename": "telltale/clock_gps.png",
+    "uid": 8,
+    "bin_offset": 119,
+    "entry_offset": 323,
+    "pixel_offset": 371,
+    "atlas_size": [
+      108,
+      108
+    ],
+    "crop": [
+      85,
+      66,
+      19,
+      19
+    ],
+    "output": "previews/atlas_early_LA-clock_gps.png"
+  },
+  {
+    "source": "<workspace>/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.2/data/gtf/atlas_full_LA.atlas",
+    "source_sha256": "36dcaf425079dbd1a10e32b8e01b50b847d0c2d0f62168afa97678be706ebeb5",
+    "index": "<workspace>/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.1/data/gtf/atlas_full_LA.json",
+    "filename": "lap_timer/intervalWatch.png",
+    "uid": 221,
+    "bin_offset": 4183,
+    "entry_offset": 9499,
+    "pixel_offset": 16627,
+    "atlas_size": [
+      980,
+      980
+    ],
+    "crop": [
+      101,
+      633,
+      32,
+      34
+    ],
+    "output": "previews/atlas_full_LA-intervalWatch.png"
+  },
+  {
+    "source": "<workspace>/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.2/data/gtf/atlas_full_LA.atlas",
+    "source_sha256": "36dcaf425079dbd1a10e32b8e01b50b847d0c2d0f62168afa97678be706ebeb5",
+    "index": "<workspace>/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.1/data/gtf/atlas_full_LA.json",
+    "filename": "lap_timer/stopwatch.png",
+    "uid": 223,
+    "bin_offset": 4183,
+    "entry_offset": 9547,
+    "pixel_offset": 16627,
+    "atlas_size": [
+      980,
+      980
+    ],
+    "crop": [
+      1,
+      858,
+      32,
+      34
+    ],
+    "output": "previews/atlas_full_LA-stopwatch.png"
+  },
+  {
+    "source": "<workspace>/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.2/data/gtf/atlas_full_LA.atlas",
+    "source_sha256": "36dcaf425079dbd1a10e32b8e01b50b847d0c2d0f62168afa97678be706ebeb5",
+    "index": "<workspace>/Firmwares/VC/AU_C1_AU491_0379_1310_prod_8S0906961AL_A4-A5-Q5_2018/extracted/stage2_fs/STAGE2.1/data/gtf/atlas_full_LA.json",
+    "filename": "boardcomputer/clock_gps.png",
+    "uid": 483,
+    "bin_offset": 4183,
+    "entry_offset": 15787,
+    "pixel_offset": 16627,
+    "atlas_size": [
+      980,
+      980
+    ],
+    "crop": [
+      671,
+      865,
+      21,
+      19
+    ],
+    "output": "previews/atlas_full_LA-clock_gps.png"
+  }
+]

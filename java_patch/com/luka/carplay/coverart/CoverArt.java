@@ -1,5 +1,5 @@
 /*
- * CarPlay Cover Art Module  (ported from java_patch, foundation-swapped)
+ * CarPlay Cover Art Module
  *
  * Subscribes to EVT_COVERART on CarplayBus, pushes to BAP service via a callback.
  * Bus: EVT_COVERART carries text payload "crc:n:<uint>\npath:s:<path>\n"

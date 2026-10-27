@@ -1,0 +1,210 @@
+{
+  "source_sha256": "8776fdb84d05571cf4addf42655bc875da7c47cc35166e3cee6c60bc5841fe4b",
+  "proofs": [
+    {
+      "name": "first_b_extended_queue_append",
+      "start": "0x131a10",
+      "end": "0x131a3e",
+      "sha256": "c70677f42c3167ac68b87d81e6037df9dedaacd383ed4a1b7a369a690ed5aed8"
+    },
+    {
+      "name": "first_b_extended_read_dispatch",
+      "start": "0x131acc",
+      "end": "0x131cca",
+      "sha256": "b4cbcebc12cfcc54eccc44e44e275306b664cae51507bc4c108c10a98d2b811c"
+    },
+    {
+      "name": "first_b_extended_write_validation",
+      "start": "0x131d22",
+      "end": "0x131e0e",
+      "sha256": "961a0c18282ba32d5f8ffbbcbd4352a77330dc2c3a9936bacad7fc28c3095ed7"
+    },
+    {
+      "name": "first_b_extended_special_validation",
+      "start": "0x132034",
+      "end": "0x1320ce",
+      "sha256": "f9759b2755ecf2d39f1ce4cede4d882e2224aea7ef0af06476d245a1e1f530de"
+    },
+    {
+      "name": "first_b_extended_queue_apply",
+      "start": "0x1326c7",
+      "end": "0x1328ea",
+      "sha256": "ea07551b37231a2e51db8b60a1c6555d1f8b3d3700c79029df56aaddcc65333e"
+    },
+    {
+      "name": "first_b_effective_config_store",
+      "start": "0x132aef",
+      "end": "0x132b2b",
+      "sha256": "d3eab73249a205e096bc0f28e3209642566509fee85e4e06ed6759764a886dcd"
+    },
+    {
+      "name": "first_b_ready_core_getters",
+      "start": "0x12dd67",
+      "end": "0x12dd7d",
+      "sha256": "e52c735cfc2fcb9b8e644a655eeade444c8c76036c41cee9d5d2f994b93e80ab"
+    }
+  ],
+  "queue": {
+    "base": "0xb909c",
+    "count": "0xb911c",
+    "normal_pending_flag": "0xb911d",
+    "capacity": 64,
+    "record_words": 2,
+    "append": "131A19 copies command and raw payload word; caller retains no payload pointer",
+    "validation": "canonical extended writes require ready1, nonnull payload pointer, count<64; high command bits distinguish extended dispatch, not queue empty/nonempty",
+    "apply_order": "12DE66 before audio: normal pending16..29 first; then extended FIFO only if pending result is0; finally clear count and pending flag even when skipped",
+    "boundary": "invalid/overflow logging return policy and concurrent producer timing not fully emulated"
+  },
+  "canonical_writes": {
+    "0x14000000|index": {
+      "index_min": 1,
+      "index_max": 842,
+      "payload": "raw32, no per-parameter float validator",
+      "writes": [
+        "object+299+index",
+        "DM(object+1180)+index"
+      ],
+      "index_le_829": "rebase descriptor44..58 bases only; no replay, mode helper or publication here",
+      "index_gt_829": "replay132168; helper12B348(api20,value=object1132); helper12B348(api16,value=object1132 AGAIN); bank replace132346(value=object1129)",
+      "boundary_store": "second store1327CB is a delay slot of1327C6 and runs for BOTH branches",
+      "defer": "does not consult object1178; does not update shadow controls",
+      "overlap": [
+        {
+          "index": 829,
+          "object_offset": 1128,
+          "api": 16,
+          "target_address_in_normal_init": "0xb8cfd"
+        },
+        {
+          "index": 830,
+          "object_offset": 1129,
+          "api": 17,
+          "target_address_in_normal_init": "0xb8cfe"
+        },
+        {
+          "index": 831,
+          "object_offset": 1130,
+          "api": 18,
+          "target_address_in_normal_init": "0xb8cff"
+        },
+        {
+          "index": 832,
+          "object_offset": 1131,
+          "api": 19,
+          "target_address_in_normal_init": "0xb8d00"
+        },
+        {
+          "index": 833,
+          "object_offset": 1132,
+          "api": 20,
+          "target_address_in_normal_init": "0xb8d01"
+        },
+        {
+          "index": 834,
+          "object_offset": 1133,
+          "api": 21,
+          "target_address_in_normal_init": "0xb8d02"
+        },
+        {
+          "index": 835,
+          "object_offset": 1134,
+          "api": 22,
+          "target_address_in_normal_init": "0xb8d03"
+        },
+        {
+          "index": 836,
+          "object_offset": 1135,
+          "api": 23,
+          "target_address_in_normal_init": "0xb8d04"
+        },
+        {
+          "index": 837,
+          "object_offset": 1136,
+          "api": 24,
+          "target_address_in_normal_init": "0xb8d05"
+        },
+        {
+          "index": 838,
+          "object_offset": 1137,
+          "api": 25,
+          "target_address_in_normal_init": "0xb8d06"
+        },
+        {
+          "index": 839,
+          "object_offset": 1138,
+          "api": 26,
+          "target_address_in_normal_init": "0xb8d07"
+        },
+        {
+          "index": 840,
+          "object_offset": 1139,
+          "api": 27,
+          "target_address_in_normal_init": "0xb8d08"
+        },
+        {
+          "index": 841,
+          "object_offset": 1140,
+          "api": 28,
+          "target_address_in_normal_init": "0xb8d09"
+        },
+        {
+          "index": 842,
+          "object_offset": 1141,
+          "api": 29,
+          "target_address_in_normal_init": "0xb8d0a"
+        }
+      ]
+    },
+    "0x12000000|index": {
+      "index_min": 4,
+      "index_max": 206,
+      "writes": [
+        "object+92+index"
+      ],
+      "effect": "raw core parameter write only; no rebase/replay/publish/defer check"
+    },
+    "0x10000000": {
+      "payload_raw": [
+        0,
+        1,
+        2
+      ],
+      "writes": [
+        "object1178"
+      ],
+      "effect": "sets future normal-control defer behavior; no automatic shadow replay here"
+    },
+    "0x20000003": {
+      "payload_raw": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "effect": "CRC effective config299 words0..827 into828; copy829 words to source1179+(bank-1)*829",
+      "destination": "SHARC source RAM; no flash write, target publish or bank-selector change here"
+    }
+  },
+  "read_domains": {
+    "0x0c000000|index": [
+      0,
+      857
+    ],
+    "0x0a000000|index": [
+      0,
+      206
+    ],
+    "0x09000000|index": [
+      0,
+      32
+    ],
+    "bases": "object+299, object+92, object+59 respectively; reads are immediate, not FIFO writes",
+    "pointer_boundary": "widest read ends atobject1156; indexed writes end1141, below pointer table1156..1173"
+  },
+  "important_boundaries": [
+    "normal target B89C0 +829 is B8CFD, start of interpolation-step array; do not truncate or silently clamp extended writes to829 words",
+    "API16 helper really receives effective API20 word, not effective API16; stored mode words are not changed by pointer helper",
+    "normal retained API20 values1/3 select API16 default pointer mapping in this branch; this is not a proof that the branch executes in the vehicle",
+    "no normal V850 sender of these extended command headers has been bound; no live-state or bass-cause inference"
+  ]
+}

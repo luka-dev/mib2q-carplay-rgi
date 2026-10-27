@@ -1,0 +1,12 @@
+{
+  "zip_sha256": "9ad639be51e14053b7366d61fb12c74e41e3ee3a0e37d9a3a2acc978f0b590fe",
+  "files": {
+    "assess_spectral_native_full40.py": "e1cca30786c0d51a60b45b334ab7e5eed402e3fc0347f49b2f23eefb271d1c76",
+    "spectral_chain_mask_replay.py": "38d07329fd4dcdd6ac50fb076b9a640ad597bce4af8261c6d5c6bfdf007b2703",
+    "upmix_spectral_chain.exe": "90240a0236706633096c56fc46024bc633f288ebc8728aac6acffc4ccd2fabbe",
+    "build.json": "4c15812bfd9586e92158b27235bd51c7a59c32ea0fe6a7e3cf502aa642cb2765",
+    "assets/manifest.json": "3d0336b6bdac32a3c7ac75866e2213e38947631d70453c5b34c35ef2d4efb54c",
+    "assets/unified_float.bin": "690e7e4a12b8b697330b2620d7fb66173e08e846ed02f961cfc1c4475e66294a",
+    "assets/unified_int8.bin": "1eef7e486c3aaea39be2171ab136eb501de793a9dd634034fc309c3a80f8a46a"
+  }
+}

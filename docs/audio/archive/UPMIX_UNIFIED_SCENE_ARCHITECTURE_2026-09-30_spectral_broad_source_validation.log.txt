@@ -1,0 +1,57 @@
+SPECTRAL_BROAD_RUNNER_PARSE_PASS
+SPECTRAL_BROAD_ALL_FROZEN_HELPERS_PASS 22
+{"sha256":"41b6b7120acea648950fc20eb8f5f52da5424a31f9d122d27205a885965c2a13","file":"train_spectral_context_generalization.py"}
+{"sha256":"3ee5bc4b4e519cff2987881b4d8cc5a441de41f71a0ea3aac754e23d592fb418","file":"eval_spectral_context_generalization.py"}
+{"sha256":"debc2a8e43203c6d27e35b478c3a5a0a8fb51bb8f3da8835699458a7ab8ae8f4","file":"run_spectral_context_generalization.ps1"}
+{"sha256":"4c2b18067e0bc73b1626410902651be05dd4b844ec1fac34e72566353394c9a6","file":"train_spectral_context_fit.py"}
+{"sha256":"5d67e9c5ab7b92b145887aac0ae754db96b10f99c9541bc66c0434e3e6494335","file":"unified_spectral_context_net.py"}
+usage: train_spectral_context_generalization.py [-h] --cache CACHE --fit FIT
+                                                --partition PARTITION
+                                                --parent PARENT --out OUT
+                                                [--mode {control,spectral}]
+                                                [--smoke] [--resume]
+                                                {prepare,train,audit}
+
+Fixed40k broad comparison of original and spectral encoders after TRAIN fit.
+Requires the completed audited fitting pair to pass before preparing any run.
+Both train156true-stem songs, unfreeze their common decoder, freeze scene;
+DEV40 is evaluated only at the fixed terminal endpoint; reserved20 stays
+unread.
+
+positional arguments:
+  {prepare,train,audit}
+
+options:
+  -h, --help            show this help message and exit
+  --cache CACHE
+  --fit FIT
+  --partition PARTITION
+  --parent PARENT
+  --out OUT
+  --mode {control,spectral}
+  --smoke
+  --resume
+usage: eval_spectral_context_generalization.py [-h] --cache CACHE --fit FIT
+                                               --partition PARTITION
+                                               --parent PARENT --out OUT
+                                               --tools TOOLS --runs RUNS
+                                               --moisesdb MOISESDB [--resume]
+
+Fixed40k spectral/context pair: original inspected DEV40 and real NN-free C.
+The fixed nominal surround gain is.40; .3235 and.50 are diagnostic operating
+points, not per-song gain fitting. Scene heads are not used or claimed
+trained.
+
+options:
+  -h, --help            show this help message and exit
+  --cache CACHE
+  --fit FIT
+  --partition PARTITION
+  --parent PARENT
+  --out OUT
+  --tools TOOLS
+  --runs RUNS
+  --moisesdb MOISESDB
+  --resume
+SPECTRAL_BROAD_PREPARED_SOURCE_IMPORT_PASS_NO_TRAINING
+

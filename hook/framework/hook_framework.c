@@ -787,6 +787,47 @@ hook_result_t hook_inject_frame(const uint8_t* frame, size_t frame_len) {
     return queued;
 }
 
+/* Grow the Cinemo NmeArray identify buffer so a module's component TLVs fit (route guidance, vehicle).  The NmeArray struct at
+ * ctx->_priv is { uint8_t* base@+0; uint32 len@+4; uint32 cap@+8 }.
+ *
+ * SAFETY: this reallocs a buffer Cinemo owns, which is sound BY CONSTRUCTION on this platform —
+ * NmeIAP2Message::Encode (libNmeBaseClasses 0x11ffe8) grows this same base@+0 with libc realloc, so
+ * the storage is the process libc heap and we call the same allocator from the same process.  We also
+ * run inside the Encode interpose before returning to Cinemo, so Cinemo holds no stale base pointer.
+ * The one residual risk is a firmware variant where the array is NOT libc-backed or the fields are
+ * unexpected; guard against it below and SKIP the append (identify goes out unpatched → no component this
+ * cycle, retried next identify) rather than corrupt the heap.  An identify is small, so any plausible
+ * size stays well under HOOK_IDENTIFY_MAX. */
+#define HOOK_IDENTIFY_MAX 8192u
+uint8_t* hook_identify_grow(hook_context_t* ctx, size_t len, size_t new_len, size_t* out_cap) {
+    if (!ctx || !ctx->_priv) return NULL;
+    void* out_array = ctx->_priv;
+    uint8_t* base = *(uint8_t**)((char*)out_array + 0);
+    unsigned int arr_len = *(unsigned int*)((char*)out_array + 4);
+    unsigned int cap = *(unsigned int*)((char*)out_array + 8);
+    /* Invariant check before touching a Cinemo-owned buffer: a sane NmeArray has a non-NULL base,
+     * len<=cap, and identify-plausible sizes.  Anything else → skip (fail-safe, never realloc). */
+    if (!base || cap == 0 || cap > HOOK_IDENTIFY_MAX || arr_len > cap || new_len > HOOK_IDENTIFY_MAX) {
+        LOG_WARN(LOG_MODULE,
+                 "identify NmeArray failed invariant (base=%p len=%u cap=%u need=%zu) — skip append, no heap touch",
+                 (void*)base, arr_len, cap, new_len);
+        return NULL;
+    }
+    if (cap >= new_len) { if (out_cap) *out_cap = cap; return base; }
+    size_t alloc = new_len + 64;
+    uint8_t* new_buf = (uint8_t*)realloc(base, alloc);
+    if (!new_buf) {
+        new_buf = (uint8_t*)malloc(alloc);
+        if (!new_buf) return NULL;
+        if (base && len > 0) memcpy(new_buf, base, len);
+        if (base) free(base);
+    }
+    *(uint8_t**)((char*)out_array + 0) = new_buf;
+    *(unsigned int*)((char*)out_array + 8) = (unsigned int)alloc;
+    if (out_cap) *out_cap = alloc;
+    return new_buf;
+}
+
 hook_result_t hook_inject_message(uint16_t msgid, const uint8_t* payload, size_t payload_len) {
     uint8_t frame[512];
     size_t frame_len = iap2_build_frame(frame, sizeof(frame), msgid, payload, payload_len);

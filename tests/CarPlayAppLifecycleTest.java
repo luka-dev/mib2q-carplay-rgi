@@ -93,7 +93,7 @@ public final class CarPlayAppLifecycleTest {
             }
             releaseModule(); settled(); awaitRebind(false);
             int expectedOther = scenario.equals("replug") ? 2 : 1;
-            check(LifecycleTestModule.count(0) == expectedOther, "unexpected screen-module restart");
+            check(LifecycleTestModule.count(0) == expectedOther, "unexpected altScreen restart");
             check(LifecycleTestModule.count(1) == 2, "missing rebind or stale generation rebind");
             check(LifecycleTestModule.count(2) == expectedOther, "unexpected input restart");
         } else if (scenario.equals("failure")) {
@@ -106,7 +106,7 @@ public final class CarPlayAppLifecycleTest {
         } else if (scenario.equals("bounce")) {
             CarPlayApp.onActivate(context); settled();
             CarPlayApp.onDeactivate(); Thread.sleep(25); CarPlayApp.onActivate(context); settled();
-            for (int i = 0; i < 3; ++i)
+            for (int i = 0; i < 4; ++i)
                 check(LifecycleTestModule.count(i) == 2, "existing debounce restart behavior changed");
         } else throw new AssertionError("unknown scenario");
         CarPlayApp.onDeactivateAndWait(); settled();

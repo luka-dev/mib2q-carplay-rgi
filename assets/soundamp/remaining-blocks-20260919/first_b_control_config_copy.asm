@@ -1,0 +1,42 @@
+00132a9b  1607 ffff fffe  I7=MODIFY(I7,-2)
+00132a9e  713f 813f       R2=I3
+00132aa0  9d08 017d       DM(-3,I6)=R2
+00132aa2  717e 813f       R2=I5
+00132aa4  707e 0abf       I5=R4
+00132aa6  9d08 017e       DM(-2,I6)=R2
+00132aa8  70be 09bf       I3=R8
+00132aaa  1804 0013 299b  CJUMP 0x13299b (DB); R2=I6, I6=I7
+00132aad  9ff2            DM(I7,M7)=R2
+00132aae  9fc0 0013 2ab0  DM(I7,M7)=0x132ab0
+00132ab1  aa02 0000 033c  R2=DM(+828,I5)
+00132ab4  c302            COMP(R0,R2)
+00132ab5  0720 0000 0023  IF NE JUMP 0x132ad8
+00132ab8  1402 0020 0000  BIT SET MODE1 0x200000
+00132abb  0001            NOP
+00132abc  0c01 9e00 0006  LCNTR=414, DO 0x132ac2 UNTIL LCE
+00132abf  6a7e 1100 0000  R2=DM(I5,+2)
+00132ac2  66fe 1100 0000  DM(I3,+2)=R2
+00132ac5  1422 0020 0000  BIT CLR MODE1 0x200000
+00132ac8  0001            NOP
+00132ac9  0001            NOP
+00132aca  9b92            R2=DM(I5,M6)
+00132acb  97b2            DM(I3,M6)=R2
+00132acc  4dfe 0e3f       I12=DM(M7,I6)
+00132ace  727e 803f       R0=M5
+00132ad0  9c08 0afe       I5=DM(-2,I6)
+00132ad2  9c08 09fd       I3=DM(-3,I6)
+00132ad4  083f 343f       JUMP (M14,I12) (DB)
+00132ad6  1901            RFRAME
+00132ad7  0001            NOP
+00132ad8  0f8c 0009       R12=0x9
+00132ada  0f88 1500       R8=0x1500
+00132adc  0f84 4000       R4=0x4000
+00132ade  1804 0012 b6a7  CJUMP 0x12b6a7 (DB); R2=I6, I6=I7
+00132ae1  9ff2            DM(I7,M7)=R2
+00132ae2  9fc0 0013 2ae4  DM(I7,M7)=0x132ae4
+00132ae5  4dfe 0e3f       I12=DM(M7,I6)
+00132ae7  9c08 09fd       I3=DM(-3,I6)
+00132ae9  9c08 0afe       I5=DM(-2,I6)
+00132aeb  083f 343f       JUMP (M14,I12) (DB)
+00132aed  1901            RFRAME
+00132aee  0001            NOP

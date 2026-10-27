@@ -62,7 +62,7 @@ static int read_env_int(const char *name, int def) {
  * screen context to already exist in the process at eglGetDisplay time.  When
  * maneuver_render ran as a JVM child it inherited the HMI's screen connection so this
  * was masked; standalone / as a framework service there is none → eglGetDisplay SIGSEGVs.
- * Idempotent (g_cs guard) so create_window_and_egl_surface() can call it too.
+ * altscreen_render also creates its cluster_surface before EGL.  Idempotent (g_cs guard) so create_window_and_egl_surface() can call it too.
  * FORMAT=RGBA8888 (8) matches our EGL config; USAGE=OPENGL_ES2 (0x20) lets the GPU render
  * into it; transparent=1 → the cluster compositor blends us over the KDK bg / stock map.
  */
@@ -104,8 +104,8 @@ static int create_window_and_egl_surface(void) {
         return -1;
     }
 
-    /* MU1316 eglsub-screen has EGL and native Screen interval state: set the
-     * native state before EGL snapshots the new window. */
+    /* MU1316 eglsub-screen has EGL and native Screen interval state. Match the
+     * altscreen path: set native state before EGL snapshots the new window. */
     {
         int interval = 2, actual = -1;
         if (screen_set_window_property_iv(cluster_surface_window(g_cs),
@@ -143,7 +143,7 @@ static int create_window_and_egl_surface(void) {
     }
 
     /* Context routing is Java's job: DisplayManagerMIB2High.defineContexts() declares
-     * dc[80]={98,101,102,33} and DisplayManager.switchContext() points the cluster at it
+     * dc[80]={98,101,102,99} and DisplayManager.switchContext() points the cluster at it
      * → setActiveDisplayable(4, 98) → MOST encoder reads our window.  NO dmdt. */
     return 0;
 }

@@ -1,0 +1,42 @@
+{
+  "complete": true,
+  "passed": true,
+  "audit": {
+    "initial_all_fields_nse": {
+      "source_stft": 0.0,
+      "source_masks": 0.0,
+      "family_presence": 0.0,
+      "membership": 0.0,
+      "family_pan": 0.0,
+      "membership_update": 0.0
+    },
+    "carried_chunk_nse": {
+      "source_stft": 2.075852350294399e-14,
+      "source_masks": 1.9983690682675562e-14,
+      "family_presence": 8.183358708955716e-15,
+      "membership": 4.883476534284411e-15,
+      "family_pan": 2.0390574316308014e-14,
+      "membership_update": 9.490474256240686e-15
+    },
+    "future_prefix_nse": {
+      "source_stft": 0.0,
+      "source_masks": 0.0,
+      "family_presence": 0.0,
+      "membership": 0.0,
+      "family_pan": 0.0,
+      "membership_update": 0.0
+    },
+    "reset_max_abs": 0.0,
+    "silence_finite": true,
+    "synthetic_second_step_gradient_abs_sums": {
+      "added_time_gru": 1.8065417606294432e-06,
+      "added_frequency_gru": 3.725597423454019e-06,
+      "added_local_rows": 2.2769479528506054e-06,
+      "added_global_rows": 7.998389222052538e-07,
+      "added_decoder_features": 4.429428946739478e-06
+    },
+    "limits": "CPU graph/initialization proof only on synthetic spectra. No actual TRAIN/DEV quality, CUDA/PCM, int8/C/device/car result."
+  },
+  "protocol_sha256": "a710e5f8cbac8dd1d6d3df5fa75c9fa6376357acd71d12970dac83c73bc98a98",
+  "expanded_initial_sha256": "385157334762f673339e24ab7893e70717464f795a55293ae1f77f0cd2cb8323"
+}

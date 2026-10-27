@@ -1,0 +1,90 @@
+{
+  "architecture": "unified-spectral-context-prototype-v1",
+  "trained": false,
+  "passed": true,
+  "gates": {
+    "chunk": true,
+    "future_prefix": true,
+    "reset_exact": true,
+    "finite_silence": true,
+    "source_attribution": true,
+    "cross_band_communication": true,
+    "all_module_gradients": true,
+    "observed_dense_count_matches": true,
+    "selected_dense_under150M": true
+  },
+  "config": {
+    "width": 48,
+    "depth": 2,
+    "local": 24,
+    "global_width": 24,
+    "decoder": 24,
+    "log_mean": -3.6760525703430176,
+    "log_std": 2.43422794342041,
+    "time_groups": 4,
+    "frequency_channels": 8,
+    "kernel": 7
+  },
+  "cost": {
+    "parameters": 834534,
+    "fps": 93.75,
+    "all_source_dense_macs_per_frame": {
+      "input_projection": 295200,
+      "grouped_time_grus": 331776,
+      "time_projection": 221184,
+      "frequency_neighbours": 32256,
+      "full_band_down_up": 73728,
+      "full_band_matrix": 36864,
+      "interface": 55296,
+      "global_gru": 3456,
+      "decoder_bottleneck": 55296,
+      "scene_projection": 41472,
+      "source_projection": 393600
+    },
+    "eligible_scene_dense_macs_per_frame": {
+      "input_projection": 295200,
+      "grouped_time_grus": 331776,
+      "time_projection": 221184,
+      "frequency_neighbours": 32256,
+      "full_band_down_up": 73728,
+      "full_band_matrix": 36864,
+      "interface": 55296,
+      "global_gru": 3456,
+      "decoder_bottleneck": 55296,
+      "scene_projection": 41472,
+      "source_projection": 98400
+    },
+    "all_source_dense_macs_s": 144387000.0,
+    "eligible_scene_dense_macs_s": 116712000.0,
+    "excluded": "FFT/iFFT, norms, activations, level/features, complex products, pooling, scene state, renderer, int8 kernels and memory traffic; not device measured"
+  },
+  "chunk_nse": {
+    "source_stft": 6.356301243488031e-14,
+    "source_masks": 6.213927025320525e-14,
+    "family_presence": 3.5821397123145884e-15,
+    "membership": 2.5341234133207747e-15,
+    "family_pan": 2.9319772064907985e-14,
+    "membership_update": 3.297589901815898e-15
+  },
+  "future_prefix_nse": {
+    "source_stft": 0.0,
+    "source_masks": 0.0,
+    "family_presence": 0.0,
+    "membership": 0.0,
+    "family_pan": 0.0,
+    "membership_update": 0.0
+  },
+  "closure_nse": 3.831219234949804e-15,
+  "cross_band_change_nse": 0.0003862965643876662,
+  "gradient_absolute_sums": {
+    "encoder": 78.85762682068162,
+    "time_groups": 1.2544397106394172,
+    "time_communication": 3.81123386323452,
+    "frequency_neighbours": 1.7778223901987076,
+    "full_band_mix": 2.210723366588354,
+    "decoder": 12.6420176186366,
+    "scene": 3.989849716424942
+  },
+  "observed_all_source_dense_macs_per_frame": 1540128,
+  "scope": "synthetic CPU causal/state/attribution/gradient/dense-count checks only; no source fit, quality, quantization, C port, device or owner result"
+}

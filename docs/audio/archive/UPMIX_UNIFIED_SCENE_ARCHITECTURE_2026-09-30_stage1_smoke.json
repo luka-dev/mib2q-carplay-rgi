@@ -1,0 +1,58 @@
+{
+  "architecture": "unified-upmix-prototype-v1",
+  "trained": false,
+  "scope": "CPU structural smoke only; no acoustic/device/port result",
+  "torch_version": "2.10.0",
+  "config": {
+    "width": 24,
+    "depth": 2,
+    "local": 16,
+    "global_width": 16,
+    "decoder": 16,
+    "log_mean": -3.6760525703430176,
+    "log_std": 2.43422794342041
+  },
+  "cost": {
+    "parameters": 483086,
+    "fps": 93.75,
+    "dense_macs_per_frame": {
+      "input_projection": 147600,
+      "time_grus": 331776,
+      "frequency_grus": 248832,
+      "residual_projections": 110592,
+      "interface": 18432,
+      "global_gru": 1536,
+      "decoder_bottleneck": 24576,
+      "four_source_projection": 262400,
+      "scene_projection": 27648
+    },
+    "dense_macs_per_second": 110005500.0,
+    "excluded": "FFT/iFFT, norms, activations, level/features, complex products, pooling, scene state, renderer, int8 kernels and memory traffic"
+  },
+  "chunk_max_abs_errors": {
+    "source_stft": 7.152557373046875e-07,
+    "source_masks": 2.44056280962468e-07,
+    "family_presence": 1.1920928955078125e-07,
+    "membership": 1.1920928955078125e-07,
+    "family_pan": 2.2351741790771484e-07,
+    "membership_update": 1.1920928955078125e-07
+  },
+  "future_prefix_max_abs_errors": {
+    "source_stft": 0.0,
+    "source_masks": 0.0,
+    "family_presence": 0.0,
+    "membership": 0.0,
+    "family_pan": 0.0,
+    "membership_update": 0.0
+  },
+  "reset_max_abs_error": 0.0,
+  "attribution_closure_nse": 3.8077125240549344e-15,
+  "gradient_absolute_sums": {
+    "encoder": 78.2960025712382,
+    "trunk": 11.919417412020266,
+    "decoder": 8.07450825360138,
+    "scene": 2.9046244621276855
+  },
+  "silence_finite": true,
+  "source_sha256": "c7aa0abc74dda830a5c306a5f61c30ae95ece5f8bdf61cd693ee4db57ff3fc46"
+}

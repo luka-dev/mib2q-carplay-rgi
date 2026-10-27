@@ -10,7 +10,11 @@
 // QNX 6.5 xtgmath float fmin/fmax templates recurse with GCC 8.5.
 // Use the explicit libm float entry points throughout layout, framing and draw.
 namespace {
-constexpr float Pitch=36, Height=CR_LANE_PANEL_HEIGHT, Padding=8, Bottom=0;
+// Lane cells follow the stock HUD (8W6919617 lg_dr_* assets, r0764/r0765 screens): 33 px pitch,
+// 5 px shafts, 11 px heads, glyphs 26 px tall inside a 2 px divider dashed 8/4 over 32 px. The glyphs
+// sit at y 3..29 (stock 4..30): the last source rows below y=178 must stay clear (test_lane_mask).
+constexpr float Pitch=33, Height=CR_LANE_PANEL_HEIGHT, Padding=8, Bottom=0;
+constexpr float Shaft=5, HeadHalf=5.5f, Base=29, Top=3;
 constexpr double FadeSeconds=.25;
 constexpr int Unknown=9, MaxVertices=4096;
 struct Point {float x,y;};
@@ -68,40 +72,56 @@ void stroke(Mesh &mesh,const Point *p,int n,float width,float cx) {
         mesh.triangle(left[i-1],right[i],left[i]);
     }
 }
-void glyph(Mesh &mesh,int direction,float cx) {
+/* Shaft up to y0, then a bend of radius r turning by `angle` toward side s. */
+int bend(Point *p,int n,float s,float y0,float r,float angle,int steps) {
+    p[n++]={0,y0};
+    for(int i=1;i<=steps;++i) {
+        float a=i*angle/steps;p[n++]={s*(r-r*std::cos(a)),y0-r*std::sin(a)};
+    }
+    return n;
+}
+/* HUD lg_dr shapes: the shaft rises high before it turns, heads are 11 px wide and
+ * 5.5 px long (7 px straight), so a 45/135 degree head is a right-angled corner.
+ * `low` is the HUD's combined-cell variant: the branch leaves the shared shaft lower. */
+void glyph(Mesh &mesh,int direction,float cx,bool low) {
     Point p[32],tip;int n=0;float s=direction<0?-1.f:1.f;
     int turn=direction<0?-direction:direction;
-    p[n++]={0,28};
-    if(turn==0) {p[n++]={0,10};tip={0,3};}
+    p[n++]={0,Base};
+    if(turn==0) {p[n++]={0,Top+7};tip={0,Top};}
     else if(turn==1) {
-        p[n++]={0,20};
-        for(int i=1;i<=4;++i) {
-            float t=i/4.f;p[n++]={s*2*t*t,20-4*t+2*t*t};
-        }
-        p[n++]={s*7.5f,12.5f};tip={s*12.5f,7.5f};
+        n=bend(p,n,s,low?18:16,3,.78539816f,3);  // low: wider, clear of a straight head
+        Point e=p[n-1];float k=(e.y-Top)*1.4142136f-HeadHalf;   // tip on y=Top
+        p[n++]={e.x+s*k*.70710678f,e.y-k*.70710678f};
+        tip={p[n-1].x+s*HeadHalf*.70710678f,Top};
     } else if(turn==2) {
-        p[n++]={0,17};
-        for(int i=1;i<=6;++i) {
-            float a=i*1.5707963f/6;p[n++]={s*(4-4*std::cos(a)),17-4*std::sin(a)};
-        }
-        p[n++]={s*7,13};tip={s*14,13};
+        n=bend(p,n,s,13,2.5f,1.5707963f,4);
+        p[n++]={s*6.5f,10.5f};tip={s*12,10.5f};
     } else if(turn==3) {
-        p[n++]={0,14};
-        for(int i=1;i<=9;++i) {
-            float a=i*2.3561945f/9;p[n++]={s*(4-4*std::cos(a)),14-4*std::sin(a)};
-        }
-        tip={p[n-1].x+s*4.95f,p[n-1].y+4.95f};
+        n=bend(p,n,s,11,4,2.3561945f,9);
+        Point e=p[n-1];
+        p[n++]={e.x+s*3.5f*.70710678f,e.y+3.5f*.70710678f};
+        tip={p[n-1].x+s*HeadHalf*.70710678f,p[n-1].y+HeadHalf*.70710678f};
     } else {
-        p[n++]={0,11};
-        for(int i=1;i<=12;++i) {
-            float a=i*3.1415927f/12;p[n++]={s*(4-4*std::cos(a)),11-4*std::sin(a)};
-        }
-        p[n++]={s*8,17};tip={s*8,24};
+        n=bend(p,n,s,10,4.5f,3.1415927f,12);
+        p[n++]={s*9,14};tip={s*9,19.5f};
     }
-    stroke(mesh,p,n,3.1f,cx);
+    static const float drop[]={0,0,6,8,9};   // 45 degrees widens instead (above)
+    if(low) {for(int i=1;i<n;++i)p[i].y+=drop[turn];tip.y+=drop[turn];}
+    stroke(mesh,p,n,Shaft,cx);
     Point end=p[n-1],d=unit({tip.x-end.x,tip.y-end.y});
-    mesh.triangle({cx+tip.x,tip.y},{cx+end.x-d.y*4.5f,end.y+d.x*4.5f},
-                  {cx+end.x+d.y*4.5f,end.y-d.x*4.5f});
+    mesh.triangle({cx+tip.x,tip.y},{cx+end.x-d.y*HeadHalf,end.y+d.x*HeadHalf},
+                  {cx+end.x+d.y*HeadHalf,end.y-d.x*HeadHalf});
+}
+/* Like the HUD assets, a cell's arrows are centred as a whole: a turn's shaft sits off-centre. */
+void centre(Geometry &mesh,int gray,int blue,float cx) {
+    float lo=1e9f,hi=-1e9f;
+    Mesh *meshes[]={&mesh.gray,&mesh.blue};int first[]={gray,blue};
+    for(int m=0;m<2;++m)for(int v=first[m];v<meshes[m]->count;++v) {
+        lo=::fminf(lo,meshes[m]->xy[v*2]);hi=::fmaxf(hi,meshes[m]->xy[v*2]);
+    }
+    if(lo>hi)return;
+    float shift=cx-(lo+hi)*.5f;
+    for(int m=0;m<2;++m)for(int v=first[m];v<meshes[m]->count;++v)meshes[m]->xy[v*2]+=shift;
 }
 void compile(Geometry &mesh,const cr_lane_panel_layout_t &layout) {
     mesh.gray.count=mesh.blue.count=mesh.dividers.count=0;
@@ -114,13 +134,20 @@ void compile(Geometry &mesh,const cr_lane_panel_layout_t &layout) {
             // Unknown is a neutral dash, never a fabricated straight arrow.
             mesh.gray.rect(cx-3.5f,18,7,1.6f);
         } else {
+            int gray=mesh.gray.count,blue=mesh.blue.count;
             for(int j=0;j<cell.count;++j) {
-                int d=cell.directions[j];
-                glyph(cell.recommended && d==cell.primary?mesh.blue:mesh.gray,d,cx);
+                int d=cell.directions[j];bool low=false;
+                // Lowered when the cell also holds a smaller turn straight ahead or to the same side.
+                for(int k=0;k<cell.count;++k) {
+                    int e=cell.directions[k];
+                    if(std::abs(e)<std::abs(d) && (e==0 || (e<0)==(d<0)))low=true;
+                }
+                glyph(cell.recommended && d==cell.primary?mesh.blue:mesh.gray,d,cx,low);
             }
+            centre(mesh,gray,blue,cx);
         }
         if(i+1<layout.count)for(int j=0;j<3;++j)
-            mesh.dividers.rect(cx+Pitch*.5f-.5f,7+j*8,1,4);
+            mesh.dividers.rect(cx+Pitch*.5f-1,j*12,2,8);
     }
 }
 float easing(float t) {return t*t*t*(t*(t*6-15)+10);}

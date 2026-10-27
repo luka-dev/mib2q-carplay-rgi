@@ -1,0 +1,257 @@
+{
+  "complete": true,
+  "float_verified": true,
+  "int8_screen_gates": {
+    "eligible_sdr_no_more_than_03db_loss": true,
+    "no_eligible_crop_over_1db_loss": true,
+    "eligible_tx_at_least_90pct_float": true,
+    "vocal_sdr_no_more_than_03db_loss": true,
+    "vocal_tx_no_more_than_001_regression": true,
+    "drums_sdr_no_more_than_03db_loss": false,
+    "drums_tx_no_more_than_001_regression": true,
+    "bass_sdr_no_more_than_03db_loss": true,
+    "bass_tx_no_more_than_001_regression": true
+  },
+  "int8_screen_pass": false,
+  "reference": {
+    "eligible": {
+      "sdr_db": [
+        8.454290390014648,
+        11.42943000793457,
+        2.9895076751708984,
+        5.007209777832031
+      ],
+      "eligible_operator_tx": [
+        0.8647320898384436,
+        0.9336189558666038,
+        0.5763609450634551,
+        0.7405352462339693
+      ]
+    },
+    "vocal": {
+      "sdr_db": [
+        6.798681259155273,
+        11.972782135009766,
+        9.574663162231445,
+        6.341219902038574
+      ],
+      "eligible_operator_tx": [
+        0.08475955613433063,
+        0.05295600375942002,
+        0.03646159574699541,
+        0.1117987129368744
+      ]
+    },
+    "drums": {
+      "sdr_db": [
+        8.695618629455566,
+        12.542535781860352,
+        11.598037719726562,
+        7.458291053771973
+      ],
+      "eligible_operator_tx": [
+        0.022038997209882928,
+        0.022590896875862163,
+        0.006368336064436441,
+        0.015241354418573175
+      ]
+    },
+    "bass": {
+      "sdr_db": [
+        6.019890785217285,
+        null,
+        5.378313064575195,
+        5.320700645446777
+      ],
+      "eligible_operator_tx": [
+        0.07838876711593395,
+        null,
+        0.0600499272674791,
+        0.04221386089175169
+      ]
+    }
+  },
+  "arms": {
+    "float": {
+      "performance": {
+        "frames": 3012,
+        "dense_macs_per_frame": 1173392,
+        "dense_macs_s_at_93_75fps": 110005500,
+        "neural_ms_mean": 0.644463513,
+        "neural_ms_p50": 0.620000064,
+        "neural_ms_p99": 0.866200076,
+        "neural_ms_max": 0.95320004,
+        "state_bytes": 11600,
+        "scope": "standalone neural path only; excludes FFT, synthesis, DSP, scheduler, IO; no device or acoustic claim"
+      },
+      "quality": {
+        "eligible": {
+          "sdr_db": [
+            8.454290390014648,
+            11.429428100585938,
+            2.989506721496582,
+            5.007209300994873
+          ],
+          "eligible_operator_tx": [
+            0.8647321010461355,
+            0.9336189476396022,
+            0.5763609762162551,
+            0.7405352431838046
+          ]
+        },
+        "vocal": {
+          "sdr_db": [
+            6.79868221282959,
+            11.97278118133545,
+            9.574663162231445,
+            6.341218948364258
+          ],
+          "eligible_operator_tx": [
+            0.08475953683360139,
+            0.052956006436874904,
+            0.0364616049434707,
+            0.11179867992200923
+          ]
+        },
+        "drums": {
+          "sdr_db": [
+            8.695618629455566,
+            12.542535781860352,
+            11.598039627075195,
+            7.458290100097656
+          ],
+          "eligible_operator_tx": [
+            0.022038995265723026,
+            0.022590926228342537,
+            0.006368337938640535,
+            0.01524135819866288
+          ]
+        },
+        "bass": {
+          "sdr_db": [
+            6.019889831542969,
+            null,
+            5.378314018249512,
+            5.3206987380981445
+          ],
+          "eligible_operator_tx": [
+            0.07838879555971899,
+            null,
+            0.060049938621695324,
+            0.04221388841875524
+          ]
+        }
+      },
+      "waveform_vs_torch_nse": {
+        "eligible": 2.88360927705064e-13,
+        "vocal": 1.423643295354808e-13,
+        "drums": 1.8876267582743986e-13,
+        "bass": 4.2808279432048727e-13
+      },
+      "scene_max_abs_error": {
+        "family_presence": 2.205371856689453e-06,
+        "membership": 1.6093254089355469e-06,
+        "family_pan": 6.586313247680664e-06,
+        "membership_update": 2.8312206268310547e-06
+      },
+      "output_sha256": "e36f840d0f4953fcd4c2d021950f39e1bff8b07de60cba023a7a4c59b3de9205",
+      "blob_sha256": "00020de259d89c83b7490ec91e82c2d66fd056d6c1954315316e33c35421daa9",
+      "gates": {
+        "all_source_waveform_parity": true,
+        "scene_parity": true,
+        "dense_macs_exact": true,
+        "eligible_sdr_parity": true,
+        "vocal_sdr_parity": true,
+        "drums_sdr_parity": true,
+        "bass_sdr_parity": true
+      }
+    },
+    "int8": {
+      "performance": {
+        "frames": 3012,
+        "dense_macs_per_frame": 1173392,
+        "dense_macs_s_at_93_75fps": 110005500,
+        "neural_ms_mean": 0.745327822,
+        "neural_ms_p50": 0.722300028,
+        "neural_ms_p99": 0.931199989,
+        "neural_ms_max": 5.171499914,
+        "state_bytes": 11600,
+        "scope": "standalone neural path only; excludes FFT, synthesis, DSP, scheduler, IO; no device or acoustic claim"
+      },
+      "quality": {
+        "eligible": {
+          "sdr_db": [
+            8.394061088562012,
+            11.370771408081055,
+            2.9089643955230713,
+            5.005841255187988
+          ],
+          "eligible_operator_tx": [
+            0.8751880242587495,
+            0.9379170781729487,
+            0.5723653990978131,
+            0.7386828667036629
+          ]
+        },
+        "vocal": {
+          "sdr_db": [
+            6.776895523071289,
+            11.915176391601562,
+            9.563851356506348,
+            6.528297424316406
+          ],
+          "eligible_operator_tx": [
+            0.08776447978739507,
+            0.05656692999550043,
+            0.03629119596024209,
+            0.10983663229770561
+          ]
+        },
+        "drums": {
+          "sdr_db": [
+            8.59827709197998,
+            12.672252655029297,
+            10.015714645385742,
+            7.424056053161621
+          ],
+          "eligible_operator_tx": [
+            0.023142648865772775,
+            0.021016111700014817,
+            0.006661803434283976,
+            0.015153579456925213
+          ]
+        },
+        "bass": {
+          "sdr_db": [
+            5.821619033813477,
+            null,
+            4.247706413269043,
+            5.217643737792969
+          ],
+          "eligible_operator_tx": [
+            0.08075194142701461,
+            null,
+            0.058964865602312004,
+            0.04290396649695589
+          ]
+        }
+      },
+      "waveform_vs_torch_nse": {
+        "eligible": 0.001871613456218912,
+        "vocal": 0.0009189344179283749,
+        "drums": 0.00290314125620699,
+        "bass": 0.005133025106807605
+      },
+      "scene_max_abs_error": {
+        "family_presence": 0.12962520122528076,
+        "membership": 0.09614908695220947,
+        "family_pan": 0.33340269327163696,
+        "membership_update": 0.12187784910202026
+      },
+      "output_sha256": "cbdd9782c98cc95894be637cc3ef11e6bb519e41ff12ae67331fb1ce004f84b9",
+      "blob_sha256": "34d0b94c894d8062d2db8a3575e6f776e0f6dc8437de43c2e852053eb77873fe"
+    }
+  },
+  "protocol_sha256": "117c11d29cddf6592c5f1c13c0003a162646a5d7a832e3a5ed501a4b30fb1fd6",
+  "limits": "No DEV/C rear, QAT, device NEON validation, loaded deadlines, FFT/DSP latency or live hook. Native Windows scalar/auto-vectorized int8 is not Krait performance."
+}

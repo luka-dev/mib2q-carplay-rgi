@@ -96,12 +96,11 @@ typedef struct {
  * screen_manage_window into the DisplayManager group).  98 has no stock owner →
  * no collision war with native nav (the old id-20 takeover / flapping is gone).
  *
- * Context routing is NO LONGER done here.  The Java patch declares the cluster
- * context dc[80]={98,101,102,33} (maneuver over KDK backings over the stock native
- * map) in DisplayManagerMIB2High.defineContexts() and calls
- * DisplayManager.switchContext() to point the cluster (LVDS2) at it, driving
- * setActiveDisplayable(4, 98) → the MOST encoder reads our window.  This renderer
- * only creates the managed window + draws; it runs NO dmdt.
+ * Context routing is NO LONGER done here.  The Java patch declares cluster
+ * contexts dc[80]={98,101,102,99} (nav: maneuver over the KDK backings + CarPlay
+ * map) / dc[81]={99} (map only) in DisplayManagerMIB2High and switches between them
+ * (AltScreenModule).  This renderer only creates the managed window + draws; it
+ * runs NO dmdt.  (altscreen_render draws the CarPlay map on id 99.)
  *
  * On shutdown screen_destroy_window vacates m_surfaceSources[98]; Java switches
  * the cluster back to the stock context (dc[74]). */

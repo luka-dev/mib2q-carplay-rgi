@@ -1,0 +1,35 @@
+{
+  "scope": "Spectral48x2 standalone QNX/ARMv7 neural/audio binaries; build and stack usage, no device execution or deadlines",
+  "files": {
+    "upmix_unified_runtime": {
+      "sha256": "601eaf4dd71adeebc6ef4d4670177c1570264dc603065e13679275240932c377",
+      "bytes": 79982
+    },
+    "upmix_unified_audio_stream": {
+      "sha256": "478926dcb73f5522a358daa8a750f46859db916f5f2a4bd482ee90c6c0d41c3f",
+      "bytes": 92419
+    }
+  },
+  "metadata": {
+    "docker-image-id.txt": "sha256:59cf5a575d69869e3983f136bdcf9e7e7d997e1206dcfc912e0d1988c68ad213\n",
+    "compiler-version.txt": "arm-unknown-nto-qnx6.5.0eabi-gcc (GCC) 8.5.0\nCopyright (C) 2018 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n",
+    "flags.txt": "-O2 -g -std=gnu99 -Wall -Wextra -fdata-sections -ffunction-sections -O3 -fno-math-errno -Werror -mfpu=neon -mfloat-abi=softfp -fstack-usage\n",
+    "source-sha256.txt": "7e6fa4e220ea70b59ac676238e06ac14fdfb80e90799d128cfa3a1faf4f3b1c3  tools/stereo-upmix-render/unified_spectral_runtime_v1/unified_runtime.h\nb7899528e67f3d3f06e5d2d300fe74ec2f3b0a943e1b8eb42232cf7536415644  tools/stereo-upmix-render/unified_spectral_runtime_v1/unified_runtime.c\n8723ddec43af6bfafc605439e65c71a623b0a1b38176850019d83c8efe4e9bf6  tools/stereo-upmix-render/unified_spectral_runtime_v1/unified_runtime_cli.c\n8ef0a6f1101faebead744344c6535c94c74be1bf9830953dcb2d9b0d009c8c26  tools/stereo-upmix-render/unified_spectral_runtime_v1/unified_audio_stream.h\n829f9062d69f86e94424d8bec193835d5efccf61f8682f7e8932cbcab1f5f12e  tools/stereo-upmix-render/unified_spectral_runtime_v1/unified_audio_stream.c\n0127099ca4c91e98a315e509022f9426587bbeafe9980f15bc47977acf0ce23d  tools/stereo-upmix-render/unified_spectral_runtime_v1/unified_audio_cli.c\n",
+    "executable-sha256.txt": "601eaf4dd71adeebc6ef4d4670177c1570264dc603065e13679275240932c377  /tmp/upmix_spectral_qnx_build_v1/upmix_unified_runtime\n478926dcb73f5522a358daa8a750f46859db916f5f2a4bd482ee90c6c0d41c3f  /tmp/upmix_spectral_qnx_build_v1/upmix_unified_audio_stream\n",
+    "unified_runtime.su": "unified_runtime.c:55:17:read_u16\t16\tstatic\nunified_runtime.c:50:17:read_u32\t16\tstatic\nunified_runtime.c:240:13:norm\t8\tstatic\nunified_runtime.c:74:12:linear_bind.isra.0\t136\tstatic\nunified_runtime.c:80:12:norm_bind\t136\tstatic\nunified_runtime.c:192:13:linear.isra.3\t608\tstatic\nunified_runtime.c:249:13:gru\t632\tstatic\nunified_runtime.c:259:12:predict_selected\t68848\tstatic\nunified_runtime.c:86:12:gru_bind.constprop\t160\tstatic\nunified_runtime.c:60:14:read_float\t24\tstatic\nunified_runtime.c:95:6:umx_free\t16\tstatic\nunified_runtime.c:100:11:umx_load\t192\tstatic\nunified_runtime.c:258:6:umx_reset\t0\tstatic\nunified_runtime.c:334:5:umx_predict\t16\tstatic\nunified_runtime.c:337:5:umx_predict_eligible\t16\tstatic\n",
+    "unified_audio_stream.su": "unified_audio_stream.c:21:13:fft\t64\tstatic\nunified_audio_stream.c:39:10:umx_audio_state_bytes\t0\tstatic\nunified_audio_stream.c:40:17:umx_audio_create\t64\tstatic\nunified_audio_stream.c:53:6:umx_audio_free\t0\tstatic\nunified_audio_stream.c:54:6:umx_audio_reset\t8\tstatic\nunified_audio_stream.c:59:18:umx_audio_prediction\t0\tstatic\nunified_audio_stream.c:60:5:umx_audio_process\t112\tstatic\n",
+    "unified_audio_cli.su": "unified_audio_cli.c:19:12:order\t0\tstatic\nunified_audio_cli.c:10:15:now\t16\tstatic\nunified_audio_cli.c:20:5:main\t8568\tstatic\n"
+  },
+  "windows": {
+    "compiler_version": "x86_64-w64-mingw32-gcc (GCC) 16.1.0\nCopyright (C) 2026 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n",
+    "flags": [
+      "-O3",
+      "-std=c99",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-static"
+    ],
+    "executable_sha256": "090d699dc0681db3483bd1b1390e607e7b6544c74dab58c1fe29a4602cec658d"
+  }
+}

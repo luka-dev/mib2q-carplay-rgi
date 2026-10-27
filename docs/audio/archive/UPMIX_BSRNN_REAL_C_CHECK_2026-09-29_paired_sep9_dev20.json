@@ -1,0 +1,378 @@
+{
+  "scope": "paired stem harness; held-out, causality, device budget and listening are separate gates",
+  "anchor": "D:\\upmix\\runs\\direct_object_sep9_probe20\\direct_no_bed_body0_cal\\stems.csv",
+  "candidate": "20 matching songs from UPMIX_BSRNN_REAL_C_CHECK_2026-09-29_direct.csv",
+  "songs": 20,
+  "rows_anchor": 115,
+  "rows_candidate": 115,
+  "any_stem_swing": {
+    "anchor": 1,
+    "candidate": 0,
+    "new": [],
+    "resolved": [
+      "Ben James - The Bench"
+    ]
+  },
+  "by_stem": {
+    "vocals": {
+      "median_rear": {
+        "n": 20,
+        "anchor_median": 0.0186,
+        "candidate_median": 0.0024,
+        "difference_of_medians": -0.0162,
+        "paired_median_delta": -0.0158,
+        "paired_median_delta_ci90": [
+          -0.0252,
+          -0.0071
+        ]
+      },
+      "slope_per_6dB": {
+        "n": 20,
+        "anchor_median": -0.0122,
+        "candidate_median": -0.01,
+        "difference_of_medians": 0.0023,
+        "paired_median_delta": 0.0019,
+        "paired_median_delta_ci90": [
+          -0.0022,
+          0.0072
+        ]
+      },
+      "rear_rms_db": {
+        "n": 20,
+        "anchor_median": -37.699,
+        "candidate_median": -36.5498,
+        "difference_of_medians": 1.1492,
+        "paired_median_delta": 1.0666,
+        "paired_median_delta_ci90": [
+          0.5657,
+          1.7724
+        ]
+      }
+    },
+    "guitar": {
+      "median_rear": {
+        "n": 20,
+        "anchor_median": 0.1053,
+        "candidate_median": 0.2039,
+        "difference_of_medians": 0.0986,
+        "paired_median_delta": 0.0946,
+        "paired_median_delta_ci90": [
+          0.0823,
+          0.1137
+        ]
+      },
+      "slope_per_6dB": {
+        "n": 20,
+        "anchor_median": 0.0149,
+        "candidate_median": 0.0241,
+        "difference_of_medians": 0.0092,
+        "paired_median_delta": 0.0113,
+        "paired_median_delta_ci90": [
+          0.0046,
+          0.0161
+        ]
+      },
+      "rear_rms_db": {
+        "n": 20,
+        "anchor_median": -37.699,
+        "candidate_median": -36.5498,
+        "difference_of_medians": 1.1492,
+        "paired_median_delta": 1.0666,
+        "paired_median_delta_ci90": [
+          0.5657,
+          1.7724
+        ]
+      }
+    },
+    "piano": {
+      "median_rear": {
+        "n": 9,
+        "anchor_median": 0.0889,
+        "candidate_median": 0.2176,
+        "difference_of_medians": 0.1287,
+        "paired_median_delta": 0.1038,
+        "paired_median_delta_ci90": [
+          0.0597,
+          0.1213
+        ]
+      },
+      "slope_per_6dB": {
+        "n": 9,
+        "anchor_median": -0.0019,
+        "candidate_median": 0.0289,
+        "difference_of_medians": 0.0309,
+        "paired_median_delta": 0.0323,
+        "paired_median_delta_ci90": [
+          0.0137,
+          0.0347
+        ]
+      },
+      "rear_rms_db": {
+        "n": 9,
+        "anchor_median": -36.645,
+        "candidate_median": -35.7894,
+        "difference_of_medians": 0.8557,
+        "paired_median_delta": 1.0995,
+        "paired_median_delta_ci90": [
+          0.0999,
+          1.9791
+        ]
+      }
+    },
+    "other_keys": {
+      "median_rear": {
+        "n": 13,
+        "anchor_median": 0.1437,
+        "candidate_median": 0.2282,
+        "difference_of_medians": 0.0846,
+        "paired_median_delta": 0.0739,
+        "paired_median_delta_ci90": [
+          0.0417,
+          0.0874
+        ]
+      },
+      "slope_per_6dB": {
+        "n": 13,
+        "anchor_median": 0.0269,
+        "candidate_median": 0.0275,
+        "difference_of_medians": 0.0007,
+        "paired_median_delta": -0.01,
+        "paired_median_delta_ci90": [
+          -0.0149,
+          0.0141
+        ]
+      },
+      "rear_rms_db": {
+        "n": 13,
+        "anchor_median": -37.5288,
+        "candidate_median": -35.9919,
+        "difference_of_medians": 1.5368,
+        "paired_median_delta": 1.0337,
+        "paired_median_delta_ci90": [
+          0.5657,
+          1.9791
+        ]
+      }
+    },
+    "bowed_strings": {
+      "median_rear": {
+        "n": 3,
+        "anchor_median": 0.1883,
+        "candidate_median": 0.228,
+        "difference_of_medians": 0.0398,
+        "paired_median_delta": 0.0469,
+        "paired_median_delta_ci90": [
+          0.0272,
+          0.102
+        ]
+      },
+      "slope_per_6dB": {
+        "n": 3,
+        "anchor_median": 0.0034,
+        "candidate_median": 0.0344,
+        "difference_of_medians": 0.031,
+        "paired_median_delta": 0.031,
+        "paired_median_delta_ci90": [
+          0.0081,
+          0.0312
+        ]
+      },
+      "rear_rms_db": {
+        "n": 3,
+        "anchor_median": -36.0584,
+        "candidate_median": -35.7894,
+        "difference_of_medians": 0.2691,
+        "paired_median_delta": 0.0999,
+        "paired_median_delta_ci90": [
+          -0.3576,
+          0.5691
+        ]
+      }
+    },
+    "wind": {
+      "median_rear": {
+        "n": 2,
+        "anchor_median": 0.1313,
+        "candidate_median": 0.2271,
+        "difference_of_medians": 0.0958,
+        "paired_median_delta": 0.0958,
+        "paired_median_delta_ci90": [
+          0.079,
+          0.1126
+        ]
+      },
+      "slope_per_6dB": {
+        "n": 2,
+        "anchor_median": 0.0319,
+        "candidate_median": 0.0239,
+        "difference_of_medians": -0.0079,
+        "paired_median_delta": -0.0079,
+        "paired_median_delta_ci90": [
+          -0.0189,
+          0.003
+        ]
+      },
+      "rear_rms_db": {
+        "n": 2,
+        "anchor_median": -39.6805,
+        "candidate_median": -37.4804,
+        "difference_of_medians": 2.2001,
+        "paired_median_delta": 2.2001,
+        "paired_median_delta_ci90": [
+          0.5691,
+          3.8311
+        ]
+      }
+    },
+    "other": {
+      "median_rear": {
+        "n": 4,
+        "anchor_median": 0.0146,
+        "candidate_median": 0.0871,
+        "difference_of_medians": 0.0725,
+        "paired_median_delta": 0.0419,
+        "paired_median_delta_ci90": [
+          0.0144,
+          0.1155
+        ]
+      },
+      "slope_per_6dB": {
+        "n": 4,
+        "anchor_median": 0.0111,
+        "candidate_median": 0.0095,
+        "difference_of_medians": -0.0016,
+        "paired_median_delta": -0.0023,
+        "paired_median_delta_ci90": [
+          -0.0048,
+          0.0379
+        ]
+      },
+      "rear_rms_db": {
+        "n": 4,
+        "anchor_median": -40.1265,
+        "candidate_median": -37.6674,
+        "difference_of_medians": 2.4591,
+        "paired_median_delta": 1.8862,
+        "paired_median_delta_ci90": [
+          1.3392,
+          2.7906
+        ]
+      }
+    },
+    "bass": {
+      "median_rear": {
+        "n": 16,
+        "anchor_median": 0.0704,
+        "candidate_median": 0.0059,
+        "difference_of_medians": -0.0646,
+        "paired_median_delta": -0.0461,
+        "paired_median_delta_ci90": [
+          -0.0628,
+          -0.0209
+        ]
+      },
+      "slope_per_6dB": {
+        "n": 18,
+        "anchor_median": -0.0076,
+        "candidate_median": -0.0124,
+        "difference_of_medians": -0.0048,
+        "paired_median_delta": -0.0046,
+        "paired_median_delta_ci90": [
+          -0.007,
+          0.0095
+        ]
+      },
+      "rear_rms_db": {
+        "n": 20,
+        "anchor_median": -37.699,
+        "candidate_median": -36.5498,
+        "difference_of_medians": 1.1492,
+        "paired_median_delta": 1.0666,
+        "paired_median_delta_ci90": [
+          0.5657,
+          1.7724
+        ]
+      }
+    },
+    "drums": {
+      "median_rear": {
+        "n": 20,
+        "anchor_median": 0.0161,
+        "candidate_median": 0.0045,
+        "difference_of_medians": -0.0116,
+        "paired_median_delta": -0.0041,
+        "paired_median_delta_ci90": [
+          -0.011,
+          -0.0017
+        ]
+      },
+      "slope_per_6dB": {
+        "n": 20,
+        "anchor_median": -0.0025,
+        "candidate_median": -0.0065,
+        "difference_of_medians": -0.004,
+        "paired_median_delta": -0.001,
+        "paired_median_delta_ci90": [
+          -0.0041,
+          0.0005
+        ]
+      },
+      "rear_rms_db": {
+        "n": 20,
+        "anchor_median": -37.699,
+        "candidate_median": -36.5498,
+        "difference_of_medians": 1.1492,
+        "paired_median_delta": 1.0666,
+        "paired_median_delta_ci90": [
+          0.5657,
+          1.7724
+        ]
+      }
+    },
+    "percussion": {
+      "median_rear": {
+        "n": 4,
+        "anchor_median": 0.0021,
+        "candidate_median": 0.0099,
+        "difference_of_medians": 0.0078,
+        "paired_median_delta": -0.0004,
+        "paired_median_delta_ci90": [
+          -0.0711,
+          0.067
+        ]
+      },
+      "slope_per_6dB": {
+        "n": 4,
+        "anchor_median": -0.0003,
+        "candidate_median": -0.0068,
+        "difference_of_medians": -0.0064,
+        "paired_median_delta": -0.0054,
+        "paired_median_delta_ci90": [
+          -0.032,
+          0.0014
+        ]
+      },
+      "rear_rms_db": {
+        "n": 4,
+        "anchor_median": -43.9032,
+        "candidate_median": -42.964,
+        "difference_of_medians": 0.9393,
+        "paired_median_delta": 1.1069,
+        "paired_median_delta_ci90": [
+          0.4014,
+          1.9791
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "bootstrap_trials": 5000,
+    "seed": 1609,
+    "comparison_script_sha256": "820af958617bc1900541e378d10753acfb0f89e72c9d96d71c057300fb80d708",
+    "paired_song_stem_keys_equal": true,
+    "subset_manifest_sha256": "d96957f2d6ad2087aed7fd889e3fb17e542097839a69cc6722eab9236309d0a0",
+    "anchor_csv_sha256": "f7ca07c1ba4eb06162fffcfb4386b03d15ef50d69a903829d2c919382eee47a9",
+    "candidate_subset_sha256": "67c917e521ed616324c920784fc64189e4afe53a2e3f6555d5c44698fd17774e",
+    "subset_scope": "Previously inspected enriched DEV20 within the full40; no independent data"
+  }
+}

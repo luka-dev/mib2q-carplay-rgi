@@ -226,7 +226,7 @@
  * sendManeuvers walks the full source) — long highway trips routinely
  * cross 20+ events.  iOS's own CRAccNavInfoCache defaults to 1000
  * entries; we keep a much smaller LRU here, with active-list eviction
- * protection (rgd_is_active_index / rgd_is_active_lane_index). */
+ * protection (rgd_is_active_index); lane events drop the lowest index. */
 #define MANEUVER_CACHE_SIZE 32
 #define RGD_HEX_PREVIEW_MAX 96
 /*
@@ -289,7 +289,6 @@ typedef struct {
     uint8_t source_supports_route_guidance;
     uint16_t maneuver_count;
     uint16_t lane_guidance_index;
-    int16_t lane_guidance_slot;  /* Bus-only remapped slot for lane_guidance_index */
     uint16_t lane_guidance_total;
     uint32_t distance_remaining;
     uint32_t dist_to_maneuver;
@@ -326,7 +325,6 @@ typedef struct {
 #define RGD_UPD_LANE_SHOWING         (1ULL << 18)
 #define RGD_UPD_SOURCE_NAME          (1ULL << 19)
 #define RGD_UPD_SOURCE_SUPPORTS_RG   (1ULL << 20)
-#define RGD_UPD_LANE_SLOT            (1ULL << 21)  /* Bus-only remapped lane slot */
 
 /* rgd_lane_guidance_t present bits */
 #define RGD_LANE_COMPONENT_IDS       (1ULL << 0)
@@ -351,8 +349,6 @@ typedef struct {
     char description[256];
     char after_road_name[256];
     char distance_string[64];
-    rgd_lane_t lanes[MAX_LANE_GUIDANCE];
-    uint8_t lane_count;
     uint16_t lane_guidance_raw_len;
 #if RGD_TRACE_RAW_FULL
     char lane_guidance_hex[(RGD_HEX_PREVIEW_MAX * 3) + 1];
@@ -382,7 +378,6 @@ typedef struct {
 #define RGD_MAN_LANE_GUIDANCE_RAW    (1ULL << 12)
 #define RGD_MAN_EXIT_INFO_RAW        (1ULL << 13)
 #define RGD_MAN_EXIT_INFO_STR        (1ULL << 14)
-#define RGD_MAN_LANE_GUIDANCE        (1ULL << 15)  /* Parsed lane data in lanes[] */
 #define RGD_MAN_LINKED_LANE_INDEX    (1ULL << 16)  /* Scalar linked lane guidance index */
 
 /* ============================================================

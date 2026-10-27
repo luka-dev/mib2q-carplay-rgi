@@ -139,8 +139,8 @@ public class CombiMapController extends DisplayControllerEvo implements NaviMoKo
     }
 
     /** Single funnel for the fullscreen/smallscreen axis.  Reads the choice model once, and only on
-     *  a real change (or when forced on connect) publishes it via ScreenModule (the view-size
-     *  cache and its single writer) and repositions the map plane.
+     *  a real change (or when forced on connect) publishes it to the altScreen hook + renderer via
+     *  AltScreenModule (the view-size cache and its single writer) and repositions the map plane.
      *  Both the NAV_VIEW_SIZE_CHOICE event and every KDK update route through here, so the cache is
      *  fed even on Classic clusters that drop the event during guidance. */
     private void syncViewSize(boolean force) {
@@ -160,12 +160,13 @@ public class CombiMapController extends DisplayControllerEvo implements NaviMoKo
         }
         this.appliedViewSizeSmall = now;
         /* The Audi View button is the authoritative fullscreen/smallscreen transition.
-         * setViewAreaMode() is the single writer of the view-size cache and notifies its
-         * listener (RouteGuidance). */
-        com.luka.carplay.core.ScreenModule.setViewAreaMode(
+         * Publish it to the altScreen hook even while its RTSP session is not up; both Java and C
+         * cache the desired mode.  setViewAreaMode() is the single writer of the view-size cache and
+         * fans out to the renderer, the hook bus and ClusterLayerController.reapply(). */
+        com.luka.carplay.core.AltScreenModule.setViewAreaMode(
             smallStage
-                ? com.luka.carplay.core.ScreenModule.VIEWAREA_SMALLSCREEN
-                : com.luka.carplay.core.ScreenModule.VIEWAREA_FULLSCREEN);
+                ? com.luka.carplay.core.AltScreenModule.VIEWAREA_SMALLSCREEN
+                : com.luka.carplay.core.AltScreenModule.VIEWAREA_FULLSCREEN);
         this.positionMap(dm, layout, smallStage);
     }
 
@@ -212,7 +213,7 @@ public class CombiMapController extends DisplayControllerEvo implements NaviMoKo
             previous, this.visibleKdk);
         /* NOTE: CarPlay nav-active is NOT derived from this stock KDK-visible bit — that only says
          * "the stock cluster is drawing a KDK panel".  The authoritative flip lives in RouteGuidance
-         * (rgActive == the BAP nav-active message) -> ScreenModule.setNavActive(). */
+         * (rgActive == the BAP nav-active message) -> AltScreenModule.setNavActive(). */
         return previous;
     }
 
@@ -342,14 +343,14 @@ public class CombiMapController extends DisplayControllerEvo implements NaviMoKo
     }
 
     public void switchToTargetContext() {
-        /* CarPlay cluster pin: while CarPlay owns the cluster (ScreenModule.isConnected()), do NOT
+        /* CarPlay cluster pin: while CarPlay owns the cluster (AltScreenModule.isConnected()), do NOT
          * switch terminal 1 to the stock kombi map.  On FPK the View button drives a model update ->
          * this controller -> switchContext(<stock map>), which is what pulled the cluster off ctx 80
          * ("View -> stock map").  Pin on isConnected() (true for the whole session from start()), NOT
          * clusterActive (set only after the first switch settles) — else a View press during the first
          * ~180ms switch slips the pin and strands the cluster on the stock map.  isConnected() clears
          * on disconnect, so the stock map returns then. */
-        if (this.kombiTerminal == CLUSTER_TERMINAL && com.luka.carplay.core.ScreenModule.isConnected()) {
+        if (this.kombiTerminal == CLUSTER_TERMINAL && com.luka.carplay.core.AltScreenModule.isConnected()) {
             logDisplay.log(10000000, "CombiMapController#switchToTargetContext SKIPPED — CarPlay owns cluster (ctx 80)");
             return;
         }

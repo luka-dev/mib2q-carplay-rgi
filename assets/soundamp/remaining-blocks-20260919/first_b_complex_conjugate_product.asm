@@ -1,0 +1,39 @@
+0012ecc7  713f 00bf       R1=I2
+0012ecc9  9ff1            DM(I7,M7)=R1
+0012ecca  9ff3            DM(I7,M7)=R3
+0012eccb  9ff5            DM(I7,M7)=R5
+0012eccc  9ff9            DM(I7,M7)=R9
+0012eccd  9ffd            DM(I7,M7)=R13
+0012ecce  9c08 0181       R3=DM(+1,I6)
+0012ecd0  713f 8082 1330  R3=PASS R3 || R1=I3
+0012ecd3  0704 0400 0033  IF LE JUMP 0x12ed06 (DB)
+0012ecd6  9ff1            DM(I7,M7)=R1
+0012ecd7  70fe 0a02 12c0  R2=PASS R12 || I4=R12
+0012ecda  707e 0902 a330  R3=R3-1 || I2=R4
+0012ecdd  70be 0982 1330  R3=PASS R3 || I3=R8
+0012ece0  0fa4 0002       M4=0x2
+0012ece2  553e 403f       R0=DM(I2,M4)
+0012ece4  573e 423f       R4=DM(I3,M4)
+0012ece6  0193 0815       F8=F1*F5
+0012ece8  0193 0d05       F13=F0*F5
+0012ecea  0700 0400 0018  IF EQ JUMP 0x12ed02 (DB)
+0012eced  55be 0013 0c04  F12=F0*F4 || R0=DM(I2,M6)
+0012ecf0  573e 4213 0914  F9=F1*F4 || R4=DM(I3,M4)
+0012ecf3  0d03 0000 000c  LCNTR=R3, DO 0x12ecff UNTIL LCE
+0012ecf6  55be 00d8 c800  F12=F0*F4, F8=F8+F12 || R1=DM(I2,M6)
+0012ecf9  55be 0059 d915  F13=F0*F5, F9=F9-F13 || R0=DM(I2,M6)
+0012ecfc  593e c413 0815  F8=F1*F5 || DM(I4,M4)=R8
+0012ecff  573e 4213 0914  F9=F1*F4 || R4=DM(I3,M4)
+0012ed02  c88c            F8+=F12
+0012ed03  c99d            F9-=F13
+0012ed04  593e c43f       DM(I4,M4)=R8
+0012ed06  9e08 0906       I2=DM(+6,I7)
+0012ed08  6e3e 2982 1020  R0=PASS R2 || R3=DM(+5,I7)
+0012ed0b  9e08 0284       R5=DM(+4,I7)
+0012ed0d  9e08 0483       R9=DM(+3,I7)
+0012ed0f  9e08 0682       R13=DM(+2,I7)
+0012ed11  9e08 0981       I3=DM(+1,I7)
+0012ed13  4dfe 0e3f       I12=DM(M7,I6)
+0012ed15  083f 343f       JUMP (M14,I12) (DB)
+0012ed17  1901            RFRAME
+0012ed18  0001            NOP
