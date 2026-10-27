@@ -7,8 +7,10 @@ but its native gate remains intentionally incomplete.
 ## 1. Collect without modifying
 
 Collect `gal`, `libautoreceiver.so`, `lsd.jxe`, `smartphone_integrator.json` and `gal.json` from the
-target firmware. Convert the owner's `lsd.jxe` locally. Run the compatibility checker and retain its
-JSON output with `--json`.
+target firmware. The ready-to-copy `collect_AndroidAutoFirmware_MoreIncredibleBash/` package performs
+this collection through M.I.B., verifies every SD-card copy with `cmp`, and never writes to a head-unit
+filesystem. Convert the owner's `lsd.jxe` locally. Run the compatibility checker and retain its JSON
+output with `--json`.
 
 ## 2. Native ABI audit
 

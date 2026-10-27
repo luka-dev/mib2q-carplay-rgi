@@ -193,6 +193,7 @@ sharp. Size changes apply on the next phone connection.
 | `android_auto/java/` | Shared Android Auto logic plus small firmware-specific Java source overrides |
 | `android_auto/deploy/` | Standalone GAL launcher and renderer supervision |
 | `firmware/profiles/` | Public fingerprints and installability state for known firmware; no firmware binaries |
+| `collect_AndroidAutoFirmware_MoreIncredibleBash/` | Read-only M.I.B. collector for exact firmware inputs |
 | `install_AndroidAuto_MoreIncredibleBash/` | M.I.B. audit/install/uninstall entrypoint |
 | `scripts/` | Compatibility checker, reproducible builds and SD-card staging |
 | `common/`, `maneuver_render/`, `toolchain/` | Shared LuKa renderer and QNX build foundation |
