@@ -241,7 +241,7 @@ def build_guest_and_ifs(candidate_override: str | None = None,
     LD_PRELOAD=
     /eso/lib/broker --node mmx --name broker &
     sleep 1
-    
+
     display_msg "--- candidate SI from verified writable filesystem ---"
     IPL_CONFIG_DIR_SMARTPHONE_INTEGRATOR=/etc/eso/production
     IPL_CONFIG_DIR_SMARTPHONE-VERSIONS=/etc/eso/production

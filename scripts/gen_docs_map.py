@@ -56,7 +56,7 @@ MAP = [
    ("Laboratory references", ["IOS_VM_LAB", "IOS210_CODE_REVIEW"]),
  ]),
  ("build-and-deploy", "Build and Deploy", "📦", [
-   ("Build and release", ["BUILD_SYSTEM", "DEPLOY_AND_RELEASE", "SCENE_BACKEND_DEPLOY",
+   ("Build and release", ["REPOSITORY_WORKFLOW", "BUILD_SYSTEM", "DEPLOY_AND_RELEASE", "SCENE_BACKEND_DEPLOY",
                            ]),
    ("Audits and recovery", ["ISSUE24_RCC_MMX_RECOVERY", "RE_ARTIFACTS"]),
  ]),

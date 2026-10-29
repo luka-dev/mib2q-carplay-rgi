@@ -72,7 +72,7 @@ The working source defines runtime behavior. Vehicle reports and laboratory meas
 
 **📦 Build and Deploy** · [overview](build-and-deploy/README.md)
 
-- Build and release: [Build System](build-and-deploy/BUILD_SYSTEM.md) · [Deploy and Release](build-and-deploy/DEPLOY_AND_RELEASE.md) · [Scene Backend Deploy](build-and-deploy/SCENE_BACKEND_DEPLOY.md)
+- Build and release: [Repository workflow](build-and-deploy/REPOSITORY_WORKFLOW.md) · [Build System](build-and-deploy/BUILD_SYSTEM.md) · [Deploy and Release](build-and-deploy/DEPLOY_AND_RELEASE.md) · [Scene Backend Deploy](build-and-deploy/SCENE_BACKEND_DEPLOY.md)
 - Audits and recovery: [Issue 24](build-and-deploy/ISSUE24_RCC_MMX_RECOVERY.md) · [RE Artifacts](build-and-deploy/RE_ARTIFACTS.md)
 
 **📚 Reference**
@@ -241,6 +241,7 @@ mindmap
         Historical iOS / stock210 interoperability review
     Build and Deploy
       Build and release
+        Repository workflow
         Build System
         Deploy and Release
         Scene Backend Deploy

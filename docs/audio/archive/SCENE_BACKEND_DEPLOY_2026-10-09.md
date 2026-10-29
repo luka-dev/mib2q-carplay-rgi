@@ -8,7 +8,7 @@
 
 ## 📦 What is in the package
 
-`scripts/prepare_install.sh build/unprotected` output, assembled by the usual path ([Deploy and Release](../../build-and-deploy/DEPLOY_AND_RELEASE.md)): the same tree as every package since 2026-09-22 with one model file, the mask blob, and none of the HSSR models. 
+`scripts/prepare_install.sh build/unprotected` output, assembled by the usual path ([Deploy and Release](../../build-and-deploy/DEPLOY_AND_RELEASE.md)): the same tree as every package since 2026-09-22 with one model file, the mask blob, and none of the HSSR models.
 
 | Artifact | Bytes | SHA-256 |
 |---|---:|---|

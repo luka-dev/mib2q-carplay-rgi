@@ -34,6 +34,7 @@ int main(void)
     cf_dictseti = (cf_dictseti_t)t_seti; cf_geti64 = (fn_cfdict_geti64_t)t_geti;
     /* advert ready, already published (no display mutation) */
     g_advert_session = s; g_advert_displays = (void *)4; g_advert_features = (void *)5;
+    g_advert_suggest_urls = (void *)7;
     g_advert_ready = 1; g_advert_published = 1;
 
     info_night = 1;                              /* no dio call yet: seed from /info */
@@ -47,6 +48,7 @@ int main(void)
     advert_clear_for_session(s);                 /* teardown: the next session seeds again */
     assert(g_alt_night_dio_session == NULL);
     g_advert_session = s; g_advert_displays = (void *)4; g_advert_features = (void *)5;
+    g_advert_suggest_urls = (void *)7;
     g_advert_ready = 1; g_advert_published = 1;
     alt_on_server_info(s, (void *)6);
     assert(g_alt_night_mode == 1);

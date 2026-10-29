@@ -519,6 +519,3 @@ The V850 implements the standard Audi MOST SWDL (`FBlock 0xC2`) state machine in
   - На **всех усилителях Bose (`0x160` `Var=2` и `0x161` `Var=0`)** обработчик `FktID 0x0D29` (`0x800549F4`) напрямую делает tail-call в **`0x8000BF4C` (обработчик `0x046B` AudioPilot)**!
   - `0x8000BF4C` проверяет булево значение `0..1` (`0x8005B05C`), сохраняет его в `BAC[0x00] = "VNC"` (`0x80061EC0`) и вызывает `0x80036D1C` (`Set_VNC`), который шлёт в SHARC `Entry[43] @ DM[0x000B2CC7]` (`w6 = 21` @ `0x0008CC2F`), записывая **`0`** в `DM[0x000B2AC8]`, `DM[0x000C7B9E]` и `DM[0x000C7E87]` (`Node[47] @ 0x000C7E7A`, блок AudioPilot).
   - **Вывод**: Вызов **`DSISound.setNoiseCompensation(conn, term, 0)` (`FktID 0x0D29 = 0`) на 100% штатно и полностью выключает Bose AudioPilot** как на `0x160` (`AU_PREM_2`), так и на `0x161` (`AU_STD_1`), а также выключает VNC на B&O Advanced `0x181` (`0x0019AED0` → `0x0015FD00` `'VNC user amount In %u'`) и GALA на Internal DSP `0x120..0x122` (`0x875D0680`). *(Бонусная находка: в заводском `MIB_AudioTable_AU_G22.xml` для `0x161` `AU_STD_1` ошибочно прописан `NOISECOMPENSATIONLEVEL_ENT = 2` (шкала `0..24`) вместо `3` (On/Off `0..1`), из-за чего любое значение `> 1` отвергается валидатором Bose `0x8005B05C`, но `0` = OFF и `1` = ON проходят всегда).*
-
-
-

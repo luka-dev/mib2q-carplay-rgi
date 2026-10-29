@@ -388,7 +388,7 @@ Every curated note as a link, grouped like the mindmap above.
 
 **📦 Build and Deploy** · [overview](../../build-and-deploy/README.md)
 
-- Build and release: [Build System](../../build-and-deploy/BUILD_SYSTEM.md) · [Deploy and Release](../../build-and-deploy/DEPLOY_AND_RELEASE.md) · [Scene Backend Deploy](../../build-and-deploy/SCENE_BACKEND_DEPLOY.md) 
+- Build and release: [Build System](../../build-and-deploy/BUILD_SYSTEM.md) · [Deploy and Release](../../build-and-deploy/DEPLOY_AND_RELEASE.md) · [Scene Backend Deploy](../../build-and-deploy/SCENE_BACKEND_DEPLOY.md)
 - Audits and recovery: [Production Audits](../../build-and-deploy/archive/PRODUCTION_AUDITS.md) · [Issue 24](../../build-and-deploy/ISSUE24_RCC_MMX_RECOVERY.md) · [RE Artifacts](../../build-and-deploy/RE_ARTIFACTS.md)
 
 **📚 Reference**

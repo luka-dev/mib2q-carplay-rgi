@@ -1,5 +1,7 @@
 # Build and Deploy
 
+Start with the [repository workflow](REPOSITORY_WORKFLOW.md) for the canonical source, branches and build boundaries.
+
 *Map of content for turning source into shipped binaries, assembling an installation package, and getting it onto the head unit without bricking anything.*
 
 ---

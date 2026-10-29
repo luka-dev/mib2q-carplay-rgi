@@ -31,7 +31,7 @@ Paths are relative to the repository root after resolving the original journal l
 
 ## 🔎 Remote history checked
 
-On 2026-10-29, the available branch history was fetched from [mib2q-carplay-rgi-next](https://github.com/luka-dev/mib2q-carplay-rgi-next), which is this checkout's `origin`. The working branch and files were not reset or merged.
+On 2026-10-29, the available branch history was fetched from [mib2q-carplay-rgi-next](https://github.com/luka-dev/mib2q-carplay-rgi-next), then configured as the development checkout's `origin`. The working branch and files were not reset or merged.
 
 | Remote branch | Searched tip |
 | --- | --- |

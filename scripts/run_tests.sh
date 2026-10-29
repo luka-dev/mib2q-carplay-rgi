@@ -425,7 +425,8 @@ printf '%-32s ' install_java_gate_test
 sh scripts/test_install_java_gate.sh
 
 printf '%-32s ' java_variants_link_test
-bash scripts/build_java.sh > /dev/null && bash scripts/audit_java_variants.sh
+bash scripts/build_java.sh > /dev/null
+bash scripts/audit_java_variants.sh
 
 printf '%-32s ' binpatch_test
 bash scripts/test_binpatch.sh

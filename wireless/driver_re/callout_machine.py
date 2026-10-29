@@ -167,4 +167,3 @@ class CalloutMachine:
             self.call("callout_hardclock")
             if self.drain(pause=pause) == "captured":
                 return "captured"
-
