@@ -176,8 +176,11 @@ static void *spurious_wakes(void *unused) {
 }
 
 static void wait_recycled(unsigned count) {
+    /* gpu_cond is a default (CLOCK_REALTIME) condition, while _AbsTimeoutMs uses the sink's
+     * clock (CLOCK_MONOTONIC off macOS): build this deadline on the condition's own clock. */
     struct timespec end;
-    _AbsTimeoutMs(&end, 1000);
+    clock_gettime(CLOCK_REALTIME, &end);
+    end.tv_sec += 1;
     pthread_mutex_lock(&gpu_lock);
     while (recycled < count)
         assert(pthread_cond_timedwait(&gpu_cond, &gpu_lock, &end) != ETIMEDOUT);
