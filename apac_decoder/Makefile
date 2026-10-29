@@ -1,7 +1,7 @@
 # Host build for fast iteration. The QNX ARMv7 cross build comes later and is
 # driven by scripts/build_hook.sh, not from here.
 #
-#   make            build our decoder
+#   make            build the port
 #   make check      build and run the tests
 #
 CXX      ?= c++

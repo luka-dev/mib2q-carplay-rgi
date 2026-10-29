@@ -27,7 +27,7 @@ BitstreamReader::BitstreamReader(const uint8_t* buf, uint32_t len)
 
     // Pre-align: consume the leading bytes until `cur` is 4-byte aligned (or
     // the buffer runs out), so every FillCacheFrom after this loads an aligned
-    // word.  `p` is tested BEFORE it is incremented, exactly as in the library;
+    // word.  `p` is tested BEFORE it is incremented, exactly as in the original;
     // that is what makes `cur` end up at the first aligned byte rather than one
     // past it.
     if (((uintptr_t)buf & 3) != 0 && end > buf) {
@@ -55,7 +55,7 @@ BitstreamReader::BitstreamReader(const uint8_t* buf, uint32_t len)
 // 0x000b1600  FillCacheFrom(unsigned char const*)
 void BitstreamReader::FillCacheFrom(const uint8_t* p)
 {
-    // The library truncates the pointer difference to 32 bits before the
+    // The original truncates the pointer difference to 32 bits before the
     // comparison; on the ARMv7 target that is the natural width anyway.
     int32_t avail = (int32_t)(uint32_t)(uintptr_t)(end - p);
     if (avail > 3) {
@@ -171,7 +171,7 @@ void BitstreamReader::AlignToNextByte()
     int32_t frac = bl & 7;
     if (frac == 0)
         return;
-    // The library also tests (frac - 1) <= 31, which is always true here.
+    // The original also tests (frac - 1) <= 31, which is always true here.
     int32_t nbl = bl - frac;
     bitsLeft = nbl;
     if (nbl < 0)
@@ -212,7 +212,7 @@ int32_t BitstreamReader::BitsRemaining() const
 uint32_t GetEscBits(BitstreamReader& bs, uint32_t numBits,
                     uint32_t escBits, uint32_t esc2Bits)
 {
-    // The library asserts numBits <= 32 (APACStructs.h:198) and then takes a
+    // The original asserts numBits <= 32 (APACStructs.h:198) and then takes a
     // path for numBits outside 1..32 that reads nothing: numBits == 32 returns
     // 0 outright, numBits == 0 falls through into the escape read with v == 0.
     uint32_t all = (uint32_t)((1ull << numBits) - 1ull);

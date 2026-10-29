@@ -5,7 +5,8 @@ import unittest
 import numpy as np
 
 from amp_test_scenarios import make_test_scenario,scenario_manifest
-from audit_amp_retained_state_grid import probes,levels,evaluate_context,run,auxiliary,make_chain,STATIC_SCENARIOS
+from audit_amp_retained_state_grid import probes,levels,evaluate_context,run
+from audit_upmix_end_to_end import auxiliary,make_chain,STATIC_SCENARIOS
 
 
 class RetainedStateGridTests(unittest.TestCase):

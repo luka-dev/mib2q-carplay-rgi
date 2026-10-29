@@ -10,7 +10,7 @@ from amp_complex_control import AdaptiveResidual
 
 
 ROOT=Path(__file__).resolve().parents[2]
-PARAMETERS=ROOT/'assets/soundamp/remaining-blocks-20260919/audit.json'
+PARAMETERS=ROOT/'output/r2/soundamp/remaining-blocks-20260919/audit.json'
 IMAGE=ROOT.parents[1]/'Firmwares/SoundAmp/uPD70f3479_8W0035465_0420_H11/CodeFlash_24082026_172027.bin'
 
 

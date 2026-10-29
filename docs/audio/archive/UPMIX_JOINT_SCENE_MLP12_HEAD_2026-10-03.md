@@ -168,9 +168,9 @@ The terminal verdict must use matched update counts and per-channel errors. The 
 
 ## 📁 Implementation and evidence
 
-- [scene_joint_head_net.py](../../../tools/stereo-upmix-render/scene_joint_head_net.py): isolated subclass replacing only the output head and updating its specification.
-- [fit_scene_fixed_nas.py](../../../tools/stereo-upmix-render/fit_scene_fixed_nas.py): explicit `--head mlp12`; unchanged crop/loss/optimizer; additional paired 2048 checkpoint.
-- [test_scene_joint_head.py](../../../tools/stereo-upmix-render/test_scene_joint_head.py): initialization, signal/state and training-path contracts.
+- [scene_joint_head_net.py](RETIRED_TOOLS.md#tool-0b3365f5d354): isolated subclass replacing only the output head and updating its specification.
+- [fit_scene_fixed_nas.py](RETIRED_TOOLS.md#tool-68f8855859f8): explicit `--head mlp12`; unchanged crop/loss/optimizer; additional paired 2048 checkpoint.
+- [test_scene_joint_head.py](RETIRED_TOOLS.md#tool-49dabc5a3cb5): initialization, signal/state and training-path contracts.
 
 The immutable NAS run has source snapshots, launch/test/train logs, frozen protocol, all monitors and checkpoints. An owned `run/STOP` marker requests a stop with retained outputs. No interband, gated-context, task-specific decoder or additional dataset experiment is queued.
 

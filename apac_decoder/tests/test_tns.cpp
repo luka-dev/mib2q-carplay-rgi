@@ -21,7 +21,7 @@
 //   2. ParseTNSData: the ENTIRE 190-byte object, byte for byte, plus the exact
 //      bit count consumed and the return code.  That is the strongest form
 //      available, because the object is the parser's whole output and its
-//      layout is the library's own - the filter records really do sit at
+//      layout is the original's own - the filter records really do sit at
 //      +2 + 23*i.  Both block layouts are covered: a long block's records are
 //      indexed by filter, a short block's by WINDOW, and `nFilt` is a count in
 //      one case and an 8-bit per-window mask (window 0 in bit 7) in the other.
@@ -30,7 +30,7 @@
 //      32 cases, 24 of which actually filter something - and it should: unlike
 //      the MDCT there is no FFT in it, so the parcor-to-LPC recursion and the
 //      all-pole filter do the same float multiplies in the same order as the
-//      library.  Anything else here would be a real divergence, not rounding.
+//      original.  Anything else here would be a real divergence, not rounding.
 //
 // The parse cases include ones the library REJECTS (a filter whose band length
 // is zero).  Those still leave a partly filled object and Apply still runs on
@@ -72,7 +72,7 @@ int hexval(char c)
 
 int main(int argc, char** argv)
 {
-    // The object must be the library's 190 bytes: Apply and ParseTNSData both
+    // The object must be the original's 190 bytes: Apply and ParseTNSData both
     // address the filter records as `this + 2 + 23*i`.
     assert(sizeof(apac::TNSFilter) == 23);
     assert(sizeof(apac::TNSData) == 190);
@@ -112,7 +112,7 @@ int main(int argc, char** argv)
             if (t.maxOrderLong != ol || t.maxOrderShort != os ||
                 t.maxBandsLong != bl || t.maxBandsShort != bs2) {
                 fprintf(stderr,
-                        "\nMISMATCH Configure(%u): ours %u/%u/%u/%u, library %u/%u/%u/%u\n",
+                        "\nMISMATCH Configure(%u): port %u/%u/%u/%u, library %u/%u/%u/%u\n",
                         rate, t.maxOrderLong, t.maxOrderShort,
                         t.maxBandsLong, t.maxBandsShort, ol, os, bl, bs2);
                 return 1;
@@ -154,7 +154,7 @@ int main(int argc, char** argv)
             const int ourRc = err ? -1 : 0;
             if (ourRc != rc || used != bits) {
                 fprintf(stderr,
-                        "\nMISMATCH ParseTNSData case %u: ours rc=%d bits=%d, "
+                        "\nMISMATCH ParseTNSData case %u: port rc=%d bits=%d, "
                         "library rc=%d bits=%d\n", c, ourRc, used, rc, bits);
                 return 1;
             }
@@ -177,7 +177,7 @@ int main(int argc, char** argv)
                 const unsigned want = (unsigned)((hi << 4) | lo);
                 if (i != 0 && ours[i] != want) {
                     fprintf(stderr,
-                            "\nMISMATCH ParseTNSData case %u byte %u: ours %02x, "
+                            "\nMISMATCH ParseTNSData case %u byte %u: port %02x, "
                             "library %02x\n", caseIdx, i, ours[i], want);
                     return 1;
                 }

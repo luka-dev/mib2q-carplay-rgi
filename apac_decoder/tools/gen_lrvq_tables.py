@@ -25,7 +25,7 @@ DEFAULT_LIB = os.path.join(ROOT, 'reference', '.build', 'libs',
 
 # The VQ codebook block, 0x310290 .. 0x317e90.  Five tables, one after the
 # other, 992 vectors of 8 floats.  They are emitted as ONE array so that the
-# out-of-range reads the library's own bound checks let through - index == n
+# out-of-range reads the original's own bound checks let through - index == n
 # (the check is `n < idx`, not `n <= idx`) and the -1 a reuse flag could feed
 # in - land on the same bytes they land on in the library.
 VQ_BLOCK = [
@@ -161,7 +161,7 @@ def main():
     w('// Kept as ONE array on purpose, in the order the library has them, so')
     w('// that a stage-1 codebook that a two-stage mode reaches from a')
     w('// stage-0 one is at the same relative offset here as there.  Two reads')
-    w('// the library does not prevent - idx == n, because its bound check is')
+    w('// the original does not prevent - idx == n, because its bound check is')
     w('// `n < idx` and not `n <= idx`, and the -1 stage-1 sentinel - would')
     w('// leave even this array at its two ends; both are unreachable from any')
     w('// bitstream and tests/test_lrvq.cpp is where that stops being true.')

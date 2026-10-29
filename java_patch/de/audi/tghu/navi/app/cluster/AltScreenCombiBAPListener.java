@@ -60,7 +60,7 @@ public final class AltScreenCombiBAPListener extends CombiBAPListener {
     }
 
     public void setMapScale(int steps) {
-        if (AltScreenModule.isConnected()) {
+        if (AltScreenModule.isClusterMapActive()) {
             AltScreenModule.consumeSteeringWheelScale(steps);
             /* Complete the BAP SetGet with the unchanged native-map status. */
             this.updateMapScale();
@@ -70,7 +70,7 @@ public final class AltScreenCombiBAPListener extends CombiBAPListener {
     }
 
     public void setMapScaleSetting(int setting) {
-        if (AltScreenModule.isConnected()) {
+        if (AltScreenModule.isClusterMapActive()) {
             /* This is autoZoom, not the steering-wheel OK key.  Do not mutate
              * the hidden Audi map; setMapScale() sends the one Status ACK. */
             return;

@@ -16,7 +16,7 @@ from amp_b_output import BSixChannelTailReference, BFourChannelTailReference, BO
 from amp_b_decorrelator import BTwoChannelTailReference
 from test_amp_b_pipeline import pipeline
 
-OUT=ROOT/'assets/soundamp/remaining-blocks-20260920-v3'
+OUT=ROOT/'output/r2/soundamp/remaining-blocks-20260920-v3'
 
 
 def caller_trace(name, *, object_base=10000, parameter_base=20000):

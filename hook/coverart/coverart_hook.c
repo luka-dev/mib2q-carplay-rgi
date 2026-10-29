@@ -632,7 +632,18 @@ static void* coverart_worker_main(void* arg) {
         pthread_mutex_unlock(&worker_mutex);
 
         if (data) {
-            (void)maybe_handle_image(data, len, generation);
+            if(len) (void)maybe_handle_image(data, len, generation);
+            else {
+                pthread_mutex_lock(&worker_mutex);
+                if(generation==worker_generation) {
+                    g_coverart.last_crc=0;unlink(COVERART_FILE);
+                    bus_text_builder_t event;uint8_t scratch[128];
+                    bus_text_begin_with(&event,"coverart",scratch,sizeof(scratch));
+                    bus_text_uint(&event,"crc",0);bus_text_uint(&event,"clear",1);bus_text_str(&event,"path","");
+                    bus_send_text(EVT_COVERART,BUS_FLAG_STICKY,&event);
+                }
+                pthread_mutex_unlock(&worker_mutex);
+            }
             free(data);
         }
     }
@@ -762,6 +773,26 @@ static void coverart_callback_leave(void) {
     pthread_mutex_unlock(&runtime_mutex);
 }
 
+void coverart_wireless_file(const uint8_t *data,size_t length) {
+    if(!data||!length||length>65535||!coverart_callback_enter())return;
+    pthread_mutex_lock(&recv_mutex);
+    if(length>=12&&data[1]==4&&!read_be64(data+2)&&read_be16(data+10)==2) {
+        uint8_t *clear=malloc(1);
+        if(clear) {
+            /* Invalidate an older decode already in flight before queuing
+             * the explicit empty artwork update. No receive-thread I/O. */
+            coverart_stream_reset(&g_recv_stream);++recv_generation;
+            pthread_mutex_lock(&worker_mutex);worker_generation=recv_generation;pthread_mutex_unlock(&worker_mutex);
+            enqueue_image_async(clear,0,recv_generation);
+        }
+        pthread_mutex_unlock(&recv_mutex);coverart_callback_leave();return;
+    }
+    uint8_t *image=NULL;size_t size=0;
+    coverart_stream_file(&g_recv_stream,data,length,&image,&size);
+    if(image)enqueue_image_async(image,size,recv_generation);
+    pthread_mutex_unlock(&recv_mutex);coverart_callback_leave();
+}
+
 /* Sink declared by the module def (on_transport_recv).  Called for every
  * NmeTransport::Recv delivery.  (The framework logs the first
  * delivery's ret + leading bytes for on-unit seam validation.) */
@@ -826,7 +857,8 @@ const hook_module_def_t coverart_module_def = {
     .on_init = coverart_runtime_init,
     .on_shutdown = coverart_runtime_shutdown,
     .on_transport_recv = coverart_on_transport_recv,
-    .on_transport_recv_reset = coverart_reset_recv_stream
+    .on_transport_recv_reset = coverart_reset_recv_stream,
+    .on_file_transfer = coverart_wireless_file
 };
 
 static void coverart_runtime_shutdown(void) {

@@ -1049,6 +1049,9 @@ static void rgd_mark_first_response(uint16_t msgid) {
 
 /* Message handler - incoming 0x5201/0x5202/0x5204 */
 static bool rgd_message_handler(hook_context_t* ctx, const iap2_frame_t* frame) {
+    if (!ctx || !frame || ctx->direction != MSG_DIR_INCOMING || !ctx->raw_buf ||
+        ctx->raw_len < frame->frame_len)
+        return false;
     rgd_lazy_init();  /* Ensure bus/session state is ready */
 
     if (frame->msgid == IAP2_MSG_ROUTE_GUIDANCE_UPDATE) {
@@ -1278,6 +1281,12 @@ static void rgd_state_handler(hook_context_t* ctx, int event, void* event_data) 
     (void)event_data;
 
     switch (event) {
+        case HOOK_EVENT_RESYNC:
+            pthread_mutex_lock(&g_rgd_start_lock);
+            g_rgd.got_520x=false;g_rgd.last_5200_ms=0;g_rgd.start_5200_attempts=0;
+            pthread_mutex_unlock(&g_rgd_start_lock);
+            rgd_request_updates();
+            break;
         case HOOK_EVENT_IDENTIFY_START:
             /* dio_manager may survive a fast phone reconnect.  Never carry
              * got_520x/retry state into the new iAP2 identification cycle. */

@@ -5,7 +5,7 @@
 // Stage e - APACBWE2Decoder's synthesis and BWELPC - against the real library.
 //
 // Fixtures: tests/fixtures/bwe_{lsf,env,lpc,frame}.fixture, produced by
-// reference/apac_bwe_ref.cpp calling Pioneer's decoder.  The
+// reference/apac_bwe_ref.cpp calling Pioneer's copy of Apple's decoder.  The
 // inputs are regenerated here from reference/bwe_cases.h, which the oracle
 // includes too, so the fixtures carry only the library's answers.
 //
@@ -50,10 +50,10 @@
 // The chain is looser than the FFT by a lot, and the reason is structural
 // rather than a defect: the synthesis DIVIDES the core envelope by the
 // extension envelope, so wherever |A(w)| has a null the reconstruction is
-// ill-conditioned by construction - in the library exactly as much as here.
+// ill-conditioned by construction - in the original exactly as much as here.
 // Stage h1 hit the same thing on the LRVQ residual and wrote it up the same way.
 //
-// SO IS THE TOLERANCE HIDING A BUG?  Fifteen deliberate mutations of our decoder
+// SO IS THE TOLERANCE HIDING A BUG?  Fifteen deliberate mutations of the port
 // say no; ALL FIFTEEN fail this test:
 //
 //   the long divisor slice moved up by one patch; the long patch source off by
@@ -68,7 +68,7 @@
 //   radix-3 gather taking the three sub-sequences in the wrong order.
 //
 // Rerun them with the mut() loop recorded in the stage-e section of
-// STATUS.md.  `make clean` first: the last of those runs failed as a
+// PORT_STATUS.md.  `make clean` first: the last of those runs failed as a
 // plausible numeric mismatch in an UNMUTATED build, because the objects had
 // gone out of step - which is the trap the Makefile note already warns about.
 
@@ -91,7 +91,7 @@ using dspfx::float_to_bits;
 using dspfx::parse_hex_floats;
 using dspfx::peak;
 
-// reference/bwe_cases.h asks the includer for this; here it is OUR own
+// reference/bwe_cases.h asks the includer for this; here it is the PORT's own
 // table, so nothing about the case plan is shared with the library except the
 // numbers it computes from it.
 static uint32_t BweCoreEdge(uint32_t rate, uint32_t seq, uint32_t maxSfb);
@@ -345,8 +345,8 @@ void checkEnv(double* worst, int* sizes)
             ++*sizes;
 
             // The same call on a filter that has never held any other size, to
-            // pin our two-filter-with-lazy-Initialize substitution for
-            // the library's six persistent objects.  gLPC has just been asked
+            // pin the port's two-filter-with-lazy-Initialize substitution for
+            // the original's six persistent objects.  gLPC has just been asked
             // for every other size in the sweep; gLPCFresh is re-Initialized.
             gLPCFresh.Initialize();
             static float fresh[2048];
@@ -360,7 +360,7 @@ void checkEnv(double* worst, int* sizes)
 
 // How far the LPC vector moves when its own autocorrelation is perturbed by
 // one part in `eps`.  Levinson-Durbin at order 16 amplifies hard, so this is
-// what says whether a difference between our decoder and the library is the FFT's
+// what says whether a difference between the port and the library is the FFT's
 // 2e-07 arriving at the output or something structural: the two are compared
 // against 8x THIS, not against a number picked to pass.  The same test stage h1
 // applies to LSP_To_LPC.
@@ -576,7 +576,7 @@ void checkFrame(double* worstTouched, int* nLong, int* nShort, int* nWide,
             if (touched[k])
                 continue;
             if (float_to_bits(gSpec[k]) != float_to_bits(c.spec[k]))
-                fail("our decoder wrote outside the extension band", i);
+                fail("the port wrote outside the extension band", i);
             if (float_to_bits(gRef[k]) != float_to_bits(c.spec[k]))
                 fail("the library wrote outside the predicted band", i);
             gBitChecks += 2;
@@ -618,7 +618,7 @@ void checkFrame(double* worstTouched, int* nLong, int* nShort, int* nWide,
                 // hypothetical - the multiplier is coreEnv / bweEnv and the
                 // product is `0.0f * mult`, so a bweEnv bin that underflows to
                 // zero gives inf and then NaN wherever the source bin is zero.
-                // The library divides and multiplies exactly the same way, so
+                // The original divides and multiplies exactly the same way, so
                 // if it ever happens it happens to both; this makes it visible
                 // instead of passing.
                 if (o != o || t != t || o - o != 0.0 || t - t != 0.0)
@@ -661,7 +661,7 @@ void checkFrame(double* worstTouched, int* nLong, int* nShort, int* nWide,
             }
         }
 
-        // Our decoder shares ONE BWELPC where the library has one per channel.
+        // The port shares ONE BWELPC where the original has one per channel.
         // Nothing in it survives a call, so a fresh instance must give the same
         // bits - run every case a second time that way and require it.
         gLPCFresh.Initialize();
@@ -692,7 +692,7 @@ void checkFrame(double* worstTouched, int* nLong, int* nShort, int* nWide,
     expectBits(gSpec, c.spec, kBweFrameLength, "inactive channel", 0);
 
     // A maxSfb past the end of the table is impossible from a bitstream and is
-    // refused rather than read out of bounds.  The library indexes the table
+    // refused rather than read out of bounds.  The original indexes the table
     // with it unchecked.
     BitWriter w;
     w.Init();
@@ -720,7 +720,7 @@ void checkFrame(double* worstTouched, int* nLong, int* nShort, int* nWide,
     e.maxSfb = 30;
     if (gBWE.Deserialize(bs3, 0, gElem) != apac::kOk)
         fail("BWE header", 0);
-    if (gBWE.DecodeFrame(e, gSpec, 0) != apac::kLimitNeedsBWE)
+    if (gBWE.DecodeFrame(e, gSpec, 0) != apac::kPortNeedsBWE)
         fail("a null BWELPC did not refuse", 0);
     gChecks += 4;
 }
@@ -789,7 +789,7 @@ int main(int argc, char** argv)
            100.0 * (double)gBandLoose / (double)gBandBins, gWorstCaseLoose,
            gWorstCase);
     printf("    that case is a 24 kHz long block whose extension envelope has "
-           "a sharp resonance: ours/library ratio there is a SMOOTH "
+           "a sharp resonance: the port-over-library ratio there is a SMOOTH "
            "ripple peaking at exactly the bin where the multiplier peaks (146x "
            "at bin 18, ratio 1.011), i.e. the two LPC vectors put the same pole "
            "a fraction of a bin apart.  On QNX armle-v7, where there is no FMA "

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build apac_bench for THIS machine (arm64 macOS).  Same sources the head unit
-# gets, a different compiler and a very different core - see STATUS.md,
+# gets, a different compiler and a very different core - see PORT_STATUS.md,
 # stage k, for what that number is and is not worth.
 #
 #   apac_decoder/bench/build_host.sh          -> apac_decoder/.build/apac_bench

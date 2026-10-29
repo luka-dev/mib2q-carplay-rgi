@@ -13,7 +13,7 @@ namespace apac {
 // GetSineWindowCoefficientPtr / GetKBDWindowCoefficientPtr /
 // GetDCTIVModulationCoefficients at 0x105590, 0x105600 and 0xb33b0.  All three
 // are three-way branches with a NULL default; that NULL is what pins the codec
-// to exactly two block sizes, so our decoder keeps it rather than clamping.
+// to exactly two block sizes, so the port keeps it rather than clamping.
 
 const float* GetSineWindowCoefficientPtr(uint32_t n)
 {
@@ -289,8 +289,8 @@ MDCT::MDCT() : mN(0), mScale(0.0f), mCoef(0)
 }
 
 // MDCT::Initialize at 0xb7530 then DCT_IV::Initialize at 0xb7410.  The `n > 31`
-// gate in the library is subsumed by the table lookup, which only ever
-// succeeds for 128 and 1024; our decoder keeps both so the status codes match.
+// gate in the original is subsumed by the table lookup, which only ever
+// succeeds for 128 and 1024; the port keeps both so the status codes match.
 int32_t MDCT::Initialize(uint32_t n, float scale)
 {
     if (scale == 0.0f)
@@ -338,7 +338,7 @@ void MDCT::PreModulation(const float* in, float* re, float* im, float f) const
 //
 //     w[k] = (re[k] + i*im[k]) * conj(coef[k]),   m = half-1-k
 //
-// the library writes, for every k in [0, half/2):
+// the original writes, for every k in [0, half/2):
 //
 //     buf [half + 2k]     =  Im(w[k])      buf2[half + 2k]     = -Re(w[k])
 //     buf [half + 1 + 2k] = -Re(w[m])      buf2[half + 1 + 2k] =  Im(w[m])
@@ -346,7 +346,7 @@ void MDCT::PreModulation(const float* in, float* re, float* im, float f) const
 //     buf [2m - half + 1] = -Im(w[k])      buf2[2m - half + 1] = -Re(w[k])
 //
 // which is the same as saying buf is antisymmetric and buf2 symmetric about
-// their midpoints.  Our decoder writes all eight rather than exploiting that, so
+// their midpoints.  The port writes all eight rather than exploiting that, so
 // that a future divergence shows up as a mismatch instead of being papered over.
 void MDCT::PostModulationExtend(const float* re, const float* im,
                                 float* buf, float* buf2) const
@@ -384,8 +384,8 @@ void MDCT::PostModulationExtend(const float* re, const float* im,
     }
 }
 
-// MDCT::InverseInPlaceTransform, 0xb75c0.  The library stages the FFT input in
-// `buf2` and its output in a stack VLA; our decoder keeps the same aliasing but
+// MDCT::InverseInPlaceTransform, 0xb75c0.  The original stages the FFT input in
+// `buf2` and its output in a stack VLA; the port keeps the same aliasing but
 // puts the VLA in the object, because the target is an LD_PRELOADed .so on QNX
 // and a 4 KiB alloca on a shared audio thread is not worth the risk.
 int32_t MDCT::InverseInPlaceTransform(float* buf, float* buf2)

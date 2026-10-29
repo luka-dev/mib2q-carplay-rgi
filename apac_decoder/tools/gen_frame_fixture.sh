@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 #
 # Build tests/fixtures/frames.bin: six real packets out of the CarPlay capture
-# and the float32 PCM the reference library produces for them, so `make check`
+# and the float32 PCM the ORIGINAL library produces for them, so `make check`
 # can run the whole-frame differential test with no Docker and no capture.
 #
 #   apac_decoder/tools/gen_frame_fixture.sh          # needs Docker, ~10 s
 #
 # WHICH SIX, AND WHY.  Packets 429..434, contiguous, decoded from a fresh
-# decoder.  Instrumenting our decoder and replaying all 3977 packets shows what
+# decoder.  Instrumenting the port and replaying all 3977 packets shows what
 # each one exercises; that window is the SHORTEST run that reaches every
 # feature this content ever uses except one, and adding ten more packets buys
 # only a second short-window grouping:

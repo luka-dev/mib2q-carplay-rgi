@@ -309,6 +309,7 @@ int main(void) {
     presentation_latency();
     presentation_queue();
     presentation_faults();
+    presentation_corrupt_output();
     fatal_hardening();
 
     /* State notifications without a returned buffer must not extend the input

@@ -15,10 +15,8 @@ against scene_upmix.py (same defaults, no mask) on the car-kit source album01.wa
   3. the output must not depend on the call size: --block 1024 and --block 100 (not a hop multiple, the
      FIFO bound's worst case) bit-identical to --block 768;
   4. --lfe assist: LFE non-zero, fronts = 31392/32768 x the reference (the assist's paired headroom).
-  5. the mask net (every mask render runs with --centre 0: the vocal-to-centre stage is not in the Python
-     reference; tests/scene_centre_test.c covers it): --mask-blob (the SMSKNET1 blob exported from the fixtures' masknet_oracle.npz, or
-     --blob PATH; the renderer runs it on the mask worker stepped inside submit, the unit's timing) with
-     --mask-rows dumping the rows the backend installed at every 512-frame control
+  5. the mask net: --mask-blob (the SMSKNET1 blob exported from the fixtures' masknet_oracle.npz, or
+     --blob PATH) with --mask-rows dumping the rows the backend installed at every 512-frame control
      boundary (256, 768, 1280, ... pushed frames; the renderer checks that cadence); scene_upmix.py driven
      by exactly those rows (a zero row for index 0 and for the priming boundaries, which is the engine's
      no-mask state exactly: e_inst and d_prot stay 0) must agree with the hook below -60 dB like the
@@ -28,8 +26,6 @@ against scene_upmix.py (same defaults, no mask) on the car-kit source album01.wa
      hook must equal the bare C engine driven by scene_engine_set_mask() at the 512r-256 rule
      (test_engine.py's) to the LSB everywhere else, and exactly its guard on those frames
      (spa_stereo_upmix_test_guard_s16 through the shared lib), which are excluded from the dB figures.
-  6. the front anchor as shipped (mask + --front-keep-db 1, through the backend's setter): the hook against
-     scene_upmix.py at front_keep_db 1 on the same rows, guard frames aside, below -60 dB; it must move the fronts.
 
     python3 test_hook_render.py [--wav PATH] [--bin PATH] [--keep] [--fixtures DIR | --blob PATH | --no-mask]
 """
@@ -50,18 +46,16 @@ HOOK = os.path.join(ROOT, "hook", "audio")
 BUILD = os.path.join(ROOT, "build", "scene_port")
 import os as _os; _REPO = _os.path.normpath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '../../..')); _WS = _os.environ.get('AUDI_WORKSPACE', _os.path.expanduser('~/Desktop/AUDI_2'))  # sibling firmware/data dirs
 WAV = _WS + "/upmix-data/scene_car_kit_2026-10-08/sources/album01.wav"
-DEFAULT_FIX = _WS + "/upmix-data/scene_port_fixtures_2026-10-17"
+DEFAULT_FIX = _WS + "/upmix-data/scene_port_fixtures_2026-10-09"
 LATENCY, TOL_DB, FRONT_Q15 = 1024, -60.0, 31392
 MASK_HOP, MASK_BINS, MASK_PREFILL = 512, 257, 256
 LIB_SOURCES = ["stereo_upmix.c", "scene_engine_math.c",
                "scene_clusters.c", "scene_engine.c", "scene_mask.c"]   # the backend too: its test guard
 SOURCES = ["stereo_upmix.c",
-           "soundcheck.c", "scene_engine_math.c", "scene_clusters.c", "scene_engine.c", "scene_mask.c",
-           "scene_mask_worker.c"]
+           "soundcheck.c", "scene_engine_math.c", "scene_clusters.c", "scene_engine.c", "scene_mask.c"]
 sys.path.insert(0, TOOLS)
 sys.path.insert(0, HERE)
 import scene_upmix as su  # noqa: E402
-from test_engine import parse_header  # noqa: E402  (struct scene_config as ctypes)
 
 fails = []
 LIB = None
@@ -106,17 +100,16 @@ def c_phase_tables():
     return tables
 
 
-def c_engine(lib, x, block=768, rows=None, front_keep_db=0.0):
+def c_engine(lib, x, block=768, rows=None):
     """scene_engine_push() in float on x[n, 2] in blocks -> [n, 6] aligned like stream_render (no flush).
     rows: the renderer's --mask-rows records (one per 512-frame boundary, all zero = nothing installed):
     record m goes in through scene_engine_set_mask() once 256 + 512 m frames are in and before any more
     are pushed, the 512r-256 rule of scene_engine.c that test_engine.py proves against the fixtures."""
     F32 = np.ctypeslib.ndpointer(np.float32, flags="C")
-    cfg = parse_header()[1]["scene_config"]()
+    cfg = ctypes.create_string_buffer(4096)             # >= sizeof(struct scene_config)
     state = ctypes.create_string_buffer(1 << 20)        # >= sizeof(struct scene_state) (290 KB)
-    lib.scene_config_defaults(ctypes.byref(cfg))
-    cfg.front_keep_db = front_keep_db
-    assert lib.scene_engine_init(state, ctypes.byref(cfg)) == 0
+    lib.scene_config_defaults(cfg)
+    assert lib.scene_engine_init(state, cfg) == 0
     lib.scene_engine_push.restype = ctypes.c_size_t
     lib.scene_engine_set_mask.argtypes = [ctypes.c_void_p, F32, F32, ctypes.c_int]
     out = np.zeros((len(x) + 2048, 6), np.float32)
@@ -196,16 +189,15 @@ def mask_section(a, binary, tmp, x, n, hook_nomask):
         return
     rows_path = os.path.join(tmp, "rows.f32")
     hook = render(binary, a.wav, os.path.join(tmp, "hook_mask.wav"), "--block", "768",
-                  "--mask-blob", blob, "--centre", "0", "--mask-rows", rows_path) / 32768.0
+                  "--mask-blob", blob, "--mask-rows", rows_path) / 32768.0
     rows = np.fromfile(rows_path, np.float32).reshape(-1, 2, MASK_BINS).astype(np.float64)
     boundaries = (n - MASK_PREFILL) // MASK_HOP + 1
     check(rows.shape[0] == boundaries, "renderer wrote one record per control boundary (%d, cadence checked by it)"
           % boundaries)
     first = int(np.argmax(rows.reshape(len(rows), -1).any(1)))
     check(rows[:first].size == 0 or not rows[:first].any(), "no row before the net's first control")
-    check(first == 3 and rows[3:].any(1).any(1).all(),
-          "net rows from the fourth boundary on (the net primes on two, the worker adds one), %d rows"
-          % (len(rows) - first))
+    check(first == 2 and rows[2:].any(1).any(1).all(),
+          "net rows from the third boundary on (control 0 = Python row 3), %d rows" % (len(rows) - first))
     check(not np.array_equal(hook, hook_nomask), "the mask changes the render")
     # the hook = the bare engine fed the same rows at the 512r-256 rule, rounded, plus the cabin guard
     eng = c_engine(LIB, x, rows=rows.astype(np.float32))[:n - LATENCY]
@@ -228,9 +220,9 @@ def mask_section(a, binary, tmp, x, n, hook_nomask):
           "mask: hook vs stream_render on the same rows after the latency, guard frames aside: %.1f dB overall, "
           "worst channel %.1f dB (limit %.0f; bare engine %.1f dB)"
           % (overall, worst, TOL_DB, db((eng - r)[:, [0, 1, 4, 5]], r[:, [0, 1, 4, 5]])))
-    other = render(binary, a.wav, os.path.join(tmp, "hook_mask100.wav"), "--block", "100", "--mask-blob", blob, "--centre", "0") / 32768.0
+    other = render(binary, a.wav, os.path.join(tmp, "hook_mask100.wav"), "--block", "100", "--mask-blob", blob) / 32768.0
     check(np.array_equal(other, hook), "mask: --block 100 bit-identical to --block 768")
-    lfe = render(binary, a.wav, os.path.join(tmp, "hook_mask_lfe.wav"), "--lfe", "assist", "--mask-blob", blob, "--centre", "0") / 32768.0
+    lfe = render(binary, a.wav, os.path.join(tmp, "hook_mask_lfe.wav"), "--lfe", "assist", "--mask-blob", blob) / 32768.0
     check(np.abs(lfe[:, 3]).max() > 0.0 and not lfe[:, 2].any(), "mask + --lfe assist writes LFE, C stays zero")
     lf = lfe[LATENCY:n]
     guard_lfe = np.abs(np.rint(lf[:, :2] * 32768.0) - np.rint(np.rint(eng[:, :2] * 32768.0) * FRONT_Q15 / 32768.0)).max(1) > 1
@@ -241,17 +233,6 @@ def mask_section(a, binary, tmp, x, n, hook_nomask):
     moved = np.flatnonzero(np.abs(lf[:, 4:] - h[:, 4:]).max(1) > 0)
     check(np.all(guard[moved] | guard_lfe[moved]) and len(moved) < 1e-3 * n,
           "mask + --lfe assist moves Ls/Rs only where a guard binds (%d frames)" % len(moved))
-    # the shipped front anchor; the rows depend on the input alone, so they are the same
-    anc = render(binary, a.wav, os.path.join(tmp, "hook_anchor.wav"), "--mask-blob", blob, "--centre", "0", "--front-keep-db", "1") / 32768.0
-    ha = anc[LATENCY:n]
-    ea = c_engine(LIB, x, rows=rows.astype(np.float32), front_keep_db=1.0)[:n - LATENCY]
-    ka = ~guard_frames(LIB, np.rint(ha * 32768.0).astype(np.int16), ea, 0)
-    ra = su.stream_render(x, su.SceneConfig(front_keep_db=1.0), block=768, inst_mask=inst, prot_mask=prot)[:n - LATENCY]
-    d = db((ha - ra)[ka][:, [0, 1, 4, 5]], ra[ka][:, [0, 1, 4, 5]])
-    fronts = db(ha[:, :2] - h[:, :2], h[:, :2])
-    check(d <= TOL_DB and fronts > -40.0,
-          "mask + --front-keep-db 1: hook vs stream_render(front_keep_db 1) on the same rows, guard frames aside: "
-          "%.1f dB (limit %.0f); the anchor moves the fronts by %.1f dB re their RMS" % (d, TOL_DB, fronts))
 
 
 def main():

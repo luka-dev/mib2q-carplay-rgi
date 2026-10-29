@@ -82,8 +82,7 @@ int scene_engine_init(struct scene_state *s, const struct scene_config *cfg)
 
     memset(s, 0, sizeof *s);
     s->cfg = *cfg;
-    if (cfg->n_fft != N || cfg->hop != H || cfg->inst_mask_hop != SCENE_MASK_HOP ||
-        !cfg->erb_pool || (!cfg->cluster && cfg->unmix))
+    if (cfg->n_fft != N || cfg->hop != H || !cfg->erb_pool || (!cfg->cluster && cfg->unmix))
         return -1;
     s->F = SCENE_BINS;
     s->G = scene_erb_groups(SCENE_BINS, N, s->group, s->group_freq, s->group_count);
@@ -205,15 +204,6 @@ void scene_engine_set_mask(struct scene_state *s, const float *elig, const float
         s->prot_row[i] = prot ? prot[i] : 1.0f - elig[i];
     }
     s->have_mask = 1;
-}
-
-void scene_engine_set_vocal(struct scene_state *s, const float *voc, int mask_bins, float frac)
-{
-    int i;
-    s->centre_frac = frac > 0.0f ? (frac < 1.0f ? frac : 1.0f) : 0.0f;
-    s->have_voc = voc && mask_bins == s->mask_bins;
-    if (s->have_voc)
-        for (i = 0; i < mask_bins; i++) s->voc_row[i] = voc[i];
 }
 
 /* ----------------------------------------------------------------------------- one frame (_engine loop body)
@@ -509,12 +499,22 @@ static inline void output_quad(struct scene_state *s, const struct frame_scratch
     rearRr = v4_add(v4_add(objRr, instRr), v4_mul(v4_mul(v4_add(t1, br), v4_s(cfg->surround)), cold));
     rearRi = v4_add(v4_add(objRi, instRi), v4_mul(v4_mul(v4_add(t2, bi), v4_s(cfg->surround)), cold));
     if (cfg->wide_pair) {
-        const scene_v4 wg = v4_mul(v4_mul(v4_mul(v4_mul(v4_s(cfg->wide_pair_alpha), v4_gather_n(wide, s->group + k, n)), hp), cold), omD);
+        const scene_v4 w_prot = fc->prot_on ? v4_sub(one, v4_ld_n(s->d_prot + k, n)) : omD;
+        const scene_v4 wg = v4_mul(v4_mul(v4_mul(v4_mul(v4_s(cfg->wide_pair_alpha), v4_gather_n(wide, s->group + k, n)), hp), cold), w_prot);
         const scene_v4 gr = v4_conserving(wg);
-        rearLr = v4_add(rearLr, v4_mul(Lr, gr)); rearLi = v4_add(rearLi, v4_mul(Li, gr));
-        rearRr = v4_add(rearRr, v4_mul(Rr, gr)); rearRi = v4_add(rearRi, v4_mul(Ri, gr));
-        subLr = v4_add(subLr, v4_mul(Lr, wg));   subLi = v4_add(subLi, v4_mul(Li, wg));
-        subRr = v4_add(subRr, v4_mul(Rr, wg));   subRi = v4_add(subRi, v4_mul(Ri, wg));
+        const scene_v4 remLr = v4_sub(Lr, subLr), remLi = v4_sub(Li, subLi);
+        const scene_v4 remRr = v4_sub(Rr, subRr), remRi = v4_sub(Ri, subRi);
+        rearLr = v4_add(rearLr, v4_mul(remLr, gr)); rearLi = v4_add(rearLi, v4_mul(remLi, gr));
+        rearRr = v4_add(rearRr, v4_mul(remRr, gr)); rearRi = v4_add(rearRi, v4_mul(remRi, gr));
+        subLr = v4_add(subLr, v4_mul(remLr, wg)); subLi = v4_add(subLi, v4_mul(remLi, wg));
+        subRr = v4_add(subRr, v4_mul(remRr, wg)); subRi = v4_add(subRi, v4_mul(remRi, wg));
+    }
+    if (cfg->bleed_cancel > 0.0f && s->blen == 0) {
+        const scene_v4 bc = v4_mul(v4_s(cfg->bleed_cancel), hp);
+        rearLr = v4_sub(rearLr, v4_mul(v4_sub(Lr, subLr), bc));
+        rearLi = v4_sub(rearLi, v4_mul(v4_sub(Li, subLi), bc));
+        rearRr = v4_sub(rearRr, v4_mul(v4_sub(Rr, subRr), bc));
+        rearRi = v4_sub(rearRi, v4_mul(v4_sub(Ri, subRi), bc));
     }
     v4_st2_n((float *)(s->subL + k), subLr, subLi, n);
     v4_st2_n((float *)(s->subR + k), subRr, subRi, n);
@@ -537,8 +537,10 @@ static void front_anchor(struct scene_state *s, const scene_cpx *XL, const scene
     int k;
 
     for (k = 0; k < s->F; k++) {
-        const float slr = s->subL[k].re * inv, sli = s->subL[k].im * inv;
-        const float srr = s->subR[k].re * inv, sri = s->subR[k].im * inv;
+        float slr, sli, srr, sri;
+        if (s->freqs[k] < s->cfg.hp_hz || s->freqs[k] > 6000.0f) continue;
+        slr = s->subL[k].re * inv; sli = s->subL[k].im * inv;
+        srr = s->subR[k].re * inv; sri = s->subR[k].im * inv;
         ex  += XL[k].re * XL[k].re + XL[k].im * XL[k].im + XR[k].re * XR[k].re + XR[k].im * XR[k].im;
         rxs += XL[k].re * slr + XL[k].im * sli + XR[k].re * srr + XR[k].im * sri;
         es  += slr * slr + sli * sli + srr * srr + sri * sri;
@@ -552,31 +554,6 @@ static void front_anchor(struct scene_state *s, const scene_cpx *XL, const scene
     else a_max = (s->anc_rxs - sqrtf(disc)) / s->anc_es;
     target = a_max < 0.0f ? 0.0f : (a_max > 1.0f ? 1.0f : a_max);
     s->anchor += (target < s->anchor ? s->a_anc_att : s->a_anc_rel) * (target - s->anchor);
-}
-
-/* Centre: the part of the front that is lead vocal (net output 0, 30 ms attack / 300 ms release)
- * AND centred (43 ms similarity 2 Re(L R*) / (|L|^2 + |R|^2) near 1) AND above ~200 Hz moves from L/R to C:
- * L, R lose w M each (M = the front mid), C gets sqrt(2 w (2 - w)) M, so the power of a centred source is
- * kept. Runs after the front anchor: the anchor measures the rear transfers only. The amp's own centre
- * (derived from L + R) gets correspondingly less of the vocal.
- * ponytail: per-bin scalar loop plus one inverse FFT per hop; NEON lanes if the realtime budget gets tight. */
-static void centre_vocal(struct scene_state *s, const scene_cpx *XL, const scene_cpx *XR)
-{
-    int k;
-    for (k = 0; k < s->F; k++) {
-        float v = s->voc_row[s->mbin[k]], ev = s->e_voc[k], psi, w, g, mr, mi;
-        v = v > 0.0f ? (v < 1.0f ? v : 1.0f) : 0.0f;
-        ev += (v > ev ? s->a_datt : s->a_drel) * (v - ev);
-        s->e_voc[k] = ev;
-        psi = 2.0f * s->C[k].re / (s->PL[k] + s->PR[k] + 1e-12f);
-        w = s->centre_frac * ev * scene_smoothstep(psi, 0.6f, 0.9f) * scene_smoothstep(s->freqs[k], 150.0f, 250.0f);
-        mr = 0.5f * ((XL[k].re - s->subL[k].re) + (XR[k].re - s->subR[k].re));
-        mi = 0.5f * ((XL[k].im - s->subL[k].im) + (XR[k].im - s->subR[k].im));
-        g = sqrtf(2.0f * w * (2.0f - w));
-        s->subL[k].re += w * mr; s->subL[k].im += w * mi;
-        s->subR[k].re += w * mr; s->subR[k].im += w * mi;
-        s->ctrX[k].re = g * mr;  s->ctrX[k].im = g * mi;
-    }
 }
 
 void scene_engine_frame(struct scene_state *s, const scene_cpx *XL, const scene_cpx *XR, int t)
@@ -721,8 +698,6 @@ void scene_engine_frame(struct scene_state *s, const scene_cpx *XL, const scene_
     for (k = 0; k + 4 <= F; k += 4) output_quad(s, &sc, &fc, XL, XR, wide, k, 4);
     if (k < F) output_quad(s, &sc, &fc, XL, XR, wide, k, F - k);
     if (cfg->front_keep_db > 0.0f) front_anchor(s, XL, XR, fc.cold_gain);
-    s->centre_on = s->have_voc && s->centre_frac > 0.0f;
-    if (s->centre_on) centre_vocal(s, XL, XR);
 }
 
 /* ----------------------------------------------------------------------------- block driver (SceneStream) */
@@ -822,8 +797,7 @@ static void emit_hop(struct scene_state *s, int base, float *out)
             v4_ld4(ol, &o0, &o1, &o2, &o3);
             v4_st_stride(o, v4_sub(inl, v4_mul(o0, half)), 6);
             v4_st_stride(o + 1, v4_sub(inr, v4_mul(o1, half)), 6);
-            v4_st_stride(o + 2, v4_mul(v4_ld(s->ola_c + idx + i), half), 6);
-            v4_st(s->ola_c + idx + i, zero);
+            v4_st_stride(o + 2, zero, 6);
             v4_st_stride(o + 3, zero, 6);
             v4_st_stride(o + 4, v4_mul(o2, half), 6);
             v4_st_stride(o + 5, v4_mul(o3, half), 6);
@@ -833,10 +807,9 @@ static void emit_hop(struct scene_state *s, int base, float *out)
             float *o = out + 6 * (n + i), *ol = &s->ola[idx + i][0];
             o[0] = s->inbuf[idx + i][0] - ol[0] / 2.0f;
             o[1] = s->inbuf[idx + i][1] - ol[1] / 2.0f;
-            o[2] = s->ola_c[idx + i] / 2.0f; o[3] = 0.0f;
+            o[2] = 0.0f; o[3] = 0.0f;
             o[4] = ol[2] / 2.0f; o[5] = ol[3] / 2.0f;
             ol[0] = ol[1] = ol[2] = ol[3] = 0.0f;
-            s->ola_c[idx + i] = 0.0f;
         }
         n += run;
     }
@@ -868,13 +841,9 @@ static size_t push_chunk(struct scene_state *s, const float *in, int frames, flo
         scene_irfft1024_pair(s->subL, s->subR, tsub, tsub + N, s->fft_scratch);
         scene_irfft1024_pair(s->rearL, s->rearR, trear, trear + N, s->fft_scratch);
         ola_frame(s, base, tsub, tsub + N, trear, trear + N);
-        if (s->centre_on) {                                         /* C: one more inverse into the free sub buffer */
-            scene_irfft1024(s->ctrX, tsub, s->fft_scratch);
-            for (n = 0; n < N; n++) s->ola_c[(base + n) & M] += tsub[n] * s->window[n];
-        }
         /* pad indices [tH, (t+1)H) are final now (the last covering frame is t); the window-power sum
          * of the sine window at hop N/4 is the constant 2. The first N/H hops are the pad: not emitted. */
-        if (t >= N / H && !s->delay_rear && !s->delay_front && !(cfg->bleed_cancel > 0.0f) &&
+        if (t >= N / H && !s->delay_rear && !s->delay_front && !(cfg->bleed_cancel > 0.0f && s->blen > 0) &&
             n_out + (size_t)H <= out_capacity) {
             emit_hop(s, base, out + 6 * n_out);
             n_out += (size_t)H;
@@ -884,21 +853,21 @@ static size_t push_chunk(struct scene_state *s, const float *in, int frames, flo
             if (t >= N / H) {
                 float fl = s->inbuf[idx][0] - s->ola[idx][0] / 2.0f;
                 float fr = s->inbuf[idx][1] - s->ola[idx][1] / 2.0f;
-                float rl = s->ola[idx][2] / 2.0f, rr = s->ola[idx][3] / 2.0f, c = s->ola_c[idx] / 2.0f;
+                float rl = s->ola[idx][2] / 2.0f, rr = s->ola[idx][3] / 2.0f;
                 if (s->delay_rear)       delay2(s->dline, &s->dpos, s->dlen, &rl, &rr);
                 else if (s->delay_front) delay2(s->dline, &s->dpos, s->dlen, &fl, &fr);
-                if (cfg->bleed_cancel > 0.0f) {                     /* cancel the amp's own front->rear bleed with what we send on Ls/Rs */
+                if (cfg->bleed_cancel > 0.0f && s->blen > 0) {      /* delayed front->rear bleed cancel (0-offset is applied in output_quad above hp_hz) */
                     float bl = fl, br = fr;
-                    if (s->blen > 0) delay2(s->bline, &s->bpos, s->blen, &bl, &br);
+                    delay2(s->bline, &s->bpos, s->blen, &bl, &br);
                     rl = rl - cfg->bleed_cancel * bl; rr = rr - cfg->bleed_cancel * br;
                 }
                 if (n_out < out_capacity) {                         /* ponytail: a full output buffer drops the sample; out_capacity >= frames + SCENE_HOP never does */
                     float *o = out + 6 * n_out;
-                    o[0] = fl; o[1] = fr; o[2] = c; o[3] = 0.0f; o[4] = rl; o[5] = rr;
+                    o[0] = fl; o[1] = fr; o[2] = 0.0f; o[3] = 0.0f; o[4] = rl; o[5] = rr;
                     n_out++;
                 }
             }
-            s->ola[idx][0] = s->ola[idx][1] = s->ola[idx][2] = s->ola[idx][3] = s->ola_c[idx] = 0.0f;
+            s->ola[idx][0] = s->ola[idx][1] = s->ola[idx][2] = s->ola[idx][3] = 0.0f;
         }
         s->in_count -= H;
         s->next_frame = t + 1;

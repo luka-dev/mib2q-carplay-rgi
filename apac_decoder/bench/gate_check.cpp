@@ -17,8 +17,8 @@
 //   * the synthesis genuinely writes back what was already there for those
 //     geometries - benign, and worth a comment; or
 //   * it runs and produces nothing, which every existing test would miss.
-//     tests/test_bwe.cpp compares our decoder against the library, so if the
-//     library does the same nothing, our decoder agrees with it perfectly while
+//     tests/test_bwe.cpp compares the port against the library, so if the
+//     library does the same nothing, the port agrees with it perfectly while
 //     both do nothing useful.  That is the shape of defect that survives a
 //     hundred thousand bit-exact checks.
 //
@@ -28,7 +28,7 @@
 //
 //   library wrote nothing  <=>  fixture spectrum == the case's input spectrum
 //
-// and our answer is measured here the same way.  Agreement on "nothing"
+// and the port's answer is measured here the same way.  Agreement on "nothing"
 // is a classification difference; disagreement is a bug.
 //
 // WHAT THIS CHECK IS AND IS NOT.  It is a NECESSARY condition, not a sufficient
@@ -39,17 +39,17 @@
 // not that they took the same path.
 //
 // That gap is closed independently, from the disassembly rather than from this
-// fixture (apac-bwe2): the library's long guard at 0x78490 is
+// fixture (apac-bwe2): the original's long guard at 0x78490 is
 // `sub_78370(spec, spec + bwStart)`, a find-first-non-zero over the WHOLE
 // [0, bwStart) rather than over the replicated slice, and it proceeds when one
 // is found.  Cases 4 and 5 have content at [0, 48) and [0, 4), both inside
-// [0, 256), so the library proceeds too; likewise the short scan for 26 and
-// 30.  So the library runs and writes zeros exactly where our decoder does.
+// [0, 256), so the original proceeds too; likewise the short scan for 26 and
+// 30.  So the original runs and writes zeros exactly where the port does.
 //
 // The complementary check lives in tests/test_bwe.cpp, which asserts bit-exactly
 // that every coefficient OUTSIDE the predicted extension band is unchanged on
-// both sides.  A decoder that gated where the library ran would show up there as
-// the library having written into a region our decoder left alone.  This one
+// both sides.  A port that gated where the library ran would show up there as
+// the library having written into a region the port left alone.  This one
 // catches the quiet-versus-quiet case that one cannot express; that one catches
 // the wrote-versus-did-not case this one cannot.
 //
@@ -138,7 +138,7 @@ int main(int argc, char** argv)
     }
 
     int portQuiet = 0, libQuiet = 0, both = 0, disagree = 0;
-    printf("case  rate  seq maxSfb coreEnd   ours     library\n");
+    printf("case  rate  seq maxSfb coreEnd   port     library\n");
     for (int i = 0; i < kBweFrameCases; ++i) {
         const BweFrameCase& c = gCase[i];
         char tag[64];
@@ -154,7 +154,7 @@ int main(int argc, char** argv)
         const bool libWrote =
             memcmp(gLib, c.spec, sizeof(float) * kBweFrameLength) != 0;
 
-        // Ours, run exactly as apac_bench times it.
+        // The port's, run exactly as apac_bench times it.
         const apac::SFBOffsets* table = apac::GetSFBOffsetTable(c.sampleRate, 1024);
         if (!table) { fprintf(stderr, "no table, case %d\n", i); return 2; }
         if (gElem.Configure(apac::kElementSCE, table, c.sampleRate) != apac::kOk) {
@@ -224,7 +224,7 @@ int main(int argc, char** argv)
                "not.  That is a defect, not a classification difference.\n", disagree);
         return 1;
     }
-    printf("no disagreement: wherever our decoder writes nothing, the library "
+    printf("no disagreement: wherever the port writes nothing, the library "
            "writes nothing too, and vice versa.\n");
     return 0;
 }

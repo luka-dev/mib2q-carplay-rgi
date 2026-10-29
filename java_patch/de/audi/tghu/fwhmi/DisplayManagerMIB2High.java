@@ -32,11 +32,11 @@ public class DisplayManagerMIB2High extends DisplayManager implements IDisplayLi
     private static final int CTX_MAP_ALT     = 76;   // alt map only
     private static final int CTX_MAP_ALT_KDK = 77;   // alt map + KDK + backings
     private static final int CTX_CARPLAY_NAV = 80;   // CarPlay: maneuver + backing + map
-    private static final int CTX_CARPLAY_MAP = 81;   // CarPlay: map only
+    private static final int CTX_CARPLAY_MAP = 81, CTX_CARPLAY_STOCK_MAP_NAV = 82;   // 81: map only; 82: maneuver + backing + stock map
     private static final int FIRST_CARPLAY_CONTEXT = 80;   // every stock context id is < this
 
     /* ---- context-table sizing / G24 KDK variants ---- */
-    private static final int DC_SIZE_A5  = 82;    // stock 0..78 + CarPlay 80/81
+    private static final int DC_SIZE_A5  = 83;    // stock 0..78 + CarPlay 80/81/82
     private static final int DC_SIZE_G24 = 158;   // stock + the +79 KDK-hoisted variants
     private static final int G24_KDK_CTX_OFFSET = 79;
     private int lastBlockedCarPlayContext = -1;
@@ -165,18 +165,19 @@ public class DisplayManagerMIB2High extends DisplayManager implements IDisplayLi
         this.dc[75] = new DisplayContext(75, new int[0]);
         this.dc[78] = new DisplayContext(78, new int[]{16, 59});
 
-        /* --- CarPlay cluster: two custom contexts, A5-class only (not G24) ---
+        /* --- CarPlay cluster: three custom contexts, A5-class only (not G24) ---
          *   z-order = array order (index 0 = front):
-         *     dc[80] = {98, 101, 102, 99}  nav active: maneuver(98) over the two KDK 987 backings
-         *                                  (101 = 328x180 sport, 102 = 210x153 popup) over base(99)
-         *     dc[81] = {99}                no nav: base only
+         *     dc[80] = {98, 101, 102, 99}  nav active + Maps on Cluster: maneuver(98) + KDK backings(101/102) over CarPlay map(99)
+         *     dc[81] = {99}                no nav + Maps on Cluster: CarPlay map(99) only
+         *     dc[82] = {98, 101, 102, 33}  nav active + stock map: maneuver(98) + KDK backings(101/102) over stock Audi map(33)
          *   98 = maneuver overlay (maneuver_render, transparent when idle); 99 = base (altscreen_render).
          *   Displayable 103 is NOT creatable (unregistered DSI id); 101/102 already exist as the 987
          *   Image backings, so we reuse those.  Plane geometry lives in ClusterLayerController; the
-         *   80<->81 switch is driven by AltScreenModule. */
+         *   80<->81/82 switch is driven by AltScreenModule. */
         if (this.framework.getKombiType() != KOMBI_TYPE_G24) {
             this.dc[CTX_CARPLAY_NAV] = new DisplayContext(CTX_CARPLAY_NAV, new int[]{98, 101, 102, 99});
             this.dc[CTX_CARPLAY_MAP] = new DisplayContext(CTX_CARPLAY_MAP, new int[]{99});
+            this.dc[CTX_CARPLAY_STOCK_MAP_NAV] = new DisplayContext(CTX_CARPLAY_STOCK_MAP_NAV, new int[]{98, 101, 102, 33});
         } else {
             this.defineContextsForG24();
         }

@@ -17,8 +17,8 @@ SynthesisFilterBank::SynthesisFilterBank()
     memset(mScratch, 0, sizeof mScratch);
 }
 
-// APACSynthesisFilterBank::Initialize, 0xae980.  The library allocates the two
-// buffers here and then calls Reset() through its own vtable; our decoder has the
+// APACSynthesisFilterBank::Initialize, 0xae980.  The original allocates the two
+// buffers here and then calls Reset() through its own vtable; the port has the
 // buffers already and calls Reset() directly.
 int32_t SynthesisFilterBank::Initialize(uint32_t channels, uint32_t frameLength)
 {
@@ -56,7 +56,7 @@ void SynthesisFilterBank::Reset()
 
 // APACSynthesisFilterBank::FrequencyToTimeInPlace, 0xae5b0.
 //
-// The library is one function with four exits; the vDSP calls it uses map to
+// The original is one function with four exits; the vDSP calls it uses map to
 // these three loops:
 //
 //     vDSP_vma (A,1,B,1,C,1,D,1,n)   D[i] = A[i]*B[i] + C[i]

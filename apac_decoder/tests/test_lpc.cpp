@@ -88,7 +88,7 @@ int main(int argc, char** argv)
     lsf.order = 0;
     lsf.sampleRate = kFs;
 
-    // Runs our version of whichever section just finished reading.
+    // Runs the port's version of whichever section just finished reading.
     struct Run {
         static void go(const char* section, unsigned c, uint32_t order,
                        apac::LPCBase* lpc, apac::Autocorr* ac, apac::LSFTools* lsf)

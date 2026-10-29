@@ -21,7 +21,7 @@ class DynamicTests(unittest.TestCase):
         np.testing.assert_array_equal(a.process(x),np.concatenate([b.process(x[:7]),b.process(x[7:])]))
 
     def five_band(self, gains=None, steps=None):
-        p = Path(__file__).resolve().parents[2]/'assets/soundamp/output_binding_audit.json'
+        p = Path(__file__).resolve().parents[2]/'output/r2/soundamp/output_binding_audit.json'
         d = json.loads(p.read_text())['dynamic_stage_research']['complex_five_band_kernel']
         return ComplexFiveBand(d['coefficients'], gains=[1]*5 if gains is None else gains,
                                steps=[0]*5 if steps is None else steps)

@@ -1,29 +1,10 @@
 # CarPlay PPID profiles and capability settings
 
+> `<AUDI_WORKSPACE>` denotes the external firmware/RE working set, not a directory shipped with this repository. Source filenames, builds and evidence offsets below identify the required artifacts.
+
 _2026-10-21 · installed CarExperienceAssets version 40; stock MU1316 firmware; supplied iOS 26.1 source comparison and iOS 27 binary checks_
 
 ---
-
-## 🧾 Current status and reading guide
-
-This report preserves the laboratory and reverse-engineering record. Later
-implementation and physical measurements have the following status:
-
-| Item | Status | Evidence |
-|---|---|---|
-| Maps-30 PPID hook | Deployed; always enabled when PPID is absent | [Production behavior](MAPS_30FPS_PROFILE.md) |
-| Physical AltScreen arrival | 29.64 FPS in the saved short session | [Performance report](WIRED_PERFORMANCE_2026-10-21.md) |
-| Concurrent workload | Both screens in motion; six-channel audio output | [Workload and CPU](WIRED_PERFORMANCE_2026-10-21.md#-simultaneous-workload) |
-| Original pre-patch PPID / effective phone profile | Not wire-captured / not read back | [Measurement limits](WIRED_PERFORMANCE_2026-10-21.md#-setup-activation-and-remaining-validation) |
-| Long-run stability / final panel FPS | Unverified | [Remaining validation](WIRED_PERFORMANCE_2026-10-21.md#-setup-activation-and-remaining-validation) |
-
-Statements about no HU deployment below refer to the specific laboratory
-experiments. Paths under `build/` and references marked as local research
-sources identify retained evidence or unpublished helpers.
-
-Read the [exact tested profile delta](#-exact-observed-comparison-for-the-tested-selector),
-[capability settings](#%EF%B8%8F-other-interesting-capability-settings)
-and [complete 90-PPID / 97-rule table](#-complete-ppid-rule-table).
 
 ## 📋 What is original, and what was changed
 
@@ -36,7 +17,7 @@ one claim about the physical HU:
 | Native laboratory cached capabilities | Empty userInfo | `mapsRefreshRate:30` in userInfo | Exact before/after dictionaries |
 | Stock MU1316 JSON | No PPID setting | No production configuration change | Extracted original file |
 | Stock MU1316 identity composer | Parameters 0–5; no PPID append in this function | No production binary change | ARM disassembly |
-| Physical HU Identify / phone PPID | Original top-level PPID not wire-captured | Later hook log confirms Maps-30 PPID addition | Original PPID and effective phone capability row remain unverified; see publication status |
+| Physical HU's actual outgoing Identify / phone PPID | **Not captured in available logs** | Not deployed or measured | Original physical value remains unverified |
 
 The stock findings support an original path without an explicitly advertised
 PPID. They do not justify inventing an original hexadecimal value, deriving
@@ -103,19 +84,11 @@ case-insensitive PPID values**. Repeated PPIDs may require an additional
 firmware or display-size predicate. These are the complete feature keys
 present in those 97 rows of the installed version-40 asset:[^catalog]
 
-The per-PPID distribution is:
-
-| Rules per PPID | PPIDs | Associated rules |
-|---|---:|---:|
-| 1 | 85 | 85 |
-| 2 | 3 | 6 |
-| 3 | 2 | 6 |
-| Total | 90 | 97 |
-
-The repeated values are `e2c77d4b` (2), `6b0bb1d6`
+The per-PPID distribution is **85 with one rule, three with two rules, and
+two with three rules**. The repeated values are `e2c77d4b` (2), `6b0bb1d6`
 (2), `c7290754b340458f` (2), `5bec6cc28dd347d5` (3), and
 `fc8bc3fb0e104e52` (3). These are alternative matching records, not additive
-feature bundles. A 90-PPID summary (`build/wired-altscreen-30fps-re/ppid-effects/ppid-summary.csv`, local research source)
+feature bundles. A 90-PPID summary (`build/wired-altscreen-30fps-re/ppid-effects/ppid-summary.csv`; local generated artifact)
 lists the rule count, row numbers, distinct feature keys and exact rules for
 each value. Counting feature keys across each PPID's rules (expanding
 `userInfo`, while keeping per-display zoom as one setting), 81 PPIDs refer
@@ -143,7 +116,7 @@ one row can set more than one key:
 | `mapsRefreshRate` | 1 | Maps supplies the target rate to VectorKit |
 
 There is no row in this asset that combines the Maps-30 key with the Siri or
-instrument-identifier keys. The complete 97-row CSV catalog (`build/wired-altscreen-30fps-re/ppid-effects/ppid-catalog.csv`, local research source)
+instrument-identifier keys. The complete 97-row CSV catalog (`build/wired-altscreen-30fps-re/ppid-effects/ppid-catalog.csv`; local generated artifact)
 includes each PPID, its additional predicates and its exact feature dictionary.
 
 ### Concrete examples
@@ -329,9 +302,9 @@ an original PPID. Adding a second PPID over an existing one would obscure
 the comparison.
 
 The existing Encode interception is the appropriate observation boundary.
-The catalog/consumer investigation itself changed no production identity or
-wireless behavior. The later [production hook](MAPS_30FPS_PROFILE.md) adds
-PPID only when absent; original native A/B evidence is retained. See the [complete mechanism](MAPS_FRAME_RATE_PROFILE_MECHANISM.md)
+No production identity replacement or shared wireless change is made in this
+turn. Existing native A/B evidence is retained, and the catalog/consumer
+analysis is read-only. See the [complete mechanism](MAPS_FRAME_RATE_PROFILE_MECHANISM.md)
 for profile-selection ambiguity, cache reversal and the source-rate controls.
 
 ## 📚 Complete PPID rule table
@@ -456,7 +429,7 @@ subject to the selection ambiguity documented in the
 ## 🔗 Sources
 
 [^original]: `build/wired-altscreen-30fps-re/maps-profile-mechanism/lifecycle-wire-proof.json`; actual outgoing messages in each lifecycle case's `journal.json`. Saved physical logs contain process-parent `ppid` values, which are unrelated to accessory PPID; no physical Identify34 capture was found.
-[^stock]: Stock `/Users/luka/Desktop/AUDI_2/Firmwares/HU/MHI2Q_US_AUG22_P5087_MU1316/extracted/system/etc/eso/production/dio_manager.json`; `app/armle/usr/lib/cinemo/libNmeVfs.so`; evidence under `build/wired-altscreen-30fps-re/ppid-effects/`: `NmeVfs-identity-function.asm`, `NmeVfs-start-identification-function.asm`, `composer-*.json`, `stock-composer-append-sites.json`, `stock-composer-r1-audit.json`. Text/GOT-relative string references were resolved and retained in `NmeVfs-pic-string-xrefs.json`; string absence alone was not used as proof.
+[^stock]: Stock `<AUDI_WORKSPACE>/Firmwares/HU/MHI2Q_US_AUG22_P5087_MU1316/extracted/system/etc/eso/production/dio_manager.json`; `app/armle/usr/lib/cinemo/libNmeVfs.so`; evidence under `build/wired-altscreen-30fps-re/ppid-effects/`: `NmeVfs-identity-function.asm`, `NmeVfs-start-identification-function.asm`, `composer-*.json`, `stock-composer-append-sites.json`, `stock-composer-r1-audit.json`. Text/GOT-relative string references were resolved and retained in `NmeVfs-pic-string-xrefs.json`; string absence alone was not used as proof.
 [^diff]: `build/wired-altscreen-30fps-re/ppid-effects/native-profile-exact-diff.json`; original native case `hook-fps-policy/ppid34-only/journal.json`. Dictionary values are quoted without assigning unverified semantic names to numeric enum values.
 [^catalog]: Installed guest asset snapshot `hook-fps-policy/phone-CarPlayCapabilities.json`; `ppid-effects/{asset-feature-inventory.json,ppid-catalog.csv}`. Counts refer only to content version 40, canonical asset JSON SHA-256 `c82fc0e7940c561001d08d9d0ce6fa84af24690d2731994ebe39cc2f73173e71`.
 [^selection]: [Verified selection mechanism](MAPS_FRAME_RATE_PROFILE_MECHANISM.md); iOS 27 feature assignment disassembly `ppid-effects/carkitd27-assign-features.asm`, including per-display zoom and Smart Zoom setters. One selected row supplies features; the manager can subsequently reconcile other preferences/policies.

@@ -4,8 +4,10 @@
 
 use super::Controller;
 use std::cell::RefCell;
+use std::collections::{BTreeSet, VecDeque};
 use std::ffi::{CStr, CString, c_char, c_void};
-use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 type Ref = *mut c_void;
@@ -128,6 +130,7 @@ impl DnsSd {
         &self,
         reference: Ref,
         deadline: Instant,
+        permission: &AtomicBool,
         ready: impl Fn() -> bool,
     ) -> Result<(), String> {
         let fd = unsafe { (self.sock_fd)(reference) };
@@ -135,6 +138,9 @@ impl DnsSd {
             return Err("DNS-SD returned no socket".into());
         }
         while !ready() {
+            if !permission.load(Ordering::Acquire) {
+                return Err("cancelled CarPlay discovery".into());
+            }
             let remaining = deadline.saturating_duration_since(Instant::now());
             if remaining.is_zero() {
                 return Err("CarPlay DNS-SD discovery timed out".into());
@@ -144,7 +150,7 @@ impl DnsSd {
                 events: 1,
                 revents: 0,
             };
-            let timeout = remaining.as_millis().min(1000) as i32;
+            let timeout = remaining.as_millis().min(250) as i32;
             // SAFETY: pfd is a valid one-element pollfd array.
             let polled = unsafe { poll(&mut pfd, 1, timeout) };
             if polled < 0 {
@@ -187,7 +193,8 @@ impl Drop for ServiceRef<'_> {
 
 #[derive(Default)]
 struct BrowseResult {
-    hit: Option<(String, String, String, u32)>,
+    hits: VecDeque<(String, String, String, u32)>,
+    seen: BTreeSet<(String, String, String, u32)>,
     error: i32,
 }
 
@@ -216,12 +223,17 @@ unsafe extern "C" fn browse_callback(
         )
     };
     if let (Ok(name), Ok(service_type), Ok(domain)) = fields {
-        result.hit = Some((name.into(), service_type.into(), domain.into(), interface));
+        let item = (name.into(), service_type.into(), domain.into(), interface);
+        if result.seen.insert(item.clone()) {
+            result.hits.push_back(item);
+        }
     }
 }
 
 #[derive(Default)]
 struct ResolveResult {
+    done: bool,
+    expected: String,
     hit: Option<(String, u16, u32)>,
     error: i32,
 }
@@ -234,13 +246,22 @@ unsafe extern "C" fn resolve_callback(
     _full_name: *const c_char,
     host: *const c_char,
     port: u16,
-    _txt_len: u16,
-    _txt: *const u8,
+    txt_len: u16,
+    txt: *const u8,
     context: *mut c_void,
 ) {
     let result = unsafe { &*(context as *const RefCell<ResolveResult>) };
     let mut result = result.borrow_mut();
     result.error = error;
+    result.done = true;
+    if txt.is_null()
+        || !super::txt_matches_peer(
+            unsafe { std::slice::from_raw_parts(txt, txt_len as usize) },
+            &result.expected,
+        )
+    {
+        return;
+    }
     if error != 0 || host.is_null() {
         return;
     }
@@ -251,14 +272,16 @@ unsafe extern "C" fn resolve_callback(
 
 #[derive(Default)]
 struct AddressResult {
-    hit: Option<Ipv4Addr>,
+    hit: Option<SocketAddr>,
+    interface: u32,
+    port: u16,
     error: i32,
 }
 
 unsafe extern "C" fn address_callback(
     _reference: Ref,
     flags: u32,
-    _interface: u32,
+    interface: u32,
     error: i32,
     _host: *const c_char,
     address: *const c_void,
@@ -268,7 +291,7 @@ unsafe extern "C" fn address_callback(
     let result = unsafe { &*(context as *const RefCell<AddressResult>) };
     let mut result = result.borrow_mut();
     result.error = error;
-    if error != 0 || flags & 2 == 0 || address.is_null() {
+    if error != 0 || flags & 2 == 0 || address.is_null() || interface != result.interface {
         return;
     }
     // QNX 6.5 sockaddr_in begins with sa_len, sa_family, sin_port, s_addr.
@@ -276,26 +299,40 @@ unsafe extern "C" fn address_callback(
     if bytes[1] == 2 {
         let ip = Ipv4Addr::new(bytes[4], bytes[5], bytes[6], bytes[7]);
         if !ip.is_link_local() && !ip.is_unspecified() {
-            result.hit = Some(ip);
+            result.hit = Some(SocketAddr::V4(SocketAddrV4::new(ip, result.port)));
+        }
+    } else if bytes[1] == 24 {
+        let bytes = unsafe { std::slice::from_raw_parts(address as *const u8, 28) };
+        let ip = Ipv6Addr::from(<[u8; 16]>::try_from(&bytes[8..24]).unwrap());
+        let scope = if ip.is_unicast_link_local() {
+            interface
+        } else {
+            u32::from_ne_bytes(bytes[24..28].try_into().unwrap())
+        };
+        if !ip.is_unspecified() && !ip.is_multicast() {
+            result.hit = Some(SocketAddr::V6(SocketAddrV6::new(ip, result.port, 0, scope)));
         }
     }
 }
 
-pub fn discover_on(interface_name: &str, timeout: Duration) -> Result<Controller, String> {
+pub fn discover_for(
+    interface_name: &str,
+    peer: &str,
+    timeout: Duration,
+    permission: &AtomicBool,
+) -> Result<Controller, String> {
     let name = CString::new(interface_name).map_err(|_| "invalid interface name")?;
-    // SAFETY: name is a valid C string; zero means the AP interface is absent.
     let interface = unsafe { if_nametoindex(name.as_ptr()) };
     if interface == 0 {
         return Err(format!("interface {interface_name} is unavailable"));
     }
     let dns = DnsSd::open()?;
     let deadline = Instant::now() + timeout;
-
     let browse_result = RefCell::new(BrowseResult::default());
-    let mut browse_ref = std::ptr::null_mut();
+    let mut reference = std::ptr::null_mut();
     let code = unsafe {
         (dns.browse)(
-            &mut browse_ref,
+            &mut reference,
             0,
             interface,
             c"_carplay-ctrl._tcp".as_ptr(),
@@ -308,88 +345,115 @@ pub fn discover_on(interface_name: &str, timeout: Duration) -> Result<Controller
         return Err(format!("DNSServiceBrowse failed: {code}"));
     }
     let browse = ServiceRef {
-        value: browse_ref,
+        value: reference,
         dns: &dns,
     };
-    dns.wait_until(browse.value, deadline, || {
-        let result = browse_result.borrow();
-        result.hit.is_some() || result.error != 0
-    })?;
-    let browse_result = browse_result.into_inner();
-    if browse_result.error != 0 {
-        return Err(format!("DNS-SD browse error: {}", browse_result.error));
+    loop {
+        dns.wait_until(browse.value, deadline, permission, || {
+            let r = browse_result.borrow();
+            !r.hits.is_empty() || r.error != 0
+        })?;
+        if browse_result.borrow().error != 0 {
+            return Err("DNS-SD browse error".into());
+        }
+        let (service, kind, domain, index) = browse_result.borrow_mut().hits.pop_front().unwrap();
+        if index != interface {
+            continue;
+        }
+        if let Some(controller) = resolve_peer(
+            &dns, &service, &kind, &domain, index, peer, deadline, permission,
+        )? {
+            return Ok(controller);
+        }
     }
-    let (service, kind, domain, service_interface) =
-        browse_result.hit.ok_or("no CarPlay controller")?;
-    drop(browse);
+}
 
-    let resolve_result = RefCell::new(ResolveResult::default());
-    let mut resolve_ref = std::ptr::null_mut();
-    let service = CString::new(service).map_err(|_| "invalid DNS-SD service name")?;
-    let kind = CString::new(kind).map_err(|_| "invalid DNS-SD service type")?;
-    let domain = CString::new(domain).map_err(|_| "invalid DNS-SD domain")?;
+fn resolve_peer(
+    dns: &DnsSd,
+    service: &str,
+    kind: &str,
+    domain: &str,
+    interface: u32,
+    peer: &str,
+    deadline: Instant,
+    permission: &AtomicBool,
+) -> Result<Option<Controller>, String> {
+    let result = RefCell::new(ResolveResult {
+        expected: peer.into(),
+        ..ResolveResult::default()
+    });
+    let mut reference = std::ptr::null_mut();
+    let service = CString::new(service).map_err(|_| "invalid service")?;
+    let kind = CString::new(kind).map_err(|_| "invalid service type")?;
+    let domain = CString::new(domain).map_err(|_| "invalid domain")?;
     let code = unsafe {
         (dns.resolve)(
-            &mut resolve_ref,
+            &mut reference,
             0,
-            service_interface,
+            interface,
             service.as_ptr(),
             kind.as_ptr(),
             domain.as_ptr(),
             resolve_callback,
-            &resolve_result as *const _ as *mut c_void,
+            &result as *const _ as *mut c_void,
         )
     };
     if code != 0 {
         return Err(format!("DNSServiceResolve failed: {code}"));
     }
     let resolved = ServiceRef {
-        value: resolve_ref,
-        dns: &dns,
+        value: reference,
+        dns,
     };
-    dns.wait_until(resolved.value, deadline, || {
-        let result = resolve_result.borrow();
-        result.hit.is_some() || result.error != 0
+    dns.wait_until(resolved.value, deadline, permission, || {
+        result.borrow().done
     })?;
-    let resolve_result = resolve_result.into_inner();
-    if resolve_result.error != 0 {
-        return Err(format!("DNS-SD resolve error: {}", resolve_result.error));
+    let result = result.into_inner();
+    if result.error != 0 {
+        return Err(format!("DNS-SD resolve error: {}", result.error));
     }
-    let (host, port, host_interface) = resolve_result.hit.ok_or("no CarPlay host")?;
+    let Some((host, port, index)) = result.hit else {
+        return Ok(None);
+    };
+    if index != interface || port == 0 {
+        return Ok(None);
+    }
     drop(resolved);
-
-    let address_result = RefCell::new(AddressResult::default());
-    let mut address_ref = std::ptr::null_mut();
-    let host_c = CString::new(host.clone()).map_err(|_| "invalid CarPlay host")?;
+    let result = RefCell::new(AddressResult {
+        interface,
+        port,
+        ..AddressResult::default()
+    });
+    let mut reference = std::ptr::null_mut();
+    let hostname = CString::new(host.clone()).map_err(|_| "invalid host")?;
     let code = unsafe {
         (dns.get_addr)(
-            &mut address_ref,
+            &mut reference,
             0,
-            host_interface,
-            1,
-            host_c.as_ptr(),
+            interface,
+            3,
+            hostname.as_ptr(),
             address_callback,
-            &address_result as *const _ as *mut c_void,
+            &result as *const _ as *mut c_void,
         )
     };
     if code != 0 {
         return Err(format!("DNSServiceGetAddrInfo failed: {code}"));
     }
     let addressed = ServiceRef {
-        value: address_ref,
-        dns: &dns,
+        value: reference,
+        dns,
     };
-    dns.wait_until(addressed.value, deadline, || {
-        let result = address_result.borrow();
-        result.hit.is_some() || result.error != 0
+    dns.wait_until(addressed.value, deadline, permission, || {
+        let r = result.borrow();
+        r.hit.is_some() || r.error != 0
     })?;
-    let address_result = address_result.into_inner();
-    if address_result.error != 0 {
-        return Err(format!("DNS-SD address error: {}", address_result.error));
+    let result = result.into_inner();
+    if result.error != 0 {
+        return Err(format!("DNS-SD address error: {}", result.error));
     }
-    let address = address_result.hit.ok_or("no CarPlay IPv4 address")?;
-    Ok(Controller {
-        address: SocketAddr::V4(SocketAddrV4::new(address, port)),
+    Ok(Some(Controller {
+        address: result.hit.ok_or("no CarPlay address")?,
         host_name: host,
-    })
+    }))
 }

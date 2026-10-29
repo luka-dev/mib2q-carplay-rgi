@@ -280,7 +280,7 @@ What each experiment says:
 - **sharedmask** — the first mechanism response in the stability direction: depth no longer follows level for guitar, keys and wind, entry ducking is 15 points softer at p10, piano / keys / strings rise to or near the teacher, one swing in 20 songs. Costs: bass 0.10, quieter air (−29 dB), SI-SDR −1.46. Being promoted as a pair against the anchor at 10k.
 - **attr** — the first run diverged to NaN at step 1000 (a window with silent vocal and silent eligible stems gave 0 / 0); fixed with an absolute floor and paused by review 16.
 
-_Paired 4k check (later 28.09):_ [`compare_rapid_pair.py`](../../../tools/stereo-upmix-render/compare_rapid_pair.py) joined the same 20 songs in `anchor_s1` and `sharedmask` and bootstrapped **songs**, not stem rows. Any-stem swings fell 3 → 1 (two resolved, none new), but guitar median rear share moved only 0.107 → 0.111; the paired median change was +0.007 with a 90% bootstrap interval −0.005 to +0.018. Piano and strings each had only 8 and 5 finite paired songs. This supports a stability mechanism signal, not a confident instrument-delivery promotion; the matched 10k pair is still needed.
+_Paired 4k check (later 28.09):_ [`compare_rapid_pair.py`](RETIRED_TOOLS.md#tool-f0828c53f80b) joined the same 20 songs in `anchor_s1` and `sharedmask` and bootstrapped **songs**, not stem rows. Any-stem swings fell 3 → 1 (two resolved, none new), but guitar median rear share moved only 0.107 → 0.111; the paired median change was +0.007 with a 90% bootstrap interval −0.005 to +0.018. Piano and strings each had only 8 and 5 finite paired songs. This supports a stability mechanism signal, not a confident instrument-delivery promotion; the matched 10k pair is still needed.
 
 _10k update (07:23 on 28.09):_ `sharedmask_10k` finished training and its 20 × 60 s real-C screen. Against the **same model family at 4k**, any-stem swing songs rose **1 → 5/20** (four new, none resolved). Median rear share: voice 0.039 → 0.041, guitar 0.111 → 0.131, piano 0.087 → 0.077, keys 0.114 → 0.111, strings 0.158 → 0.124, bass 0.097 → 0.096, drums 0.078 → 0.092. The 10k transition diagnostic gives entry-retention median 0.845, p10 **0.431** (4k p10 0.58; goal ≥ 0.60). Eligible transmission is 0.44 but vocal transmission 0.247; rear RMS −36.8 dBFS. The guitar gain does not compensate for worsened movement, ducking and protected stems; **do not extend `sharedmask_10k` to 40k**. `anchor_10k` was training when this was recorded, so the matched 10k comparison remains pending. Paired raw result: `D:\upmix\runs\rapid\sharedmask_4k_vs_10k.json`.
 
@@ -326,7 +326,7 @@ stateDiagram-v2
 | G 1.0 | 0.031 | 0.102 | 0.080 | 0.106 | 0.081 | 0.065 | 0.092 | 11/40 | −38.6 dBFS |
 | G 1.3 | 0.044 | 0.161 | 0.125 | 0.157 | 0.117 | 0.102 | 0.107 | 23/40 | −36.8 dBFS |
 
-G 1.3 recovers guitar, piano, and keys but misses strings and all three protected-stem limits; 12 additional songs begin swinging and none of the original 11 stop. **Do not promote or extend sep9.** Its 8-frame future context is also not yet a strict causal implementation because whole-window normalisation sees future audio; a device latency/profile gate would still be required if its audio metrics had passed. Paired CSV comparisons against sep3 and sep8 are reproducible with [`compare_rapid_pair.py`](../../../tools/stereo-upmix-render/compare_rapid_pair.py) and `D:\upmix\runs\sep9\dsp_g1.0\stems.csv` / `dsp_g1.3\stems.csv`.
+G 1.3 recovers guitar, piano, and keys but misses strings and all three protected-stem limits; 12 additional songs begin swinging and none of the original 11 stop. **Do not promote or extend sep9.** Its 8-frame future context is also not yet a strict causal implementation because whole-window normalisation sees future audio; a device latency/profile gate would still be required if its audio metrics had passed. Paired CSV comparisons against sep3 and sep8 are reproducible with [`compare_rapid_pair.py`](RETIRED_TOOLS.md#tool-f0828c53f80b) and `D:\upmix\runs\sep9\dsp_g1.0\stems.csv` / `dsp_g1.3\stems.csv`.
 
 **The rapid board so far** (20-song CPU screen at G 1.0; attribution on the 12 DEV excerpts at 4k steps):
 
@@ -403,7 +403,7 @@ flowchart TB
 
 ### Priorities
 
-_Playback correction after this review: the car receives ordinary stereo over live CarPlay and the head-unit hook performs the upmix. Only front-only and Track A are currently playable in that chain. The shared-mask student requires a Track A-owned hook port; the non-causal teacher cannot run there. Rear-only headphone previews can screen the student and teacher but cannot count as an in-car result. See the [CarPlay listening protocol](../UPMIX_CARPLAY_LISTENING_PROTOCOL.md)._
+_Playback correction after this review: the car receives ordinary stereo over live CarPlay and the head-unit hook performs the upmix. Only front-only and Track A are currently playable in that chain. The shared-mask student requires a Track A-owned hook port; the non-causal teacher cannot run there. Rear-only headphone previews can screen the student and teacher but cannot count as an in-car result. See the [CarPlay listening protocol](UPMIX_CARPLAY_LISTENING_PROTOCOL.md)._
 
 1. **Blind in-car listening test** — front-only versus Track A through live CarPlay, level-matched, shuffled, repeated; use the shared-mask and teacher only for the separate rear-only headphone preview until a student is ported into the hook.
 2. **Persistent rear membership in Track A's controller** — slow membership with hysteresis and minimum dwell, separated from fast protection; log membership changes and eligible-audio loss separately.
@@ -426,7 +426,7 @@ _Playback correction after this review: the car receives ordinary stereo over li
 
 - [Upmix Source Separation Plan](UPMIX_SOURCE_SEPARATION_PLAN.md) — the running log with every review (1–15), run row and diagnostic
 - [Upmix Mask Net Phase 1 Report 2026-09-27](UPMIX_MASK_PHASE1_REPORT_2026-09-27.md) — Track A: the deployable mask net in the car
-- [Upmix Stability 2026-09-25](../UPMIX_STABILITY_2026-09-25.md) — the original "back and forth" measurement and causes
+- [Upmix Stability 2026-09-25](UPMIX_STABILITY_2026-09-25.md) — the original "back and forth" measurement and causes
 - [Upmix Datasets and Teachers](../UPMIX_DATASETS_AND_TEACHERS.md) — MoisesDB, the caches, htdemucs and BS-RoFormer as teachers
 - Student and tools: `tools/stereo-upmix-render/sep_net.py`, `diag_gap.py`, `diag_transitions.py`, `diag_lossfloor.py`, `diag_auxgrad.py`, `rapid_board.py`, `pc/rapid_daemon.ps1`, `pc/rapid_context.ps1`, `bench_precision.py`
 

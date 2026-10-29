@@ -20,7 +20,7 @@ from amp_complex_modes import CalibrationNoiseCore, CalibrationSequence, select_
 from amp_complex_path import biquad_sos
 
 ROOT = Path(__file__).resolve().parents[2]
-LOADER = ROOT/'assets/soundamp/J525_8W0035465_SW0420_SHARC_SPI_bitrev.ldr.bin'
+LOADER = ROOT/'output/r2/soundamp/J525_8W0035465_SW0420_SHARC_SPI_bitrev.ldr.bin'
 
 
 def load_builtin_records(loader=LOADER):
@@ -169,8 +169,8 @@ every declared input regardless of current coefficient values.
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--loader', type=Path, default=LOADER)
-    parser.add_argument('--audit', type=Path, default=ROOT/'assets/soundamp/remaining-blocks-20260919/audit.json')
-    parser.add_argument('--binding', type=Path, default=ROOT/'assets/soundamp/output_binding_audit.json')
+    parser.add_argument('--audit', type=Path, default=ROOT/'output/r2/soundamp/remaining-blocks-20260919/audit.json')
+    parser.add_argument('--binding', type=Path, default=ROOT/'output/r2/soundamp/output_binding_audit.json')
     parser.add_argument('--output', type=Path)
     args = parser.parse_args()
     records = load_builtin_records(args.loader)

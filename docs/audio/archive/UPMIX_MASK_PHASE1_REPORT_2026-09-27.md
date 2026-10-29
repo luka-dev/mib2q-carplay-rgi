@@ -236,7 +236,7 @@ Every file was written as `name.new`, renamed, read back and compared byte for b
 ## 🔗 References
 
 - [Upmix Source Separation Plan](UPMIX_SOURCE_SEPARATION_PLAN.md) — the living log with every row, review and decision.
-- [Upmix Stability 2026-09-25](../UPMIX_STABILITY_2026-09-25.md) — the "back and front" causes and the vocal gate.
+- [Upmix Stability 2026-09-25](UPMIX_STABILITY_2026-09-25.md) — the "back and front" causes and the vocal gate.
 - [Bench README](../../../tools/stereo-upmix-render/bench/README.md) — QEMU instruction counts, the per-function profile plugin, the NEON self-test.
 - `models/mask-full-probe-v21a/manifest.json`, `models/*/settings.json` — provenance and the shipped knobs.
 - Commits: 0c91d5e, efa42d9, 81a836e, 6d667c7, 68a137f, e835282, c43a17c, 196d1bd, dcbacb5, 04fb06d.

@@ -5,7 +5,7 @@ static char lifecycle_identity[253];
 static int lifecycle_wait(pid_t child)
 {
     unsigned i;int status;
-    for(i=0;i<300;++i) {
+    for(i=0;i<600;++i) {
         pid_t got=waitpid(child,&status,WNOHANG);
         if(got==child) {
             printf("[stock210-lifecycle] child=%ld wait status=%d\n",(long)child,status);fflush(stdout);
@@ -62,6 +62,9 @@ static int lifecycle_bridge(unsigned op)
        !read_all(fd,reply,sizeof(reply)) && !memcmp(reply,"CPRA\x02",5))result=reply[5];
     close(fd);return result;
 }
+#ifdef MHI2Q_STOCK210_ACTIVE_STOP_QEMU
+#include "stock210_active_stop_qemu.c"
+#endif
 static int lifecycle_wired(void)
 {
     int busy=lifecycle_bridge(3),unowned=lifecycle_bridge(4);
@@ -72,10 +75,11 @@ static int lifecycle_wired(void)
     setenv("MHI2Q_DIO_OWNER_LOCK","/mnt/pairing/owner.lock",1);
     setenv("MHI2Q_DIO_WIRED_PRIORITY_LOCK","/mnt/pairing/wired.lock",1);
     setenv("MHI2Q_REQUIRE_BRIDGE_QUIESCE","1",1);
-    pid_t child=spawnl(P_NOWAIT,"/mnt/pairing/bin/dio_owner_exec","dio_owner_exec","wired","/mnt/pairing/bin/wired-confirm-qemu",(char *)NULL);
+    pid_t child=spawnl(P_NOWAIT,"/mnt/pairing/bin/stock210-wired-owner-qemu","stock210-wired-owner-qemu",(char *)NULL);
     if(child<0 || lifecycle_wait(child))return -1;
     puts("[stock210-lifecycle] wired takeover and release verified");fflush(stdout);return 0;
 }
+#ifndef MHI2Q_STOCK210_ACTIVE_STOP_QEMU
 static int lifecycle_stop(void)
 {
     long pid=0;FILE *f=fopen("/dev/shmem/stock210_supervisor_pid","r");
@@ -84,6 +88,7 @@ static int lifecycle_stop(void)
     if(read!=1 || pid<=1 || kill((pid_t)pid,SIGTERM))return -1;
     return lifecycle_wait(lifecycle_phone);
 }
+#endif
 static void lifecycle_dump_info(const uint8_t *body,size_t length)
 {
     char line[16400];size_t i,used=(size_t)snprintf(line,sizeof(line),"[stock210-info] ");

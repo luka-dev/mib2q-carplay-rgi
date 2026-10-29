@@ -109,7 +109,7 @@ class ComplexTimingTests(unittest.TestCase):
             with self.assertRaises(ValueError):load_builtin_records(bad)
 
     def test_inventory_separates_delay_cadence_and_no_write(self):
-        audit=json.loads((ROOT/'assets/soundamp/remaining-blocks-20260919/audit.json').read_text())
+        audit=json.loads((ROOT/'output/r2/soundamp/remaining-blocks-20260919/audit.json').read_text())
         result=timing_inventory(audit)
         for p in result['profiles']:
             self.assertEqual(p['full_mode_pair_delay_samples'],[1023]*5)
@@ -120,7 +120,7 @@ class ComplexTimingTests(unittest.TestCase):
         self.assertFalse(result['live_state_proven'])
 
     def test_second_b_schedule_reuse_does_not_create_music_edge(self):
-        binding=json.loads((ROOT/'assets/soundamp/output_binding_audit.json').read_text())
+        binding=json.loads((ROOT/'output/r2/soundamp/output_binding_audit.json').read_text())
         result=second_b_binding(binding)
         self.assertEqual(result['source_roots'],[8,9,10])
         self.assertEqual(result['slot_possible_input_roots'],[[8,9,10]]*16)

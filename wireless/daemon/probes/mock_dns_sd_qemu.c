@@ -80,7 +80,7 @@ int DNSServiceGetAddrInfo(DNSServiceRef *out, uint32_t flags,
                           void *context)
 {
     (void)flags;
-    if (interface == 0 || protocol != 1 || !host ||
+    if (interface == 0 || protocol != 3 || !host ||
         strcmp(host, "iphone.local.") != 0) return EINVAL;
     return make_ref(out, 3, (void *)callback, context);
 }
@@ -101,8 +101,9 @@ int DNSServiceProcessResult(DNSServiceRef ref)
         ref->callback.browse(ref, 2, 1, 0, "QEMU-iPhone",
                              "_carplay-ctrl._tcp.", "local.", ref->context);
     } else if (ref->kind == 2) {
+        static const uint8_t txt[]={20,'i','d','=','0','1',':','0','2',':','0','3',':','0','4',':','0','5',':','0','6'};
         ref->callback.resolve(ref, 0, 1, 0, "QEMU-iPhone._carplay-ctrl._tcp.local.",
-                              "iphone.local.", htons(7001), 0, NULL, ref->context);
+                              "iphone.local.", htons(7001), sizeof(txt), txt, ref->context);
     } else if (ref->kind == 3) {
         struct sockaddr_in address;
         memset(&address, 0, sizeof(address));

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 import re
 import shutil
@@ -18,7 +19,7 @@ TOOLS = AUDI / "Tools"
 SDP = TOOLS / "qnx-65-sdp-docker"
 QEMU = TOOLS / "qemu-src/build/qemu-system-arm"
 SYS = SDP / "sdp/target/qnx6/armle-v7"
-IMAGE = "qnx65-armv7-toolchain:latest"
+IMAGE = os.environ.get("QNX_RUST_IMAGE", "qnx65-armv7-toolchain:8.5-rust")
 PROBE = DAEMON / "target/armv7-unknown-nto-qnx650/release/wifi-ie-qemu-probe"
 OUT = DAEMON / "out"
 
@@ -37,7 +38,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--delayed-ap-qemu", action="store_true",
                         help="fake uaputl rejects the first three AP queries")
+    parser.add_argument("--timeout-qemu", action="store_true",
+                        help="TERM-resistant fake command, native capture regression and cross-generation quarantine")
     options = parser.parse_args()
+    if options.timeout_qemu and options.delayed_ap_qemu:
+        parser.error("select one scenario")
     docker(Path("/tmp"), "/opt/rust/qnx-cargo", "build", "-q",
            "--manifest-path", f"/src/{DAEMON.relative_to(AUDI)}/Cargo.toml",
            "--features", "qemu-probe", "--bin", "wifi-ie-qemu-probe",
@@ -63,6 +68,12 @@ def main() -> None:
         docker(work, "arm-unknown-nto-qnx6.5.0eabi-gcc",
                "-O2", "-Wall", "-Wextra", "-Werror", "-o", "/work/fake_uaputl",
                f"/src/{(HERE / 'fake_uaputl.c').relative_to(AUDI)}")
+        if options.timeout_qemu:
+            docker(work, "arm-unknown-nto-qnx6.5.0eabi-gcc", "-std=gnu99",
+                   "-O2", "-Wall", "-Wextra", "-Werror", "-DMHI2Q_CAPTURE_TIMEOUT_MS=300",
+                   "-o", "/work/qnx_capture_test",
+                   f"/src/{(DAEMON / 'src/qnx_process.c').relative_to(AUDI)}",
+                   f"/src/{(HERE / 'qnx_capture_test.c').relative_to(AUDI)}")
         manifest = """[linker="(40;1;)qcc -bootstrap -nostdlib -Wl,--no-keep-memory -Vgcc_ntoarmv7%(m!=3,%(m!=6,%(e==0, -EL%)%(e==1, -EB%)%)%)%(h!=0, -Wl,-Ttext -Wl,0x%t%)%(d!=0, -Wl,-Tdata -Wl,0x%d%) -o%o %i %[M -L%^i -Wl,-uinit_%n -lmod_%n%] /work/libstartup.a -L/opt/qnx650/target/qnx6/armle-v7/lib -L/opt/qnx650/target/qnx6/armle-v7/usr/lib -llzo -lucl -ldrvr"]
 [linker="(40;2;)cp %i %o"]
 [image=0x40200000]
@@ -87,6 +98,7 @@ def main() -> None:
 }
 [type=link] /usr/lib/ldqnx.so.2=/proc/boot/libc.so.3
 [type=link] /dev/console=/dev/ser1
+[type=link] /tmp=/dev/shmem
 [perms=+r,+x]
 /proc/boot/libc.so.3=/work/libc.so.3
 /proc/boot/libm.so.2=/work/libm.so.2
@@ -105,6 +117,17 @@ def main() -> None:
                 "    MHI2Q_CP_UAPUTL=/dev/shmem/fake_uaputl\n"
                 "    MHI2Q_QEMU_AP_DELAY_QUERIES=3\n",
             )
+        if options.timeout_qemu:
+            manifest = manifest.replace(
+                "    /proc/boot/cp -p /proc/boot/fake_uaputl /dev/shmem/fake_uaputl",
+                "    /proc/boot/cp -p /proc/boot/fake_uaputl /proc/boot/qnx_capture_test /proc/boot/wifi-ie-qemu-probe /dev/shmem")
+            manifest = manifest.replace("    /proc/boot/wifi-ie-qemu-probe\n", """    MHI2Q_CAPTURE_TEST_PATH=/dev/shmem/qnx_capture_test
+    /dev/shmem/qnx_capture_test
+    MHI2Q_QEMU_UAPUTL_HANG=1
+    /dev/shmem/wifi-ie-qemu-probe
+    /dev/shmem/wifi-ie-qemu-probe
+""")
+            manifest += "/proc/boot/qnx_capture_test=/work/qnx_capture_test\n"
         (work / "wifi_ie.build").write_text(manifest)
         docker(work, "sh", "-c",
                "MKIFS_PATH=/work:/opt/qnx650/target/qnx6/armle-v7/boot/sys "
@@ -114,8 +137,8 @@ def main() -> None:
         for name in ("proc/boot/fake_uaputl", "proc/boot/wifi-ie-qemu-probe"):
             if name not in listing:
                 raise RuntimeError(f"QEMU IFS lacks {name}")
-        log = OUT / ("qemu_wifi_ie_delayed_ap.log" if options.delayed_ap_qemu
-                     else "qemu_wifi_ie.log")
+        log = OUT / ("qemu_wifi_ie_timeout.log" if options.timeout_qemu else
+                     "qemu_wifi_ie_delayed_ap.log" if options.delayed_ap_qemu else "qemu_wifi_ie.log")
         with log.open("w") as stream:
             process = subprocess.Popen(
                 [str(QEMU), "-M", "virt", "-m", "256", "-cpu", "cortex-a15",
@@ -138,6 +161,14 @@ def main() -> None:
                         process.kill()
                         process.wait()
         output = log.read_text(errors="replace")
+        if options.timeout_qemu:
+            for marker in ("capture: output, EOF, failure, overflow, TERM-resistant timeout, flood deadline and reap passed",
+                           "[wifi-ie-qemu] timeout and no retry=ok",
+                           "[wifi-ie-qemu] quarantine across generation=ok"):
+                if marker not in output:
+                    raise SystemExit(f"missing {marker}; inspect {log}")
+            print(f"QNX native capture deadlines/reap and persistent radio quarantine passed; log: {log}")
+            return
         for marker in ("[wifi-ie-qemu] initial=ok", "[wifi-ie-qemu] restore=ok",
                        "[wifi-ie-qemu] removal=ok",
                        "=== wifi IE probe returned ==="):

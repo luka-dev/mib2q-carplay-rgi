@@ -82,6 +82,11 @@ Cold boot on 2026-09-16 still showed about 1.5 s of black: `Screen/EGL open` too
 
 Sources: `ALTSCREEN_PRISM_WAITING_2026_09_14`, `ALTSCREEN_VC_NAV_STATUSBAR`
 
+Surface readiness is separate from [stock Navigation initialization](../cluster-and-rgi/NAV_INITIALIZING_SCREEN.md).
+The renderer-ready wait avoids selecting an empty CarPlay plane; it does not
+clear the stock NAVSD INITIALIZING screen. The earlier NAVSD workaround was
+removed after the owner's cold-boot test.
+
 ## ⏱️ Renderer start cost
 
 Both renderers start only when the first `dio_manager` generation after boot starts `carplay_monitor.sh`; later sessions adopt the running processes, so this cost is paid once per boot.
@@ -126,7 +131,7 @@ Before the old shader was deleted, the production waiting artwork matched the or
 
 ## 📌 Related
 
-`altscreen_render` is a persistent renderer. `carplay_monitor.sh` starts or adopts it, restarts it only when it is missing, and leaves it alive across ordinary `dio_manager` exits. Java never spawns or kills it (`deploy/smartphone_integrator/README.md:72-89`). See [Reconnect and Lifecycle](RECONNECT_AND_LIFECYCLE.md) and [AltScreen and Video overview](README.md); for the HMI start order that decides what appears first see [HMI Startup and Identity](../connect-and-usb/HMI_STARTUP_AND_IDENTITY.md), and for the renderer log audit [Production Audits](../build-and-deploy/PRODUCTION_AUDITS.md).
+`altscreen_render` is a persistent renderer. `carplay_monitor.sh` starts or adopts it, restarts it only when it is missing, and leaves it alive across ordinary `dio_manager` exits. Java never spawns or kills it (`deploy/smartphone_integrator/README.md:72-89`). See [Reconnect and Lifecycle](RECONNECT_AND_LIFECYCLE.md) and [AltScreen and Video overview](README.md); for the HMI start order that decides what appears first see [HMI Startup and Identity](../connect-and-usb/HMI_STARTUP_AND_IDENTITY.md), and for the renderer log audit [Production Audits](../build-and-deploy/archive/PRODUCTION_AUDITS.md).
 
 ## 📚 Sources
 

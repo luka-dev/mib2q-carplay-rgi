@@ -181,9 +181,9 @@ Keep the same selected TRAIN crop, common gain, loss, normalization, seed, score
 
 ## 📁 Code and evidence
 
-- [fit_scene_fixed_nas.py](../../../tools/stereo-upmix-render/fit_scene_fixed_nas.py): unchanged fixed-crop recipe plus hash-bound model/optimizer restoration and replay check.
-- [test_scene_fixed_resume.py](../../../tools/stereo-upmix-render/test_scene_fixed_resume.py): trajectory equality and recipe/checkpoint rejection.
-- [scene_joint_net.py](../../../tools/stereo-upmix-render/scene_joint_net.py): unchanged model; proposals above are not implemented here.
+- [fit_scene_fixed_nas.py](RETIRED_TOOLS.md#tool-68f8855859f8): unchanged fixed-crop recipe plus hash-bound model/optimizer restoration and replay check.
+- [test_scene_fixed_resume.py](RETIRED_TOOLS.md#tool-d35e5a35ade2): trajectory equality and recipe/checkpoint rejection.
+- [scene_joint_net.py](RETIRED_TOOLS.md#tool-4f996c57d64f): unchanged model; proposals above are not implemented here.
 
 [^bsrnn]: ../Luo and Yu, [Music Source Separation with Band-split RNN](https://arxiv.org/pdf/2209.15174), sectionII.B–C. The paper uses bidirectional LSTMs and separate band modules; its temporal model is not our causal deployment design.
 [^replication]: ../Magron, Serizel and Douwes, [Investigating the Performance and Energy Costs of Replicating Band-Split RNN for Music Source Separation](https://arxiv.org/html/2609.21918v1), September18,2026, sections4.1.1/4.1.3/4.1.5. [Author code and models](https://github.com/magronp/bsrnn).

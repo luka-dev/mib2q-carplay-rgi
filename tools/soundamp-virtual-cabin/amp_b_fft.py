@@ -13,7 +13,7 @@ import sys
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
-LOADER = ROOT/'assets/soundamp/J525_8W0035465_SW0420_SHARC_SPI_bitrev.ldr.bin'
+LOADER = ROOT/'output/r2/soundamp/J525_8W0035465_SW0420_SHARC_SPI_bitrev.ldr.bin'
 KERNEL_SHA256 = '66341298899d9deb79e5f3a6d725f45578c4cbddc9fb8e13a280946368c2eb4d'
 PINS = {
     0x12e8d3: 'I14=0xe4754',

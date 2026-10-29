@@ -1,8 +1,8 @@
 # Virtual Cabin — reverse-engineering the Audi B&O J525 amp and feeding it CarPlay 5.1
 
-*A long-read on how the Audi B&O amplifier was reverse-engineered, why getting six discrete channels to it was so hard, and what the "Virtual Cabin" actually is.*
+> **Scope:** stock amplifier RE and dated acoustic models are retained here. Runtime integration and tuning sections describe the earlier Universal/HSSR implementation unless explicitly updated. The current renderer and controls are documented in [Stereo to 5.1 Upmix](../audio/STEREO_TO_5_1_UPMIX.md); cross-amplifier support is in [ODIS mapping](../audio/ODIS_AMP_MAPPING.md#external-amplifier-support). Do not use the old environment tables as installation instructions.
 
-> **History: a long-read of the HSSR era (2026-09).** The upmix it describes (HSSR Universal, its knobs and the shipped-config table) was retired on 2026-10-09; the `path:line` cites are from that tree and have drifted. The amp reading here already uses the corrected matrix orientation, but the current amp hub is [Virtual Cabin and Amp RE](../audio/VIRTUAL_CABIN_AND_AMP_RE.md) with [J525 Wiring and Speakers](../audio/J525_WIRING_AND_SPEAKERS.md); what runs now: [Stereo to 5.1 Upmix](../audio/STEREO_TO_5_1_UPMIX.md).
+*A long-read on how the Audi B&O amplifier was reverse-engineered, why getting six discrete channels to it was so hard, and what the "Virtual Cabin" actually is.*
 
 ---
 
@@ -101,14 +101,14 @@ flowchart TB
     sharc --> speakers
 ```
 
-`MIBRoot` picks the route from `ExternalAmplifierCoded`; non-B&O cars render on the
-internal C674x DSP.
+`MIBRoot` picks the route from `ExternalAmplifierCoded`; internal-amplifier cars render on the
+internal C674x DSP. External B&O and Bose share the multichannel route; see the
+[current amplifier comparison](../audio/ODIS_AMP_MAPPING.md#external-amplifier-support).
 
 **Why "MMX sends 6×24, the RCC link is 2- or 8-slot" is not a contradiction:** the two
 framings sit on opposite sides of two INICs and the MOST ring. The INICs reframe; the
 only quantity that crosses end-to-end is the MOST synchronous **BlockWidth** (26 bytes
-for the multichannel source, read as `2 + 8×3`; the older `2 + 6×4` reading is superseded)
-(`docs/audio/INTERNAL_AMP_PATH.md`, [QNX Audio Topology](../audio/QNX_AUDIO_TOPOLOGY.md)).
+for the six-channel source) (`docs/audio/INTERNAL_AMP_PATH.md`).
 
 ## 🔗 How audio reaches the amp — the routing decision
 
@@ -122,7 +122,7 @@ MIBRoot resolves a route through a two-table mapper keyed on one byte
 
 | ExternalAmplifierCoded | source | sink | width |
 |---|---|---|---|
-| 1 (external, B&O/Bose) | `eSRC_ENT_AMP_DIO_MEDIA_MC` (0x46f) | `eSNK_DTCP51` (2) | **26 B** (`2 + 8×3`; carries the six channels) |
+| 1 (external, B&O/Bose) | `eSRC_ENT_AMP_DIO_MEDIA_MC` (0x46f) | `eSNK_DTCP51` (2) | **26 B = 6ch** |
 | 0 (internal amp) | `eSRC_ENT_AMP_DIO_MEDIA` (0x46e) | `eSNK_SPEAKERS` (1) | **4 B = stereo** |
 
 There is no channel-count negotiation, no capability check — one byte picks a static
@@ -130,19 +130,19 @@ There is no channel-count negotiation, no capability check — one byte picks a 
 `on -f rcc /usr/apps/modifyE2P r fc 1` → `02`=external, `01`=internal (`0xFC` is the
 flat EEPROM offset of that byte).
 
-**The finding that shapes the product: the internal (non-B&O) amp has no native
+**The finding that shapes the product: the internal amp has no native
 6-channel CarPlay route.** MOST source width is a static property in MIBRoot's
 `MmxSourcePresCtrl` table (`docs/audio/QNX_AUDIO_TOPOLOGY.md`): the internal media
 source is BlockWidth 4 (stereo). `eSNK_SPEAKERS_MC` (the multichannel speaker sink) is
 a **dead alias** — it appears in none of the 143 resource records and zero connections,
 and `AudioProcess` even maps it back to the same stereo DSI input. So on an internal-amp
 car a PCM6 stream is **front L/R only**. The safe product policy is therefore to gate
-`AUDIO_SPATIAL` on E2P 0xFC (`AUDIO_STEREO_UPMIX=off` alone is not enough — the bypass
-still rides the 6-voice path) (`memory/internal_amp_no_51_path.md`). The startup ships with `AUDIO_SPATIAL=1`; the
-installer implements the E2P gate (`install_MoreIncredibleBash/mod/custom.sh`, `read_amp`
-/ `gate_audio`) and rewrites it to `AUDIO_SPATIAL=0` unless the byte is `02`, and the MMI
-UpMix row is hidden on internal amps (stock `AmplifierListener`, `DEVICETYPE` 1–3); neither
-has run on an internal-amp car yet. A real internal 6-channel
+`AUDIO_SPATIAL` on E2P 0xFC (the MMI UpMix Off setting alone is not enough — the bypass
+still rides the 6-voice path) (`memory/internal_amp_no_51_path.md`). This unit's startup
+hardcodes `AUDIO_SPATIAL=1` because it is an external-amp car; the installer now implements
+the E2P gate in `read_amp` and `gate_audio`, rewriting the installed startup to
+`AUDIO_SPATIAL=0` for internal or unreadable coding
+(`install_MoreIncredibleBash/mod/custom.sh`). A real internal 6-channel
 path is *feasible* but needs RCC-side flashing (MIBRoot 8 bytes + Jacinto DSP
 McASP3/reader/mixer edits) and an internal-amp car to develop against — planned, not
 built (`docs/audio/INTERNAL_AMP_PATH.md`, `docs/audio/INTERNAL_AMP_PATH.md`).
@@ -170,7 +170,7 @@ channel" takes its fallback.
 
 **The fix (SOLVED 2026-09-02, confirmed by ear):** make `mpl5`'s caps record **mirror
 `mpl1` field-for-field** (min/max voices = 6, fragsize `0x4800`;
-`deploy/deva-ctrl-qc/patch_deva_mirror_mpl1.sh:36-46`). The CSD session is then built
+`deploy/deva-ctrl-qc/build_final.py`). The CSD session is then built
 six-channel at attach time. Stereo still opens because **QSA inserts a channel
 conversion** rather than refusing a below-min open — `mpl1` had served stereo at
 `min==max==6` all along. The month-long belief "widening the minima breaks stereo" was
@@ -198,24 +198,14 @@ ADSP/MOST/SHARC/COPP — all of which were found **correct**. The rule that came
 
 The MMX AFE/LPASS packs six 24-bit slots at byte offsets 2,5,8,11,14,17 in a 32-byte
 frame and never clamps to stereo; the COPP does not narrow; the MOST/INIC transport
-carries BlockWidth 26; the amp's V850 accepts `SinkNr 0x26, BlockWidth 26` (whether the
-connection lands on `0x26` or on the 26-byte 7.1 sink `0x32` is unresolved; either is accepted)
+carries BlockWidth 26; the amp's V850 accepts `SinkNr 0x26, BlockWidth 26`
 (`docs/audio/QNX_AUDIO_TOPOLOGY.md`, `docs/audio/QNX_AUDIO_TOPOLOGY.md`,
 `docs/audio/QNX_AUDIO_TOPOLOGY.md`). Every amp-side layer did exactly what it
 was told — consistent with the two width declarations above being the only faults.
 
 ### The mirror driver
 
-`deploy/deva-ctrl-qc/` ships the fix as a three-step patch of the stock Qualcomm driver
-(`deploy/deva-ctrl-qc/BUILD_CHAIN.md:1-13`): `patch_deva.sh` (caps maxima 2→6 + a
-DMA-side helper, since `.rodata` shares the R+E segment there is no code cave — the
-helper is injected into the tail of a `__FILE__` diagnostic string),
-`patch_deva_csd_live.sh` (live-channel read, now redundant,
-`deploy/deva-ctrl-qc/BUILD_CHAIN.md:29`), and `patch_deva_mirror_mpl1.sh` — **the step
-that actually fixed the car** (`deploy/deva-ctrl-qc/BUILD_CHAIN.md:33-34`) — which
-makes the minima mirror `mpl1`. The output `deva-ctrl-qc.so.patched` is deployed to
-`/mnt/app/armle/lib/dll/deva-ctrl-qc.so` and becomes active at the next reboot
-(`deploy/deva-ctrl-qc/BUILD_CHAIN.md:11-13`). **Ceiling: 6 is the max a byte can
+The selected driver is reproduced by `deploy/deva-ctrl-qc/build_final.py`; its three mechanisms and attach-order evidence are consolidated in `docs/stock-patches/deva-ctrl-qc.so.md`. The final binary is unchanged and is loaded after reboot. **Ceiling: 6 is the max a byte can
 reach** (`deva_csd_start_csd_session_playback` hardcodes 6; no 8-channel output node
 exists), so CarPlay's 5.1.2 = 8 channels needs a mandatory **8→6 fold** on the hook side
 (`hook/audio/spatial_downmix.h:95-96`). Channel order is Apple canonical
@@ -295,19 +285,19 @@ There are **two independent "B" processors**: a spectral **first-B** (74-band, w
 `124DF3`, ~1024-sample / 21.3 ms delay) injected at the first mixer, and a **second-B**
 fed only by aux inputs at the second mixer. Their full binding/config/scheduling is
 documented across [SHARC B Processors](../audio/SHARC_B_PROCESSORS.md) (merged from 16 audits); for the white paper the load-bearing
-facts are: the model defaults both to conservative/identity behavior, but that is a
-hypothesis — static evidence is compatible with an active first B (bank 1 requests library
-mode 5), and C4D17 is not proven off — and the matrix **bank selects a SHARC "mode"** (below).
+facts are: both default to conservative/identity behavior in the shipped banks, and the
+matrix **bank selects a SHARC "mode"** (below).
 
 ### The input matrix — corrected orientation
 
 > **Correction that supersedes older notes:** the matrix orientation was transposed in
-> earlier readings. The A07 RAM stores
+> earlier readings (`docs/audio/VIRTUAL_CABIN_AND_AMP_RE.md:9-29`). The A07 RAM stores
 > **rows = outputs, columns = inputs**; the hook's copy is transposed once so its rows
 > are inputs (`hook/audio/stereo_upmix.c:57-58`). The memory-file per-speaker summaries
 > derived from the old transposed reading ("sub = LFE only", "centre no bass",
-> "woofers sum L/Ls/C/LFE", "fb3 = −3 dB woofers") are **withdrawn**. Use the matrix
-> below (the same as [Virtual Cabin and Amp RE](../audio/VIRTUAL_CABIN_AND_AMP_RE.md)).
+> "woofers sum L/Ls/C/LFE", "fb3 = −3 dB woofers") are **withdrawn**, and so is the
+> table in `docs/audio/VIRTUAL_CABIN_AND_AMP_RE.md:27-36`, which is still the old
+> orientation. Use the matrix below.
 
 The V850 selects a signed-dB 8×8 table from `AD301A07` (profile 0, bank 1 for the
 CarPlay/DTCP51 sink) and writes 64 linear coefficients to the SHARC. **Profile-0 /
@@ -444,13 +434,13 @@ What `deploy/smartphone_integrator/carplay_startup.sh` exports:
 | Rollback | `AUDIO_STEREO_UPMIX=off` | `hook/audio/audio_hook.h:59` |
 
 Driver: `deploy/deva-ctrl-qc/deva-ctrl-qc.so.patched` (needs a reboot to map,
-`deploy/deva-ctrl-qc/BUILD_CHAIN.md:11-13`).
+`docs/stock-patches/deva-ctrl-qc.so.md`).
 
 ### Blocked / modelled / not done
 
 - **Phone-side spatial over realtime CarPlay** — refused live; phone-side gate, lever
   exhausted.
-- **Non-B&O internal 6ch** — no route exists; feasible via RCC flashing but untested for
+- **Internal 6ch CarPlay** — no route exists; feasible via RCC flashing but untested for
   lack of an internal-amp car.
 - **The amp DSP model is static RE** — no live bank/profile/mode/limiter/gain readback
   (no verified J525 SHARC readback transport); the complex block C4D17 is active-scheduled

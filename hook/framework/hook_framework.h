@@ -24,7 +24,7 @@ typedef void (*hook_state_callback_t)(hook_context_t* ctx, int event, void* even
 typedef void (*hook_transport_callback_t)(hook_context_t* ctx, uint16_t msgid);
 
 /* ---- AirPlay seams -------------------------------------------------------
- * Three stock libairplay entry points are needed by more than one module, and
+ * Four stock libairplay entry points are needed by more than one module, and
  * an ELF symbol can only have one definition in this shared object.  The
  * framework owns them (framework/airplay_seams.c) and modules subscribe here
  * instead of one module interposing on another's behalf.
@@ -41,9 +41,27 @@ typedef struct {
     int result;
 } hook_setup_ctx_t;
 
+typedef struct {
+    void* session;
+    uint32_t flags;
+    const void* command;
+    const void* qualifier;
+    const void* params;
+    void** response_out;
+    int result;
+    int handled;
+    char command_text[96];
+    uint64_t feedback_epoch;
+    uint32_t trace_sequence;
+    int feedback_query;
+    int feedback_nonmedia;
+    int tracing;
+} hook_control_ctx_t;
+
 typedef void (*hook_setup_callback_t)(hook_setup_ctx_t* setup);
 typedef void (*hook_server_info_callback_t)(void* session, void* info);
 typedef void (*hook_teardown_callback_t)(void* session, void* request, int reason);
+typedef void (*hook_control_callback_t)(hook_control_ctx_t* control);
 
 typedef struct {
     /* AirPlayReceiverSessionSetup: before stock, after stock, and after every
@@ -60,6 +78,11 @@ typedef struct {
     hook_teardown_callback_t on_teardown;
     /* After stock has stopped/joined its stream workers. */
     hook_teardown_callback_t on_teardown_final;
+    /* AirPlayReceiverSessionControl: before stock (allowing a module to claim
+     * commands stock 210 does not implement, such as suggestUI) and after stock
+     * (for response mutation/caching and diagnostics). */
+    hook_control_callback_t on_control;
+    hook_control_callback_t on_control_response;
 } hook_airplay_seams_t;
 
 /* The 210 HTTP adapter owns the binary ABI. Modules own protocol state.
@@ -82,6 +105,7 @@ typedef struct {
 #define HOOK_EVENT_IDENTIFY_OK      6
 #define HOOK_EVENT_IDENTIFY_END     7
 #define HOOK_EVENT_AUTH_DONE        8
+#define HOOK_EVENT_RESYNC           9
 
 /* Hook Module Definition.
  *
@@ -109,6 +133,8 @@ typedef struct {
      * a new Identify so partial reassembly cannot cross sessions. */
     hook_transport_recv_sink_t on_transport_recv;
     hook_transport_recv_reset_t on_transport_recv_reset;
+    /* Negotiated, ordered file payload; link validation belongs to daemon. */
+    void (*on_file_transfer)(const uint8_t *,size_t);
 
     hook_airplay_seams_t airplay;
 

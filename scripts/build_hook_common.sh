@@ -41,6 +41,12 @@ carplay_build_hook() {
   local HOOK_AUDIO="${HOOK_AUDIO:-1}"
   local HOOK_WIRELESS="${HOOK_WIRELESS:-0}"
   local WIRELESS_ALT_QEMU="${WIRELESS_ALT_QEMU:-0}"
+  local HTTP210_LAB="${HTTP210_LAB:-0}"
+  [[ "$HTTP210_LAB" == "0" || "$HTTP210_LAB" == "1" ]] || { echo "Invalid HTTP210_LAB (0|1)"; return 1; }
+  if [ "$HTTP210_LAB" = "1" ]; then
+      [ "$HOOK_WIRELESS" = "1" ] || { echo "HTTP210_LAB requires HOOK_WIRELESS=1"; return 1; }
+      case "$OUTDIR_REL" in build/wireless-validation-*/hook-spatial-lab) ;; *) echo "HTTP210_LAB requires an isolated hook-spatial-lab output"; return 1 ;; esac
+  fi
   # There is one production image: logging compiled in, WARN only, and every runtime
   # diagnostic behind carplay_verbose (log_verbose()).  The old LOG=0 variant is gone.
   [ "${LOG:-}" = 0 ] && { echo "LOG=0 is gone: the hook always logs WARN; touch carplay_verbose for diagnostics"; return 1; }
@@ -61,9 +67,13 @@ carplay_build_hook() {
 
   local CFLAGS_EXTRA="-D__QNX__ -mfpu=neon -mfloat-abi=softfp"
   CFLAGS_EXTRA="$CFLAGS_EXTRA -DHOOK_WIRELESS=$HOOK_WIRELESS"
+  [ "$HTTP210_LAB" = "1" ] && CFLAGS_EXTRA="$CFLAGS_EXTRA -DMHI2Q_HTTP210_LAB=1"
   [ "$WIRELESS_ALT_QEMU" = "1" ] && CFLAGS_EXTRA="$CFLAGS_EXTRA -DMHI2Q_WIRELESS_ALT_QEMU=1"
   if [ "$HOOK_WIRELESS" = "1" ]; then
+      CFLAGS_EXTRA="$CFLAGS_EXTRA -DMHI2Q_WIRELESS_ALT=1"
       QNX_TOOLCHAIN_VARIANT="$QNX_TOOLCHAIN_VARIANT" python3 "$PROJECT_DIR/hook/wireless/build_pairing.py" || return 1
+      QNX_TOOLCHAIN_VARIANT="$QNX_TOOLCHAIN_VARIANT" python3 "$PROJECT_DIR/hook/wireless/build_opus.py" || return 1
+      cp "$PROJECT_DIR/build/wireless-codecs/opus-1.5.2/COPYING" "$PROJECT_DIR/$OUTDIR_REL/opus-LICENSE.txt" || return 1
   fi
   if [ "$HOOK_AUDIO" == "0" ]; then
       CFLAGS_EXTRA="$CFLAGS_EXTRA -DHOOK_AUDIO=0"
@@ -109,7 +119,7 @@ carplay_build_hook() {
     EXTRA_OBJS=""; EXTRA_CC=""
 
     if [ "$HOOK_AUDIO" = "1" ]; then
-    # The APAC decoder and its C shim.  The flag set comes from
+    # The APAC decoder port and its C shim.  The flag set comes from
     # scripts/apac_flags.sh, which apac_decoder/bench/build_qnx_bench.sh sources
     # too - a benchmark compiled with drifted flags reports headroom for a binary
     # nobody ships, and says nothing about it.
@@ -139,8 +149,10 @@ carplay_build_hook() {
     DSP_OBJS=""
     WIRELESS_LIB=""
     if [ "$HOOK_WIRELESS" = "1" ]; then
-        SRCS="$SRCS framework/http210_seams.c wireless/stock210_abi.c wireless/wireless_hook.c wireless/media.c wireless/advertisement.c"
-        WIRELESS_LIB="/src/build/wireless-sdk/libwireless_pairing.a -lbacktrace"
+        SRCS="$SRCS framework/http210_seams.c wireless/stock210_abi.c wireless/wireless_hook.c wireless/media.c wireless/advertisement.c wireless/audio_codec.c wireless/audio_queue.c wireless/audio_stream.c"
+        HOOK_CFLAGS="$HOOK_CFLAGS -I/src/build/wireless-codecs/opus-1.5.2/include"
+        WIRELESS_LIB="/src/build/wireless-sdk/libwireless_pairing.a /src/build/wireless-codecs/opus-qnx/.libs/libopus.a -lbacktrace"
+        [ "$HOOK_AUDIO" = "1" ] || SRCS="$SRCS audio/aac_bridge.c"
     fi
     if [ "$HOOK_AUDIO" = "1" ]; then
         SRCS="$SRCS $AUDIO_SRCS"
@@ -213,12 +225,16 @@ carplay_build_hook() {
     if [ "$HOOK_AUDIO" = "0" ]; then
         # Every interposer audio_hook.c owns: the QSA bridge, the AirPlay audio
         # format/stream seams, the /info property rail and the CQNXSoundIF seams.
-        grep -vE "^(snd_pcm_.*|AudioSessionGetSupportedOutputFormats|AirPlayAudioFormatToASBD|AudioStreamPrepare|AudioStreamStop|AirTunesServer_EnsureCreated|AirPlayReceiverServerPlatformCopyProperty|AirPlayReceiverSessionControl|_ZN3dio11CQNXSoundIF.*createMetadata.*)$" \
+        grep -vE "^(snd_pcm_.*|AudioSessionGetSupported(Input|Output)Formats|AudioStreamPrepare|AudioStreamStop|AirTunesServer_EnsureCreated|AirPlayReceiverServerPlatformCopyProperty|_ZN3dio11CQNXSoundIF.*createMetadata.*)$" \
             /tmp/hook_exports_expected > /tmp/hook_exports_expected_noaudio
         mv /tmp/hook_exports_expected_noaudio /tmp/hook_exports_expected
     fi
+    if [ "$HOOK_AUDIO" = "0" ] && [ "$HOOK_WIRELESS" = "0" ]; then
+        grep -v "^AirPlayAudioFormatToASBD$" /tmp/hook_exports_expected > /tmp/hook_exports_expected_noasbd
+        mv /tmp/hook_exports_expected_noasbd /tmp/hook_exports_expected
+    fi
     if [ "$HOOK_WIRELESS" = "0" ]; then
-        grep -vE "^(HTTPServerCreate|HTTPMessageReadMessage|SocketWriteData|carplay_wireless_copy_pairing_identity|carplay_wireless_receiver_ready|carplay_wireless_receiver_control|AirPlayGetFeatures|TXTRecordSetValue|HTTPServerSetDispatchQueue|HTTPClientCreateWithSocket|AirPlayReceiverSessionScreen_SetSecurityInfo|AirPlayReceiverSessionScreen_ProcessFrames|SocketRecvFrom|sendto|close)$" \
+        grep -vE "^(RTPJitterBuffer(Init|Read|Free|Reset|PutBusyNode)|mhi2q_wireless_iap2_receive|mhi2q_wireless_iap2_outgoing|mhi2q_wireless_iap2_nmea|HTTPServerCreate|HTTPMessageReadMessage|SocketWriteData|carplay_wireless_copy_pairing_identity|carplay_wireless_receiver_ready|carplay_wireless_receiver_control|AirPlayGetFeatures|TXTRecordSetValue|HTTPServerSetDispatchQueue|HTTPClientCreateWithSocket|AirPlayReceiverSessionScreen_SetSecurityInfo|AirPlayReceiverSessionScreen_ProcessFrames|SocketRecvFrom|sendto|close)$" \
             /tmp/hook_exports_expected > /tmp/hook_exports_expected_nowireless
         mv /tmp/hook_exports_expected_nowireless /tmp/hook_exports_expected
     fi

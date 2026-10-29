@@ -48,6 +48,23 @@ static inline int spa_media_route_nonmedia(const spa_media_route_t *route)
     return 0;
 }
 
+/* Stock get_audio_path @ 0x49398 routes both audioType 1 (media) and 2
+ * (alert: iPhone alarm clock, timer, ringtone) to mpl5_dio_ent, while 3
+ * (telephony) opens tel2_dio_phone and 4 (speechRecognition) opens
+ * ann4_dio_voice.  Direct stock type-100 writes to mpl5_dio_ent must therefore
+ * proceed for 1 and 2 (with 2 expanded as plain L/R without 5.1 upmix) and
+ * abort only when a non-ent stream (3, 4, unknown 0) or overflow is active. */
+static inline int spa_media_route_non_ent(const spa_media_route_t *route)
+{
+    size_t i;
+    if (route->faulted) return 1;
+    for (i = 0; i < SPA_MEDIA_ROUTE_MAX_MAIN_STREAMS; ++i)
+        if (route->main_streams[i] &&
+            route->main_types[i] != 1 && route->main_types[i] != 2)
+            return 1;
+    return 0;
+}
+
 /* A response obtained across any route transition has ambiguous ownership,
  * even if a complete telephone call began AND ended during the stock query. */
 static inline int spa_media_route_feedback_allowed(const spa_media_route_t *route,

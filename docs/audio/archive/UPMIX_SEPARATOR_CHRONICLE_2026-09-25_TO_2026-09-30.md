@@ -6,7 +6,7 @@ _2026-09-25 through 2026-09-30 local dates, with the final PC readback at 2026-1
 
 ## 📋 Scope and reading rules
 
-The [training history](../UPMIX_TRAINING_HISTORY.md) retains V9–V16, G1–G17, H1, P1, R1/C1/C2 and Q1–q6d from the earlier period. This ledger continues that history through the later mask students, separator ladder, reviews16–43, data interventions, BSRNN reference, one-network reconstruction and completed spectral40k comparison. The [source plan](UPMIX_SOURCE_SEPARATION_PLAN.md), [night report](UPMIX_SEPARATOR_NIGHT_REPORT_2026-09-28.md), individual reports and [unified chronological ledger](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30.md) retain full recipes, learning curves, hashes and per-song evidence.
+The [training history](UPMIX_TRAINING_HISTORY.md) retains V9–V16, G1–G17, H1, P1, R1/C1/C2 and Q1–q6d from the earlier period. This ledger continues that history through the later mask students, separator ladder, reviews16–43, data interventions, BSRNN reference, one-network reconstruction and completed spectral40k comparison. The [source plan](UPMIX_SOURCE_SEPARATION_PLAN.md), [night report](UPMIX_SEPARATOR_NIGHT_REPORT_2026-09-28.md), individual reports and [unified chronological ledger](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30.md) retain full recipes, learning curves, hashes and per-song evidence.
 
 An entry represents a changed training recipe, inference/renderer intervention, diagnostic, intake or execution failure. A checkpoint monitor is part of its parent experiment; it is not counted as a new architecture. Related arms are named separately where their results differ. There is no defensible single “number of architectures” obtained by adding reviews, checkpoints, seeds, renderer points and infrastructure checks together.
 
@@ -286,7 +286,7 @@ The upper64 verifier contains one disposable synthetic optimizer probe to demons
 | Scalar/gain selection | Fix nominal operating point, retain all failed variants and absolute gates; no near-silence or best-checkpoint rescue |
 | Owner feedback and live testing | Earlier sighted Track A listening differs from blind one-network acceptance; no new owner verdict invented |
 
-Track A's mask-reset fix, int8/NEON≈1.33ms mask time, drive1.5 and rear-air−9 car calibration are recorded in its [phase1 report](UPMIX_MASK_PHASE1_REPORT_2026-09-27.md), [matched40 baseline](../UPMIX_TRACKA_MATCHED40_2026-09-30.md) and [deploy/listening log](../UPMIX_LISTENING_AND_DEPLOY_LOG.md). That mask timing is not free time for the full new chain, and the historical render probes are not hook deployments.
+Track A's mask-reset fix, int8/NEON≈1.33ms mask time, drive1.5 and rear-air−9 car calibration are recorded in its [phase1 report](UPMIX_MASK_PHASE1_REPORT_2026-09-27.md), [matched40 baseline](UPMIX_TRACKA_MATCHED40_2026-09-30.md) and [deploy/listening log](UPMIX_LISTENING_AND_DEPLOY_LOG.md). That mask timing is not free time for the full new chain, and the historical render probes are not hook deployments.
 
 ## 🎯 Final archive and continuation boundary
 

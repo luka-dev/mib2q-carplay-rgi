@@ -32,7 +32,7 @@ namespace tables {
 // Kept as ONE array on purpose, in the order the library has them, so
 // that a stage-1 codebook that a two-stage mode reaches from a
 // stage-0 one is at the same relative offset here as there.  Two reads
-// the library does not prevent - idx == n, because its bound check is
+// the original does not prevent - idx == n, because its bound check is
 // `n < idx` and not `n <= idx`, and the -1 stage-1 sentinel - would
 // leave even this array at its two ends; both are unreachable from any
 // bitstream and tests/test_lrvq.cpp is where that stops being true.

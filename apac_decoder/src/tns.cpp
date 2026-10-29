@@ -40,7 +40,7 @@ void SynthesisFilter(float* p, int stride, uint32_t count,
 }
 
 // Parcor (reflection) coefficients to direct-form LPC, the recursion the
-// library spells out inline in Apply with two interleaved stack arrays:
+// original spells out inline in Apply with two interleaved stack arrays:
 //
 //     a[0] = 1, a[1] = k[0]
 //     for m = 1 .. order-1:
@@ -72,13 +72,13 @@ void ParcorToLPC(const float* k, uint32_t order, float* a)
 // APACTNSData::APACTNSData, 0xaed10.  The record table is 12 {rate, limits}
 // pairs; the limits word carries the long band cap in its low byte and the
 // short one in the next.  A rate that is not in the table gives 0 / 0, and the
-// library does not treat that as an error - it just means no band ever passes
+// original does not treat that as an error - it just means no band ever passes
 // the cap.
 void TNSData::Configure(uint32_t sampleRate)
 {
     present = 0;
     nFilt = 0;
-    maxOrderLong = 12;      // the 1804 = 0x070C the library stores at +186
+    maxOrderLong = 12;      // the 1804 = 0x070C the original stores at +186
     maxOrderShort = 7;
     maxBandsLong = 0;
     maxBandsShort = 0;
@@ -92,7 +92,7 @@ void TNSData::Configure(uint32_t sampleRate)
     }
 }
 
-// APACTNSData::ParseTNSData, 0xaedc0.  The library inlines the bit reader;
+// APACTNSData::ParseTNSData, 0xaedc0.  The original inlines the bit reader;
 // every read below is one of its GetBits calls, in the same order.
 //
 // Long blocks: one window, a 2-bit filter count, up to three filters, each
@@ -132,7 +132,7 @@ bool TNSData::ParseTNSData(BitstreamReader& bs, const APACICSInfo& ics)
                 if (order > maxOrderLong) order = maxOrderLong;
             }
             if (length == 0)
-                return true;                       // the library's -1
+                return true;                       // the original's -1
 
             rec.length = (uint8_t)length;
             rec.order  = (uint8_t)order;

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Stage i: cross-build the APAC decoder for QNX 6.5 / armle-v7 and enforce
+# Stage i: cross-build the APAC decoder port for QNX 6.5 / armle-v7 and enforce
 # the traps that make an LD_PRELOADed .so on that platform work at all.
 #
 #   apac_decoder/tools/build_qnx.sh                 # GCC 4.9.4, the baseline
@@ -34,7 +34,7 @@
 #   then tests/test_mdct.cpp - fails to compile with dozens of "redefinition of
 #   constexpr float std::sqrt(float)".  _NO_CPP_INLINES tells the QNX header to
 #   stand back and let the compiler's <cmath> own them; the C declarations it
-#   still provides are what our decoder itself uses.  The effect on our decoder is
+#   still provides are what the port itself uses.  The effect on the port is
 #   that sin/cos reach libm as `sin`/`cos` instead of QNX's inline `_Sin(x,0)`
 #   /`_Sin(x,1)` - the same libm code either way, and the QEMU run below proves
 #   it by keeping every bit-exact fixture test passing on the target.
@@ -119,11 +119,11 @@ if [ "$QEMU" = 1 ]; then
               n=$(basename "$t" .cpp)
               # -fno-threadsafe-statics: a function-local static with a dynamic
               # initializer (tests/test_frames.cpp) otherwise needs
-              # __cxa_guard_acquire, which lives in libstdc++ and which our decoder
-              # is not allowed to want.  The tests are single-threaded, and our
-              # decoder itself is checked for __cxa_guard by the assertions above.
+              # __cxa_guard_acquire, which lives in libstdc++ and which the port
+              # is not allowed to want.  The tests are single-threaded, and the
+              # port itself is checked for __cxa_guard by the assertions above.
               arm-unknown-nto-qnx6.5.0eabi-g++ '"$CXXFLAGS"' -fno-threadsafe-statics -c "$t" -o "$O/$n.to"
-              # Link with gcc, not g++: our decoder needs no C++ runtime and linking
+              # Link with gcc, not g++: the port needs no C++ runtime and linking
               # with the C++ driver would drag libstdc++.so.6 onto the target.
               arm-unknown-nto-qnx6.5.0eabi-gcc "$O/$n.to" $(ls "$O"/*.o) -o "$O/$n" -lm
               n2=$(arm-unknown-nto-qnx6.5.0eabi-readelf -d "$O/$n" | grep -c libstdc || true)
@@ -141,7 +141,7 @@ if [ "$QEMU" = 1 ]; then
     # test_lrvq is the one test this cannot run: it opens six fixtures through
     # a hardcoded "tests/fixtures/%s" and the IFS has no subdirectories, so
     # there is nowhere to put them.  It is a host-only check; the frame mode it
-    # covers is unreachable on this content anyway (see STATUS.md).
+    # covers is unreachable on this content anyway (see PORT_STATUS).
     #
     # test_bwe names four fixtures but takes a fixture DIRECTORY in argv[1], so
     # it does run: all four are staged and it is handed /proc/boot, which is
@@ -184,8 +184,8 @@ if [ "$QEMU" = 1 ]; then
         "${FILES[@]}" "${RUNS[@]}" 2>&1 | tee "$LOG"
     set -e
 
-    # Two tests miss their tolerance on the target and neither is a decoder bug;
-    # both are measured and written up in STATUS.md, stage i.  Anything
+    # Two tests miss their tolerance on the target and neither is a port bug;
+    # both are measured and written up in PORT_STATUS.md, stage i.  Anything
     # else that fails is new and fails this script.
     #
     #   test_tns   TNS::Apply, 1.67e-6 of full scale against a 1.53e-6 tolerance.
@@ -193,7 +193,7 @@ if [ "$QEMU" = 1 ]; then
     #              target is VFPv3-d16 with no FMA at all.  Rebuilding the HOST
     #              test with -ffp-contract=off reproduces the target's bits
     #              exactly (3f04a9ea at index 179), so nothing here is ARM- or
-    #              QNX-specific and nothing is wrong with our decoder.
+    #              QNX-specific and nothing is wrong with the port.
     #   test_lpc   get_LSFWeightingFactors, 9.3e-10 absolute on a 1.9e-3 peak
     #              against a 7.7e-10 tolerance.  NOT contraction - the host with
     #              -ffp-contract=off passes.  It is QNX libm cos/acos differing
@@ -208,7 +208,7 @@ if [ "$QEMU" = 1 ]; then
         case " $SKIP " in *" $n "*) continue ;; esac
         if grep -q "Process [0-9]* ($n) exited status=0\." "$LOG"; then continue; fi
         case " $EXPECTED " in
-            *" $n "*) echo "  $n: known ARMv7 tolerance delta, see STATUS.md stage i" ;;
+            *" $n "*) echo "  $n: known ARMv7 tolerance delta, see PORT_STATUS stage i" ;;
             *) echo "  $n: FAILED on the target"; bad=1 ;;
         esac
     done

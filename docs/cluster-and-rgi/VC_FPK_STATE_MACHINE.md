@@ -218,7 +218,7 @@ The per-entry gates are `Nav_`-prefixed and fed from the nav function block: `Na
 Measured failures, do not retry: `[car]`
 
 - The FctID 54 override in `AltScreenCombiBAPListener.setMapPresentation`: wrong direction, and it lied to stock navigation about the drawer. The current override only forwards the stage and calls `super` (`java_patch/de/audi/tghu/navi/app/cluster/AltScreenCombiBAPListener.java:57-60`).
-- Empty FctID 43/44 capability bits from `GatedCombiService`: the VC kept opening the drawers. Both methods are pass-throughs again (`java_patch/com/luka/carplay/rgd/GatedCombiService.java:130-132`). Stock owns FctID 43/44/54.
+- Empty FctID 43/44 capability bits from `GatedCombiService`: the VC kept opening the drawers. Both methods are pass-throughs again (`java_patch/com/luka/carplay/rgd/GatedCombiService.java:181-183`). Stock owns FctID 43/44/54.
 
 What is left `[open]`: the per-entry `Nav_SideMenusNav_*_visible` gates have another input besides FctID 43/44, which must be found first. Reaching the master lock means patching the VC. There is no BAP path to the drawer-open event.
 

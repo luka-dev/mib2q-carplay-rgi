@@ -8,7 +8,7 @@
 
 The Audi B&O amplifier (part `8W0035465`, the "J525") is a **complete 5.1 processor**: it takes six logical inputs `L R C LFE Ls Rs`, runs them through an input matrix and a deep per-driver DSP/EQ/crossover chain, and fans them out to 16 amplified circuits driving 19 speakers. **The "Virtual Cabin" is our decision to let the amp be the renderer** — the hook only delivers the *right six PCM channels* in Apple order and declares them correctly. The amp derives the centre, manages the sub, crosses over every driver, and spatializes. We do not re-implement any of that on the head unit.
 
-For the stereo content that is most of what people play, the [stereo upmix](STEREO_TO_5_1_UPMIX.md) (the SCENE renderer) synthesizes the six channels the Virtual Cabin then renders. The discrete path is in [Discrete 5.1 Routing](DISCRETE_5_1_ROUTING.md).
+For the stereo content that is most of what people play, the [HSSR upmix](archive/HSSR_MODEL.md) synthesizes the six channels the Virtual Cabin then renders. The discrete path is in [Discrete 5.1 Routing](DISCRETE_5_1_ROUTING.md).
 
 This note is the hub for the amp. The detail lives in three companion notes:
 
@@ -61,7 +61,7 @@ flowchart TB
 - **RCC = TI Jacinto (DRA6xx, C674x DSP) (QNX)** — `MIBRoot` (the audio-policy owner), `AudioProcess`, and the *internal* amp's DSP. **All amplifier-specific routing policy lives here.**
 - **J525 amp** (external, on the MOST fibre ring with the MIB J794 and the cluster J285) — a **V850** MOST/FBlock control processor + an **ADSP-2148x SHARC** audio DSP. The B&O box.
 
-The two framings ("MMX sends 6×24" vs "the RCC link is 2- or 8-slot") sit on opposite sides of two INICs, which reframe; the only quantity that crosses end-to-end is the MOST synchronous **BlockWidth**: 26 bytes for the multichannel source, read as `2 + 8×3` ([QNX Audio Topology](QNX_AUDIO_TOPOLOGY.md); the older `2 + 6×4` reading is superseded).
+The two framings ("MMX sends 6×24" vs "the RCC link is 2- or 8-slot") sit on opposite sides of two INICs, which reframe; the only quantity that crosses end-to-end is the MOST synchronous **BlockWidth** (26 bytes for the six-channel source).
 
 ## 🔧 The single-byte routing decision
 
@@ -69,14 +69,12 @@ MIBRoot resolves a route through a two-table mapper keyed on **one byte**. CarPl
 
 | ExternalAmplifierCoded | source | sink | width |
 |---|---|---|---|
-| 1 (external, B&O/Bose) | `eSRC_ENT_AMP_DIO_MEDIA_MC` (0x46f) | `eSNK_DTCP51` (2) | **26 B** (`2 + 8×3`; carries the six channels) |
+| 1 (external, B&O/Bose) | `eSRC_ENT_AMP_DIO_MEDIA_MC` (0x46f) | `eSNK_DTCP51` (2) | **26 B = 6ch** |
 | 0 (internal amp) | `eSRC_ENT_AMP_DIO_MEDIA` (0x46e) | `eSNK_SPEAKERS` (1) | **4 B = stereo** |
-
-Width reading: 26 B is the HU MOST source 7 allocation (`2 + 8×3`); the amp's 5.1 sink `0x26` advertises 14 B (2 + six 16-bit samples), and binding source 7 to exactly these 26 bytes is an inference `[open]`. Whether connection 162 lands on sink `0x26` or on `0x32` (Entertainment_7.1_SAD, exactly 26 B) is unresolved; the amp accepts either ([Discrete 5.1 Routing](DISCRETE_5_1_ROUTING.md), [QNX Audio Topology](QNX_AUDIO_TOPOLOGY.md)).
 
 There is no channel-count negotiation and no capability check — one byte picks a static `{source, sink}` pair. Read/flip it from a shell: `on -f rcc /usr/apps/modifyE2P r fc 1` → `02`=external, `01`=internal.
 
-The finding that shapes the product: the internal (non-B&O) amp has **no native 6-channel CarPlay route**. The internal media source is BlockWidth 4 (stereo); `eSNK_SPEAKERS_MC` is a dead alias in none of the 143 resource records. So on an internal-amp car a PCM6 stream is front L/R only. The safe policy is `AUDIO_SPATIAL=0` unless E2P 0xFC reads `02` — `AUDIO_STEREO_UPMIX=off` alone is not enough, because the bypass still writes PCM6 (`L R 0 0 0 0`, `hook/audio/stereo_upmix.c:886-900`). The installer implements that gate: `install_MoreIncredibleBash/mod/custom.sh` (`read_amp`, `gate_audio`) reads `modifyE2P r FC 1` and rewrites the installed `carplay_startup.sh` (shipped with `AUDIO_SPATIAL=1`, `deploy/smartphone_integrator/carplay_startup.sh:83`) to `AUDIO_SPATIAL=0` / `AUDIO_SPATIAL_ATMOS=0` unless the byte is `02`; an unreadable byte also gives stereo. The MMI UpMix row is hidden on internal amps (`DEVICETYPE` 1–3 from the stock `AmplifierListener`, `java_patch/com/luka/carplay/core/UpmixSetting.java`) **[code]**; neither has run on an internal-amp car yet `[open]`. A real internal 6-channel path is feasible but needs RCC-side flashing — planned, not built. See [Landmines](../LANDMINES.md).
+The finding that shapes the product: the internal amp has **no native 6-channel CarPlay route**. The internal media source is BlockWidth 4 (stereo); `eSNK_SPEAKERS_MC` is a dead alias in none of the 143 resource records. So on an internal-amp car a PCM6 stream is front L/R only. The safe policy is `AUDIO_SPATIAL=0` unless E2P 0xFC reads `02` — the MMI UpMix Off setting alone is not enough, because the bypass still writes PCM6 (`L R 0 0 0 0`, `hook/audio/stereo_upmix.c:666-672`). The installer implements this gate in `read_amp` and `gate_audio`: it reads RCC E2P `0xFC` and rewrites the installed `carplay_startup.sh` to `AUDIO_SPATIAL=0` for internal or unreadable coding **[code]**. External support includes B&O and Bose; see the [cross-amplifier analysis](ODIS_AMP_MAPPING.md#external-amplifier-support). A real internal 6-channel path is feasible but needs RCC-side flashing — planned, not built. See [Landmines](../LANDMINES.md).
 
 ## 📊 Why six channels was hard — two independent fixes
 
@@ -87,7 +85,7 @@ Getting six channels to the amp took two months because the head unit silently c
 | 1 | Qualcomm CSD | `mpl5` shipped `min_voices=2`; `deva_update_session_info_from_list` copies the record's **minimum** into the active session at route-attach (14 s before the PCM channel exists), so CSD advances `0x4800`/tick while submitting `0x1800` — **tearing at 62.5 Hz** | mirror `mpl5`'s caps record field-for-field to `mpl1` (min/max voices = 6, fragsize `0x4800`); QSA inserts a channel conversion so stereo still opens |
 | 2 | libairplay | `createMetadata` wrote a **stereo SAD header** (`asad=0xc0`) beside genuinely six-channel PCM, so the amp kept only L/R | interpose `createMetadata` to announce `asad=0xfc` / 6ch / 24-bit |
 
-The full sequence and the mirror driver live in [Discrete 5.1 Routing](DISCRETE_5_1_ROUTING.md). **Ceiling: 6 is the max a byte can reach** (`deva_csd_start_csd_session_playback` hardcodes 6; no 8-channel output node), so CarPlay's 5.1.2 = 8 channels would need an 8→6 fold on the hook side. The fold exists (`hook/audio/spatial_downmix.c:71-98`) but runs only on the experimental `AUDIO_SPATIAL_ATMOS=1` / SETUP-66 path; the shipped config advertises APAC 5.1 (`hook/audio/audio_hook.c:736-739`). The output order is Apple canonical `L R C LFE Ls Rs`, which deva maps straight to FL FR FC LFE LB RB (`hook/audio/audio_hook.c:366-367`).
+The full sequence and the mirror driver live in [Discrete 5.1 Routing](DISCRETE_5_1_ROUTING.md). **Ceiling: 6 is the max a byte can reach** (`deva_csd_start_csd_session_playback` hardcodes 6; no 8-channel output node), so CarPlay's 5.1.2 = 8 channels would need an 8→6 fold on the hook side. The fold exists (`hook/audio/spatial_downmix.c:71-97`) but runs only on the experimental `AUDIO_SPATIAL_ATMOS=1` / SETUP-66 path; the shipped config advertises APAC 5.1 (`hook/audio/audio_hook.c:785-788`). The output order is Apple canonical `L R C LFE Ls Rs`, which deva maps straight to FL FR FC LFE LB RB (`hook/audio/audio_hook.c:419-420`).
 
 ### The LPASS COPP topology A/B (a side experiment)
 
@@ -142,7 +140,7 @@ Sources: `SOUNDAMP_FULL_DSP_MODEL`, `SHARC_APPLICATION_EXTRACTION`, `AMP_SHARC_A
 
 > **Correction that supersedes older notes:** the matrix orientation was transposed in earlier readings. The V850 writer `A903C` reads `RAM[8·i+j]` (`gp−0x3E20`) and sends it to SHARC `C022A[8·j+i]`; the SHARC consumer `1269BC` reads coefficient `R7·outputs+R3` with R7 looping inputs. So **A07/RAM rows = outputs, columns = inputs**. The old per-speaker summaries ("sub = LFE only", "centre no bass", "woofers sum L/Ls/C/LFE", "fb3 = −3 dB woofers") and AmpChain v5/v6 are withdrawn; the CSV and extractor were regenerated. Use the matrix below.
 
-The V850 selects a signed-dB 8×8 table from `AD301A07` (profile 0, bank 1 for the CarPlay/DTCP51 sink) and writes 64 linear coefficients to SHARC `0xC022A..0xC0269`, two outputs per 16-word packet. The table below is the hook's own copy, `kInputMatrix` (`hook/audio/stereo_upmix.c:46-53`), rows = inputs, converted to dB. Its orientation is self-checking: the largest bus column, bus6 = 0.708 + 2.818 ≈ 3.53, equals `kCabinMatrixMaxColumnNorm` (`stereo_upmix.c:44`) **[code]**.
+The V850 selects a signed-dB 8×8 table from `AD301A07` (profile 0, bank 1 for the CarPlay/DTCP51 sink) and writes 64 linear coefficients to SHARC `0xC022A..0xC0269`, two outputs per 16-word packet. The table below is the hook's own copy, `kInputMatrix` (`hook/audio/stereo_upmix.c:66-73`), rows = inputs, converted to dB. Its orientation is self-checking: the largest bus column, bus6 = 0.708 + 2.818 ≈ 3.53, equals `kCabinMatrixMaxColumnNorm` (`stereo_upmix.c:64`) **[code]**.
 
 | input | busL | busR | busC | busLFE | busLs | busRs | bus6 | bus7 |
 |---|---|---|---|---|---|---|---|---|
@@ -238,11 +236,11 @@ Sources: `SHARC_MATRIX_CONTROL_2026-09-20`, `SHARC_INPUT_OUTPUT_MATRIX`, `AMP_ST
 
 "Virtual Cabin" = feed the amp six correct PCM channels and let it be the renderer. The amp handles:
 
-- **Centre**, derived from L+R — so the hook writes only the centred lead vocal to digital C (`AUDIO_SCENE_CENTRE`, [Stereo to 5.1](STEREO_TO_5_1_UPMIX.md#centre)); it was 0 until 2026-10-17.
-- **Bass management** — the LFE bus sums LFE (+3 dB) with L/R, C and Ls/Rs, so LFE = 0 does **not** silence the sub. `AUDIO_STEREO_LFE=assist` (level via `AUDIO_STEREO_LFE_GAIN`, dB re 4096) is a relative top-up, not the whole sub feed (`hook/audio/stereo_upmix.h:31-35`, `hook/audio/audio_hook.h:61-66`, `:70-73`) **[code]**.
+- **Centre**, derived from L+R — so the hook writes **digital C = 0** on purpose.
+- **Bass management** — the LFE bus sums LFE (+3 dB) with L/R, C and Ls/Rs, so LFE = 0 does **not** silence the sub. `AUDIO_STEREO_LFE=assist` (level via `AUDIO_STEREO_LFE_GAIN`, dB re 4096) is a relative top-up, not the whole sub feed (`hook/audio/stereo_upmix.h:32-36`, `hook/audio/audio_hook.h:66-70`, `:88-91`) **[code]**.
 - **Crossovers, per-driver EQ, spatial buses, and the 19-speaker fan-out.**
 
-**The matrix inside the hook is a guard, not acoustics.** `hook/audio/stereo_upmix.c:46` embeds `kInputMatrix[6][8]` — the profile-0/bank-1 matrix converted to linear, transposed once so rows are inputs (comment at `:37`). Its only purpose is the S16 cabin guard `spa_upmix_cabin_guard_s16` (`stereo_upmix.c:274`), which predicts each logical bus peak so no bus exceeds `kCabinSampleLimit = 32275` (0.985 FS, `stereo_upmix.c:35`). The largest column norm is `3.53` (`stereo_upmix.c:44`), so the hot-path early-out is: if `peak · 3.53 ≤ limit`, nothing can clip — return before touching the matrix (`stereo_upmix.c:287`). On overload it repairs via LFE only first, then linked-scales all six channels (`stereo_upmix.c:290-357`) **[code]**. It sees the played level: on the buffered path the SoundCheck gain is applied to each frame before the guard. The header states it explicitly: this is a downstream peak-detection model, not an acoustic model or an EQ inverse — it cannot bound the amp's own upstream EQ, which can add up to +20.5 dB at 55 Hz.
+**The matrix inside the hook is a guard, not acoustics.** `hook/audio/stereo_upmix.c:66` embeds `kInputMatrix[6][8]` — the profile-0/bank-1 matrix converted to linear, transposed once so rows are inputs (comment at `:57`). Its only purpose is the S16 cabin guard `spa_upmix_cabin_guard_s16` (`stereo_upmix.c:327`), which predicts each logical bus peak so no bus exceeds `kCabinSampleLimit = 32275` (0.985 FS, `stereo_upmix.c:55`). The largest column norm is `3.53` (`stereo_upmix.c:64`), so the hot-path early-out is: if `peak · 3.53 ≤ limit`, nothing can clip — return before touching the matrix (`stereo_upmix.c:340`). On overload it repairs via LFE only first, then linked-scales all six channels (`stereo_upmix.c:350-410`) **[code]**. The header states it explicitly: this is a downstream peak-detection model, not an acoustic model or an EQ inverse — it cannot bound the amp's own upstream EQ, which can add up to +20.5 dB at 55 Hz.
 
 ## 📈 Electrical regressions through the model
 
@@ -255,7 +253,7 @@ The offline tools run hook output through the recovered chain; these are **elect
 | Fixed assist (removed) | 0.362 % | −22.54 dB | −22.32 / −15.44 dBFS | −0.27 dBFS | 0 |
 | **Cabin-Aware LFE V2** | **0.448 %** | **−21.77 dB** | **−20.72 / −14.11 dBFS** | **−0.48 dBFS** | **0** |
 
-V2 raises LFE energy 23.9 % yet gains 0.21 dB of bus headroom, because its limiter solves the allowed LFE interval from the current front/rear samples. A coherent 40 Hz tone gives LFE RMS `0.135107`, the same with `L = −R` (the removed mono-sum path gave zero); 500 Hz sits 60.3 dB below. `AUDIO_STEREO_LFE=assist` still selects exactly V2 (`hook/audio/audio_hook.h:61-66`) **[code]**; the rear gain of this run (0.25) belonged to the Universal renderer, retired 2026-10-09.
+V2 raises LFE energy 23.9 % yet gains 0.21 dB of bus headroom, because its limiter solves the allowed LFE interval from the current front/rear samples. A coherent 40 Hz tone gives LFE RMS `0.135107`, the same with `L = −R` (the removed mono-sum path gave zero); 500 Hz sits 60.3 dB below. `AUDIO_STEREO_LFE=assist` still selects exactly V2 (`hook/audio/audio_hook.h:66-70`) **[code]**; the shipped rear gain is now 0.40, not 0.25 (`deploy/smartphone_integrator/carplay_startup.sh:65`).
 
 **Bank-1 music report v2 (historical, pre-orientation-fix).** Seven tracks, 60 s clips, analysis 5..55 s, Welch PSD re dry L; baseline is L/R-only PCM6 in bank 1: dry woofer 60–120 Hz −0.7 dB, front mid −2.3 dB, sub −90.4 dB (leakage); LFE 12288 no shelf: sub −5.3 dB, bass/mid +2.80 dB; LFE 4096: sub −14.8 dB, +3.07 dB; LFE 4096 with −3 dB shelf: +0.15 dB. The "sub −90 dB with L/R only" figure came from the transposed matrix; the corrected rerender supersedes these numbers ([Stereo to 5.1 Upmix](STEREO_TO_5_1_UPMIX.md)).
 
@@ -280,13 +278,13 @@ Sources: `AMP_7_1_SINK`, `SOUNDAMP_9VS_VIRTUAL_CABIN_EVIDENCE`
 **Blocked / modelled / not done:**
 
 - **Phone-side spatial over realtime CarPlay** — refused live; phone-side gate, lever exhausted. See [Dolby Atmos](DOLBY_ATMOS.md). `[car]`
-- **Non-B&O internal 6ch** — no route exists; feasible via RCC flashing but untested for lack of an internal-amp car. The installer-side `AUDIO_SPATIAL` gate on E2P 0xFC keeps such cars on stock stereo ([Internal Amp Path](INTERNAL_AMP_PATH.md)); not yet run on a car. `[open]`
+- **Internal 6ch CarPlay** — no route exists; feasible via RCC flashing but untested for lack of an internal-amp car. The installer-side `AUDIO_SPATIAL` gate on E2P 0xFC keeps such cars on stock stereo ([Internal Amp Path](INTERNAL_AMP_PATH.md)); not yet run on a car. `[open]`
 - **The amp DSP model is static RE** — no live bank/profile/mode/level/limiter/gain readback (no verified J525 readback transport; RCC `/dev/io-amp` is the internal TI DSP); the level-selected input EQ bank, C4D17 and both B processors are not proven off or on; bus→speaker binding, per-driver EQ, and "3D OFF = level 0" are inferences; nothing is bit-exact. `[model]`
-- **Upmix quality** — the SCENE renderer was accepted by ear on 2026-10-10 (sighted); a blind, level-matched stationary-vehicle A/B is still outstanding. `[open]`
+- **Historical HSSR listening work** — the Universal backend was retired on 2026-10-09. Current stereo playback uses the scene renderer; see [Stereo to 5.1 Upmix](STEREO_TO_5_1_UPMIX.md) for its status. Older listening questions are historical, not current release gates.
 
 Code: `hook/audio/stereo_upmix.{c,h}`, `hook/audio/spatial_downmix.{c,h}`. Model: `tools/soundamp-virtual-cabin/`. RE artifacts: `assets/soundamp/`.
 
-**Related:** [Internal Amp Path](INTERNAL_AMP_PATH.md) and [QNX Audio Topology](QNX_AUDIO_TOPOLOGY.md) (the non-B&O route and the QNX side of the chain) · [Upmix Training History](UPMIX_TRAINING_HISTORY.md) (what the upmix model learned) · [Upmix Calibration and Tuning](UPMIX_CALIBRATION_AND_TUNING.md#the-corrected-matrix-changed-the-diagnosis) (what the corrected matrix did to the upmix diagnosis) · [Buffered Playback Lifecycle](BUFFERED_PLAYBACK_LIFECYCLE.md) (the type-103 session that feeds the amp).
+**Related:** [Internal Amp Path](INTERNAL_AMP_PATH.md) and [QNX Audio Topology](QNX_AUDIO_TOPOLOGY.md) (the internal-amplifier route and the QNX side of the chain) · [Upmix Training History](archive/UPMIX_TRAINING_HISTORY.md) (what the upmix model learned) · [Upmix Calibration and Tuning](archive/UPMIX_CALIBRATION_AND_TUNING.md#the-corrected-matrix-changed-the-diagnosis) (what the corrected matrix did to the upmix diagnosis) · [Buffered Playback Lifecycle](BUFFERED_PLAYBACK_LIFECYCLE.md) (the type-103 session that feeds the amp).
 
 ## 📚 Sources
 
@@ -307,5 +305,5 @@ Merged originals were removed from the tree after this note absorbed them; they 
 | `SOUNDAMP_9VS_VIRTUAL_CABIN_EVIDENCE` | 9VS evidence boundary |
 | [patch_acdb_topology.sh](../sources/acdb/patch_acdb_topology.sh), [Speaker_cal.acdb](../sources/acdb/Speaker_cal.acdb) | LPASS COPP topology A/B generator and the patched ACDB |
 | [albumdb page-5.png](../sources/papers/albumdb-paper.gitqWx/page-5.png) | AlbumDB (AES Europe) paper page 5: 7.1.4 speaker table, 7.1.4→5.1 downmix recipe — upmix training-data context, see [Stereo to 5.1 Upmix](STEREO_TO_5_1_UPMIX.md) |
-| [band-scnet.pdf](../sources/papers/upmix-research-20260912/band-scnet.pdf), [band-scnet-4.png](../sources/papers/upmix-research-20260912/band-scnet-4.png) | Band-SCNet (Interspeech 2025), causal real-time separation reference (2.59 M params, 92 ms) — upmix research, see [HSSR Model](HSSR_MODEL.md) |
-| [vocalrep.pdf](../sources/papers/upmix-research-20260912/vocalrep.pdf), [vocalrep-06.png](../sources/papers/upmix-research-20260912/vocalrep-06.png) | VocalRep (lead/backing/accompaniment representations) — upmix research, see [HSSR Model](HSSR_MODEL.md) |
+| [band-scnet.pdf](../sources/papers/upmix-research-20260912/band-scnet.pdf), [band-scnet-4.png](../sources/papers/upmix-research-20260912/band-scnet-4.png) | Band-SCNet (Interspeech 2025), causal real-time separation reference (2.59 M params, 92 ms) — upmix research, see [HSSR Model](archive/HSSR_MODEL.md) |
+| [vocalrep.pdf](../sources/papers/upmix-research-20260912/vocalrep.pdf), [vocalrep-06.png](../sources/papers/upmix-research-20260912/vocalrep-06.png) | VocalRep (lead/backing/accompaniment representations) — upmix research, see [HSSR Model](archive/HSSR_MODEL.md) |

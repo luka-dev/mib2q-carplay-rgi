@@ -52,7 +52,7 @@ packet-beta
 
 Key readings **[decompile]** · **[code]**:
 
-- **Bit 42 = `AAC-ELD/48000/5.1.2`, bit 40 = `AAC-LC/48000/5.1.2`; 39/41 are the LC/ELD 5.1 pair** (`hook/audio/audio_hook.h:128-129`; AUDIO.md §15 lines 595-597). Earlier text in this vault that labelled bit 42 as AAC-LC, or 39/41 the other way round, was wrong.
+- **Bit 42 = `AAC-ELD/48000/5.1.2`, bit 40 = `AAC-LC/48000/5.1.2`; 39/41 are the LC/ELD 5.1 pair** (`hook/audio/audio_hook.h:127-128`; AUDIO.md §15 lines 595-597). Earlier text in this vault that labelled bit 42 as AAC-LC, or 39/41 the other way round, was wrong.
 - **Bit 42 is the whole spatial delta.** `APAudioFormatGetSupportedTransportAudioFormatsForScreenReceiver@0x22669E3F4` returns `0x1440800` (bits 11/18/22/24 — 44.1 kHz PCM/ALAC/AAC-LC/AAC-ELD stereo) or `0x40001440800` when spatial is allowed. That mask is 44.1 kHz and does not intersect our realtime {4, 15}, so it describes the **buffered** stream, not ours.
 - **The buffered selector's vocabulary is AAC/ALAC only.** `APAudioFormatSelectTransportFormatForAudioSourceInputFormat@0x22669C568`: early-out bit 22; 5.1.2 source tries 40 then 42; 5.1 source tries 39 then 41; stereo tries 21 (ALAC 48k, settings-gated) then 23; floor = error "Supported format does not include AAC-LC 48k stereo format". No PCM (38/44/47) or DD+ (50/53) bit can ever be selected there.
 - **Bit 44 = `PCM/48000/16/5.1`** belongs to buffered HomePod-class receivers. The hook still defines `SPA_DEFAULT_BIT 44u` (`hook/audio/audio_hook.h:42`) and ORs it into the type-100 offer when armed (`hook/audio/audio_hook.c:451-461`) — a harmless retained migration probe; the phone keeps choosing stereo.

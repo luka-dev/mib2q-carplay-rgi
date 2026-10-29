@@ -1,0 +1,189 @@
+{
+  "status": "pass",
+  "binary_sha256": "47a370bc30ca1b038fa5baee1c3eb6f3ef567788a70f57aed3957e98a35a1f05",
+  "cases": [
+    {
+      "base": "0x0",
+      "case": "clean64_real_hooks",
+      "relocations": 338,
+      "stats": {
+        "enroll": 1,
+        "fallback": 0,
+        "pool_exhausted": 0,
+        "stale_callback": 0,
+        "callbacks": 0,
+        "arm": 0,
+        "cancel_queued": 0,
+        "cancel_captured": 0,
+        "forced_flush": 0,
+        "invalid": 0
+      }
+    },
+    {
+      "base": "0x0",
+      "case": "inherited_deadline",
+      "stats": {
+        "enroll": 1,
+        "fallback": 0,
+        "pool_exhausted": 0,
+        "stale_callback": 0,
+        "callbacks": 1,
+        "arm": 1,
+        "cancel_queued": 0,
+        "cancel_captured": 0,
+        "forced_flush": 1,
+        "invalid": 0
+      }
+    },
+    {
+      "base": "0x0",
+      "case": "captured_delete_real_softclock",
+      "stats": {
+        "enroll": 1,
+        "fallback": 0,
+        "pool_exhausted": 0,
+        "stale_callback": 1,
+        "callbacks": 1,
+        "arm": 1,
+        "cancel_queued": 0,
+        "cancel_captured": 1,
+        "forced_flush": 0,
+        "invalid": 0
+      }
+    },
+    {
+      "base": "0x2000000",
+      "case": "clean64_real_hooks",
+      "relocations": 338,
+      "stats": {
+        "enroll": 1,
+        "fallback": 0,
+        "pool_exhausted": 0,
+        "stale_callback": 0,
+        "callbacks": 0,
+        "arm": 0,
+        "cancel_queued": 0,
+        "cancel_captured": 0,
+        "forced_flush": 0,
+        "invalid": 0
+      }
+    },
+    {
+      "base": "0x2000000",
+      "case": "inherited_deadline",
+      "stats": {
+        "enroll": 1,
+        "fallback": 0,
+        "pool_exhausted": 0,
+        "stale_callback": 0,
+        "callbacks": 1,
+        "arm": 1,
+        "cancel_queued": 0,
+        "cancel_captured": 0,
+        "forced_flush": 1,
+        "invalid": 0
+      }
+    },
+    {
+      "base": "0x2000000",
+      "case": "captured_delete_real_softclock",
+      "stats": {
+        "enroll": 1,
+        "fallback": 0,
+        "pool_exhausted": 0,
+        "stale_callback": 1,
+        "callbacks": 1,
+        "arm": 1,
+        "cancel_queued": 0,
+        "cancel_captured": 1,
+        "forced_flush": 0,
+        "invalid": 0
+      }
+    },
+    {
+      "base": "0x4100000",
+      "case": "clean64_real_hooks",
+      "relocations": 338,
+      "stats": {
+        "enroll": 1,
+        "fallback": 0,
+        "pool_exhausted": 0,
+        "stale_callback": 0,
+        "callbacks": 0,
+        "arm": 0,
+        "cancel_queued": 0,
+        "cancel_captured": 0,
+        "forced_flush": 0,
+        "invalid": 0
+      }
+    },
+    {
+      "base": "0x4100000",
+      "case": "inherited_deadline",
+      "stats": {
+        "enroll": 1,
+        "fallback": 0,
+        "pool_exhausted": 0,
+        "stale_callback": 0,
+        "callbacks": 1,
+        "arm": 1,
+        "cancel_queued": 0,
+        "cancel_captured": 0,
+        "forced_flush": 1,
+        "invalid": 0
+      }
+    },
+    {
+      "base": "0x4100000",
+      "case": "captured_delete_real_softclock",
+      "stats": {
+        "enroll": 1,
+        "fallback": 0,
+        "pool_exhausted": 0,
+        "stale_callback": 1,
+        "callbacks": 1,
+        "arm": 1,
+        "cancel_queued": 0,
+        "cancel_captured": 1,
+        "forced_flush": 0,
+        "invalid": 0
+      }
+    },
+    {
+      "base": "0x2000000",
+      "case": "prepare_selfpin_failure_stock_delivery"
+    },
+    {
+      "base": "0x2000000",
+      "case": "overdue_rx_real_hardclock_softclock_deferred",
+      "stats": {
+        "enroll": 1,
+        "fallback": 0,
+        "pool_exhausted": 0,
+        "stale_callback": 0,
+        "callbacks": 0,
+        "arm": 1,
+        "cancel_queued": 1,
+        "cancel_captured": 0,
+        "forced_flush": 1,
+        "invalid": 0
+      }
+    },
+    {
+      "base": "0x2000000",
+      "case": "captured_native_table_address_reuse",
+      "stats": {
+        "enroll": 2,
+        "fallback": 0,
+        "pool_exhausted": 0,
+        "stale_callback": 1,
+        "callbacks": 2,
+        "arm": 2,
+        "cancel_queued": 0,
+        "cancel_captured": 1,
+        "forced_flush": 1,
+        "invalid": 0
+      }
+    }
+  ]
+}

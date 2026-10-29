@@ -1,6 +1,6 @@
 /*
  * The realtime upmix deadline policy: warmup grace, four-in-a-row trip,
- * and the return after a break in the stream as a cold start.
+ * backoff that doubles and caps, and the return as a cold start.
  *
  * Copyright (c) 2026 LuKa (@LuKa_dev)
  */

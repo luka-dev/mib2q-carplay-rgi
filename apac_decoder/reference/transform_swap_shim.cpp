@@ -2,7 +2,7 @@
  * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
-// transform_swap_shim - decode the real capture with OUR transform stage
+// transform_swap_shim - decode the real capture with the PORT's transform stage
 // substituted into the middle of Pioneer's decoder, and see what it costs.
 //
 // This is the composition test for stage d.  The per-function differential
@@ -17,7 +17,7 @@
 // HOW.  The library is linked DT_SYMBOLIC, so LD_PRELOAD cannot interpose its
 // internals; NOTES.md records that trap.  So this does what scratch/stub_shim.c
 // does - patches the function entry in memory - except that instead of stubbing
-// the function out it plants a 16-byte absolute jump to our version:
+// the function out it plants a 16-byte absolute jump to the port's version:
 //
 //     LDR X16, [PC, #8]     ; 0x58000050
 //     BR  X16               ; 0xd61f0200
@@ -26,9 +26,9 @@
 // Two entry points are replaced, both reached through the filter bank's vtable:
 // FrequencyToTimeInPlace and Reset.  Everything else - the bitstream, the
 // scalefactors, the spectrum, TNS - is still the library's, so any difference
-// in the output is our transform stage and nothing else.
+// in the output is the port's transform stage and nothing else.
 //
-// Our decoder keeps its own overlap state, so the library's copy goes stale.  That
+// The port keeps its own overlap state, so the library's copy goes stale.  That
 // is safe: FrequencyToTimeInPlace and Reset are the only two functions that
 // read it, and both are the ones being replaced.
 
@@ -46,7 +46,7 @@
 namespace {
 
 // APACSynthesisFilterBank fields the shim reads out of the library's object, so
-// our filter bank can be configured to match without intercepting
+// the port's filter bank can be configured to match without intercepting
 // Initialize (which allocates buffers the library's destructor frees).
 //
 //   +24  channel count
@@ -81,12 +81,12 @@ apac::SynthesisFilterBank* bankFor(const void* self)
     s.owner = self;
     const int32_t rc = s.fb.Initialize(channels, frameLen);
     if (rc != 0) {
-        fprintf(stderr, "[swap] ours Initialize(%u, %u) returned %d\n",
+        fprintf(stderr, "[swap] port Initialize(%u, %u) returned %d\n",
                 channels, frameLen, rc);
         abort();
     }
     s.fb.Reset();
-    fprintf(stderr, "[swap] ours filter bank engaged: %u channels, frame %u\n",
+    fprintf(stderr, "[swap] port filter bank engaged: %u channels, frame %u\n",
             channels, frameLen);
     return &s.fb;
 }
@@ -122,7 +122,7 @@ bool plantJump(void* site, void* target, const char* what)
     i[1] = 0xd61f0200;                       // BR  X16
     memcpy(i + 2, &target, sizeof target);   // the absolute destination
     __builtin___clear_cache((char*)site, (char*)site + 16);
-    fprintf(stderr, "[swap] %s -> ours\n", what);
+    fprintf(stderr, "[swap] %s -> port\n", what);
     return true;
 }
 
@@ -150,7 +150,7 @@ __attribute__((constructor)) void install(void)
 __attribute__((destructor)) void report(void)
 {
     if (g_calls)
-        fprintf(stderr, "[swap] %ld transform calls served by our decoder\n", g_calls);
+        fprintf(stderr, "[swap] %ld transform calls served by the port\n", g_calls);
 }
 
 }  // namespace

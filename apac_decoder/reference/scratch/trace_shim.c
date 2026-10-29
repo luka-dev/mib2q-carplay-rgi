@@ -1,7 +1,7 @@
 /* Vtable-slot tracer for the APAC frame layer.
  *
  * The library is linked DT_SYMBOLIC so LD_PRELOAD cannot interpose its
- * internals, and patching a function entry destroys the library.  But every
+ * internals, and patching a function entry destroys the original.  But every
  * call the frame layer makes into an element, an ICSInfo or the core decoder
  * goes through an EXPORTED vtable, so replacing the slot gives a wrapper that
  * can still call the real function by its own symbol.

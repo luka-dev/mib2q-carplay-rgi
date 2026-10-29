@@ -2,7 +2,7 @@
  * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
-// frame_swap_shim - run OUR element and core-decoder layers inside
+// frame_swap_shim - run the PORT's element and core-decoder layers inside
 // Pioneer's own decoder, and let the library's top level do everything else.
 //
 //     ./apac_decoder/reference/run.sh swapframe          # all 3977 packets
@@ -10,29 +10,29 @@
 //
 // This is the stage-f/g composition test, and the counterpart of
 // transform_swap_shim.cpp for stage d.  `APACCoreDecoder::DecodeAPACFrame` is
-// the whole of our frame layer behind one entry point: the element
+// the whole of the port's frame layer behind one entry point: the element
 // presence loop, the SCE / CPE / LFE bodies, the CAC tool, TNS, the
 // bandwidth-extension header, the filter bank and the channel remap.  Above it
 // the LIBRARY keeps the frame-type field, the trimming record, the ancillary
 // and extension-frame decoders, ContentOutBuffer and InterleaveConvert - so
-// this measures our frame layer against the library with our own
+// this measures the port's frame layer against the original with the port's own
 // reimplementation of the top level taken out of the picture, which the plain
 // end-to-end run cannot do.
 //
 // HOW.  Same 16-byte absolute jump transform_swap_shim.cpp uses, for the same
 // reason: the library is linked DT_SYMBOLIC so LD_PRELOAD cannot interpose its
 // internals.  Two entry points are replaced, `DecodeAPACFrame` and the
-// `APACCoreDecoder::Reset` that APACDecoder::Reset drives, because our decoder
+// `APACCoreDecoder::Reset` that APACDecoder::Reset drives, because the port
 // keeps its own filter-bank overlap and the library's copy goes stale.
 //
-// Our decoder needs the stream's configuration and the shim cannot reach the
+// The port needs the stream's configuration and the shim cannot reach the
 // library's parsed copy, so it parses the magic cookie itself out of
 // APAC_SWAP_COOKIE - the same file apac_ref is given.
 //
 // WHAT THE LIBRARY STILL READS OUT OF ITS OWN OBJECT, and which therefore has
-// to keep agreeing with our decoder: GetNumChannels() at +200 and GetBlockSize()
+// to keep agreeing with the port: GetNumChannels() at +200 and GetBlockSize()
 // through the instance config at +8.  Both are the library's, unmodified; if
-// our decoder disagreed about either, ContentOutBuffer would reject the frame.
+// the port disagreed about either, ContentOutBuffer would reject the frame.
 //
 // The output vector is a std::vector<float*> the library owns and would
 // normally emplace_back into.  The shim writes the three pointers directly and
@@ -53,9 +53,9 @@
 
 namespace {
 
-// The library's TBitstreamReader<unsigned> and our apac::BitstreamReader
+// The library's TBitstreamReader<unsigned> and the port's apac::BitstreamReader
 // are the same 24 bytes in the same order - cur, end, cache, bitsLeft - which is
-// what lets the shim hand the library's reader straight to our decoder.
+// what lets the shim hand the library's reader straight to the port.
 struct LayoutCheck {
     char sizeMatches[sizeof(apac::BitstreamReader) == 24 ? 1 : -1];
 };
@@ -131,10 +131,10 @@ apac::CoreDecoder* coreFor(const void* self)
     const uint32_t rc = s.core.Initialize(g_config.codecConfigs[0], g_config.sampleRate,
                                           g_config.frameLength, &g_lrvq);
     if (rc != apac::kOk) {
-        fprintf(stderr, "[frame] ours CoreDecoder::Initialize -> %u\n", rc);
+        fprintf(stderr, "[frame] port CoreDecoder::Initialize -> %u\n", rc);
         abort();
     }
-    fprintf(stderr, "[frame] ours frame layer engaged: %u channels, frame %u\n",
+    fprintf(stderr, "[frame] port frame layer engaged: %u channels, frame %u\n",
             s.core.GetNumChannels(), s.core.GetBlockSize());
     return &s.core;
 }
@@ -152,7 +152,7 @@ bool plantJump(void* site, void* target, const char* what)
     i[1] = 0xd61f0200;                       // BR  X16
     memcpy(i + 2, &target, sizeof target);
     __builtin___clear_cache((char*)site, (char*)site + 16);
-    fprintf(stderr, "[frame] %s -> ours\n", what);
+    fprintf(stderr, "[frame] %s -> port\n", what);
     return true;
 }
 
@@ -219,7 +219,7 @@ __attribute__((constructor)) void install(void)
 __attribute__((destructor)) void report(void)
 {
     if (g_frames)
-        fprintf(stderr, "[frame] %ld frames decoded by our frame layer\n", g_frames);
+        fprintf(stderr, "[frame] %ld frames decoded by the port's frame layer\n", g_frames);
     (void)g_haveConfig;
 }
 

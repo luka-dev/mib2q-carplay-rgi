@@ -17,13 +17,14 @@
 #include <stdint.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <dlfcn.h>
 
 #include "decoder_optimize/decoder_optimize_hook.h"
 #include "framework/logging.h"
 
 /* statics of the module under test */
 uintptr_t dec_base_from_anchors(uintptr_t delegate_, uintptr_t create, uintptr_t control);
-uintptr_t dec_base_from_library(void* library, void* (*lookup)(void*, const char*));
+uintptr_t dec_base_from_library(void *, void *(*)(void *, const char *));
 bool dec_site_matches(const uint8_t* site, const uint8_t sig[12]);
 bool dec_readable(const void* addr, size_t len);
 bool decoder_optimize_apply(uintptr_t base);
@@ -42,6 +43,29 @@ static const uint8_t SIG_B[12] = { 0x04,0x00,0xa0,0xe3, 0x3a,0x38,0xfe,0xeb, 0x0
 static const uint8_t CN_AT_A[12] = { 0x01,0x00,0x73,0xe3, 0x0b,0x00,0x00,0x0a, 0x50,0x10,0x9f,0xe5 };
 
 static uint8_t elf_page[0x2000] __attribute__((aligned(0x1000)));
+
+static unsigned library_lookups, global_lookups;
+static int explicit_library;
+static void *collision_lookup(void *handle, const char *name) {
+    /* A bridge before libairplay owns these names in the global namespace.
+     * Only the explicit library's exports have the pinned ARM layout. */
+    if (handle != &explicit_library) { ++global_lookups; return (void *)1; }
+    ++library_lookups;
+    if (!strcmp(name, "AirPlayReceiverServerSetDelegate")) return (void *)((uintptr_t)elf_page + OFF_DELEGATE);
+    if (!strcmp(name, "AirPlayReceiverServerCreate")) return (void *)((uintptr_t)elf_page + OFF_CREATE);
+    if (!strcmp(name, "AirPlayReceiverServerControl")) return (void *)((uintptr_t)elf_page + OFF_CONTROL);
+    return NULL;
+}
+
+static void test_library_scope(void) {
+    /* Addresses are never dereferenced outside the actual ELF header. */
+    assert(dec_base_from_library(NULL, collision_lookup) == 0);
+    assert(dec_base_from_library(&explicit_library, NULL) == 0);
+    assert(dec_base_from_library(&explicit_library, collision_lookup) == (uintptr_t)elf_page);
+    assert(library_lookups == 3 && global_lookups == 0);
+    assert(dec_base_from_library(RTLD_DEFAULT, collision_lookup) == 0);
+    puts("  library scope: colliding preload exports cannot replace explicit library anchors");
+}
 
 static void elf_identity(uint8_t* page) {
     memcpy(page, "\x7f" "ELF", 4);
@@ -96,27 +120,6 @@ static void test_base_rule(void) {
                                  base + OFF_CONTROL) == 0);
 
     printf("  base rule: deltas gate, probe+ELF identity confirm; shifted base refused unread\n");
-}
-
-static int library_token, lookup_calls;
-static void* scoped_lookup(void* handle, const char* name) {
-    uintptr_t base = (uintptr_t)elf_page;
-    assert(handle == &library_token);
-    ++lookup_calls;
-    if (strcmp(name, "AirPlayReceiverServerSetDelegate") == 0) return (void*)(base + OFF_DELEGATE);
-    if (strcmp(name, "AirPlayReceiverServerCreate") == 0) return (void*)(base + OFF_CREATE);
-    if (strcmp(name, "AirPlayReceiverServerControl") == 0) return (void*)(base + OFF_CONTROL);
-    assert(0);
-    return NULL;
-}
-static void test_library_scope(void) {
-    elf_identity(elf_page);
-    assert(dec_base_from_library(NULL, scoped_lookup) == 0);
-    assert(dec_base_from_library(&library_token, NULL) == 0);
-    assert(lookup_calls == 0);
-    assert(dec_base_from_library(&library_token, scoped_lookup) == (uintptr_t)elf_page);
-    assert(lookup_calls == 3);
-    printf("  scope: all anchors resolved through explicit library handle\n");
 }
 
 static void test_site_match(void) {

@@ -8,7 +8,6 @@ exhaustive control/history space or a certified worst-case signal bound.
 """
 import argparse
 import copy
-import hashlib
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import itertools
 import json
@@ -16,76 +15,9 @@ from pathlib import Path
 
 import numpy as np
 
-from amp_dsp_chain import AmpChain, SR, reference_fingerprint
+from amp_dsp_chain import AmpChain, reference_fingerprint
 from amp_test_scenarios import make_test_scenario, scenario_manifest
-
-# provenance and the explicit scenarios (kept from the retired audit_upmix_end_to_end.py)
-STATIC_SCENARIOS = {
-    f'full_static_{rounding}_{suffix}': (rounding, probe, adaptive)
-    for rounding in ('nearest','floor')
-    for suffix,probe,adaptive in (('zero_aux',False,0),('aux_fixed',True,0),
-                                  ('zero_aux_adaptive',False,1),('aux_probe',True,1))}
-SCENARIOS = ('baseline_v7', 'full_zero_aux', 'full_aux_probe',
-             'full_retained_zero_aux', 'full_retained_aux_probe', *STATIC_SCENARIOS)
-
-def fingerprint(path):
-    path = Path(path).resolve()
-    digest = hashlib.sha256()
-    with path.open('rb') as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b''):
-            digest.update(block)
-    return {'path': str(path), 'sha256': digest.hexdigest(), 'bytes': path.stat().st_size}
-
-
-def verify(record):
-    if fingerprint(record['path'])['sha256'] != record['sha256']:
-        raise ValueError('file changed: ' + record['path'])
-
-def source_provenance():
-    paths = sorted(Path(__file__).parent.glob('amp_*.py'))
-    paths += [Path(__file__).with_name('digital_stages.py')]
-    return [fingerprint(p) for p in paths]
-
-def array_fingerprint(value, dtype):
-    data = np.ascontiguousarray(value, dtype=dtype)
-    return {'sha256': hashlib.sha256(data.tobytes()).hexdigest(), 'shape': list(data.shape),
-            'dtype': data.dtype.str, 'order': 'C frames then channels', 'bytes': data.nbytes}
-
-def auxiliary(scenario, programme_frames, tail_frames):
-    """Independent post-boundary probes; never derive auxiliary PCM from music."""
-    if scenario not in SCENARIOS:raise ValueError('known explicit scenario required')
-    if scenario == 'baseline_v7':
-        return {}, {'kind': 'omitted by explicit v7 identity/B-zero hypotheses'}
-    count = programme_frames + tail_frames
-    c4 = np.zeros(count)
-    second = np.zeros((count, 3))
-    probe = STATIC_SCENARIOS[scenario][1] if scenario in STATIC_SCENARIOS else scenario.endswith('_aux_probe')
-    if probe:
-        time = np.arange(programme_frames) / SR
-        c4[:programme_frames] = .01 * np.sin(2 * np.pi * 63 * time)
-        second[:programme_frames] = .003 * np.sin(2 * np.pi * time[:, None] * np.array([71., 113., 173.]))
-    return {'complex_auxiliary': c4, 'second_b_auxiliary': second}, {
-        'kind': 'synthetic_independent_probe' if probe else 'explicit_zero',
-        'music_donors': False, 'active_window_frames': [0, programme_frames],
-        'tail': 'explicit zeros', 'phase_radians': 0,
-        'complex_graph11_after_C4D11': {'frequency_hz': 63, 'amplitude': .01 if probe else 0},
-        'second_B_graph8_9_10': {'frequencies_hz': [71, 113, 173], 'amplitude_each': .003 if probe else 0},
-        'physical_meaning_and_live_levels_proven': False}
-
-
-def make_chain(scenario, bank):
-    if scenario not in SCENARIOS:raise ValueError('known explicit scenario required')
-    if scenario == 'baseline_v7':
-        return AmpChain(), {'kind': 'baseline_v7', 'actual_vehicle_state_proven': False,
-                            'note': 'existing v7 identity complex block and both B-zero hypotheses'}
-    static = STATIC_SCENARIOS.get(scenario)
-    parameters = make_test_scenario(input_eq_bank=bank, auxiliary_gain_mode=1,
-                                   first_b_pointer_variant='default',
-                                   first_b_spectral=('retained_calibration' if static or scenario.startswith('full_retained_')
-                                                     else 'neutral_diagnostic'),
-                                   first_b_numerics='firmware_library_'+static[0] if static else 'host_math',
-                                   adaptive_enable=static[2] if static else int(scenario.endswith('_aux_probe')))
-    return AmpChain(**parameters), scenario_manifest(parameters)
+from audit_upmix_end_to_end import array_fingerprint, fingerprint, source_provenance, verify
 
 STAGES=('common_input8','first_b8','first_b10','second_b16','pre_complex_gain',
         'complex','ten','mixed16','limiter_1','limiter_2','out')

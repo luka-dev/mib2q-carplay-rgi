@@ -69,6 +69,17 @@ def main() -> None:
     data = supervisor_bin.read_bytes()
     if data[:6] != b"\x7fELF\x01\x01" or struct.unpack_from("<H", data, 18)[0] != 40:
         raise RuntimeError("wireless supervisor is not ARM little-endian ELF32")
+    for source, name in (("wireless_runtime.c", "wireless_runtime"),
+                         ("mdns_probe.c", "mhi2q_mdns_probe")):
+        subprocess.run([
+            'docker', 'run', '--rm', '--platform=linux/amd64',
+            '-v', f'{AUDI}:/src:ro', '-v', f'{OUT}:/out',
+            '-w', '/src/Patches/mhi2-carplay', IMAGE,
+            'arm-unknown-nto-qnx6.5.0eabi-gcc', '-std=c11', '-Os',
+            '-Wall', '-Wextra', '-Werror', '-o', f'/out/{name}',
+            f'wireless/integration/{source}', '-lsocket',
+        ], check=True)
+        report(OUT / name)
     supervisor = OUT / "wireless_dio_supervisor.offline.sh"
     shutil.copyfile(HERE / "wireless_dio_supervisor.sh", supervisor)
     subprocess.run(["sh", "-n", str(supervisor)], check=True)

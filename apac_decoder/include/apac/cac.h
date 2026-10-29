@@ -6,7 +6,7 @@
 // between the two channels of a channel-pair element, with the rotation angle
 // carried as a run-length-coded index into a quantised gain table.
 //
-// Reference functions in libSPF_CP_PlugInWrapper.so (Pioneer SPHERA 1.030010):
+// Originals in libSPF_CP_PlugInWrapper.so (Pioneer SPHERA 1.030010):
 //
 //   0x0007b5a0  APACCACDecoder::Deserialize(TBitstreamReader<unsigned>&,
 //                                           APACICSInfo const&)
@@ -26,7 +26,7 @@
 // APACCACDecoder::Deserialize's entry to `return 0` - i.e. letting it consume
 // no bits - desynchronises the bitstream and the library then produces no
 // output at all, and patching ProcessCac the same way changes the decoded PCM.
-// See STATUS.md, "What the stream actually uses".
+// See PORT_STATUS.md, "What the stream actually uses".
 //
 // The two code tables are copied byte for byte out of the library's .rodata
 // (`CacDecoder::kGainIndexCodeTableDec` at 0x331b28, 35 records, and
@@ -68,7 +68,7 @@ extern const CacCode kCacRepeatCodeTable[kCacRepeatCodes];
 // once gain reaches 0.999.  Indices 18..34 are the same entries with `gain` and
 // `sine` negated, and anything above 34 reads entry 0.
 struct CacGain {
-    float gain;     // .a in the library's 12-byte record
+    float gain;     // .a in the original's 12-byte record
     float sine;     // .b = 1 / sqrt(1 + g*g)
     float cosine;   // .c = g / sqrt(1 + g*g)
 };
@@ -80,8 +80,8 @@ class CACDecoder {
 public:
     void Initialize();          // CacQuantizer::Initialize
 
-    // Returns TRUE on ERROR, the library's convention.  Reads nothing when
-    // ics.maxSfb is zero.  Leaves the reader exactly where the library does:
+    // Returns TRUE on ERROR, the original's convention.  Reads nothing when
+    // ics.maxSfb is zero.  Leaves the reader exactly where the original does:
     // it decodes out of a 16-bit look-ahead window and gives the surplus back
     // with a single PutBack(16).
     bool Deserialize(BitstreamReader& bs, const APACICSInfo& ics);

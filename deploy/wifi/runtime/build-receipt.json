@@ -1,0 +1,263 @@
+{
+  "profile": "latency",
+  "stock_sha256": "d7fbf49b297665cbb8c6ba71b41ac892ccd062e0dcbd8339f3286555db1f394a",
+  "io_pkt_sha256": "baf6e5df318ba3ea22cf669017b04185a4da8abb77adb4cd6e40629a8e80dae7",
+  "sha256": "47a370bc30ca1b038fa5baee1c3eb6f3ef567788a70f57aed3957e98a35a1f05",
+  "size": 484052,
+  "patches": [
+    {
+      "name": "expiry",
+      "va": "0x47368",
+      "offset": 291688,
+      "original_hex": "012082e20c0094e5022aa0e1222aa0e1",
+      "patched_hex": "032082e0012082e20c0094e55220ebe7"
+    },
+    {
+      "name": "window",
+      "va": "0x46d64",
+      "offset": 290148,
+      "original_hex": "14a091e502005ae118a091a5030000aa02a06ae0183091e503005ae103a0a0a1",
+      "patched_hex": "14a091e50aa042e05aa0ebe7183091e503005ae103a0a0a100005ae303a0a001"
+    },
+    {
+      "name": "harden",
+      "va": "0x46ed8",
+      "offset": 290520,
+      "original_hex": "0500000a",
+      "patched_hex": "00f020e3"
+    },
+    {
+      "name": "rx",
+      "va": "0x473a8",
+      "offset": 291752,
+      "original_hex": "f04f2de9",
+      "patched_hex": "d98400ea"
+    },
+    {
+      "name": "create",
+      "va": "0x47d10",
+      "offset": 294160,
+      "original_hex": "f04f2de9",
+      "patched_hex": "0c8400ea"
+    },
+    {
+      "name": "delete",
+      "va": "0x46e8c",
+      "offset": 290444,
+      "original_hex": "f0472de9",
+      "patched_hex": "4e8800ea"
+    },
+    {
+      "name": "flush",
+      "va": "0x472fc",
+      "offset": 291580,
+      "original_hex": "70402de9",
+      "patched_hex": "808700ea"
+    },
+    {
+      "name": "attach",
+      "va": "0x15034",
+      "offset": 86068,
+      "original_hex": "f04f2de9",
+      "patched_hex": "3a4901ea"
+    },
+    {
+      "name": "detach",
+      "va": "0x15a38",
+      "offset": 88632,
+      "original_hex": "f04f2de9",
+      "patched_hex": "2d4701ea"
+    },
+    {
+      "name": "wl_rx_runtime_tail_trampoline",
+      "va": "0x47748",
+      "offset": 292680,
+      "original_hex": "2430d5e5",
+      "patched_hex": "0b8700ea"
+    },
+    {
+      "name": "wl_tx_gate_trampoline",
+      "va": "0xf188",
+      "offset": 61832,
+      "original_hex": "0700001a",
+      "patched_hex": "1769011a"
+    },
+    {
+      "name": "wl_tx_runtime_request",
+      "va": "0xf1a8",
+      "offset": 61864,
+      "original_hex": "7be6ffeb",
+      "patched_hex": "dd6101eb"
+    }
+  ],
+  "payload_symbols": {
+    "wifi_latency_runtime.c": 0,
+    "$a": 431596,
+    "$d": 431624,
+    "prepare_diag": 524872,
+    "wl_stack_guards": 431640,
+    "runtime_mutex": 524288,
+    "ready": 524900,
+    "world_scope": 524904,
+    "self_pin": 524908,
+    "next_generation": 524912,
+    "contexts": 524920,
+    "exhausted_contexts": 529016,
+    "retired": 529020,
+    "submit": 424704,
+    "suppressed": 529024,
+    "cookie_hint": 529032,
+    "cookies": 563396,
+    "callback": 425076,
+    "notifications": 529028,
+    "exhausted_cookies": 536204,
+    "wl_runtime_prepare": 422420,
+    "wl_lock": 423012,
+    "wl_unlock": 423068,
+    "wl_native_ticks": 423092,
+    "wl_runtime_probe": 423108,
+    "wl_tx_runtime_attach": 423204,
+    "wl_tx_runtime_detach": 423668,
+    "wl_tx_runtime_gate": 423960,
+    "wl_tx_runtime_request": 424228,
+    "wifi_latency_policy.c": 0,
+    "wl_tx_init": 426252,
+    "wl_tx_bind": 426268,
+    "wl_tx_retire": 426436,
+    "wl_tx_serial_exhausted": 427712,
+    "wl_tx_request": 426592,
+    "wl_tx_submit_failed": 427468,
+    "wl_tx_begin": 426924,
+    "wl_tx_finish": 427164,
+    "wl_rx_age_create": 425460,
+    "wl_rx_age_retire": 425556,
+    "wl_rx_age_observe": 425612,
+    "wl_tx_reclaimable": 427672,
+    "wl_policy_abi": 427756,
+    "wifi_latency_rx_runtime.c": 0,
+    "frame": 536208,
+    "stats": 536216,
+    "action": 428312,
+    "fallback": 429124,
+    "entries": 536260,
+    "expiry": 431356,
+    "ever_enrolled": 536256,
+    "wl_rx_runtime_receive": 427796,
+    "wl_rx_runtime_tail": 428072,
+    "wl_rx_runtime_create": 429384,
+    "wl_rx_runtime_delete": 430028,
+    "wl_rx_runtime_flush": 430340,
+    "wl_rx_runtime_quiescent": 430508,
+    "wl_rx_runtime_stats": 430644,
+    "create": 431480,
+    "ignore": 431536,
+    "delete": 431448,
+    "validated_event": 431152,
+    "expired_virtual": 431184,
+    "valid_virtual": 431192,
+    "reset_virtual": 431224,
+    "choose_due": 431240,
+    "empty": 431392,
+    "chosen": 431280,
+    "flush": 431416,
+    "arm": 431324,
+    "done": 431540,
+    "bump_generation": 431512,
+    "wl_native_base": 422400,
+    "wl_orig_attach": 431580,
+    "wl_orig_detach": 431588,
+    "wl_orig_rx": 431548,
+    "wl_orig_flush": 431572,
+    "wl_orig_create": 431556,
+    "wl_orig_delete": 431564,
+    "wl_tx_gate_trampoline": 431596,
+    "_DYNAMIC": 524300,
+    "rx_timer_churn_policy": 431044,
+    "wl_rx_runtime_tail_trampoline": 430972,
+    "wl_resume_rx": 431552,
+    "wl_resume_create": 431560,
+    "wl_resume_delete": 431568,
+    "wl_resume_flush": 431576,
+    "wl_resume_attach": 431584,
+    "wl_resume_detach": 431592,
+    "wl_tx_gate_stock_skip": 431624,
+    "wl_tx_gate_early_continue": 431628
+  },
+  "stack_guards": [
+    [
+      1148540,
+      12,
+      2040664272
+    ],
+    [
+      1149980,
+      12,
+      740009532
+    ],
+    [
+      1147904,
+      12,
+      2648154931
+    ],
+    [
+      1148456,
+      12,
+      117248136
+    ],
+    [
+      1150292,
+      12,
+      3505589493
+    ],
+    [
+      1766992,
+      40,
+      1971385714
+    ],
+    [
+      1767096,
+      320,
+      3759342785
+    ],
+    [
+      1767772,
+      196,
+      2023656983
+    ],
+    [
+      1768608,
+      824,
+      568945968
+    ],
+    [
+      1922856,
+      228,
+      188011009
+    ]
+  ],
+  "payload_relocations": 1,
+  "merged_rel_va": 568516,
+  "merged_rel_size": 1552,
+  "code_load_va": 421888,
+  "state_load_va": 524288,
+  "code_file_offset": 421888,
+  "state_file_offset": 438272,
+  "sources": {
+    "wifi_latency_runtime.c": "ea6f97065c07759b57260e35ac203960e1439a07f495d1b7fd1b41df8db49cb8",
+    "wifi_latency_policy.c": "82c3a330869664d7c7e05346b61458b7bfc2eeb67623955ea28b427ec775dc6c",
+    "wifi_latency_rx_runtime.c": "b628c4127cd22957656b0eb56cd97184a4af78eb1249c192ff8a9416570ec163",
+    "wifi_latency_rx_runtime.S": "54b9a934924664dff4adac185845bad13ad9f1f1ce40b76b3f867b2f360c7a6c",
+    "rx_timer_churn_policy.S": "ed6f562a7c126a11fb99d744ad1fd12d78db6c11d1f2ff8380c3f0fe47e19d53",
+    "wifi_latency_runtime.h": "e425ac9c0a2d3f488031d66efafa3e625aa260004e6d23c403590c6f7ffd1fe6",
+    "wifi_latency_rx_runtime.h": "b4ddbb469fdf292a6dc63d91d2cab8117a06f30a7b2811253820aac1db761196",
+    "wifi_latency_policy.h": "3eebdf49b042c15858e9a529408677e0bdc765968ed8d9d79f64fa37348ca95d",
+    "rx_timer_churn_policy.h": "b2c293315c9b21716827710948b25b94799b20293348adea80e315fcf3f4bb1e",
+    "latency_payload.py": "b1b58f6a7d2a41a3d2d4c69ac7c70fa99bb9dbee87fb4d706296b93cfa7c779d"
+  },
+  "requirements": [
+    "pinned MU1316 driver and io-pkt; hz119",
+    "runtime module self-pin required; failure preserves stock policy",
+    "bounded sidecars/cookies; exhaustion falls back to stock policy",
+    "separate io-sdiorm coalescing is not part of this driver"
+  ]
+}

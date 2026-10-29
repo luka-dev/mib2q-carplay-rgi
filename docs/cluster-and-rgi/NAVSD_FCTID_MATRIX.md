@@ -23,7 +23,7 @@ Variant legend: `S` Std, `H` HighPrem, `M` MMIKombi, `MH` MMIKombiHUD; `All` = a
 | 3 | 0x03 | FunctionList | property | All | framework | availability bitmap | stock; capability truth |
 | 4 | 0x04 | HeartBeat | protocol | All | framework | LSG liveness | stock |
 | 5-14 | - | reserved | - | none | none | - | do not use |
-| 15 | 0x0F | FSG_OperationState | property | All | `show/hideInitializingScreen()` | READY / INITIALIZING | stock, not gated: INITIALIZING (3) puts the VC NA "Initialising navigation system" screen over the CarPlay map until stock Navigation is ready; every workaround was removed 2026-10-19 ([Nav Initializing Screen](NAV_INITIALIZING_SCREEN.md)) |
+| 15 | 0x0F | FSG_OperationState | property | All | `show/hideInitializingScreen()` | READY / INITIALIZING | session-gated for `appIsReady` only: altScreen ownership defers stock `showInitializingScreen` and replays it. That alone was not enough (`appState == 0`, `initState < 9`, a download or a BAP stack drop still sent INITIALIZING (3), which the VC turns into the NA "Initialising navigation system" screen over the CarPlay map), the September clamp was removed; the October 18 host-verified candidate gates the final writer on an applied CarPlay surface and preserves native init semantics; physical cold-boot verification remains open ([Nav Initializing Screen](NAV_INITIALIZING_SCREEN.md)) |
 | 16 | 0x10 | CompassInfo | property | All | `updateCompassInfo(angle, symbolic)` | heading, N/NE/… | stock |
 | 17 | 0x11 | RG_Status | property | All | `updateRGStatus(status)` | RG active; opens FctSync | CarPlay-owned for the session |
 | 18 | 0x12 | DistanceToNextManeuver | property | All | `updateDistanceToNextManeuver(dist, unit, barOn, bar)` | distance + bargraph | CarPlay-owned |
@@ -72,7 +72,7 @@ Variant legend: `S` Std, `H` HighPrem, `M` MMIKombi, `MH` MMIKombiHUD; `All` = a
 
 | Class | FctIDs | Rule |
 |---|---|---|
-| Session altScreen availability | 15 | While plane 99 owns the cluster, stock `showInitializingScreen` is deferred and `hideInitializingScreen` reasserted; on release the latest request is replayed and `ClusterService` recomputes. This covers `appIsReady` only and did not stop the NA screen (owner, 2026-09-23); an INITIALIZING→NORMAL clamp for the same lifetime was tried and removed 2026-09-24 ([Nav Initializing Screen](NAV_INITIALIZING_SCREEN.md)) |
+| Session altScreen availability | 15 | While plane 99 owns the cluster, stock `showInitializingScreen` is deferred and `hideInitializingScreen` reasserted; on release the latest request is replayed and `ClusterService` recomputes. This covers `appIsReady` only and did not stop the NA screen (owner, 2026-09-23); the September clamp was removed; the October 18 candidate overrides INITIALIZING only for an applied CarPlay context with a ready renderer, BAP up, power on and no software download; host tests pass, HU validation is pending ([Nav Initializing Screen](NAV_INITIALIZING_SCREEN.md)) |
 | CarPlay exclusive during takeover | 17, 18, 23, 24, 39, 49, 55 | `GatedCombiService` drops stock writes; `BAPBridge` publishes |
 | CarPlay exclusive only during active RGI | 19, 20, 21, 22, 46 | stock route text and trip output allowed again for `CP && !RGI` |
 | Suppressed native-map decorations | 45, 47 | stock value cached; hidden status sent (`updateMapScale(15, false, 0xFFFF, 0xFF, false)`, `updateAltitude(0x7FFF, 2)`); restored on release |

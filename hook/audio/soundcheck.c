@@ -251,37 +251,6 @@ void spa_soundcheck_apply_s16(spa_soundcheck_state_t *state,
     }
 }
 
-const float *spa_soundcheck_take_gains(spa_soundcheck_state_t *state,
-                                       float *gains, size_t frames)
-{
-    size_t frame;
-    int unity = 1;
-
-    if (!state || !gains || !frames || !state->config.enabled ||
-        !state->haveAppliedGain)
-        return NULL;
-    for (frame = 0; frame < frames; frame++) {
-        gains[frame] = spa_soundcheck_next_gain(state);
-        if (gains[frame] != 1.0f) unity = 0;
-    }
-    return unity ? NULL : gains;
-}
-
-void spa_soundcheck_scale_s16(int16_t *samples, size_t frames,
-                              unsigned channels, const float *gains)
-{
-    size_t frame, channel;
-
-    if (!samples || !gains) return;
-    for (frame = 0; frame < frames; frame++) {
-        if (gains[frame] == 1.0f) continue;
-        for (channel = 0; channel < channels; channel++) {
-            size_t at = frame * channels + channel;
-            samples[at] = spa_soundcheck_s16((float)samples[at] * gains[frame]);
-        }
-    }
-}
-
 void spa_soundcheck_process_s16(spa_soundcheck_state_t *state,
                                 int16_t *samples, size_t frames,
                                 unsigned channels)

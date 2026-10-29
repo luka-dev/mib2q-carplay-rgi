@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -25,13 +27,11 @@ QEMU = TOOLS / "qemu-src/build/qemu-system-arm"
 OUT = HERE / "out/qemu_install_wireless.log"
 IMAGE = "qnx65-armv7-toolchain:latest"
 CONFIG = """export MHI2Q_CP_IE_INDEX=2
+export IPL_CONFIG_DIR_DIO_MANAGER=/proc/boot
 export MHI2Q_CP_BT_MAC=00:01:02:03:04:05
 export MHI2Q_CP_DEVICE_ID=02:00:00:00:00:01
-export MHI2Q_CP_NAME=Audi
-export MHI2Q_CP_MANUFACTURER=Audi
 export MHI2Q_CP_MODEL=MHI2Q
 export MHI2Q_CP_SERIAL=QEMU
-export MHI2Q_CP_FIRMWARE=MU1316
 export MHI2Q_CP_HARDWARE=MHI2Q
 export MHI2Q_CP_SSID=QemuCarPlay
 export MHI2Q_CP_PASSPHRASE=testpassword
@@ -64,27 +64,63 @@ def map_rows(entries: list[tuple[str, str, int]]) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--archive", type=Path,
-                        default=REPO / "wireless/out/mhi2q-wireless-offline-review.tar")
+    parser.add_argument("--archive", type=Path)
+    parser.add_argument("--stock210", action="store_true", help="test the separate stock210 HU installer")
     options = parser.parse_args()
-    archive_path = options.archive
-    log = (HERE / "out/qemu_install_wireless_handoff.log"
+    archive_path = options.archive or REPO / ('wireless/out/mhi2q-stock210-hu-test.tar'
+        if options.stock210 else 'wireless/out/mhi2q-wireless-offline-review.tar')
+    log = HERE / 'out/qemu_install_stock210_test.log' if options.stock210 else (HERE / "out/qemu_install_wireless_handoff.log"
            if archive_path.name == "mhi2q-wireless-handoff-review.tar" else OUT)
     if not archive_path.is_file():
         raise SystemExit("build wireless offline bundle first")
     with tempfile.TemporaryDirectory(prefix="mhi2q-install-qemu-") as temp:
         work = Path(temp)
         stage_entries: list[tuple[str, str, int]] = []
+        payloads = {}
         with tarfile.open(archive_path) as archive:
             for number, member in enumerate(archive.getmembers()):
                 if not member.isfile():
                     continue
                 contents = archive.extractfile(member).read()
-                image_name = f"stage_{number:02d}"
-                encoded(work, image_name, contents)
-                stage_entries.append((image_name, member.name, member.mode))
-        encoded(work, "stage_config", CONFIG.encode())
-        stage_entries.append(("stage_config", "integration/wireless_carplay.env", 0o600))
+                payloads[member.name] = (contents, member.mode)
+        if options.stock210:
+            values = dict(line.removeprefix('export ').split('=', 1) for line in CONFIG.splitlines())
+            values.update(MHI2Q_CP_RECEIVER='stock210', MHI2Q_CP_SOURCE_VERSION='210.81', MHI2Q_CP_AIRPLAY_PORT='5000')
+            config = payloads['integration/wireless_carplay.env'][0].decode()
+            for key, value in values.items():
+                pattern = r'^export '+key+r'=.*$'
+                if re.search(pattern, config, flags=re.MULTILINE):
+                    config = re.sub(pattern, f'export {key}={value}', config, flags=re.MULTILINE)
+                else:
+                    config += f'\nexport {key}={value}\n'
+            payloads['integration/wireless_carplay.env'] = (config.encode(), 0o600)
+            payloads['baseline-status.txt'] = (b'verified\n', 0o600)
+            app = FW.parent
+            for name, data in (('libairplay.so', (app / 'eso/lib/libairplay.so').read_bytes()),
+                               ('dio_manager', (app / 'eso/bin/apps/dio_manager').read_bytes()),
+                               ('mdnsd', (FW / 'usr/sbin/mdnsd').read_bytes()),
+                               ('libdns_sd.so.1', (FW / 'usr/lib/libdns_sd.so.1').read_bytes()),
+                               ('libcarplay_hook.so', b'QEMU wired hook sentinel'),
+                               ('rc.local', b'QEMU startup sentinel')):
+                payloads[f'reference/untouched.{name}'] = (data, 0o600)
+            guards = b''
+            for name, path in (('libairplay.so', '/mnt/app/eso/lib/libairplay.so'),
+                               ('dio_manager', '/mnt/app/eso/bin/apps/dio_manager'),
+                               ('mdnsd', '/mnt/app/armle/usr/sbin/mdnsd'),
+                               ('libdns_sd.so.1', '/mnt/app/armle/usr/lib/libdns_sd.so.1'),
+                               ('libcarplay_hook.so', '/mnt/app/root/hooks/libcarplay_hook.so'),
+                               ('rc.local', '/mnt/app/root/rc.local')):
+                data = payloads[f'reference/untouched.{name}'][0]
+                guards += f'{hashlib.sha256(data).hexdigest()} {path}\n'.encode()
+            payloads['untouched.txt'] = (guards, 0o600)
+            payloads['checksums.txt'] = (''.join(f'{hashlib.sha256(data).hexdigest()} {name}\n'
+                for name, (data, mode) in sorted(payloads.items()) if name != 'checksums.txt').encode(), 0o600)
+        else:
+            payloads['integration/wireless_carplay.env'] = (CONFIG.encode(), 0o600)
+        for number, (name, (data, mode)) in enumerate(payloads.items()):
+            image_name = f'stage_{number:02d}'
+            encoded(work, image_name, data)
+            stage_entries.append((image_name, name, mode))
         cli_sources = {
             "sh": FW / "bin/sh",
             "cp": SDK / "bin/cp",
@@ -95,6 +131,8 @@ def main() -> None:
             "printf": FW / "usr/bin/printf",
             "openssl": FW / "usr/bin/openssl",
         }
+        if options.stock210:
+            cli_sources.update(mkdir=SDK / 'bin/mkdir', rmdir=SDK / 'usr/bin/rmdir')
         cli_entries: list[tuple[str, str, int]] = []
         for number, (name, source) in enumerate(cli_sources.items()):
             image_name = f"cli_{number:02d}"
@@ -107,6 +145,7 @@ def main() -> None:
             + map_rows(cli_entries) + "\n};\n"
         )
         direct = {
+            "dio_manager.json": REPO / "wireless/daemon/probes/dio_manager.fixture.json",
             "startup-virt": SDP / "tests/qemu/startup-virt",
             "libstartup.a": SDP / "tests/qemu/libstartup.a",
             "procnto-smp": TOOLS / "bsp-qemu-arm/extract/procnto-smp",
@@ -122,6 +161,7 @@ def main() -> None:
             shutil.copyfile(source, work / name)
         docker(work, "arm-unknown-nto-qnx6.5.0eabi-gcc", "-std=c11", "-Os",
                "-Wall", "-Wextra", "-Werror", "-I/work", "-o", "/work/install_qemu_probe",
+               *(['-DMHI2Q_STOCK210_TEST_INSTALL'] if options.stock210 else []),
                f"/src/{(HERE / 'install_qemu_probe.c').relative_to(AUDI)}")
         manifest = r'''[linker="(40;1;)qcc -bootstrap -nostdlib -Wl,--no-keep-memory -Vgcc_ntoarmv7%(m!=3,%(m!=6,%(e==0, -EL%)%(e==1, -EB%)%)%)%(h!=0, -Wl,-Ttext -Wl,0x%t%)%(d!=0, -Wl,-Tdata -Wl,0x%d%) -o%o %i %[M -L%^i -Wl,-uinit_%n -lmod_%n%] /work/libstartup.a -L/opt/qnx650/target/qnx6/armle-v7/lib -L/opt/qnx650/target/qnx6/armle-v7/usr/lib -llzo -lucl -ldrvr"]
 [linker="(40;2;)cp %i %o"]
@@ -146,6 +186,7 @@ def main() -> None:
 [type=dir] /mnt/owner
 [perms=+r,+x]
 /proc/boot/libc.so.3=/work/libc.so.3
+/proc/boot/dio_manager.json=/work/dio_manager.json
 /proc/boot/libm.so.2=/work/libm.so.2
 /proc/boot/libsocket.so.3=/work/libsocket.so.3
 /proc/boot/libz.so.2=/work/libz.so.2

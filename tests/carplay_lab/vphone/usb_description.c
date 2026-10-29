@@ -56,12 +56,64 @@ extern unsigned long CFNumberGetTypeID(void);
 extern unsigned char CFNumberGetValue(CFRef, int, void *);
 extern CFRef CFNumberCreate(void *, int, const void *);
 extern int IORegistryEntrySetCFProperties(u32, CFRef);
+extern long time(void *);
+extern int *__error(void);
+extern void os_unfair_lock_lock(void *), os_unfair_lock_unlock(void *);
 extern int socket(int, int, int), connect(int, const void *, u32), close(int);
 extern long send(int, const void *, size_t, int), recv(int, void *, size_t, int);
 extern int setsockopt(int, int, int, const void *, u32), inet_pton(int, const char *, void *);
 extern u32 if_nametoindex(const char *);
 extern unsigned short htons(unsigned short);
 extern int memcmp(const void *, const void *, size_t);
+
+static int wireless_network_probe(void) {
+    struct { unsigned char len,family;unsigned short port;unsigned address;unsigned char zero[8]; } address={16,2,0,0,{0}};
+    struct {long seconds;int microseconds;} timeout={3,0};
+    static const char request[]="GET /info HTTP/1.1\r\nHost: 192.168.64.200\r\nConnection: close\r\n\r\n";
+    char response[2049];long n;int fd=socket(2,1,0);
+    address.port=htons(5000);
+    if(fd<0||inet_pton(2,"192.168.64.200",&address.address)!=1)return 55;
+    setsockopt(fd,0xffff,0x1006,&timeout,sizeof(timeout));
+    setsockopt(fd,0xffff,0x1005,&timeout,sizeof(timeout));
+    printf("native QNX connect begin\n");fflush(0);
+    if(connect(fd,&address,sizeof(address))||send(fd,request,sizeof(request)-1,0)!=(long)sizeof(request)-1){close(fd);return 56;}
+    n=recv(fd,response,sizeof(response)-1,0);close(fd);
+    if(n<=0)return 57;
+    response[n]=0;printf("native QNX response %.12s\n",response);fflush(0);
+    return n>=12&&!memcmp(response,"HTTP/1.1 200",12)?0:58;
+}
+
+static int wireless_profile_probe(void) {
+    void *framework=dlopen("/System/Library/PrivateFrameworks/APTransport.framework/APTransport",2);
+    if(!framework)return 59;
+    const unsigned char *create=dlsym(framework,"APBrowserCarSessionCreate");
+    if(!create)return 60;
+    int (*is_vm)(void)=dlsym(framework,"APSIsVirtualMachine");
+    printf("native APSIsVirtualMachine present=%d result=%d\n",is_vm!=0,is_vm?is_vm():-1);
+    const char *symbols[]={"APConnectivityHelperGetSharedHelper","APConnectivityHelperGetSharedHelperWithWiFiInterfaceClass",
+        "APConnectivityHelperCopyCurrentWiFiNetworkInfo","APConnectivityHelperRegisterEventHandler",
+        "APConnectivityHelperRegisterForEvent","APConnectivityHelperQueryWiFiPower","APCarPlayHelperSessionCreate"};
+    for(unsigned i=0;i<sizeof(symbols)/sizeof(symbols[0]);i++){
+        const unsigned char *function=dlsym(framework,symbols[i]);
+        printf("native symbol=%s address=%p",symbols[i],function);
+        if(function){printf(" prologue=");for(unsigned j=0;j<16;j++)printf("%02x",function[j]);}
+        printf("\n");
+    }
+    printf("native APBrowserCarSessionCreate=%p bytes=",create);
+    for(unsigned i=0;i<1024;i++)printf("%02x",create[i]);
+    printf("\n");fflush(0);
+    return 0;
+}
+
+static int wireless_adapter_probe(void){
+    void *library=dlopen("/var/mobile/Library/Application Support/MHI2CarPlayLab/wireless-network.dylib",2);
+    if(!library){printf("network adapter load failed: %s\n",dlerror());return 61;}
+    int (*probe)(void)=dlsym(library,"mhi2_vphone_network_adapter_probe");
+    int result=probe?probe():-1;
+    printf("owned process network adapter patches=%d\n",result);fflush(0);
+    if(result!=5)return 62;
+    return wireless_profile_probe();
+}
 
 static int network_classify(void) {
     void *library = dlopen("/System/Library/PrivateFrameworks/CoreUtils.framework/CoreUtils", 2);
@@ -343,7 +395,8 @@ static int iap_inspect(const char *selected, int list_classes) {
     }
     void *type = objc_getClass(selected);
     const char *image = type ? class_getImageName(type) : 0;
-    if (!image || !strstr(image, "IOAccessoryManager.transport/IOAccessoryManager")) return 29;
+    if (!image || (!strstr(image, "IOAccessoryManager.transport/IOAccessoryManager") &&
+                   !strstr(image, "CoreAccessories.framework/CoreAccessories"))) return 29;
     unsigned count = 0; void **methods = class_copyMethodList(type, &count);
     unsigned shown = count < 80 ? count : 80;
     printf("class=%s methods=%u shown=%u\n", class_getName(type), count, shown);
@@ -365,9 +418,11 @@ static int iap_inspect(const char *selected, int list_classes) {
 int main(int argc, char **argv) {
     alarm(20);
     unsigned peer_seconds = 60;
-    if ((argc != 3 && !(argc == 5 && !strcmp(argv[1], "iap-peer")) && !(argc == 4 && (!strcmp(argv[1], "iap-inspect") || !strcmp(argv[1], "port-prepare") || !strcmp(argv[1], "iap-peer")))) || getuid() != 0 || (strcmp(argv[1], "probe") && strcmp(argv[1], "apply") && strcmp(argv[1], "restore") && strcmp(argv[1], "reconnect") && strcmp(argv[1], "network") && strcmp(argv[1], "network-classify") && strcmp(argv[1], "apply-destroy") && strcmp(argv[1], "ncm-direct") && strcmp(argv[1], "iap-list") && strcmp(argv[1], "iap-wake") && strcmp(argv[1], "iap-inspect") && strcmp(argv[1], "iap-registry") && strcmp(argv[1], "iap-smoke") && strcmp(argv[1], "iap-peer") && strcmp(argv[1], "manager-apply") && strcmp(argv[1], "manager-remove") && strcmp(argv[1], "port-prepare"))) return 2;
+    int bluetooth=argc>1&&(!strcmp(argv[1],"iap-smoke-bluetooth")||!strcmp(argv[1],"iap-peer-bluetooth")||!strcmp(argv[1],"iap-stream-bluetooth"));
+    int peer_mode=argc>1&&(!strcmp(argv[1],"iap-peer")||!strcmp(argv[1],"iap-peer-bluetooth")||!strcmp(argv[1],"iap-stream-bluetooth"));
+    if ((argc != 3 && !(argc == 5 && peer_mode) && !(argc == 4 && (!strcmp(argv[1], "iap-inspect") || !strcmp(argv[1], "port-prepare") || peer_mode))) || getuid() != 0 || (strcmp(argv[1], "probe") && strcmp(argv[1], "apply") && strcmp(argv[1], "restore") && strcmp(argv[1], "reconnect") && strcmp(argv[1], "network") && strcmp(argv[1], "wireless-network") && strcmp(argv[1], "wireless-profile") && strcmp(argv[1], "wireless-adapter-probe") && strcmp(argv[1], "network-classify") && strcmp(argv[1], "apply-destroy") && strcmp(argv[1], "ncm-direct") && strcmp(argv[1], "iap-list") && strcmp(argv[1], "iap-wake") && strcmp(argv[1], "iap-inspect") && strcmp(argv[1], "iap-registry") && strcmp(argv[1], "iap-smoke") && strcmp(argv[1], "iap-smoke-bluetooth") && !peer_mode && strcmp(argv[1], "manager-apply") && strcmp(argv[1], "manager-remove") && strcmp(argv[1], "port-prepare"))) return 2;
     if (!strcmp(argv[1], "port-prepare") && (argc != 4 || (strcmp(argv[3], "1") && strcmp(argv[3], "4") && strcmp(argv[3], "5")))) return 2;
-    if (!strcmp(argv[1], "iap-peer")) {
+    if (peer_mode) {
         if (argc != 4 && argc != 5) return 2;
         for (unsigned i=0;i<16;i++) if (!argv[3][i] || !((argv[3][i]>='0' && argv[3][i]<='9') || (argv[3][i]>='a' && argv[3][i]<='f'))) return 2;
         if (argv[3][16]) return 2;
@@ -396,12 +451,15 @@ int main(int argc, char **argv) {
     printf("owned research USB description verified\n"); fflush(0);
     if (!strcmp(argv[1], "probe")) return dump(original);
     if (!strcmp(argv[1], "network")) return network_probe();
+    if (!strcmp(argv[1], "wireless-network")) return wireless_network_probe();
+    if (!strcmp(argv[1], "wireless-profile")) return wireless_profile_probe();
+    if (!strcmp(argv[1], "wireless-adapter-probe")) return wireless_adapter_probe();
     if (!strcmp(argv[1], "network-classify")) return network_classify();
     if (!strcmp(argv[1], "manager-apply") || !strcmp(argv[1], "manager-remove")) return manager_configure(service, !strcmp(argv[1], "manager-remove"));
     if (!strcmp(argv[1], "port-prepare")) return port_prepare(service, argv[3][0] - '0');
     if (!strcmp(argv[1], "iap-registry")) return iap_registry(service);
-    if (!strcmp(argv[1], "iap-smoke")) return iap_smoke(0, 60);
-    if (!strcmp(argv[1], "iap-peer")) return iap_smoke(argv[3], peer_seconds);
+    if (!strcmp(argv[1], "iap-smoke") || !strcmp(argv[1], "iap-smoke-bluetooth")) return iap_smoke(0, 60, bluetooth, 0);
+    if (peer_mode) return iap_smoke(argv[3], peer_seconds, bluetooth, !strcmp(argv[1],"iap-stream-bluetooth"));
     if (!strcmp(argv[1], "iap-inspect")) return iap_inspect(argc == 4 ? argv[3] : "ACCTransportPluginIOAccessoryManager", argc == 3);
     if (!strcmp(argv[1], "iap-wake")) {
         void *connection = xpc_connection_create_mach_service("com.apple.iap2d.xpc", 0, 2);

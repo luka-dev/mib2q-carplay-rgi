@@ -62,7 +62,7 @@ def run(image, audit, profile_index=0, seconds=5):
 if __name__=='__main__':
     ap=argparse.ArgumentParser(description=__doc__)
     ap.add_argument('image',type=Path)
-    ap.add_argument('--audit',type=Path,default=ROOT/'assets/soundamp/remaining-blocks-20260919/audit.json')
+    ap.add_argument('--audit',type=Path,default=ROOT/'output/r2/soundamp/remaining-blocks-20260919/audit.json')
     ap.add_argument('--profile',type=int,choices=(0,1),default=0)
     ap.add_argument('--seconds',type=float,default=5)
     ap.add_argument('--output',type=Path)

@@ -162,12 +162,12 @@ Terminal and paired checkpoints, protocol bindings, source snapshots and optimiz
 
 ## 📁 Implementation and evidence
 
-- [Graph builder](../../../tools/stereo-upmix-render/build_scene_fly_graph.py): deterministic CSV reduction and constrained null.
-- [Reduced attributed graph](../../../tools/stereo-upmix-render/scene_flywire_783_64.json): node IDs, annotations, source hashes and both edge lists.
-- [Reservoir model](../../../tools/stereo-upmix-render/scene_fly_net.py): isolated global context replacement.
-- [Contracts](../../../tools/stereo-upmix-render/test_scene_fly_net.py): meaningful null/model guarantees.
-- [Finite supervisor](../../../tools/stereo-upmix-render/run_scene_fly_pair_nas.py): serialized trial and predeclared comparisons.
-- [Fixed-crop runner](../../../tools/stereo-upmix-render/fit_scene_fixed_nas.py): explicit global-core flag and hash-bound protocol.
+- [Graph builder](RETIRED_TOOLS.md#tool-44a1b835ebbd): deterministic CSV reduction and constrained null.
+- [Reduced attributed graph](RETIRED_TOOLS.md#tool-bc22a06c6134): node IDs, annotations, source hashes and both edge lists.
+- [Reservoir model](RETIRED_TOOLS.md#tool-5f87a52ffe97): isolated global context replacement.
+- [Contracts](RETIRED_TOOLS.md#tool-32feb0014956): meaningful null/model guarantees.
+- [Finite supervisor](RETIRED_TOOLS.md#tool-0b43a48c20c1): serialized trial and predeclared comparisons.
+- [Fixed-crop runner](RETIRED_TOOLS.md#tool-68f8855859f8): explicit global-core flag and hash-bound protocol.
 
 ## 🧾 Measured verdict and next decision
 

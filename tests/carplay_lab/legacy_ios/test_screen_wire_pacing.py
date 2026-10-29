@@ -1,4 +1,5 @@
 import random
+import plistlib
 import struct
 import unittest
 
@@ -23,6 +24,34 @@ def picture(opcode=0, data=b"encrypted bytes"):
 
 
 class ScreenWireTests(unittest.TestCase):
+    def test_sender_counters_survive_fragmentation_without_becoming_pictures(self):
+        metrics = {"encoderCurrentFPS": 30, "submitSurfaceFPS": 28,
+                   "beforeEncoderFPS": 4, "sinkOverflowDropFPS": 24,
+                   "encoderQueueDropFPS": 0, "encoderDropFPS": 0,
+                   "idleEncoderFPS": 1, "idleDropFPS": 0}
+        status = picture(5, plistlib.dumps(metrics, fmt=plistlib.FMT_BINARY))
+        result = report(pcap([(0, frame(100, flags=2)),
+                              (10, frame(101, status[:150])),
+                              (45, frame(251, status[150:])),
+                              (90, frame(101, status))]))["connections"][0]
+        self.assertEqual(result["screen_access_units"]["events"], 0)
+        self.assertEqual(result["opcodes"], {"5": 1})
+        self.assertEqual(result["telemetry"], [metrics])
+        self.assertEqual(result["telemetry_samples"], [{"capture_ms": 45, "metrics": metrics}])
+
+    def test_telemetry_window_uses_receipt_time_and_rejects_non_numeric_values(self):
+        early = picture(5, plistlib.dumps({"encoderCurrentFPS": 30}))
+        late = picture(5, plistlib.dumps({"submitSurfaceFPS": 20,
+                       "sinkOverflowDropFPS": True, "encoderDropFPS": "0",
+                       "rttAvg": float("inf"), "lossAvg": float("nan"),
+                       "unrecognized": 123}))
+        result = report(pcap([(0, frame(100, flags=2)),
+                              (10, frame(101, early)),
+                              (40, frame(101+len(early), late))]),
+                        window=(30, 50))["connections"][0]
+        self.assertEqual(result["telemetry"], [{"submitSurfaceFPS": 20}])
+        self.assertEqual(result["telemetry_samples"][0]["capture_ms"], 40)
+
     def test_buffered_other_direction_does_not_invalidate_screen_clock(self):
         a = picture()
         other = bytearray(frame(1))
@@ -42,9 +71,10 @@ class ScreenWireTests(unittest.TestCase):
         items = [(0, frame(100, flags=2)), (10, frame(101, a[:70])),
                  (40, frame(171, a[70:])), (50, frame(101+len(a), b)),
                  (90, frame(101, a))]
-        result = report(pcap(items))["connections"][0]
+        result = report(pcap(items), include_samples=True)["connections"][0]
         self.assertEqual(result["screen_access_units"]["events"], 2)
         self.assertEqual(result["screen_access_units"]["interval_ms"]["median"], 10)
+        self.assertEqual(result["access_unit_capture_ms"], [40, 50])
         self.assertEqual(result["repeated_tcp_payload_bytes"], len(a))
         self.assertEqual(result["bytes_after_sequence_gap"], 0)
 

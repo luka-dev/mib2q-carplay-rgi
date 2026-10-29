@@ -11,7 +11,7 @@ from amp_b_pipeline import BMode5FixedReference
 import test_amp_b_pipeline as bfixtures
 from amp_music_report import load_upstream_scenario
 
-PATH=Path(__file__).resolve().parents[2]/'assets/soundamp/remaining-blocks-20260919/audit.json'
+PATH=Path(__file__).resolve().parents[2]/'output/r2/soundamp/remaining-blocks-20260919/audit.json'
 
 
 def upstream(bank=7,delay=0):

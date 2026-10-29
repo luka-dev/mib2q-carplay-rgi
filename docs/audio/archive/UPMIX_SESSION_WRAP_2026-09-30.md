@@ -24,7 +24,7 @@ Both arms have40 songs×60s,231rows at all three predeclared gains and the same8
 
 ### Original full40 acoustic results
 
-The following rows belong to the original 40 DEV songs × 60 seconds and the named renderer configurations. They are not interchangeable with TRAIN fitting, DEV20 screens, source SI-SDR or per-band transmission. See the [Track A matched40 report](../UPMIX_TRACKA_MATCHED40_2026-09-30.md) and the [unified full40 ledger](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30.md#completed-capacity-full40-pair-reject-this-expansion-as-the-repair).
+The following rows belong to the original 40 DEV songs × 60 seconds and the named renderer configurations. They are not interchangeable with TRAIN fitting, DEV20 screens, source SI-SDR or per-band transmission. See the [Track A matched40 report](UPMIX_TRACKA_MATCHED40_2026-09-30.md) and the [unified full40 ledger](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30.md#completed-capacity-full40-pair-reject-this-expansion-as-the-repair).
 
 | Candidate | Guitar / keys / piano / strings | Voice / bass / drums | Swing songs | Decision |
 | --- | --- | --- | ---: | --- |
@@ -166,7 +166,7 @@ The supervisor already owns the sequential numerical audit and original full40 e
 - Nominal gain .40; predeclared .3235/.50 diagnostics do not select a rescue gain or best checkpoint
 - Reserved20 is candidate-independent but older experiments already used those songs; it does not satisfy the strict untouched20 acceptance gate
 
-Frozen source/manifest hashes and runner guards are in the [broad protocol](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30.md#spectral-broad-comparison-frozen156train-and-full40-real-c-study-is-live) and [supervisor](../../../tools/stereo-upmix-render/pc/run_spectral_context_generalization.ps1). Process IDs are observations, never sufficient restart authorization on their own.
+Frozen source/manifest hashes and runner guards are in the [broad protocol](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30.md#spectral-broad-comparison-frozen156train-and-full40-real-c-study-is-live) and [supervisor](RETIRED_TOOLS.md#tool-2c054d56e3dc). Process IDs are observations, never sufficient restart authorization on their own.
 
 ## 🎯 Acceptance and finite continuation
 
@@ -180,7 +180,7 @@ Frozen source/manifest hashes and runner guards are in the [broad protocol](UPMI
 - [ ] Track A coordinates integration of the one-model path into its owned hook
 - [ ] Owner's level-matched blind live CarPlay test confirms clear stable rear instruments, no rear voice, daily-use preference over current Track A
 
-Front-only and current Track A can play live today. The new one-network chain is a research build; the noncausal teacher is an offline reference. No owner listening verdict has been obtained for this candidate. The [CarPlay protocol](../UPMIX_CARPLAY_LISTENING_PROTOCOL.md) specifies live phone stereo, reconnect-based configuration activation and the distinction from headphone previews.
+Front-only and current Track A can play live today. The new one-network chain is a research build; the noncausal teacher is an offline reference. No owner listening verdict has been obtained for this candidate. The [CarPlay protocol](UPMIX_CARPLAY_LISTENING_PROTOCOL.md) specifies live phone stereo, reconnect-based configuration activation and the distinction from headphone previews.
 
 ### Bounded next sequence after explicit resume
 
@@ -213,14 +213,14 @@ flowchart TB
 
 | Artifact | Purpose |
 | --- | --- |
-| [Upper-band decoder](../../../tools/stereo-upmix-render/unified_spectral_upper_decoder.py) | Isolated contingent24→64 architecture; no live helper mutation |
-| [Structural verifier](../../../tools/stereo-upmix-render/verify_spectral_upper_decoder.py) | Initialization, derivative-route, observed-count and causal checks |
+| [Upper-band decoder](RETIRED_TOOLS.md#tool-c13fc6e62075) | Isolated contingent24→64 architecture; no live helper mutation |
+| [Structural verifier](RETIRED_TOOLS.md#tool-238dc3f1e2bf) | Initialization, derivative-route, observed-count and causal checks |
 | [Final structural protocol](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_upper_decoder_structure_protocol.json) / [final result](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_upper_decoder_structure_check.json) | Authoritative23-gate raw evidence with code/input hashes |
 | [Original protocol v1](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_upper_decoder_structure_protocol_v1.json) / [original result v1](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_upper_decoder_structure_check_v1.json) | Preserved22-gate history before CPU-only seed guard |
-| [Native full40 assessor](../../../tools/stereo-upmix-render/assess_spectral_native_full40.py) | Prepared actual-mixture float/int8 qualification with original inventory |
+| [Native full40 assessor](RETIRED_TOOLS.md#tool-63aab629c032) | Prepared actual-mixture float/int8 qualification with original inventory |
 | [Native true-TRAIN evidence](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30_spectral_native_smoke_check.json) | Original four real TRAIN mixtures and three detected TRAIN entries |
-| [Mask replay](../../../tools/stereo-upmix-render/spectral_chain_mask_replay.py) | Actual native mask applied to true sources plus separate PCM rounding residual |
-| [Rear spectrum reporter](../../../tools/stereo-upmix-render/report_upmix_rear_spectrum.py) | Source-family band medians, identity/coverage/hash checks from saved C output |
+| [Mask replay](RETIRED_TOOLS.md#tool-a703279704e0) | Actual native mask applied to true sources plus separate PCM rounding residual |
+| [Rear spectrum reporter](RETIRED_TOOLS.md#tool-5374162fe11f) | Source-family band medians, identity/coverage/hash checks from saved C output |
 | [Complete architecture ledger](UPMIX_UNIFIED_SCENE_ARCHITECTURE_2026-09-30.md) | Detailed methods, successive results, failures and raw artifact links |
 
 ### Rules that survive the pause

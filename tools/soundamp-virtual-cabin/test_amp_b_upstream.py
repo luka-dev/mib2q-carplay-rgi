@@ -8,7 +8,7 @@ from amp_dsp_chain import design_to_sos
 
 
 PARAMS = json.loads((Path(__file__).resolve().parents[2]/
-    'assets/soundamp/remaining-blocks-20260919/audit.json').read_text())['input_path_profiles'][0]
+    'output/r2/soundamp/remaining-blocks-20260919/audit.json').read_text())['input_path_profiles'][0]
 
 
 def reference(bank=7, delay=0, family='graphic', gains=None):

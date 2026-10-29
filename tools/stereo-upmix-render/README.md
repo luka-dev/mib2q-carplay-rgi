@@ -11,22 +11,22 @@ C port is checked against it, and the car decides the rest.
 | File | What it is |
 |---|---|
 | `scene_upmix.py` | The numpy reference renderer (`render(x[n,2], SceneConfig) -> y[n,6]`, `decompose()` for tests) and `SceneStream` / `stream_render`, the block-exact streaming form the C port is diffed against. CLI compatible with the stem harness: unknown renderer flags are ignored, the last two positionals are the stereo input and the 6-ch output (48 kHz int16 WAV); `--alpha --surround --ambient-gain --air-db --rear-delay-ms --sigma-min --no-cluster --no-unmix --wide-pair --duck-mask --dump`. |
-| `test_scene_upmix.py` | The verification suite: synthetic scenes (20 s, 48 kHz, mix peak 0.7), every number attributed by stem with the harness's `rear_share`; 54 checks, exit 1 on any failure; prints the module md5. |
+| `test_scene_upmix.py` | The verification suite: synthetic scenes (20 s, 48 kHz, mix peak 0.7), every number attributed by stem with the harness's `rear_share`; 51 checks, exit 1 on any failure; prints the module md5. |
 | `scene_albumdb_eval.py` | The ten AlbumDB songs with real stems (sum of the stored heads, loudest 60 s) against the passive matrix and the PAD baseline; per-head rear share, swing and behind-ness; writes a Markdown table and JSON into `--out-dir`. The spec's section 14 table. |
 | `scene_oracle_master.py` | One AlbumDB stem hard-panned, everything else dead-centre: the exact-decomposition test offline and the in-car oracle file of spec section 13.5. |
 | `scene_car_kit.py` | The blind listening kit: stereo sources × renderer conditions → headerless 6-ch S16 files for `qsa_play` on the head unit (plus the 6-ch WAVs), names blinded per source, key in `KEY.txt`, a `rearcheck.s16` tone to prove the SAD is 0xfc. |
 | `scene_dev40_dump_stems.py`, `scene_dev40_remeasure_steady.py`, `scene_dev40_summarise.py` | The DEV40 pipeline on the training PC and the Mac (spec section 15): dump the harness's per-stem 60 s excerpts as one npz per song; re-measure a harness run with the steady-range columns; summarise `stems.csv` files the way the Track A matched40 did. |
 | `scene_swing_audit.py` | Swing audit on dumped DEV40 stems: one stem's 1 s rear-share medians next to the renderer's internals (admitted places, member weight, pooled pan, Wiener w). |
-| `scene_port_fixtures.py` | Golden fixtures for the C port: `functions.npz` (the pure per-frame functions, the tables, an STFT round trip) and `stream_spatial.npz` / `stream_mask.npz` / `stream_anchor.npz` (block-exact `SceneStream` goldens: analysis frames, per-frame engine outputs and stats including the front-anchor gain, the final [n,6]; `stream_anchor` is check 14's sparse wide mix at `front_keep_db` 1, where the anchor binds). |
+| `scene_port_fixtures.py` | Golden fixtures for the C port: `functions.npz` (the pure per-frame functions, the tables, an STFT round trip) and `stream_spatial.npz` / `stream_mask.npz` (block-exact `SceneStream` goldens: analysis frames, per-frame engine outputs and stats, the final [n,6]). |
 | `scene_mask_fixtures.py` | Goldens for the fine mask net c runtime, made on the training PC with torch and `mask_net.py`: weights, standardize constants, features, every layer for the first 64 controls, posteriors, eligibility and protect for the whole file (`masknet_oracle.npz`). |
-| `scene_render_hook.c` | The `SCENE` backend of `hook/audio/stereo_upmix.c` on a stereo WAV, through `spa_stereo_upmix_process_s16()` in 768-frame calls (one QSA period), the output 1024 frames late exactly as in the hook; the mask net on the hook's worker, stepped inline. |
+| `scene_render_hook.c` | The `SCENE` backend of `hook/audio/stereo_upmix.c` on a stereo WAV, through `spa_stereo_upmix_process_s16()` in 768-frame calls (one QSA period), the output 1024 frames late exactly as in the hook. |
 | `port/` | The ctypes tests of the C port against the fixtures (below) and `export_masknet_weights.py`, which turns `masknet_oracle.npz` into the `SMSKNET1` blob the hook loads (`models/scene-masknet-c/scene_masknet_c.bin`). |
 | `bench/scene_*` | The engine and mask-net benches, their QNX cross-build and the QEMU `-icount` runner ([bench/README.md](bench/README.md)). |
 
 ## ✅ Reference tests
 
 ```sh
-python3 tools/stereo-upmix-render/test_scene_upmix.py            # 54 checks, ~30 s
+python3 tools/stereo-upmix-render/test_scene_upmix.py            # 51 checks, ~30 s
 python3 -m pytest tools/stereo-upmix-render/test_scene_upmix.py  # the same as test_* functions
 ```
 
@@ -38,31 +38,21 @@ system temp dir.
 Each script builds what it needs into `build/scene_port/` with the host
 compiler and `-ffp-contract=off`, loads it with ctypes and prints per check the
 error and PASS/FAIL (exit 1 on any FAIL). The fixtures are the output of
-`scene_port_fixtures.py OUT_DIR` and `scene_mask_fixtures.py`. The scripts default
-to `upmix-data/scene_port_fixtures_2026-10-17` under `$AUDI_WORKSPACE` (the
-firmware and data workspace beside the repo); `--fixtures DIR` points them
-elsewhere. That set was regenerated on 2026-10-17: `functions`, `stream_spatial`
-and `stream_mask` are bit-identical to the 2026-10-09 set apart from the new
-`front_keep_db` config field, `stream_anchor.npz` is new, and `clusters.npz` /
-`masknet_oracle.npz` are the 2026-10-09 files.
+`scene_port_fixtures.py OUT_DIR` and `scene_mask_fixtures.py`; pass `--fixtures DIR`
+(the default in the scripts is a scratch path of the session that made them).
 
 ```sh
 python3 tools/stereo-upmix-render/port/test_math.py --fixtures DIR      # helpers, tables, FFT, config defaults
 python3 tools/stereo-upmix-render/port/test_clusters.py --fixtures DIR  # scene_clusters.c, fixture replay + synthetic runs
-python3 tools/stereo-upmix-render/port/test_engine.py --fixtures DIR    # spatial / mask / anchor: frame level (anchor gain per frame) and block level, -60 dB gate, 768 vs 1000 bit-identical
+python3 tools/stereo-upmix-render/port/test_engine.py --fixtures DIR    # frame level and block level, -60 dB gate, 768 vs 1000 bit-identical
 python3 tools/stereo-upmix-render/port/test_mask.py --fixtures DIR      # scene_mask.c vs torch on the C features and vs the goldens
-python3 tools/stereo-upmix-render/port/test_hook_render.py             # scene_render_hook vs stream_render on the car-kit album01.wav: spatial, LFE, the net, the net + --front-keep-db 1
+python3 tools/stereo-upmix-render/port/test_hook_render.py             # scene_render_hook vs stream_render on the car-kit album01.wav
 ```
 
-Measured on the shipped sources: engine −125.8 / −131.3 / −128.8 dB of the
-output RMS on spatial / mask / anchor, the anchor gain within 3e-7 per frame
+Measured on the shipped sources: engine −125.8 / −131.3 dB of the output RMS
 (`test_engine.py`), net 4.2e-4 vs torch on the C features and 5.2e-3 end to
 end (`test_mask.py`; the reference's own float32 noise is 4.2e-3), the hook
-−71.7 dB on the net's own rows and −74.5 dB with them at `--front-keep-db 1`
-(`test_hook_render.py`). The host renderer runs the net on the same worker as
-the unit, so its rows start at the fourth control boundary, one control after
-the Python's own timing; the test drives the reference with exactly the rows
-the hook installed.
+−71.7 dB on the net's own rows (`test_hook_render.py`).
 
 ## ⚙️ The hook renderer
 
@@ -78,27 +68,23 @@ cc -std=gnu99 -O2 -ffp-contract=off -Wall -Wextra -Werror -Ihook -Ihook/audio \
 
 build/scene_port/scene_render_hook [--mode scene|off] [--lfe off|assist] [--block 1..1024] \
     [--alpha A] [--inst-alpha A] [--inst-gamma G] [--duck-depth D] [--rear-delay-ms MS] \
-    [--sigma-min S] [--side-lp-hz HZ] [--bleed-cancel K] [--front-keep-db DB] \
+    [--sigma-min S] [--side-lp-hz HZ] [--bleed-cancel K] \
     [--mask-blob masknet.bin] [--mask-rows rows.f32] in.wav out.wav
 ```
 
 The knobs are the environment's `AUDIO_SCENE_*` in the same units and default
 to the engine's variant-J values, which are what `carplay_startup.sh` exports;
 `--mask-blob` installs the fine mask net as `AUDIO_SCENE_MASK_BLOB` does on the
-unit (without it: spatial only), on the scene mask worker without a thread:
-every job runs inside its submit, so each row lands one control after its
-boundary (the unit's timing while its worker keeps up) and the render does not
-depend on `--block`; `--mask-rows` (a `-DSPA_STEREO_UPMIX_TESTING` build) dumps
-the rows the backend installed at every 512-frame control boundary.
-`--mode off` is the exact `L,R,0,0,0,0` bypass.
+unit (without it: spatial only); `--mask-rows` (a `-DSPA_STEREO_UPMIX_TESTING`
+build) dumps the rows the backend installed at every 512-frame control boundary.
+`--mode off` is the exact `L,R,0,0,0,0` bypass. The build line in the file's
+header still names the retired `hssr_*.c` files; use the one above.
 
 `-ffp-contract=off` on every host build: the QNX/ARMv7 build has no FMA, so a
 host render with fused multiply-adds is not the arithmetic the car performs.
-Every link line that names `stereo_upmix.c` needs the three engine files
-(`scene_engine_math.c`, `scene_clusters.c`, `scene_engine.c`); the net
-(`scene_mask.c`, `scene_mask_worker.c`) only where a mask worker is started.
-`scene_clusters.c` alone needs `scene_engine_math.c` (it uses the engine's
-`scene_smoothstep` and `scene_ema_alpha`).
+Every link line that names `stereo_upmix.c` needs the four scene files
+(`scene_engine_math.c`, `scene_clusters.c`, `scene_engine.c`, `scene_mask.c`)
+and `scene_mask_worker.c` when the worker is referenced.
 
 ## 📊 The stem harness
 

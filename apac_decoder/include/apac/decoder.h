@@ -5,7 +5,7 @@
 // The APAC decoder's top two layers: the per-ASC core decoder and the frame
 // decoder that drives it.
 //
-// Reference functions in libSPF_CP_PlugInWrapper.so (Pioneer SPHERA 1.030010):
+// Originals in libSPF_CP_PlugInWrapper.so (Pioneer SPHERA 1.030010):
 //
 //   0x0007d1e0  APACCoreDecoder::Initialize(apac::ParamList const&,
 //                                           observer_ptr<apac::IASCConfig>)
@@ -44,7 +44,7 @@
 // if it is set - and the extension-frame decoder has no elements at all.  Both
 // were checked by patching their entries in the running library; because
 // nothing after them reads bits, neither can change the output on this content.
-// Our decoder implements the trimming parser anyway and the extension list as the
+// The port implements the trimming parser anyway and the extension list as the
 // empty list it is.
 //
 // WHICH TOP-LEVEL DECODER THE CARPLAY STREAM NEEDS: the ASP one.
@@ -84,7 +84,7 @@
 
 namespace apac {
 
-// Limits of this decoder.  Eight elements is sixteen channels, twice what the
+// Limits of this port.  Eight elements is sixteen channels, twice what the
 // CarPlay 5.1.2 profile needs.
 const uint32_t kMaxDecoderElements = 8;
 const uint32_t kMaxDecoderChannels = 16;
@@ -114,12 +114,12 @@ struct TrimmingData {
 class CoreDecoder {
 public:
     // `lrvq` may be null, in which case an LRVQ frame is refused with
-    // kLimitNeedsLRVQ.  One instance is shared by the whole decoder: every
-    // APACLRVQDecoder member is static in the library and its prediction state
-    // is a stack local of the wrapper, so nothing survives a call and our decoder
+    // kPortNeedsLRVQ.  One instance is shared by the whole decoder: every
+    // APACLRVQDecoder member is static in the original and its prediction state
+    // is a stack local of the wrapper, so nothing survives a call and the port
     // resets it on entry to each of the three spectrum entry points.
     // `bwe` may be null too, in which case an ACTIVE bandwidth-extension
-    // channel is refused with kLimitNeedsBWE.  Shared for the same reason and
+    // channel is refused with kPortNeedsBWE.  Shared for the same reason and
     // on the same evidence as `lrvq`: BWELPC carries nothing across a call.
     uint32_t Initialize(const CoreDecoderConfig& cfg, uint32_t sampleRate,
                         uint32_t frameLength, LRVQDecoder* lrvq, BWELPC* bwe);
@@ -171,7 +171,7 @@ public:
     uint32_t Initialize(const GlobalConfig& cfg);
 
     // APACDecoder::Reset: the filter-bank overlap of every core decoder.  The
-    // element state is deliberately NOT cleared - that is what the library
+    // element state is deliberately NOT cleared - that is what the original
     // does, and a frame decode overwrites all of it anyway.
     void Reset();
 
@@ -202,7 +202,7 @@ protected:
     // One for the whole decoder, not one per core: 56 KiB once.  See
     // CoreDecoder::Initialize for why a single instance is faithful.
     LRVQDecoder  mLRVQ;
-    // And one BWELPC, for the same reason.  The library has one per CHANNEL;
+    // And one BWELPC, for the same reason.  The original has one per CHANNEL;
     // nothing in it survives a call, so this costs ~100 KiB once instead of
     // ~100 KiB per channel.  See include/apac/bwe.h.
     BWELPC       mBWELPC;
@@ -234,10 +234,10 @@ protected:
 //               came before.
 //   * resume  - only legal on an ASP.  Every packet here is one, so resuming
 //               anywhere is safe on this content; on a stream that mixes frame
-//               types it would not be, and our decoder exposes FrameType() rather
+//               types it would not be, and the port exposes FrameType() rather
 //               than deciding for the caller.
 //
-// Two things this decoder will not guess at, because the binary does not say them:
+// Two things this port will not guess at, because the binary does not say them:
 // which of frame types 0, 1 and 3 means what, and what the 2048-bytes-per-
 // channel buffer APACASPDecoder::Initialize sizes at +464 is for.  Neither is
 // read anywhere on the decode path.

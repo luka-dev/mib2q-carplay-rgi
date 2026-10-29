@@ -1,11 +1,12 @@
 """Synthetic aux provenance is explicit; no car-state or acoustic claim."""
 import copy
+import json
 import tempfile
 import unittest
 
 import numpy as np
 
-from amp_dsp_chain import AmpChain, reference_fingerprint
+from amp_dsp_chain import AmpChain, reference_fingerprint, ROOT
 from amp_second_b import SecondBAuxReference, load_static_inventory
 from test_amp_second_b import synthetic_scenario
 import test_amp_cabin_render as cabin_fixtures
@@ -82,6 +83,10 @@ class SecondBIntegrationTests(unittest.TestCase):
             self.assertGreater(np.max(abs(y)),0)
             self.assertEqual(report['boundary_inputs']['second_b_auxiliary']['shape'],[256,3])
             self.assertIn('second_b_scenario',report['model'])
+
+    def test_default_metadata_matches_completed_tuning_report(self):
+        report=json.loads((ROOT/'output/upmix-tuning-grid-20260920/report.json').read_text())
+        self.assertEqual(AmpChain().metadata(),report['model'])
 
 
 if __name__=='__main__':unittest.main()

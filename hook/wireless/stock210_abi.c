@@ -2,6 +2,7 @@
 #include "stock210_abi.h"
 #include "stock210_fingerprint.h"
 #include "pairing.h"
+#include "../framework/ap_status.h"
 #include <dlfcn.h>
 #include <errno.h>
 static uintptr_t verified_base;

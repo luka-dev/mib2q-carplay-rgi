@@ -4,7 +4,7 @@
 
 // Codebook 11's escape magnitude, pow(v, 4/3), on whatever libm is underneath.
 //
-// STATUS.md listed this as the one open portability question: our
+// PORT_STATUS listed this as the one open portability question: the port's
 // escapeMagnitude() calls pow() for v > 1023, and "macOS libm and glibc/aarch64
 // agree bit-for-bit over the 562 escapes the fixture drives through that path"
 // was an observation about two libms, not a guarantee for QNX 6.5's.
@@ -47,7 +47,7 @@ uint32_t bits(float f)
     return b;
 }
 
-// Our escapeMagnitude(), for v past the i^(4/3) table.
+// The port's escapeMagnitude(), for v past the i^(4/3) table.
 float escapeMagnitude(uint32_t v)
 {
     return (float)pow((double)v, 4.0 / 3.0);
@@ -107,7 +107,7 @@ int main(void)
         return 1;
     }
 
-    // Below the escape range our decoder must take the table, not pow: the two
+    // Below the escape range the port must take the table, not pow: the two
     // are not interchangeable there, which is why the boundary is checked.
     if (kEscapePowLo != 1024) { printf("FAIL table starts at %u\n", kEscapePowLo); return 1; }
 

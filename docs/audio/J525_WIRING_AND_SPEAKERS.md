@@ -11,7 +11,7 @@ Target vehicle: Audi S5 Sportback, MY2018 (built 09.04.2018), sales type F5A54A,
 | Layer | Status |
 |---|---|
 | 19 drivers on 16 T38 circuits | proven from Audi Current Flow Diagram No. 45 (from 07.2016) + J525 connector page (Coupé/Sportback up to 09.2019) `[decompile]`-grade document evidence |
-| DSP output slot → T38 circuit | **candidate** only: numeric routing + passbands + driver inventory |
+| V850 config `0..15` → DSP output slot → T38 circuit | **proven**: ODIS `EV_AMPMst16C2Gen2ALPI_001` (`DOP_TEXTTABLELPChaneSelec` / DID `0x18EE` `MASxxxxx` labels) + EEPROM `0x0600` Long Coding (`AF AA AF AA` marking `TT+HT` on Ch 1, 2, 9, 10) matches the 16 circuits 1:1 (see [ODIS_AMP_MAPPING.md](ODIS_AMP_MAPPING.md)) |
 | Per-circuit filters, gains, delays, polarity | EQ record counts and some crossover records recovered; polarity and passive networks unknown |
 | Speaker and cabin acoustics | unknown — no measurement |
 
@@ -79,24 +79,24 @@ flowchart LR
 ```
  Two A07 tables feed the selectors: mode table `A07[0x102DAD + mode·16] → 0xA91C6 → SHARC 0xC20D0` (both stored modes are `[8,0,8,0,9,1,9,1,4,5,6,7,2,2,3,3]`) and normal routing `A07[0x102DCD] → 0xA9328 → 0xC2114` = `[1,5,4,0,2,6,11,10,8,9,13,12,3,7,14,15]` in V850 config order. V850-to-DSP permutation at `0x68B40` = `[11,10,9,8,4,5,6,7,15,14,13,12,0,1,3,2]`, inverse at `0x68B30`; it is shared by routing (`0xA9328`), delays (`0xA9C94`), gains (`0xAC464`), dynamics (`0xACAA0`, `0xA8548`) and monitoring (`0xA8238`). `0xA9328` also implements channel-test overrides (diagnostic inputs 16/17, mute `0xFFFFFFFF`).
 
-| V850 config | DSP slot | Bus10 source | Candidate speaker(s) | Candidate T38 | Output EQ count |
-|---:|---:|---:|---|---|---:|
-| 0 | 11 | 0 | R20 + R103 front-left mid/treble | 11,12 | 12 |
-| 1 | 10 | 1 | R22 + R104 front-right mid/treble | 13,14 | 12 |
-| 2 | 9 | 9 | R221 upper A-pillar right | 24,32 | 5 |
-| 3 | 8 | 8 | R220 upper A-pillar left | 23,31 | 5 |
-| 4 | 4 | 8 | R276 dash left | 25,33 | 4 |
-| 5 | 5 | 9 | R277 dash right | 26,34 | 4 |
-| 6 | 6 | 7 | R210 right effect | 28,36 | 10 |
-| 7 | 7 | 6 | R209 left effect | 27,35 | 10 |
-| 8 | 15 | 4 | R14 + R15 rear-left door | 4,5 | 12 |
-| 9 | 14 | 5 | R16 + R17 rear-right door | 16,17 | 12 |
-| 10 | 13 | 2 | R208 centre mid | 6,18 | 17 |
-| 11 | 12 | 2 | R219 centre tweeter | 3,15 | 6 |
-| 12 | 0 | 0 | R21 front-left bass | 7,8 | 17 |
-| 13 | 1 | 1 | R23 front-right bass | 9,10 | 17 |
-| 14 | 3 | 3 | R211 one winding | 19,20 or 21,22 | 0 |
-| 15 | 2 | 3 | R211 other winding | 21,22 or 19,20 | 0 |
+| V850 config | ODIS Channel & DIDB ID | DSP slot | Bus10 source | Proven speaker(s) (`EV_AMPMst16C2Gen2ALPI_001`) | T38 pins | Coding `0x0600` (`AF AA AF AA`) | Output EQ count |
+|---:|---|---:|---:|---|---|---|---:|
+| 0 | `Channel_1` (`MAS01189`) | 11 | 0 | R20 + R103 front-left mid/treble | 11,12 | `TT=1, HT=1` | 12 |
+| 1 | `Channel_2` (`MAS01192`) | 10 | 1 | R22 + R104 front-right mid/treble | 13,14 | `TT=1, HT=1` | 12 |
+| 2 | `Channel_3` (`MAS06562`) | 9 | 9 | R221 upper A-pillar right (`Right front treble speaker 2`) | 24,32 | `TT=1, HT=0` | 5 |
+| 3 | `Channel_4` (`MAS06561`) | 8 | 8 | R220 upper A-pillar left (`Left front treble speaker 2`) | 23,31 | `TT=1, HT=0` | 5 |
+| 4 | `Channel_5` (`MAS11755`) | 4 | 8 | R276 dash left (`Left front midrange speaker 2`) | 25,33 | `TT=1, HT=0` | 4 |
+| 5 | `Channel_6` (`MAS11756`) | 5 | 9 | R277 dash right (`Right front midrange speaker 2`) | 26,34 | `TT=1, HT=0` | 4 |
+| 6 | `Channel_7` (`MAS01200`) | 6 | 7 | R210 right effect (`Right effect speaker`) | 28,36 | `TT=1, HT=0` | 10 |
+| 7 | `Channel_8` (`MAS01199`) | 7 | 6 | R209 left effect (`Left effect speaker`) | 27,35 | `TT=1, HT=0` | 10 |
+| 8 | `Channel_9` (`MAS01194`) | 15 | 4 | R14 + R15 rear-left door (`Left rear bass speaker`) | 4,5 | `TT=1, HT=1` | 12 |
+| 9 | `Channel_10` (`MAS01196`) | 14 | 5 | R16 + R17 rear-right door (`Right rear bass speaker`) | 16,17 | `TT=1, HT=1` | 12 |
+| 10 | `Channel_11` (`MAS01198`) | 13 | 2 | R208 centre mid (`Center speaker`) | 6,18 | `TT=1, HT=0` | 17 |
+| 11 | `Channel_12` (`MAS11754`) | 12 | 2 | R219 centre tweeter (`Center speaker 2`) | 3,15 | `TT=1, HT=0` | 6 |
+| 12 | `Channel_13` (`MAS01188`) | 0 | 0 | R21 front-left bass (`Left front bass speaker`) | 7,8 | `TT=1, HT=0` | 17 |
+| 13 | `Channel_14` (`MAS01191`) | 1 | 1 | R23 front-right bass (`Right front bass speaker`) | 9,10 | `TT=1, HT=0` | 17 |
+| 14 | `Channel_15` (`MAS04506`) | 3 | 3 | R211 winding 1 (`Double subwoofer speaker 1`) | 19,20 | `TT=1, HT=0` | 0 |
+| 15 | `Channel_16` (`MAS04507`) | 2 | 3 | R211 winding 2 (`Double subwoofer speaker 2`) | 21,22 | `TT=1, HT=0` | 0 |
 
 Bus10 is the ten-channel stage after the first mixer, not raw MOST input. Bus10 8/9 feed the elevated front branches and 6/7 the effect branches; neither pair is MOST inputs 7/8. The sub windings cannot be ordered. The output-EQ design records (`0x102448`, 143 used of 144) put an HP-family record at **100 Hz** on the rear doors, a **6000 Hz** mid/tweeter split on the centre pair, **HP 62 Hz / LP 240 Hz** on the front woofers; the rear input buses carry 113/138/174 Hz records at −8 dB each plus mid/treble correction, and the LFE input bus has **LP 66 Hz and HP 33 Hz** — zero output-EQ count does not mean an unfiltered sub. These are digital design parameters, not acoustic crossovers. B01 (3562 words, `0x12000C → 0xC3C6A`) is not a flat 23-biquad catalogue as an early scan suggested.
 
@@ -111,8 +111,6 @@ Bus10 is the ten-channel stage after the first mixer, not raw MOST input. Bus10 
 | Sub winding ← LFE | +3.8 | +4.9 | −25.3 | −40.2 | −59.8 | −67.1 |
 
 Known A-path delays (samples, excluding upmixer and filter group delay): front mid/treble 1786/1789, rear doors 2035, centre mid 1757, centre tweeter 1774, front woofers 1719, sub windings 1836.
-
-These totals already include the 8-bus delays of [SHARC DSP Blocks](SHARC_DSP_BLOCKS.md) (`[1632]×8` plus `[87,87,125,204,403,403,367,367]`): rear doors 2035 = 1632 + 403, front woofers 1719 = 1632 + 87. So the rear doors trail the front mid/treble by 249 samples ≈ **5.2 ms** and the front woofers by 316 ≈ 6.6 ms `[model]`. Do not add the 316-sample bus offset again: an earlier reading did and got 11.8 ms.
 
 Sources: `SHARC_OUTPUT_BINDING_AUDIT`, `SOUNDAMP_FULL_DSP_MODEL`, `SHARC_VISA_3D_OFF_AUDIT`
 

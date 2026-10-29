@@ -6,7 +6,7 @@
 
 typedef struct fake_cf {
     int refs, session;
-    char text[96], type[48], uuid[64];
+    char text[128], type[48], uuid[64], url[128];
     int64_t value;
     struct fake_cf *params;
 } fake_cf_t;
@@ -20,7 +20,7 @@ static pthread_mutex_t test_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t test_cond = PTHREAD_COND_INITIALIZER;
 static int hold, entered, fail_view;
 static struct {
-    char type[48];
+    char type[48], url[128];
     int value, session;
     uint64_t time;
 } sent[512];
@@ -129,6 +129,16 @@ static void dict_set(void *dict, const void *key, const void *value) {
         snprintf(d->type, sizeof(d->type), "%.*s", (int)sizeof(d->type) - 1, v->text);
     else if (!strcmp(k->text, "uuid"))
         snprintf(d->uuid, sizeof(d->uuid), "%.*s", (int)sizeof(d->uuid) - 1, v->text);
+    else if (!strcmp(k->text, "url"))
+        snprintf(d->url, sizeof(d->url), "%.*s", (int)sizeof(d->url) - 1, v->text);
+}
+static int fake_getcstr(const void *cf, char *buf, long max, uint32_t enc) {
+    const fake_cf_t *f = cf;
+    (void)enc;
+    if (!f || !buf || max <= 0)
+        return 0;
+    snprintf(buf, (size_t)max, "%s", f->text);
+    return 1;
 }
 static int dict_integer(void *dict, const void *key, int64_t value) {
     fake_cf_t *d = dict;
@@ -173,10 +183,12 @@ static int send_command(void *session, void *command, void *completion, void *ct
     assert(sent_count < 512);
     unsigned n = sent_count++;
     snprintf(sent[n].type, sizeof(sent[n].type), "%s", c->type);
+    snprintf(sent[n].url, sizeof(sent[n].url), "%s", c->params ? c->params->url : "");
     sent[n].value = c->params ? (int)c->params->value : 0;
     sent[n].session = s->session;
     sent[n].time = alt_timing_now_us();
-    if (!strcmp(c->type, "changeMapZoomLevel") || !strcmp(c->type, "forceKeyFrame"))
+    if (!strcmp(c->type, "changeMapZoomLevel") || !strcmp(c->type, "forceKeyFrame") ||
+        !strcmp(c->type, "showUI"))
         assert(c->params && !strcmp(c->params->uuid, CLUSTER_DISPLAY_UUID));
     if (!strcmp(c->type, "hold")) {
         entered = 1;
@@ -239,21 +251,14 @@ static void wait_zooms(unsigned target) {
     pthread_mutex_unlock(&test_lock);
 }
 static void schedule_state(unsigned kind) {
-    uint8_t appearance[] = {(uint8_t)(kind == 2), 1, 2};
     if (kind == 0)
         (void)zone_send_mode(1, 2, 250, NULL);
     else if (kind == 1)
         (void)alt_send_cluster_night_mode(1, 1, "fault-test");
-    else if (kind == 2 || kind == 3)
-        appearance_on_cmd(0, 0, appearance, 3, NULL);
-    else if (kind == 4)
+    else if (kind == 2)
         (void)alt_show_ui_for_mode(1, 0, "fault-test");
-    else if (kind == 5)
+    else
         (void)alt_send_cluster_idr_raw(1, "fault-test");
-    else {
-        const uint8_t url[] = "maps:/car/instrumentcluster";
-        uictx_on_cmd(0, 0, url, sizeof(url) - 1, NULL);
-    }
 }
 static void assert_preserved(void *previous, unsigned objects) {
     pthread_mutex_lock(&g_alt_cmd_lock);
@@ -265,16 +270,13 @@ static void assert_preserved(void *previous, unsigned objects) {
  * worker is blocked inside SDK send, so pending refs can be inspected safely.
  */
 static void state_construction_faults(void) {
-    const char *keys[7][8] = {
+    const char *keys[4][8] = {
         {"uuid", "viewAreaIndex", "animationDurationMillis", "adjacentViewAreas", "type", "params",
          NULL},
         {"uuid", "nightMode", "type", "params", NULL},
-        {"uuid", "appearanceMode", "appearanceSetting", "type", "params", NULL},
-        {"uuid", "appearanceMode", "appearanceSetting", "type", "params", NULL},
         {"uuid", "url", "type", "params", NULL},
-        {"uuid", "type", "params", NULL},
-        {"url", "type", "params", NULL}};
-    for (unsigned kind = 0; kind < 7; ++kind) {
+        {"uuid", "type", "params", NULL}};
+    for (unsigned kind = 0; kind < 4; ++kind) {
         schedule_state(kind);
         pthread_mutex_lock(&g_alt_cmd_lock);
         assert(g_alt_commands.count == 1);
@@ -287,11 +289,9 @@ static void state_construction_faults(void) {
             fail_string = NULL;
             assert_preserved(previous, objects);
         }
-        const char *numbers[4][3] = {{"viewAreaIndex", "animationDurationMillis", NULL},
-                                     {"nightMode", NULL},
-                                     {"appearanceMode", "appearanceSetting", NULL},
-                                     {"appearanceMode", "appearanceSetting", NULL}};
-        if (kind < 4)
+        const char *numbers[2][3] = {{"viewAreaIndex", "animationDurationMillis", NULL},
+                                     {"nightMode", NULL}};
+        if (kind < 2)
             for (unsigned k = 0; numbers[kind][k]; ++k) {
                 fail_number = numbers[kind][k];
                 schedule_state(kind);
@@ -338,9 +338,12 @@ static void state_construction_faults(void) {
 int main(void) {
     alarm(10);
     cf_ok = 1;
+    alt_enabled = 1;
+    alt_syms_ok = 1;
     cf_ret = retain_object;
     cf_rel = release_object;
     cf_str = make_string;
+    cf_getcstr = fake_getcstr;
     cf_dictm = make_dict;
     cf_dictset = dict_set;
     cf_dictseti = dict_integer;
@@ -433,6 +436,67 @@ int main(void) {
         assert(pthread_cond_timedwait(&test_cond, &test_lock, &until) != ETIMEDOUT);
     assert(acks[ack_count - 1].mode == 1 && acks[ack_count - 1].status == -6729);
     pthread_mutex_unlock(&test_lock);
+    /* suggestUI control command interception and showUI dispatch. */
+    {
+        fake_cf_t *cmd_other = make_string(NULL, "updateFeedback", 0);
+        fake_cf_t *cmd_suggest = make_string(NULL, "suggestUI", 0);
+        void *resp_ptr = (void *)0xdeadbeef;
+        hook_control_ctx_t ctrl = {0};
+
+        ctrl.session = one;
+        ctrl.command = cmd_other;
+        ctrl.response_out = &resp_ptr;
+        alt_on_control(&ctrl);
+        assert(!ctrl.handled && resp_ptr == (void *)0xdeadbeef);
+
+        /* Uncommitted session two: suggestUI is claimed/acked, no showUI queued. */
+        memset(&ctrl, 0, sizeof(ctrl));
+        resp_ptr = (void *)0xdeadbeef;
+        ctrl.session = two;
+        ctrl.command = cmd_suggest;
+        ctrl.response_out = &resp_ptr;
+        block_worker();
+        alt_on_control(&ctrl);
+        assert(ctrl.handled && ctrl.result == 0 && resp_ptr == NULL);
+        pthread_mutex_lock(&g_alt_cmd_lock);
+        assert(g_alt_commands.count == 0);
+        pthread_mutex_unlock(&g_alt_cmd_lock);
+
+        /* Active session one: suggestUI claims/acks and queues showUI with current RGI URL. */
+        alt_rgi_active_set(1);
+        memset(&ctrl, 0, sizeof(ctrl));
+        resp_ptr = (void *)0xdeadbeef;
+        ctrl.session = one;
+        ctrl.command = cmd_suggest;
+        ctrl.response_out = &resp_ptr;
+        alt_on_control(&ctrl);
+        assert(ctrl.handled && ctrl.result == 0 && resp_ptr == NULL);
+        pthread_mutex_lock(&g_alt_cmd_lock);
+        assert(g_alt_commands.count == 1 &&
+               g_alt_commands.items[0].key == ALT_COMMAND_SHOW_UI);
+        pthread_mutex_unlock(&g_alt_cmd_lock);
+        unblock_worker();
+
+        alt_deadline_after_ms(&until, 1500);
+        pthread_mutex_lock(&test_lock);
+        for (;;) {
+            int found = 0;
+            for (unsigned i = 0; i < sent_count; ++i) {
+                if (!strcmp(sent[i].type, "showUI") &&
+                    !strcmp(sent[i].url, ALT_CLUSTER_URL_RGI_ON)) {
+                    found = 1;
+                    break;
+                }
+            }
+            if (found)
+                break;
+            assert(pthread_cond_timedwait(&test_cond, &test_lock, &until) != ETIMEDOUT);
+        }
+        pthread_mutex_unlock(&test_lock);
+        alt_rgi_active_set(0);
+        release_object(cmd_other);
+        release_object(cmd_suggest);
+    }
     /* Concurrent rapid area changes exercise real completion/state reads. */
     for (unsigned i = 0; i < 24; ++i) {
         uint8_t area[3] = {(uint8_t)(i % 3), 0, 0};

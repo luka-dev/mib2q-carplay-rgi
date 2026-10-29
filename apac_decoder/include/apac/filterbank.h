@@ -4,7 +4,7 @@
 
 // APACSynthesisFilterBank - inverse MDCT, windowing and overlap-add.
 //
-// Reference: libSPF_CP_PlugInWrapper.so (Pioneer SPHERA 1.030010)
+// Original: libSPF_CP_PlugInWrapper.so (Pioneer SPHERA 1.030010)
 //
 //   0x000ae530  APACSynthesisFilterBank::Reset()
 //   0x000ae5b0  APACSynthesisFilterBank::FrequencyToTimeInPlace(unsigned, float*,
@@ -16,13 +16,13 @@
 // The object is 184 bytes and holds two MDCTs (long at +40, short at +96), a
 // per-channel overlap buffer, a per-channel record of the PREVIOUS frame's
 // window shape, and four window pointers at +152 arranged as two { short, long }
-// pairs indexed by shape.  This decoder keeps all of that and only replaces the
+// pairs indexed by shape.  This port keeps all of that and only replaces the
 // two `operator new` buffers with fixed arrays, because the target is an
 // LD_PRELOADed .so on QNX 6.5 and the decode path must not allocate.
 //
 // The two parameters that are easy to swap: the third argument of
 // FrequencyToTimeInPlace is the window SHAPE (0 sine, 1 KBD) and the fourth is
-// the window SEQUENCE (0..3).  The library proves which is which by writing
+// the window SEQUENCE (0..3).  The original proves which is which by writing
 // the third into the per-channel shape array and by rejecting a fourth above 3.
 //
 // frameLength must be 1024.  Initialize looks the short window up at
@@ -53,11 +53,11 @@ enum WindowShape {
     kWindowShapeKBD  = 1
 };
 
-// A limit of this decoder, not of the format: 5.1.2 (CarPlay format index 66) is
+// A limit of this port, not of the format: 5.1.2 (CarPlay format index 66) is
 // eight channels and nothing in the profile goes above that.
 //
 // It is also what makes this object 90 KiB - the overlap buffer alone is
-// channels * 1024 floats.  The library heap-allocates that; our decoder cannot
+// channels * 1024 floats.  The original heap-allocates that; the port cannot
 // allocate on the decode path, so it is inline and the object MUST NOT be put
 // on a stack.  Same for LPMDCTFilter (47 KiB) and MDCT (10 KiB).
 const uint32_t kFilterBankMaxChannels = 16;
@@ -67,7 +67,7 @@ public:
     SynthesisFilterBank();
 
     // channels <= kFilterBankMaxChannels, frameLength == 1024.
-    // Returns 0 on success; 1 or 'size' otherwise, matching the library.
+    // Returns 0 on success; 1 or 'size' otherwise, matching the original.
     int32_t Initialize(uint32_t channels, uint32_t frameLength);
 
     // Zeroes the overlap buffer and the per-channel window-shape memory.
@@ -81,7 +81,7 @@ public:
 
 private:
     // Window pointers, [shape][0] = short, [shape][1] = long, exactly the
-    // 16-byte-strided pairs the library keeps at +152.
+    // 16-byte-strided pairs the original keeps at +152.
     const float* mWindow[2][2];
 
     MDCT     mLong;
@@ -92,7 +92,7 @@ private:
     uint8_t  mPrevShape[kFilterBankMaxChannels];
     float    mOverlap[kFilterBankMaxChannels * kTransformLong];
     // The eight-short path accumulates 9 half-windows: 8 * 128 rising plus the
-    // last falling 128.  The library's stack VLA is float[1154].
+    // last falling 128.  The original's stack VLA is float[1154].
     float    mScratch[kTransformLong + kTransformShort];
 };
 

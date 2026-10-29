@@ -1,0 +1,12 @@
+# Synthetic DIO identity for isolated daemon/QNX installer probes only.
+{
+    "iap2": {
+        "accessoryIdentification": {
+            "displayName": "QEMU MMI",
+            "manufacturer": "Test Manufacturer",
+            "firmwareVersion": "QEMU firmware"
+        },
+        "MessagesSentByAccessory": ["0x5000", "0x1D01"],
+        "MessagesReceivedFromDevice": ["0x5001", "0x1D00"]
+    }
+}

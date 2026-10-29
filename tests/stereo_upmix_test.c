@@ -132,6 +132,7 @@ static void test_default_validation_and_fail_closed(void)
     assert(config.lfe_gain_q15 == SPA_STEREO_UPMIX_LFE_Q15_DEFAULT);
     assert(config.lfe_enabled == 0);
     assert(config.backend == SPA_STEREO_UPMIX_OFF);
+    assert(config.scene_mask_blob == NULL);
     assert(config.scene_mask_provider == NULL);
     assert(config.scene.n_fft == SCENE_NFFT && config.scene.hop == SCENE_HOP);
     assert(spa_stereo_upmix_backend_supported(SPA_STEREO_UPMIX_OFF));
@@ -305,17 +306,35 @@ static void test_corrected_guard_extremes(void)
     }
 }
 
+static uint32_t g_scene_boundaries, g_scene_rows;
+static uint64_t g_scene_last_pushed;
+
+static void scene_observer(uint64_t pushed, const float *elig, const float *prot)
+{
+    assert(pushed % 512u == 256u);
+    assert(g_scene_boundaries == 0 || pushed == g_scene_last_pushed + 512u);
+    assert((elig == NULL) == (prot == NULL));
+    g_scene_last_pushed = pushed;
+    g_scene_boundaries++;
+    if (elig) {
+        g_scene_rows++;
+        assert(elig[0] == 0.0f && prot[0] == 1.0f && elig[SMASK_BINS - 1] == 0.0f);
+    }
+}
+
 static void test_scene_backend_smoke(void)
 {
     static struct spa_stereo_upmix state;
+    static struct scene_mask_weights blob;
     struct spa_stereo_upmix_config config;
     size_t frame, count;
+    unsigned i;
     int nonzero = 0;
 
     fill_stereo(UINT32_C(0x5343454e), 0);
     spa_stereo_upmix_default_config(&config);
     config.backend = SPA_STEREO_UPMIX_SCENE;
-    assert(config.scene_mask_provider == NULL);
+    assert(config.scene_mask_blob == NULL);
     assert(spa_stereo_upmix_init(&state, &config) == SPA_STEREO_UPMIX_OK);
     assert(state.config.front_gain_q15 == 32768u);
     assert(!state._runtime._scene_mask_on);
@@ -344,20 +363,64 @@ static void test_scene_backend_smoke(void)
     }
     assert(memcmp(g_output_a, g_output_b, sizeof(g_output_a)) == 0);
 
+    /* the setter: the exact size, magic and dimensions or nothing */
+    memset(&blob, 0, sizeof(blob));
+    spa_stereo_upmix_config_set_scene_mask_blob(&config, &blob, sizeof(blob));
+    assert(config.scene_mask_blob == NULL);
+    memcpy(blob.magic, SMASK_MAGIC, sizeof(blob.magic));
+    blob.ch = SMASK_CH;
+    blob.hidden = SMASK_HID;
+    blob.n_out = SMASK_OUT;
+    for (i = 0; i < SMASK_FEAT; ++i) blob.feat_std[i] = 1.0f;
+    spa_stereo_upmix_config_set_scene_mask_blob(&config, &blob, sizeof(blob) - 1u);
+    assert(config.scene_mask_blob == NULL);
+    spa_stereo_upmix_config_set_scene_mask_blob(&config, &blob, sizeof(blob));
+    assert(config.scene_mask_blob == &blob);
+    blob.ch = SMASK_CH + 1u;
+    spa_stereo_upmix_config_set_scene_mask_blob(&config, &blob, sizeof(blob));
+    assert(config.scene_mask_blob == NULL);
+    blob.ch = SMASK_CH;
+    spa_stereo_upmix_config_set_scene_mask_blob(&config, &blob, sizeof(blob));
+    assert(config.scene_mask_blob == &blob);
+
+    /* zero weights: every posterior sigmoid(0) = 0.5, no eligible output ->
+     * elig 0 / prot 1, so the duck engages and the LFE steering sees 0.5 */
+    assert(spa_stereo_upmix_init(&state, &config) == SPA_STEREO_UPMIX_OK);
+    assert(state._runtime._scene_mask_on);
+    spa_stereo_upmix_test_scene_mask_observer = scene_observer;
+    process_blocks(&state, g_input, g_output_b);
+    assert(g_scene_boundaries == (TEST_FRAMES - 256u) / 512u + 1u);
+    assert(g_scene_rows == g_scene_boundaries - 2u);
+    assert(memcmp(g_output_a, g_output_b, sizeof(g_output_a)) != 0);
+    assert(state._runtime._scene_lfe_bass > 0.4f && state._runtime._scene_lfe_bass <= 0.5f);
+    assert(state._runtime._scene_lfe_drum > 0.4f && state._runtime._scene_lfe_drum <= 0.5f);
+    for (frame = 0; frame < TEST_FRAMES; ++frame) {
+        const int16_t *out = g_output_b + frame * TEST_CHANNELS;
+
+        assert(out[SPA_STEREO_UPMIX_CHANNEL_C] == 0 && out[SPA_STEREO_UPMIX_CHANNEL_LFE] == 0);
+        if (frame < SPA_SCENE_LATENCY_FRAMES)
+            assert(!out[0] && !out[1] && !out[4] && !out[5]);
+    }
+    /* reset with the net: the same cadence and the same render again */
+    g_scene_boundaries = g_scene_rows = 0;
+    assert(spa_stereo_upmix_reset(&state) == SPA_STEREO_UPMIX_OK);
+    process_blocks(&state, g_input, g_overlap);
+    spa_stereo_upmix_test_scene_mask_observer = NULL;
+    assert(g_scene_rows == g_scene_boundaries - 2u);
+    assert(memcmp(g_overlap, g_output_b, sizeof(g_output_b)) == 0);
+
     config.backend = SPA_STEREO_UPMIX_OFF;
     assert(spa_stereo_upmix_init(&state, &config) == SPA_STEREO_UPMIX_OK);
     assert(spa_stereo_upmix_scene_track_change(&state) == SPA_STEREO_UPMIX_ERROR_UNSUPPORTED);
     assert(spa_stereo_upmix_scene_track_change(NULL) == SPA_STEREO_UPMIX_ERROR_ARGUMENT);
 }
 
-/* SCENE with the mask net on the worker (scene_mask_worker.h, the only place
- * it runs), a zero-weight blob: every posterior sigmoid(0) = 0.5, no eligible
- * output -> rows elig 0 / prot 1, the duck engages and the LFE steering sees
- * 0.5.  The blob is accepted by its magic and dimensions only.  Three runs:
+/* SCENE with the mask net on the worker (scene_mask_worker.h), the same
+ * zero-weight blob (rows elig 0 / prot 1).  Three runs:
  *  1. driven by hand (no thread, every job stepped after each block): every
  *     row is applied at the boundary after its own, never earlier, from the
- *     fourth boundary on, no job refused, the render agrees with the spatial
- *     one (no net) until the first row lands, and reset() renders it again;
+ *     fourth boundary on (the audio-thread net: the third), no job refused,
+ *     and the two renders agree until the first row lands;
  *  2. a thread whose net sleeps 1 ms, a driver paced at half realtime: no job
  *     is lost (busy 0, every job completed), rows one or two boundaries late
  *     (two when a 768-frame block holds two boundaries), in order, each once;
@@ -366,7 +429,7 @@ static void test_scene_backend_smoke(void)
  *     jobs are refused instead of waited for (busy > 0), the rows that come
  *     are still in order and late, nothing is lost from the accounting. */
 static struct spa_stereo_upmix g_worker_state;    /* the observer reads its sequence numbers */
-static struct spa_stereo_upmix g_plain_state;
+static struct spa_stereo_upmix g_sync_state;
 static struct spa_scene_mask_worker g_worker;
 static uint32_t g_worker_rows, g_worker_boundaries, g_worker_last_sequence;
 static uint32_t g_worker_first_row_boundary, g_worker_max_lateness;
@@ -453,27 +516,22 @@ static void test_scene_mask_worker(void)
     struct spa_scene_mask_worker_stats stats;
     size_t frame, first_diff = TEST_FRAMES;
     unsigned i;
-    int centre_seen = 0;
 
     fill_stereo(UINT32_C(0x574f524b), 0);
-    spa_stereo_upmix_default_config(&config);
-    config.backend = SPA_STEREO_UPMIX_SCENE;
-
-    /* the spatial reference: no net */
-    assert(spa_stereo_upmix_init(&g_plain_state, &config) == SPA_STEREO_UPMIX_OK);
-    assert(!g_plain_state._runtime._scene_mask_on);
-    process_blocks(&g_plain_state, g_input, g_output_a);
-
-    /* the blob: the magic and dimensions, or no worker */
     memset(&blob, 0, sizeof(blob));
-    assert(spa_scene_mask_worker_start(&g_worker, &blob, 1u, SPA_SCENE_MASK_WORKER_NO_THREAD) == -1);
     memcpy(blob.magic, SMASK_MAGIC, sizeof(blob.magic));
-    blob.ch = SMASK_CH + 1u;
+    blob.ch = SMASK_CH;
     blob.hidden = SMASK_HID;
     blob.n_out = SMASK_OUT;
     for (i = 0; i < SMASK_FEAT; ++i) blob.feat_std[i] = 1.0f;
-    assert(spa_scene_mask_worker_start(&g_worker, &blob, 1u, SPA_SCENE_MASK_WORKER_NO_THREAD) == -1);
-    blob.ch = SMASK_CH;
+    spa_stereo_upmix_default_config(&config);
+    config.backend = SPA_STEREO_UPMIX_SCENE;
+    spa_stereo_upmix_config_set_scene_mask_blob(&config, &blob, sizeof(blob));
+    assert(config.scene_mask_blob == &blob);
+
+    /* the audio-thread reference */
+    assert(spa_stereo_upmix_init(&g_sync_state, &config) == SPA_STEREO_UPMIX_OK);
+    process_blocks(&g_sync_state, g_input, g_output_a);
 
     /* 1. by hand */
     assert(spa_scene_mask_worker_start(NULL, &blob, 1u, 0) == -1);
@@ -490,31 +548,21 @@ static void test_scene_mask_worker(void)
     assert(stats.submitted == g_worker_boundaries && stats.completed == g_worker_boundaries);
     assert(stats.busy == 0 && stats.stale_discarded == 0 && stats.superseded == 0);
     assert(stats.resets == 1);
-    assert(g_worker_rows == g_worker_boundaries - 3u);      /* the net primes on two, the worker adds one */
-    assert(g_worker_first_row_boundary == 4u);
+    assert(g_worker_rows == g_worker_boundaries - 3u);      /* sync: boundaries - 2 */
+    assert(g_worker_first_row_boundary == 4u);              /* sync: 3 */
     assert(g_worker_max_lateness == 1u);
-    assert(g_worker_state._runtime._scene_lfe_bass > 0.4f && g_worker_state._runtime._scene_lfe_bass <= 0.5f);
-    assert(g_worker_state._runtime._scene_lfe_drum > 0.4f && g_worker_state._runtime._scene_lfe_drum <= 0.5f);
     for (frame = 0; frame < TEST_FRAMES; ++frame) {
         const int16_t *a = g_output_a + frame * TEST_CHANNELS;
         const int16_t *b = g_output_b + frame * TEST_CHANNELS;
 
-        assert(b[SPA_STEREO_UPMIX_CHANNEL_LFE] == 0);
-        /* the centre (default 1) needs the net's vocal row: silent until the first one lands */
-        if (frame < 1792u - SPA_SCENE_LATENCY_FRAMES) assert(b[SPA_STEREO_UPMIX_CHANNEL_C] == 0);
-        centre_seen |= b[SPA_STEREO_UPMIX_CHANNEL_C] != 0;
+        assert(b[SPA_STEREO_UPMIX_CHANNEL_C] == 0 && b[SPA_STEREO_UPMIX_CHANNEL_LFE] == 0);
         if (first_diff == TEST_FRAMES && memcmp(a, b, TEST_CHANNELS * sizeof(*a)) != 0)
             first_diff = frame;
     }
-    /* the first row lands at the fourth boundary (1792 pushed frames), 1024 of
-     * latency later in the output: identical before that, different after */
-    assert(first_diff >= 1792u - SPA_SCENE_LATENCY_FRAMES && first_diff < TEST_FRAMES);
-    assert(centre_seen);
-    /* reset with the net: a new generation, the same render again */
-    assert(spa_stereo_upmix_reset(&g_worker_state) == SPA_STEREO_UPMIX_OK);
-    worker_counters_reset();
-    worker_drive(g_overlap, 512, 0, 1);
-    assert(memcmp(g_overlap, g_output_b, sizeof(g_output_b)) == 0);
+    /* the audio-thread row lands at 1280 pushed frames, 1024 of latency later
+     * in the output: identical before that, different after (the duck starts
+     * one control later on the worker) */
+    assert(first_diff >= 1280u - SPA_SCENE_LATENCY_FRAMES && first_diff < TEST_FRAMES);
     spa_scene_mask_worker_stop(&g_worker);
     assert(spa_scene_mask_worker_provider(&g_worker) == NULL);
 
@@ -560,49 +608,6 @@ static void test_scene_mask_worker(void)
     g_worker_sleep_ms = 0;
 }
 
-/* The programme gain (SoundCheck) of process_gain_s16 goes in ahead of the
- * cabin guard: NULL and all-unity are process_s16 exactly, and +6 dB on a
- * loud wide mix stays inside the J525 buses where scaling the guarded output
- * afterwards (the old order) does not. */
-static void test_scene_gain_before_guard(void)
-{
-    static struct spa_stereo_upmix state;
-    static float gain[SPA_STEREO_UPMIX_MAX_FRAMES];
-    struct spa_stereo_upmix_config config;
-    size_t frame, i, over = 0;
-    unsigned pass;
-
-    fill_stereo(UINT32_C(0x47414e31), 0);
-    make_scene_config(&config, 1);
-    assert(spa_stereo_upmix_init(&state, &config) == SPA_STEREO_UPMIX_OK);
-    process_blocks(&state, g_input, g_output_a);                   /* unity reference */
-    for (pass = 0; pass < 3; ++pass) {                              /* NULL, unity, +6 dB */
-        for (i = 0; i < SPA_STEREO_UPMIX_MAX_FRAMES; ++i) gain[i] = pass == 2 ? 2.0f : 1.0f;
-        assert(spa_stereo_upmix_init(&state, &config) == SPA_STEREO_UPMIX_OK);
-        for (frame = 0; frame < TEST_FRAMES; frame += SPA_STEREO_UPMIX_MAX_FRAMES)
-            assert(spa_stereo_upmix_process_gain_s16(&state, g_input + frame * 2, SPA_STEREO_UPMIX_MAX_FRAMES,
-                       g_output_b + frame * TEST_CHANNELS, SPA_STEREO_UPMIX_MAX_FRAMES,
-                       pass ? gain : NULL) == SPA_STEREO_UPMIX_OK);
-        if (pass < 2) assert(memcmp(g_output_a, g_output_b, sizeof(g_output_a)) == 0);
-    }
-    assert_cabin_buses_bounded(g_output_b, TEST_FRAMES);
-    for (frame = 0; frame < TEST_FRAMES; ++frame) {                 /* the old order: guard, then gain */
-        const float *m = spa_stereo_upmix_input_matrix();
-        unsigned bus, ch;
-        int bad = 0;
-        for (bus = 0; bus < 8; ++bus) {
-            double v = 0.0;
-            for (ch = 0; ch < 6; ++ch) {
-                double s = 2.0 * g_output_a[frame * TEST_CHANNELS + ch];
-                v += m[ch * 8 + bus] * (s > 32767.0 ? 32767.0 : s < -32768.0 ? -32768.0 : s);
-            }
-            bad |= fabs(v) > 32275.01;
-        }
-        over += (size_t)bad;
-    }
-    assert(over > 0);
-}
-
 /* MMI levels: OFF is the bypass, input SPA_SCENE_LATENCY_FRAMES late; to/from OFF
  * crossfades and between levels the tuning glides, both over SPA_UPMIX_LEVEL_FADE_MS;
  * init and reset land on the level. */
@@ -640,12 +645,12 @@ static void test_scene_levels(void)
         assert(o[0] == want_l && o[1] == want_r && !o[2] && !o[3] && !o[4] && !o[5]);
     }
 
-    /* OFF -> FULL mid-stream: tuning switched, rears fade in, fully wet after the fade */
-    spa_stereo_upmix_set_level(&state, SPA_UPMIX_LEVEL_FULL);
+    /* OFF -> INTENSE mid-stream: tuning switched, rears fade in, fully wet after the fade */
+    spa_stereo_upmix_set_level(&state, SPA_UPMIX_LEVEL_INTENSE);
     for (f = 0; f < N; f += BLOCK)
         assert(spa_stereo_upmix_process_s16(&state, in + f * 2, BLOCK < N - f ? BLOCK : N - f,
                                             out + f * TEST_CHANNELS, N) == SPA_STEREO_UPMIX_OK);
-    assert(state._runtime._scene.cfg.alpha == 0.9f && state._runtime._scene.cfg.side_lp_hz == 11000.0f);
+    assert(state._runtime._scene.cfg.alpha == 1.0f && state._runtime._scene.cfg.side_lp_hz == 12000.0f);
     assert(state._wet == 1.0f);
     for (f = 0; f < fade / 4; ++f) rear_early += fabs((double)out[f * TEST_CHANNELS + 4]);
     for (f = fade; f < fade + fade / 4; ++f) rear_late += fabs((double)out[f * TEST_CHANNELS + 4]);
@@ -657,21 +662,21 @@ static void test_scene_levels(void)
     assert(state._wet == 0.0f && state._level_applied == SPA_UPMIX_LEVEL_OFF);
     config.level = SPA_UPMIX_LEVEL_COUNT;
     assert(spa_stereo_upmix_init(&state, &config) == SPA_STEREO_UPMIX_ERROR_CONFIG);
-    config.level = SPA_UPMIX_LEVEL_FULL;
+    config.level = SPA_UPMIX_LEVEL_INTENSE;
     assert(spa_stereo_upmix_init(&state, &config) == SPA_STEREO_UPMIX_OK);
-    assert(state._wet == 1.0f && state._runtime._scene.cfg.alpha == 0.9f);
+    assert(state._wet == 1.0f && state._runtime._scene.cfg.alpha == 1.0f);
     config.level = SPA_UPMIX_LEVEL_NORMAL;
 
-    /* NORMAL -> FULL glides (one block in: between), then lands on FULL */
+    /* NORMAL -> INTENSE glides (one block in: between), then lands on INTENSE */
     assert(spa_stereo_upmix_init(&state, &config) == SPA_STEREO_UPMIX_OK);
-    spa_stereo_upmix_set_level(&state, SPA_UPMIX_LEVEL_FULL);
+    spa_stereo_upmix_set_level(&state, SPA_UPMIX_LEVEL_INTENSE);
     assert(spa_stereo_upmix_process_s16(&state, in, BLOCK, out, N) == SPA_STEREO_UPMIX_OK);
-    assert(state._runtime._scene.cfg.alpha > config.scene.alpha && state._runtime._scene.cfg.alpha < 0.9f);
-    assert(state._runtime._scene.cfg.side_lp_hz > 7000.0f && state._runtime._scene.cfg.side_lp_hz < 11000.0f);
+    assert(state._runtime._scene.cfg.alpha > config.scene.alpha && state._runtime._scene.cfg.alpha < 1.0f);
+    assert(state._runtime._scene.cfg.side_lp_hz > 7000.0f && state._runtime._scene.cfg.side_lp_hz < 12000.0f);
     for (f = 0; f < N; f += BLOCK)
         assert(spa_stereo_upmix_process_s16(&state, in + f * 2, BLOCK < N - f ? BLOCK : N - f,
                                             out + f * TEST_CHANNELS, N) == SPA_STEREO_UPMIX_OK);
-    assert(state._runtime._scene.cfg.alpha == 0.9f && state._runtime._scene.cfg.side_lp_hz == 11000.0f);
+    assert(state._runtime._scene.cfg.alpha == 1.0f && state._runtime._scene.cfg.side_lp_hz == 12000.0f);
 
     /* NORMAL restores the configured scene */
     spa_stereo_upmix_set_level(&state, SPA_UPMIX_LEVEL_NORMAL);
@@ -683,6 +688,102 @@ static void test_scene_levels(void)
            state._runtime._scene.cfg.duck_depth == config.scene.duck_depth);
 }
 
+static void test_scene_vehicle_refinements(void)
+{
+    static struct spa_stereo_upmix state_a, state_b;
+    struct spa_stereo_upmix_config cfg_a, cfg_b;
+    float elig[257], prot[257];
+    uint64_t rear_lo_a, rear_lo_b, rear_sub_bleed;
+    double bus4_no_bc = 0.0, bus4_bc = 0.0;
+    size_t frame;
+    int i;
+
+    /* 1. Setter validation and NORMAL <-> INTENSE glide for front_keep_db + wide_pair */
+    spa_stereo_upmix_default_config(&cfg_a);
+    cfg_a.backend = SPA_STEREO_UPMIX_SCENE;
+    spa_stereo_upmix_config_set_scene_front_keep_db(&cfg_a, 1.5f);
+    spa_stereo_upmix_config_set_scene_wide_pair(&cfg_a, 0.35f);
+    spa_stereo_upmix_config_set_scene_inst_gamma_lo(&cfg_a, 1.5f);
+    spa_stereo_upmix_config_set_scene_bleed_cancel(&cfg_a, 0.15f);
+    assert(spa_stereo_upmix_init(&state_a, &cfg_a) == SPA_STEREO_UPMIX_OK);
+    assert(fabsf(state_a._runtime._scene.cfg.front_keep_db - 1.5f) < 1e-6f);
+    assert(state_a._runtime._scene.cfg.wide_pair == 1);
+    assert(fabsf(state_a._runtime._scene.cfg.wide_pair_alpha - 0.35f) < 1e-6f);
+    assert(fabsf(state_a._runtime._scene.cfg.inst_gamma_lo - 1.5f) < 1e-6f);
+    assert(fabsf(state_a._runtime._scene.cfg.bleed_cancel - 0.15f) < 1e-6f);
+
+    fill_stereo(UINT32_C(0x56454831), 0);
+    spa_stereo_upmix_set_level(&state_a, SPA_UPMIX_LEVEL_INTENSE);
+    process_blocks(&state_a, g_input, g_output_a);
+    /* 8192 frames (~170 ms) is halfway through the 300 ms glide */
+    assert(state_a._runtime._scene.cfg.front_keep_db > 1.5f &&
+           state_a._runtime._scene.cfg.front_keep_db < 2.8f);
+    assert(state_a._runtime._scene.cfg.wide_pair_alpha > 0.35f &&
+           state_a._runtime._scene.cfg.wide_pair_alpha < 0.55f);
+    process_blocks(&state_a, g_input, g_output_a);
+    assert(fabsf(state_a._runtime._scene.cfg.front_keep_db - 2.8f) < 1e-5f);
+    assert(fabsf(state_a._runtime._scene.cfg.wide_pair_alpha - 0.55f) < 1e-5f);
+
+    /* 2. Midband front_anchor: heavy 50 Hz sub-bass must not blind midrange protection */
+    for (frame = 0; frame < TEST_FRAMES; ++frame) {
+        double sub50 = 14000.0 * sin(6.283185307179586 * 50.0 * (double)frame / 48000.0);
+        double mid1k = 4000.0 * sin(6.283185307179586 * 1000.0 * (double)frame / 48000.0);
+        g_input[frame * 2]     = (int16_t)lrint(sub50 + mid1k);
+        g_input[frame * 2 + 1] = (int16_t)lrint(sub50); /* 1 kHz hard-panned left */
+    }
+    for (i = 0; i < 257; ++i) { elig[i] = 0.9f; prot[i] = 0.0f; }
+    spa_stereo_upmix_default_config(&cfg_a);
+    cfg_a.backend = SPA_STEREO_UPMIX_SCENE;
+    spa_stereo_upmix_config_set_scene_front_keep_db(&cfg_a, 1.5f);
+    assert(spa_stereo_upmix_init(&state_a, &cfg_a) == SPA_STEREO_UPMIX_OK);
+    assert(spa_stereo_upmix_scene_set_mask(&state_a, elig, prot, 257) == SPA_STEREO_UPMIX_OK);
+    for (i = 0; i < 4; ++i) process_blocks(&state_a, g_input, g_output_a);
+    /* Anchor must engage (< 0.50) despite the loud 50 Hz sub-bass */
+    assert(state_a._runtime._scene.anchor < 0.50f);
+
+    /* 3. inst_gamma_lo < 700 Hz sharpens partial eligibility at 350 Hz */
+    fill_sine(350.0f, 0);
+    for (i = 0; i < 257; ++i) { elig[i] = 0.45f; prot[i] = 0.0f; }
+    spa_stereo_upmix_default_config(&cfg_a);
+    cfg_a.backend = SPA_STEREO_UPMIX_SCENE;
+    cfg_b = cfg_a;
+    spa_stereo_upmix_config_set_scene_inst_gamma_lo(&cfg_b, 1.5f);
+    assert(spa_stereo_upmix_init(&state_a, &cfg_a) == SPA_STEREO_UPMIX_OK);
+    assert(spa_stereo_upmix_init(&state_b, &cfg_b) == SPA_STEREO_UPMIX_OK);
+    assert(spa_stereo_upmix_scene_set_mask(&state_a, elig, prot, 257) == SPA_STEREO_UPMIX_OK);
+    assert(spa_stereo_upmix_scene_set_mask(&state_b, elig, prot, 257) == SPA_STEREO_UPMIX_OK);
+    process_blocks(&state_a, g_input, g_output_a);
+    process_blocks(&state_b, g_input, g_output_b);
+    rear_lo_a = channel_energy(g_output_a, SPA_STEREO_UPMIX_CHANNEL_LS, 4096);
+    rear_lo_b = channel_energy(g_output_b, SPA_STEREO_UPMIX_CHANNEL_LS, 4096);
+    assert(rear_lo_b < (rear_lo_a * 3u) / 4u);
+
+    /* 4. bleed_cancel (0.15) reduces J525 Bus 4 centered 1 kHz bleed without injecting 50 Hz into Ls/Rs */
+    fill_sine(1000.0f, 0);
+    spa_stereo_upmix_default_config(&cfg_a);
+    cfg_a.backend = SPA_STEREO_UPMIX_SCENE;
+    cfg_b = cfg_a;
+    spa_stereo_upmix_config_set_scene_bleed_cancel(&cfg_b, 0.15f);
+    assert(spa_stereo_upmix_init(&state_a, &cfg_a) == SPA_STEREO_UPMIX_OK);
+    assert(spa_stereo_upmix_init(&state_b, &cfg_b) == SPA_STEREO_UPMIX_OK);
+    process_blocks(&state_a, g_input, g_output_a);
+    process_blocks(&state_b, g_input, g_output_b);
+    for (frame = 4096; frame < TEST_FRAMES; ++frame) {
+        const int16_t *sa = g_output_a + frame * TEST_CHANNELS;
+        const int16_t *sb = g_output_b + frame * TEST_CHANNELS;
+        double b4a = 0.707945784 * sa[0] + 1.995262315 * sa[4];
+        double b4b = 0.707945784 * sb[0] + 1.995262315 * sb[4];
+        bus4_no_bc += b4a * b4a;
+        bus4_bc += b4b * b4b;
+    }
+    assert(bus4_bc < bus4_no_bc * 0.45);
+    fill_sine(50.0f, 0);
+    assert(spa_stereo_upmix_init(&state_b, &cfg_b) == SPA_STEREO_UPMIX_OK);
+    process_blocks(&state_b, g_input, g_output_b);
+    rear_sub_bleed = channel_energy(g_output_b, SPA_STEREO_UPMIX_CHANNEL_LS, 4096);
+    assert(rear_sub_bleed * 100000u < channel_energy(g_output_b, SPA_STEREO_UPMIX_CHANNEL_L, 4096));
+}
+
 int main(void)
 {
     test_default_validation_and_fail_closed();
@@ -692,8 +793,7 @@ int main(void)
     test_scene_backend_smoke();
     test_scene_mask_worker();
     test_scene_levels();
-    test_scene_gain_before_guard();
-    puts("stereo_upmix_test: OK (validation, OFF bypass, LFE V2 + cabin guard, SCENE smoke, mask worker, levels, "
-         "gain before the guard)");
+    test_scene_vehicle_refinements();
+    puts("stereo_upmix_test: OK (validation, OFF bypass, LFE V2 + cabin guard, SCENE smoke, mask worker, levels, vehicle refinements)");
     return 0;
 }

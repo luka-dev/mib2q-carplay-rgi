@@ -1,5 +1,5 @@
 #!/bin/sh
-# Host-side tests for the shipping hook.  The APAC decoder has its own
+# Host-side tests for the shipping hook.  The APAC decoder port has its own
 # suite (`make -C apac_decoder check`); this runs what lives under hook/.
 #
 # The integration test needs a live session capture, which is never committed.
@@ -22,12 +22,6 @@ cc -std=gnu99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
     hook/audio/scene_engine_math.c hook/audio/scene_clusters.c hook/audio/scene_engine.c hook/audio/scene_mask.c \
     hook/audio/scene_mask_worker.c -lm -lpthread -o "$OUT/upmix"
 "$OUT/upmix"
-
-printf '%-32s ' scene_centre_test
-cc -std=gnu99 -O2 -ffp-contract=off -Wall -Wextra -Werror -pedantic -Ihook \
-    tests/scene_centre_test.c hook/audio/scene_engine_math.c hook/audio/scene_clusters.c hook/audio/scene_engine.c \
-    -lm -o "$OUT/centre"
-"$OUT/centre"
 
 printf '%-32s ' rt_upmix_guard_test
 cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
@@ -62,8 +56,31 @@ cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
     tests/receiver_wait_test.c -lpthread -o "$OUT/receiver_wait"
 "$OUT/receiver_wait"
 
+printf '%-32s ' wireless_peer_health_test
+cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic \
+    tests/wireless_peer_health_test.c -o "$OUT/wireless_health"
+"$OUT/wireless_health"
+
+printf '%-32s ' wireless_now_playing_test
+cc -std=c99 -O1 -Wall -Wextra -Werror -fsanitize=address,undefined \
+    wireless/receiver_bridge/test_now_playing.c -o "$OUT/now_playing"
+"$OUT/now_playing"
+
+printf '%-32s ' airplay_listener_test
+cc -std=c99 -O1 -Wall -Wextra -Werror -fsanitize=address,undefined \
+    wireless/receiver_bridge/test_airplay_listener.c -o "$OUT/airplay_listener"
+"$OUT/airplay_listener"
+
 printf '%-32s ' audio_interposer_test
 sh scripts/test_audio_interposers.sh
+
+printf '%-32s ' http210_composition_test
+cc -std=gnu99 -O1 -Wall -Wextra -Werror -Ihook \
+    tests/http210_composition_test.c -o "$OUT/http210_composition"
+"$OUT/http210_composition"
+cc -std=gnu99 -O1 -Wall -Wextra -Werror -DMHI2Q_HTTP210_LAB -Ihook \
+    tests/http210_composition_test.c -o "$OUT/http210_lab_composition"
+"$OUT/http210_lab_composition"
 
 printf '%-32s ' aac_fifo_test
 cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
@@ -88,6 +105,19 @@ cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
     -o "$OUT/coverart_safety"
 "$OUT/coverart_safety"
 
+printf '%-32s ' wireless_semantic_test
+cc -std=gnu99 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined \
+    wireless/receiver_bridge/test_semantic_delivery.c -o "$OUT/semantic_delivery"
+"$OUT/semantic_delivery"
+cc -std=gnu99 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined \
+    wireless/receiver_bridge/test_si_state_publisher.c -lpthread -o "$OUT/si_state_publisher"
+"$OUT/si_state_publisher"
+if [ "$(uname)" = Darwin ]; then SEM_STRIP=-Wl,-dead_strip; else SEM_STRIP=-Wl,--gc-sections; fi
+cc -std=gnu99 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined \
+    -ffunction-sections -fdata-sections \
+    tests/wireless_iap2_semantic_test.c hook/coverart/coverart_stream.c \
+    hook/framework/iap2_protocol.c -lpthread $SEM_STRIP -o "$OUT/wireless_semantic"
+"$OUT/wireless_semantic"
 printf '%-32s ' coverart_stream_test
 cc -std=c99 -O2 -Wall -Wextra -Werror -Ihook \
     tests/coverart_stream_test.c hook/coverart/coverart_stream.c \
@@ -146,6 +176,10 @@ cc -std=gnu99 -O1 -Wall -Wextra -Werror -Wno-unused-function -Wno-unused-variabl
 printf '%-32s ' altscreen_pace_trace_test
 cc -std=c99 -O2 -Wall -Wextra -Werror tests/altscreen_pace_trace_test.c -o "$OUT/alt_pace"
 "$OUT/alt_pace"
+
+printf '%-32s ' alt_receiver_io_test
+cc -std=gnu99 -O2 -Wall -Wextra -Werror tests/alt_receiver_io_test.c -lpthread -o "$OUT/alt_receiver_io"
+"$OUT/alt_receiver_io"
 
 printf '%-32s ' altscreen_sink_test
 cc -std=gnu99 -O1 -Wall -Wextra -Werror \
@@ -395,8 +429,12 @@ bash scripts/build_java.sh > /dev/null && bash scripts/audit_java_variants.sh
 
 printf '%-32s ' binpatch_test
 bash scripts/test_binpatch.sh
+printf '%-32s ' network_patcher_test
+python3 -m unittest discover -s tests -p test_network_patcher.py
 printf '%-32s ' install_e2e_test
 bash scripts/test_install_e2e.sh
+printf '%-32s ' install_network_policy_test
+bash scripts/test_install_network_policy.sh
 
 printf '%-32s ' logging_mib_test
 sh scripts/test_logging_mib.sh

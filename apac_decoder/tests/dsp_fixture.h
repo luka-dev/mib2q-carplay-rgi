@@ -9,7 +9,7 @@
 // transcribed instruction for instruction out of the library except one thing:
 // the complex FFT.  `MultiRadixFFT::CplxOutOfPlaceTransform` is a wrapper
 // around Apple's `vDSP_DFT_Execute`, which is closed source and is not on the
-// head unit, so our decoder has its own radix-2 FFT.  A different butterfly order
+// head unit, so the port has its own radix-2 FFT.  A different butterfly order
 // gives a different rounding pattern, and the difference does not shrink.
 //
 // The comparison is therefore
@@ -30,7 +30,7 @@
 //               there the inputs are 1e-39-ish, every product underflows, and a
 //               few denormal ULPs is the entire precision that exists.
 //
-// This file is header-only and is not part of our decoder.
+// This file is header-only and is not part of the port.
 
 #ifndef APAC_TESTS_DSP_FIXTURE_H
 #define APAC_TESTS_DSP_FIXTURE_H

@@ -8,7 +8,7 @@ import unittest
 import numpy as np
 from amp_matrix_control import coefficient_targets, pair_row_step
 
-OUT=Path(__file__).resolve().parents[2]/'assets/soundamp/remaining-blocks-20260919'
+OUT=Path(__file__).resolve().parents[2]/'output/r2/soundamp/remaining-blocks-20260919'
 
 
 def decoded_writer(binding,matrix,current,level,processing,b01,state,asad,coordinate,entry):

@@ -11,9 +11,14 @@ name = "iap2-link"
 version = "0.1.0"
 
 [[package]]
+name = "json"
+version = "0.12.4"
+
+[[package]]
 name = "mhi2q-wireless-daemon"
 version = "0.1.0"
 dependencies = [
  "iap2-csm",
  "iap2-link",
+ "json",
 ]

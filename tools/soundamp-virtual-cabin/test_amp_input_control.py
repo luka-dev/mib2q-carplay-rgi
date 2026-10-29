@@ -8,7 +8,7 @@ from amp_input_control import (normal_level_target, select_level_targets,
                                source_adjustment_request, override_mode_request,
                                b_level_parameter, b_level_apply)
 
-OUT=Path(__file__).resolve().parents[2]/'assets/soundamp/remaining-blocks-20260919'
+OUT=Path(__file__).resolve().parents[2]/'output/r2/soundamp/remaining-blocks-20260919'
 THRESHOLDS=[12,9,6,3,-3,-10,-12,-16,-22,-28,-33,-38,-44,-50,-60,-60]
 
 

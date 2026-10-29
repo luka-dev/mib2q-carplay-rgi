@@ -18,7 +18,7 @@ import numpy as np
 from amp_b_bound_scenario import retained_config, replay_bound_scalar_targets
 
 ROOT=Path(__file__).resolve().parents[2]
-LOADER=ROOT/'assets/soundamp/J525_8W0035465_SW0420_SHARC_SPI_bitrev.ldr.bin'
+LOADER=ROOT/'output/r2/soundamp/J525_8W0035465_SW0420_SHARC_SPI_bitrev.ldr.bin'
 STEP_BASE=0xB8CFD
 PROOFS=((0x12FAF2,0x12FC78,'0cd10d117e3b0f9a9aa5948ebdb6c4f382c09e17b7329b4280e4da022a8e4ec2'),
         (0x132168,0x1323DE,'f4ead817847774bea62ea0a7e00218d2b56eaf4d788cd39e5848c357c051679e'))

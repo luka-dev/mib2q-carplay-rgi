@@ -182,7 +182,7 @@ int main(void)
         audioPackets++;
 
         /* The APAC packet the hook extracts must be byte-identical to the one
-         * the reference decoder was driven with when this decoder was accepted.
+         * Apple's own decoder was driven with when this port was accepted.
          * tools/pioneer_apap_decrypt.py produced those independently of any code
          * under test here.
          *

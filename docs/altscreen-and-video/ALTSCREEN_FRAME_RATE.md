@@ -51,6 +51,73 @@ The lower frame count is present before decoding. That still does not separate t
 
 Sources: `ALTSCREEN_FRAME_RATE_INVESTIGATION`, `ALTSCREEN_AGE_FILTER_HU_REGRESSION`, `ALTSCREEN_LATENCY_AUDIT_2026_09_14`
 
+### Follow-up: wired sender counters and USB stand capacity
+
+The [2026-10-21 wired investigation](WIRED_30FPS_INVESTIGATION.md) rechecks iOS
+26.6/27.0 code and the October 15 HU logs. It also recovers per-display
+submission and sink-overflow counters from existing laboratory opcode-5
+telemetry, which the PCAP reporter previously discarded. One cluster report
+has 30 submitted surfaces, 2 before-encoder frames and 28 sink-overflow drops
+with nominal encoder FPS still 30. An independent QNX TCP sink measures about
+2.4–2.6 Mbit/s through the current laboratory OHCI path. A separate corrected
+EHCI build works at High Speed; replacing the macOS GLib wait with native
+`poll()` raises combined laboratory TCP throughput to 7.73 Mbit/s for 512 KiB
+requests and 9.21 Mbit/s for 4 MiB requests. These are laboratory
+findings; they do not establish the cause or capacity of the physical HU's USB
+path, or a sustained-30-fps fix.
+
+Native wired vphone follow-up raises AltScreen delivery from 16.39 to
+23.90 AU/s in matched 40-second motion windows after reducing the diagnostic
+encoder bandwidth to 2 Mbit/s. Sink-overflow and encoder-queue drops become zero,
+but source submission remains about 18–22 surfaces/s. A continuous native GPS
+trajectory and active guidance also remain below 30. Applying Maps'
+`VKNavDisplayRate=2` and relaunching it yields 21.02 AU/s in a further full window;
+writing the verified Maps container plist in another run yields 21.59 AU/s.
+The active controller's effective override was unverified in those runs. A
+later passive readback during native wired motion identifies the 720 × 271-point
+AltScreen canvas and its selected `VKDeferredCameraController`, both base 15,
+with the shared run loop requesting **15 fps** in two snapshots. Its MapView
+has no attached navigation controller; a navigation-camera-only preference
+therefore does not demonstrate an intervention on this browsing camera.
+The encoder still reports 30; the latest full window delivers 21.05 AltScreen
+AUs/s, with zero sink-overflow/encoder-queue drops and about 0.85 encoder drops/s.
+Primary encoded cadence is near 30 but includes extensive idle encoding, so it
+does not establish 30 distinct moving map pictures. The report retains the
+runtime-code check, canvas links, source counters and exact restoration.
+A subsequent temporary phone-profile control sets
+`CarCapabilities[vehicle].CRCapabilitiesUserInfoKey.mapsRefreshRate=30`.
+The same AltScreen canvas then reads base/request **30/30**, source submissions
+average 29.925/s, and the 40-second capture receives **1196 AUs (29.9 AU/s)**,
+with zero sink/queue drops and almost no idle encoding. Maps obtains this key
+through `CRFetchCarPlayCapabilities`, independently of the receiver's already-30
+`maxFPS`. A subsequent **accessory-input-only** case appends iAP2
+IdentificationInfo string parameter 34 (`PPID=bf889dfdaea54096`). The installed
+version-40 CarExperienceAssets profile automatically supplies `mapsRefreshRate=30`,
+without a pre-measurement capabilities write. The selected camera reads 30/30,
+AltScreen receives **1189 AUs / 40 s = 29.725 AU/s**, and a short moving GOP
+strictly decodes into **63 distinct pictures**. Two delivery intervals exceed
+100 ms in this IDR/snapshot-instrumented window, so this is near-30 delivery.
+The hook's existing Encode/`on_identify` seam can change this field; a
+production identity replacement is not enabled. Profile availability depends
+on the phone's installed asset version.
+The [complete mechanism analysis](MAPS_FRAME_RATE_PROFILE_MECHANISM.md) also
+verifies automatic reversion on reconnect without PPID and documents
+per-property selection-order ambiguity when multiple vehicle rules match.
+Physical-phone policy and final HU presentation remain unmeasured. The
+temporary capabilities, bandwidth and USB settings are restored; the report records
+the one retained USB runtime flag and complete capture/restore artifacts.
+
+The user confirms that the **real main screen is smooth while AltScreen is
+not**. The above vphone runs do not establish a global phone/USB limit: their
+primary stream is below 30 or becomes idle. The differential follow-up in the
+same report verifies stock primary TCP receive at FIFO priority 17; the old
+AltScreen receiver inherited scheduling. A current candidate uses the same
+stock priority helper and logs actual before/after scheduling and receive-buffer
+size. Its separate QNX test passes; physical-HU FPS improvement is unverified.
+A new paired PCAP reporter measures both streams over the same complete window.
+
+<a id="phone-sender-policy"></a>
+
 ## 🔍 The phone's sender policy (iOS 26.6 / 27.0 binaries)
 
 Verified in the 26.6 (23G71) Mach-O files and the 27.0 (24A5418b) dyld cache; addresses are unslid VAs. **[decompile]**

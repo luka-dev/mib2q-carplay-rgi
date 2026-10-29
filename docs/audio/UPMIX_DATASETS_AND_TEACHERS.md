@@ -1,16 +1,12 @@
 # Upmix Datasets and Teachers
 
-> **Retired 2026-10-09 with the Universal backend.** The renderer, models and knobs this note describes left the tree; the last tree that has them is git tag `upmix-universal-last-2026-10-09`.
-> What runs now: [Stereo to 5.1 Upmix](STEREO_TO_5_1_UPMIX.md). Why, and with which numbers: [Upmix History and Results](UPMIX_HISTORY_AND_RESULTS_2026-10-09.md), [Upmix Code Retirement](UPMIX_CODE_RETIREMENT_2026-10-09.md).
-> The corpus facts and licences remain valid; mask net c's training data is recorded in `models/scene-masknet-c/manifest.json`.
-
 *Every corpus, cache and teacher network used to train or judge the stereo→5.1 upmix: sizes, splits, licences, known defects, and the role-label contract that never got real labels.*
 
 ---
 
 ## 📋 Overview
 
-Two kinds of supervision exist and must not be confused. **Real stems** (MUSDB18, MoisesDB, AlbumDB) give exact source identity. **Teacher estimates** (Demucs, RoFormer, karaoke) give plausible stems for commercial masters but are not truth. Neither gives *musical role* — whether a part is foreground or support — and that is what the rear speaker actually needs. The shipped models: V11 (guard) learned from MUSDB18 plus teacher supervision; q6d (primary) learned from MoisesDB real stems only ([HSSR Model](HSSR_MODEL.md)).
+Two kinds of supervision exist and must not be confused. **Real stems** (MUSDB18, MoisesDB, AlbumDB) give exact source identity. **Teacher estimates** (Demucs, RoFormer, karaoke) give plausible stems for commercial masters but are not truth. Neither gives *musical role* — whether a part is foreground or support — and that is what the rear speaker actually needs. The shipped models: V11 (guard) learned from MUSDB18 plus teacher supervision; q6d (primary) learned from MoisesDB real stems only ([HSSR Model](archive/HSSR_MODEL.md)).
 
 ```mermaid
 flowchart LR
@@ -183,7 +179,7 @@ Dense F/S supervision is allowed only when **every** contributor over the whole 
 
 ### C2 sustained-source selection rule
 
-C2 references ([Upmix Training History](UPMIX_TRAINING_HISTORY.md)) picked passages by a rule fixed before scanning: over 16 one-second bins (after 2 s pre-roll), a bin is active when its stereo MSE ≥ 1e-5; take the earliest start where the candidate is active ≥ 8/16, lead-only ≥ 4/16 and both together ≥ 4/16.
+C2 references ([Upmix Training History](archive/UPMIX_TRAINING_HISTORY.md)) picked passages by a rule fixed before scanning: over 16 one-second bins (after 2 s pre-roll), a bin is active when its stereo MSE ≥ 1e-5; take the earliest start where the candidate is active ≥ 8/16, lead-only ≥ 4/16 and both together ≥ 4/16.
 
 | Candidate | Starts tested | Qualifying | Chosen, s | Cand / lead / overlap bins |
 |---|---:|---:|---|---|

@@ -121,6 +121,9 @@ monitor_main()
 
     MON_TICKS=0
     while monitor_current; do
+        if [ ! -r /tmp/ncm_session_generation ] && [ -r /tmp/ncm_generation_carplay0 ]; then
+            cp /tmp/ncm_generation_carplay0 /tmp/ncm_session_generation 2>/dev/null || :
+        fi
         start_renderer altscreen_render restart
         start_renderer maneuver_render restart
         sleep 2

@@ -34,6 +34,11 @@ BUILD_ID_RAW=${CARPLAY_BUILD_ID:-$(git -C "$PROJECT_DIR" describe --always --dir
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT HUP INT TERM
 
+# Preserve the stock FSM and synthetic accessor ABI. These two pinned class
+# edits add presentation/default-checkbox calls; all other instructions remain.
+mkdir -p "$WORK/transport-tools"
+"$JAVAC" -cp "$ASM_CP" -d "$WORK/transport-tools" "$PROJECT_DIR/tools/java/TransportDevicePatch.java"
+
 # build_variant <name> <stock jar> <output jar> [patch dir]
 build_variant() {
 VARIANT=$1; STOCK_JAR=$2; OUTPUT_JAR=$3; PATCH_DIR=${4:-}
@@ -72,6 +77,7 @@ printf '%s\n' "$GEN_APP" >> "$SOURCES_LIST"
     -d "$OUTPUT_DIR" \
     -Xlint:-options \
     @"$SOURCES_LIST"
+"$JAVA_HOME/bin/java" -cp "$WORK/transport-tools:$ASM_CP" TransportDevicePatch "$STOCK_JAR" "$OUTPUT_DIR"
 # Compact generated metrics/Unicode tables live inside the hook JAR. Ordinary
 # builds never read firmware fonts or invoke the offline generator.
 cp -R "$PROJECT_DIR/java_resources/." "$OUTPUT_DIR/"
@@ -82,15 +88,32 @@ write_receipt
 }
 
 write_receipt() {
-python3 - "$OUTPUT_JAR" "$BUILD_ID" "$PROJECT_DIR" <<'PY'
+python3 - "$OUTPUT_JAR" "$BUILD_ID" "$PROJECT_DIR" "$STOCK_JAR" <<'PY'
 import hashlib, json, pathlib, subprocess, sys
+from zipfile import ZipFile
 jar, build_id, root = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+stock = pathlib.Path(sys.argv[4])
+digest = lambda b: hashlib.sha256(b).hexdigest()
+with ZipFile(stock) as original, ZipFile(jar) as patch:
+    transport_classes = {
+        name: {"stock_sha256": digest(original.read(name)),
+               "patch_sha256": digest(patch.read(name))}
+        for name in ("de/audi/app/terminalmode/device/PhysicalDevice.class",
+                     "de/audi/app/terminalmode/hmi/NewDeviceHMIHandler.class")
+    }
 receipt = {
     "jar": str(jar), "bytes": jar.stat().st_size,
     "sha256": hashlib.sha256(jar.read_bytes()).hexdigest(), "build_id": build_id,
     "commit": subprocess.check_output(["git", "-C", root, "rev-parse", "HEAD"], text=True).strip(),
     "source_dirty": bool(subprocess.check_output([
-        "git", "-C", root, "status", "--porcelain", "--", "java_patch", "java_patch_cn", "java_resources"])),
+        "git", "-C", root, "status", "--porcelain", "--", "java_patch", "java_patch_cn", "java_resources",
+        "scripts/build_java.sh", "tools/java/TransportDevicePatch.java"])),
+    "transport_ui": {
+        "stock_jar_sha256": digest(stock.read_bytes()), "classes": transport_classes,
+        "sources": {name: digest((pathlib.Path(root) / name).read_bytes()) for name in (
+            "scripts/build_java.sh", "tools/java/TransportDevicePatch.java",
+            "java_patch/com/luka/carplay/core/TransportDevicePolicy.java")},
+    },
     "deployed": False,
 }
 jar.with_name(jar.stem + "-build.json").write_text(json.dumps(receipt, indent=2) + "\n")

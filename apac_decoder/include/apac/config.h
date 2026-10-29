@@ -4,7 +4,7 @@
 
 // apac::GlobalConfig and the configuration objects it deserialises.
 //
-// Reference functions in libSPF_CP_PlugInWrapper.so (Pioneer SPHERA 1.030010):
+// Originals in libSPF_CP_PlugInWrapper.so (Pioneer SPHERA 1.030010):
 //
 //   0x00097d50  apac::GlobalConfig::Deserialize(BitstreamReader&)
 //   0x000978c0  apac::GlobalConfig::Reset()
@@ -17,13 +17,13 @@
 //   0x0009d870  apac::ProfileLevelConfig::IsDecodable(Profile, Profile)
 //   0x000af770  apac::ASCChannelMap::AddMap(AudioDataType, unsigned short, unsigned short)
 //
-// No STL and no dynamic allocation: the library's std::vectors become
-// fixed-capacity arrays and an over-long stream is rejected with a decoder-specific
+// No STL and no dynamic allocation: the original's std::vectors become
+// fixed-capacity arrays and an over-long stream is rejected with a port-specific
 // status instead of growing.  The capacities are far above anything the CarPlay
 // 5.1 / 5.1.2 profile can produce.
 //
 // The channel layout is CoreAudio's AudioChannelLayout, reached through a
-// vector<char> in the library: word 0 is the tag, word 1 the bitmap, word 2 the
+// vector<char> in the original: word 0 is the tag, word 1 the bitmap, word 2 the
 // description count, then 20-byte AudioChannelDescriptions.  Tag 0 means "use
 // the descriptions", 0x10000 means "use the bitmap", anything else encodes
 // (constant << 16) | channelCount - so the 5.1 streams here carry 0x007c0006,
@@ -38,37 +38,37 @@
 
 namespace apac {
 
-// Capacities.  Not limits of the format: limits of this decoder.
+// Capacities.  Not limits of the format: limits of this port.
 const uint32_t kMaxCodecConfigs = 8;
 const uint32_t kMaxASCConfigs   = 16;
 const uint32_t kMaxElements     = 64;
 const uint32_t kMaxChannels     = 64;
 
-// Status codes.  0, 1, 4 and 5 are the library's own return values.  Anything
-// >= kStatusLimitBase is this decoder saying it will not guess.
+// Status codes.  0, 1, 4 and 5 are the original's own return values.  Anything
+// >= kStatusPortBase is this port saying it will not guess.
 enum Status {
     kOk                  = 0,
-    kBadValue            = 1,   // the library's `return 1`
-    kUnsupportedValue    = 4,   // the library's `return 4`
+    kBadValue            = 1,   // the original's `return 1`
+    kUnsupportedValue    = 4,   // the original's `return 4`
     kNotDeserialized     = 5,   // BaseASCConfig::Deserialize's constant
 
-    kStatusLimitBase      = 0x100,
-    kLimitNeedsAudioScene   = 0x100,  // apac::AudioSceneConfig, out of scope here
-    kLimitNeedsLoudnessDRC  = 0x101,  // apac::LoudnessDRCConfig -> mpddrc, stage h
-    kLimitTooManyElements   = 0x102,
-    kLimitTooManyChannels   = 0x103,
-    kLimitTooManyConfigs    = 0x104,
-    kLimitNeedsProfileTable = 0x105,  // SetChannelLayout's profile-derived layout
+    kStatusPortBase      = 0x100,
+    kPortNeedsAudioScene   = 0x100,  // apac::AudioSceneConfig, out of scope here
+    kPortNeedsLoudnessDRC  = 0x101,  // apac::LoudnessDRCConfig -> mpddrc, stage h
+    kPortTooManyElements   = 0x102,
+    kPortTooManyChannels   = 0x103,
+    kPortTooManyConfigs    = 0x104,
+    kPortNeedsProfileTable = 0x105,  // SetChannelLayout's profile-derived layout
 
     // Frame layer.  The first two are refusals: each stands in for a tool this
-    // decoder does not implement, each is proved unreachable on the CarPlay 5.1
-    // capture, and each propagates as a frame error exactly as the library's
-    // own non-zero return from that tool does.  The last two are this decoder's
-    // fixed capacities, which the library grows instead.
-    kLimitNeedsLRVQ         = 0x106,  // APACLRVQDecoder, stage h1
-    kLimitNeedsBWE          = 0x107,  // APACBWE2Decoder::DecodeFrame, stage e
-    kLimitTooManyElementsRT = 0x108,  // more elements than the decoder can hold
-    kLimitBadElementType    = 0x109   // an element type CreateList would reject
+    // port does not implement, each is proved unreachable on the CarPlay 5.1
+    // capture, and each propagates as a frame error exactly as the original's
+    // own non-zero return from that tool does.  The last two are this port's
+    // fixed capacities, which the original grows instead.
+    kPortNeedsLRVQ         = 0x106,  // APACLRVQDecoder, stage h1
+    kPortNeedsBWE          = 0x107,  // APACBWE2Decoder::DecodeFrame, stage e
+    kPortTooManyElementsRT = 0x108,  // more elements than the decoder can hold
+    kPortBadElementType    = 0x109   // an element type CreateList would reject
 };
 
 // apac::ProfileLevelConfig - GlobalConfig + 32, three bytes.
@@ -98,7 +98,7 @@ struct ChannelLayout {
 // apac::chan::CoreDecoderConfig, plus the one bit apac::lbr::DecoderConfig
 // prepends to it.  GlobalConfig always builds the lbr subclass.
 struct CoreDecoderConfig {
-    uint8_t       lbrFlag;         // +96 in the library
+    uint8_t       lbrFlag;         // +96 in the original
     uint16_t      channelOffset;   // +42, written by GlobalConfig after Deserialize
     uint32_t      numElements;
     uint8_t       elementTypes[kMaxElements];
@@ -131,7 +131,7 @@ struct GlobalConfig {
     uint32_t frameLengthIndex;         // +41; must be 0
     uint32_t frameLength;              // 1024 when frameLengthIndex == 0
     uint32_t numChannels;              // +43
-    uint32_t reservedAfterChannels;    // 8 bits the library reads and drops
+    uint32_t reservedAfterChannels;    // 8 bits the original reads and drops
 
     uint32_t numCodecConfigs;
     CoreDecoderConfig codecConfigs[kMaxCodecConfigs];
@@ -144,8 +144,8 @@ struct GlobalConfig {
     uint8_t  deserialized;             // +248, set only after the whole config parses
 
     // Where the reader stood, in bits from the start of the config, when
-    // Deserialize returned.  Meaningful for a decoder-specific status too, which is
-    // how the tests pin the point our decoder stops at.
+    // Deserialize returned.  Meaningful for a port-specific status too, which is
+    // how the tests pin the point the port stops at.
     int32_t  bitsConsumed;
 
     void Reset();                                   // 0x000978c0

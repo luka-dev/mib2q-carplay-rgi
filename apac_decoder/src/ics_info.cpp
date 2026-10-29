@@ -14,7 +14,7 @@ void APACICSInfo::Clear() { memset(this, 0, sizeof *this); }
 bool APACICSInfo::Deserialize(BitstreamReader& bs, int32_t codingType)
 {
     windowSequence = (uint8_t)bs.GetBits(2);
-    // One 16-bit store in the library: maxSfb = 0, numWindowGroups = 1.
+    // One 16-bit store in the original: maxSfb = 0, numWindowGroups = 1.
     maxSfb = 0;
     numWindowGroups = 1;
     windowGroupWord = 1;

@@ -239,7 +239,48 @@ The templates are not what runs: on the unit the access point is on channel 11, 
 
 ## 📶 Radio and throughput on the unit
 
-Two read-mostly sessions on the car, 2026-09-27 (access point and scan) and 2026-10-13 (readiness, radio settings, throughput). The 2026-10-13 session measured what the 2.4 GHz access point actually carries. No CarPlay traffic went over Wi-Fi. The only writes were temporary `iperf` processes and one runtime channel switch, described below, which did not hold. Wireless experiments are **parked** after this session. **[car]**
+The [2026-10-17 audit and freeze incident](../stock-patches/README.md)
+records newer measurements and corrections to the interpretations below.
+The owner reported a full HU freeze after a radio GET request blocked in
+`io-pkt`; do not repeat `uaputl sys_cfg_scan_channels` on the live unit.
+After the owner's reboot, SSH and the wired CarPlay connection were verified;
+direct throughput testing resumed without radio-control queries. The audit
+also separates receiver-scheduling losses and Mac AWDL effects from HU radio
+capacity. The historical October 13 settings below are not a current-state
+snapshot.
+
+### Current throughput findings: 2026-10-17
+
+| Direct Mac → HU test | Completed result | Important condition |
+|---|---|---|
+| TCP / IPv6 | 36.9 Mbit/s over 60.1 s | Mac AWDL temporarily off; HU 512 KiB, priority 10 |
+| TCP / IPv6, screen-like buffer | 37.3 Mbit/s over 20.1 s | AWDL off; HU 176 KiB, priority 10; short run |
+| UDP / IPv4, requested 45 Mbit/s | 42.0 Mbit/s over 60.3 s; 0.018% loss | Actual offering 42.162 Mbit/s; HU 256 KiB, priority 21 |
+| UDP / IPv4, requested 50 Mbit/s | 42.8 Mbit/s over 60.3 s; 0.041% loss | Actual offering 43.019 Mbit/s; same receiver |
+
+Wired CarPlay remained connected during these synthetic tests. Short TCP
+on/off/on AWDL runs gave 24.5 → 37.4 → 21.3 Mbit/s; this identifies an
+important Mac client condition, not an installed HU speed improvement.
+Receiver priority removed severe synthetic UDP socket starvation, while
+TCP priority changes, TCLASS128 and two streams did not establish gains.
+The [audit](../stock-patches/README.md)
+records full controls, rejected measurements, static findings and remaining
+validation. **[car]**
+
+The TCP average is about 1.94 times an assumed 19 Mbit/s video budget,
+supporting enough average bandwidth under these conditions. iPhone Wi-Fi
+headroom and CarPlay frame pacing remain unverified. The iPhone app test
+was cancelled without a client connection; its temporary TCP/UDP 5001
+redirects and receivers were removed, and original NAT/filter/queue rules
+were verified restored. No persistent radio tuning was installed. **[car]** / **[open]**
+
+### Historical sessions: September 27 and October 13
+
+The following snapshots cover 2026-09-27 (access point and scan) and
+2026-10-13 (readiness, radio settings and throughput). No CarPlay traffic
+went over Wi-Fi. Writes in those sessions were temporary `iperf` processes
+and one runtime channel switch, described below, which did not hold. That
+work was parked on October 13; testing resumed on October 17. **[car]**
 
 ### Readiness of the unit for the stock210 bundle
 
@@ -286,20 +327,23 @@ flowchart LR
 - `btstack` keeps HCI on `/dev/sdio0`, stores pairings through `/dev/eso/persistence` and listens only on `10.0.0.15:21314` (internal `mmx0`). Firmware for both halves is `/mnt/app/var/FwImage/w8787_wlan_SDIO_bt_SDIO.bin` and `sd8787_uapsta.bin`; `/eso/bin/reset_bt.sh` resets the whole chip. **[car]**
 - The DHCP server on `uap0` is `dnsmasq` (leases in `/ramdisk/dnsmasq.leases`), not the `dhcpd.conf` template. **[car]**
 
-### Live access point state
+### Access point snapshot: 2026-10-13
 
-Read with the stock `uaputl` (read-only commands). Against the specification the access point is legal on the Wi-Fi side: a permitted channel, HT20 only, SSID broadcast. What it lacks is everything above the radio. **[car]**
+Recorded with the stock `uaputl`. These historical queries are not a replay
+recipe: a later radio GET preceded a full HU freeze. The snapshot showed a
+permitted channel, HT20 and a broadcast SSID; it did not establish a wireless
+CarPlay session. **[car]**
 
 | Property | Value | Effect |
 |---|---|---|
 | Interface, SSID | `uap0`, `hostap`, `10.173.189.1`, `Audi_MMI_9137` broadcast | not hidden, as required |
-| Channel, width | 11, HT20, SGI-20, `ht_cap_info=0x12c`, no secondary channel | permitted channel; 72 Mbit/s PHY ceiling |
+| Channel, width | 11, HT20, SGI-20, `ht_cap_info=0x12c`, no secondary channel | permitted channel; observed client PHY 72 Mbit/s |
 | A-MPDU per TID | on for TID 0–3, **off for TID 4–7** (video and voice) | only the unit's own transmit side; the phone's uplink is unaffected |
-| ADDBA windows | tx 32, **rx 16**, `addbareject` all 0 | aggregation accepted, receive aggregates capped at 16 MPDUs |
-| HT protection | `1`, non-greenfield stations present | RTS/CTS overhead |
+| ADDBA windows | tx 32, **rx 16**, `addbareject` all 0 | RX BA window 16; not a measurement of effective aggregate length or its throughput impact |
+| HT protection | `1`, non-greenfield stations present | Historical state; October 17 readback was `0`, so this does not explain its remaining throughput gap |
 | WMM | BE 3/4/10, BK 7/4/10, VI 2/3/4 TXOP 94, VO 2/2/3 TXOP 47 | standard |
 | Transmit power | **9 dBm** (templates say 13) | range, not short-range throughput |
-| BT coexistence (`coex.cfg`) | `APBTCoex=0`; ACL profile `btTime=40`, `wlanTime=60` | if active with an iAP2 link up, Wi-Fi gets 60 % airtime; untested |
+| BT coexistence (`coex.cfg`) | File profile `btTime=40`, `wlanTime=60`; `APBTCoex=0` | October 17 runtime flags and ACL coexistence were disabled; file contents do not prove a 40% active airtime reservation |
 | 802.11d | enabled | — |
 | Custom information elements | eight slots, indices 0–7, all `len=0`, mask `0x00` (2026-09-27) | free for the Apple vendor element |
 | Channel neighbours (host scan) | 7 networks on channels 8–11, 1 on channel 1 | channel 11 is crowded |
@@ -335,17 +379,32 @@ Measured with the unit's `/eso/bin/iperf` 2.0.5 against a Mac on the same access
 
 For comparison, a wired CarPlay session on `carplay0` received **15–19.5 Mbit/s, mean ~17.5**, and sent ~0.11 Mbit/s, sampled over 64 s from `netstat -ib`. That figure is main screen, cluster stream 111 and audio together, on a link where iOS has no reason to economise.
 
-### Why it is ~20 Mbit/s and not 72
+### Interpreting the older ~20 Mbit/s results
 
-72 Mbit/s is the PHY rate. A clean single-client 802.11n HT20 link normally delivers about 40–45 Mbit/s of goodput. The remaining gap has three causes, none of them aggregation:
+72 Mbit/s was the observed PHY rate, not application goodput. The October 17
+minute-long results of 36.9 Mbit/s TCP and 42.8 Mbit/s UDP supersede the idea
+that ~20 Mbit/s is this HU's demonstrated receive ceiling. The earlier
+session did not isolate the contribution of channel contention, protection,
+CPU scheduling, client radio activity and socket accounting.
 
-1. **Crowded channel 11.** Seven neighbouring networks share or overlap it.
-2. **HT protection** (`1`) spends airtime on RTS/CTS.
-3. **Unit CPU.** `top` shows ~60 % busy on all four cores with no CarPlay session (`mcd` ~27 % of one core, then `videoencoderservice`, `videoCore`, `displaymanager`, `traceserver`, navigation, `kgsl`, each 7–8 %). `iperf` at priority 10 loses packets in the socket: a 256 KB buffer cut loss at 10 Mbit/s from 15 % to 3 %. A wireless receiver needs large buffers and priority.
+Channel 11 had overlapping neighbours in the older scan. HT protection was
+`1` then and `0` in the later audit. The older `top` samples showed ~60%
+busy on four cores with no CarPlay session. Those observations are context,
+not a quantitative attribution of the remaining bandwidth gap. Later UDP
+counter comparisons identified severe test-consumer socket drops; priority
+21 removed those under one workload. The production screen worker already
+defaults to 17 and explicitly requests 176 KiB, so neither the default iperf
+buffer nor its priority is the production configuration.
 
-The default TCP window overruns the unit's transmit queue (ALTQ `default_out`, `qlimit 50`, RED), causing the RTO stalls. That direction only carries control and microphone for CarPlay.
+The older HU → Mac TCP direction had stalls and retransmission timeouts
+alongside ALTQ queueing. It did not isolate a single cause and must be kept
+separate from the newer Mac → HU receive-capacity results. Bigger buffers
+are not a demonstrated cure for latency tails or frame pacing.
 
-`mcd` is stock: `etc/boot/startup.sh` starts `mcd -Vv /etc/mcd.conf`, and its ~13 timer threads (CD poll `CD_MEDIA_IOBLK 250,500` plus one per media rule) cost ~1–2 % each. It owns SD/USB mounts and SWDL autorun, so it was left alone: the gain would be ~7 % of total CPU.
+`mcd` is stock: `etc/boot/startup.sh` starts `mcd -Vv /etc/mcd.conf`. Older
+samples attributed ~27% of one core to it, including media polling threads.
+It owns SD/USB mounts and SWDL autorun, so it was left alone. Reducing this
+load has not been tested as a Wi-Fi speed improvement.
 
 ### Changing channel, HT40 and 5 GHz
 
@@ -354,13 +413,16 @@ The default TCP window overruns the unit's transmit queue (ALTQ `default_out`, `
 - **HT40 is not worth it.** The specification forbids HT40 for a 2.4 GHz CarPlay access point (§30.2.5, quoted above), it would overlap the crowded neighbours, and Apple clients are expected to stay at HT20 on 2.4 GHz **[open]**.
 - **5 GHz stays open.** The 88W8787 silicon and this driver have A-band code, but the radio scans nothing above 2452 MHz. Region code, module band flags (`fw_bands`) or an unpopulated 5 GHz front end are all possible; only the first two are software. Not probed further. **[open]**
 
-### Parked state
+### State when testing was parked on 2026-10-13
 
-Nothing persistent changed on the unit. Temporary files `/tmp/ch_switch.sh`, `/tmp/uaputl.ch1.cfg` and `/tmp/ch_switch.log` live in RAM and vanish on reboot. Next steps, when wireless resumes:
+Nothing persistent changed during the October 13 session. Its temporary
+`/tmp/ch_switch.sh`, `/tmp/uaputl.ch1.cfg` and `/tmp/ch_switch.log` files were
+in RAM and were not persistent deployment artifacts.
 
-1. Measure iPhone → unit throughput and mDNS reachability with the bundle's PF rules loaded at runtime.
-2. A/B a clean channel through `start-ap.sh` and with Bluetooth connected, to see whether `coex.cfg` takes 40 % airtime.
-3. Read the radio's band capability and region code to settle 5 GHz.
+The October 17 [follow-up plan](../stock-patches/README.md)
+supersedes that session's next steps. It requires a recovery path before
+more radio queries, separates iPhone capacity from actual frame timing, and
+does not assume the dormant 40/60 coexistence profile is active.
 
 ## 🔒 Why the stock unit cannot do wireless
 
@@ -368,7 +430,7 @@ The band is not the blocker. Even a spec-perfect 5 GHz access point would change
 
 - `dio_manager.json` marks `carplay0` as the Bonjour Direct Link interface through `MDNS_DIRECTLINK_IFACE=carplay0`. This does not exclude `uap0`: the stock `mdnsd` still calls `mDNS_RegisterInterface` for other interfaces. The actual WLAN barrier is PF's quick inbound block to `uap0`; see [Wireless firewall](FIREWALL.md). **[decompile]**
 - `smartphone_integrator.json` carries no Wi-Fi or wireless key at all. **[code]**
-- Neither `dio_manager` nor `libairplay` has a wireless CarPlay path. The only related symbol in `libairplay` is the helper `IsWiFiNetworkInterface`, and the transport-type field it feeds (`platformData +0x288`: 1 Ethernet, 2 Wi-Fi, 8 USB, 16 Direct, 32 BTLE, 64 WFD) is set to USB on this unit ([AltScreen RE History](../altscreen-and-video/ALTSCREEN_RE_HISTORY.md)). **[decompile]**
+- Neither `dio_manager` nor `libairplay` has a wireless CarPlay path. The only related symbol in `libairplay` is the helper `IsWiFiNetworkInterface`, and the transport-type field it feeds (`platformData +0x288`: 1 Ethernet, 2 Wi-Fi, 8 USB, 16 Direct, 32 BTLE, 64 WFD) is set to USB on this unit ([AltScreen RE History](../altscreen-and-video/archive/ALTSCREEN_RE_HISTORY.md)). **[decompile]**
 - The stock HMI Java has `ComaWlanListener` and `WLANSource` for tethering and media, and nothing for CarPlay over Wi-Fi. **[code]**
 
 Doing it inside the head unit means supplying that transport and the missing CU pairing/encrypted control/media around stock AirPlay210. The Bluetooth donor uses our chip and build line, but Bluetooth alone is insufficient. The donor analysis is in [Wireless CarPlay on the Head Unit](HARDWARE_AND_DONORS.md); the [current implementation](README.md) records the hook/daemon/bridge integration, passing offline tests and remaining hardware validation.
@@ -438,4 +500,4 @@ Claims are tagged **[car]** confirmed on the unit, **[decompile]** from reverse 
 - The external report of a working iPhone-facing bootstrap is **[open]** and unreproduced here.
 - Radio state, `uaputl` values, throughput, CPU load and the failed runtime channel switch are **[car]**, 2026-10-13. No CarPlay session ran over Wi-Fi; there is still no wireless path on the unit to test.
 
-Related: [USB and NCM Connect](../connect-and-usb/USB_AND_NCM_CONNECT.md) · [Session Lifecycle](../connect-and-usb/SESSION_LIFECYCLE.md) · [iOS Version Gate](../connect-and-usb/IOS_VERSION_GATE.md) · [CarPlay Feature Survey](../altscreen-and-video/CARPLAY_FEATURE_SURVEY.md) · sibling project `cp-wireless-to-usb-proxy`
+Related: [USB and NCM Connect](../connect-and-usb/USB_AND_NCM_CONNECT.md) · [Session Lifecycle](../connect-and-usb/SESSION_LIFECYCLE.md) · [iOS Version Gate](../connect-and-usb/archive/IOS_VERSION_GATE.md) · [CarPlay Feature Survey](../altscreen-and-video/CARPLAY_FEATURE_SURVEY.md) · sibling project `cp-wireless-to-usb-proxy`

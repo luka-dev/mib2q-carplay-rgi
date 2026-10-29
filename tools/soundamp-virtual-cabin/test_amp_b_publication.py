@@ -73,7 +73,7 @@ class PublicationTests(unittest.TestCase):
         state.advance_offsets([293]*100);self.assertEqual(state.effective[293],0)
 
     def test_replay_whole_bank_immediate_publication_and_untouched_words(self):
-        report=json.loads((ROOT/'assets/soundamp/remaining-blocks-20260920-v3/b_config_control.json').read_text())
+        report=json.loads((ROOT/'output/r2/soundamp/remaining-blocks-20260920-v3/b_config_control.json').read_text())
         controls={api:0. for api in (19,18,22,21,23,24,25,27,29)}
         controls[19]=-50
         contributions={d:[0.]*9 for d in range(44,59)};contributions[51][1]=.25

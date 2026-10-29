@@ -6,6 +6,9 @@
 #include "stock210_abi.h"
 #include "advertisement.h"
 #include "pairing.h"
+#include "audio_stream.h"
+#include "../audio/buffered_wireless.h"
+DEFINE_LOG_MODULE(WADVERT);
 
 static struct {
     void *(*string)(void *, const char *, unsigned);
@@ -19,6 +22,9 @@ static struct {
     long (*count)(const void *);
     void *(*at)(const void *, long);
     void (*remove_at)(void *, long);
+    void *(*create)(void *,long,const void *,const void *);
+    void (*append)(void *,const void *);
+    void *keys,*values;
     void *features, *pi, *audio, *type_key, *input, *output, *input_ext, *output_ext;
     int ready;
 } cf;
@@ -33,6 +39,8 @@ static void resolve(void)
     R(set_string,"CFDictionarySetCString"); R(remove,"CFDictionaryRemoveValue");
     R(count,"CFArrayGetCount"); R(at,"CFArrayGetValueAtIndex");
     R(remove_at,"CFArrayRemoveValueAtIndex");
+    R(create,"CFDictionaryCreateMutable"); R(append,"CFArrayAppendValue");
+    R(keys,"kCFLDictionaryKeyCallBacksCFLTypes"); R(values,"kCFLDictionaryValueCallBacksCFLTypes");
 #undef R
 #define K(member,name) cf.member=cf.string(NULL,name,0x08000100); if(!cf.member)return
     K(features,"features"); K(pi,"pi"); K(audio,"audioFormats"); K(type_key,"type");
@@ -46,9 +54,12 @@ int cp_advertisement_available(void)
 
 static uint64_t supported_features(uint64_t features)
 {
-    /* This adapter accepts encrypted PCM16 only. Retain bit26: stock MFi-SAP
+    /* Retain bit26: stock MFi-SAP
      * is real and is also used by client authentication selection. */
-    return (features & ~((UINT64_C(1)<<20) | (UINT64_C(1)<<22))) | CP_WIRELESS_FEATURES;
+    features &= ~((UINT64_C(1)<<20) | (UINT64_C(1)<<22));
+    if(cp_wireless_audio_enabled() && (cp_audio_codec_formats()&CP_AUDIO_AAC))
+        features|=UINT64_C(1)<<20;
+    return features | CP_WIRELESS_FEATURES;
 }
 
 HOOK_EXPORT uint64_t AirPlayGetFeatures(void)
@@ -82,28 +93,57 @@ void cp_advertisement_info(void *session,void *info)
 {
     char id[CP_PAIR_ID_MAX+1];
     void *audio;
+    uint64_t codecs=0;
     int err=0;
     long i;
-    (void)session;
     if(!carplay_wireless_receiver_ready())return;
     if(cf.type(info)!=cf.dict_type() ||
        carplay_wireless_copy_pairing_identity(id,sizeof(id),NULL))goto failed;
     audio=cf.get(info,cf.audio);
     if(!audio || cf.type(audio)!=cf.array_type())goto failed;
-    /* Stock owns mutable entries; run after all module additions, so optional
-     * wired type103/AAC advertisements cannot escape into wireless /info. */
+    if(cp_wireless_audio_enabled()) {
+        codecs=cp_audio_codec_formats();
+        LOG_INFO(LOG_MODULE,"wireless audio codecs=%#llx",(unsigned long long)codecs);
+        /* Wireless main-media needs AAC-LC independently of the voice codec.
+         * A linked symbol or a format string is not an available decoder. */
+        if(!(codecs&CP_AUDIO_AAC))goto failed;
+    }
+    /* Preserve the audio module's negotiated buffered descriptor verbatim:
+     * extended indices, APAC/AAC selection and PCM6 are shared with wired. */
     for(i=cf.count(audio);i-- > 0;) {
         void *entry=cf.at(audio,i);
         uint64_t input=0, output=0;
         if(!entry || cf.type(entry)!=cf.dict_type())goto failed;
         int64_t type=cf.integer(entry,cf.type_key,&err);
+        if(!err && type==103 && spa_buffered_wireless_offer &&
+           spa_buffered_wireless_offer(session))continue;
         if(err || (type!=100 && type!=101)) { cf.remove_at(audio,i);continue; }
-        if(cf.get(entry,cf.input))input=(uint64_t)cf.integer(entry,cf.input,NULL)&CP_WIRELESS_PCM16;
-        if(cf.get(entry,cf.output))output=(uint64_t)cf.integer(entry,cf.output,NULL)&CP_WIRELESS_PCM16;
+        /* /info may reuse its mutable capability objects. Preserve our own
+         * already-normalized Opus masks on a repeated final pass. */
+        uint64_t voice_source=CP_WIRELESS_PCM16|(codecs&CP_AUDIO_OPUS);
+        if(cf.get(entry,cf.input))input=(uint64_t)cf.integer(entry,cf.input,NULL)&voice_source;
+        if(cf.get(entry,cf.output))output=(uint64_t)cf.integer(entry,cf.output,NULL)&voice_source;
+        if(cp_wireless_audio_enabled()) {
+            /* iOS's wireless filter excludes the legacy PCM bits. Advertise
+             * one compression family for voice, separately from media. */
+            input=input?(codecs&CP_AUDIO_OPUS):0;
+            output=output?(codecs&CP_AUDIO_OPUS):0;
+        }
         if(!input && !output) { cf.remove_at(audio,i);continue; }
         if(input)cf.set_integer(entry,cf.input,(int64_t)input);else cf.remove(entry,cf.input);
         if(output)cf.set_integer(entry,cf.output,(int64_t)output);else cf.remove(entry,cf.output);
         cf.remove(entry,cf.input_ext); cf.remove(entry,cf.output_ext);
+    }
+    if(codecs) {
+        if(!cf.count(audio))goto failed;
+        void *media=cf.create(NULL,0,cf.keys,cf.values);
+        if(!media)goto failed;
+        /* Wireless realtime media is wire102/MainHigh, aliased to native100.
+         * Buffered103 and telephony keep their own independent contracts. */
+        cf.set_integer(media,cf.type_key,102);
+        cf.set_integer(media,cf.output,(int64_t)(codecs&CP_AUDIO_AAC));
+        cf.remove(media,cf.input);
+        cf.append(audio,media);cf.release(media);
     }
     if(!cf.count(audio) || cf.set_string(info,cf.pi,id,strlen(id)))goto failed;
     cf.set_integer(info,cf.features,(int64_t)supported_features((uint64_t)cf.integer(info,cf.features,NULL)));

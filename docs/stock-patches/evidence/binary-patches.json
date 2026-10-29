@@ -1,0 +1,230 @@
+{
+  "firmware": "MHI2Q_US_AUG22_P5087_MU1316",
+  "patches": [
+    {
+      "name": "smartphone_integrator",
+      "path": "eso/bin/apps/smartphone_integrator",
+      "stock_bytes": 802798,
+      "bytes": 802798,
+      "stock_sha256": "a25dc981e5591cb3c6b09f00fd95de23803dd3daa0f562e7e8d60b6d0e1b0d02",
+      "patched_sha256": "606236a81c7c4dafda6fdd08fe6eb27c43252796784da25d9760a7d552ee2af3",
+      "changed_bytes": 4,
+      "sites": [
+        {
+          "file_offset": "0x7fdb4",
+          "old": "0030a0e3",
+          "new": "2e3309e0"
+        }
+      ]
+    },
+    {
+      "name": "mcd",
+      "path": "armle/usr/sbin/mcd",
+      "stock_bytes": 47039,
+      "bytes": 47039,
+      "stock_sha256": "f11d13ffec1322aefcfb431966180cff46c314320eeef7ed12470bfc441dd593",
+      "patched_sha256": "e18f3055f633c99b3f10022c1f0a9c61a9e597d8b9a95831e5578a2e5c5387ee",
+      "changed_bytes": 5,
+      "sites": [
+        {
+          "file_offset": "0x7730",
+          "old": "860f8de20010a0e373ebffeb",
+          "new": "c800a0e30010a0e3f7ebffeb"
+        }
+      ]
+    },
+    {
+      "name": "airplay_decoder",
+      "path": "eso/lib/libairplay.so",
+      "stock_bytes": 763420,
+      "bytes": 763420,
+      "stock_sha256": "01c116b1674215daa0602d556a6d9b2eb48c2113ca294ea1f5d58787e3f656f2",
+      "patched_sha256": "a527b77800f690a33a8856e79e7f9d5a89143bfdd7108903837a444976be25b6",
+      "changed_bytes": 2,
+      "sites": [
+        {
+          "file_offset": "0x8c694",
+          "old": "04",
+          "new": "02"
+        },
+        {
+          "file_offset": "0x8c6f4",
+          "old": "04",
+          "new": "02"
+        }
+      ]
+    },
+    {
+      "name": "deva-ctrl-qc.so",
+      "stock_bytes": 694904,
+      "patched_bytes": 694904,
+      "stock_sha256": "58dddcabaa94c2fecf989855a6f810ec219926f49669a0ed9482ed629fdc64b9",
+      "patched_sha256": "e2216037dcecf00040e69aaf84d7c9e3e390ac583849ab7b62f308eed2432b99",
+      "changed_bytes": 140,
+      "changed_ranges": [
+        {
+          "file_offset": "0x54a14",
+          "length": 4,
+          "old": "b421d3e1",
+          "new": "9de100ea"
+        },
+        {
+          "file_offset": "0x563c8",
+          "length": 4,
+          "old": "1c2095e5",
+          "new": "bee300eb"
+        },
+        {
+          "file_offset": "0x8d08f",
+          "length": 81,
+          "old": "61702f414d53532f6d756c74696d656469612f617564696f2f716e785f617564696f2f7372632f68617264776172652f646576612f6374726c2f71632f646576615f7372665f6d697865725f726f757465",
+          "new": "0007102de9b421d3e11c1093e51c0195e5000050e30700000a10c090e500005ce30400000a0c20a0e194c090e500005ce30000000a0c10a0e1b428c7e1bc22d3e1b628c7e16c1087e50710bde8521effea"
+        },
+        {
+          "file_offset": "0x8f2c7",
+          "length": 21,
+          "old": "632f646576615f7372665f706c6174666f726d2e63",
+          "new": "001c2095e5101096e5060051e3122ba0031eff2fe1"
+        },
+        {
+          "file_offset": "0xa6e18",
+          "length": 1,
+          "old": "02",
+          "new": "06"
+        },
+        {
+          "file_offset": "0xa6e1c",
+          "length": 1,
+          "old": "02",
+          "new": "06"
+        },
+        {
+          "file_offset": "0xa6e21",
+          "length": 1,
+          "old": "18",
+          "new": "48"
+        },
+        {
+          "file_offset": "0xa6e25",
+          "length": 1,
+          "old": "18",
+          "new": "48"
+        },
+        {
+          "file_offset": "0xa6e29",
+          "length": 2,
+          "old": "f000",
+          "new": "d002"
+        },
+        {
+          "file_offset": "0xa6efc",
+          "length": 1,
+          "old": "08",
+          "new": "80"
+        },
+        {
+          "file_offset": "0xa6f01",
+          "length": 1,
+          "old": "3e",
+          "new": "bb"
+        },
+        {
+          "file_offset": "0xa6f05",
+          "length": 1,
+          "old": "3e",
+          "new": "bb"
+        },
+        {
+          "file_offset": "0xa6f11",
+          "length": 1,
+          "old": "02",
+          "new": "06"
+        },
+        {
+          "file_offset": "0xa6f15",
+          "length": 1,
+          "old": "02",
+          "new": "06"
+        },
+        {
+          "file_offset": "0xa6f19",
+          "length": 1,
+          "old": "14",
+          "new": "3c"
+        },
+        {
+          "file_offset": "0xa6f2c",
+          "length": 2,
+          "old": "0800",
+          "new": "0010"
+        },
+        {
+          "file_offset": "0xa6f30",
+          "length": 2,
+          "old": "803e",
+          "new": "c05d"
+        },
+        {
+          "file_offset": "0xa6f34",
+          "length": 2,
+          "old": "803e",
+          "new": "c05d"
+        },
+        {
+          "file_offset": "0xa6f41",
+          "length": 1,
+          "old": "02",
+          "new": "03"
+        },
+        {
+          "file_offset": "0xa6f45",
+          "length": 1,
+          "old": "02",
+          "new": "03"
+        },
+        {
+          "file_offset": "0xa6f49",
+          "length": 1,
+          "old": "14",
+          "new": "1e"
+        },
+        {
+          "file_offset": "0xa70dc",
+          "length": 2,
+          "old": "0800",
+          "new": "0010"
+        },
+        {
+          "file_offset": "0xa70e0",
+          "length": 2,
+          "old": "803e",
+          "new": "c05d"
+        },
+        {
+          "file_offset": "0xa70e4",
+          "length": 2,
+          "old": "803e",
+          "new": "c05d"
+        },
+        {
+          "file_offset": "0xa70f1",
+          "length": 1,
+          "old": "02",
+          "new": "03"
+        },
+        {
+          "file_offset": "0xa70f5",
+          "length": 1,
+          "old": "02",
+          "new": "03"
+        },
+        {
+          "file_offset": "0xa70f9",
+          "length": 1,
+          "old": "14",
+          "new": "1e"
+        }
+      ]
+    }
+  ]
+}

@@ -35,7 +35,7 @@
 
 enum { BLOCK = 768, HOPS_PER_BLOCK = BLOCK / SCENE_HOP, MAX_BLOCKS = 4096, MASK_BINS = 257 };
 
-static struct scene_state g_state;                       /* 290 KB, static like the hook's */
+static struct scene_state g_state;                       /* 265 KB, static like the hook's */
 static float g_in[BLOCK * 2];
 static float g_out[(BLOCK + SCENE_HOP) * 6];
 static float g_elig[MASK_BINS], g_prot[MASK_BINS];

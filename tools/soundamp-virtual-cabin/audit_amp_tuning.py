@@ -193,8 +193,8 @@ def postprocess(a, base, chain):
             report['tracks'][song]=dict(target_front_mid_power_dbfs=target,variants=rows)
             print('match',song,'verified',flush=True)
     else:
-        scenarios={f'bank{b}':load_upstream_scenario(ROOT/f'assets/soundamp/remaining-blocks-20260919/common-input-bank{b}-hypothesis.json') for b in (7,10)}
-        report['scenario_files']=[fingerprint(ROOT/f'assets/soundamp/remaining-blocks-20260919/common-input-bank{b}-hypothesis.json') for b in (7,10)]
+        scenarios={f'bank{b}':load_upstream_scenario(ROOT/f'output/r2/soundamp/remaining-blocks-20260919/common-input-bank{b}-hypothesis.json') for b in (7,10)}
+        report['scenario_files']=[fingerprint(ROOT/f'output/r2/soundamp/remaining-blocks-20260919/common-input-bank{b}-hypothesis.json') for b in (7,10)]
         report['common_input_audit']=fingerprint(scenarios['bank7']['audit_path'])
         report['scenario_models']={k:AmpChain(upstream_scenario=v).metadata() for k,v in scenarios.items()}
         report.update(scenarios=scenarios,frames_rendered=12*SR,window_source_seconds=[2,10],

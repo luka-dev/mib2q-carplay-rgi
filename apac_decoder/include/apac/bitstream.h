@@ -2,9 +2,9 @@
  * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
-// TBitstreamReader<unsigned int> - the APAC bit reader, bit-exact against the library.
+// TBitstreamReader<unsigned int> - Apple's APAC bit reader, ported bit-exactly.
 //
-// Reference: libSPF_CP_PlugInWrapper.so (Pioneer SPHERA 1.030010), out-of-line
+// Original: libSPF_CP_PlugInWrapper.so (Pioneer SPHERA 1.030010), out-of-line
 // copies at 0x000b1430 .. 0x000b19a8, decompiled in
 // reference/decomp/TBitstreamReader.c.  Apple's own source calls this typedef
 // `BitstreamReader` (see the __PRETTY_FUNCTION__ string at 0x30ea90).
@@ -20,8 +20,8 @@
 // Every shift is written with an explicit `& 31`, because the AArch64 original
 // relies on LSL/LSR taking their shift amount modulo 32 and C would make those
 // cases undefined.  In particular `GetBits(32)` on a full cache leaves the
-// cache unchanged rather than zeroed; that is what the hardware does and our
-// decoder keeps it.  See reference/decomp/NOTES.md, "open questions", item 4.
+// cache unchanged rather than zeroed; that is what the hardware does and the
+// port keeps it.  See reference/decomp/NOTES.md, "open questions", item 4.
 
 #ifndef APAC_BITSTREAM_H
 #define APAC_BITSTREAM_H

@@ -76,7 +76,8 @@ def main() -> int:
         binary = out / "host-target/debug/mhi2q-wireless-daemon"
         data = binary.read_bytes()
         markers = [b"NOT_A_REAL_MFI_IDENTITY", b"mhi2q-test-only-mfi",
-                   b"synthetic MFi OpenSSL", b"mfiq_verify"]
+                   b"synthetic MFi OpenSSL", b"mfiq_verify", b"[native-api-lab]",
+                   b"10.0.3.2:32502", b"native API lab requires"]
         if any(marker in data for marker in markers):
             raise RuntimeError("synthetic provider marker in default daemon")
         report["checks"].append({"name": "default-binary-isolation", "passed": True,
@@ -100,7 +101,7 @@ def main() -> int:
             qnx_build = [
                 "docker", "run", "--rm", "--platform=linux/amd64",
                 "-v", f"{ROOT.parents[1]}:/src", "-w", "/src/Patches/mhi2-carplay",
-                "qnx65-armv7-toolchain:latest", "/opt/rust/qnx-cargo", "build",
+                os.environ.get("QNX_RUST_IMAGE", "qnx65-armv7-toolchain:8.5-rust"), "/opt/rust/qnx-cargo", "build",
                 "--manifest-path", "/src/Patches/mhi2-carplay/wireless/daemon/Cargo.toml",
                 "--bin", "mhi2q-wireless-daemon"]
             run("qnx-default-build", qnx_build)

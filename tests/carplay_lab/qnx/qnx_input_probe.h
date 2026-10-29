@@ -312,6 +312,17 @@ static void *lab_touch_worker(void *unused)
             lab_avc_timing(fd, command[2] == 'C'); close(fd); continue;
         }
 #endif
+        #ifdef MHI2Q_VPHONE_AUDIO_PERIPHERAL
+        if (received == sizeof(command) && !memcmp(command, "MHA\0\0\0\0", 7)) {
+            extern size_t mhi2q_audio_peripheral_copy(void *,size_t,unsigned *,unsigned *);
+            uint8_t *pcm=malloc(65536);unsigned rate=0,channels=0;
+            size_t length=pcm?mhi2q_audio_peripheral_copy(pcm,65536,&rate,&channels):0;
+            uint32_t header[3]={htonl((uint32_t)length),htonl(rate),htonl(channels)};
+            (void)send(fd,header,sizeof(header),0);
+            size_t sent=0;while(sent<length){ssize_t n=send(fd,pcm+sent,length-sent,0);if(n<=0)break;sent+=(size_t)n;}
+            free(pcm);close(fd);continue;
+        }
+        #endif
         if (received == sizeof(command) && !memcmp(command, "MCL\0\0\0\0", 7)) {
             lab_clock_snapshot(fd); close(fd); continue;
         }

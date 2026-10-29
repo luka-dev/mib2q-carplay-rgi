@@ -96,7 +96,7 @@ The NCM function was simply absent. iAP2 was fine throughout (`accessoryd`: `Pro
 Retracted theories, recorded so nobody rebuilds them:
 
 1. "The head unit is not advertising its Bonjour service" — wrong direction. The **phone** advertises (`Starting USB Bonjour advertising with host`); the unit discovers. `dns-sd -B` on the unit showed the phone's service.
-2. "iOS 27's `updateBonjourHost` repairs a malformed host from the accessory" — neither version takes a host from the accessory (see [iOS Version Gate](IOS_VERSION_GATE.md)).
+2. "iOS 27's `updateBonjourHost` repairs a malformed host from the accessory" — neither version takes a host from the accessory (see [iOS Version Gate](archive/IOS_VERSION_GATE.md)).
 3. "iOS ≤ 26's single car-wide `zoomFactor` cannot reconcile our density mismatch" — the display configuration was built successfully every cycle; the zoom never reaches that decision.
 
 Re-query the locally kept capture (`logs/`, gitignored, ~1 GB, the owner's device log): `log show --archive logs/system_logs.logarchive --style compact --predicate 'eventMessage CONTAINS "USB eligible"'`.
@@ -176,4 +176,4 @@ Merged originals were removed from the tree after this note absorbed them; they 
 - `CONNECT_FAILURE_ROOT_CAUSE` — `No Network Interface` verdict counts, NCM ownership, phone-side latency.
 - `USB_IPHONE_CONNECT_POSTMORTEM` — the `Device_Stack` ownership finding and MH2p launcher differences.
 
-Related: [USB Replug Recovery](USB_REPLUG_RECOVERY.md), [SI Stack and Replug Race](SI_STACK_AND_REPLUG_RACE.md), [PF Firewall](PF_FIREWALL.md), [iOS Version Gate](IOS_VERSION_GATE.md), [Landmines](../LANDMINES.md).
+Related: [USB Replug Recovery](USB_REPLUG_RECOVERY.md), [SI Stack and Replug Race](SI_STACK_AND_REPLUG_RACE.md), [PF Firewall](PF_FIREWALL.md), [iOS Version Gate](archive/IOS_VERSION_GATE.md), [Landmines](../LANDMINES.md).

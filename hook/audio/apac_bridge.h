@@ -1,7 +1,7 @@
 /*
- * apac_bridge.h — the hook's C view of the APAC decoder.
+ * apac_bridge.h — the hook's C view of the APAC decoder port.
  *
- * Our decoder under apac_decoder/ is C++; the hook is C.  This is the whole seam
+ * The port under apac_decoder/ is C++; the hook is C.  This is the whole seam
  * between them: one opaque handle and a versioned C function table, with no
  * C++ types crossing over.  The table lets the main LD_PRELOAD hook dlopen the
  * decoder only when Spatial audio is enabled; ordinary CarPlay remains usable
@@ -42,7 +42,7 @@ enum {
     SPA_APAC_ERR_INIT = 5,          /* Decoder::Initialize refused the config */
     SPA_APAC_ERR_CHANNELS = 6,      /* outside the decoder's 1..16 channel capacity */
     SPA_APAC_ERR_FRAME_LENGTH = 7,  /* not 1024 samples per packet */
-    SPA_APAC_ERR_DECODE = 8,        /* one packet failed; see the decoder status */
+    SPA_APAC_ERR_DECODE = 8,        /* one packet failed; see the port status */
     SPA_APAC_ERR_OUTPUT_SPACE = 9
 };
 

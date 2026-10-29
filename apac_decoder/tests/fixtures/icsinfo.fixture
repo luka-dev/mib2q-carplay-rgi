@@ -4,7 +4,7 @@
 # whose +8 / +9 (maxSfbLong / maxSfbShort) were set from the case line.
 #   ICS <idx> <maxSfbLong> <maxSfbShort> <codingType> <bufferHex|->
 #   R <idx> <rc> <windowSequence> <maxSfb> <numWindowGroups> <groupWord> <bitsUsed>
-# rc is the library's convention: 1 means ERROR.
+# rc is the original's convention: 1 means ERROR.
 ICS 0 49 14 0 0370
 R 0 0 0 3 1 1 8
 ICS 1 49 14 0 ae51b3

@@ -38,10 +38,10 @@ Run an independent CPU replay of the checkpoint, crop hashes, topology/budget an
 
 ## Reproduction and execution safety
 
-- [Geometry factory and loader](../../../tools/stereo-upmix-render/separator_band_geometry.py).
-- [Fixed TRAIN trainer](../../../tools/stereo-upmix-render/separator_band_probe.py).
-- [CPU auditor](../../../tools/stereo-upmix-render/audit_separator_band_result.py).
-- [Guarded PC runner](../../../tools/stereo-upmix-render/pc/run_separator_band_probe.ps1).
+- [Geometry factory and loader](RETIRED_TOOLS.md#tool-7b57389698f6).
+- [Fixed TRAIN trainer](RETIRED_TOOLS.md#tool-bb2d30e55239).
+- [CPU auditor](RETIRED_TOOLS.md#tool-4b3ded479434).
+- [Guarded PC runner](RETIRED_TOOLS.md#tool-f86dd26ff24a).
 
 Main output: `D:\upmix\runs\separator_redistributed_bands_fit_v1`. Smokes use separate original/redistributed output directories. Preserve all completed and failed artifacts. The runner refuses an existing output, pending rapid queue, Python work or rapid daemon, checks source hashes, and acquires one exclusive GPU lease. Only its own token is released. No packages, Track A files, unit deployment/restart or DSD Test audio are involved.
 

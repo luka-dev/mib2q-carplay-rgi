@@ -103,6 +103,8 @@ int open(const char *path, int flags, ...)
         errno = ENOSYS;
         return -1;
     }
+    if (path && strcmp(path,"/dev/urandom")==0 && getenv("MHI2Q_PHONE_QEMU_INTEGRATED"))
+        return real_open(getenv("MHI2Q_INTEGRATED_DAEMON_ITER") && !strcmp(getenv("MHI2Q_INTEGRATED_DAEMON_ITER"),"1")?"/proc/boot/integrated-entropy-next":"/proc/boot/integrated-entropy",O_RDONLY);
     if (path && (strcmp(path, "/dev/shmem/qemu_mfi") == 0 ||
                  (strcmp(path, "/dev/i2c8") == 0 && getenv("MHI2Q_STOCK_MFI_QEMU")))) {
         const char *fixture = getenv("MHI2Q_MFI_QEMU_FIXTURE");

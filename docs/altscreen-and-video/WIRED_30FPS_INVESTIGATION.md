@@ -1,34 +1,12 @@
 # Wired AltScreen 30 fps investigation
 
-_2026-10-21 · iOS sender code, saved HU logs, isolated QNX USB and native wired vphone experiments_
+> `<AUDI_WORKSPACE>` denotes the external firmware/RE working set, not a directory shipped with this repository. Source filenames, builds and evidence offsets below identify the required artifacts.
 
----
+_2026-10-21 · iOS sender code, saved HU logs, isolated QNX USB and native wired vphone experiments_
 
 The subsequent [complete Maps vehicle-profile analysis](MAPS_FRAME_RATE_PROFILE_MECHANISM.md)
 covers PPID parsing, asset matching and collisions, cache/notification lifecycle,
 the native reconnect reversal, VectorKit rate scaling and the iOS 27 query path.
-
-## 🧾 Current status and reading guide
-
-This report preserves the laboratory and reverse-engineering record. Later
-implementation and physical measurements have the following status:
-
-| Item | Status | Evidence |
-|---|---|---|
-| Maps-30 PPID hook | Deployed; always enabled when PPID is absent | [Production behavior](MAPS_30FPS_PROFILE.md) |
-| Physical AltScreen arrival | 29.64 FPS in the saved short session | [Performance report](WIRED_PERFORMANCE_2026-10-21.md) |
-| Concurrent workload | Both screens in motion; six-channel audio output | [Workload and CPU](WIRED_PERFORMANCE_2026-10-21.md#-simultaneous-workload) |
-| Original pre-patch PPID / effective phone profile | Not wire-captured / not read back | [Measurement limits](WIRED_PERFORMANCE_2026-10-21.md#-setup-activation-and-remaining-validation) |
-| Long-run stability / final panel FPS | Unverified | [Remaining validation](WIRED_PERFORMANCE_2026-10-21.md#-setup-activation-and-remaining-validation) |
-
-Statements about no HU deployment below refer to the specific laboratory
-experiments. Paths under `build/` and references marked as local research
-sources identify retained evidence or unpublished helpers.
-
-Read the [laboratory findings](#-findings),
-[receiver comparison](#%EF%B8%8F-real-primary-versus-altscreen-differential-follow-up),
-[Maps-rate controls](#-carplay-capabilities-control-reaches-approximately-30-fps)
-and [remaining validation plan](#-path-to-a-verified-30-fps-result).
 
 ## 📋 Findings
 
@@ -59,8 +37,8 @@ is a laboratory result from a temporary phone preference. A subsequent
 from our hook; neither experiment is a physical-vehicle measurement or a
 deployed hook fix.[^maps-capabilities]
 
-The initial problem report was that the **real primary screen was smooth
-while AltScreen was not**. This was the comparison investigated below. These laboratory captures
+The user reports that the **real primary screen is smooth while AltScreen is
+not**. Treat this as the comparison to explain. These laboratory captures
 do not demonstrate 30 distinct moving primary map pictures, and their
 source counters must not be generalized to the physical phone. A shared USB
 link can still have a per-stream receive/sink bottleneck. Low AltScreen sender
@@ -73,8 +51,7 @@ records before/after readback plus the accepted socket's actual receive-buffer
 size. This is a scheduling-parity correction, **not a verified 30-fps fix**.
 The next candidate also drains available bytes before polling and reads the
 phone's opcode-5 numeric submission/drop counters in diagnostic mode. Both
-helpers passed in an isolated QNX runtime. Their effect on physical-HU FPS
-remains unmeasured: the later near-30-FPS run did not include these candidates.
+helpers pass in an isolated QNX runtime; physical-HU FPS remains unmeasured.
 
 The later passive vphone readback identifies the exact 720 × 271-point
 AltScreen canvas and its selected deferred camera requesting **15 fps**, while
@@ -84,7 +61,7 @@ the [effective-rate section](#-effective-maps-rate-in-the-running-vphone)
 separates it from encoded cadence and the subsequent target-rate control.
 
 ```mermaid
-flowchart TB
+flowchart LR
     accTitle: Independent CarPlay Frame Rate Gates
     accDescr: Scene submission, encoder policy and sink overflow are separate gates. Slow transport or receiver reads can fill the sender queue and cause pre-encode drops even when the encoder is configured for thirty frames per second.
 
@@ -332,12 +309,12 @@ backend. No stable-FPS claim follows from this timer experiment.
 
 ## 🖥️ Native wired follow-up
 
-The snapshot builder (`tests/carplay_lab/qnx/usb_highspeed_receiver.py`, local research source)
+The [snapshot builder](../../tests/carplay_lab/qnx/usb_highspeed_receiver.py)
 repackages the saved October 13 receiver image, freezing 878 manifest assets
 and the already compiled hook/probe. Only the startup clock and USB driver
 configuration select the corrected clock and EHCI `int_thresh=1`. This avoids
 mixing concurrent wireless source edits into the measurement. The
-native adapter (`tests/carplay_lab/vphone/wired_native.py`, local research source) uses its own
+[native adapter](../../tests/carplay_lab/vphone/wired_native.py) uses its own
 receiver directory and port 33503 for input; shared wireless port 32503 and
 its QEMU process are preserved. Native iAP2, MFi, Identification, availability
 and StartSession complete through the real CoreAccessories API.
@@ -420,8 +397,7 @@ controller rate and virtual rendering/compositor scheduling remain open.
 The current telemetry proves a source deficit, not its particular cause.
 
 A sixth run addresses the Maps **application-container plist** through an
-absolute-path domain. Icli's pinned preferences implementation[^icli-preferences]
-
+absolute-path domain. [Icli's pinned preferences implementation](https://github.com/owngoal-dev/icli/blob/217dc37e55ef44bf6a0739358f2486e660b05d40/Sources/IcliKit/Preferences.swift)
 accepts such paths and uses CFPreferences. Its successful RPC readback precedes
 the actual file flush: the first direct binary-plist read is stale, while a
 later read confirms `VKNavDisplayRate=2` before Maps is launched. This is why
@@ -444,11 +420,10 @@ key do not prove a particular controller's runtime scheduling.
 
 ### Workload control
 
-The ordinary `location.set` path in Icli's implementation[^icli-location]
-
+The ordinary `location.set` path in [Icli's implementation](https://github.com/owngoal-dev/icli/blob/217dc37e55ef44bf6a0739358f2486e660b05d40/Sources/IcliPrivate/Location.m)
 stops, clears and restarts simulation for each fix, then vphoned verifies its
 readback. Some measured RPCs take several seconds. The separate
-bounded native route helper (`tests/carplay_lab/vphone/location_route.c`, local research source)
+[bounded native route helper](../../tests/carplay_lab/vphone/location_route.c)
 queues 41 timestamped CLLocation points through the existing native
 `CLSimulationManager`, flushes once and starts once. Its native process exits
 successfully after returning to a stationary final point. Nine independent
@@ -577,7 +552,7 @@ In this ELF32 ARM LE image these `.text` VAs also equal file offsets:
 | `SetCurrentThreadPriority` `0x97e14`–`0x97e64` | Reads current parameters, replaces priority, calls `pthread_setschedparam` with policy 1 (QNX FIFO) |
 | Old `alt_setup` / `alt_thread_main` | `pthread_create(..., NULL, ...)`; no corresponding scheduling call |
 
-The candidate helper (`hook/altscreen/receiver_runtime.h`, local research source) applies the same
+The [candidate helper](../../hook/altscreen/receiver_runtime.h) applies the same
 existing stock override/default and helper to the AltScreen receiver itself.
 It retains the inherited setting if symbol resolution or the stock call fails,
 and reports the failure instead of asserting a successful change. No
@@ -593,7 +568,7 @@ Two bounded startup records are added to the ordinary hook log:
 ```
 
 `before=2/10` is demonstrated in the **separate QNX test**, not measured on the
-physical HU. The runtime probe (`tests/carplay_lab/qnx/alt_receiver_runtime.py`, local research source)
+physical HU. The [runtime probe](../../tests/carplay_lab/qnx/alt_receiver_runtime.py)
 loads the frozen fixture's libairplay and checks that all 84 bytes of its
 scheduling helper equal the physical firmware helper. The complete fixture has
 a different hash after laboratory preparation. Actual QNX results are:
@@ -629,7 +604,7 @@ The stock-binary socket audit rules out two speculative differences:
 
 The old AltScreen read loop called `poll` before **every** header/body portion,
 even when bytes were already buffered, and treated HUP as fatal before draining
-pending bytes. The new reader (`hook/altscreen/receiver_io.h`, local research source) attempts
+pending bytes. The [new reader](../../hook/altscreen/receiver_io.h) attempts
 `recv(MSG_DONTWAIT)` first and waits only after EAGAIN/EWOULDBLOCK, retaining
 the 60 ms cancellation tick. It reads final pending bytes before EOF and keeps
 record boundaries exact. This removes unnecessary readiness syscalls and a
@@ -641,7 +616,7 @@ throughput benchmark.
 Verbose/pace summaries now include `recv_calls`, `poll_calls`, `would_block`
 and `bytes` covering all stream records in that batch.
 
-The sender parser (`hook/altscreen/sender_telemetry.h`, local research source) reads plaintext
+The [sender parser](../../hook/altscreen/sender_telemetry.h) reads plaintext
 opcode 5 using the same library's CFLite. It retains the fourteen fields
 already reviewed in the PCAP reporter, notably `submitSurfaceFPS`,
 `beforeEncoderFPS`, `sinkOverflowDropFPS`, `encoderQueueDropFPS`,
@@ -662,21 +637,20 @@ reporting windows must not be interpreted as a continuous counter history.
 111 sender summary gen=... seen=... parsed=... invalid=... throttled=... available=...
 ```
 
-When numeric sender counters are available for a continuously moving scene,
-use the following checks. Missing counters leave the source/drop state unknown;
-low arrival cadence alone cannot select a cause.
+For a continuously moving scene, the next physical trace can distinguish:
 
 ```mermaid
-flowchart TB
-    accTitle: Sender Counters Guide Frame Rate Checks
-    accDescr: With measured per-stream counters available, surface submissions, sink overflow and encoder drops select the next investigation. Missing counters leave the source and drop state unknown.
-
-    surface_rate{"Surface submissions near 30?"} -->|No| inspect_maps["Inspect Maps render commits"]
-    surface_rate -->|Yes| sink_overflow{"Sink overflow present?"}
-    sink_overflow -->|Yes| inspect_delivery["Inspect TCP drain and scheduling"]
-    sink_overflow -->|No| encoder_drops{"Encoder drops present?"}
-    encoder_drops -->|Yes| inspect_encoder["Inspect encoder service"]
-    encoder_drops -->|No| compare_stages["Compare wire, decode and presentation"]
+flowchart TD
+    accTitle: Use Actual Sender Counters Before Selecting a Frame Rate Fix
+    accDescr: Per-stream surface submissions and drop counters select the next investigation. Missing telemetry remains unknown; low arrival alone never identifies the cause.
+    data{"Sender counters available?"} -->|No| unknown["Unknown source/drop state"]
+    data -->|Yes| submitted{"Surface submissions near 30?"}
+    submitted -->|No| scene["Inspect Maps cluster scene and render commits"]
+    submitted -->|Yes| overflow{"Sink overflow present?"}
+    overflow -->|Yes| drain["Inspect TCP drain, scheduling and delivery"]
+    overflow -->|No| encoded{"Encoder drops present?"}
+    encoded -->|Yes| encoder["Inspect encoder service"]
+    encoded -->|No| downstream["Compare encoded output, wire AUs, decode and presentation"]
 ```
 
 The QNX probe verifies that the fixture's complete `0x4c000`–`0x63000`
@@ -698,7 +672,7 @@ session change is performed.
 
 ### Compare the same time interval, including idle periods
 
-The paired reporter (`tests/carplay_lab/common/screen_pair_pacing.py`, local research source)
+The [paired reporter](../../tests/carplay_lab/common/screen_pair_pacing.py)
 measures ports 6030 and 6031 in one explicit window with five-second bins,
 retaining sender counters and TCP evidence separately. It rejects a capture
 that does not cover the whole window. Missing counters are null; it never
@@ -745,7 +719,7 @@ Maps policy choice in this laboratory scene. It does not establish the full
 cause of every missing encoded frame or the policy on the physical phone.
 Sustained 30 fresh map pictures remains unverified.[^maps-runtime]
 
-The new passive native probe (`tests/carplay_lab/vphone/maps_rate_probe.c`, local research source)
+The new [passive native probe](../../tests/carplay_lab/vphone/maps_rate_probe.c)
 uses the existing Maps PID and the exact guest's Objective-C class/ivar metadata.
 It reads resident private writable pages within a bounded scan, then follows
 identity-checked MapView → canvas → camera links. It does not suspend Maps,
@@ -862,11 +836,11 @@ to 30 in two live snapshots. The 400 × 240 primary canvas remains at 15.
 No target-process memory write or injected Maps code is used.[^maps-capabilities]
 
 ```mermaid
-flowchart TB
+flowchart LR
     accTitle: Maps Target Rate Configuration
     accDescr: The measured map target comes from the phone vehicle profile. The receiver maximum frame rate remains a separate encoder limit.
 
-    profile["Vehicle profile<br/>mapsRefreshRate = 30"] --> fetch["CRFetchCarPlayCapabilities"]
+    profile["Phone vehicle profile<br/>userInfo.mapsRefreshRate = 30"] --> fetch["CRFetchCarPlayCapabilities"]
     fetch --> task["Maps CarTargetFpsAuxiliaryTask"]
     task --> setter["VKMapView setCarTargetFps"]
     setter --> camera["AltScreen map request: 30"]
@@ -1013,16 +987,14 @@ not a demonstrated way to write the profile value.
 
 The existing hook already intercepts `NmeIAP2Message::Encode` and invokes
 module `on_identify` callbacks for outgoing `0x1d01`; `hook_identify_grow`
-provides checked NmeArray growth. The later always-enabled
-[production hook](MAPS_30FPS_PROFILE.md) uses this seam. Changing an accessory PPID selects a
+provides checked NmeArray growth. This is the concrete integration seam for
+an explicitly enabled physical test. Changing an accessory PPID selects a
 vehicle profile; it is not a generic protocol command for arbitrary
 `features.userInfo`. The exact profile comes from a phone MobileAsset and can
-vary by installed version. The laboratory experiments described here did not
-deploy a production identity change. The subsequent physical run confirmed
-PPID addition in the hook log and near-30 arrival; it did not read back the
-phone's selected profile or verify the iOS 27 path end to end.
+vary by installed version. No production default identity replacement is made.
+Physical iPhone/HU behavior and the iOS 27 end-to-end path remain unmeasured.
 
-The profile helper (`tests/carplay_lab/vphone/car_capabilities.py`, local research source)
+The [profile helper](../../tests/carplay_lab/vphone/car_capabilities.py)
 prepares and restores only the owned profile's Maps-rate key, and now also
 provides the tested bounded IdentificationInfo transformation. Seven tests
 cover restoration, unrelated/concurrent writes, preserved TLVs, idempotence,
@@ -1082,22 +1054,18 @@ have fresh moving-location readbacks. Five full motion captures and one partial
 navigation window are reported with their limitations above. Strict independent
 H.264 decoding is verified for the first bitrate run and the later short GOPs
 from the Maps-rate and PPID controls, with sample scope stated separately.
-These laboratory runs performed no HU deployment. See the linked physical
-performance report for the subsequent deployment and measured arrival rate.
-Empty live log queries are not treated as FPS or thermal evidence.
+No HU deployment is
+performed. Empty live log queries are not treated as FPS or thermal evidence.
 
 [^inputs]: VectorKit 27 SHA-256 `4d41d660c8ccc1a93d1ffeff0ba9b2be3b99e0369d2f92f88fe348d9882cb848`; targeted disassembly and config metadata under `build/wired-altscreen-30fps-re/vector27/`. Local input paths and SHA-256 fingerprints: `build/wired-altscreen-30fps-re/inputs.json`. AirPlaySender 27 SHA-256 `379fb232ff228287d3b11d1253b1b942e6c50dd633d150cfab6acb9d063bead1`; 26.6 `952d73f8e97d4697490f69bdf08067df6ccff29f5b44c60489eb117db015d832`.
-[^sender]: Saved decompilation/disassembly under `build/wired-altscreen-30fps-re/ios27/` and `ios266/`, VA/file mappings in `symbol-offsets.json`; `create.asm` is used for the large creation function because the MCP pseudocode response was truncated. See also [sender-policy history](ALTSCREEN_FRAME_RATE.md#-the-phones-sender-policy-ios-266--270-binaries).
+[^sender]: Saved decompilation/disassembly under `build/wired-altscreen-30fps-re/ios27/` and `ios266/`, VA/file mappings in `symbol-offsets.json`; `create.asm` is used for the large creation function because the MCP pseudocode response was truncated. See also [sender-policy history](ALTSCREEN_FRAME_RATE.md#phone-sender-policy).
 [^processor]: `build/wired-altscreen-30fps-re/ios27/processor-drop.c` and `processor-rate.c`; 26.1 `MediaToolbox_52.mm:3455` and `MediaToolbox_125.mm:1317` in the supplied restore text tree. MediaToolbox 27 SHA-256 `0213a91f451f319fb243a217d48c22d6408d257e6240cc3396132d5b07990c6e`.
 [^hu]: `logs/trace/2026-10-15_night_test/`: sender gaps weighted mean 53.415 ms (18.72 intervals/s), socket arrivals 53.389 ms (18.73 intervals/s), 3298 intervals across 11 full windows; full-present mean 8.679 ms over 3300 presentations. Hook windows have received=forwarded and attempted=sent. The raw NCM generation evidence is in `carplay_hook.log`; these counts do not prove the exact live phone policy branch.
 [^telemetry]: Reprocessed original PCAP: `build/wired-altscreen-30fps-re/usb-reviewed-6030-pacing.json` and `usb-reviewed-6031-pacing.json`. The quoted cluster record has capture time `1791943358248.105` ms; the original input is `build/vphone-lab/queues-usb-reviewed-ethernet.pcap`.
 [^analyzer]: [Wire reporter](../../tests/carplay_lab/common/screen_wire_pacing.py), [focused tests](../../tests/carplay_lab/legacy_ios/test_screen_wire_pacing.py). `telemetry` remains a list of numeric dictionaries; `telemetry_samples` adds capture times. No secret or video decryption is required.
 [^hook]: [Hook receiver](../../hook/altscreen/altscreen_hook.c), [frame-rate history and constraints](ALTSCREEN_FRAME_RATE.md), [video pipeline](VIDEO_PIPELINE.md).
-[^maps-runtime]: Artifacts under `build/wired-altscreen-30fps-re/vphone-source-policy/`: `verified-source-policy.json`; `live-canvas/maps-probe/probe-result.json` and `full.log`; `live-canvas/motion-6030.json`, `motion-6031.json` and `journal.json`. Earlier cases retain the same files in their respective directories. Probe driver (`tests/carplay_lab/vphone/maps_rate_probe.py`, local research source). Native guest iOS 26.6.2 / 23G90; extracted comparison VectorKit 26.6 / 23G71 SHA-256 `b16a0e0a2b223fdadf09fdc4fbc6f26ef8e53ba58ba005451f663d00c4289860`; final native C source SHA-256 `998e09264a23d751d8d41a8326f232947734b52b694992e7024cbfb04503ff46`. The helper-local control uses an allocated control object; its default zero is not the live Maps debug setting.
+[^maps-runtime]: Artifacts under `build/wired-altscreen-30fps-re/vphone-source-policy/`: `verified-source-policy.json`; `live-canvas/maps-probe/probe-result.json` and `full.log`; `live-canvas/motion-6030.json`, `motion-6031.json` and `journal.json`. Earlier cases retain the same files in their respective directories. Probe [driver](../../tests/carplay_lab/vphone/maps_rate_probe.py). Native guest iOS 26.6.2 / 23G90; extracted comparison VectorKit 26.6 / 23G71 SHA-256 `b16a0e0a2b223fdadf09fdc4fbc6f26ef8e53ba58ba005451f663d00c4289860`; final native C source SHA-256 `998e09264a23d751d8d41a8326f232947734b52b694992e7024cbfb04503ff46`. The helper-local control uses an allocated control object; its default zero is not the live Maps debug setting.
 [^maps-capabilities]: Artifacts under `build/wired-altscreen-30fps-re/hook-fps-policy/`: `source-chain.json`, `maps-cap-read.asm`, `maps-apply-target.asm`, `CarKit-config-init.asm`, `CarKit-profile-storage.asm`, `CarKit27-config-init.asm`; `capabilities30/{summary.json,journal.json,motion-6030.json,motion-6031.json,maps-probe/full.log}`; `capabilities30-gop/{summary.json,decode-result.json}`; `phone-CarPlayCapabilities.json`, `phone-asset-summary.json`, `ppid-source-excerpts.txt`, `ppid-source-record.json`; `ppid34-only/{journal.json,summary.json,motion-6031.json,decode-result.json,identification-helper-parity.json,maps-probe/full.log}`. Static Maps input is `Refferences/ios266_extract/maps_rootfs/23G71__iPhone18,2/private/var/staged_system_apps/Maps.app/Maps`; runtime is the owned native iOS 26.6.2 / 23G90 vphone. The helper-local memory probe remains passive; preference changes are journaled separately by the case runner.
-[^probe]: Standalone sink (`tests/carplay_lab/qnx/usb_throughput_probe.c`, local research source), build/run script (`tests/carplay_lab/qnx/usb_throughput_probe.py`, local research source); artifacts under `build/wired-altscreen-30fps-re/usb-throughput/`, including `result.json`, `status.json`, `probe.build` and serial/QEMU logs.
-[^qemu]: `/Users/luka/Desktop/AUDI_2/Tools/qemu-src/hw/usb/dev-network.c:179`, `:257`, `:307`, `:1026`, `:1295`; isolated driver disassembly `build/wired-altscreen-30fps-re/ecmplus-rx.asm`. Shared QEMU SHA-256 at measurement: `7866ac5f4c628263a4840e8bf9eb82b1ca4dcddc09c294ebfcb879e93303e2b9`.
-[^highspeed]: Copied-source builder (`tests/carplay_lab/qnx/usb_highspeed_build.py`, local research source); `build/wired-altscreen-30fps-re/qemu-highspeed/` and `qemu-highspeed-exynos/` contain diffs, fingerprints and build commands. Guest status/logs are in the respective `usb-highspeed*-throughput/` directories.
-
-[^icli-preferences]: Icli, `Sources/IcliKit/Preferences.swift`, pinned commit `217dc37e55ef44bf6a0739358f2486e660b05d40`. https://github.com/owngoal-dev/icli/blob/217dc37e55ef44bf6a0739358f2486e660b05d40/Sources/IcliKit/Preferences.swift
-[^icli-location]: Icli, `Sources/IcliPrivate/Location.m`, same pinned commit. https://github.com/owngoal-dev/icli/blob/217dc37e55ef44bf6a0739358f2486e660b05d40/Sources/IcliPrivate/Location.m
+[^probe]: [Standalone sink](../../tests/carplay_lab/qnx/usb_throughput_probe.c), [build/run script](../../tests/carplay_lab/qnx/usb_throughput_probe.py); artifacts under `build/wired-altscreen-30fps-re/usb-throughput/`, including `result.json`, `status.json`, `probe.build` and serial/QEMU logs.
+[^qemu]: `<AUDI_WORKSPACE>/Tools/qemu-src/hw/usb/dev-network.c:179`, `:257`, `:307`, `:1026`, `:1295`; isolated driver disassembly `build/wired-altscreen-30fps-re/ecmplus-rx.asm`. Shared QEMU SHA-256 at measurement: `7866ac5f4c628263a4840e8bf9eb82b1ca4dcddc09c294ebfcb879e93303e2b9`.
+[^highspeed]: [Copied-source builder](../../tests/carplay_lab/qnx/usb_highspeed_build.py); `build/wired-altscreen-30fps-re/qemu-highspeed/` and `qemu-highspeed-exynos/` contain diffs, fingerprints and build commands. Guest status/logs are in the respective `usb-highspeed*-throughput/` directories.

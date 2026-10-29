@@ -17,6 +17,15 @@ else:
 
 LIMIT = 64*1024*1024
 
+# Encoder configuration, scene submissions, idle repeats and drops are separate
+# measurements. Keep the native counters instead of reducing them to max FPS.
+TELEMETRY_FIELDS = (
+    "sentFramesAvg", "queuedFramesAvg", "encoderCurrentFPS", "rttAvg",
+    "txUsageAvg", "txCapacityAvg", "lossAvg", "submitSurfaceFPS",
+    "beforeEncoderFPS", "sinkOverflowDropFPS", "encoderDropFPS",
+    "encoderQueueDropFPS", "idleEncoderFPS", "idleDropFPS",
+)
+
 
 def packets(data: bytes):
     if len(data) < 24 or len(data) > LIMIT:
@@ -75,7 +84,8 @@ def tcp(frame: bytes):
     return (src, dst, sport, dport), seq, segment[13], segment[header:]
 
 
-def report(data: bytes, port: int = 6030, window: tuple[float, float] | None = None) -> dict:
+def report(data: bytes, port: int = 6030, window: tuple[float, float] | None = None,
+           *, include_samples: bool = False) -> dict:
     if not 1 <= port <= 65535:
         raise ValueError("invalid receiver screen port")
     if window is not None and (len(window) != 2 or any(not math.isfinite(v) for v in window) or window[0] >= window[1]):
@@ -152,7 +162,7 @@ def report(data: bytes, port: int = 6030, window: tuple[float, float] | None = N
         contiguous = present.find(0)
         if contiguous == -1:
             contiguous = maximum
-        at, pictures, sender, opcodes, telemetry, delivered = 0, [], [], {}, [], 0
+        at, pictures, sender, opcodes, telemetry_samples, delivered = 0, [], [], {}, [], 0
         while contiguous-at >= 128:
             if sum(opcodes.values()) >= 8192:
                 raise ValueError("too many screen headers")
@@ -176,15 +186,18 @@ def report(data: bytes, port: int = 6030, window: tuple[float, float] | None = N
                 try:
                     value = plistlib.loads(bytes(stream[at+128:end]))
                     if isinstance(value, dict):
-                        telemetry.append({name: value[name] for name in
-                            ("sentFramesAvg", "queuedFramesAvg", "encoderCurrentFPS", "rttAvg", "txUsageAvg", "txCapacityAvg", "lossAvg")
-                            if name in value and type(value[name]) in (int, float)})
+                        metrics = {name: value[name] for name in TELEMETRY_FIELDS
+                                   if name in value and type(value[name]) in (int, float)
+                                   and math.isfinite(value[name])}
+                        telemetry_samples.append({"capture_ms": delivered, "metrics": metrics})
                 except (ValueError, plistlib.InvalidFileException):
                     pass
             at = end
         if window is not None:
             chosen = [(a,s) for a,s in zip(pictures,sender) if window[0] <= a <= window[1]]
             pictures, sender = ([a for a,_ in chosen], [s for _,s in chosen])
+            telemetry_samples = [sample for sample in telemetry_samples
+                                 if window[0] <= sample["capture_ms"] <= window[1]]
         sender_valid = bool(sender) and all(sender) and all(b >= a for a, b in zip(sender, sender[1:]))
         sender_ms = [(v-sender[0])*1000/(1 << 32) for v in sender] if sender_valid else []
         gaps = []
@@ -207,12 +220,16 @@ def report(data: bytes, port: int = 6030, window: tuple[float, float] | None = N
                         "unparsed_contiguous_bytes": contiguous-at,
                         "unparsed_first_capture_ms": arrival_times[first_arrival[at]-1] if contiguous > at else None,
                         "bytes_after_sequence_gap": maximum-contiguous,
-                        "telemetry": telemetry})
+                        "telemetry": [sample["metrics"] for sample in telemetry_samples],
+                        "telemetry_samples": telemetry_samples})
+        if include_samples:
+            results[-1]["access_unit_capture_ms"] = pictures
     return {"connections": results, "capture_window_ms": window, "clock": "companion PCAP capture clock",
             "limitations": ["no cryptographic keys or decrypted video used",
                 "TCP repeats and capture gaps do not establish network packet loss",
                 "receiver window values are unscaled TCP header values; RST is not a zero-window advertisement",
                 "sender timestamps are presentation targets, not render or encoder completion times",
+                "telemetry counters are native reporting windows, not per-frame completion or unique-picture counts; capture_ms is receipt time",
                 "transit deltas compare clock intervals; absolute latency and clock offset unknown",
                 "NCM Ethernet is not a 2.4 GHz RF measurement",
                 "IPv6 extension headers and fragmented IPv4 are not parsed"]}

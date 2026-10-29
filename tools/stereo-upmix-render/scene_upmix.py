@@ -71,7 +71,7 @@ class SceneConfig:
     same_sign_below_hz: float = 550.0 # ambient pair in phase below this (no low-mid hole)
     side_lp_hz: float = 7000.0        # side layer rolled off above 7 kHz (DEV40 08.10: drums .17 -> .13, nothing else moves; the air layer keeps the treble behind); 0 = full band
     decorrelate_ambient: bool = True  # static per-bin phase table, different for Ls and Rs
-    rear_delay_ms: float = 0.0        # signed: + delays the rear, - delays the front (rear-lead). Variant J (09.10): 0, the J525 rear doors trail the front ~5.2 ms by themselves and our rear meets the amp's front bleed in phase at the doors
+    rear_delay_ms: float = 0.0        # signed: + delays the rear, - delays the front (rear-lead). Variant J (09.10): 0, the J525 rear bus is ~11.8 ms late by itself and our rear meets the amp's front bleed in phase at the doors
     bleed_cancel: float = 0.0         # J525 bank-1: the rear-door bus = 0.707*L + 2.0*Ls; Ls -= coef*L cancels the amp's front bleed (0.355 doors, 0.251 effect bus); 0 = off, needs the cabin tone probe for the tap offset
     bleed_cancel_offset_ms: float = 0.0
     front_keep_db: float = 0.0        # front anchor: the most the transfers may take from the front, dB over ~1 s (sparse wide mixes); 0 = off
@@ -631,20 +631,27 @@ def _engine(cfg, F, G, group, freqs, duck_mask=None, inst_mask=None, prot_mask=N
             corr = (envLR - envL * envR) / (np.sqrt(np.maximum(envLL - envL ** 2, 0) * np.maximum(envRR - envR ** 2, 0)) + 1e-12)
             coh = PS / (PS + PN + 1e-12)
             wide = smoothstep(corr, 0.5, 0.8) * (1.0 - smoothstep(coh, 0.35, 0.6)) * (1.0 - smoothstep(np.abs(p_slow), 0.2, 0.4))
-            wg = cfg.wide_pair_alpha * wide[group] * hp * cold_gain * (1.0 - D)
+            w_prot = (1.0 - d_prot) if prot_on else (1.0 - D)
+            wg = cfg.wide_pair_alpha * wide[group] * hp * cold_gain * w_prot
             gr = np.sqrt(np.maximum(1.0 - (1.0 - wg) ** 2, 0.0))
-            rearL += gr * L; rearR += gr * R
-            subL += wg * L; subR += wg * R
+            remL = L - subL; remR = R - subR
+            rearL += gr * remL; rearR += gr * remR
+            subL += wg * remL; subR += wg * remR
+        if cfg.bleed_cancel > 0 and round(cfg.bleed_cancel_offset_ms * SR / 1000.0) <= 0:
+            rearL -= cfg.bleed_cancel * hp * (L - subL)
+            rearR -= cfg.bleed_cancel * hp * (R - subR)
         st["p"] = p; st["PN"] = PN; st["PS"] = PS; st["w"] = w
         st["w_fast"] = np.bincount(group, weights=w_fast_bin, minlength=G) / np.maximum(np.bincount(group, minlength=G), 1); st["w_member"] = w_member
         if cfg.front_keep_db > 0:
             # front anchor: the front is X - a S (S = the subtraction at full transfer); its 1 s energy
-            # Ex - 2a Rxs + a^2 Es must stay >= keep Ex; a = the smaller root, followed 0.3 s down / 2 s back
+            # Ex - 2a Rxs + a^2 Es in the active transfer band (hp_hz..6000 Hz) must stay >= keep Ex
             keep = 10.0 ** (-cfg.front_keep_db / 10.0)
             inv = 1.0 / max(cold_gain, 1e-3)
-            sL_full = subL * inv; sR_full = subR * inv
-            anc_ex += a_anc_meas * (float(np.sum(np.abs(L) ** 2 + np.abs(R) ** 2)) - anc_ex)
-            anc_rxs += a_anc_meas * (float(np.sum((np.conj(L) * sL_full).real + (np.conj(R) * sR_full).real)) - anc_rxs)
+            mid = (freqs >= cfg.hp_hz) & (freqs <= 6000.0)
+            sL_full = subL[mid] * inv; sR_full = subR[mid] * inv
+            Lm = L[mid]; Rm = R[mid]
+            anc_ex += a_anc_meas * (float(np.sum(np.abs(Lm) ** 2 + np.abs(Rm) ** 2)) - anc_ex)
+            anc_rxs += a_anc_meas * (float(np.sum((np.conj(Lm) * sL_full).real + (np.conj(Rm) * sR_full).real)) - anc_rxs)
             anc_es += a_anc_meas * (float(np.sum(np.abs(sL_full) ** 2 + np.abs(sR_full) ** 2)) - anc_es)
             disc = anc_rxs * anc_rxs - anc_es * (1.0 - keep) * anc_ex
             a_max = 1.0 if anc_es <= 1e-12 or disc < 0 else (anc_rxs - np.sqrt(disc)) / anc_es
@@ -687,7 +694,7 @@ def render(x, cfg=SceneConfig(), duck_mask=None, dump=None, inst_mask=None, prot
             rL = np.concatenate([np.zeros(d), rL[:-d]]); rR = np.concatenate([np.zeros(d), rR[:-d]])
         else:
             fL = np.concatenate([np.zeros(d), fL[:-d]]); fR = np.concatenate([np.zeros(d), fR[:-d]])
-    if cfg.bleed_cancel > 0:                         # cancel the amp's own front->rear bleed with what we send on Ls/Rs
+    if cfg.bleed_cancel > 0 and round(cfg.bleed_cancel_offset_ms * SR / 1000.0) > 0:
         o = int(round(cfg.bleed_cancel_offset_ms * SR / 1000.0))
         cL = np.concatenate([np.zeros(o), fL[:n - o]]) if o > 0 else fL
         cR = np.concatenate([np.zeros(o), fR[:n - o]]) if o > 0 else fR
@@ -793,7 +800,7 @@ class SceneStream:
                     rear = self._delay(rear)
                 elif self.delay_front:
                     front = self._delay(front)
-                if self.cfg.bleed_cancel > 0:
+                if self.cfg.bleed_cancel > 0 and round(self.cfg.bleed_cancel_offset_ms * SR / 1000.0) > 0:
                     rear = rear - self.cfg.bleed_cancel * self._bleed_delay(front)
                 z = np.zeros((len(front), 1))
                 outs.append(np.concatenate([front, z, z, rear], axis=1))

@@ -1,0 +1,118 @@
+{
+  "status": "pass",
+  "binary_sha256": "47a370bc30ca1b038fa5baee1c3eb6f3ef567788a70f57aed3957e98a35a1f05",
+  "cases": [
+    {
+      "base": "0x0",
+      "case": "first_free_gate_and_100_requests_one_native_callback"
+    },
+    {
+      "base": "0x0",
+      "case": "captured_detach_rebind_same_owner_old_cookie_discarded"
+    },
+    {
+      "base": "0x0",
+      "case": "owner_cleanup_and_new_attach_generation"
+    },
+    {
+      "base": "0x0",
+      "case": "fail_malloc_then_next_request_wakes"
+    },
+    {
+      "base": "0x0",
+      "case": "fail_pulse_then_next_request_wakes"
+    },
+    {
+      "base": "0x0",
+      "case": "busy_wl_lock_gate_and_request_take_stock_path"
+    },
+    {
+      "base": "0x2000000",
+      "case": "first_free_gate_and_100_requests_one_native_callback"
+    },
+    {
+      "base": "0x2000000",
+      "case": "captured_detach_rebind_same_owner_old_cookie_discarded"
+    },
+    {
+      "base": "0x2000000",
+      "case": "owner_cleanup_and_new_attach_generation"
+    },
+    {
+      "base": "0x2000000",
+      "case": "fail_malloc_then_next_request_wakes"
+    },
+    {
+      "base": "0x2000000",
+      "case": "fail_pulse_then_next_request_wakes"
+    },
+    {
+      "base": "0x2000000",
+      "case": "busy_wl_lock_gate_and_request_take_stock_path"
+    },
+    {
+      "base": "0x4100000",
+      "case": "first_free_gate_and_100_requests_one_native_callback"
+    },
+    {
+      "base": "0x4100000",
+      "case": "captured_detach_rebind_same_owner_old_cookie_discarded"
+    },
+    {
+      "base": "0x4100000",
+      "case": "owner_cleanup_and_new_attach_generation"
+    },
+    {
+      "base": "0x4100000",
+      "case": "fail_malloc_then_next_request_wakes"
+    },
+    {
+      "base": "0x4100000",
+      "case": "fail_pulse_then_next_request_wakes"
+    },
+    {
+      "base": "0x4100000",
+      "case": "busy_wl_lock_gate_and_request_take_stock_path"
+    },
+    {
+      "base": "0x0",
+      "case": "exhausted_attach_pool_same_owner_uses_original_callback"
+    },
+    {
+      "base": "0x0",
+      "case": "sparse_declared_prefix_newest_owner_and_retirement"
+    },
+    {
+      "base": "0x0",
+      "case": "real_attach_highwater_rebind_uses_new_generation"
+    },
+    {
+      "base": "0x0",
+      "case": "recursive_followup_allocates_before_old_cookie_release"
+    },
+    {
+      "base": "0x0",
+      "case": "occupied_and_one_past_cookie_hint_find_arbitrary_free_hole"
+    },
+    {
+      "base": "0x0",
+      "case": "fail_malloc_cookie_exhaustion_preserves_native_wakes"
+    },
+    {
+      "base": "0x0",
+      "case": "fail_pulse_cookie_exhaustion_preserves_native_wakes"
+    },
+    {
+      "base": "0x0",
+      "case": "last_serial_drains_then_stock_gate_without_wrap"
+    },
+    {
+      "base": "0x2000000",
+      "case": "last_serial_drains_then_stock_gate_without_wrap"
+    },
+    {
+      "base": "0x4100000",
+      "case": "last_serial_drains_then_stock_gate_without_wrap"
+    }
+  ]
+}

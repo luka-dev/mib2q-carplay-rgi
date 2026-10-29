@@ -13,7 +13,17 @@ REPO = Path(__file__).resolve().parents[2]
 SOURCE = REPO / "deploy/smartphone_integrator/carplay_startup.sh"
 OUT = Path(__file__).resolve().parent / "out/carplay_startup.wireless.offline.sh"
 HANDOFF_OUT = Path(__file__).resolve().parent / "out/carplay_startup.handoff.offline.sh"
-EXPECTED_SHA = "90d9e65bc97c8a835c4aa85f785271702bfe7f09d292ab45001ea453b78f87a2"
+# Re-reviewed against 8131a534: only vehicle-data/audio policy changed;
+# all owner/NCM/monitor/preload/exec seams below remain byte-identical.
+# The reversible transform must preserve that current policy verbatim.
+EXPECTED_SHA = "d5a9493556aa3c6bb2d14ed1e12a809fe41f7d721a84ae7d84e3b6b65ed2547e"
+# Captured October 17 HU: differs from SOURCE only in mask-worker comments.
+# No executable shell statement differs; preserve those live bytes as well.
+# 23cb8b0b: reviewed against 8a1f6369: decoder/amp comments and the
+# AUDIO_SCENE_FRONT_KEEP_DB policy only; every transformed seam is identical.
+REVIEWED_SHAS = {EXPECTED_SHA, "95a94cc9af658afc391195c6ba157907819ab8daf9553df2be3b27f431467362",
+                 "23cb8b0ba24576c0187011473ed2c09aabf0a3083db633046ac32a6cd153efc4",
+                 "44f5593ed1a53e66de68e582f37b461830b7cc3caa2e198cad5702b2e93c06e9"}
 CHECK = '''[ -r "$H/libcarplay_hook.so" ] || {
     echo "[startup] missing $H/libcarplay_hook.so" >> "$WLOG"
     exit 127
@@ -25,7 +35,21 @@ BRIDGE_CHECK = '''[ -r "$H/libdio_receiver_bridge.so" ] || {
 }
 '''
 OLD_PRELOAD = 'export LD_PRELOAD="$H/libcarplay_hook.so"'
-NEW_PRELOAD = 'export LD_PRELOAD="$H/libcarplay_hook.so:$H/libdio_receiver_bridge.so"'
+NEW_PRELOAD = '''if [ "${MHI2Q_DIO_OWNER_MODE:-}" = wireless ]; then
+    CP_ENV=${MHI2Q_CP_ENV_FILE:-${MHI2Q_CP_CONFIG:-$H/wireless_carplay.env}}
+    [ -r "$CP_ENV" ] || startup_fail
+    . "$CP_ENV" || startup_fail
+    export MHI2Q_DIO_OWNER_MODE=wireless
+    if [ -n "${MHI2Q_CP_SI_EPOCH:-}" ]; then
+        export MHI2Q_CP_MDNS_MANAGED=1
+        export MHI2Q_CP_MDNS_BINARY=${MHI2Q_CP_MDNS_BINARY:-/mnt/app/armle/usr/sbin/mdnsd}
+    fi
+    WIRELESS_HOOK=${MHI2Q_CP_WIRELESS_HOOK:-$H/libcarplay_hook.so}
+    [ -r "$WIRELESS_HOOK" ] || startup_fail
+    export LD_PRELOAD="$WIRELESS_HOOK:$H/libdio_receiver_bridge.so"
+else
+    export LD_PRELOAD="$H/libcarplay_hook.so"
+fi'''
 OWNER_ANCHOR = 'WLOG=${WLOG:-/tmp/carplay_wrapper.log}\n'
 QUIESCE_EXPORT = 'export MHI2Q_REQUIRE_BRIDGE_QUIESCE=1\n'
 STOCK210_EXPORT = '''# Native owner publication needs filesystem rename; QNX RAM /tmp lacks it.
@@ -40,7 +64,9 @@ if [ "${MHI2Q_DIO_OWNER_CLAIMED:-0}" != 1 ]; then
         exit 127
     }
     export MHI2Q_DIO_PUBLISH_OWNER=1
-    exec "$H/dio_owner_exec" wired "$H/carplay_startup.sh" "$@"
+    OWNER_MODE=${MHI2Q_DIO_OWNER_MODE:-wired}
+    case "$OWNER_MODE" in wired|wireless) ;; *) exit 78 ;; esac
+    exec "$H/dio_owner_exec" "$OWNER_MODE" "$H/carplay_startup.sh" "$@"
 fi
 '''
 OWNER_SOURCE = '''OWNER_STAGE=${OWNER_FILE}.${DIO_PID}
@@ -74,13 +100,16 @@ fi
 MONITOR_SOURCE = '''LD_PRELOAD= "$H/carplay_monitor.sh" "$DIO_PID" </dev/null >>"$WLOG" 2>&1 &
 MONITOR_PID=$!
 '''
-MONITOR_WIRELESS_GUARD = '''if [ "${MHI2Q_DIO_OWNER_MODE:-}" != wireless ]; then
+MONITOR_WIRELESS_GUARD = '''if [ "${MHI2Q_DIO_OWNER_MODE:-}" != wireless ] || [ -n "${MHI2Q_CP_SI_EPOCH:-}" ]; then
     LD_PRELOAD= "$H/carplay_monitor.sh" "$DIO_PID" </dev/null >>"$WLOG" 2>&1 &
     MONITOR_PID=$!
 fi
 '''
 EXEC_DIO = 'exec "$DIODIR/dio_manager" "$@"'
 EXEC_DIO_WITH_AIRPLAY = '''# Resolve dio_manager's libairplay.so from the installed MU1316 app image.
+if [ "${MHI2Q_DIO_OWNER_MODE:-}" = wireless ] && [ -n "${MHI2Q_CP_WIRELESS_APAC:-}" ]; then
+    export AUDIO_SPATIAL_CODEC_LIB="$MHI2Q_CP_WIRELESS_APAC"
+fi
 export LD_LIBRARY_PATH=/mnt/app/eso/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
 exec "$DIODIR/dio_manager" "$@"'''
 
@@ -89,11 +118,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--property-handoff", action="store_true")
     parser.add_argument("--stock210", action="store_true")
+    parser.add_argument("--source", type=Path, default=SOURCE,
+                        help="captured wired wrapper; only explicitly reviewed hashes accepted")
     args = parser.parse_args()
     if args.stock210 and not args.property_handoff:
         parser.error("--stock210 requires --property-handoff")
-    raw = SOURCE.read_bytes()
-    if sha256(raw).hexdigest() != EXPECTED_SHA:
+    raw = args.source.read_bytes()
+    if sha256(raw).hexdigest() not in REVIEWED_SHAS:
         raise RuntimeError("current wired CarPlay wrapper differs from reviewed source")
     source = raw.decode()
     if (source.count(CHECK) != 1 or source.count(OLD_PRELOAD) != 1 or

@@ -4,7 +4,7 @@
 Written to stdout.  Fixed seed: a fixture whose cases moved on every run would
 make every regeneration an unreadable diff.
 
-Six families, so that every branch of the library is reached:
+Six families, so that every branch of the original is reached:
   A  long blocks, 5-bit runs, random scalefactor payload
   B  short blocks, 3-bit runs, EXPLICITLY ENCODED book-0 deltas - the only way
      to keep a multi-group case in sync, since a random payload consumes an

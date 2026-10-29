@@ -445,6 +445,12 @@ static size_t veh_on_identify(hook_context_t* ctx, uint8_t* buf, size_t len, siz
 
 static void veh_on_state(hook_context_t* ctx, int event, void* data) {
     (void)ctx; (void)data;
+    if(event==HOOK_EVENT_RESYNC) {
+        uint8_t status[32];size_t size;
+        pthread_mutex_lock(&veh_lock);veh_sent_any=false;
+        size=status_due_locked(veh_now_ms(),status,sizeof(status));pthread_mutex_unlock(&veh_lock);
+        send_status(status,size);return;
+    }
     if (event != HOOK_EVENT_IDENTIFY_START && event != HOOK_EVENT_DISCONNECT) return;
     pthread_mutex_lock(&veh_lock);
     veh_want = 0;

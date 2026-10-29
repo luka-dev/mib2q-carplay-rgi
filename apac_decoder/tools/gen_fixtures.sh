@@ -102,7 +102,7 @@ echo "running the bit reader against the library"
 {
     echo "# apac_decoder/tests/fixtures/bitreader.fixture"
     echo "# GENERATED - do not edit.  Regenerate with tools/gen_fixtures.sh (needs Docker)."
-    echo "# Every R line is what Pioneer's TBitstreamReader<unsigned>"
+    echo "# Every R line is what Pioneer's copy of Apple's TBitstreamReader<unsigned>"
     echo "# actually returned, and what its 24 bytes of state actually held afterwards."
     echo "#   CASE <idx> <align> <bufferHex|-> <op,op,...>"
     echo "#   R <opIdx> <op> <ret> <curOffsetFromBufferBase> <cache> <bitsLeft>"
@@ -150,7 +150,7 @@ ICSPY
     echo "# whose +8 / +9 (maxSfbLong / maxSfbShort) were set from the case line."
     echo "#   ICS <idx> <maxSfbLong> <maxSfbShort> <codingType> <bufferHex|->"
     echo "#   R <idx> <rc> <windowSequence> <maxSfb> <numWindowGroups> <groupWord> <bitsUsed>"
-    echo "# rc is the library's convention: 1 means ERROR."
+    echo "# rc is the original's convention: 1 means ERROR."
     "$RUN" fn ics < "$FIX/icsinfo.cases" 2>/dev/null
 } > "$FIX/icsinfo.fixture"
 grep -c '^R ' "$FIX/icsinfo.fixture" | sed 's/^/  result lines: /'
@@ -169,8 +169,8 @@ python3 "$HERE/gen_scf_cases.py" > "$FIX/scf.cases"
     echo "#   R <idx> <rc> <bitsUsed> <numRecordsHex> <recordsHex> <scfHex>"
     echo "# recordsHex and scfHex cover 15 * numWindowGroups entries, the struct's"
     echo "# stride, and are LITTLE-ENDIAN raw bytes: the scalefactors are compared as"
-    echo "# bit patterns because the library builds them by adding an exponent into"
-    echo "# the float rather than with a pow.  rc is the library's convention: 1 is"
+    echo "# bit patterns because the original builds them by adding an exponent into"
+    echo "# the float rather than with a pow.  rc is the original's convention: 1 is"
     echo "# ERROR."
     "$RUN" fn scf < "$FIX/scf.cases" 2>/dev/null
 } > "$FIX/scalefactors.fixture"
@@ -235,10 +235,10 @@ echo "running apac::GlobalConfig::Deserialize on both cookies"
     done
 
     # The generated cookie carries an apac::AudioSceneConfig, which is out of
-    # scope for the CarPlay 5.1 target, so our decoder stops at the flag that
+    # scope for the CarPlay 5.1 target, so the port stops at the flag that
     # announces it.  Probing the library's own AudioSceneConfig::Deserialize
     # either side of that position shows only one offset it accepts, which is
-    # what turns "our decoder stopped at bit 97" into a checkable claim.
+    # what turns "the port stopped at bit 97" into a checkable claim.
     echo "SCENEPROBE generated"
     for at in 93 94 95 96 97 98 99 100 101; do
         echo "SCENE $at $("$RUN" fn scene "$GEN_COOKIE" --at $at 2>/dev/null \

@@ -35,6 +35,7 @@ fn config() -> Config {
         device_id: "01:02:03:04:05:06".into(),
         pairing_id: Some("TEST_ONLY_PI".into()),
         source_version: "210.81".into(),
+        vehicle_engine: iap2_csm::messages::identification::EngineType::Gas,
     }
 }
 fn availability() -> Vec<u8> {

@@ -104,7 +104,7 @@ Terminal per-channel NMSE, FL/FR/C/Ls/Rs: 0.054893, 0.061866, 0.014306, 0.448540
 
 ## 📁 Reproduction and retained evidence
 
-[fit_scene_fixed_nas.py](../../../tools/stereo-upmix-render/fit_scene_fixed_nas.py) imports the unchanged [scene model](../../../tools/stereo-upmix-render/scene_joint_net.py) and [parent loss/helpers](../../../tools/stereo-upmix-render/train_scene_joint_nas.py). Immutable source snapshots, `launch.json` and `train.log` live in the new run root. Its `run/` contains protocol, initial/monitor/status/best reports, best/terminal checkpoints, hashes and full optimizer history.
+[fit_scene_fixed_nas.py](RETIRED_TOOLS.md#tool-68f8855859f8) imports the unchanged [scene model](RETIRED_TOOLS.md#tool-4f996c57d64f) and [parent loss/helpers](RETIRED_TOOLS.md#tool-e602dc3f4215). Immutable source snapshots, `launch.json` and `train.log` live in the new run root. Its `run/` contains protocol, initial/monitor/status/best reports, best/terminal checkpoints, hashes and full optimizer history.
 
 An owned `run/STOP` marker stops the run while retaining outputs. Sources, parent runs and catalog/audio are not modified. No extra training experiment is automatically queued by this diagnostic.
 

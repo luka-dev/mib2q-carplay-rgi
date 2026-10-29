@@ -1,12 +1,22 @@
 # Third-party Nav Apps
 
-*Why Waze puts nothing on the cluster (and what an old AMap build sent), why Waze ignores steering-wheel zoom, the one lever (`updateViewArea`) that reshapes any app's cluster scene without its cooperation, and how the head unit picks the cluster scene URL.*
+*Current compatibility, the semantic navigation contract and cluster scene controls.*
 
 ---
 
+## Compatibility and evidence
+
+| App | RGI / HUD guidance | Evidence boundary |
+| --- | --- | --- |
+| Apple Maps / Google Maps | Semantic route guidance is supported | Existing integration and app analysis |
+| AMap | Owner-confirmed working with its CarPlay guidance setting enabled on a recent iOS | Exact working app/iOS versions and setting label were not recorded |
+| Waze | No usable semantic RGI in the analysed 5.23.0.1 / 5.24.0.1 builds | These versions do not opt in to navigation metadata; do not generalize this to every future release |
+
+RGI/HUD maneuvers and the AltScreen map are separate outputs. A working video map does not prove that an app supplies semantic maneuvers. The old AMap 16.25.0 analysis does not describe the owner-confirmed working configuration.
+
 ## 📋 Where RGI actually comes from
 
-Analysed from the decrypted IPAs (`com.waze.iphone` 5.23.0.1 and 5.24.0.1, `com.autonavi.amap` 16.25.0) and iOS 26.6 (23G71) `CarPlay.framework` / `CarPlaySupport`. Every claim is a symbol or property list read from a binary; none of the app analysis was tested on the vehicle. `[decompile]`
+Analysed from the decrypted IPAs (`com.waze.iphone` 5.23.0.1 and 5.24.0.1, `com.autonavi.amap` 16.25.0) and iOS 26.6 (23G71) `CarPlay.framework` / `CarPlaySupport`. The binary tables below are version-specific static evidence; the compatibility table separately identifies owner observations. `[decompile]`
 
 The app does not produce the iAP2 `RouteGuidanceUpdate`. `CarPlay.framework` does, from two private model objects, through a generic serializer, and hands it to accessoryd: `[decompile]`
 
@@ -35,9 +45,7 @@ The once-blocks build a fixed `CPAccNavParam(property, keys)` table. That table 
 
 Neither table has an image property. `symbolImage`, `symbolSet`, `junctionImage`, `dashboardSymbolImage` and `cardBackgroundColor` are CarPlay-screen only. The cluster gets semantics (a type, a junction shape, angles, a distance, a string) and draws its own icon. That is why our `ManeuverMapper` exists (`java_patch/com/luka/carplay/rgd/ManeuverMapper.java`). `initialDistance` is derived: `-[CPManeuver(CPAccNavUpdate) initialDistance]` returns `initialTravelEstimates.distanceRemaining`, so setting travel estimates is enough. How these fields arrive on the wire is in [iAP2 Route Guidance TLVs](IAP2_ROUTE_GUIDANCE_TLVS.md).
 
-> 📌 **Owner correction (2026-09-25): AMap works on the car.** With a recent iOS and the CarPlay guidance setting enabled inside AMap, AMap maneuvers reach the cluster and HUD. The exact iOS version and the setting's name are not recorded yet. The AMap analysis below is from AMap 16.25.0 on iOS 26.6 and does not describe current versions. Waze still sends nothing. `[car]`
-
-## ⚠️ Waze and AMap fail at different stages
+## Navigation metadata gate
 
 The on/off gate is `CPRouteGuidance.sourceSupportsRouteGuidance` (TLV `0x14`). It is written in one place, `-[CPSTemplateInstance setSendsNavigationMetadata:]` (`CarPlaySupport` `0x24a18b3c8`, block `0x24a18b4c4`), which copies a BOOL through. That BOOL comes from `-[CPMapTemplate startNavigationSessionForTrip:]` (`0x23d92cfb4`): `[decompile]`
 
@@ -51,63 +59,9 @@ if ([mapDelegate respondsToSelector:@selector(mapTemplateShouldProvideNavigation
 
 It reaches the host as `hostStartNavigationSessionForTrip:sendsNavigationMetadata:supportsRouteSharing:reply:` (block `0x23d92d354`), where `-[CPSMapTemplateViewController hostStart…]` (`0x24a233380`) sets `navigatorObserver.sendsNavigationMetadata` unconditionally. `-[CPNavigationSession initWithTrip:mapTemplate:]` (`0x23d925ea8`) leaves the ivar zero, so a delegate without the selector means NO.
 
-| App | Metadata gate | maneuverType | What reaches the cluster |
-|---|---|---|---|
-| Waze | never implements the selector, so `SourceSupportsRouteGuidance = 0` | never set | nothing; `RouteGuidance.java` deactivates on `source_supports_rg == 0` |
-| AMap 16.25.0 / iOS 26.6 | implements it 3× | never set | session, ETA and distance flow; maneuvers are typeless (current AMap on a recent iOS works, see correction above) |
-| Apple / Google Maps | implements it | set | full RGI |
+The analysed Waze builds omit the delegate opt-in, so `source_supports_rg == 0` makes the Java RGI path deactivate cleanly. AMap's owner-confirmed working configuration enables guidance; the old missing-maneuverType result belongs to AMap 16.25.0 / iOS 26.6.
 
-`[decompile]` for the apps; `[code]` for our reaction (`java_patch/com/luka/carplay/rgd/RouteGuidance.java:517`, `:876-905`)
-
-- **AMap** implements it in `-[WCPMapPresenter …]` (`0x105036104`, forwards to the current map state), `-[WCPMapState …]` (`0x105037fe4`, `mov w0, #0`) and `-[WCPMapStateBaseNavi …]` (`0x10503ebc8`, tail call). It is on while navigating and off otherwise.
-- **Waze** mentions the selector twice, both inside an emitted `CPMapTemplateDelegate` protocol descriptor (objc dump lines 671 and 719). Neither delegate (`WZCarPlayMapController`, `WZMapTemplateManager`) has it, and IDA finds no such function. The phone tells the car `SourceSupportsRouteGuidance = 0`: Waze is not sending weak maneuvers, it declares no route guidance.
-
-<details>
-<summary>Waze in detail</summary>
-
-Waze calls this code "CarPlayLegacy" (assertion path `third_party/waze/client/waze/src/iphone/Source/CarPlayLegacy/WZCarPlayCoordinator/WZCarPlayCoordinator+NavigationSession.mm`).
-
-`-[WZCarPlayCoordinator buildManeuverForDirectionsItemAtIndex:inItems:isFirst:]` (`0x10005ca10`) sets every property Waze ever puts on a `CPManeuver`:
-
-```objc
-CPManeuver *m = [CPManeuver new];
-m.maneuverInfo.displayAndThenArrowFirst = item.displayAndThenArrowFirst;  // userInfo
-m.maneuverInfo.isLanesManeuver          = NO;
-m.instructionVariants                   = [builder instructionVariantsFrom:item];
-if (flag(978)) m.attributedInstructionVariants = [builder attributedInstructionVariantsFrom:item];
-if ([self canShowLanesForDirectionsItemAtIndex:i inItems:items]) {
-    m.junctionImage          = <lane strip rendered to a bitmap>;
-    m.dashboardJunctionImage = <same>;
-}
-[self addTurnSymbolToManeuver:m forDirectionsItemAtIndex:i inItems:items];   // -> symbolImage
-m.initialTravelEstimates = [[CPTravelEstimates alloc] initWithDistanceRemaining:d timeRemaining:t];
-```
-
-Only `instructionVariants` and `initialTravelEstimates` are in the accessory table.
-
-`addTurnSymbolToManeuver:` (`0x10005c590`) reads `item.imageName`, `isRoundabout`, `roundaboutNumber`, and for a roundabout draws the exit number into a `UILabel` over a `UIImageView` and snapshots it to a `UIImage`. The exit number, which `CPManeuverType` models as `RoundaboutExit1…19`, becomes pixels. Waze has the full turn set (22 CarPlay icon assets including left/right/exit/u-turn/HOV/end/stop, four roundabout entry variants, `_UK` twins for left-hand traffic = `CPTrafficSide`) and discards it at the CarPlay boundary.
-
-Session level, `startNavigationSessionImplementation` (`0x10005bc30`): the trip uses the deprecated `initWithOrigin:destination:routeChoices:` with an empty route-choices array; `CPTrip.destinationNameVariants` (iOS 17.4) is never set, only `MKMapItem.name`. Waze never calls `setCurrentRoadNameVariants:` or `setManeuverState:`, and never builds a `CPLaneGuidance`, although `WZCPManeuverInfo.isLanesManeuver` shows it knows which maneuvers have lanes. It never sets `junctionType`, `trafficSide`, junction angles or `linkedLaneGuidance`.
-
-This is not SDK age: Waze implements the iOS 26.4 methods `mapTemplate:didRequestToInsertWaypoint:intoSegment:completion:` and `mapTemplate:mapTemplateWaypoint:accepted:forSegment:`.
-
-</details>
-
----
-
-**What would fix it (app side only).** Waze: first implement `mapTemplateShouldProvideNavigationMetadata:` on `WZMapTemplateManager` returning YES while navigating, then set `CPManeuver.maneuverType` in `buildManeuverForDirectionsItemAtIndex:…` (a mechanical mapping from `imageName` / `isRoundabout` / `roundaboutNumber`). AMap needs only the second step. Both would also want `junctionType` + `junctionExitAngle` for roundabouts, `trafficSide`, real `linkedLaneGuidance`, and `maneuverState` / `currentRoadNameVariants`. Nothing on our side can do this. `[decompile]`
-
-## ⚠️ Waze altScreen zoom is dropped inside Waze
-
-This is the video cluster (our altScreen, type-111 stream), separate from BAP RGI. Waze 5.24.0.1, IDA. `[decompile]`
-
-- `Info.plist` maps `CPTemplateApplicationInstrumentClusterSceneSessionRoleApplication` to `Waze.CarPlayClusterSceneDelegate` and sets `CPSupportsInstrumentClusterNavigationScene = true`. `…didConnectInstrumentClusterController:` (`0x100355b48` → `0x10035592c`) publishes `.connected(scene, controller)`; `CarPlayInstrumentClusterDisplayManager` (`0x1009aec50`) reads `contentStyle`, takes `instrumentClusterWindow`, sets itself as delegate.
-- The manager is created only in `registerClusterScene` (`0x1009afe10`) when config item **1006** ("Instrument cluster enabled", compiled default `"1"`, server-overridable) is true; otherwise it logs `cluster - not registering delegate, CARPLAY_INSTRUMENT_CLUSTER_ENABLED is false`. If the Waze cluster map never appears, that is the server side of flag 1006.
-- `instrumentClusterControllerDidZoomIn:` / `…DidZoomOut:` (`0x1009ade98` / `0x1009adf68`; bodies `0x1009addfc` / `0x1009adea4`) send a stat (`clusterZoomIn` / `clusterZoomOut`, `cluster_zoom_in_stat.proto`) and `controlEventSubject.send(.zoom(.in|.out))`. Enum layout: `.zoom(.in)` = `{0,0}`, `.zoom(.out)` = `{1,0}`, `.configurationChanged(cfg)` has bit 63 of word 0 set.
-- `events` (`0x1009ae3a0`) merges `configurationStateSubject.map{.configurationChanged}` with `controlEventSubject`. Its only subscriber is `CarPlayInstrumentClusterRootCoordinator`: the windowEvents sink (`0x1009b8f88`) calls `startCoordinator` (`0x1009b58b8`), which does `events.compactMap { word0 < 0 ? word1 : nil }` (`0x1009b5e9c`). That keeps only the `UIUserInterfaceStyle` and turns `.zoom` into nil. None of the 13 `sink` calls in `0x1009ad000-0x1009bc000` touches zoom. Compass and speed-limit settings from the HU are dropped the same way.
-- `CarPlayInstrumentClusterMapPresentable` (`0x1009b25b8`) builds one `WazeMapCamera` with `.trackUserLocation(cameraZoomBehavior: .static(0.000125))`, a fixed 1:8000 (float `0x3903126f`; `.dynamic` speed auto-zoom and `.manual` exist but are unused), north lock and centre offset. It re-issues `WazeMapState` only on skin change (`0x1009b2bd8`). `zoomSubject` is fed only by the main-screen map buttons.
-
-So our `changeMapZoomLevel` reaches Waze, is counted, and is discarded. Apple and Google Maps act on the same callback. Not fixable from the head unit.
+The [archived app analysis](../archive/internal-reference-2026-10-29/cluster-and-rgi/THIRD_PARTY_NAV_APPS.md) preserves the app addresses, old AMap table, Waze maneuver construction and Waze 5.24.0.1's discarded zoom callback. That zoom finding is specific to the inspected build, not a universal claim about Waze.
 
 ## ⚙️ `CMD_ALT_ZOOM` is live
 
@@ -128,7 +82,7 @@ The phone accepts a fixed set of HU→phone commands in `carEndpoint_processEven
 
 `updateViewArea` (`carEndpoint_updateViewArea`, `0x2510891fc`) is the only command that changes what an app draws without its cooperation. Params: `uuid`, `viewAreaIndex`, `adjacentViewAreas`, `animationDurationMillis`. `carEndpoint_validateViewAreaParams` looks the `uuid` up in the whole `/info` `displays[]` (no main-display restriction) and checks only `viewAreaIndex < viewAreas.count`. Gates: `"viewAreas"` in the setup-response feature list, and on the display entry `viewAreas` (array of `{originXPixels, originYPixels, widthPixels, heightPixels, safeArea?, viewAreaTransitionControl?, viewAreaSupportsFocusTransfer?, viewAreaStatusBarEdge?}`), `initialViewArea` and `adjacentViewAreas`. On success: `kFigEndpointNotification_ViewAreaChanged` → CarKit `-[CARSession _sessionUpdatesQueue_handleViewAreaChangeWithPayload:]` → per-screen `CARScreenInfo.currentViewArea` (each display has its own, so the altScreen carries its own `viewAreas`) → SpringBoard re-frames that display's scenes. `[decompile]`
 
-The endpoint flag offsets disagree: this RE gives `viewAreas` at endpoint+0x45 "in the altScreen +0x3f family"; the hook's own RE comment gives `viewAreas+0x3D, altScreen+0x3E, uiContext+0x3F, enhancedSiri+0x39` (`altscreen_hook.c:1833-1835`). `[open]`
+Private offsets are build-specific: this iOS 27 analysis records `viewAreas` at endpoint+0x45, while the iOS 26.6 table records `viewAreas+0x3D`, `altScreen+0x3E`, `uiContext+0x3F`. Use the matched binary and [architecture address table](../reference/ARCHITECTURE.md#ios-266-altscreen-addresses); do not combine offsets across builds.
 
 The zoom idea: shrink or grow the cluster window while the map stays at 1:8000 per point, so the visible extent changes; the HU crops the active view area out of the unchanged 111 stream and scales it to the panel. Scale trap: `CRScreenScaleHeuristics getPrimaryDisplayScale:viewAreas:` derives point scale from pixels and physical size, so more pixels need proportionally more mm or iOS goes @2x and the extent does not change. `zoomFactor` in the display description is the static form of the same lever. `[decompile]`
 
@@ -141,7 +95,7 @@ flowchart TD
   fwd["forwarded to CarKit and app"]
   reframe["SpringBoard reframes scene"]
   maps["Apple or Google Maps zoom"]
-  waze["Waze drops zoom event"]
+  waze["Waze 5.24.0.1 drops zoom event"]
   cmd -->|updateViewArea| accepted --> reframe
   cmd -->|changeMapZoomLevel| fwd
   fwd --> maps
@@ -154,11 +108,11 @@ flowchart TD
   class cmd,fwd neutral
 ```
 
-## ⚠️ State in our hook
+## Current zone and scene behavior
 
 `viewAreas` and `updateViewArea` are implemented in `hook/altscreen/altscreen_hook.c`, but only for zone switching (fullscreen / sportscreen / classicscreen via `CMD_ALT_ZONE 0x0111`, acknowledged by `CMD_ALT_ZONE_ACK 0x0112`). `[code]` (`altscreen_hook.c:2016-2025`, `:2269-2291`; `hook/framework/bus_protocol.h:95-98`)
 
-- The display is declared as 292 × 110 mm (`altscreen_hook.c:251-252`). It used to be 180 × 68 mm (203 dpi); 292 × 110 implies 12.28" against the real 12.3" panel.
+- The display is declared as 292 × 110 mm, approximately the 12.3-inch panel diagonal.
 - All three view areas keep the full 1440×542 visible frame and differ only in the nested `safeArea`. The panel calibration grid is 16 columns × 6 rows (one column = 90 px; row edges 0/90/181/271/361/452/542). The VC draws its own translucent map bar from about y = 390 and hides row 6 under the clock bar. `[code]` (`altscreen_hook.c:254-294`)
 
 | View area | Safe area | Cells |
@@ -167,9 +121,7 @@ flowchart TD
 | sportscreen | (90, 90) 360×300, bottom y = 390 | B2-E5 |
 | classicscreen | (540, 90) 360×300 | centred |
 
-The source RE recorded the zones as (90,135) / (540,135) 360×245; the code's 360×300 at y = 90 supersedes it, because a narrow safe area needs about 290 px of height (below). Maps anchors its bottom text to the safe-area edge, so the old y = 452 edge put it under the VC bar (calibration-grid photos, 2026-09-19). `[car]`
-
-A view area whose visible frame was reduced to the safe region got the 111 stream rejected at activation (`altscreen_hook.c:258-262`). Root cause unknown; candidates are CarKit `CRDisplayScaleInfo.minAcceptableViewAreaSize*` / `isViewAreaPixelSizeAcceptable`, or the initial view area having to equal the display. Zoom by view area is blocked on this. `[open]`
+The zones change safe-area layout while retaining the full visible frame. They do not implement a map-zoom workaround. The earlier reduced-frame experiment and rejected activation are retained in the archived app analysis.
 
 ## 🔧 Choosing the cluster scene (`showUI`)
 
@@ -189,7 +141,7 @@ Maps sends `suggestUI{urls}` (stock 210 answers −6714; we ignore it); CarKit s
 | `maneuverLayout=topAligned / leftAligned / rightAligned` | justification 1 / 2 / 3; anything else (including `no`) → 0 |
 | `mapsPresentation=anycontent / map / instructioncard` | itemType 3 / 1 / 2 (Maps-hosted content) |
 
-Correction (2026-09-30): the earlier "27 only / 26.6 ignores" claim was wrong for Maps URLs. Both binaries contain the query-to-setting path; the separate `nextGenHostedContent` branch has different query handling. This establishes display-policy parsing, not an exported numeric speed or on-car sign rendering. [Speed-limit investigation](CARPLAY_SPEED_LIMIT.md). `[decompile]` / `[open]`
+Both inspected iOS 26.6 and 27 binaries contain the Maps URL query-to-setting path; the separate `nextGenHostedContent` branch has different query handling. This establishes display-policy parsing, not an exported numeric speed or on-car sign rendering. [Speed-limit investigation](CARPLAY_SPEED_LIMIT.md). `[decompile]` / `[open]`
 
 `CarPlay.framework` creates an app's cluster window only for itemType 1 or 3 (`updateSceneForNewItemTypeSetting`). `[decompile]`
 
@@ -208,7 +160,7 @@ The runtime switch is `CMD_ALT_RGI 0x0116`, sent from `AltScreenModule.republish
 
 ## 🔗 Related
 
-- [RGI and BAP Bridge](RGI_AND_BAP_BRIDGE.md): `source_supports_rg == 0` (Waze) clears RGI cleanly.
+- [RGI and BAP Bridge](RGI_AND_BAP_BRIDGE.md): `source_supports_rg == 0` (as in the analysed Waze builds) clears RGI cleanly.
 - [iAP2 Route Guidance TLVs](IAP2_ROUTE_GUIDANCE_TLVS.md): the wire form of the `CPRouteGuidance` / `CPManeuver` fields.
 - [AltScreen Cluster Video](../altscreen-and-video/ALTSCREEN_CLUSTER_VIDEO.md): the type-111 stream these commands act on.
 - [Cluster Contexts](CLUSTER_CONTEXTS.md): where the cluster video plane lands.

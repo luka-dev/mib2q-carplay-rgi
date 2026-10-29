@@ -4,6 +4,8 @@
 
 ---
 
+Wireless extension (2026-10-21): authenticated file-session payloads now enter the same reassembly/decoder worker. Rust supplies the native Start/Data/Success/Cancel handshake without storing a second image. A typed zero-length image invalidates outstanding decode work, removes the canonical PNG on the worker and sends an explicit Java clear; repeated clear is idempotent. C/Java regressions cover clearing, and the native QNX feature profile checks a real 256×256 PNG and bus publication. See [wireless channels and evidence limits](../wireless-carplay/WIRELESS_PRODUCTION_CHANNELS.md). This has not been physically accepted on HU.
+
 ## 📋 Two very different designs
 
 Stock MHI2Q's `DSICarplay` `coverArtUrl` path never delivered art on this unit, so the hook takes the raw iAP2 file transfer, rebuilds the image, and publishes a PNG path to Java. The newer MH2P firmware does the same job much higher up, inside `dio_manager`, on existing threads. **[decompile]** / **[code]**

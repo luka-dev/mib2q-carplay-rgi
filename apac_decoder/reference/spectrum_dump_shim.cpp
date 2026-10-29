@@ -8,20 +8,20 @@
 // This is the differential probe for stages f and g.  Everything above the
 // filter bank - the element layer, the CAC tool, TNS, the bandwidth-extension
 // header, the core decoder's element loop - has no other observable output, so
-// comparing these records against ours isolates the frame layer from the
+// comparing these records against the port's isolates the frame layer from the
 // transform, which is the only part that cannot be bit exact.
 //
 //     APAC_DUMP_SPECTRA=/out/lib.spec LD_PRELOAD=/tmp/dump.so apac_ref --f32 ...
-//     apac_decode ... --dump-spectra ours.spec
-//     reference/compare_spectra.py lib.spec ours.spec
+//     apac_decode ... --dump-spectra port.spec
+//     reference/compare_spectra.py lib.spec port.spec
 //
 // HOW.  APACCoreDecoder::DecodeAPACFrame calls
 // APACSynthesisFilterBank::FrequencyToTimeInPlace directly, not through a
 // vtable, so there is no slot to replace: the entry is patched with a 16-byte
 // absolute jump, exactly as transform_swap_shim.cpp does.  That destroys the
-// library, so the wrapper finishes the job with OUR filter bank - which
+// original, so the wrapper finishes the job with the PORT's filter bank - which
 // `run.sh swap` has already measured against the library's at 3e-8 end to end.
-// The dump itself is taken BEFORE the transform runs, so it is the library's
+// The dump itself is taken BEFORE the transform runs, so it is the original's
 // spectrum whatever the transform then does with it.
 //
 // Record: [u32 channel][u32 windowSequence][1024 float32].
@@ -67,7 +67,7 @@ apac::SynthesisFilterBank* bankFor(const void* self)
     Slot& s = g_slots[g_used++];
     s.owner = self;
     if (s.fb.Initialize(channels, frameLen) != 0) {
-        fprintf(stderr, "[dump] ours Initialize(%u, %u) failed\n", channels, frameLen);
+        fprintf(stderr, "[dump] port Initialize(%u, %u) failed\n", channels, frameLen);
         abort();
     }
     s.fb.Reset();

@@ -25,11 +25,11 @@
 //
 // Then the five LPMDCTFilter entry points, over four transform lengths (64 to
 // 512), LPC orders 1 to 16, and both values of the fftSize / n ratio - 2 and 4
-// - because 4 is the one value the library tests for and it switches the
+// - because 4 is the one value the original tests for and it switches the
 // output between stride 1 and stride 2.
 //
-// Tolerance and why there is one: tests/dsp_fixture.h.  The FFT here is
-// our own for the same reason the MDCT's is.
+// Tolerance and why there is one: tests/dsp_fixture.h.  The FFT here is the
+// port's own for the same reason the MDCT's is.
 
 #include "apac/lpc.h"
 
@@ -47,7 +47,7 @@ float g_want[2048];
 float g_have[2048];
 float g_x[4096];
 // The library's own forward output, kept so that the inverse can be tested on
-// it rather than on our forward.  Chaining our two transforms
+// it rather than on the port's forward.  Chaining the port's two transforms
 // would double the error budget and measure the wrong thing.
 float g_libFwd[2048];
 
@@ -157,7 +157,7 @@ int main(int argc, char** argv)
 
             const float scale = filt.Initialize((uint16_t)fft, (uint16_t)ord);
             if (dspfx::float_to_bits(scale) != sc) {
-                fprintf(stderr, "\nMISMATCH Initialize(%u) scale: ours %08x, "
+                fprintf(stderr, "\nMISMATCH Initialize(%u) scale: port %08x, "
                                 "library %08x\n", fft,
                         dspfx::float_to_bits(scale), sc);
                 return 1;

@@ -84,7 +84,7 @@ For platform id 2, `deva_mib_get_session_handles_from_platform_id @0x545a4` retu
 | max fragments | `+0x28` | 10 | 10 | 10 |
 | bits/sample | `+0x2c` | 24 | 24 | 24 |
 
-The shipped column is enforced by `deploy/deva-ctrl-qc/patch_deva_mirror_mpl1.sh:35-49` (asserts the MPL5 record equals MPL1 after the write) **[code]**.
+The shipped column is enforced by `deploy/deva-ctrl-qc/build_final.py` (asserts the MPL5 record equals MPL1 after the write) **[code]**.
 
 ### The router and stream types
 
@@ -135,7 +135,7 @@ Handles 256/257/258 = device/stream/context. Stream open: `format=0x1c, rate=480
 ### Fix options that were weighed
 
 - **Six-only diagnostic:** MPL5 `min_voices` VA `0xa7e18` (file `0xa6e18`) `2→6` and `min_fragsize` VA `0xa7e20` (file `0xa6e20`) `0x1800→0x4800`. Changing only the voice field leaves the CSD buffer one third too small; redirecting the two loads in `deva_update_session_info_from_list` to the `max_*` offsets is equivalent. It was feared to break stereo — the car proved otherwise, and it shipped.
-- **Dual-mode:** derive `session+0x84 = channel->voices` (channel `+0x10`, read by helper `0x8f2c8`) and `session+0x6c = channel->frag_size` (channel `+0x94`, stored at `0x563d4`) from `timer+0x11c` (stored at `0x56504`), and stop/reset/re-setup the stream, context and buffer pool on a 2↔6 transition — overwriting the two fields of a live session is unsafe. Kept only as `patch_deva_csd_live.sh`.
+- **Dual-mode:** derive `session+0x84 = channel->voices` (channel `+0x10`, read by helper `0x8f2c8`) and `session+0x6c = channel->frag_size` (channel `+0x94`, stored at `0x563d4`) from `timer+0x11c` (stored at `0x56504`), and stop/reset/re-setup the stream, context and buffer pool on a 2↔6 transition — overwriting the two fields of a live session is unsafe. Kept only as the final live-channel helper.
 - Read-only confirmation on the unit: the timer side advances `0x4800` per tick while `csd_data_dumps` is called with the session size at `0x694c4`.
 
 Sources: `ROUTER_INPUT_WIDTH_AUDIT`, `DEVICE_TOPOLOGY_AUDIT`, `CODEX_PROMPT_ROUTER_INPUT_WIDTH`, `CODEX_PROMPT_CSD_REPROVISION`, `CODEX_PROMPT_DEVICE_TOPOLOGY`

@@ -46,7 +46,7 @@ from amp_complex_path import ComplexFullModeReference
 
 SR = 48000
 ROOT = Path(__file__).resolve().parents[2]
-AUDIT = ROOT / 'assets/soundamp/output_binding_audit.json'
+AUDIT = ROOT / 'output/r2/soundamp/output_binding_audit.json'
 MODEL_VERSION = 'bank1-known-electronics-v7'
 # bank 1 (sink 0x26) input matrix, dB: rows = buses L R C LFE Ls Rs B7 B8, cols = inputs L R C LFE Ls Rs
 MATRIX_DB = [[-2,-100,-6,-100,-100,-100],[-100,-2,-6,-100,-100,-100],

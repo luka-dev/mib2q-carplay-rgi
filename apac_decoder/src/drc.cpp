@@ -25,7 +25,7 @@ namespace drc {
 //   return 0;
 //
 // Both arms turn on what mpddrc::UniDrc::Deserialize did with the bitstream,
-// and that is the function this decoder does not have.  It is the ONLY bit
+// and that is the function this port does not have.  It is the ONLY bit
 // consumer anywhere in the DRC layer, so there is nothing to transcribe around
 // it: either the parser is here or the position after the payload is unknown.
 uint32_t DRCExtensionPayload::Deserialize(BitstreamReader& bs,
@@ -33,7 +33,7 @@ uint32_t DRCExtensionPayload::Deserialize(BitstreamReader& bs,
 {
     (void)bs;
     (void)type;
-    return kLimitNeedsLoudnessDRC;
+    return kPortNeedsLoudnessDRC;
 }
 
 // 0x0007ecc0  DynRangeCompressor::Deserialize
@@ -51,14 +51,14 @@ uint32_t DynRangeCompressor::Deserialize(BitstreamReader& bs,
 {
     if (hasPayload)
         return payload.Deserialize(bs, type);
-    return kBadValue;   // the library's `return 1`
+    return kBadValue;   // the original's `return 1`
 }
 
 } // namespace drc
 
 // 0x00072bb0  LoudnessDRCConfig::Deserialize
 //
-// The library: if no DynRangeCompressor has been built yet, `operator new`
+// The original: if no DynRangeCompressor has been built yet, `operator new`
 // one, zero it, seed +56 = 1 and the pair at +60 with 0x3F800000C1F80000
 // (float -31.0 then 1.0 - the default target loudness and boost), destroy any
 // previous one, then DynRangeCompressor::Initialize(ParamList).  A non-zero
@@ -67,8 +67,8 @@ uint32_t DynRangeCompressor::Deserialize(BitstreamReader& bs,
 //
 // Initialize (0x0007ffb0) is what builds the APACDRCExtensionPayload out of
 // the DRCConfiguration in the ParamList, and its 3796-byte constructor is what
-// creates the mpddrc::UniDrc the payload then parses into.  Our decoder has
-// neither, so a config that reaches this function is a config our decoder cannot
+// creates the mpddrc::UniDrc the payload then parses into.  The port has
+// neither, so a config that reaches this function is a config the port cannot
 // follow - which is exactly what it reports.  It reads no bits on the way out,
 // so the caller's bit position is still exact and the refusal is honest about
 // where it stopped.
@@ -79,7 +79,7 @@ uint32_t LoudnessDRCConfig::Deserialize(BitstreamReader& bs,
         compressor.Clear();
         initialized = 1;
         // DynRangeCompressor::Initialize(ParamList const&) would set
-        // compressor.hasPayload here.  Not implemented; see above.
+        // compressor.hasPayload here.  Not ported; see above.
     }
     return compressor.Deserialize(bs, type);
 }
@@ -103,9 +103,9 @@ uint32_t APACDRCDecoder::Deserialize(BitstreamReader& bs) const
 //                                                       buf, buf, &v3);
 //
 // ProcessUniDrc applies the gains in place.  It touches no bitstream, and the
-// head unit does not want loudness normalisation applied twice, so our decoder
+// head unit does not want loudness normalisation applied twice, so the port
 // stops here deliberately: the samples are left exactly as the core decoder
-// produced them.  The library returns false on success.
+// produced them.  The original returns false on success.
 bool APACDRCDecoder::DecodeFrame(float** buf) const
 {
     (void)buf;

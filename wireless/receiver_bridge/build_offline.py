@@ -47,7 +47,7 @@ def main() -> None:
         '-DMHI2Q_CAPTURE_INTERFACE_NAME="uap0"',
     ]
     if args.receiver == "stock210":
-        command.append("-DMHI2Q_BRIDGE_STOCK210")
+        command += ["-DMHI2Q_BRIDGE_STOCK210", "-DMHI2Q_BRIDGE_SI_TRANSPORT"]
     if args.property_handoff:
         command.append("-DMHI2Q_BRIDGE_PROPERTY_HANDOFF")
     command += [
@@ -57,11 +57,29 @@ def main() -> None:
     ]
     if args.property_handoff:
         command.append("wireless/receiver_bridge/property_handoff.c")
+    if args.receiver == "stock210":
+        command.append("wireless/receiver_bridge/si_transport.c")
+        command.append("wireless/receiver_bridge/now_playing.c")
+        command.append("wireless/receiver_bridge/si_state.c")
+        command.append("wireless/receiver_bridge/si_location.c")
     command.append("-lsocket")
     subprocess.run(command, check=True)
     image = artifact.read_bytes()
     if image[:4] != b"\x7fELF" or image[4] != 1 or image[5] != 1:
         raise SystemExit("output is not a little-endian ELF32 object")
+    if args.receiver == "stock210":
+        from elftools.elf.elffile import ELFFile
+        with artifact.open('rb') as stream:
+            exports = {s.name for s in ELFFile(stream).get_section_by_name('.dynsym').iter_symbols()
+                       if s['st_shndx'] != 'SHN_UNDEF'}
+        required={'kill','bind','mhi2q_si_transport_install','mhi2q_si_transport_initialized',
+                  'mhi2q_now_playing_capture','mhi2q_now_playing_submit',
+                  'mhi2q_si_state_install','mhi2q_si_location_install'}
+        if not required <= exports:
+            raise SystemExit(f'stock210 bridge omits required interpositions: {required-exports}')
+        if any(name.startswith('si_qemu_') or name in
+               {'snd_pcm_open_name','snd_pcm_plugin_write','snd_pcm_plugin_read'} for name in exports):
+            raise SystemExit('production bridge contains QEMU HMI/audio implementations')
     print(f"{artifact} ({len(image)} bytes)")
     print(f"stock display mode {args.display_mode}")
     print(f"SHA-256 {sha256(image).hexdigest()}")

@@ -10,31 +10,9 @@ CarPlay can drive a **second display**: the Audi instrument cluster (Virtual Coc
 
 Read [AltScreen Cluster Video](ALTSCREEN_CLUSTER_VIDEO.md) first for the activation gate and the cluster wiring. Then read [Video Pipeline](VIDEO_PIPELINE.md) for the decode and delivery internals, [Cluster Loader](CLUSTER_LOADER.md) for the PRISM waiting animation, and [Reconnect and Lifecycle](RECONNECT_AND_LIFECYCLE.md) for replug behaviour. [Home](../README.md) is the hub and [Landmines](../LANDMINES.md) holds the trap list. Cluster route-guidance graphics, the *other* frame source in the same cluster context, are covered in [Cluster and RGI overview](../cluster-and-rgi/README.md).
 
-Latest physical-HU result (2026-10-21): wired AltScreen arrival averaged
-**29.64 FPS** across five 300-interval windows (28.68–30.00 FPS). The five
-measured processes together used about 83% of one core, equivalent to 20.8%
-of four-core capacity, with AltScreen in motion, the main screen in motion
-and 5.1 audio output playing simultaneously. See [wired performance measurements](WIRED_PERFORMANCE_2026-10-21.md)
-for CPU denominators, timing, evidence and the limits of this short sample.
-
 ## 📊 The whole path
 
-The 2026-10-06 source candidate adds shared recovery, idle EOF/status observation,
-owned in-place conversion, batched I/O, end-to-end compressed age and decoded
-mailbox selection. The stock capture clock, `glFinish` and per-frame image
-refresh remain in place. **[code]**
-
-First drive with that build (2026-10-09): the phone delivered a steady ~21 fps
-and the hook forwarded every frame, but the cluster went black twice for
-1.6–1.8 s. Both were the renderer's own steady-backlog rule turning a ≥1 s
-stall of its threads (process starvation at default priority) into a
-generation restart with a decoder teardown. Since 2026-10-09 a backlog keeps the
-picture, reports `STATUS 0` so the hook requests an IDR, and drops the queued
-frames when that IDR arrives; `altscreen_render` runs at priority 15 like
-`maneuver_render`, the OMX input wait is 3 s on a monotonic clock, and the
-hook's greeting window is 250 ms so a late `accept()` no longer degrades the
-link to legacy framing. Details: [Video Pipeline](VIDEO_PIPELINE.md),
-[Landmines](../LANDMINES.md). **[car + code]**
+The hook transfers H.264 through a bounded worker queue. The renderer tracks compressed-frame age, decodes through OMX, selects decoded output through its mailbox and presents to plane 99. Recovery keeps the last picture while requesting an IDR and replacing stale queued frames. The stock capture clock, `glFinish` and per-frame image refresh remain part of the display path.
 
 ```mermaid
 flowchart TB
@@ -64,24 +42,24 @@ and input review resolutions, reproducible commands and latest result limits.
 
 | Note | What it covers |
 |---|---|
-| [AltScreen Cluster Video](ALTSCREEN_CLUSTER_VIDEO.md) | The activation gate — control-SETUP response `enabledFeatures` ∋ `altScreen` (the `/info` advert is also injected but does not set the flag) — then the hook's own stream-111 receiver. Also the iOS URL model, error codes, the 1440×542 panel, and the forceKeyFrame `uuid` fix (resolved). |
-| [Video Pipeline](VIDEO_PIPELINE.md) | The OMX decode chain (native 32m buffers → EGLImage → RGBA plane 99), the Nagle/`TCP_NODELAY` fix, the load-bearing `glFinish` and per-frame rebind, owned buffers, v2/status protocol, mailbox/FIFO ownership, stream 110 and screen crypto for comparison. |
+| [AltScreen Cluster Video](ALTSCREEN_CLUSTER_VIDEO.md) | The activation gate — control-SETUP response `enabledFeatures` ∋ `altScreen` (the `/info` advert is also injected but does not set the flag) — then the hook's own stream-111 receiver. Also the iOS URL model, error codes, the 1440×542 panel, and the `forceKeyFrame` UUID contract. |
+| [Video Pipeline](VIDEO_PIPELINE.md) | The OMX decode chain (native 32m buffers → EGLImage → RGBA plane 99), `TCP_NODELAY` and batched I/O, the load-bearing `glFinish` and per-frame rebind, owned buffers, v2/status protocol, mailbox/FIFO ownership, stream 110 and screen crypto for comparison. |
 | [Cluster Loader](CLUSTER_LOADER.md) | The PRISM waiting animation: an embedded glass-Apple material shader in `altscreen_render/loader/`, drawn until the first decoded picture takes over. |
-| [Reconnect and Lifecycle](RECONNECT_AND_LIFECYCLE.md) | Lifecycle churn on a fast replug, now absorbed by a 400 ms deactivate debounce. Also covers the advert correction, the main-screen UUID fix, and renderer supervision. |
+| [Reconnect and Lifecycle](RECONNECT_AND_LIFECYCLE.md) | Session generations, the 400 ms deactivate debounce, display identity and renderer supervision. |
 | [AltScreen Input Commands](ALTSCREEN_INPUT_COMMANDS.md) | Canonical input path, paced zoom, reserved priority, state replacement, pre-commit/TTL cancellation, CF faults and runtime knobs. |
 | [AltScreen Pacing Validation](ALTSCREEN_PACING_VALIDATION.md) | Current startup/steady, HELLO/STATUS, clock and input-command contracts; 25 sanitizer scenarios, paced zoom, command priority/coalescing, test commands and hardware limits. |
 | [AltScreen Frame Rate](ALTSCREEN_FRAME_RATE.md) | Saved 20–27 fps evidence, sender/decoder/capture analysis, all six current pacing improvements, operation counts and offline validation limits. |
-| [Wired Performance — 2026-10-21](WIRED_PERFORMANCE_2026-10-21.md) | Physical-HU arrival rate near 30 FPS, CPU on one-core and four-core scales, stage timing, saved evidence and validation limits. |
-| [Stock Decoder Queue Patch](DECODER_QUEUE_PATCH.md) | Physical QNX symbol lookup/protection diagnosis, signature installation and rollback. |
 | [Maps 30 FPS Profile](MAPS_30FPS_PROFILE.md) | Always-enabled Identify PPID addition for the verified Maps-30 profile, identity-preserving fallback and native vphone evidence. |
-| [AltScreen RE History](ALTSCREEN_RE_HISTORY.md) | Every altScreen framing, gate theory, plan and verdict in order — what held and what was refuted. |
+| [Wired 30 FPS Investigation](WIRED_30FPS_INVESTIGATION.md) | Saved HU logs, native vphone source-rate controls, direct Maps capability override and accessory PPID evidence; physical-unit validation limits. |
+| [Maps Frame-Rate Profile Mechanism](MAPS_FRAME_RATE_PROFILE_MECHANISM.md) | iAP2 identity through CarExperienceAssets to Maps/VectorKit scheduling, profile selection, cache updates and reconnection. |
+| [PPID Profiles and Capability Settings](PPID_PROFILE_COMPARISON.md) | Original HU identity evidence, display/Siri/capability settings, and an inline table of all 90 PPIDs and their 97 exact rules in asset version 40. |
 | [Cluster Video Encoder](CLUSTER_VIDEO_ENCODER.md) | DisplayManager, `videoencoderservice` and stock KOMO: how a cluster context becomes the VC's H.264. |
-| [Cover Art Pipeline](COVER_ART_PIPELINE.md) | Stock MH2P cover-art design vs our MHI2Q hook, and the size-only Setup regression. |
+| [Cover Art Pipeline](COVER_ART_PIPELINE.md) | Artwork transport, assembly, ownership and Java display integration. |
 | [Enhanced Siri Contract](ENHANCED_SIRI_CONTRACT.md) | What iOS 26.6 needs for zero-latency Siri and voice trigger: the negotiation gate, `/info` keys, the `'zll '` parameters message, the timestamped `requestSiri`. Verdict: button-only possible in principle, not built; voice trigger not practical. Probe: the control SETUP logs the phone's feature proposal. |
 | [CarPlay Video Playback](CARPLAY_VIDEO_PLAYBACK.md) | iOS 27 "Video in Car" (stream 130, URL playback). **Not planned:** only a partial build is possible (clear H.264); DRM needs Apple's receiver FairPlay module, and camera clips are HEVC. |
 | [CarPlay Feature Survey](CARPLAY_FEATURE_SURVEY.md) | Stock baseline, features we added, tiered list of addable ones, the LOD widgets / Live Activities chain. |
 | [Partial 360 Camera Preflight](PARTIAL_360_CAMERA_PREFLIGHT.md) | Deferred: CarPlay beside the top-view camera — contexts, crops, camera ownership, coordinator design. |
 
-## 💡 Truth levels
+## 🧪 Validation
 
-Claims are tagged **[car]** for confirmed on the unit, **[decompile]** for reverse engineering, **[code]** for verified in the current source, and **[open]** for unverified. The earlier stream 111 path from decode to panel is **[car]**: one session ran 13,056 frames in 5 min. The 2026-10-06 pacing candidate is verified offline, not on the unit. The later 2026-10-21 physical session confirmed near-30 FPS arrival as **[car]**, as recorded in [wired performance measurements](WIRED_PERFORMANCE_2026-10-21.md). Long-run stability, final panel rate and the cause of the session-to-session improvement remain **[open]**. Provenance is listed in each note's Sources section; merged originals remain in git history.
+[AltScreen Pacing Validation](ALTSCREEN_PACING_VALIDATION.md) lists reproducible checks and their coverage. Report sender, decoder, presentation and capture rates separately; a 30 fps configuration does not establish 30 unique frames delivered to the panel. Dated drive traces and earlier theories are retained in [the archive](../archive/README.md).

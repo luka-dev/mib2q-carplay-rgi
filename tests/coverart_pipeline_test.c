@@ -127,6 +127,14 @@ int main(void)
     stbi_image_free(rgb);
     assert(maybe_handle_image(jpeg, jpeg_len, recv_generation));
     assert(notifications == 1); /* CRC dedup after successful publication */
+    uint8_t clear[12]={9,4,0,0,0,0,0,0,0,0,0,2};
+    coverart_wireless_file(clear,sizeof(clear));
+    for(unsigned attempt=0;attempt<100;++attempt) {
+        pthread_mutex_lock(&worker_mutex);int cleared=g_coverart.last_crc==0&&notifications==2;pthread_mutex_unlock(&worker_mutex);
+        if(cleared)break;usleep(10000);
+    }
+    pthread_mutex_lock(&worker_mutex);assert(!g_coverart.last_crc&&notifications==2);pthread_mutex_unlock(&worker_mutex);
+    assert(access(COVERART_FILE,F_OK)!=0);
     coverart_runtime_shutdown();
     puts("coverart_pipeline_test: real EXIF JPEG decode, Identify race, stale enqueue, EINTR/short write and PNG publication PASS");
     return 0;

@@ -54,7 +54,7 @@ void LPCBase::LevinsonDurbin(const float* r)
         for (uint32_t j = 0; j < m; ++j)
             acc = acc + r[m - j] * a[j];
         k = -acc / err;
-        // The library spells this as `while (1)` with a computed break, and it
+        // The original spells this as `while (1)` with a computed break, and it
         // runs exactly m>>1 times: the pair (i, m-i) walking inwards.  Written
         // as a counted loop so it cannot run away on a malformed order - the
         // same call the spectrum agent made on the band-zeroing loop.
@@ -85,7 +85,7 @@ void LPCBase::ComputeLPCs(const float* signal, bool lagWindow)
     uint32_t order = mAutocorr->order;
     uint32_t len = mAutocorr->windowLength;
     const float* win = mAutocorr->window;
-    // The library allocas to fit whatever the Autocorr says; our decoder has
+    // The original allocas to fit whatever the Autocorr says; the port has
     // fixed buffers, so an over-long window or order is clamped rather than
     // allowed to run off the end.  Both caps are far above anything the profile
     // produces (orders are 8 to 16, windows a frame long).
@@ -112,7 +112,7 @@ void LPCBase::ComputeLPCs(const float* signal, bool lagWindow)
     r[0] = (r[0] < 1.0f) ? 1.0001f : (r[0] * 1.0001f);
 
     if (lagWindow && order) {
-        // The library hardcodes the first factor as 0.99941 - it is
+        // The original hardcodes the first factor as 0.99941 - it is
         // kLPCLagWindow[0] folded into an immediate - and reads the rest of
         // the table from index 1 on, so r[i] takes kLPCLagWindow[i-1].
         for (i = 1; i <= order; ++i)
@@ -168,14 +168,14 @@ void LSFTools::Condition_LSFs(float* lsf, float minGap, float fs) const
     }
 }
 
-// apac::LSFTools::ConditionLSFs, 0x9c6e0 - the constants are the library's.
+// apac::LSFTools::ConditionLSFs, 0x9c6e0 - the constants are the original's.
 void LSFTools::ConditionLSFs(float* lsf) const
 {
     Condition_LSFs(lsf, 50.0f, 24000.0f);
 }
 
 // apac::LSFTools::get_LSFWeightingFactors, 0xb4220.  Transcribed with the
-// library's loop shape, which handles two entries per iteration and leaves
+// original's loop shape, which handles two entries per iteration and leaves
 // the last one (or the last two, for order < 4) to the tail.
 void LSFTools::get_LSFWeightingFactors(const float* a, float* w,
                                        uint16_t order, float fs)
@@ -188,7 +188,7 @@ void LSFTools::get_LSFWeightingFactors(const float* a, float* w,
 
     if (end > 1) {
         uint32_t i = 1, j = 1;
-        // Bounded: `i` steps by two and the library's break is `end <= i`, so
+        // Bounded: `i` steps by two and the original's break is `end <= i`, so
         // this cannot exceed order iterations even on a nonsense order.
         for (uint32_t guard = 0; guard <= (uint32_t)order; ++guard) {
             i += 2;
@@ -266,7 +266,7 @@ void LSFTools::LSP_To_LPC(const float* lsp, float* lpc, uint16_t order)
     }
 }
 
-// apac::LSFTools::LSF_To_LPC, 0xb5370.  Three virtual calls in the library,
+// apac::LSFTools::LSF_To_LPC, 0xb5370.  Three virtual calls in the original,
 // all through the object's own vtable:
 //
 //   if (vtable[136] == apac::LSFTools::ConditionLSFs)   // slot 17
@@ -338,7 +338,7 @@ void LPMDCTFilter::LPImpulseToSpecEnvelope(const float* impulse, float* env,
 
 // apac::LPMDCTFilter::LPCToSpecEnvelope, 0xb4be0: zero-pad the coefficients to
 // the transform length and hand them to LPImpulseToSpecEnvelope, which the
-// library reaches through its own vtable.
+// original reaches through its own vtable.
 void LPMDCTFilter::LPCToSpecEnvelope(const float* lpc, float* env, uint32_t n)
 {
     memset(mImpulse, 0, sizeof(float) * mFFTSize);

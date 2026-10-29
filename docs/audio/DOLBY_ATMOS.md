@@ -11,7 +11,7 @@
 Two very different "Dolby" questions live here — keep them separate:
 
 1. **The transport question** — what Atmos *is* on the wire, and why the phone won't send it to us in real time.
-2. **The DSP question** — how Dolby distributes objects to a surround field, and what principles [HSSR](HSSR_MODEL.md) borrowed.
+2. **The DSP question** — how Dolby distributes objects to a surround field, and what principles [HSSR](archive/HSSR_MODEL.md) borrowed.
 
 > **Scope & honesty.** This is analysis, **not** a redistribution of anything Dolby. **The Dolby binary, Dolby's own PDF, and our raw RE dumps have been removed from the repo** — Dolby-proprietary material is not kept here; this analysis is the only retained Dolby artifact. Numbers below are results of our *own* reverse-engineering (static disassembly + Unicorn emulation of extracted kernels). Provenance: `docs/research/DOLBY_ATMOS_TEARDOWN.md`.
 
@@ -36,7 +36,7 @@ flowchart TB
   class buffered_103 success
 ```
 
-The realtime stream is PCM passthrough only — stock 210 libairplay never decodes AAC (`AudioConverterNew_compat` is a dead stub). `[car]`: realtime CarPlay = `'lpcm'` 48 kHz/16/stereo on `mpl5_dio_ent`. The hook upmixes that stereo media PCM itself (`AUDIO_REALTIME_UPMIX=on`, `deploy/smartphone_integrator/carplay_startup.sh:86`). See [Stereo to 5.1 Upmix](STEREO_TO_5_1_UPMIX.md) for how both streams feed the pipeline.
+The realtime stream is PCM passthrough only — stock 210 libairplay never decodes AAC (`AudioConverterNew_compat` is a dead stub). `[car]`: realtime CarPlay = `'lpcm'` 48 kHz/16/stereo on `mpl5_dio_ent`. The hook upmixes that stereo media PCM itself (controlled live by the MMI UpMix setting). See [Stereo to 5.1 Upmix](STEREO_TO_5_1_UPMIX.md) for how both streams feed the pipeline.
 
 ## 🔍 What "Dolby Atmos" is on the transport
 
@@ -130,7 +130,7 @@ All three are implemented behind flags that default off in code and are bit-exac
 
 The −0.18 cross term with `1/sqrt(1+0.18²)` scaling was the plan's first form (`docs/audio/UPMIX_CALIBRATION_AND_TUNING.md`); the code ships the 0.79 / 0.60 / 0.14 split above.
 
-Plus a bonus fix: ungated retention kept each bright object's treble in the front (+1.3 dB in the front 2–16 kHz, per `hssr_dsp.c:1576-1578` and `carplay_startup.sh:79-80`). The fix — a frequency-dependent retention taper, library default `1000:2500 Hz` (`hook/audio/stereo_upmix.h:42-43`) — is the analogue of Dolby's front-vs-surround voicing and ships with retention 0.5. See [HSSR Model](HSSR_MODEL.md).
+Plus a bonus fix: ungated retention kept each bright object's treble in the front (+1.3 dB in the front 2–16 kHz, per `hssr_dsp.c:1576-1578` and `carplay_startup.sh:79-80`). The fix — a frequency-dependent retention taper, library default `1000:2500 Hz` (`hook/audio/stereo_upmix.h:42-43`) — is the analogue of Dolby's front-vs-surround voicing and ships with retention 0.5. See [HSSR Model](archive/HSSR_MODEL.md).
 
 ## ❌ Where HSSR deliberately differs
 

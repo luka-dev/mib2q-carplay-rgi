@@ -14,7 +14,7 @@
 // apac::GetSFBOffsetTable before calling Deserialize, and Deserialize rejects a
 // maxSfb larger than whichever one applies.  Wiring them up is stage f's job.
 //
-// Deserialize returns TRUE on error, which is the library's convention.
+// Deserialize returns TRUE on error, which is the original's convention.
 
 #ifndef APAC_ICS_INFO_H
 #define APAC_ICS_INFO_H

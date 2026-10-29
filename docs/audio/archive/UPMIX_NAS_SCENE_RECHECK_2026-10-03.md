@@ -26,7 +26,7 @@ Ten selected runtime trees were listed to a bounded depth. Nine selected saved r
 
 [Sanitized report bindings and numerical excerpts](UPMIX_NAS_SCENE_RECHECK_2026-10-03.json) retain the exact relative report paths, raw-file hashes, completion/scope fields and selected values. They do not contain credentials or download links. Original reports remain on the NAS.
 
-The earlier consolidated [training history](../UPMIX_TRAINING_HISTORY.md#-p1-direct-stereo-to-multichannel) and [dataset inventory](../UPMIX_DATASETS_AND_TEACHERS.md#-where-it-all-lives) remain useful. Their September15 inventory is historical; the live directory enumeration here is an October3 observation.
+The earlier consolidated [training history](UPMIX_TRAINING_HISTORY.md#-p1-direct-stereo-to-multichannel) and [dataset inventory](../UPMIX_DATASETS_AND_TEACHERS.md#-where-it-all-lives) remain useful. Their September15 inventory is historical; the live directory enumeration here is an October3 observation.
 
 ## 📊 Relevant recovered experiments
 

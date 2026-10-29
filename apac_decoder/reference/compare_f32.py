@@ -4,7 +4,7 @@
     compare_f32.py A.f32 B.f32 CHANNELS [FRAMES_PER_BLOCK]
 
 Written for the stage-d composition test: A is Pioneer's own decode of the
-capture, B is the same decode with our transform stage patched in, and
+capture, B is the same decode with the port's transform stage patched in, and
 the question is what the substitution costs at the output.
 
 Reports, per channel and overall:

@@ -1,0 +1,767 @@
+{
+  "date": "2026-10-23",
+  "comparison": "sequential A/B; not controlled A/B/A",
+  "reports": {
+    "sdio_patched": {
+      "source": "build/hu-network-load-ch1-20261023/summary.json",
+      "sha256": "7acd273e3301a505d5846fe09cc8fcf36b48ef013dd030146b73e16a53e5cac4",
+      "summary": {
+        "path": "Mac en0 10.173.189.45 <-> HU uap0 10.173.189.1 channel1; control SSH over Tailscale, unchanged AWDL/radio/PF",
+        "driver_sha256": "47a370bc30ca1b038fa5baee1c3eb6f3ef567788a70f57aed3957e98a35a1f05",
+        "sdio_sha256": "ee6ddf524dfed06272b5cef1348d8f91c28d53be9ba9d0e31026e3fc0fbad393",
+        "rows": [
+          {
+            "name": "idle-before",
+            "kind": "idle",
+            "seconds": 15,
+            "requested_mbps": null,
+            "ping": {
+              "samples": 102,
+              "sent": 102,
+              "received": 102,
+              "mean_ms": 12.309,
+              "p50_ms": 4.95,
+              "p95_ms": 51.028,
+              "p99_ms": 79.147,
+              "max_ms": 92.922
+            },
+            "cpu": {
+              "sdio_one_core_percent": 1.107,
+              "sdio_sample_seconds": 15.018,
+              "io_pkt_one_core_percent": 3.191,
+              "io_pkt_sample_seconds": 15.025
+            },
+            "received_mbps": null
+          },
+          {
+            "name": "r1-tcp-up",
+            "kind": "tcp_up",
+            "seconds": 20,
+            "requested_mbps": null,
+            "ping": {
+              "samples": 137,
+              "sent": 138,
+              "received": 137,
+              "mean_ms": 28.834,
+              "p50_ms": 20.17,
+              "p95_ms": 90.217,
+              "p99_ms": 127.672,
+              "max_ms": 131.703
+            },
+            "cpu": {
+              "sdio_one_core_percent": 23.725,
+              "sdio_sample_seconds": 20.025,
+              "io_pkt_one_core_percent": 24.931,
+              "io_pkt_sample_seconds": 20.042
+            },
+            "received_mbps": 27.1,
+            "receiver_seconds": 20.1,
+            "receiver_line": "[ 62.16%, 44.14%, 42.34%, 45.05%, sum 193.69%][  4]  0.0-20.1 sec  65.0 MBytes  27.1 Mbits/sec"
+          },
+          {
+            "name": "r1-tcp-down",
+            "kind": "tcp_down",
+            "seconds": 20,
+            "requested_mbps": null,
+            "ping": {
+              "samples": 140,
+              "sent": 140,
+              "received": 140,
+              "mean_ms": 17.141,
+              "p50_ms": 12.3,
+              "p95_ms": 46.734,
+              "p99_ms": 83.158,
+              "max_ms": 98.682
+            },
+            "cpu": {
+              "sdio_one_core_percent": 16.347,
+              "sdio_sample_seconds": 20.024,
+              "io_pkt_one_core_percent": 21.611,
+              "io_pkt_sample_seconds": 20.036
+            },
+            "received_mbps": 26.0,
+            "receiver_seconds": 20.07,
+            "receiver_line": "[  1] 0.00-20.07 sec  62.1 MBytes  26.0 Mbits/sec"
+          },
+          {
+            "name": "r1-udp30-up",
+            "kind": "udp_up",
+            "seconds": 30,
+            "requested_mbps": 30,
+            "ping": {
+              "samples": 200,
+              "sent": 201,
+              "received": 200,
+              "mean_ms": 17.845,
+              "p50_ms": 8.782,
+              "p95_ms": 62.277,
+              "p99_ms": 98.772,
+              "max_ms": 123.527
+            },
+            "cpu": {
+              "sdio_one_core_percent": 25.897,
+              "sdio_sample_seconds": 30.04,
+              "io_pkt_one_core_percent": 28.035,
+              "io_pkt_sample_seconds": 30.063
+            },
+            "received_mbps": 28.9,
+            "receiver_seconds": 30.3,
+            "receiver_line": "[ 16.39%, 11.07%, 7.38%, 6.56%, sum 41.39%][  3]  0.0-30.3 sec   104 MBytes  28.9 Mbits/sec   4.454 ms    2/78187 (0.0026%)",
+            "jitter_ms": 4.454,
+            "lost": 2,
+            "total": 78187,
+            "loss_percent": 0.0026,
+            "offered_mbps": 29.189,
+            "local_backpressure_retries": 0
+          },
+          {
+            "name": "r1-udp45-up",
+            "kind": "udp_up",
+            "seconds": 20,
+            "requested_mbps": 45,
+            "ping": {
+              "samples": 123,
+              "sent": 139,
+              "received": 123,
+              "mean_ms": 43.699,
+              "p50_ms": 25.98,
+              "p95_ms": 137.748,
+              "p99_ms": 185.777,
+              "max_ms": 248.319
+            },
+            "cpu": {
+              "sdio_one_core_percent": 27.892,
+              "sdio_sample_seconds": 20.023,
+              "io_pkt_one_core_percent": 35.38,
+              "io_pkt_sample_seconds": 20.041
+            },
+            "received_mbps": 38.5,
+            "receiver_seconds": 20.3,
+            "receiver_line": "[ 36.75%, 19.28%, 18.67%, 16.87%, sum 91.57%][  3]  0.0-20.3 sec  93.3 MBytes  38.5 Mbits/sec  17.085 ms   65/69956 (0.093%)",
+            "jitter_ms": 17.085,
+            "lost": 65,
+            "total": 69956,
+            "loss_percent": 0.093,
+            "offered_mbps": 39.175,
+            "local_backpressure_retries": 4049
+          },
+          {
+            "name": "r2-tcp-up",
+            "kind": "tcp_up",
+            "seconds": 20,
+            "requested_mbps": null,
+            "ping": {
+              "samples": 126,
+              "sent": 135,
+              "received": 126,
+              "mean_ms": 40.536,
+              "p50_ms": 28.476,
+              "p95_ms": 112.297,
+              "p99_ms": 197.239,
+              "max_ms": 199.767
+            },
+            "cpu": {
+              "sdio_one_core_percent": 27.34,
+              "sdio_sample_seconds": 20.026,
+              "io_pkt_one_core_percent": 31.013,
+              "io_pkt_sample_seconds": 20.041
+            },
+            "received_mbps": 31.1,
+            "receiver_seconds": 20.2,
+            "receiver_line": "[ 37.43%, 25.13%, 28.34%, 26.20%, sum 117.11%][  4]  0.0-20.2 sec  74.7 MBytes  31.1 Mbits/sec"
+          },
+          {
+            "name": "r2-tcp-down",
+            "kind": "tcp_down",
+            "seconds": 20,
+            "requested_mbps": null,
+            "ping": {
+              "samples": 127,
+              "sent": 129,
+              "received": 127,
+              "mean_ms": 19.615,
+              "p50_ms": 13.301,
+              "p95_ms": 58.075,
+              "p99_ms": 97.215,
+              "max_ms": 118.372
+            },
+            "cpu": {
+              "sdio_one_core_percent": 14.948,
+              "sdio_sample_seconds": 20.025,
+              "io_pkt_one_core_percent": 20.633,
+              "io_pkt_sample_seconds": 20.043
+            },
+            "received_mbps": 23.4,
+            "receiver_seconds": 20.15,
+            "receiver_line": "[  1] 0.00-20.15 sec  56.2 MBytes  23.4 Mbits/sec"
+          },
+          {
+            "name": "r2-udp30-up",
+            "kind": "udp_up",
+            "seconds": 30,
+            "requested_mbps": 30,
+            "ping": {
+              "samples": 191,
+              "sent": 195,
+              "received": 191,
+              "mean_ms": 22.592,
+              "p50_ms": 10.477,
+              "p95_ms": 98.624,
+              "p99_ms": 146.541,
+              "max_ms": 147.423
+            },
+            "cpu": {
+              "sdio_one_core_percent": 25.418,
+              "sdio_sample_seconds": 30.039,
+              "io_pkt_one_core_percent": 29.321,
+              "io_pkt_sample_seconds": 30.064
+            },
+            "received_mbps": 29.3,
+            "receiver_seconds": 30.3,
+            "receiver_line": "[ 14.51%, 4.31%, 3.92%, 3.53%, sum 26.27%][  3]  0.0-30.3 sec   106 MBytes  29.3 Mbits/sec   0.351 ms   26/79189 (0.033%)",
+            "jitter_ms": 0.351,
+            "lost": 26,
+            "total": 79189,
+            "loss_percent": 0.033,
+            "offered_mbps": 29.564,
+            "local_backpressure_retries": 0
+          },
+          {
+            "name": "r2-udp45-up",
+            "kind": "udp_up",
+            "seconds": 20,
+            "requested_mbps": 45,
+            "ping": {
+              "samples": 115,
+              "sent": 133,
+              "received": 115,
+              "mean_ms": 54.295,
+              "p50_ms": 31.276,
+              "p95_ms": 185.383,
+              "p99_ms": 315.225,
+              "max_ms": 460.334
+            },
+            "cpu": {
+              "sdio_one_core_percent": 28.722,
+              "sdio_sample_seconds": 20.023,
+              "io_pkt_one_core_percent": 37.748,
+              "io_pkt_sample_seconds": 20.041
+            },
+            "received_mbps": 41.6,
+            "receiver_seconds": 20.3,
+            "receiver_line": "[ 73.55%, 43.87%, 46.13%, 43.55%, sum 207.10%][  3]  0.0-20.3 sec   101 MBytes  41.6 Mbits/sec  17.009 ms   16/75361 (0.021%)",
+            "jitter_ms": 17.009,
+            "lost": 16,
+            "total": 75361,
+            "loss_percent": 0.021,
+            "offered_mbps": 42.201,
+            "local_backpressure_retries": 1799
+          },
+          {
+            "name": "idle-after",
+            "kind": "idle",
+            "seconds": 15,
+            "requested_mbps": null,
+            "ping": {
+              "samples": 94,
+              "sent": 94,
+              "received": 94,
+              "mean_ms": 11.37,
+              "p50_ms": 5.561,
+              "p95_ms": 49.728,
+              "p99_ms": 75.268,
+              "max_ms": 75.786
+            },
+            "cpu": {
+              "sdio_one_core_percent": 12.19,
+              "sdio_sample_seconds": 15.021,
+              "io_pkt_one_core_percent": 14.114,
+              "io_pkt_sample_seconds": 15.028
+            },
+            "received_mbps": null
+          }
+        ],
+        "limits": [
+          "ICMP RTT, not video or one-way latency.",
+          "Repeated current-build measurements; no contemporaneous stock control.",
+          "Synthetic Mac traffic, not iPhone CarPlay frame pacing.",
+          "CPU is one-core scale; whole io-pkt includes Wi-Fi and all networking."
+        ]
+      }
+    },
+    "sdio_stock": {
+      "source": "build/hu-sdio-ab-stock-20261023/summary.json",
+      "sha256": "93c423f67c78d49025ccc40433bd692399e37c8539eb283741cb49b200a10558",
+      "summary": {
+        "path": "Mac en0 10.173.189.45 <-> HU uap0 10.173.189.1 channel1; control SSH over Tailscale, unchanged AWDL/radio/PF",
+        "driver_sha256": "47a370bc30ca1b038fa5baee1c3eb6f3ef567788a70f57aed3957e98a35a1f05",
+        "sdio_sha256": "ec30174b59b51b94dee7a8c3f209e069ebabc8341d97194c2f30d674676fad46",
+        "rows": [
+          {
+            "name": "idle-before",
+            "kind": "idle",
+            "seconds": 15,
+            "requested_mbps": null,
+            "ping": {
+              "samples": 96,
+              "sent": 96,
+              "received": 96,
+              "mean_ms": 4.509,
+              "p50_ms": 3.756,
+              "p95_ms": 8.735,
+              "p99_ms": 10.674,
+              "max_ms": 11.879
+            },
+            "cpu": {
+              "sdio_one_core_percent": 1.187,
+              "sdio_sample_seconds": 15.018,
+              "io_pkt_one_core_percent": 3.084,
+              "io_pkt_sample_seconds": 15.024
+            },
+            "received_mbps": null
+          },
+          {
+            "name": "r1-tcp-up",
+            "kind": "tcp_up",
+            "seconds": 20,
+            "requested_mbps": null,
+            "ping": {
+              "samples": 126,
+              "sent": 126,
+              "received": 126,
+              "mean_ms": 17.346,
+              "p50_ms": 15.215,
+              "p95_ms": 31.963,
+              "p99_ms": 44.395,
+              "max_ms": 58.49
+            },
+            "cpu": {
+              "sdio_one_core_percent": 28.77,
+              "sdio_sample_seconds": 20.025,
+              "io_pkt_one_core_percent": 34.3,
+              "io_pkt_sample_seconds": 20.044
+            },
+            "received_mbps": 46.6,
+            "receiver_seconds": 20.1,
+            "receiver_line": "[ 38.96%, 24.68%, 23.38%, 22.08%, sum 109.09%][  4]  0.0-20.1 sec   112 MBytes  46.6 Mbits/sec"
+          },
+          {
+            "name": "r1-tcp-down",
+            "kind": "tcp_down",
+            "seconds": 20,
+            "requested_mbps": null,
+            "ping": {
+              "samples": 128,
+              "sent": 128,
+              "received": 128,
+              "mean_ms": 11.393,
+              "p50_ms": 10.761,
+              "p95_ms": 21.179,
+              "p99_ms": 24.589,
+              "max_ms": 30.431
+            },
+            "cpu": {
+              "sdio_one_core_percent": 23.394,
+              "sdio_sample_seconds": 20.024,
+              "io_pkt_one_core_percent": 34.369,
+              "io_pkt_sample_seconds": 20.042
+            },
+            "received_mbps": 34.9,
+            "receiver_seconds": 20.06,
+            "receiver_line": "[  1] 0.00-20.06 sec  83.4 MBytes  34.9 Mbits/sec"
+          },
+          {
+            "name": "r1-udp30-up",
+            "kind": "udp_up",
+            "seconds": 30,
+            "requested_mbps": 30,
+            "ping": {
+              "samples": 192,
+              "sent": 192,
+              "received": 192,
+              "mean_ms": 7.503,
+              "p50_ms": 5.207,
+              "p95_ms": 17.864,
+              "p99_ms": 35.271,
+              "max_ms": 71.177
+            },
+            "cpu": {
+              "sdio_one_core_percent": 32.708,
+              "sdio_sample_seconds": 30.045,
+              "io_pkt_one_core_percent": 30.942,
+              "io_pkt_sample_seconds": 30.068
+            },
+            "received_mbps": 29.5,
+            "receiver_seconds": 30.3,
+            "receiver_line": "[ 8.27%, 5.26%, 4.51%, 3.76%, sum 21.80%][  3]  0.0-30.3 sec   106 MBytes  29.5 Mbits/sec   0.479 ms    0/79734 (0%)",
+            "jitter_ms": 0.479,
+            "lost": 0,
+            "total": 79734,
+            "loss_percent": 0.0,
+            "offered_mbps": 29.767,
+            "local_backpressure_retries": 0
+          },
+          {
+            "name": "r1-udp45-up",
+            "kind": "udp_up",
+            "seconds": 20,
+            "requested_mbps": 45,
+            "ping": {
+              "samples": 131,
+              "sent": 131,
+              "received": 131,
+              "mean_ms": 14.799,
+              "p50_ms": 11.028,
+              "p95_ms": 37.156,
+              "p99_ms": 51.652,
+              "max_ms": 57.39
+            },
+            "cpu": {
+              "sdio_one_core_percent": 34.388,
+              "sdio_sample_seconds": 20.028,
+              "io_pkt_one_core_percent": 37.827,
+              "io_pkt_sample_seconds": 20.044
+            },
+            "received_mbps": 43.8,
+            "receiver_seconds": 20.3,
+            "receiver_line": "[ 8.30%, 5.42%, 4.33%, 2.89%, sum 20.94%][  3]  0.0-20.3 sec   106 MBytes  43.8 Mbits/sec   0.520 ms    0/79249 (0%)",
+            "jitter_ms": 0.52,
+            "lost": 0,
+            "total": 79249,
+            "loss_percent": 0.0,
+            "offered_mbps": 44.379,
+            "local_backpressure_retries": 0
+          },
+          {
+            "name": "r2-tcp-up",
+            "kind": "tcp_up",
+            "seconds": 20,
+            "requested_mbps": null,
+            "ping": {
+              "samples": 126,
+              "sent": 126,
+              "received": 126,
+              "mean_ms": 18.197,
+              "p50_ms": 16.864,
+              "p95_ms": 32.275,
+              "p99_ms": 53.135,
+              "max_ms": 55.951
+            },
+            "cpu": {
+              "sdio_one_core_percent": 28.358,
+              "sdio_sample_seconds": 20.028,
+              "io_pkt_one_core_percent": 34.655,
+              "io_pkt_sample_seconds": 20.045
+            },
+            "received_mbps": 44.7,
+            "receiver_seconds": 20.1,
+            "receiver_line": "[ 33.33%, 19.70%, 21.21%, 10.61%, sum 84.85%][  4]  0.0-20.1 sec   107 MBytes  44.7 Mbits/sec"
+          },
+          {
+            "name": "r2-tcp-down",
+            "kind": "tcp_down",
+            "seconds": 20,
+            "requested_mbps": null,
+            "ping": {
+              "samples": 131,
+              "sent": 131,
+              "received": 131,
+              "mean_ms": 10.774,
+              "p50_ms": 10.424,
+              "p95_ms": 19.09,
+              "p99_ms": 23.091,
+              "max_ms": 23.525
+            },
+            "cpu": {
+              "sdio_one_core_percent": 22.263,
+              "sdio_sample_seconds": 20.028,
+              "io_pkt_one_core_percent": 33.806,
+              "io_pkt_sample_seconds": 20.042
+            },
+            "received_mbps": 35.6,
+            "receiver_seconds": 20.13,
+            "receiver_line": "[  1] 0.00-20.13 sec  85.4 MBytes  35.6 Mbits/sec"
+          },
+          {
+            "name": "r2-udp30-up",
+            "kind": "udp_up",
+            "seconds": 30,
+            "requested_mbps": 30,
+            "ping": {
+              "samples": 194,
+              "sent": 194,
+              "received": 194,
+              "mean_ms": 8.054,
+              "p50_ms": 5.381,
+              "p95_ms": 20.384,
+              "p99_ms": 37.183,
+              "max_ms": 60.452
+            },
+            "cpu": {
+              "sdio_one_core_percent": 30.292,
+              "sdio_sample_seconds": 30.037,
+              "io_pkt_one_core_percent": 30.337,
+              "io_pkt_sample_seconds": 30.066
+            },
+            "received_mbps": 29.4,
+            "receiver_seconds": 30.3,
+            "receiver_line": "[ 9.72%, 9.37%, 3.47%, 3.12%, sum 25.69%][  3]  0.0-30.3 sec   106 MBytes  29.4 Mbits/sec   0.521 ms    0/79598 (0%)",
+            "jitter_ms": 0.521,
+            "lost": 0,
+            "total": 79598,
+            "loss_percent": 0.0,
+            "offered_mbps": 29.717,
+            "local_backpressure_retries": 0
+          },
+          {
+            "name": "r2-udp45-up",
+            "kind": "udp_up",
+            "seconds": 20,
+            "requested_mbps": 45,
+            "ping": {
+              "samples": 130,
+              "sent": 132,
+              "received": 130,
+              "mean_ms": 13.937,
+              "p50_ms": 8.747,
+              "p95_ms": 32.128,
+              "p99_ms": 119.805,
+              "max_ms": 130.874
+            },
+            "cpu": {
+              "sdio_one_core_percent": 32.842,
+              "sdio_sample_seconds": 20.026,
+              "io_pkt_one_core_percent": 40.232,
+              "io_pkt_sample_seconds": 20.045
+            },
+            "received_mbps": 43.8,
+            "receiver_seconds": 20.3,
+            "receiver_line": "[ 9.40%, 6.01%, 6.01%, 6.39%, sum 27.82%][  3]  0.0-20.3 sec   106 MBytes  43.8 Mbits/sec   0.393 ms    0/79298 (0%)",
+            "jitter_ms": 0.393,
+            "lost": 0,
+            "total": 79298,
+            "loss_percent": 0.0,
+            "offered_mbps": 44.407,
+            "local_backpressure_retries": 0
+          },
+          {
+            "name": "idle-after",
+            "kind": "idle",
+            "seconds": 15,
+            "requested_mbps": null,
+            "ping": {
+              "samples": 96,
+              "sent": 96,
+              "received": 96,
+              "mean_ms": 4.322,
+              "p50_ms": 3.734,
+              "p95_ms": 7.036,
+              "p99_ms": 9.762,
+              "max_ms": 10.23
+            },
+            "cpu": {
+              "sdio_one_core_percent": 1.207,
+              "sdio_sample_seconds": 15.02,
+              "io_pkt_one_core_percent": 3.03,
+              "io_pkt_sample_seconds": 15.023
+            },
+            "received_mbps": null
+          }
+        ],
+        "limits": [
+          "ICMP RTT, not video or one-way latency.",
+          "Repeated current-build measurements; no contemporaneous stock control.",
+          "Synthetic Mac traffic, not iPhone CarPlay frame pacing.",
+          "CPU is one-core scale; whole io-pkt includes Wi-Fi and all networking."
+        ]
+      }
+    },
+    "historical_peak": {
+      "source": "build/wifi-latency-full-20261022/hu-speed-test/summary.json",
+      "sha256": "0353d0cc749b65d070acb3d5ebd88e8e2a20af1c967eb9debd0a1c960fa6a2d8",
+      "summary": {
+        "time_utc": "2026-10-23T02:48:15.998690+00:00",
+        "status": "benchmarks complete; final HU health unavailable after Mac network change; cause awaiting user clarification",
+        "driver_sha256": "ff67efd8b8ec28c8fa10955c7474db9ec3ca0d15fe18072a3c3f4b6d6c5dd198",
+        "runtime_active_before": true,
+        "path_during_tests": "en0 10.173.189.45 <-> uap0 10.173.189.1",
+        "final_mac_ip": "192.168.0.204",
+        "measure": "ICMP RTT during separate synthetic TCP/UDP load; not CarPlay frame latency",
+        "carplay_interface_present": false,
+        "awdl_restored": true,
+        "benchmarks": [
+          {
+            "name": "awdl-on-idle",
+            "kind": "idle",
+            "ping": {
+              "samples": 62,
+              "sent": 62,
+              "received": 62,
+              "average_ms": 5.915,
+              "p50_ms": 5.261,
+              "p95_ms": 10.213,
+              "p99_ms": 12.151,
+              "max_ms": 13.089
+            },
+            "seconds": null
+          },
+          {
+            "name": "awdl-on-tcp-up",
+            "kind": "tcp_up",
+            "ping": {
+              "samples": 186,
+              "sent": 186,
+              "received": 186,
+              "average_ms": 18.291,
+              "p50_ms": 16.837,
+              "p95_ms": 33.482,
+              "p99_ms": 40.58,
+              "max_ms": 46.981
+            },
+            "seconds": 30,
+            "receiver_final": "[ 41.56%, 33.77%, 33.77%, 31.17%, sum 140.26%][  4]  0.0-30.1 sec   164 MBytes  45.7 Mbits/sec",
+            "mbps": 45.7
+          },
+          {
+            "name": "awdl-on-tcp-down",
+            "kind": "tcp_down",
+            "ping": {
+              "samples": 126,
+              "sent": 126,
+              "received": 126,
+              "average_ms": 11.291,
+              "p50_ms": 10.684,
+              "p95_ms": 20.149,
+              "p99_ms": 24.327,
+              "max_ms": 29.114
+            },
+            "seconds": 20,
+            "receiver_final": "[  1] 0.00-20.07 sec  82.0 MBytes  34.3 Mbits/sec",
+            "mbps": 34.3
+          },
+          {
+            "name": "awdl-on-udp30",
+            "kind": "udp_up",
+            "ping": {
+              "samples": 128,
+              "sent": 129,
+              "received": 128,
+              "average_ms": 9.778,
+              "p50_ms": 7.707,
+              "p95_ms": 21.241,
+              "p99_ms": 25.354,
+              "max_ms": 34.19
+            },
+            "seconds": 20,
+            "receiver_final": "[ 55.45%, 8.91%, 16.83%, 30.69%, sum 111.88%][  3]  0.0-20.3 sec  70.5 MBytes  29.2 Mbits/sec   0.514 ms    0/52805 (0%)",
+            "mbps": 29.2,
+            "lost": 0,
+            "datagrams": 52805,
+            "loss_pct": 0.0,
+            "pacer": "datagrams=52805 payload=1400 elapsed=20.000122 offered_mbps=29.571 local_backpressure_retries=0 ack_bytes=1400 interrupted=0"
+          },
+          {
+            "name": "awdl-on-udp45",
+            "kind": "udp_up",
+            "ping": {
+              "samples": 129,
+              "sent": 129,
+              "received": 129,
+              "average_ms": 13.111,
+              "p50_ms": 10.169,
+              "p95_ms": 30.41,
+              "p99_ms": 46.96,
+              "max_ms": 77.717
+            },
+            "seconds": 20,
+            "receiver_final": "[ 18.05%, 5.78%, 4.33%, 7.22%, sum 35.38%][  3]  0.0-20.3 sec   105 MBytes  43.5 Mbits/sec   0.554 ms    0/78699 (0%)",
+            "mbps": 43.5,
+            "lost": 0,
+            "datagrams": 78699,
+            "loss_pct": 0.0,
+            "pacer": "datagrams=78699 payload=1400 elapsed=20.000029 offered_mbps=44.071 local_backpressure_retries=0 ack_bytes=1400 interrupted=0"
+          },
+          {
+            "name": "awdl-off-idle",
+            "kind": "idle",
+            "ping": {
+              "samples": 31,
+              "sent": 32,
+              "received": 31,
+              "average_ms": 5.109,
+              "p50_ms": 4.994,
+              "p95_ms": 6.54,
+              "p99_ms": 9.891,
+              "max_ms": 11.304
+            },
+            "seconds": null
+          },
+          {
+            "name": "awdl-off-tcp-up",
+            "kind": "tcp_up",
+            "ping": {
+              "samples": 187,
+              "sent": 187,
+              "received": 187,
+              "average_ms": 17.516,
+              "p50_ms": 16.152,
+              "p95_ms": 33.36,
+              "p99_ms": 40.272,
+              "max_ms": 51.525
+            },
+            "seconds": 30,
+            "receiver_final": "[ 30.00%, 20.91%, 22.73%, 20.91%, sum 94.55%][  4]  0.0-30.1 sec   165 MBytes  46.1 Mbits/sec",
+            "mbps": 46.1
+          },
+          {
+            "name": "awdl-off-tcp-down",
+            "kind": "tcp_down",
+            "ping": {
+              "samples": 123,
+              "sent": 124,
+              "received": 123,
+              "average_ms": 12.974,
+              "p50_ms": 11.085,
+              "p95_ms": 25.237,
+              "p99_ms": 47.927,
+              "max_ms": 63.024
+            },
+            "seconds": 20,
+            "receiver_final": "[  1] 0.00-20.08 sec  70.9 MBytes  29.6 Mbits/sec",
+            "mbps": 29.6
+          },
+          {
+            "name": "awdl-off-udp45",
+            "kind": "udp_up",
+            "ping": {
+              "samples": 189,
+              "sent": 189,
+              "received": 189,
+              "average_ms": 13.243,
+              "p50_ms": 10.259,
+              "p95_ms": 29.493,
+              "p99_ms": 56.09,
+              "max_ms": 62.465
+            },
+            "seconds": 30,
+            "receiver_final": "[ 14.66%, 4.14%, 5.64%, 5.26%, sum 29.70%][  3]  0.0-30.3 sec   159 MBytes  44.0 Mbits/sec   1.671 ms    0/118894 (0%)",
+            "mbps": 44.0,
+            "lost": 0,
+            "datagrams": 118894,
+            "loss_pct": 0.0,
+            "pacer": "datagrams=118894 payload=1400 elapsed=30.000001 offered_mbps=44.387 local_backpressure_retries=0 ack_bytes=1400 interrupted=0"
+          }
+        ],
+        "udp_total_lost": 0,
+        "udp_total_datagrams": 250398,
+        "icmp_sent": 1164,
+        "icmp_received": 1161,
+        "final_tailscale_status": {
+          "local_backend": "Running",
+          "HU_online": false,
+          "observed_utc": "2026-10-23T02:50:11Z"
+        }
+      }
+    }
+  }
+}

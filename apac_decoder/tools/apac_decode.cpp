@@ -2,14 +2,14 @@
  * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
-// apac_decode - decode APAC packets with OUR decoder and write float32 PCM.
+// apac_decode - decode APAC packets with the PORT and write float32 PCM.
 //
-// This is our side of the whole-capture comparison that
-// apac_decoder/reference/run.sh runs with the library:
+// This is the port's side of the whole-capture comparison that
+// apac_decoder/reference/run.sh runs with the original library:
 //
 //     ./apac_decoder/reference/run.sh --f32          # library -> pioneer.f32
-//     apac_decode COOKIE OUT.f32 --list LIST         # ours    -> ours.f32
-//     apac_decoder/reference/compare_f32.py pioneer.f32 ours.f32 6
+//     apac_decode COOKIE OUT.f32 --list LIST         # port    -> port.f32
+//     apac_decoder/reference/compare_f32.py pioneer.f32 port.f32 6
 //
 // Output is INTERLEAVED float32 in the decoder's own channel order, exactly the
 // layout apac_ref writes with --f32, so the two files are directly comparable.
@@ -160,7 +160,7 @@ int main(int argc, char** argv)
     }
 
     // Same record layout as reference/spectrum_dump_shim.cpp writes for the
-    // library: [u32 channel][u32 windowSequence][1024 float32].
+    // original: [u32 channel][u32 windowSequence][1024 float32].
     FILE* dump = dumpPath ? fopen(dumpPath, "wb") : 0;
     if (dump)
         decoder.SetSpectrumSink(&DumpSpectrum, dump);

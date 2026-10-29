@@ -19,7 +19,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
             break;
         case 1:
             item.gen = q.generation;
-            item.key = data[i + 2] % 7u;
+            item.key = data[i + 2] % 5u;
             alt_command_offer(&q, item, &replaced, &has);
             break;
         case 2: {

@@ -30,7 +30,7 @@ ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 HOOK = os.path.join(ROOT, "hook", "audio")
 BUILD = os.path.join(ROOT, "build", "scene_port")
 import os as _os; _REPO = _os.path.normpath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '../../..')); _WS = _os.environ.get('AUDI_WORKSPACE', _os.path.expanduser('~/Desktop/AUDI_2'))  # sibling firmware/data dirs
-FIXTURES = _WS + "/upmix-data/scene_port_fixtures_2026-10-17"
+FIXTURES = _WS + "/upmix-data/scene_port_fixtures_2026-10-09"
 sys.path.insert(0, os.path.join(HERE, ".."))
 import scene_upmix  # noqa: E402  (the reference; never edited here)
 
@@ -73,8 +73,7 @@ def build_lib(path):
     lib = os.path.join(BUILD, "libscene_clusters.so") if path is None else path
     if path is None:
         subprocess.check_call(["cc", "-O2", "-std=gnu99", "-ffp-contract=off", "-Wall", "-Wextra", "-fPIC",
-                               "-shared", "-I" + HOOK, os.path.join(HOOK, "scene_clusters.c"),
-                               os.path.join(HOOK, "scene_engine_math.c"), "-lm", "-o", lib])
+                               "-shared", "-I" + HOOK, os.path.join(HOOK, "scene_clusters.c"), "-lm", "-o", lib])
     return ctypes.CDLL(lib)
 
 

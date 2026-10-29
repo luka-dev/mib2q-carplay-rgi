@@ -7,6 +7,7 @@ Original firmware libraries/binaries are inputs, never outputs of this builder.
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import subprocess
 import tarfile
@@ -26,7 +27,7 @@ def main():
     run('python3','wireless/integration/build_owner_offline.py','--stock210','--property-handoff')
     run('python3','wireless/integration/build_launch_candidate.py','--stock210','--property-handoff')
     run('docker','run','--rm','--platform=linux/amd64','-v',f'{AUDI}:/src',
-        '-w','/src/Patches/mhi2-carplay','qnx65-armv7-toolchain:latest',
+        '-w','/src/Patches/mhi2-carplay',os.environ.get('QNX_RUST_IMAGE','qnx65-armv7-toolchain:8.5-rust'),
         '/opt/rust/qnx-cargo','build','-q','--manifest-path','wireless/daemon/Cargo.toml',
         '--bin','mhi2q-wireless-daemon')
     files={
@@ -35,6 +36,8 @@ def main():
         'hooks/libdio_receiver_bridge.so':'wireless/receiver_bridge/out/libdio_receiver_bridge.stock210.offline.so',
         'hooks/dio_owner_exec':'wireless/integration/out/dio_owner_exec.handoff.offline',
         'hooks/wireless_dio_supervisor_bin':'wireless/integration/out/wireless_dio_supervisor_bin.handoff.offline',
+        'hooks/wireless_runtime':'wireless/integration/out/wireless_runtime',
+        'hooks/mhi2q_mdns_probe':'wireless/integration/out/mhi2q_mdns_probe',
         'hooks/wireless_dio_supervisor.sh':'wireless/integration/wireless_dio_supervisor.sh',
         'hooks/carplay_startup.sh':'wireless/integration/out/carplay_startup.stock210.offline.sh',
         'hooks/mhi2q-wireless-daemon':'wireless/daemon/target/armv7-unknown-nto-qnx650/release/mhi2q-wireless-daemon',
@@ -43,6 +46,9 @@ def main():
         'wireless/receiver_bridge/out/qemu_stock210_lifecycle.log':'wireless/receiver_bridge/out/qemu_stock210_lifecycle.log',
         'wireless/daemon/out/qemu_daemon_phone_control.log':'wireless/daemon/out/qemu_daemon_phone_control.log',
     }
+    active_log = 'wireless/receiver_bridge/out/qemu_stock210_active_stop.log'
+    if (REPO / active_log).is_file():
+        files[active_log] = active_log
     # Preserve canonical relative paths so links between the migrated notes and
     # the included logs also work inside the review archive.
     if not (DOCS/'README.md').is_file():

@@ -12,8 +12,8 @@
 # view of time to it: each instruction advances the virtual clock by 2^N ns, and
 # every timer the guest reads is derived from that clock.  So a guest-side
 # measurement is a count of the instructions the target's own binary executed,
-# which is a real property of our decoder and of the ARMv7 code GCC generated for
-# it.  Turning that into seconds still needs an IPC assumption, and STATUS.md
+# which is a real property of the port and of the ARMv7 code GCC generated for
+# it.  Turning that into seconds still needs an IPC assumption, and PORT_STATUS
 # states the one it uses rather than hiding it in a headline number.
 #
 # apac_bench does not take this on trust: it times two loops of known length and

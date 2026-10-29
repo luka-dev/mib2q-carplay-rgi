@@ -150,6 +150,9 @@ read_generation
 case "${NCM_READ_GENERATION}" in
     "${GENERATION_KEY}":*)
         if "${NCM_IFCONFIG_BIN}" "${IF_NAME}" >/dev/null 2>&1; then
+            if [ "${IF_NAME}" = "carplay0" ]; then
+                echo "${NCM_READ_GENERATION}" > "${NCM_GENERATION_DIR}/ncm_session_generation" 2>/dev/null || :
+            fi
             log_ncm "skip duplicate_ready interface=${IF_NAME} generation=${NCM_READ_GENERATION}"
             exit 0
         fi
@@ -195,6 +198,9 @@ if "${NCM_IF_UP_BIN}" -p "${IF_NAME}" -s 2 -r 1; then
             log_ncm "fail generation_publish=${GENERATION_FILE}"
             cleanup_new_interface
             exit 1
+        fi
+        if [ "${IF_NAME}" = "carplay0" ]; then
+            echo "${GENERATION}" > "${NCM_GENERATION_DIR}/ncm_session_generation" 2>/dev/null || :
         fi
         log_ncm "ready interface=${IF_NAME} generation=${GENERATION}"
         exit 0

@@ -49,7 +49,7 @@ uint32_t CoreDecoder::Initialize(const CoreDecoderConfig& cfg,
         return kBadValue;
 
     if (cfg.numElements > kMaxDecoderElements)
-        return kLimitTooManyElementsRT;
+        return kPortTooManyElementsRT;
 
     mFrameLength = frameLength;
     mNumElements = cfg.numElements;
@@ -61,7 +61,7 @@ uint32_t CoreDecoder::Initialize(const CoreDecoderConfig& cfg,
         mNumChannels += mElement[i].NumChannels();
     }
     if (mNumChannels > kMaxDecoderChannels)
-        return kLimitTooManyChannels;
+        return kPortTooManyChannels;
 
     // APACChannelRemapper::Initialize, 0x0007bd80: the map is simply copied.
     // The remapper is only built when the config carries a non-empty one.
@@ -93,10 +93,10 @@ void CoreDecoder::Reset()
 // bandwidth-extension header for its channels; the element's Reset when it is
 // clear.  After every element the reader must still have bits left.
 //
-// The channel counter is maintained exactly where the library maintains it -
+// The channel counter is maintained exactly where the original maintains it -
 // inside the bandwidth-extension branch for a present element, and by a bare
 // ++ in the absent branch, which does NOT account for a channel pair.  That
-// asymmetry is the library's; it only moves which channel index the BWE header
+// asymmetry is the original's; it only moves which channel index the BWE header
 // is attributed to and it is unreachable on this content, where every presence
 // bit is set.
 uint32_t CoreDecoder::Deserialize(BitstreamReader& bs, bool align)
@@ -112,7 +112,7 @@ uint32_t CoreDecoder::Deserialize(BitstreamReader& bs, bool align)
                 const uint32_t brc = mBWE.Deserialize(bs, channel, e);
                 if (brc != kOk)
                     return brc;
-                // The synthesis, in the library's own place: after the
+                // The synthesis, in the original's own place: after the
                 // element's Deserialize (so after TNS) and after the BWE
                 // header, once per channel, each guarded by its own active
                 // flag.  0x7e440 devirtualises both calls - it compares the
@@ -159,7 +159,7 @@ uint32_t CoreDecoder::Deserialize(BitstreamReader& bs, bool align)
 uint32_t CoreDecoder::DecodeAPACFrame(BitstreamReader& bs, uint32_t frameType,
                                       float** channels)
 {
-    (void)frameType;    // the library passes it on and never reads it here
+    (void)frameType;    // the original passes it on and never reads it here
 
     const uint32_t rc = Deserialize(bs, true);
     if (rc != kOk)
@@ -196,15 +196,15 @@ uint32_t CoreDecoder::DecodeAPACFrame(BitstreamReader& bs, uint32_t frameType,
     // gather: entry i is chased through the map until it stops rising, and the
     // two slots are exchanged.
     //
-    // COUNTED, where the library's walk is not.  `j = mRemap[j]` terminates
+    // COUNTED, where the original's walk is not.  `j = mRemap[j]` terminates
     // only if the map is a permutation: a fixed point above i, or a cycle among
     // entries above i, spins forever, and an entry >= mNumChannels indexes past
-    // our fixed array.  The library grows its map from the bitstream and
+    // the port's fixed array.  The original grows its map from the bitstream and
     // never validates it, and Process is handed the map rather than the bits, so
     // the invariant is not enforced where it is relied on - the same shape of
-    // risk as APACTNSData::Apply.  Our decoder bounds the walk by the number of
+    // risk as APACTNSData::Apply.  The port bounds the walk by the number of
     // channels, which is the length of any real cycle, and refuses an index it
-    // cannot hold.  On a well-formed map this is the library, step for step.
+    // cannot hold.  On a well-formed map this is the original, step for step.
     if (mHasRemap) {
         for (uint32_t i = 0; i < n; ++i) {
             uint32_t j = mRemap[i];
@@ -237,7 +237,7 @@ uint32_t Decoder::Initialize(const GlobalConfig& cfg)
     mFrameLength = cfg.frameLength;
 
     if (cfg.numCodecConfigs == 0 || cfg.numCodecConfigs > kMaxCodecConfigs)
-        return kLimitTooManyConfigs;
+        return kPortTooManyConfigs;
     mNumCores = cfg.numCodecConfigs;
 
     for (uint32_t i = 0; i < mNumCores; ++i) {
@@ -249,7 +249,7 @@ uint32_t Decoder::Initialize(const GlobalConfig& cfg)
         mNumChannels += mCore[i].GetNumChannels();
     }
     if (mNumChannels > kMaxDecoderChannels)
-        return kLimitTooManyChannels;
+        return kPortTooManyChannels;
 
     mTrimming.Initialize(cfg.frameLength);
     mConfigured = 1;
@@ -355,7 +355,7 @@ uint32_t ASPDecoder::DecodeFrame(const uint8_t* data, uint32_t bytes,
     BitstreamReader bs(data, bytes);
     mFrameType = bs.GetBits(2);
     if (mFrameType == 2)
-        return kBadValue;       // the library's only rejection here
+        return kBadValue;       // the original's only rejection here
     const uint32_t rc = DecodeBody(bs, out);
     if (rc == kOk && framesOut)
         *framesOut = mFrameLength;

@@ -3,10 +3,19 @@
 
 pub mod carplay_control;
 pub mod control;
+mod device_name;
+mod factory_identity;
+mod file_transfer;
 pub mod mfi;
+#[cfg(feature = "native-api-lab")]
+#[path = "../probes/native_api_mfi.rs"]
+pub mod native_api_mfi;
+pub mod receiver_control;
+mod recovery;
+#[cfg(unix)]
+pub mod si_control;
 #[cfg(all(feature = "software-mfi-test", unix, not(target_os = "nto")))]
 pub mod software_mfi_test;
-pub mod receiver_control;
 pub mod wifi_ie;
 
 use iap2_link::{CONTROL_SESSION_ID, Event, LinkConfig, LinkEngine, LinkState};
@@ -32,7 +41,11 @@ pub struct BridgeFrame {
 
 impl BridgeFrame {
     pub fn encode(&self) -> io::Result<Vec<u8>> {
-        if self.data.len() > MAX_DATA || (self.kind != TYPE_DATA && !self.data.is_empty()) {
+        if self.data.len() > MAX_DATA
+            || (self.kind == TYPE_CONNECTED && !matches!(self.data.len(), 0 | 6))
+            || (self.kind == TYPE_DISCONNECTED && !self.data.is_empty())
+            || !matches!(self.kind, TYPE_CONNECTED | TYPE_DATA | TYPE_DISCONNECTED)
+        {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "invalid bridge frame",
@@ -67,7 +80,8 @@ impl FrameDecoder {
             if reserved != 0
                 || length > MAX_DATA
                 || !matches!(kind, TYPE_CONNECTED | TYPE_DATA | TYPE_DISCONNECTED)
-                || (kind != TYPE_DATA && length != 0)
+                || (kind == TYPE_CONNECTED && !matches!(length, 0 | 6))
+                || (kind == TYPE_DISCONNECTED && length != 0)
                 || (kind == TYPE_DATA && length == 0)
             {
                 return Err(io::Error::new(
@@ -96,6 +110,9 @@ pub struct BridgeLink {
     engine: Option<LinkEngine>,
     outbound: VecDeque<BridgeFrame>,
     control: VecDeque<Vec<u8>>,
+    files: VecDeque<Vec<u8>>,
+    authenticated: bool,
+    transfers: file_transfer::Transfers,
     dead: bool,
 }
 
@@ -117,6 +134,7 @@ impl BridgeLink {
     pub fn next_control(&mut self) -> Option<Vec<u8>> {
         self.control.pop_front()
     }
+    pub fn next_file(&mut self) -> Option<Vec<u8>> { self.files.pop_front() }
 
     pub fn send_control(&mut self, frame: Vec<u8>, now_ms: u64) -> io::Result<()> {
         let Some(engine) = &mut self.engine else {
@@ -142,6 +160,8 @@ impl BridgeLink {
                 self.generation = Some(frame.generation);
                 self.outbound.clear();
                 self.control.clear();
+                self.files.clear();
+                self.authenticated=false;self.transfers.clear();
                 self.dead = false;
                 let mut engine = LinkEngine::new(LinkConfig::default());
                 engine.start(false, now_ms);
@@ -152,6 +172,8 @@ impl BridgeLink {
                 self.generation = None;
                 self.outbound.clear();
                 self.control.clear();
+                self.files.clear();
+                self.authenticated=false;self.transfers.clear();
             }
             TYPE_DATA if self.generation == Some(frame.generation) => {
                 if let Some(engine) = &mut self.engine {
@@ -181,6 +203,11 @@ impl BridgeLink {
         while let Some(event) = engine.poll_event() {
             match event {
                 Event::Control(data) => self.control.push_back(data),
+                Event::FileTransfer(data) => {
+                    if !self.authenticated {continue;}
+                    if data.len()>MAX_DATA || self.files.len()==32 { self.dead=true; }
+                    else { self.files.push_back(data); }
+                }
                 Event::Dead { .. } => self.dead = true,
                 _ => {}
             }
@@ -213,14 +240,14 @@ fn drain_control<A: control::AuthProvider>(
             let Some(machine) = machine.as_mut() else {
                 continue;
             };
-            let is_availability = control::message_id(&frame).map_err(io::Error::other)? == 0x4300;
             if let Some(reply) = machine.handle(&frame).map_err(io::Error::other)? {
-                if is_availability {
+                if control::message_id(&reply).map_err(io::Error::other)? == 0x4301 {
                     gated_replies.push(reply);
                 } else {
                     link.send_control(reply, now_ms)?;
                 }
             }
+            link.authenticated=machine.phase()==control::Phase::Authenticated;
         }
     }
     Ok(gated_replies)
@@ -242,12 +269,60 @@ fn schedule_receiver_starts(
     Ok(())
 }
 
+fn publish_peer_name<A: control::AuthProvider>(
+    machine: &mut Option<control::ControlMachine<A>>,
+    peer: &mut Option<receiver_control::PeerIdentity>,
+    receiver: &receiver_control::ReceiverWorker,
+    generation: Option<u32>,
+) -> io::Result<()> {
+    if let Some(control) = machine.as_mut() {
+        if let (Some(generation),Some(identify))=(generation,control.take_identification()) {
+            receiver.identification(generation,identify)?;
+        }
+        while let Some(frame)=control.take_semantic() {
+            if let Some(generation)=generation { receiver.semantic(generation,1,frame)?; }
+        }
+        // Metadata stays off the link timer thread. The receiver worker
+        // rechecks native SI identity before forwarding the raw CSM frame.
+        while let Some(frame) = control.take_metadata() {
+            if let Some(generation) = generation {
+                let _ = receiver.now_playing(generation, frame);
+            }
+        }
+    }
+    if let Some(name) = machine.as_mut().and_then(|m| m.take_peer_name()) {
+        if let Some(identity) = peer.as_mut() {
+            if identity.name != name {
+                identity.name = name;
+                receiver.set_peer(Some(identity.clone()))?;
+            }
+        }
+    }
+    Ok(())
+}
+
 fn complete_receiver_starts(
     link: &mut BridgeLink,
     receiver: &receiver_control::ReceiverWorker,
     pending: &mut VecDeque<(u32, Vec<u8>)>,
     now_ms: u64,
+    recovery: &mut recovery::Recovery,
 ) -> io::Result<bool> {
+    while let Some((generation,frame))=receiver.try_outgoing() {
+        if link.generation()==Some(generation) && link.is_normal() { link.send_control(frame,now_ms)?; }
+    }
+    while let Some(frame)=link.next_file() {
+        /* Only authenticated control can start a receiver. Worker also checks
+         * the native SI admission before accepting any transfer payload. */
+        if let Some(generation)=link.generation() {
+            let (forward,replies)=link.transfers.accept(&frame);
+            if forward {receiver.semantic(generation,2,frame)?;}
+            for reply in replies {
+                if let Some(engine)=&mut link.engine {engine.send(iap2_link::FILE_TRANSFER_SESSION_ID,reply.to_vec(),now_ms);}
+            }
+            link.drain_engine();
+        }
+    }
     let mut start_carplay = false;
     while let Some((generation, result)) = receiver.try_result()? {
         let Some(index) = pending.iter().position(|(value, _)| *value == generation) else {
@@ -260,6 +335,7 @@ fn complete_receiver_starts(
         let id = match result {
             Ok(id) => id,
             Err(error) => {
+                recovery.started(generation, false, now_ms);
                 eprintln!("[receiver-control] START generation {generation}: {error}");
                 continue;
             }
@@ -267,12 +343,18 @@ fn complete_receiver_starts(
         let reply = match control::bind_receiver_identity(&reply, &id) {
             Ok(reply) => reply,
             Err(error) => {
+                recovery.started(generation, false, now_ms);
                 eprintln!("[receiver-control] identity generation {generation}: {error}");
                 receiver.reset()?;
                 continue;
             }
         };
         link.send_control(reply, now_ms)?;
+        link.send_control(
+            control::ControlMachine::<control::UnavailableAuth>::metadata_subscription(),
+            now_ms,
+        )?;
+        recovery.started(generation, true, now_ms);
         start_carplay = true;
     }
     Ok(start_carplay)
@@ -286,15 +368,30 @@ pub fn serve_stream<
     stream: &mut S,
     time_ms: impl Fn() -> u64,
     config: &control::Config,
-    mut auth_factory: impl FnMut() -> A,
+    auth_factory: impl FnMut() -> A,
     receiver_control: R,
+) -> io::Result<()> {
+    let receiver = receiver_control::ReceiverWorker::new(receiver_control);
+    serve_stream_with_receiver(stream, time_ms, config, auth_factory, &receiver)
+}
+
+/// Daemon-lifetime worker: RFCOMM/TCP loss must not drop an active IP media
+/// heartbeat. The caller resets bootstrap ownership when a stream ends.
+pub fn serve_stream_with_receiver<S: Read + Write, A: control::AuthProvider>(
+    stream: &mut S,
+    time_ms: impl Fn() -> u64,
+    config: &control::Config,
+    mut auth_factory: impl FnMut() -> A,
+    receiver: &receiver_control::ReceiverWorker,
 ) -> io::Result<()> {
     let mut decoder = FrameDecoder::default();
     let mut link = BridgeLink::default();
     let mut machine: Option<control::ControlMachine<A>> = None;
+    let mut current_peer = None;
     let mut csm_reader = control::CsmReader::default();
-    let receiver = receiver_control::ReceiverWorker::new(receiver_control);
+
     let mut pending_starts = VecDeque::new();
+    let mut recovery = recovery::Recovery::default();
     #[cfg(target_os = "nto")]
     let mut connector = carplay_control::ConnectorSlot::default();
     let mut buf = [0u8; 4096];
@@ -304,14 +401,23 @@ pub fn serve_stream<
             Ok(n) => {
                 for frame in decoder.feed(&buf[..n])? {
                     let old_generation = link.generation();
+                    let peer = if frame.kind == TYPE_CONNECTED && frame.data.len() == 6 {
+                        Some(receiver_control::PeerIdentity::from_sdk_address(
+                            frame.data.as_slice().try_into().unwrap(),
+                        ))
+                    } else {
+                        None
+                    };
                     #[cfg(target_os = "nto")]
-                    if frame.kind == TYPE_DATA &&
-                        frame.data == iap2_link::IAP2_MARKER {
+                    if frame.kind == TYPE_DATA && frame.data == iap2_link::IAP2_MARKER {
                         eprintln!("[bridge] iAP2 marker received from RFCOMM");
                     }
                     link.handle(frame, time_ms());
                     if link.generation() != old_generation {
+                        recovery.reset(link.generation());
                         receiver.reset()?;
+                        current_peer = peer;
+                        receiver.set_peer(current_peer.clone())?;
                         pending_starts.clear();
                         #[cfg(target_os = "nto")]
                         connector.reset();
@@ -322,6 +428,19 @@ pub fn serve_stream<
                     }
                     let replies =
                         drain_control(&mut link, &mut machine, &mut csm_reader, time_ms())?;
+                    publish_peer_name(
+                        &mut machine,
+                        &mut current_peer,
+                        &receiver,
+                        link.generation(),
+                    )?;
+                    let replies = replies
+                        .into_iter()
+                        .filter(|reply| {
+                            link.generation()
+                                .is_some_and(|g| recovery.offer(g, reply.clone()))
+                        })
+                        .collect();
                     schedule_receiver_starts(&link, &receiver, &mut pending_starts, replies)?;
                     #[cfg(target_os = "nto")]
                     if complete_receiver_starts(
@@ -329,8 +448,11 @@ pub fn serve_stream<
                         &receiver,
                         &mut pending_starts,
                         time_ms(),
+                        &mut recovery,
                     )? {
-                        connector.start(config.clone());
+                        if let (Some(peer), Some(generation)) = (&current_peer, link.generation()) {
+                            connector.start(config.clone(), peer.key.clone(), generation);
+                        }
                     }
                     #[cfg(not(target_os = "nto"))]
                     let _ = complete_receiver_starts(
@@ -338,6 +460,7 @@ pub fn serve_stream<
                         &receiver,
                         &mut pending_starts,
                         time_ms(),
+                        &mut recovery,
                     )?;
                 }
             }
@@ -348,13 +471,66 @@ pub fn serve_stream<
         }
         link.advance(time_ms());
         let replies = drain_control(&mut link, &mut machine, &mut csm_reader, time_ms())?;
+        publish_peer_name(
+            &mut machine,
+            &mut current_peer,
+            &receiver,
+            link.generation(),
+        )?;
+        let replies = replies
+            .into_iter()
+            .filter(|reply| {
+                link.generation()
+                    .is_some_and(|g| recovery.offer(g, reply.clone()))
+            })
+            .collect();
         schedule_receiver_starts(&link, &receiver, &mut pending_starts, replies)?;
         #[cfg(target_os = "nto")]
-        if complete_receiver_starts(&mut link, &receiver, &mut pending_starts, time_ms())? {
-            connector.start(config.clone());
+        if complete_receiver_starts(
+            &mut link,
+            &receiver,
+            &mut pending_starts,
+            time_ms(),
+            &mut recovery,
+        )? {
+            if let (Some(peer), Some(generation)) = (&current_peer, link.generation()) {
+                connector.start(config.clone(), peer.key.clone(), generation);
+            }
         }
         #[cfg(not(target_os = "nto"))]
-        let _ = complete_receiver_starts(&mut link, &receiver, &mut pending_starts, time_ms())?;
+        let _ = complete_receiver_starts(
+            &mut link,
+            &receiver,
+            &mut pending_starts,
+            time_ms(),
+            &mut recovery,
+        )?;
+        while let Some((generation, phase)) = receiver.try_phase() {
+            if recovery.observe(generation, phase, time_ms()) {
+                eprintln!("[wireless-recovery] generation {generation}: {phase:?}");
+                #[cfg(target_os = "nto")]
+                connector.reset();
+            }
+        }
+        #[cfg(target_os = "nto")]
+        {
+            let available = machine.as_ref().is_some_and(|m| m.wireless_available());
+            if !available {
+                connector.reset();
+                recovery.probe_cancelled();
+            }
+            if let Some(generation) = connector.tick() {
+                if let Some(reply) = recovery.reachable(generation, available) {
+                    receiver.start(generation)?;
+                    pending_starts.push_back((generation, reply));
+                }
+            }
+            if let (Some(generation), Some(peer)) =
+                (recovery.probe_due(time_ms(), available), &current_peer)
+            {
+                connector.probe(config.clone(), peer.key.clone(), generation);
+            }
+        }
         while let Some(frame) = link.next_outbound() {
             stream.write_all(&frame.encode()?)?;
         }
@@ -395,8 +571,9 @@ mod tests {
         let mut pending = VecDeque::new();
         schedule_receiver_starts(&link, &receiver, &mut pending, vec![vec![1]]).unwrap();
         let deadline = Instant::now() + Duration::from_secs(1);
+        let mut recovery = recovery::Recovery::default();
         loop {
-            match complete_receiver_starts(&mut link, &receiver, &mut pending, 0) {
+            match complete_receiver_starts(&mut link, &receiver, &mut pending, 0, &mut recovery) {
                 Ok(false) if pending.is_empty() => break,
                 Ok(false) if Instant::now() < deadline => {
                     std::thread::sleep(Duration::from_millis(1))
@@ -608,6 +785,7 @@ mod tests {
             device_id: "01:02:03:04:05:06".into(),
             pairing_id: None,
             source_version: "test".into(),
+            vehicle_engine: iap2_csm::messages::identification::EngineType::Gas,
         };
         let mut link = BridgeLink::default();
         link.handle(

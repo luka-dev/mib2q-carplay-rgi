@@ -21,7 +21,7 @@ Weights: [Zenodo record 17516442, version 3](https://zenodo.org/records/17516442
 | PC provenance and hashes | `D:\upmix\third_party\bsrnn_reference\INTAKE_COMPLETE.json` |
 | Full Mac code, same clean revision | `<workspace>/Research/bsrnn-reference` |
 | Repository copy of the intake manifest | [Public provenance and checkpoint hashes](UPMIX_BSRNN_REFERENCE_INTAKE_2026-09-29.json) |
-| Reproducible downloader | [download_bsrnn_reference.py](../../../tools/stereo-upmix-render/pc/download_bsrnn_reference.py) |
+| Reproducible downloader | [download_bsrnn_reference.py](RETIRED_TOOLS.md#tool-13f829778d20) |
 
 The repeated bundle directory names come from the upstream ZIP layout. Do not point inference at the parent directory: the actual `.ckpt` files are one level deeper.
 

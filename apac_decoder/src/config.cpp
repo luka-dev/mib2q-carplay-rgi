@@ -45,12 +45,12 @@ struct ChannelMap {
     {
         if (n >= sizeof r / sizeof r[0])
             return false;
-        // upper_bound by start, which is what the library's binary search finds
+        // upper_bound by start, which is what the original's binary search finds
         uint32_t i = 0;
         while (i < n && !(start < r[i].start))
             ++i;
         if (i != n) {
-            // The library tests the entry at the insertion point and the one
+            // The original tests the entry at the insertion point and the one
             // after it, not the one before.  Transcribed as written.
             if ((r[i].start < end && r[i].end > start) ||
                 (i + 1 != n && r[i + 1].start < end && r[i + 1].end > start))
@@ -110,7 +110,7 @@ uint32_t CoreDecoderConfig::Deserialize(BitstreamReader& bs)
         count = (e1 == 1023) ? bs.GetBits(16) + 1054 : e1 + 31;
     }
     if (count > kMaxElements)
-        return kLimitTooManyElements;
+        return kPortTooManyElements;
     numElements = count;
 
     uint32_t nch = 0;
@@ -124,7 +124,7 @@ uint32_t CoreDecoderConfig::Deserialize(BitstreamReader& bs)
         // every other element type contributes no channels
     }
     if (nch > kMaxChannels)
-        return kLimitTooManyChannels;
+        return kPortTooManyChannels;
 
     layout.Clear();
     uint32_t tag16 = bs.GetBits(16);
@@ -135,7 +135,7 @@ uint32_t CoreDecoderConfig::Deserialize(BitstreamReader& bs)
     } else if (tag16 != 1) {
         layout.tag = nch | (tag16 << 16);
     } else {
-        // Transcribed as written: for tag16 == 1 the library stores the bitmap
+        // Transcribed as written: for tag16 == 1 the original stores the bitmap
         // in word 1 and never sets word 0 to 0x10000, so GetNumChannels then
         // reads the layout as "use descriptions" with a count of zero.  That
         // looks like a bug in Apple's source.  It is unreachable on the CarPlay
@@ -149,7 +149,7 @@ uint32_t CoreDecoderConfig::Deserialize(BitstreamReader& bs)
 
     uint32_t n = NumChannels();
     if (n > kMaxChannels)
-        return kLimitTooManyChannels;
+        return kPortTooManyChannels;
     // vcvtps_u32_f32: float to unsigned, rounding toward +infinity.  A negative
     // result (n == 1; n == 0 gives -inf) saturates to zero.
     float f = log2f((float)n) - 0.0001f;
@@ -174,10 +174,10 @@ void GlobalConfig::Reset()
 
 // 0x000979a0  apac::GlobalConfig::SetChannelLayout()
 //
-// Only the single-codec-config path is implemented, which is the path both the live
+// Only the single-codec-config path is ported, which is the path both the live
 // CarPlay cookie and the afconvert-generated one take: copy that config's
 // layout up into the GlobalConfig and accept it if it already names a channel
-// count.  The library's other two paths are NOT here -
+// count.  The original's other two paths are NOT here -
 //   * more than one config, where it merges the layouts and renumbers them;
 //   * a layout with no channel count, where it derives a tag from
 //     apac::GetProfileConfig's table in .data.rel.ro.
@@ -185,7 +185,7 @@ void GlobalConfig::Reset()
 uint32_t GlobalConfig::SetChannelLayout()
 {
     if (numCodecConfigs != 1)
-        return kLimitTooManyConfigs;
+        return kPortTooManyConfigs;
     layout = codecConfigs[0].layout;
     if (layout.tag == 0) {
         if (layout.numDescriptions)
@@ -196,7 +196,7 @@ uint32_t GlobalConfig::SetChannelLayout()
     } else if ((layout.tag & 0xFFFFu) != 0) {
         return kOk;
     }
-    return kLimitNeedsProfileTable;
+    return kPortNeedsProfileTable;
 }
 
 // 0x00097d50  apac::GlobalConfig::Deserialize(TBitstreamReader<unsigned int>&)
@@ -225,7 +225,7 @@ uint32_t GlobalConfig::Deserialize(BitstreamReader& bs)
     frameLength = 1024;
 
     numChannels = bs.GetBits(8);
-    reservedAfterChannels = bs.GetBits(8);   // read and dropped by the library
+    reservedAfterChannels = bs.GetBits(8);   // read and dropped by the original
     if (bs.GetBit())
         APAC_RETURN(kBadValue);
 
@@ -234,7 +234,7 @@ uint32_t GlobalConfig::Deserialize(BitstreamReader& bs)
     if (n == 0)
         APAC_RETURN(kBadValue);
     if (n > kMaxCodecConfigs)
-        APAC_RETURN(kLimitTooManyConfigs);
+        APAC_RETURN(kPortTooManyConfigs);
     numCodecConfigs = n;
 
     ChannelMap map;
@@ -259,11 +259,11 @@ uint32_t GlobalConfig::Deserialize(BitstreamReader& bs)
         cfg.channelOffset = (uint16_t)chOff;
     }
 
-    // ValidateProfileLevelData, 0x0009d8e0.  Only its first gate is implemented.  The
+    // ValidateProfileLevelData, 0x0009d8e0.  Only its first gate is ported.  The
     // profile it infers from the codec configs (0x0009d2e0) and the level it
     // derives from them (0x0009d0d0) both walk pointer tables in .data.rel.ro
     // that were not dumped, so a stream this accepts might still be rejected by
-    // the library on those grounds.  Neither reads any bits.
+    // the original on those grounds.  Neither reads any bits.
     if (profileLevel.profile != kSupportedProfile ||
         profileLevel.level > kSupportedMaxLevel)
         APAC_RETURN(kUnsupportedValue);
@@ -280,7 +280,7 @@ uint32_t GlobalConfig::Deserialize(BitstreamReader& bs)
         if (m == 0)
             APAC_RETURN(kBadValue);
         if (m > kMaxASCConfigs)
-            APAC_RETURN(kLimitTooManyConfigs);
+            APAC_RETURN(kPortTooManyConfigs);
         numASCConfigs = m;
         for (uint32_t i = 0; i < m; ++i) {
             BaseASCConfig& cfg = ascConfigs[i];
@@ -291,9 +291,9 @@ uint32_t GlobalConfig::Deserialize(BitstreamReader& bs)
             cfg.type = bs.GetBits(3);
             cfg.channelOffset = (uint16_t)chOff;
         }
-        // The library then sorts these by channel offset and hands each one a
+        // The original then sorts these by channel offset and hands each one a
         // slice of the global layout.  That is bookkeeping over data already
-        // read - it consumes no bits - and is not implemented.
+        // read - it consumes no bits - and is not ported.
     }
 
     // ---- per-config trailer ---------------------------------------------
@@ -309,17 +309,17 @@ uint32_t GlobalConfig::Deserialize(BitstreamReader& bs)
 
     // ---- AncillaryConfig, 0x00072e60 ------------------------------------
     if (bs.GetBit())
-        APAC_RETURN(kOk);   // the library also returns 0 here, without setting +248
+        APAC_RETURN(kOk);   // the original also returns 0 here, without setting +248
     if (bs.GetBit())
         // apac::AudioSceneConfig::Deserialize - the Ambisonics scene
         // description, explicitly out of scope for the CarPlay 5.1 target.
-        APAC_RETURN(kLimitNeedsAudioScene);
+        APAC_RETURN(kPortNeedsAudioScene);
     if (bs.GetBit()) {
         // apac::LoudnessDRCConfig::Deserialize, 0x00072bb0, with
-        // HeaderPayloadType 4 - the value AncillaryConfig passes.  Implemented in
+        // HeaderPayloadType 4 - the value AncillaryConfig passes.  Ported in
         // src/drc.cpp, where it is three dispatchers deep and then stops at
         // mpddrc::UniDrc::Deserialize, the only bit consumer in the DRC layer
-        // and not part of this decoder.  It consumes nothing on the way out, so
+        // and not part of this port.  It consumes nothing on the way out, so
         // the position reported here is still exact.
         LoudnessDRCConfig drcCfg;
         drcCfg.Clear();

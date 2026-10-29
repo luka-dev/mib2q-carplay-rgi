@@ -9,9 +9,9 @@
  *
  * WHAT IT CHECKS AGAINST.  apac_decoder/tests/fixtures/frames.bin holds six real APAC packets out
  * of the live CarPlay 5.1 capture, the magic cookie they were decoded with, and the float32 PCM
- * the reference library produced for them - Pioneer's decoder, run natively on AArch64.  This
+ * the ORIGINAL library produced for them - Apple's own decoder, run natively on AArch64.  This
  * test wraps those six packets in APAP frames, opens them the way the receiver does, decodes them
- * through our decoder, and requires every one of 36 864 samples to land within one 16-bit LSB of the
+ * through the port, and requires every one of 36 864 samples to land within one 16-bit LSB of the
  * library's float, in the permuted (declared) channel order.  So a mistake anywhere in the chain -
  * a wrong AAD, a mis-split frame, a dropped TLV terminator, a transposed channel - fails it.
  *

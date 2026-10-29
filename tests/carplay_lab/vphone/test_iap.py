@@ -3,7 +3,7 @@ import random
 import unittest
 
 from tests.carplay_lab.legacy_ios.usb_probe import link_frame
-from tests.carplay_lab.vphone.iap import verify
+from tests.carplay_lab.vphone.iap import verify, verify_transport
 
 
 class NativeIAPTests(unittest.TestCase):
@@ -14,7 +14,23 @@ class NativeIAPTests(unittest.TestCase):
         frames = [bytes.fromhex("ff550200ee10"), self.syn if syn is None else syn,
                   self.request if request is None else request]
         return "\n".join([f"native iAP2 outgoing length={len(p)} hex={p.hex()}" for p in frames] +
-                         ["native SYNACK acknowledged=238", "native smoke connection cleanup complete"])
+                         ["native SYNACK acknowledged=238", "native smoke connection cleanup complete",
+                          "native iAP2 profile connection_type=6 endpoint_transport=0 endpoint_protocol=4"])
+
+    def test_bluetooth_requires_actual_connection_and_endpoint_readback(self):
+        profile="connection_type=2 endpoint_transport=2 endpoint_protocol=4"
+        log=self.log().replace("connection_type=6 endpoint_transport=0", "connection_type=2 endpoint_transport=2")
+        with self.assertRaises(ValueError):verify(log,"bluetooth")
+        log+="\nnative iAP2 readback "+profile
+        result=verify(log,"bluetooth")
+        self.assertTrue(result["non_usb_endpoint_verified"])
+        self.assertFalse(result["wireless_carplay_verified"])
+        self.assertFalse(result["physical_bluetooth_verified"])
+        for bad in (log.replace("readback connection_type=2", "readback connection_type=6"),
+                    log.replace("readback "+profile,"readback connection_type=2 endpoint_transport=0 endpoint_protocol=4"),
+                    log+"\nnative iAP2 profile "+profile):
+            with self.assertRaises(ValueError):verify(bad,"bluetooth")
+        with self.assertRaises(ValueError):verify_transport(log,"wifi")
 
     def test_native_capture_reaches_certificate_request_with_explicit_limits(self):
         report = verify(self.log())
@@ -24,6 +40,14 @@ class NativeIAPTests(unittest.TestCase):
         self.assertFalse(report["usb_forwarding_verified"])
         self.assertFalse(report["mfi_acceptance_verified"])
         self.assertFalse(report["video_verified"])
+
+    def test_unpublished_observer_is_not_reported_as_non_usb_endpoint_proof(self):
+        log=self.log().replace("connection_type=6 endpoint_transport=0","connection_type=2 endpoint_transport=2")
+        log+="\nnative iAP2 readback connection_type=11 endpoint_transport=18 endpoint_protocol=0"
+        report=verify(log,"bluetooth")
+        self.assertFalse(report["non_usb_endpoint_verified"])
+        self.assertFalse(report["connection_info_published"])
+        with self.assertRaises(ValueError):verify_transport(log,"bluetooth")
 
     def test_partial_probe_is_not_reported_as_success(self):
         original = self.log()

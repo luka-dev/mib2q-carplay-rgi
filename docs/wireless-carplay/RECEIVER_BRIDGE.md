@@ -8,6 +8,8 @@ _MHI2Q wireless CarPlay — technical reference, integrated 2026-09-29._
 
 Maintained technical reference. The evidence below distinguishes static analysis, local QNX tests and observations from the unit.
 
+Current SI-owned additions are specified in [wireless production channels](WIRELESS_PRODUCTION_CHANNELS.md): CPRX v3 operations 9/10 provide sequenced semantic iAP2 input and acknowledged output; the private SIA3 version-2 envelope binds native ASI controls to the originating DIO. These are local candidates, not physically accepted HU updates. Earlier standalone lifecycle results below retain their original scope.
+
 Implementation and local diagnostic paths in this record refer to the [original source directory](../../wireless/receiver_bridge/). Run `wireless/...` commands from the repository root; moving this note does not move binaries or logs.
 
 ## 📊 Component flow
@@ -33,12 +35,18 @@ sequenceDiagram
 
 ## 📋 Implementation and evidence
 
-Current stock210 candidate: build with `build_offline.py --receiver stock210
+For a focused stock210 bridge build, use `build_offline.py --receiver stock210
 --property-handoff`. It keeps factory 210.81 on port5000 and requires the
-wireless hook's guarded readiness and matching published identity. The combined
-daemon/owner/media/wired-priority QEMU test passes; see
-[stock210 receiver lifecycle](STOCK210_RECEIVER_LIFECYCLE.md).
+wireless hook's guarded readiness and matching published identity. For the matched SI-owned kit use `python3 wireless/si/build_si_review.py --full-cycle`; see [receiver lifecycle](STOCK210_RECEIVER_LIFECYCLE.md).
 The 280/7000 descriptions below document the historical replacement build.
+
+For an admitted SI-owned wireless process, the bridge's `bind` interposer applies `SO_REUSEADDR` to the native port-5000 TCP listener. A reproduced DIO SIGKILL otherwise made stock AirPlay fall back to a random port and blocked recovery. Other ports, UDP, wired/unbound processes and the exclusive DIO owner lock retain their policy; `SO_REUSEPORT` is not enabled. The [native recovery evidence](SI_STAGE2_OFFLINE.md) includes the replacement listener and a complete second media session.
+
+### SI-bound metadata (2026-10-21)
+
+`CPRX` v3 operation **8** (`NOW_PLAYING`) carries the existing 16-byte SI epoch/session context after the normal header, then a u16LE size and at most 4096 raw iAP2 CSM bytes. The operation accepts only `0x5001` updates in the active SI-owned generation. Legacy/unbound metadata, mismatched parent/epoch/session/link, malformed TLV/UTF-8 and oversized strings are rejected. Authorization is repeated after the bounded body read.
+
+[`now_playing.c`](../../wireless/receiver_bridge/now_playing.c) uses the existing manager event-listener token, verified by the native resolver, and enqueues through stock track/playback/elapsed helpers. Metadata never writes the native manager directly. The production build includes this adapter; the disposable QEMU HMI/QSA observer is excluded. See [exact native routing and acceptance](SI_STAGE2_OFFLINE.md#native-now-playing-and-hid) for the job/event token distinction, partial updates, negative controls and physical limits.
 
 <a id="identity-protocol"></a>
 

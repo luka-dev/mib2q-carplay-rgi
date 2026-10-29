@@ -5,7 +5,7 @@
 // Differential test: our TBitstreamReader against the real one.
 //
 // FIXTURE: tests/fixtures/bitreader.fixture.  Every `R` line in it is what
-// Pioneer's TBitstreamReader<unsigned int> ACTUALLY returned
+// Pioneer's copy of Apple's TBitstreamReader<unsigned int> ACTUALLY returned
 // and what its 24 bytes of state ACTUALLY held afterwards, captured by running
 // the library natively in the arm64 container.  Nothing in it is hand written.
 //

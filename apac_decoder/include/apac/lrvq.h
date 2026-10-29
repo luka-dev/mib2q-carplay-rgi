@@ -6,7 +6,7 @@
 // under an LPC spectral envelope, the alternative to the transform/SQ path in
 // APACSpectralData.
 //
-// Reference functions in libSPF_CP_PlugInWrapper.so (Pioneer SPHERA 1.030010):
+// Originals in libSPF_CP_PlugInWrapper.so (Pioneer SPHERA 1.030010):
 //
 //   0x0009a950  APACLRVQDecoder::dequantizeLrvqGain(u16, u16, float*)
 //   0x0009aa10  APACLRVQDecoder::lsfsToMdctSpectralEnvelope(bool, const u16[5], float[1024])
@@ -19,17 +19,17 @@
 //
 // Semantics established against the running library in
 // reference/decomp/LRVQ_SEMANTICS.md section 3 and 4, and re-derived from the
-// disassembly here.  Two things Hex-Rays got wrong and this decoder does not
+// disassembly here.  Two things Hex-Rays got wrong and this port does not
 // repeat:
 //
 //   * every one of those APACLRVQDecoder members is STATIC.  The decompiler
 //     invented a `this` and shifted every argument by one, which is why its
-//     pseudocode for LrvqDeserialize is unusable and our decoder comes from the
+//     pseudocode for LrvqDeserialize is unusable and the port comes from the
 //     appended disassembly instead.
 //   * the `+0x2F0` / `+0x2F8` pointer pair is APACIndividualChannelStream's
 //     APACSpectralData, not anything on APACICSInfo.
 //
-// The class here is not static because two of the buffers the library puts on
+// The class here is not static because two of the buffers the original puts on
 // the stack are far too big for one: SpectrumDeserialize{SCE,CPE,LFE} each
 // alloca 9.5 KiB of envelope / residual scratch, and lsfsToMdctSpectralEnvelope
 // stack-constructs a 512-point apac::LPMDCTFilter.  Those become members.
@@ -47,7 +47,7 @@
 
 namespace apac {
 
-// One row of the VQ mode table at 0x42b1f8, 32 bytes in the library.  The two
+// One row of the VQ mode table at 0x42b1f8, 32 bytes in the original.  The two
 // codebook pointers are relocations there; here they are float offsets into the
 // single contiguous kLrvqVQCodebook block, and -1 stands for NULL.
 //
@@ -114,7 +114,7 @@ public:
     LRVQDecoder();
 
     // What SpectrumDeserializeSCE does on entry: the inter-channel prediction
-    // state goes back to zero.  See the note on mQIdx below for why our decoder
+    // state goes back to zero.  See the note on mQIdx below for why the port
     // does this in CPE and LFE too.
     void ResetPrediction();
 
@@ -164,7 +164,7 @@ public:
     // division bit-exact.
     //
     // Interleaved and long take `work` before the gain; reversed takes it
-    // after, which is the order the library applies them in.
+    // after, which is the order the original applies them in.
     static void ShortLayoutInterleaved(const float* work, float gain,
                                        float* spec);
     static void ShortLayoutReversed(const float* work, float* spec);

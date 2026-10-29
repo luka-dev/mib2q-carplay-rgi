@@ -10,7 +10,26 @@ from tests.carplay_lab.legacy_ios.usb_probe import IAP2_DETECT, parse_control_me
 from . import lab, usb
 
 
-def verify(log: str) -> dict:
+def verify_transport(log: str, transport: str, *, require_published: bool = True) -> dict:
+    if transport not in ("usb", "bluetooth"):
+        raise ValueError("unsupported native iAP2 transport")
+    connection, endpoint = (6, 0) if transport == "usb" else (2, 2)
+    expected = f"connection_type={connection} endpoint_transport={endpoint} endpoint_protocol=4"
+    profiles = re.findall(r"^native iAP2 profile (.*)$", log, re.M)
+    readbacks = re.findall(r"^native iAP2 readback (.*)$", log, re.M)
+    published=readbacks==[expected]
+    absent=["connection_type=11 endpoint_transport=18 endpoint_protocol=0"]
+    if profiles != [expected] or transport == "bluetooth" and (
+            not published and (require_published or readbacks!=absent)):
+        raise ValueError("native transport profile/readback does not match the requested transport")
+    return {"connection_type": connection, "endpoint_transport": endpoint,
+            "endpoint_protocol": 4, "non_usb_endpoint_verified": transport == "bluetooth" and published,
+            "connection_info_published": published,
+            "wireless_carplay_verified": False, "physical_bluetooth_verified": False}
+
+
+def verify(log: str, transport: str = "usb") -> dict:
+    profile = verify_transport(log, transport, require_published=False)
     frames = []
     detect = False
     for line in log.splitlines():
@@ -53,24 +72,26 @@ def verify(log: str) -> dict:
             "control_sessions": sessions, "certificate_request": "0xAA00",
             "synack": synack | {"payload": payload.hex()},
             "request": certificate | {"payload": certificate["payload"].hex()},
-            "transport": "CoreAccessories API", "connection_type": 6,
-            "endpoint_transport": 0, "endpoint_protocol": 4,
+            "transport": "CoreAccessories API", **profile,
             "usb_forwarding_verified": False, "mfi_acceptance_verified": False,
             "video_verified": False}
 
 
-def run() -> dict:
-    native = usb.run("iap-smoke")
-    result = {"udid": native["udid"], "verification": verify(native["log"]["result"]["content"]),
+def run(transport: str = "usb") -> dict:
+    if transport not in ("usb", "bluetooth"):
+        raise ValueError("unsupported native iAP2 transport")
+    native = usb.run("iap-smoke-bluetooth" if transport == "bluetooth" else "iap-smoke")
+    result = {"udid": native["udid"], "verification": verify(native["log"]["result"]["content"], transport),
               "native": native}
-    lab.save("iap-smoke.json", result)
+    lab.save("iap-smoke-bluetooth.json" if transport == "bluetooth" else "iap-smoke.json", result)
     return result
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--experimental", action="store_true")
+    parser.add_argument("--transport", choices=("usb", "bluetooth"), default="usb")
     args = parser.parse_args()
     if not args.experimental:
         parser.error("a transient native accessory connection requires --experimental")
-    print(json.dumps(run(), indent=2))
+    print(json.dumps(run(args.transport), indent=2))

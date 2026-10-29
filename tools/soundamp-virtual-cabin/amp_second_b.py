@@ -21,8 +21,8 @@ from amp_b_input_eq import _finite
 from digital_stages import PackedOutputEQ
 
 ROOT = Path(__file__).resolve().parents[2]
-LOADER = ROOT / 'assets/soundamp/J525_8W0035465_SW0420_SHARC_SPI_bitrev.ldr.bin'
-BINDING = ROOT / 'assets/soundamp/output_binding_audit.json'
+LOADER = ROOT / 'output/r2/soundamp/J525_8W0035465_SW0420_SHARC_SPI_bitrev.ldr.bin'
+BINDING = ROOT / 'output/r2/soundamp/output_binding_audit.json'
 IMAGE = ROOT.parents[1] / 'Firmwares/SoundAmp/uPD70f3479_8W0035465_0420_H11/CodeFlash_24082026_172027.bin'
 GAINS = ('0xc4b7f', '0xc4ba7', '0xc4bbe', '0xc4bd5', '0xc4bec', '0xc4c03', '0xc4c31')
 

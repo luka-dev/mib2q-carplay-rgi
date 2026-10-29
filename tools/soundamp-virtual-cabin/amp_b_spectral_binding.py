@@ -18,7 +18,7 @@ from amp_b_tail_binding import _unsigned_control
 from amp_b_window import load_spectral_tables
 
 ROOT=Path(__file__).resolve().parents[2]
-LOADER=ROOT/'assets/soundamp/J525_8W0035465_SW0420_SHARC_SPI_bitrev.ldr.bin'
+LOADER=ROOT/'output/r2/soundamp/J525_8W0035465_SW0420_SHARC_SPI_bitrev.ldr.bin'
 IMAGE=ROOT.parents[1]/'Firmwares/SoundAmp/uPD70f3479_8W0035465_0420_H11/CodeFlash_24082026_172027.bin'
 sys.path.insert(0,str(ROOT/'tools'))
 from inspect_amp_visa import load_shortwords, decode

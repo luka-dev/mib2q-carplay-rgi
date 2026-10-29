@@ -126,6 +126,6 @@ On the HU, `CombinedNumbersListHandler.updateList` sends a full-range ChangedArr
 ## 🔗 Related
 
 - [CarPlay Telephony](CARPLAY_TELEPHONY.md): the module that feeds this tab while CarPlay is active.
-- [Phone Tab Gating](PHONE_TAB_GATING.md): the earlier attempt to hide the tab, and the Telephone vs Telephone2 correction.
+- [Phone Tab Gating](archive/PHONE_TAB_GATING.md): the earlier attempt to hide the tab, and the Telephone vs Telephone2 correction.
 - [VC FPK State Machine](VC_FPK_STATE_MACHINE.md): the VC firmware layers and datapool.
 - [Smartphone Tab and Kombi DSI](SMARTPHONE_TAB_AND_KOMBI_DSI.md).

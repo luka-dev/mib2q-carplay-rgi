@@ -14,6 +14,39 @@ import time
 from tests.carplay_lab.legacy_ios import usb_probe as wire
 from tests.carplay_lab.common.mfi_fixture import fixture_key, sign_digest
 from . import lab, usb
+from .iap import verify_transport
+
+
+def bluetooth_identification() -> bytes:
+    """Synthetic same-profile fields as the production Rust identification.
+
+    The API test supplies no Wi-Fi credentials and sends no CarPlay start.
+    """
+    _, fields=wire.parse_control_message(wire.identification_message())
+    fields.pop(15);fields.pop(16)
+    for kind, ids in ((6,(0xAA01,0xAA03,0x5703,0x4301)),
+                      (7,(0xAA00,0xAA02,0xAA04,0xAA05,0x5702,0x4300,0x4E0D))):
+        fields[kind]=b"".join(struct.pack(">H",mid) for mid in ids)
+    fields[17]=(wire.parameter(0,b"\0\0")+wire.parameter(1,b"Bluetooth\0")+
+                wire.parameter(2,b"")+wire.parameter(3,bytes.fromhex("020000000001")))
+    fields[24]=(wire.parameter(0,b"\0\x01")+wire.parameter(1,b"MHI2 QEMU Lab\0")+
+                wire.parameter(2,b"")+wire.parameter(4,b""))
+    params=b"".join(wire.parameter(kind,data) for kind,data in sorted(fields.items()))
+    return struct.pack(">HHH",0x4040,len(params)+6,0x1D01)+params
+
+
+def verify_bluetooth_bootstrap(result: dict, log: str, *, identify: bool) -> dict:
+    proof=verify_transport(log,"bluetooth",require_published=False)
+    wifi_requested=any(p.get("session")==10 and p.get("control")==0x40 and
+        wire.parse_control_message(bytes.fromhex(p["payload"]))[0]==0x5702
+        for p in result.get("post_identification_packets",[]))
+    if identify and (not wifi_requested or result.get("authentication_succeeded") is not True or
+                     result.get("identification_accepted") is not True):
+        raise ValueError("native Bluetooth bootstrap requires AA05, 1D02 and a Wi-Fi configuration request")
+    # Public observer metadata can remain unpublished. These protocol replies
+    # come from the native endpoint, not from a property/authentication setter.
+    proof["non_usb_endpoint_verified"]=bool(identify and wifi_requested)
+    return {"transport_verification":proof,"wireless_bootstrap_requested":wifi_requested}
 
 
 class NativeAPIPeer:
@@ -27,6 +60,9 @@ class NativeAPIPeer:
         self.out_index = 0
         self.synack = None
         self.discarded_synacks = 0
+        self.out_lines = []
+        self.recent_data = []
+        self.discarded_data_retransmits = 0
 
     def ctrl_transfer(self, request_type, request, value, index, report, timeout=0):
         if (request_type, request, value, index) != (0x21, 9, 0x0201, 2) or not 3 <= len(report) <= 1025 or report[0] != 1 or report[1] & ~3:
@@ -61,15 +97,8 @@ class NativeAPIPeer:
     def read(self, endpoint, size, timeout):
         deadline = time.monotonic() + timeout / 1000
         while time.monotonic() < deadline:
-            result = lab.rpc(self.settings, "files.read", {"path": self.log, "limit": 16000})["result"]
-            if result.get("truncated"):
-                raise RuntimeError("native peer output truncated")
-            lines = [line for line in result["content"].splitlines() if line.startswith("native iAP2 outgoing ")]
-            while self.out_index < len(lines):
-                line = lines[self.out_index]
-                # A read during printf can expose an incomplete final line.
-                if not result["content"].endswith("\n") and line == result["content"].splitlines()[-1]:
-                    break
+            while self.out_index < len(self.out_lines):
+                line = self.out_lines[self.out_index]
                 self.out_index += 1
                 match = re.fullmatch(r"native iAP2 outgoing length=(\d+) hex=([0-9a-f]+)", line)
                 if not match or int(match[1]) > 512:
@@ -89,14 +118,34 @@ class NativeAPIPeer:
                         self.discarded_synacks += 1
                         continue
                     self.synack = packet
+                if parsed["payload"]:
+                    if packet in self.recent_data:
+                        self.discarded_data_retransmits += 1
+                        continue
+                    self.recent_data = (self.recent_data + [packet])[-64:]
                 return b"\x01\x00" + packet
-            time.sleep(0.15)
+            result = lab.rpc(self.settings, "files.read", {"path": self.log, "limit": 16000})["result"]
+            if result.get("truncated"):
+                raise RuntimeError("native peer output truncated")
+            # Drain complete cached packets before another expensive RPC. A
+            # partially printed final row remains unavailable until completed.
+            content=result["content"]
+            complete=content[:content.rfind("\n")+1]
+            lines=[line for line in complete.splitlines() if line.startswith("native iAP2 outgoing ")]
+            if lines[:len(self.out_lines)] != self.out_lines:
+                raise ValueError("native peer output history changed")
+            self.out_lines=lines
+            if self.out_index==len(lines):time.sleep(0.15)
         raise TimeoutError("native API peer receive deadline expired")
 
 
 def run(*, negative: str | None = None, identify: bool = False, start_carplay: bool = False,
         public_key: bytes | None = None, receiver_ipv6: str = "fe80::4254:ff:fe12:3456", hold_seconds: int = 6,
-        carplay_interface: int = 2) -> dict:
+        carplay_interface: int = 2, transport: str = "usb") -> dict:
+    if transport not in ("usb", "bluetooth"):
+        raise ValueError("unsupported native iAP2 transport")
+    if transport == "bluetooth" and start_carplay:
+        raise ValueError("Bluetooth CarPlay start requires a wireless network-session profile")
     if negative not in (None, "signature", "certificate"):
         raise ValueError("unknown native MFi negative control")
     if type(identify) is not bool or type(start_carplay) is not bool or (identify or start_carplay) and negative is not None:
@@ -140,8 +189,8 @@ def run(*, negative: str | None = None, identify: bool = False, start_carplay: b
 
     def worker():
         try:
-            context["native"] = usb.run("iap-peer", peer_nonce=nonce,
-                                        peer_seconds=max(60, hold_seconds + 30), on_launch=launched)
+            context["native"] = usb.run("iap-peer-bluetooth" if transport == "bluetooth" else "iap-peer", peer_nonce=nonce,
+                                        peer_seconds=max(120 if transport=="bluetooth" else 60, hold_seconds + 30), on_launch=launched)
         except Exception as error:
             context["error"] = str(error)
             ready.set()
@@ -150,7 +199,7 @@ def run(*, negative: str | None = None, identify: bool = False, start_carplay: b
         signature = sign_digest(key, digest)
         return signature[:-1] + bytes((signature[-1] ^ 1,)) if negative == "signature" else signature
 
-    result = {"transport": "CoreAccessories API + bounded RPC queue", "negative_control": negative,
+    result = {"transport": "CoreAccessories API + bounded RPC queue", "iap_transport": transport, "negative_control": negative,
               "usb_forwarding_verified": False, "qnx_session_verified": False, "video_verified": False}
     thread = threading.Thread(target=worker)
     thread.start()
@@ -160,8 +209,10 @@ def run(*, negative: str | None = None, identify: bool = False, start_carplay: b
         peer = NativeAPIPeer(settings, incoming, context["log"])
         wire.handshake(peer, [(1, 1024)], certificate, result, signer=signer, identify=identify or start_carplay,
                        start_carplay=start_carplay, hold_seconds=hold_seconds, public_key=public_key, receiver_ipv6=receiver.compressed,
-                       carplay_interface=carplay_interface)
+                       carplay_interface=carplay_interface,
+                       **({"identification_payload":bluetooth_identification(),"exchange_timeout":45} if transport=="bluetooth" else {}))
         result["discarded_retransmitted_synacks"] = peer.discarded_synacks
+        result["discarded_data_retransmits"] = peer.discarded_data_retransmits
         expected = "0xaa04" if negative else "0xaa05"
         if not result.get("link_synchronized") or result.get("first_control_message") != "0xaa00" or result.get("authentication_messages", [])[-1:] != [expected]:
             raise RuntimeError("native MFi result does not match the requested control")
@@ -189,8 +240,13 @@ def run(*, negative: str | None = None, identify: bool = False, start_carplay: b
         result["native"] = context.get("native", {"error": context.get("error")})
         if context.get("error"):
             result["error"] = context["error"]
+        if transport == "bluetooth" and not result.get("error"):
+            try:
+                result.update(verify_bluetooth_bootstrap(result,context["native"]["log"]["result"]["content"],identify=identify))
+            except (KeyError, ValueError) as error:
+                result["error"] = str(error)
         case = "carplay" if start_carplay else "identify" if identify else negative or "valid"
-        lab.save("mfi-api-" + case + ".json", result)
+        lab.save("mfi-api-" + ("bluetooth-" if transport == "bluetooth" else "") + case + ".json", result)
         for path in (incoming, done):
             lab.rpc(settings, "files.remove", {"path": path})
     return result
@@ -199,6 +255,7 @@ def run(*, negative: str | None = None, identify: bool = False, start_carplay: b
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--experimental", action="store_true")
+    parser.add_argument("--transport", choices=("usb", "bluetooth"), default="usb")
     parser.add_argument("--negative", choices=("signature", "certificate"))
     parser.add_argument("--identify", action="store_true")
     parser.add_argument("--start-carplay", action="store_true")
@@ -212,6 +269,6 @@ if __name__ == "__main__":
     public_key = bytes.fromhex(args.receiver_public_key) if args.receiver_public_key else None
     result = run(negative=args.negative, identify=args.identify, start_carplay=args.start_carplay,
                  public_key=public_key, receiver_ipv6=args.receiver_ipv6, hold_seconds=args.hold_seconds,
-                 carplay_interface=args.carplay_interface)
+                 carplay_interface=args.carplay_interface, transport=args.transport)
     print(json.dumps(result, indent=2))
     raise SystemExit(int("error" in result))

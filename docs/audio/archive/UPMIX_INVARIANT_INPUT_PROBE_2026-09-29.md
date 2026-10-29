@@ -39,7 +39,7 @@ Passing justifies testing this precise mechanism on a matched causal real-data t
 
 ## Execution and checkpoint compatibility
 
-Sources: [feature replacement and loader](../../../tools/stereo-upmix-render/separator_invariant_features.py), [fixed-window runner](../../../tools/stereo-upmix-render/separator_feature_probe.py), [guarded PC orchestration](../../../tools/stereo-upmix-render/pc/run_separator_feature_probe.ps1).
+Sources: [feature replacement and loader](RETIRED_TOOLS.md#tool-902f00397c0d), [fixed-window runner](RETIRED_TOOLS.md#tool-fc9a6112a4ab), [guarded PC orchestration](RETIRED_TOOLS.md#tool-df10dc9db9f0).
 
 The pre-hook replaces encoder inputs without adding parameters or changing state-dict shapes. A candidate checkpoint records `feature_mode=invariant6`: **load it with `separator_invariant_features.load`, never plain `sep_net.load`**, which would silently restore the wrong feature semantics. Initial and final numerical parity and polarity are recorded in the run. Code outside Track B, including `hook/audio`, is untouched.
 
@@ -57,7 +57,7 @@ The frozen protocol and three execution sources were committed as `cff502b`. Bot
 
 ## Completed 10k result and decision
 
-The fixed horizon completed. All four windows, raw crop hashes, 586,916 parameters and **125.139 M estimated neural MAC/s** match the protocol. The [result auditor](../../../tools/stereo-upmix-render/audit_separator_feature_result.py) verified exact intervention metadata, checked the actual encoder inputs against the independent feature formula and reloaded the final checkpoint on CPU.
+The fixed horizon completed. All four windows, raw crop hashes, 586,916 parameters and **125.139 M estimated neural MAC/s** match the protocol. The [result auditor](RETIRED_TOOLS.md#tool-2ba5f80ef9e7) verified exact intervention metadata, checked the actual encoder inputs against the independent feature formula and reloaded the final checkpoint on CPU.
 
 | Metric | Original absolute-phase input | Invariant input |
 | --- | ---: | ---: |

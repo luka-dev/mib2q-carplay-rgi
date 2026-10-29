@@ -21,7 +21,7 @@ class DigitalStagesTests(unittest.TestCase):
                                       [[21, 86]])
 
     def test_off_row_and_mute_are_not_matrix_floor(self):
-        path = HERE.parents[1] / "assets/soundamp/output_binding_audit.json"
+        path = HERE.parents[1] / "output/r2/soundamp/output_binding_audit.json"
         audit = json.loads(path.read_text())
         row, gains = pair_gains(audit, PairState(0, True, True, 0xFC))
         self.assertEqual(row, 1)

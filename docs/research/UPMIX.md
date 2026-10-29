@@ -1,8 +1,6 @@
 # UPMIX — the whole stereo→5.1 pipeline, end to end
 
-> **Retired 2026-10-09 with the Universal backend.** The renderer, models and knobs this note describes left the tree; the last tree that has them is git tag `upmix-universal-last-2026-10-09`.
-> What runs now: [Stereo to 5.1 Upmix](../audio/STEREO_TO_5_1_UPMIX.md). Why, and with which numbers: [Upmix History and Results](../audio/UPMIX_HISTORY_AND_RESULTS_2026-10-09.md), [Upmix Code Retirement](../audio/UPMIX_CODE_RETIREMENT_2026-10-09.md).
-> The transport it maps (deva, SAD, MOST) remains valid; the amp: [Virtual Cabin and Amp RE](../audio/VIRTUAL_CABIN_AND_AMP_RE.md); the algorithm now: [Upmix Scene Algorithm](../audio/UPMIX_SCENE_ALGORITHM_2026-10-08.md).
+> **Historical research:** this paper describes the retired Universal/HSSR pipeline and its measured experiments. SCENE replaced that runtime on 2026-10-09. Configuration tables and source line numbers below belong to those older revisions; use [current runtime and MMI controls](../audio/STEREO_TO_5_1_UPMIX.md) and [tool recovery](../audio/archive/RETIRED_TOOLS.md) for current operation and reproducibility.
 
 *The master map from the phone's audio to the 19 speakers, every stage with a diagram; the deep detail lives in three companion papers.*
 
@@ -333,7 +331,7 @@ flowchart TB
 
 `createMetadata` is interposed to announce `asad=0xfc` / 6ch / 24-bit; the mirrored
 caps record gives 6 voices with minimum == active geometry
-(`deploy/deva-ctrl-qc/patch_deva_mirror_mpl1.sh:36-46`).
+(`deploy/deva-ctrl-qc/build_final.py`).
 
 What the amp does for us (so the hook doesn't): **derives the centre** (C bus fed
 from L and R at **−8 dB**, `hook/audio/stereo_upmix.c:67-68`), **manages the sub**
@@ -391,7 +389,7 @@ Deployed 2026-09-22 (repo at commit `b021ec9`), each verified by read-back **[ca
 | `/mnt/app/root/hooks/` | `libcarplay_hook.so` (upmix + all interposers), `libcarplay_apac.so` (APAC decoder, dlopen'd), `hssr_model.bin` (q6d), `hssr_guard.bin` (V11), `maneuver_render`, `altscreen_render`, `flag_atlas.rgba`, `carplay_{startup,monitor,processes,cleanup}.sh` |
 | `/mnt/app/eso/hmi/lsd/jars/` | `carplay_hook.jar` (needs a unit restart to load) |
 | `/mnt/app/eso/bin/apps/` | `smartphone_integrator` (firmware, whole-file) |
-| `/mnt/app/armle/lib/dll/` | `deva-ctrl-qc.so` (the 6-voice mirror driver, `deploy/deva-ctrl-qc/BUILD_CHAIN.md:11`) |
+| `/mnt/app/armle/lib/dll/` | `deva-ctrl-qc.so` (the 6-voice mirror driver, `docs/stock-patches/deva-ctrl-qc.so.md`) |
 
 Source homes for a manual build (models in `models/`, firmware in `deploy/`) are in
 `docs/build-and-deploy/DEPLOY_AND_RELEASE.md`. The `.so` files come from `build/unprotected/`

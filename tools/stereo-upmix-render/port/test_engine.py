@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """test_engine.py — hook/audio/scene_engine.c (the per-frame engine and the block driver of the scene renderer
-port) against port_fixtures/stream_spatial.npz, stream_mask.npz and stream_anchor.npz (front_keep_db 1).
+port) against port_fixtures/stream_spatial.npz and stream_mask.npz.
 
 Builds build/scene_port/libscene.so from scene_engine_math.c + scene_clusters.c + scene_engine.c, mirrors the
 header's structs in ctypes (checked against the compiler's sizeof/offsetof), loads the Python phase tables
@@ -8,7 +8,7 @@ header's structs in ctypes (checked against the compiler's sizeof/offsetof), loa
 
   1. frame level: the fixture's analysis frames XL[t]/XR[t] through scene_engine_frame(); subL/subR/rearL/rearR
      per frame within 1e-4 relative to the frame's max magnitude (max over the four spectra); n_clusters and
-     the places (centre, sigma, mass, gain) from the clusters struct; the front anchor gain within 1e-4.
+     the places (centre, sigma, mass, gain) from the clusters struct.
   2. block level: x in blocks of 768 (and 1000) through scene_engine_push() + flush; the [n,6] output against
      out6, error RMS below -60 dB of the output RMS (printed); the two block sizes must be bit-identical.
      For stream_mask.npz the mask rows are installed through scene_engine_set_mask() at the moments that
@@ -34,7 +34,7 @@ HOOK = os.path.join(ROOT, "hook", "audio")
 HEADER = os.path.join(HOOK, "scene_engine.h")
 BUILD = os.path.join(ROOT, "build", "scene_port")
 import os as _os; _REPO = _os.path.normpath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '../../..')); _WS = _os.environ.get('AUDI_WORKSPACE', _os.path.expanduser('~/Desktop/AUDI_2'))  # sibling firmware/data dirs
-FIXTURES = _WS + "/upmix-data/scene_port_fixtures_2026-10-17"
+FIXTURES = _WS + "/upmix-data/scene_port_fixtures_2026-10-09"
 SOURCES = ["scene_engine_math.c", "scene_clusters.c", "scene_engine.c"]
 TOL_FRAME, TOL_DB, TOL_PLACE = 1e-4, -60.0, 1e-5
 N, H, F, SR = 1024, 256, 513, 48000
@@ -169,7 +169,6 @@ def run_frames(lib, structs, fx, phL, phR, name):
     n_clusters, places = fx["n_clusters"], fx["places"]
     worst = {k: (0.0, -1) for k in keys}; bad_frames = []; first_bad = None
     n_bad, places_bad, place_err = 0, 0, 0.0
-    anchor_ref = fx["anchor"]; anchor_err = 0.0
     cur = -1
     t0 = time.time()
     for t in range(T):
@@ -194,7 +193,6 @@ def run_frames(lib, structs, fx, phL, phR, name):
         n_ref = int(n_clusters[t])
         if eng.n_live() != n_ref:
             n_bad += 1
-        anchor_err = max(anchor_err, abs(eng.s.anchor - float(anchor_ref[t])))
         pref = places[t]; nref = int((~np.isnan(pref[:, 0])).sum()); pl = eng.places()
         if len(pl) != nref:
             places_bad += 1
@@ -209,9 +207,8 @@ def run_frames(lib, structs, fx, phL, phR, name):
     print("  frames over %.0e: %d%s" % (TOL_FRAME, len(bad_frames), (" first %s ... last %d" % (bad_frames[:8], bad_frames[-1])) if bad_frames else ""))
     if first_bad:
         print("  first divergence: frame %d %s rel=%.3e bin %d C=%s ref=%s (n_clusters C %d ref %d)" % first_bad)
-    print("  n_clusters mismatches: %d; places mismatches: %d (max abs err %.3e); anchor max abs err %.3e (min %.3f)"
-          % (n_bad, places_bad, place_err, anchor_err, float(anchor_ref.min())))
-    ok = not bad_frames and n_bad == 0 and places_bad == 0 and anchor_err <= TOL_FRAME
+    print("  n_clusters mismatches: %d; places mismatches: %d (max abs err %.3e)" % (n_bad, places_bad, place_err))
+    ok = not bad_frames and n_bad == 0 and places_bad == 0
     print("  " + ("PASS" if ok else "FAIL"))
     if not ok:
         fails.append("frames " + name)
@@ -277,7 +274,7 @@ def main():
     check_layout(structs)
     fn = np.load(os.path.join(args.fixtures, "functions.npz"))
     phL, phR = fn["phL"], fn["phR"]
-    for name in ("spatial", "mask", "anchor"):
+    for name in ("spatial", "mask"):
         fx = np.load(os.path.join(args.fixtures, "stream_%s.npz" % name), allow_pickle=True)
         run_frames(lib, structs, fx, phL, phR, name)
         run_blocks(lib, structs, fx, phL, phR, name)

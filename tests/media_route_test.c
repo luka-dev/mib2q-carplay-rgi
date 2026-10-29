@@ -197,16 +197,25 @@ static void realtime_upmix_policy(void)
     assert(!spa_media_route_realtime_upmix_allowed(&route, 1, 2, 6, 0));
     /* a phone/Siri/alert owner anywhere wins, even beside live media */
     assert(spa_media_route_stock_begin_type(&route, &phone, 3) == 1);
+    assert(spa_media_route_non_ent(&route));
     assert(!spa_media_route_realtime_upmix_allowed(&route, 1, 2, 6, 1));
     assert(spa_media_route_stock_end(&route, &phone, now));
+    assert(!spa_media_route_non_ent(&route));
     assert(spa_media_route_realtime_upmix_allowed(&route, 1, 2, 6, 1));
+    assert(spa_media_route_stock_begin_type(&route, &alert, 2) == 1);
+    assert(spa_media_route_nonmedia(&route));
+    assert(!spa_media_route_non_ent(&route)); /* alert uses mpl5_dio_ent */
+    assert(!spa_media_route_realtime_upmix_allowed(&route, 1, 2, 6, 1));
+    assert(spa_media_route_stock_end(&route, &alert, now));
     assert(spa_media_route_stock_begin_type(&route, &alert, 0) == 1);
+    assert(spa_media_route_non_ent(&route));
     assert(!spa_media_route_realtime_upmix_allowed(&route, 1, 2, 6, 1));
     assert(spa_media_route_stock_end(&route, &alert, now));
     /* media stopped: back to plain L/R; a faulted table never upmixes */
     assert(spa_media_route_stock_end(&route, &media, now));
     assert(!spa_media_route_realtime_upmix_allowed(&route, 1, 2, 6, 1));
     route.faulted = 1;
+    assert(spa_media_route_non_ent(&route));
     assert(spa_media_route_stock_begin_type(&route, &media, 1) == 1);
     assert(!spa_media_route_realtime_upmix_allowed(&route, 1, 2, 6, 1));
 }

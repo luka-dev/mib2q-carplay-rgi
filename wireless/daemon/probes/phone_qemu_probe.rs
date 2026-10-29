@@ -1,8 +1,9 @@
 //! QEMU-only synthetic phone driving the ordinary QNX daemon over its bridge.
 use iap2_csm::CsmMessage;
 use iap2_csm::messages::authentication::{
-    AuthenticationCertificate, AuthenticationFailed, AuthenticationResponse, AuthenticationSucceeded,
-    RequestAuthenticationCertificate, RequestAuthenticationChallengeResponse,
+    AuthenticationCertificate, AuthenticationFailed, AuthenticationResponse,
+    AuthenticationSucceeded, RequestAuthenticationCertificate,
+    RequestAuthenticationChallengeResponse,
 };
 use iap2_csm::messages::car_play::{
     CarPlayAvailability, CarPlayAvailabilityWirelessAttributes, CarPlayStartSession,
@@ -15,7 +16,12 @@ use iap2_csm::messages::wifi::{
 };
 use iap2_link::{CONTROL_SESSION_ID, Event, LinkConfig, LinkEngine, LinkState};
 use mhi2q_wireless_daemon::control::{CsmReader, message_id};
-use mhi2q_wireless_daemon::{BridgeFrame, FrameDecoder, TYPE_CONNECTED, TYPE_DATA};
+use mhi2q_wireless_daemon::{
+    BridgeFrame, FrameDecoder, TYPE_CONNECTED, TYPE_DATA, TYPE_DISCONNECTED,
+};
+mod integrated_fixture;
+mod features_fixture;
+mod recovery_fixture;
 use std::io::{self, Read, Write};
 use std::net::{Ipv4Addr, SocketAddrV4, TcpListener, TcpStream};
 use std::sync::mpsc;
@@ -33,16 +39,17 @@ enum Phase {
     Signature,
     Wifi,
     CarPlay,
+    Recovering,
     Done,
     Rejected,
 }
 
-fn flush_link(stream: &mut TcpStream, engine: &mut LinkEngine) -> io::Result<()> {
+fn flush_link(stream: &mut TcpStream, engine: &mut LinkEngine, generation: u32) -> io::Result<()> {
     for chunk in engine.take_output().chunks(20) {
         stream.write_all(
             &BridgeFrame {
                 kind: TYPE_DATA,
-                generation: 1,
+                generation,
                 data: chunk.to_vec(),
             }
             .encode()?,
@@ -195,8 +202,7 @@ fn airplay_port() -> u16 {
 }
 
 fn airplay_source_version() -> String {
-    std::env::var("MHI2Q_PHONE_QEMU_SOURCE_VERSION")
-        .unwrap_or_else(|_| "210.81".to_owned())
+    std::env::var("MHI2Q_PHONE_QEMU_SOURCE_VERSION").unwrap_or_else(|_| "210.81".to_owned())
 }
 
 fn stock_receiver_ready() -> io::Result<()> {
@@ -257,9 +263,83 @@ fn handle_csm(
     software_auth: &mut Option<SoftwarePhoneAuth>,
 ) -> io::Result<()> {
     let id = message_id(frame).map_err(io::Error::other)?;
+    if features_fixture::control(engine,id,frame,now)? {return Ok(());}
     match (*phase, id) {
+        (_, 0x5000) => {
+            use iap2_csm::messages::now_playing::*;
+            let subscription = StartNowPlayingUpdates::decode(frame).map_err(io::Error::other)?;
+            if !subscription
+                .media_item_attributes
+                .is_some_and(|v| v.title && v.artist)
+                || !subscription
+                    .playback_attributes
+                    .is_some_and(|v| v.status && v.elapsed_ms && v.app_name)
+            {
+                return Err(io::Error::other(
+                    "missing native metadata subscription fields",
+                ));
+            }
+            if std::env::var_os("MHI2Q_PHONE_QEMU_INTEGRATED").is_some() {
+                let update = NowPlayingUpdate {
+                    media_item_attributes: Some(MediaItemAttributes {
+                        title: Some("QNX Песня".into()),
+                        duration_ms: Some(123000),
+                        album: Some("Native Album".into()),
+                        artist: Some("Phone Artist".into()),
+                        persistent_id: None,
+                        album_artist: None,
+                        genre: None,
+                        artwork_ftid: None,
+                    }),
+                    playback_attributes: Some(PlaybackAttributes {
+                        status: Some(PlaybackStatus::Playing),
+                        elapsed_ms: Some(4200),
+                        app_name: Some("Phone Music".into()),
+                        app_bundle_id: None,
+                    }),
+                };
+                engine.send(CONTROL_SESSION_ID, update.encode(), now);
+                let partial = NowPlayingUpdate {
+                    media_item_attributes: Some(MediaItemAttributes {
+                        title: Some("QNX Следующая".into()),
+                        duration_ms: None,
+                        album: None,
+                        artist: None,
+                        persistent_id: None,
+                        album_artist: None,
+                        genre: None,
+                        artwork_ftid: None,
+                    }),
+                    playback_attributes: Some(PlaybackAttributes {
+                        status: Some(PlaybackStatus::Paused),
+                        elapsed_ms: Some(5600),
+                        app_name: None,
+                        app_bundle_id: None,
+                    }),
+                };
+                engine.send(CONTROL_SESSION_ID, partial.encode(), now);
+                println!("[integrated-media] real iAP2 Now Playing update sent");
+                if features_fixture::enabled(){features_fixture::artwork(engine,now);}
+            }
+        }
         (Phase::Identification, 0x1d01) => {
             let info = IdentificationInformation::decode(frame).map_err(io::Error::other)?;
+            let has_sent = |wanted| info.messages_sent_by_accessory.chunks_exact(2)
+                .any(|id| u16::from_be_bytes([id[0], id[1]]) == wanted);
+            // Real iPhone rejects parameter 6 for an incomplete Now Playing
+            // start/stop capability. Do not let the lab accept that payload.
+            if has_sent(0x5000) != has_sent(0x5002) {
+                return Err(io::Error::other("incomplete Now Playing start/stop capability"));
+            }
+            if std::env::var("MHI2Q_PHONE_QEMU_FACTORY_FIXTURE").as_deref() == Ok("1") {
+                if info.name != "QEMU MMI"
+                    || info.manufacturer != "Test Manufacturer"
+                    || info.firmware_version != "QEMU firmware"
+                {
+                    return Err(io::Error::other("factory JSON identity differs on wire"));
+                }
+                println!("[phone-qemu] factory JSON identity verified on wire");
+            }
             if !info
                 .wireless_car_play_transport_component
                 .is_some_and(|component| component.supports_car_play)
@@ -271,12 +351,18 @@ fn handle_csm(
             println!("[phone-qemu] identification=1");
             engine.send(CONTROL_SESSION_ID, IdentificationAccepted {}.encode(), now);
             if std::env::var("MHI2Q_PHONE_QEMU_AUTH_FIRST").as_deref() == Ok("1") {
-                engine.send(CONTROL_SESSION_ID,
-                    RequestAccessoryWiFiConfigurationInformation {}.encode(), now);
+                engine.send(
+                    CONTROL_SESSION_ID,
+                    RequestAccessoryWiFiConfigurationInformation {}.encode(),
+                    now,
+                );
                 *phase = Phase::Wifi;
             } else {
-                engine.send(CONTROL_SESSION_ID,
-                    RequestAuthenticationCertificate {}.encode(), now);
+                engine.send(
+                    CONTROL_SESSION_ID,
+                    RequestAuthenticationCertificate {}.encode(),
+                    now,
+                );
                 *phase = Phase::Certificate;
             }
         }
@@ -291,7 +377,8 @@ fn handle_csm(
             engine.send(
                 CONTROL_SESSION_ID,
                 RequestAuthenticationChallengeResponse {
-                    challenge: software_auth.as_ref()
+                    challenge: software_auth
+                        .as_ref()
                         .map_or_else(|| vec![0x12; 20], |auth| auth.challenge()),
                 }
                 .encode(),
@@ -315,7 +402,8 @@ fn handle_csm(
                             CONTROL_SESSION_ID,
                             RequestAuthenticationChallengeResponse {
                                 challenge: auth.challenge(),
-                            }.encode(),
+                            }
+                            .encode(),
                             now,
                         );
                         return Ok(());
@@ -332,8 +420,11 @@ fn handle_csm(
                 engine.send(CONTROL_SESSION_ID, StartIdentification {}.encode(), now);
                 *phase = Phase::Identification;
             } else {
-                engine.send(CONTROL_SESSION_ID,
-                    RequestAccessoryWiFiConfigurationInformation {}.encode(), now);
+                engine.send(
+                    CONTROL_SESSION_ID,
+                    RequestAccessoryWiFiConfigurationInformation {}.encode(),
+                    now,
+                );
                 *phase = Phase::Wifi;
             }
         }
@@ -346,13 +437,14 @@ fn handle_csm(
             println!("[phone-qemu] wifi=1");
             *phase = Phase::CarPlay;
         }
-        (Phase::CarPlay, 0x4301) => {
+        (Phase::CarPlay | Phase::Recovering, 0x4301) => {
             let start = CarPlayStartSession::decode(frame).map_err(io::Error::other)?;
             if start.port != Some(u32::from(airplay_port()))
                 || start.wireless_attributes.and_then(|attrs| attrs.channel) != Some(11)
                 || start.device_identifier.as_deref() != Some("02:00:00:00:00:01")
-                || start.public_key.as_ref().is_none_or(|id|
-                    mhi2q_wireless_daemon::control::validate_pairing_id(id).is_err())
+                || start.public_key.as_ref().is_none_or(|id| {
+                    mhi2q_wireless_daemon::control::validate_pairing_id(id).is_err()
+                })
                 || start.source_version.as_deref() != Some(airplay_source_version().as_str())
             {
                 return Err(io::Error::other("wrong CarPlayStartSession"));
@@ -369,8 +461,21 @@ fn handle_csm(
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut integrated = if std::env::var_os("MHI2Q_PHONE_QEMU_INTEGRATED").is_some() {
+        Some(integrated_fixture::Fixture::new()?)
+    } else {
+        None
+    };
+    let mut recovery = if std::env::var_os("MHI2Q_PHONE_QEMU_RECOVERY").is_some() {
+        Some(recovery_fixture::Fixture::new()?)
+    } else {
+        None
+    };
     let mut software_auth = SoftwarePhoneAuth::from_environment()?;
-    let control = if std::env::var_os("MHI2Q_PHONE_QEMU_CONTROL").is_some() {
+    let control = if integrated.is_none()
+        && recovery.is_none()
+        && std::env::var_os("MHI2Q_PHONE_QEMU_CONTROL").is_some()
+    {
         Some(fake_control_phone()?)
     } else {
         None
@@ -378,6 +483,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let real_receiver = std::env::var_os("MHI2Q_PHONE_QEMU_REAL_RECEIVER").is_some();
     let stop = if real_receiver {
         stock_receiver_ready()?;
+        None
+    } else if recovery.is_some() || integrated.is_some() {
         None
     } else {
         Some(fake_receiver()?)
@@ -388,30 +495,104 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &BridgeFrame {
             kind: TYPE_CONNECTED,
             generation: 1,
-            data: Vec::new(),
+            data: vec![6, 5, 4, 3, 2, 1],
         }
         .encode()?,
     )?;
+    let mut generation = 1;
+    let mut bootstrap_gap = None;
+    let mut gap_done = false;
     let start = Instant::now();
     let mut engine = LinkEngine::new(LinkConfig::default());
     engine.start(true, 0);
-    flush_link(&mut stream, &mut engine)?;
+    flush_link(&mut stream, &mut engine, generation)?;
     let mut bridge = FrameDecoder::default();
     let mut csm = CsmReader::default();
     let mut phase = Phase::Link;
     let mut last_availability_ms: Option<u64> = None;
     let mut input = [0u8; 4096];
-    while start.elapsed() < Duration::from_secs(65) && phase != Phase::Done {
+    while start.elapsed()
+        < Duration::from_secs(if integrated.is_some() {
+            integrated_fixture::deadline_seconds()
+        } else {
+            65
+        })
+        && phase != Phase::Done
+    {
         let now = start.elapsed().as_millis() as u64;
+        if !gap_done
+            && std::env::var("MHI2Q_INTEGRATED_FAULT").as_deref() == Ok("rfcomm-gap")
+            && std::path::Path::new("/dev/shmem/integrated-rfcomm-gap").exists()
+        {
+            if bootstrap_gap.is_none() {
+                stream.write_all(
+                    &BridgeFrame {
+                        kind: TYPE_DISCONNECTED,
+                        generation,
+                        data: vec![],
+                    }
+                    .encode()?,
+                )?;
+                bootstrap_gap = Some(Instant::now());
+                println!(
+                    "[integrated-media] RFCOMM disconnected while native IP media remains live"
+                );
+            }
+            if bootstrap_gap.unwrap().elapsed() < Duration::from_secs(3) {
+                thread::sleep(Duration::from_millis(20));
+                continue;
+            }
+            generation += 1;
+            stream.write_all(
+                &BridgeFrame {
+                    kind: TYPE_CONNECTED,
+                    generation,
+                    data: vec![6, 5, 4, 3, 2, 1],
+                }
+                .encode()?,
+            )?;
+            engine = LinkEngine::new(LinkConfig::default());
+            engine.start(true, now);
+            csm = CsmReader::default();
+            phase = Phase::Link;
+            last_availability_ms = None;
+            gap_done = true;
+            println!("[integrated-media] RFCOMM reopened without radio or Bluetooth bond reset");
+        }
         match stream.read(&mut input) {
             Ok(0) => {
-                if phase == Phase::Rejected
-                    && std::env::var_os("MHI2Q_MFI_QEMU_TAMPER").is_some() {
+                if std::env::var("MHI2Q_INTEGRATED_FAULT").as_deref() == Ok("daemon-crash")
+                    && generation == 1
+                {
+                    stream = connect_daemon()?;
+                    stream.set_read_timeout(Some(Duration::from_millis(50)))?;
+                    generation = 2;
+                    stream.write_all(
+                        &BridgeFrame {
+                            kind: TYPE_CONNECTED,
+                            generation,
+                            data: vec![6, 5, 4, 3, 2, 1],
+                        }
+                        .encode()?,
+                    )?;
+                    bridge = FrameDecoder::default();
+                    engine = LinkEngine::new(LinkConfig::default());
+                    engine.start(true, now);
+                    csm = CsmReader::default();
+                    phase = Phase::Link;
+                    last_availability_ms = None;
+                    println!(
+                        "[integrated-media] phone reauthenticated with restarted daemon on new RFCOMM generation"
+                    );
+                    flush_link(&mut stream, &mut engine, generation)?;
+                    continue;
+                }
+                if phase == Phase::Rejected && std::env::var_os("MHI2Q_MFI_QEMU_TAMPER").is_some() {
                     println!("[phone-qemu] software AA04 closed bridge=1");
                     return Ok(());
                 }
-                if std::env::var("MHI2Q_PHONE_QEMU_EXPECT_MFI_TIMEOUT")
-                    .as_deref() == Ok("1") && phase == Phase::Certificate
+                if std::env::var("MHI2Q_PHONE_QEMU_EXPECT_MFI_TIMEOUT").as_deref() == Ok("1")
+                    && phase == Phase::Certificate
                 {
                     println!("[phone-qemu] MFi timeout closed bridge=1");
                     return Ok(());
@@ -420,7 +601,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             Ok(n) => {
                 for frame in bridge.feed(&input[..n])? {
-                    if frame.kind != TYPE_DATA || frame.generation != 1 {
+                    if frame.generation < generation {
+                        continue;
+                    }
+                    if frame.kind != TYPE_DATA || frame.generation != generation {
                         return Err("unexpected bridge frame".into());
                     }
                     engine.feed(&frame.data, now);
@@ -438,16 +622,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             return Err("iAP2 link died".into());
         }
         while let Some(event) = engine.poll_event() {
+            if let Event::FileTransfer(data)=&event {features_fixture::file(&mut engine,data,now)?;}
             if let Event::Control(data) = event {
                 for frame in csm.push(&data).map_err(io::Error::other)? {
                     handle_csm(&mut engine, &mut phase, &frame, now, &mut software_auth)?;
+                    if phase == Phase::Done {
+                        if let Some(fixture) = integrated.as_mut() {
+                            fixture.started();
+                            phase = Phase::Recovering;
+                        }
+                        if let Some(fixture) = recovery.as_mut() {
+                            if !fixture.started() {
+                                phase = Phase::Recovering;
+                            }
+                        }
+                    }
                 }
             }
         }
         if engine.state() == LinkState::Normal && phase == Phase::Link {
             println!("[phone-qemu] iap2 normal=1");
             if std::env::var("MHI2Q_PHONE_QEMU_AUTH_FIRST").as_deref() == Ok("1") {
-                engine.send(CONTROL_SESSION_ID, RequestAuthenticationCertificate {}.encode(), now);
+                engine.send(
+                    CONTROL_SESSION_ID,
+                    RequestAuthenticationCertificate {}.encode(),
+                    now,
+                );
                 phase = Phase::Certificate;
             } else {
                 engine.send(CONTROL_SESSION_ID, StartIdentification {}.encode(), now);
@@ -472,10 +672,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             last_availability_ms = Some(now);
             println!("[phone-qemu] availability sent=1");
         }
-        flush_link(&mut stream, &mut engine)?;
+        if let Some(fixture) = recovery.as_mut() {
+            fixture.tick(&mut engine, now)?;
+        }
+        if let Some(fixture) = integrated.as_mut() {
+            if fixture.tick(&mut engine, now)? {
+                phase = Phase::Done;
+            }
+        }
+        if let Err(error) = flush_link(&mut stream, &mut engine, generation) {
+            if std::env::var("MHI2Q_INTEGRATED_FAULT").as_deref() != Ok("daemon-crash")
+                || generation != 1
+            {
+                return Err(error.into());
+            }
+        }
     }
     if phase != Phase::Done {
         return Err("CarPlayStartSession timeout".into());
+    }
+    if let Some(fixture) = recovery.as_ref() {
+        fixture.verify()?;
     }
     if let Some(control) = control {
         control.recv_timeout(Duration::from_secs(12))?;
@@ -491,15 +708,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("[phone-qemu] full daemon path=1");
                     return Ok(());
                 }
-                Ok(n) => for frame in bridge.feed(&input[..n])? {
-                    if frame.kind == TYPE_DATA { engine.feed(&frame.data, now); }
-                },
-                Err(error) if matches!(error.kind(), io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock) => {},
+                Ok(n) => {
+                    for frame in bridge.feed(&input[..n])? {
+                        if frame.kind == TYPE_DATA {
+                            engine.feed(&frame.data, now);
+                        }
+                    }
+                }
+                Err(error)
+                    if matches!(
+                        error.kind(),
+                        io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock
+                    ) => {}
                 Err(error) => return Err(error.into()),
             }
             engine.advance_time(now);
             while engine.poll_event().is_some() {}
-            flush_link(&mut stream, &mut engine)?;
+            flush_link(&mut stream, &mut engine, generation)?;
         }
         return Err("media owner failed to close RFCOMM generation".into());
     }

@@ -61,9 +61,6 @@ run() {   # run <file> <command...>: best effort, output and errors into <file>
 }
 
 # ---- what the unit looks like right now ----
-# Perishable and cheap diagnostics first (slog is a RAM ring; pidin is safe),
-# potentially-stalling filesystem probes (mount/df) after them: when the video
-# core wedges, a stall must not cost us the whole collection.
 {
     echo "save        $NN"
     echo "date        $(date 2>&1)"
@@ -72,8 +69,6 @@ run() {   # run <file> <command...>: best effort, output and errors into <file>
     echo "script      $D/custom.sh"
 } > "$OUT/info.txt"
 run uname.txt uname -a
-run sloginfo_mmx.txt sloginfo
-run sloginfo_rcc.txt on -f rcc sloginfo
 run pidin_ar.txt pidin ar
 run pidin_info.txt pidin info
 run mount.txt mount
@@ -81,6 +76,8 @@ run df.txt df -k
 run ifconfig.txt ifconfig -a
 run netstat_rn.txt netstat -rn
 run pf_rules.txt pfctl -sr
+run sloginfo_mmx.txt sloginfo
+run sloginfo_rcc.txt on -f rcc sloginfo
 run hooks_ls.txt ls -la /mnt/app/root/hooks /mnt/app/eso/hmi/lsd/jars /mnt/app/eso/bin/apps/smartphone_integrator /mnt/app/armle/lib/dll/deva-ctrl-qc.so
 run carplay_stock_ls.txt find /mnt/app /mnt/system -name '*.carplay-stock'
 run tmp_ls.txt ls -la "$SRC/"     # /tmp is a symlink to /dev/shmem: list what it points at
@@ -114,24 +111,6 @@ i=0
 for f in $(ls -t "$SRC"/smartphone_integrator_error_*.tar.gz 2>/dev/null); do
     [ $i -lt 5 ] || break
     cp "$f" "$OUT/si_errors/" 2>/dev/null && i=$((i+1))
-done
-
-# ---- video-core fatal dumps (read-only: the firmware owns these files) ----
-# On a HW timeout the driver writes /var/log/vidc*.dat; TPM's video_fatal
-# event then archives them to /var/log/ana_dumps/ramdumps/ and deletes the
-# originals.  Grab whichever of the two still exists, capped per file: the
-# firmware dumps can be megabytes and the SD card fits one GitHub attachment.
-mkdir "$OUT/vidc"
-for f in /var/log/ana_dumps/ramdumps/vidc* /var/log/vidc*.dat; do
-    [ -f "$f" ] || continue
-    sz=$(wc -c < "$f" 2>/dev/null)
-    case $sz in ''|*[!0-9]*) continue ;; esac
-    if [ "$sz" -gt 4194304 ]; then
-        dd if="$f" of="$OUT/vidc/${f##*/}" bs=4096 count=1024 2>/dev/null ||
-            echo "dd failed: $f" >> "$OUT/info.txt"
-    else
-        cp "$f" "$OUT/vidc/" 2>/dev/null || echo "copy failed: $f" >> "$OUT/info.txt"
-    fi
 done
 
 # ---- every crash dump and freeze log (the dumper writes them to /mnt/ota/system/core) ----

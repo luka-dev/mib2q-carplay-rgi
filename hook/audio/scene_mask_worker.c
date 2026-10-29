@@ -48,6 +48,11 @@ static int smw_submit(void *context, uint32_t generation, uint32_t sequence, con
     memcpy(job->in, in512, sizeof(job->in));
     smw_store(&w->_job_published, next);
     smw_increment(&w->_submitted);
+    if (w->_priority != SPA_SCENE_MASK_WORKER_NO_THREAD &&
+        pthread_mutex_trylock(&w->_wake_lock) == 0) {
+        (void)pthread_cond_signal(&w->_wake_cond);
+        (void)pthread_mutex_unlock(&w->_wake_lock);
+    }
     return 1;
 }
 
@@ -150,7 +155,6 @@ int spa_scene_mask_worker_step(struct spa_scene_mask_worker *w)
     memcpy(result->row.elig, w->_net.elig, sizeof(result->row.elig));
     memcpy(result->row.prot, w->_net.prot, sizeof(result->row.prot));
     spa_scene_mask_lfe_posteriors(&w->_net, &result->row.lfe_bass, &result->row.lfe_drum);
-    memcpy(result->row.voc, w->_net.post[0], sizeof(result->row.voc));
     smw_store(&w->_result_published, next);
     return 1;
 }
@@ -177,20 +181,25 @@ static void smw_set_priority(int priority)
 static void *smw_main(void *opaque)
 {
     struct spa_scene_mask_worker *w = (struct spa_scene_mask_worker *)opaque;
-    /* Busy: poll every 250 us (a job every 512 frames = 10.7 ms).  Parked (no job for ~10 ms: the
-     * other path is playing, or nothing is): back off to 4 ms, as the retired HSSR worker did. */
-    const struct timespec idle = { 0, 250000 };
-    const struct timespec parked = { 0, 4000000 };
-    uint32_t idle_polls = 0;
 
     smw_set_priority(w->_priority);
     while (!smw_load(&w->_stop)) {
-        if (spa_scene_mask_worker_step(w)) {
-            idle_polls = 0;
-            continue;
+        struct timespec ts;
+
+        if (spa_scene_mask_worker_step(w)) continue;
+        if (pthread_mutex_lock(&w->_wake_lock) == 0) {
+            if (!smw_load(&w->_stop) &&
+                smw_load(&w->_job_published) == smw_load(&w->_job_consumed)) {
+                (void)clock_gettime(CLOCK_REALTIME, &ts);
+                ts.tv_nsec += 20000000L; /* 20 ms fallback wake */
+                if (ts.tv_nsec >= 1000000000L) {
+                    ts.tv_sec += 1;
+                    ts.tv_nsec -= 1000000000L;
+                }
+                (void)pthread_cond_timedwait(&w->_wake_cond, &w->_wake_lock, &ts);
+            }
+            (void)pthread_mutex_unlock(&w->_wake_lock);
         }
-        if (idle_polls < 40u) idle_polls++;
-        (void)nanosleep(idle_polls >= 40u ? &parked : &idle, NULL);
     }
     return NULL;
 }
@@ -209,10 +218,22 @@ int spa_scene_mask_worker_start(struct spa_scene_mask_worker *w,
     w->provider.receive = smw_receive;
     w->provider.reset = smw_reset;
     smw_store(&w->_requested_generation, initial_generation);
-    if (priority != SPA_SCENE_MASK_WORKER_NO_THREAD &&
-        pthread_create(&w->_thread, NULL, smw_main, w) != 0) {
-        memset(w, 0, sizeof(*w));
-        return -1;
+    if (priority != SPA_SCENE_MASK_WORKER_NO_THREAD) {
+        if (pthread_mutex_init(&w->_wake_lock, NULL) != 0) {
+            memset(w, 0, sizeof(*w));
+            return -1;
+        }
+        if (pthread_cond_init(&w->_wake_cond, NULL) != 0) {
+            (void)pthread_mutex_destroy(&w->_wake_lock);
+            memset(w, 0, sizeof(*w));
+            return -1;
+        }
+        if (pthread_create(&w->_thread, NULL, smw_main, w) != 0) {
+            (void)pthread_cond_destroy(&w->_wake_cond);
+            (void)pthread_mutex_destroy(&w->_wake_lock);
+            memset(w, 0, sizeof(*w));
+            return -1;
+        }
     }
     smw_store(&w->_started, 1u);
     return 0;
@@ -222,8 +243,15 @@ void spa_scene_mask_worker_stop(struct spa_scene_mask_worker *w)
 {
     if (!w || !smw_load(&w->_started)) return;
     smw_store(&w->_stop, 1u);
-    if (w->_priority != SPA_SCENE_MASK_WORKER_NO_THREAD)
+    if (w->_priority != SPA_SCENE_MASK_WORKER_NO_THREAD) {
+        if (pthread_mutex_lock(&w->_wake_lock) == 0) {
+            (void)pthread_cond_broadcast(&w->_wake_cond);
+            (void)pthread_mutex_unlock(&w->_wake_lock);
+        }
         (void)pthread_join(w->_thread, NULL);
+        (void)pthread_cond_destroy(&w->_wake_cond);
+        (void)pthread_mutex_destroy(&w->_wake_lock);
+    }
     smw_store(&w->_started, 0u);
 }
 

@@ -15,7 +15,7 @@ import numpy as np
 from amp_b_spatial import SpatialFrameReference
 
 ROOT = Path(__file__).resolve().parents[2]
-LOADER = ROOT/'assets/soundamp/J525_8W0035465_SW0420_SHARC_SPI_bitrev.ldr.bin'
+LOADER = ROOT/'output/r2/soundamp/J525_8W0035465_SW0420_SHARC_SPI_bitrev.ldr.bin'
 PROOFS = (
     (0x12E109,0x12E116,'42ab88975234af523b4eaaf410eb3f11c9a1d965c5204f0c38b9a39ad1127187'),
     (0x12FD24,0x12FE4F,'c5e317678a99646b2fc0740321470b16ef24c6bc5ce4a764e20daad1c853fa72'),

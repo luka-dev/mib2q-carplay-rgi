@@ -8,6 +8,8 @@ _MHI2Q wireless CarPlay — technical reference, integrated 2026-09-29._
 
 Maintained technical reference. The evidence below distinguishes static analysis, local QNX tests and observations from the unit.
 
+The current SI-owned daemon also advertises RGI component 16 and vehicle/location services, forwards authenticated 5201/5202/5204 and status/location subscriptions, and handles artwork Start/Data/Success/Cancel on the negotiated file session. The bounded semantic worker uses CPRX v3 operations 9/10 with exact input replay and retained output ACKs. See [wireless production channels](WIRELESS_PRODUCTION_CHANNELS.md) for limits, native GPS routing, test commands and physical acceptance gaps. Earlier bootstrap-only descriptions below are historical.
+
 Implementation and local diagnostic paths in this record refer to the [original source directory](../../wireless/daemon/). Run `wireless/...` commands from the repository root; moving this note does not move binaries or logs.
 
 ## 📊 Component flow
@@ -51,6 +53,70 @@ interface, and answers Wi-Fi configuration and CarPlay availability after
 authentication. Tests cover fragmented bridge and CSM frames, generation
 changes, a synthetic iAP2 handshake, a phone Identify request carried through
 the bridge, and the control sequence with a synthetic MFi signer.
+
+The SI-owned build now also advertises `0x5000/0x5001` Now Playing support. After an admitted receiver starts, Rust subscribes to track/playback attributes. Updates are accepted only after identification and MFi authentication; both metadata queues are bounded at 16 frames, with a 4096-byte frame limit. The receiver worker rechecks native SI ownership and forwards CPRX v3 operation 8 outside the iAP2 timer thread. Reset/start clears pending updates. Native DIO merges track fields, and omitted playback fields retain their previous values. Two integrated QNX cycles verify Cyrillic titles, partial updates, app/state and elapsed DSI publications; [details and evidence limits](SI_STAGE2_OFFLINE.md#native-now-playing-and-hid).
+
+The [native Bluetooth API test on October 18](../archive/internal-reference-2026-10-29/carplay-lab/VPHONE_LAB.md#native-bluetooth-bootstrap-checkpoint-2026-10-18)
+found that iOS 26.6.2 rejects declaring the Identification exchange itself as
+capabilities: `1D01` in MessagesSentByAccessory and `1D00/1D02/1D03` in
+MessagesReceivedFromAccessory. These four declarations were removed; their
+protocol handlers remain unchanged. The matching test profile then received
+native `AA05`, `1D02` and Wi-Fi request `5702`. The subsequent
+[real QNX/native session](../carplay-lab/NATIVE_WIRELESS_QNX.md) exercises the
+ARM Rust daemon itself, answers `5702` and delivers `4301` after receiver
+readiness and identity IPC. The opt-in VM association adapter now enables
+native wireless PairSetup/PairVerify and media: independently decoded
+800×480 H.264 shows Maps. This uses virtual Ethernet and establishes no
+physical radio result. Its explicit
+`native-api-lab` build uses a public-fixture host signer and `ecm0` discovery;
+the default QNX build retains hardware MFi and `uap0`.
+
+### Factory identity and wireless capabilities
+
+The daemon reads the active stock DIO configuration at startup, including
+`--check-config`. It selects `IPL_CONFIG_DIR_DIO_MANAGER/dio_manager.json`,
+falls back to `IPL_CONFIG_DIR/dio_manager.json` when the DIO-specific variable
+is absent, and otherwise uses `/etc/eso/production/dio_manager.json`.
+An explicitly empty directory is an error. The factory `#`/`##` comments are
+supported; hashes and escaped quotes inside strings are preserved.
+
+| Identification field | Source |
+|---|---|
+| Name | `iap2.accessoryIdentification.displayName` |
+| Manufacturer | `iap2.accessoryIdentification.manufacturer` |
+| Firmware version | `iap2.accessoryIdentification.firmwareVersion` |
+| Model, serial, hardware version | Required `MHI2Q_CP_MODEL`, `MHI2Q_CP_SERIAL`, `MHI2Q_CP_HARDWARE`; these fields are absent from the reviewed MU1316 JSON |
+| Bluetooth transport and MAC | Daemon implementation and explicit `MHI2Q_CP_BT_MAC` |
+| Wireless transport and AP settings | Daemon implementation and verified per-unit AP configuration |
+| Message capability lists | Only messages supported by this daemon; the stock DIO lists are not copied |
+
+Legacy `MHI2Q_CP_NAME`, `MHI2Q_CP_MANUFACTURER` and `MHI2Q_CP_FIRMWARE`
+are ignored, including in older per-unit environment files. They cannot
+override the shared factory identity. There are no fallback identity strings
+when the file is missing, malformed or incomplete. Required JSON fields must
+be nonblank strings of at most 255 UTF-8 bytes without control characters;
+the file is limited to 1 MiB. Changes take effect on the next daemon launch.
+The stock JSON is read only and is never rewritten by the daemon.
+
+```mermaid
+flowchart LR
+    accTitle: Factory identity and wireless identification
+    accDescr: Stock DIO and the wireless daemon share the factory identity. The wireless daemon adds only its implemented transports and message capabilities.
+    factory_json["Active dio_manager.json"] --> stock_dio["Stock DIO"]
+    factory_json --> base_identity["Name, manufacturer, firmware"]
+    base_identity --> identification["Wireless iAP2 Identification"]
+    unit_config["Model, serial, hardware and AP config"] --> identification
+    daemon_capabilities["Daemon transports and supported messages"] --> identification
+```
+
+The file-loader/CSM regression checks conflicting legacy overrides, malformed
+and missing files, UTF-8, the size limit, and isolation from stock-only message
+lists. The minimal QNX phone fixture checks the three JSON values in the
+daemon's actual Identification response; this remains a synthetic phone test.
+The JSON parser is vendored for offline builds; see
+[vendor provenance](IAP2_VENDOR_PROVENANCE.md#-factory-configuration-parser).
+
+### Software MFi provider checks
 
 The opt-in host-only [software MFi tests](TEST_SOFTWARE_MFI.md) now generate
 synthetic RSA/SHA-1 and P-256/SHA-256 identities and verify the actual control

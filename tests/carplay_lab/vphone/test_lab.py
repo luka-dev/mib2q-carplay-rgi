@@ -117,6 +117,25 @@ class VPhoneLabTests(unittest.TestCase):
                 lab.rpc(self.settings, "device.info")
             client.assert_called_once_with("vm", "list")
 
+    def test_rpc_batch_pins_only_one_owned_profile_and_expires(self):
+        running=dict(self.machine,state='running',udid='owned')
+        lab.save('machine.json',running)
+        def client(*args,**kwargs):
+            return [running] if args==('vm','list') else {'ok':True}
+        with patch.object(lab,'client',side_effect=client) as calls:
+            with lab.rpc_batch(self.settings,30):
+                lab.rpc(self.settings,'device.info')
+                lab.rpc(self.settings,'services.status',{'label':'owned-job'})
+                with self.assertRaisesRegex(RuntimeError,'different profile'):
+                    lab.rpc(dict(self.settings,machine='other'),'device.info')
+                with self.assertRaisesRegex(RuntimeError,'nested'):
+                    with lab.rpc_batch(self.settings):pass
+                with patch.object(lab.time,'monotonic',return_value=float('inf')):
+                    with self.assertRaises(TimeoutError):lab.rpc(self.settings,'device.info')
+            self.assertEqual(sum(c.args==('vm','list') for c in calls.call_args_list),1)
+            lab.require_machine(self.settings,'running')
+            self.assertEqual(sum(c.args==('vm','list') for c in calls.call_args_list),2)
+
     def test_reports_are_atomic_private_and_preserve_previous_on_bad_json(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(lab, "OUT", Path(directory)):
             file = lab.save("doctor.json", {"ready": False})

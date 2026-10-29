@@ -16,7 +16,7 @@ from test_amp_second_b import synthetic_scenario
 
 
 def explicit_synthetic_scenario():
-    path=ROOT/'assets/soundamp/remaining-blocks-20260920-v3'
+    path=ROOT/'output/r2/soundamp/remaining-blocks-20260920-v3'
     report=json.loads((path/'b_config_control.json').read_text())
     mode=json.loads((path/'b_mode_control.json').read_text())
     cfg=retained_config(report,source='b01',bank=1)

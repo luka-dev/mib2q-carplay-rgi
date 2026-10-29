@@ -1,6 +1,6 @@
 # Wireless CarPlay with MU1316 stock AirPlay 210.81
 
-_MHI2Q wireless CarPlay — technical reference, integrated 2026-09-29._
+_Current stock210 component contracts; original ABI evidence remains version-pinned._
 
 ---
 
@@ -15,27 +15,24 @@ Implementation and local diagnostic paths in this record refer to the [original 
 ```mermaid
 flowchart LR
     accTitle: Stock210 wireless component boundaries
-    accDescr: The Rust daemon handles Bluetooth bootstrap while the C hook extends the original receiver; the owner supervisor coordinates its lifetime.
+    accDescr: The Rust daemon handles Bluetooth bootstrap while the C hook extends the original receiver; SI owns admission and the DIO child.
     phone["Phone Bluetooth and Wi-Fi"]
     graft["btstack RFCOMM graft"]
     daemon["Rust iAP2 bootstrap daemon"]
     bridge["DIO receiver bridge"]
     hook["C pairing and media hook"]
     stock["Factory AirPlay 210.81"]
-    owner["Native owner supervisor"]
+    owner["Existing SI: admission and child owner"]
     phone -->|Bluetooth| graft --> daemon -->|START and IDENTITY| bridge
     phone -->|Wi-Fi| hook --> stock
     bridge --> stock
+    daemon -->|SIW2 admission| owner
     owner --> bridge
 ```
 
-This is the stock-library, hook-based track requested for MHI2Q. It is an
-offline design and evidence ledger, **not** a claim of iPhone interoperability.
-The separate 280.33.8 replacement archive is an experimental alternative;
-its QEMU success does not establish that the replacement can run on the unit.
-No head-unit file was touched for this analysis.
+The implementation keeps factory AirPlay and adds pairing/media adapters in the hook. [SI ownership](DIO_OWNERSHIP.md) defines process authority; the [shared ledger](../carplay-lab/WIRELESS_COMPLETION_PLAN.md) defines current acceptance. Original standalone-supervisor experiments are retained in the [architecture snapshot](../archive/internal-reference-2026-10-29/wireless-carplay/STOCK210_ARCHITECTURE.md).
 
-**Updated after static iOS gate tracing:** direct wireless stock 210 with
+**Wireless endpoint contract:** direct wireless stock 210 with
 only feature bit 37 is insufficient. iOS 26.6/27 requires CU pairing and
 encryption for non-USB CarPlay endpoints; iOS 27 StartSession also synthesizes
 bit 38 locally. The original library can remain, but the wireless hook/front
@@ -114,56 +111,23 @@ Bonjour and `/info`, publishing bits 37/38 only when its guarded pairing/media
 implementation is ready. It adds persisted `pi` at the TXT construction seam
 and final info callback without changing stock `libairplay.so`. `dio_manager` hardcodes
 `interfaceName=carplay0`; the existing exact-callsite probe can substitute
-`uap0` for wireless receiver startup. The actual `uap0` listener and Bonjour
-registration still need on-unit confirmation.
+`uap0` for wireless receiver startup. Vehicle observations and the required matched-kit radio checks are recorded in the shared ledger.
 
 <a id="required-stock-210-integration"></a>
 
-## 📋 Required stock-210 integration
+## 📋 Stock210 integration contract
 
-1. Keep original `libairplay.so` and the existing wired
-   `libcarplay_hook.so`/SI path. Add a wireless module to the hook or preload
-   the already built `libdio_receiver_bridge.so` after it. Guard the receiver
-   start/stop by the existing single-owner protocol so cable insertion gives
-   the wired SI child priority.
-2. In the wireless `dio_manager`, change only the guarded
-   `interfaceName=carplay0` setter to `uap0`, start the **stock** receiver,
-   verify TCP 5000 `/info`, and ensure `_airplay._tcp.` advertises that same
-   port and the real unit identity. This is a local receiver milestone, not
-   a sufficient iPhone wireless endpoint. Add the required CU pairing and
-   encrypted transport/stream support in the hook/front end before exposing
-   modern wireless capabilities. Bonjour `pi` and StartSession field 4 must
-   contain the same stable pairing identifier returned by that implementation;
-   its Ed25519 public key is a separate value.
-3. Keep the btstack graft limited to the verified iAP2 SDP record, CarPlay
-   service/EIR advertisement, RFCOMM accept/send/credits, and bounded local
-   byte bridge. It runs in `btstack`, which is a different process; the
-   AirPlay hook cannot substitute for this registration. The graft's local
-   peer is the iAP2 daemon at `127.0.0.1:57342`.
-4. The iAP2 daemon owns link framing, MFi authentication through `/dev/i2c8`,
-   Wi-Fi credentials/Device IE and CarPlay control. It tells the receiver
-   bridge to START over `127.0.0.1:57343`, waits for the stock TCP 5000
-   readiness acknowledgement. For wireless availability/start, it must wait
-   for the pairing-capable front end as well and send the actual exposed
-   receiver port, device ID, IP, and pairing identity. The stock back end is
-   `210.81` on port 5000; a separate front end must report its own truthful
-   capabilities and route to that back end.
-   A connection generation ties RFCOMM disconnect, daemon state, receiver
-   STOP, and IE removal together. The daemon defaults to the explicit
-   `stock210` profile (210.81/5000); the production bridge has a corresponding
-   guarded build. Historical 280 tests explicitly select `experimental280`.
-5. Verify pairing, the transition to encrypted control records, event and
-   media keys/transports, and teardown against an independent client. Static
-   iOS analysis already rules out treating legacy `/auth-setup` alone as
-   sufficient for this non-USB path. Passing iAP2 and StartSession does not
-   prove the AirPlay session.
+| Boundary | Current owner/contract |
+| --- | --- |
+| Device admission and DIO creation | Existing SI, native controller queue and generation-bound child environment |
+| Bootstrap | Rust daemon outside the media-child lifetime; graft provides the local RFCOMM byte channel |
+| Authentication | Hardware MFi for production; private pairing primitives and guarded stock210 HTTP adaptation |
+| Receiver identity | Persisted Bonjour `/info` pi matches receiver-bound StartSession; Ed25519 key is a separate value |
+| Transport | Guarded wireless interface selection, actual listener readiness, encrypted control/events/media |
+| Termination | Native SI terminal state and child exit; generation-scoped cleanup and kernel owner/priority locks |
+| Persistence | Owner locks, advisory generation marker and pairing keys under `/mnt/persist` |
 
-Flow: `iPhone --BT RFCOMM--> grafted btstack --local frames:57342--> iAP2/MFi
-daemon --START/STOP:57343--> receiver bridge` and
-`iPhone on uap0 <--> pairing/crypto hook or front end <--> stock dio_manager/210`.
-The daemon, hook and graft are separate failure domains;
-Owner locks, the advisory generation marker and long-term pairing keys use
-`/mnt/persist`; the QNX fixture lacks the required rename semantics in `/tmp`.
+The daemon defaults to `stock210` (210.81/5000); `experimental280` is an explicit research profile. Bootstrap, receiver and graft remain separate failure domains. See [SI protocol](SI_STAGE2_OFFLINE.md), [receiver lifecycle](STOCK210_RECEIVER_LIFECYCLE.md) and [media contracts](../carplay-lab/WIRELESS_MEDIA_VALIDATION.md).
 
 <a id="p5092-bootstrap-reference-and-current-iphone-clients"></a>
 
@@ -226,7 +190,4 @@ component; replacing the original `libairplay.so` is not implied. The
 the post-M4 transition, and required event/stream derivation. The private module
 now has independent protocol tests for pairing, encrypted control, events and
 basic screen/PCM media; see [validation](STOCK210_VALIDATION.md).
-Capability/`pi` publication, stock210 readiness and supervisor integration now
-pass combined offline QEMU, including media reconnect and wired-priority drain.
-See [receiver lifecycle](STOCK210_RECEIVER_LIFECYCLE.md) for current artifacts
-and the remaining real hardware validation boundary.
+Current SI-owned integration and its test boundaries are documented in the [receiver lifecycle](STOCK210_RECEIVER_LIFECYCLE.md) and [acceptance ledger](../carplay-lab/WIRELESS_COMPLETION_PLAN.md). Earlier supervisor fixtures remain dated evidence in the archive.

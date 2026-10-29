@@ -1,4 +1,4 @@
-case  rate  seq maxSfb coreEnd   ours     library
+case  rate  seq maxSfb coreEnd   port     library
    4  48000    0     11      48   quiet   quiet    ran, wrote nothing
    5  48000    0      1       4   quiet   quiet    ran, wrote nothing
    6  48000    0     30     352   quiet   quiet    ran, wrote nothing
@@ -15,5 +15,5 @@ case  rate  seq maxSfb coreEnd   ours     library
   42  48000    0      0       0   quiet   quiet    ran, wrote nothing
   43  48000    2      0       0   quiet   quiet    ran, wrote nothing
 
-ours quiet on 15 of 44, library quiet on 15, both quiet on 15
-no disagreement: wherever our decoder writes nothing, the library writes nothing too, and vice versa.
+port quiet on 15 of 44, library quiet on 15, both quiet on 15
+no disagreement: wherever the port writes nothing, the library writes nothing too, and vice versa.

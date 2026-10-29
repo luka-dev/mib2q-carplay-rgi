@@ -4,7 +4,7 @@
 
 // apac::LPCBase and the pure conversions of apac::LSFTools.
 //
-// Reference functions in libSPF_CP_PlugInWrapper.so (Pioneer SPHERA 1.030010):
+// Originals in libSPF_CP_PlugInWrapper.so (Pioneer SPHERA 1.030010):
 //
 //   0x000b4190  apac::LPCBase::LPC_Weighting(const float*, float*, float, unsigned short)
 //   0x000b4620  apac::LPCBase::LevinsonDurbin(const float*)
@@ -36,16 +36,16 @@
 // what they need is BWELPC's fixed geometry (order 16, 24000 Hz, two 512-entry
 // codebooks) and not a general LSFTools:
 //
-//   Initialize  the sizing is BWELPC's constant geometry, so our decoder has fixed
+//   Initialize  the sizing is BWELPC's constant geometry, so the port has fixed
 //               members instead of six resized vectors.
-//   DecodeLSF   implemented, as apac::BWELPC::DecodeLSFsToLPCs' first step.
+//   DecodeLSF   ported, as apac::BWELPC::DecodeLSFsToLPCs' first step.
 //   Reset       its only effect the decode path could see is zeroing those same
 //               vectors; the sixteen constants it also writes at +120 are read
-//               ONLY by QuantizeLSF, so our decoder does not carry them.
+//               ONLY by QuantizeLSF, so the port does not carry them.
 //   QuantizeLSF the encoder half (LPCodeBook::VQSearch).  Still no call site
-//               anywhere in this library, and still not implemented.
+//               anywhere in this library, and still not ported.
 //
-// The trig here is DOUBLE precision on purpose: the library calls the double
+// The trig here is DOUBLE precision on purpose: the original calls the double
 // `cos` and divides by the literal 3.14159265 - which is not M_PI, it is a
 // nine-digit truncation of it - and the difference is visible in float32.
 
@@ -58,19 +58,19 @@
 
 namespace apac {
 
-// Our caps.  The library has no fixed limit; these are far above
+// The port's caps.  The original has no fixed limit; these are far above
 // anything the profile can ask for (the LPC orders in play are 8 to 16).
 const uint32_t kMaxLPCOrder  = 32;
 const uint32_t kMaxLPCWindow = 2048;
 
-// The literal the library divides by.  Not M_PI - see the header note.
+// The literal the original divides by.  Not M_PI - see the header note.
 const double kLSFPi = 3.14159265;
 
 // apac::Autocorr as ComputeLPCs reads it: an analysis window and a lag count.
-// The library is a 32-byte object - vptr, the lag count at +8, and an owning
+// The original is a 32-byte object - vptr, the lag count at +8, and an owning
 // {begin, end} pair at +16 - and ComputeLPCs touches exactly those three.
 struct Autocorr {
-    uint32_t     order;          // +8 in the library, a uint16
+    uint32_t     order;          // +8 in the original, a uint16
     const float* window;         // +16
     uint32_t     windowLength;   // (+24 - +16) / 4
 };
@@ -90,9 +90,9 @@ public:
     static void LPC_Weighting(const float* in, float* out, float gamma,
                               uint16_t order);
 
-    // Autocorrelation r[0 .. order] to direct-form LPC.  The library clamps a
+    // Autocorrelation r[0 .. order] to direct-form LPC.  The original clamps a
     // non-positive prediction error to 0.01 and keeps going rather than
-    // failing; our decoder reproduces that.
+    // failing; the port reproduces that.
     void LevinsonDurbin(const float* r);
 
     // Window the signal with the Autocorr's window, autocorrelate it to
@@ -104,12 +104,12 @@ private:
     uint32_t        mOrder;
     float*          mLPC;
     const Autocorr* mAutocorr;
-    // The library allocas both of these; our decoder cannot, so they are members.
+    // The original allocas both of these; the port cannot, so they are members.
     float mSignal[kMaxLPCWindow + kMaxLPCOrder + 1];
     float mCorr[kMaxLPCOrder + 2];
 };
 
-// The stateless half of apac::LSFTools.  `order` is the library's uint16 at
+// The stateless half of apac::LSFTools.  `order` is the original's uint16 at
 // +104 and `sampleRate` its float at +112.
 struct LSFTools {
     uint32_t order;
@@ -133,7 +133,7 @@ struct LSFTools {
     // Force a minimum gap of `minGap` between neighbouring LSFs, from the
     // bottom up and then from the top down against fs/2 - minGap.
     void Condition_LSFs(float* lsf, float minGap, float fs) const;
-    // Condition_LSFs(lsf, 50.0f, 24000.0f) - the constants are in the library.
+    // Condition_LSFs(lsf, 50.0f, 24000.0f) - the constants are in the original.
     void ConditionLSFs(float* lsf) const;
 
     // w[i] = 1/(lsf[i] - lsf[i-1]) + 1/(lsf[i+1] - lsf[i]), with lsf[-1] taken
@@ -158,7 +158,7 @@ class LPMDCTFilter {
 public:
     LPMDCTFilter();
 
-    // Returns 2.0f / fftSize, which is what the library returns and stores.
+    // Returns 2.0f / fftSize, which is what the original returns and stores.
     float Initialize(uint16_t fftSize, uint16_t order);
 
     uint32_t FFTSize() const { return mFFTSize; }

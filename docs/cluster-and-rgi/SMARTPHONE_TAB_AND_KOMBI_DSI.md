@@ -212,7 +212,7 @@ None of these listeners is wired in `java_patch/` today. The reference once sugg
 
 - [Cluster Contexts](CLUSTER_CONTEXTS.md): the production path on the nav map slot.
 - [VC FPK State Machine](VC_FPK_STATE_MACHINE.md): the VC nav views.
-- [Phone Tab Gating](PHONE_TAB_GATING.md): `mainContext` PHONE 3 and the telephone tab.
+- [Phone Tab Gating](archive/PHONE_TAB_GATING.md): `mainContext` PHONE 3 and the telephone tab.
 
 ## 📚 Sources
 

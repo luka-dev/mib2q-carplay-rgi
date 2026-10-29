@@ -9,7 +9,7 @@ import re
 from tests.carplay_lab.qnx.qemu_capture import AUDI, REPO, docker
 
 
-def prepare(work, media=False, lifecycle=False):
+def prepare(work, media=False, lifecycle=False, active_stop=False):
     stock = AUDI / ('Firmwares/HU/MU1316-MHI2Q_US_AUG22_P5087-JTB-07426.03.1811930398/'
                     'advanced/MU1316-appimg/eso/lib/libairplay.so')
     if sha256(stock.read_bytes()).hexdigest() != '01c116b1674215daa0602d556a6d9b2eb48c2113ca294ea1f5d58787e3f656f2':
@@ -39,6 +39,7 @@ def prepare(work, media=False, lifecycle=False):
            '-DMHI2Q_PAIRING_TEST_PORT=5000',
            '-DMHI2Q_PAIRING_HOOK_QEMU',
            *(['-DMHI2Q_STOCK210_LIFECYCLE_QEMU'] if lifecycle else []),
+           *(['-DMHI2Q_STOCK210_ACTIVE_STOP_QEMU'] if active_stop else []),
            *(['-DMHI2Q_WIRELESS_MEDIA_QEMU', '-DMHI2Q_INDEPENDENT_CONTROL_SETUP',
               '-DMHI2Q_INDEPENDENT_SCREEN_SETUP', '-DMHI2Q_SCREEN_DATA_QEMU',
               '-DMHI2Q_SCREEN_FRAME_QEMU', '-DMHI2Q_SCREEN_AUDIO_QEMU'] if media else []),
@@ -106,10 +107,17 @@ def prepare(work, media=False, lifecycle=False):
     manifest.write_text(source)
     if lifecycle:
         from tests.carplay_lab.qnx.stock210_lifecycle_fixture import prepare_lifecycle
-        prepare_lifecycle(work)
+        prepare_lifecycle(work, active_stop=active_stop)
 
 
-def validate(output, log, media=False, lifecycle=False):
+def unexpected_dio_signal(output):
+    wired=set(re.findall(r'\[wired-stock-qemu\] SI child pid=(\d+)',output))
+    forced=set(re.findall(r'fixture SIGKILL pid=(\d+)',output)) & wired
+    return any(pid not in forced or signo!='SIGKILL' for pid,signo in
+               re.findall(r'Process (\d+) \(dio_manager\) terminated (SIG\w+)',output))
+
+
+def validate(output, log, media=False, lifecycle=False, active_stop=False):
     required = ['[independent-srp-qemu] ' + step for step in (
         'M1-M4 proof verified', 'M1-M6 identity verified',
         'pair-verify M1-M4 verified', 'pipelined body and bad-tag rejection verified',
@@ -133,25 +141,25 @@ def validate(output, log, media=False, lifecycle=False):
     if media:
         import plistlib
         bodies = re.findall(r'\[independent-srp-qemu\] screen-setup-body-hex=([0-9a-f]+)', output)
-        if len(bodies) != (2 if lifecycle else 1):
+        if len(bodies) != (2 if lifecycle and not active_stop else 1):
             missing.append('paired SETUP response count')
         for body in bodies:
             if 'altScreen' in plistlib.loads(bytes.fromhex(body)).get('enabledFeatures', []):
                 missing.append('unsupported paired altScreen negotiated')
-        if len(re.findall(r'\[fakeomx\] EmptyThisBuffer #\d+ nFilledLen=8 flags=0x10', output)) != (2 if lifecycle else 1):
+        if len(re.findall(r'\[fakeomx\] EmptyThisBuffer #\d+ nFilledLen=8 flags=0x10', output)) != (2 if lifecycle and not active_stop else 1):
             missing.append('authenticated video frame count')
-        if output.count('[stock210-media] authenticated PCM reached stock jitter buffer') != (160 if lifecycle else 80):
+        if output.count('[stock210-media] authenticated PCM reached stock jitter buffer') != (160 if lifecycle and not active_stop else 80):
             missing.append('authenticated PCM packet count')
         if 'unexpected PCM admitted' in output:
             missing.append('PCM integrity')
         if output.count('[independent-srp-qemu] screen TEARDOWN status=200') != 1:
             missing.append('media session tore down')
-        if lifecycle and output.count('[stock210-lifecycle] media ended by wired drain') != 1:
+        if lifecycle and not active_stop and output.count('[stock210-lifecycle] media ended by wired drain') != 1:
             missing.append('second media session ended by wired drain')
-    if missing or '(dio_manager) terminated SIG' in output or 'pairing failed' in output:
+    if missing or unexpected_dio_signal(output) or 'pairing failed' in output:
         raise SystemExit(f'Stock210 hook pairing failed: missing={missing}; log: {log}')
     if lifecycle:
         from tests.carplay_lab.qnx.stock210_lifecycle_fixture import validate_lifecycle
-        validate_lifecycle(output)
+        validate_lifecycle(output, active_stop=active_stop)
     print(f'Stock210 + hook: independent pairing/control'
           f'{" + events/screen/PCM/microphone/teardown" if media else ""} passed; {log}')

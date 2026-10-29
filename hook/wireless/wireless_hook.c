@@ -3,7 +3,9 @@
 #include "stock210_abi.h"
 #include "media.h"
 #include "advertisement.h"
+#include "peer_health.h"
 #include <sys/socket.h>
+#include <time.h>
 
 DEFINE_LOG_MODULE(WIRELESS);
 #define CONNECTIONS 8
@@ -12,12 +14,14 @@ static cp_pair_store *store;
 static int enabled;
 static void *http_server, *http_queue;
 static int admission_closed, advertisement_failed;
+static int session_seen;
 static void (*queue_retain)(void *), (*queue_release)(void *);
 static void (*queue_sync)(void *,void *,void (*)(void *));
 static struct connection {
     void *http;
     int fd, commit_pending;
     cp_pair_connection *pair;
+    struct cp_peer_health health;
 } connections[CONNECTIONS];
 
 static struct connection *find_connection(void *http, int fd)
@@ -87,13 +91,46 @@ HOOK_EXPORT int carplay_wireless_receiver_ready(void)
 }
 
 struct receiver_operation { void *server; unsigned operation; int result; };
+static uint64_t monotonic_ms(void)
+{
+    struct timespec ts;
+    if(clock_gettime(CLOCK_MONOTONIC,&ts))return 0;
+    return (uint64_t)ts.tv_sec*1000+(unsigned)ts.tv_nsec/1000000;
+}
 static void receiver_on_queue(void *opaque)
 {
     struct receiver_operation *op=opaque;
     unsigned i;
-    /* Operations 1=idle stop, 2=resume admission, 3=wired drain. Every SETUP
+    /* 1=idle stop, 2=resume, 3=wired drain, 4=read-only status,
+     * 5=sample peer health / shutdown only its silent authenticated socket.
+     * Every SETUP
      * and connection finalizer runs on this same retained stock HTTP queue. */
     pthread_mutex_lock(&lock);
+    if(op->operation==4 || op->operation==5) {
+        unsigned flags=0;
+        for(i=0;i<CONNECTIONS;++i) {
+            struct connection *c=&connections[i];
+            void *context=c->http?cp210_ptr(c->http,8):NULL;
+            void *session=context?cp210_ptr(context,244):NULL;
+            if(!session || !cp_pair_is_encrypted(c->pair))continue;
+            session_seen=1; flags|=1;
+            int started=*((volatile uint8_t *)session+702)!=0;
+            if(started)flags|=2;
+            if(op->operation==5 && cp_peer_health_sample(&c->health,(uintptr_t)session,
+                started,cp210_get(session,488),cp210_get(session,496),
+                cp210_get(session,564),cp210_get(session,612),monotonic_ms())) {
+                /* SDK fields are pinned: 488=data rx, 496=HTTP/screen
+                 * activity, 564=accepted timing responses, 612=correlated
+                 * responses rejected only for clock-sync RTT (>70 ms). The finalizer
+                 * and ASI notification stay entirely native. */
+                LOG_WARN(LOG_MODULE,"wireless peer deadline expired (%s); closing its control socket",
+                         started?"silent 10s":"SETUP without RECORD 30s");
+                (void)shutdown(c->fd,SHUT_RDWR);
+            }
+        }
+        op->result=(int)(flags | (session_seen?4:0));
+        pthread_mutex_unlock(&lock);return;
+    }
     if(op->operation==2) {
         admission_closed=0;op->result=0;pthread_mutex_unlock(&lock);return;
     }
@@ -124,7 +161,7 @@ HOOK_EXPORT int carplay_wireless_receiver_control(void *server,unsigned operatio
     struct receiver_operation op={server,operation,-1};
     void **actual=(void **)dlsym(RTLD_NEXT,"gAirPlayReceiverServer");
     void *queue=NULL;
-    if(!actual || *actual!=server || !server || operation<1 || operation>3)return -1;
+    if(!actual || *actual!=server || !server || operation<1 || operation>5)return -1;
     pthread_mutex_lock(&lock);
     if(http_queue && queue_sync && queue_retain && queue_release) {
         queue=http_queue;queue_retain(queue);
@@ -346,6 +383,7 @@ const hook_module_def_t wireless_module_def = {
     .airplay = { .on_setup_request = wireless_setup,
                  .on_server_info_final = cp_advertisement_info,
                  .on_setup_response = cp_media_setup_response,
+                 .on_teardown = cp_media_teardown_request,
                  .on_teardown_final = cp_media_teardown },
     .http = { .on_open = wireless_open, .on_close = wireless_close,
               .on_close_final = cp_media_forget,

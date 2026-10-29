@@ -22,7 +22,7 @@ ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 HOOK = os.path.join(ROOT, "hook", "audio")
 HEADER = os.path.join(HOOK, "scene_engine.h")
 import os as _os; _REPO = _os.path.normpath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '../../..')); _WS = _os.environ.get('AUDI_WORKSPACE', _os.path.expanduser('~/Desktop/AUDI_2'))  # sibling firmware/data dirs
-DEFAULT_FIX = _WS + "/upmix-data/scene_port_fixtures_2026-10-17"
+DEFAULT_FIX = _WS + "/upmix-data/scene_port_fixtures_2026-10-09"
 sys.path.insert(0, os.path.join(HERE, ".."))
 import scene_upmix as su   # the reference (read only)
 

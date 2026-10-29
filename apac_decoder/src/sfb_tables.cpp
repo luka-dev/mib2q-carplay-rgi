@@ -11,7 +11,7 @@
 //
 // The 12-record dispatch table and the record layout are
 // apac::GetSFBOffsetTable at 0x0009d9d0; several rates share an array, exactly
-// as the library's records share a pointer.
+// as the original's records share a pointer.
 
 #include "apac/sfb_offsets.h"
 
@@ -87,7 +87,7 @@ const uint16_t kSfb_00330388[42] = {
     96, 108, 120, 132, 144, 156, 172, 188, 212, 240, 276, 320, 384, 448, 512,
     576, 640, 704, 768, 832, 896, 960, 1024,
 };
-// The 12 records at 0x004258f8, in the order the library searches them.
+// The 12 records at 0x004258f8, in the order the original searches them.
 const SFBOffsets kRecords[12] = {
     { 96000, 41, kSfb_00330388, 12, kSfb_00330368 },
     { 88200, 41, kSfb_00330388, 12, kSfb_00330368 },

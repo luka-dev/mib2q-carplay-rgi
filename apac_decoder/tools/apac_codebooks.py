@@ -1,6 +1,6 @@
 """Read the APAC Huffman codebooks out of the reference material.
 
-Shared by tools/gen_huff_tables.py (which emits our tables) and
+Shared by tools/gen_huff_tables.py (which emits the port's tables) and
 tools/gen_fixtures.sh (which needs a book-0 ENCODER to build test bitstreams
 that reach a chosen scalefactor value).
 

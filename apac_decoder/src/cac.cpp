@@ -13,7 +13,7 @@ namespace apac {
 //
 // Entry 0 is {0, 1, 0}.  Entry k, 1 <= k <= 17, carries the gain
 // 10^((1.5*(k-1) - 12)/20) and the normalised rotation pair built from it, or
-// from its reciprocal once the gain reaches 0.999.  The library writes the raw
+// from its reciprocal once the gain reaches 0.999.  The original writes the raw
 // powf result into `.a` and uses the possibly-reciprocated value for the pair,
 // which is why `.a` alone tells ProcessCac which way round to apply the result.
 void CACDecoder::Initialize()
@@ -54,7 +54,7 @@ namespace {
 
 // 0x0007b070, the kernel ProcessCac calls.  A Givens rotation of the two
 // spectra by (cosine, sine); when |gain| has reached 0.999 the table holds the
-// reciprocal gain instead, and the library compensates by swapping which
+// reciprocal gain instead, and the original compensates by swapping which
 // output each half lands in.  The library's copy is NEON, unrolled 16/8/4/1;
 // the arithmetic is identical lane for lane.
 void Rotate(bool reciprocal, float* x, float* y, uint32_t n, float s, float c)
@@ -124,7 +124,7 @@ bool CACDecoder::Deserialize(BitstreamReader& bs, const APACICSInfo& ics)
             return false;
         }
     }
-    // 120 pairs without a terminator: the library's `if (++v17 != 120)` falls
+    // 120 pairs without a terminator: the original's `if (++v17 != 120)` falls
     // out of the loop into its error exit.
     return true;
 }
@@ -141,7 +141,7 @@ bool CACDecoder::ProcessCac(const APACICSInfo& ics, const SFBOffsets& table,
     const uint16_t* offs = eightShort ? table.sfbOffsetShort : table.sfbOffsetLong;
     const uint32_t numBands = eightShort ? table.numSfbShort : table.numSfbLong;
 
-    // COUNTED, where the library's band walks are not.  Every band loop below
+    // COUNTED, where the original's band walks are not.  Every band loop below
     // reads offs[band + 1], and the offset array holds numBands + 1 entries, so
     // a maxSfb above numBands walks off the end of a .rodata table.
     // APACICSInfo::Deserialize cannot produce one - it rejects a maxSfb past the
@@ -162,7 +162,7 @@ bool CACDecoder::ProcessCac(const APACICSInfo& ics, const SFBOffsets& table,
     memset(gains, 0, sizeof gains);
 
     if (groups == 0) {
-        // The library returns immediately for an eight-short frame with no
+        // The original returns immediately for an eight-short frame with no
         // groups and otherwise runs the band loop over an all-zero gain map.
         if (eightShort)
             return false;

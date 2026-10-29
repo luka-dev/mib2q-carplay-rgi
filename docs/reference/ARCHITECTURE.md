@@ -6,7 +6,7 @@
 
 ## 📋 The shape of production
 
-Production is **stock `dio_manager` + stock `libairplay.so` 210.81 + `LD_PRELOAD` `libcarplay_hook.so` + the Java patch + two external renderers**. Nothing from the from-source libairplay/dio experiments ships; they were excluded as an authority by the seam audit and live under `Patches/dio_asm_to_c/_legacy_attempt/` (see [Record Replay Tooling](RECORD_REPLAY_TOOLING.md)). **[code]**
+Production is **stock-derived `dio_manager` + `libairplay.so` 210.81 + `LD_PRELOAD` `libcarplay_hook.so` + the Java patch + two external renderers**. The [stock patch catalog](../stock-patches/README.md) identifies the modifications to those binaries. **[code]**
 
 ```mermaid
 flowchart TB
@@ -41,31 +41,31 @@ flowchart TB
   class monitor,man,alt neutral
 ```
 
-The four ports and their frame formats are in [Hook to Java Bus](HOOK_TO_JAVA_BUS.md). The only supported artifacts are the hook `.so` (plus the optional `libcarplay_apac.so`), the jar and the two renderers; variant and probe builds no longer exist ([Build System](../build-and-deploy/BUILD_SYSTEM.md)).
+The four ports and their frame formats are in [Hook to Java Bus](HOOK_TO_JAVA_BUS.md). The normal package contains the hook `.so`, optional `libcarplay_apac.so` and scene blob, Java jars, two renderers, assets and installer patches. Audio-disabled, tracing and experimental wireless build paths also exist ([Build System](../build-and-deploy/BUILD_SYSTEM.md)).
 
 Sources: `ARCHITECTURE`, `DEPLOYMENT`
 
-## 🎵 Audio runtime and research boundary
+## 🎵 Audio runtime
 
-The production stereo path remains Track A's q6d routing controller, V11 vocal guard and v21a eligibility mask inside the audio hook; discrete multichannel audio follows its separate reorder path. Track B's single causal spectral network runs in an isolated research chain. Its completed spectral40k full40 study fails joint acoustic promotion and research is paused. Host/ARM numerical checks do not establish a deployed replacement or an owner listening verdict.
+The current stereo renderer is SCENE with the fine mask net c. Both buffered stereo and realtime media can enter it; discrete APAC 5.1 follows the reorder path. Live MMI settings control UpMix and Spatial Audio. The installer keeps internal amplifiers on stock stereo; all supported external amplifier families use the six-channel path, including confirmed B&O and Bose support.
 
 ```mermaid
 flowchart LR
-  accTitle: Production audio and isolated research
-  accDescr: Production CarPlay uses the existing Track A hook and J525 amplifier. The isolated single-network Track B prototype feeds archived offline evidence with no connection to the deployed runtime.
-  carplay_audio["CarPlay stereo"] --> audio_hook["Audio hook<br/>q6d + V11 + v21a"]
-  audio_hook --> j525_amp["PCM6 to J525"]
-  frozen_audio["Frozen real-stem stereo"] --> track_b_research["Track B single-network C chain"]
-  track_b_research --> archived_verdict["Full40 joint failure<br/>research paused"]
+  accTitle: Current audio architecture
+  accDescr: Stereo media enters the scene renderer and discrete multichannel audio follows a separate reorder path, both feeding external amplifier PCM6.
+  stereo[Stereo media] --> scene[SCENE and mask net c]
+  discrete[APAC 5.1] --> reorder[Channel reorder]
+  scene --> pcm[PCM6 to external amplifier]
+  reorder --> pcm
 ```
 
-See [Audio overview](../audio/README.md), [upmix domain and evidence model](../audio/UPMIX_DOMAIN_MODEL.md), [Track A matched40](../audio/UPMIX_TRACKA_MATCHED40_2026-09-30.md), [Track B wrap](../audio/archive/UPMIX_SESSION_WRAP_2026-09-30.md) and the [attempt chronicle](../audio/archive/UPMIX_SEPARATOR_CHRONICLE_2026-09-25_TO_2026-09-30.md).
+See [current audio runtime](../audio/STEREO_TO_5_1_UPMIX.md), [amplifier compatibility](../audio/ODIS_AMP_MAPPING.md#external-amplifier-support) and [retirement history](../audio/archive/UPMIX_CODE_RETIREMENT_2026-10-09.md). Stock-derived receiver binaries retain their original implementation with selected patches; [the patch catalog](../stock-patches/README.md) identifies those changes. Experimental SI-owned wireless integration is documented in [Wireless CarPlay](../wireless-carplay/README.md).
 
 ## ⚙️ Native hook: a module table over framework seams
 
-`hook/main.c` is only the module table (`hook/main.c:28-36`): `rgd`, `coverart`, `altscreen`, `telephony`, and `audio` when `HOOK_AUDIO=1`. The framework never names a module. It registers the table in order through one `pthread_once` at the **first real Cinemo boundary** (`hook/framework/hook_framework.c:117`, `:582`) and logs one WARN, `lazy runtime init complete (constructor-free; first Cinemo boundary)` (`:608`). It tears the table down in reverse from its destructor. There is no ELF constructor, and the build enforces that ([Build System](../build-and-deploy/BUILD_SYSTEM.md)). **[code]**
+[hook/main.c](../../hook/main.c) registers optional `wireless` first, then `rgd`, `coverart`, `altscreen`, `telephony`, `vehicle`, `decoder_optimize`, and `audio` plus `upmix_level` when `HOOK_AUDIO=1`. The framework never names a module. It registers the table in order through one `pthread_once` at the **first real Cinemo boundary** (`hook/framework/hook_framework.c`) and logs one WARN, `lazy runtime init complete (constructor-free; first Cinemo boundary)`. It tears the table down in reverse from its destructor. There is no ELF constructor, and the build enforces that ([Build System](../build-and-deploy/BUILD_SYSTEM.md)). **[code]**
 
-Each module declares its needs in one `hook_module_def_t` next to its code (`hook/framework/hook_framework.h:78-99`):
+Each module declares its needs in one `hook_module_def_t` next to its code (`hook/framework/hook_framework.h`):
 
 | Field | Seam |
 |---|---|
@@ -74,28 +74,37 @@ Each module declares its needs in one `hook_module_def_t` next to its code (`hoo
 | `on_message` + `msg_filter` | incoming iAP2 messages |
 | `on_state`, `on_transport_send` | session edges, outgoing transport frames |
 | `on_transport_recv` / `_reset` | raw `NmeTransport::Recv` bytes, Identify boundary |
-| `airplay.*` | AirPlay SETUP request/response (+final), `/info` (+final), TearDown |
+| `airplay.*` | AirPlay SETUP request/response (+final), `/info` (+final), teardown and control |
+| `http.*` | Shared stock210 HTTP open/close, request and transport seams |
+| `on_file_transfer` | Wireless artwork file delivery |
 
-The three AirPlay entry points that more than one module wants (`AirPlayReceiverSessionSetup`, `AirPlayCopyServerInfo`, `AirPlayReceiverSessionTearDown`) are interposed **once**, in `hook/framework/airplay_seams.c`, and fan out to subscribers in priority order. An ELF symbol has one definition per object, so before this the altScreen module owned all three and called the audio module's type-103 negotiation on its behalf. Single-consumer interposers (`SetNightMode`, `AirPlayReceiverServerPlatformCopyProperty`, the QSA writers) stay in the module that uses them. **[code]**
+The three AirPlay entry points that more than one module wants (`AirPlayReceiverSessionSetup`, `AirPlayCopyServerInfo`, `AirPlayReceiverSessionTearDown`) are interposed **once**, in `hook/framework/airplay_seams.c`, and fan out to subscribers in priority order. Each shared ELF interposer has one definition; modules subscribe through the framework. Single-consumer interposers (`SetNightMode`, `AirPlayReceiverServerPlatformCopyProperty`, the QSA writers) stay in the module that uses them. **[code]**
 
-| Module | Priority (`.priority`) | Seams used |
-|---|---|---|
-| `routeguidance` | normal (`rgd_hook.c:453`) | Identify, 0x52xx messages, state, transport send |
-| `coverart` | low (`coverart_hook.c:825`) | transport recv + reset |
-| `altscreen` | normal (`altscreen_hook.c:2656`) | AirPlay setup response, `/info`, teardown |
-| `audio` | high (`audio_hook.c:9091`) | setup request/response (+final), `/info` (+final), teardown |
+| Module | Priority | Main subscriptions |
+| --- | --- | --- |
+| `wireless` (optional) | first | AirPlay setup/info/teardown and HTTP pairing/media hooks |
+| `audio` (optional) | high | Audio messages, setup/info/teardown and control |
+| `routeguidance` | normal | Identify, route messages, state and transport send |
+| `altscreen` | normal | Identify, setup/info/teardown and control |
+| `coverart` | low | Transport receive/reset and wireless file transfer |
+| `telephony` | low | Phone messages and state |
+| `vehicle` | low | Identify, vehicle messages and state |
+| `decoder_optimize` | last | Decoder lifecycle |
+| `upmix_level` (optional) | low | Live audio settings bus |
+
+The authoritative registrations and priorities are in [main.c](../../hook/main.c) and each module's `hook_module_def_t`; registration order and callback priority are distinct.
 
 The stream-111 H.264 path is self-contained in the hook and forwards Annex-B access units to `altscreen_render` on 19831; stock `libairplay.so` stays installed and loaded. See [AltScreen Cluster Video](../altscreen-and-video/ALTSCREEN_CLUSTER_VIDEO.md).
 
-Also from the seam audit: not every read/write of the shared `g_fw.ctx` fields is under one lock; stock normally serialises the NME callbacks, but that is an external assumption, so a future refactor should prove single-threading or lock the Identify/session state. **[open]** K1004 (MHI2Q CN) shares the public DIO/Cinemo seams with MU1316, but its private `libairplay.so` layout differs, so the MU1316-only type-103 request-dispatch patch requires an exact code fingerprint and fails closed on K1004 or any unknown image (`hook/audio/audio_hook.c:1296-1297`). **[code]**
+Concurrency and image scope are part of the integration contract. `g_fw.ctx` is not protected by one lock on every access; preserve the stock NME callback serialization assumption when changing those paths. Private MU1316 patches require matched instruction fingerprints and fail closed on unknown layouts. Public DIO/Cinemo seams alone do not prove private-layout compatibility with K1004.
 
-Open hardening item **[code]**: `hook_process_is_dio_manager()` still returns *true* when `/proc/self/cmdline` cannot be opened or read (`hook_framework.c:35-45`). The startup script only preloads into dio_manager, so this is dormant, but fail-closed would be safer if an environment regression ever let helpers inherit the hook.
+`hook_process_is_dio_manager()` permits initialization when `/proc/self/cmdline` cannot be read. Process isolation therefore also depends on the wrapper: preload the hook into DIO and clear `LD_PRELOAD` for helpers.
 
 Sources: `ARCHITECTURE`, `STOCK_INTEGRATION_SEAM_AUDIT`
 
 ## 🔍 Which stock seams LD_PRELOAD really reaches
 
-The old blanket rule "a library's calls to its own exports always bypass `LD_PRELOAD`" is **false** for this binary. The correct rule: classify **every callsite** as PLT/GOT (interposable) or direct/local (not interposable). A symbol being exported proves nothing; check the exact caller instruction before accepting any new hook target. **[decompile]**
+For each proposed hook, classify **every callsite** as PLT/GOT (interposable) or direct/local (not interposable). A symbol being exported proves nothing; check the exact caller instruction before accepting any new hook target. **[decompile]**
 
 | Seam | Stock implementation | Stock caller | Result |
 |---|---|---|---|
@@ -116,29 +125,11 @@ The old blanket rule "a library's calls to its own exports always bypass `LD_PRE
 | `NmeIAP2Message::Decode` | `0x120880` | validates the `0x40 0x40` prefix and exact length |
 | `NmeIAP2Message::Encode` | `0x11ffe8` | grows the same NmeArray with process-libc `realloc` |
 
-libNmeVfs imports all four through its PLT (Recv `0x12af20`, Send `0x12af70`, Decode `0xe4924`, Encode `0xd834c`, `0xd84f8`, `0xdf49c`, `0xdf888`, `0xdf988`), so they are valid preemption seams. That is why the Identify resize may `realloc` Cinemo's buffer: it matches the stock allocator, and it still checks pointer, length, capacity and an 8192-byte ceiling first (`hook/routeguidance/rgd_hook.c:1516-1581`). **[code]** See the realloc trap in [Landmines](../LANDMINES.md).
+libNmeVfs imports all four through its PLT (Recv `0x12af20`, Send `0x12af70`, Decode `0xe4924`, Encode `0xd834c`, `0xd84f8`, `0xdf49c`, `0xdf888`, `0xdf988`), so they are valid preemption seams. That is why the Identify resize may `realloc` Cinemo's buffer: it matches the stock allocator, and it still checks pointer, length, capacity and an 8192-byte ceiling first (`hook/routeguidance/rgd_hook.c`). **[code]** See the realloc trap in [Landmines](../LANDMINES.md).
 
 `CinemoCreateIAP@0x5848c` returns an `ICinemoIAP` whose vtable has AddRef `0x9b60c` (slot 0), Release `0x9b620` (`+4`) and SendIAP2 `0x9b748` (`+60`, args `(self, session, data, size)`). The hook captures the object only after the real factory succeeds, keeps a persistent reference and takes a transient reference around every injected `SendIAP2`. The stock outbound frame is sent first; only after a successful stock Send does LocationInfo trigger the separate 0x5200 injection, so LocationInfo is never consumed or used as a carrier. The component-0x001E schema and 0x520x payloads are **operationally** verified on the car, not independently proven from the phone binary. **[decompile]** **[car]**
 
-**Injected frames go through one worker thread.** `hook_inject_message()` snapshots `(link_session, generation)` and queues the frame; the worker re-checks both just before the stock `SendIAP2` and drops a frame whose values changed (`Dropped stale semantic frame …`, WARN). `generation` names **one iAP2 link session**: it advances when a stock link frame arrives on a new session or after an Identify boundary (`inject_note_link` / `inject_unlink` in `hook/framework/hook_framework.h`), and is never reset, so a frame queued for an old link cannot match the next one. Until 2026-09-24 it advanced on every stock Send. Telephony queues StartListUpdates from the Encode of stock `0x4154`, before that message's own Send, so whenever the stock Send won the race the worker dropped the request and the recents and favorites stayed empty for the whole session. Checked by `tests/inject_generation_test.c`. **[code]**
-
-```mermaid
-sequenceDiagram
-  accTitle: Injection worker race on the generation
-  accDescr: The telephony module queues StartListUpdates while stock Cinemo encodes 0x4154. Stock then sends 0x4154, which used to advance the generation, so the worker found a changed generation and dropped the queued frame. Now the generation only changes per link session and the frame is sent.
-
-  participant stock as Stock Cinemo
-  participant hook as Hook Encode seam
-  participant worker as Injection worker
-  participant phone as iPhone
-
-  stock->>hook: Encode 0x4154 StartCallStateUpdates
-  hook->>worker: queue 0x4170 with generation G
-  stock->>phone: Send 0x4154
-  Note over hook,worker: old code: every Send made G+1, frame dropped as stale
-  worker->>phone: SendIAP2 0x4170 (generation still G)
-  phone-->>stock: ListUpdate 0x4171 recents and favorites
-```
+**Injected frames go through one worker thread.** `hook_inject_message()` snapshots `(link_session, generation)` and queues the frame; the worker re-checks both just before the stock `SendIAP2` and drops a frame whose values changed (`Dropped stale semantic frame …`, WARN). `generation` names **one iAP2 link session**: it advances when a stock link frame arrives on a new session or after an Identify boundary (`inject_note_link` / `inject_unlink` in `hook/framework/hook_framework.h`), and is never reset, so a frame queued for an old link cannot match the next one. The generation contract is covered by `tests/inject_generation_test.c`. Ordinary stock sends within the same link do not invalidate queued messages.
 
 ### iOS 26.6 altScreen addresses
 
@@ -163,7 +154,7 @@ Authority for these tables: stock `libairplay.so` 210.81 (copy at `Patches/carpl
 
 ### Stream-111 ownership and presentation
 
-`altav_claim` accepts only a strictly newer generation under its lock; config, frame forwarding and shutdown check ownership inside that lock; a generation is assigned only to a receiver whose response insertion succeeded; a superseded receive thread checks ownership before forwarding data or commands. Renderer socket backpressure counts as a stall after 1000 ms (`hook/altscreen/altscreen_av.c:35`). An older, slower control SETUP could in theory finish after a newer one and still return feature keys; RTSP requests are normally serialized, so this is a low-probability edge. **[code]**
+`altav_claim` accepts only a strictly newer generation under its lock; config, frame forwarding and shutdown check ownership inside that lock; a generation is assigned only to a receiver whose response insertion succeeded; a superseded receive thread checks ownership before forwarding data or commands. Renderer socket backpressure counts as a stall after 1000 ms (`hook/altscreen/altscreen_av.c`). An older, slower control SETUP could in theory finish after a newer one and still return feature keys; RTSP requests are normally serialized, so this is a low-probability edge. **[code]**
 
 The renderer does not post raw Qualcomm tiled NV12: it requests native 32m output `0x7f000004` (linear NV12 cannot finish Loaded→Idle on this decoder), binds Screen buffers with `OMX_UseBuffer`, imports each decoded buffer as an EGL external image and draws it into a managed RGBA8888 plane-99 window, recycling the OMX buffer only after the synchronous present. A callback-close gate waits for active callbacks before arrays are destroyed; health is asserted only after a successful swap, and three consecutive failures arm output-only recovery. `maneuver_render` creates its Screen context before `eglGetDisplay`, which this Adreno stack requires. Details in [Video Pipeline](../altscreen-and-video/VIDEO_PIPELINE.md). **[code]**
 
@@ -194,60 +185,19 @@ Sources: `STOCK_INTEGRATION_SEAM_AUDIT`
 
 ## 📦 Java patch
 
-There is one Java tree, `java_patch/`, compiled against `MU1316-final.jar` as Java 1.4 bytecode ([Build System](../build-and-deploy/BUILD_SYSTEM.md)). `CarPlayApp` keeps the bus transport alive for the process lifetime and runs an **ordered module chain**: `AltScreenModule` (cluster display context, steering-wheel map zoom) first, then `RgdModule` once the first is ready (RGI/BAP maneuver state). Activation and deactivation only record the desired state and wake a daemon lifecycle worker; module start/stop is serialized by `lifecycleLock`, and the general state lock is never held across `Module.start` (that was the cold-boot ABBA deadlock in [Landmines](../LANDMINES.md)). Deactivation is debounced 400 ms (`java_patch/com/luka/carplay/core/CarPlayApp.java:230`). **[code]** Details of the context state machine are in [Cluster Contexts](../cluster-and-rgi/CLUSTER_CONTEXTS.md) and [Reconnect and Lifecycle](../altscreen-and-video/RECONNECT_AND_LIFECYCLE.md).
+There is one Java tree, `java_patch/`, compiled against `MU1316-final.jar` as Java 1.4 bytecode ([Build System](../build-and-deploy/BUILD_SYSTEM.md)). `CarPlayApp` keeps the bus transport alive for the process lifetime and runs an **ordered module chain**: `AltScreenModule` (cluster display context, steering-wheel map zoom) first, then `RgdModule` once the first is ready (RGI/BAP maneuver state). Activation and deactivation only record the desired state and wake a daemon lifecycle worker; module start/stop is serialized by `lifecycleLock`, and the general state lock is never held across `Module.start`. Deactivation is debounced 400 ms (`java_patch/com/luka/carplay/core/CarPlayApp.java`). **[code]** Details of the context state machine are in [Cluster Contexts](../cluster-and-rgi/CLUSTER_CONTEXTS.md) and [Reconnect and Lifecycle](../altscreen-and-video/RECONNECT_AND_LIFECYCLE.md).
 
-The tree has 47 sources: 29 new classes under `com/luka/carplay/` and 18 files that replace or extend stock classes (`ClusterService`, `AltScreenCombiBAPListener`, `DisplayManagerMIB2High`, `CombiMapController`, `TerminalModeBapCombi`, `CarplayDSILifecycleController`, `ExternalEventsListener`, `HighPriorityResourceTracker`, `AppConnectorTerminalMode` + `$CoverArtProvider` + `CoverArtProviderMux`, `ParkingPartialPopupHandler`, `ParkingSystemControllerComponentEvo`, `PartialPopupManagerEvoHigh`, `StatusBarStubController`, `AudioDrawerContextImpl`, `ServiceManagerPhone`, the phone state machine's `Activator`). **[code]** The pure OPS parking popup `2100008` has a narrow `SMALL_STAGE` exception: CarPlay keeps `Resource.SCREEN`, while every other HMI deactivation and fullscreen camera takeover stays stock (`java_patch/de/audi/app/terminalmode/ExternalEventsListener.java:39`, `PartialPopupManagerEvoHigh.java:53`).
+Stock class replacements and new modules are compiled from [java_patch](../../java_patch/); the [build script](../../scripts/build_java.sh) defines the current source/artifact set. The pure OPS parking popup `2100008` has a narrow `SMALL_STAGE` exception: CarPlay keeps `Resource.SCREEN`, while every other HMI deactivation and fullscreen camera takeover stays stock (`java_patch/de/audi/app/terminalmode/ExternalEventsListener.java`, `PartialPopupManagerEvoHigh.java`).
 
 ### MMI touchpad
 
-CarPlay has no pointer: the MMI touchpad moves CarPlay's focus. Rotary, knob press and softkeys reach CarPlay through stock DSI and are not touched. Since 2026-10-13 the pad runs through the Java DPAD bridge again; iOS's native trackpad focus mode is built but disabled, because it crashes Apple Music on iOS 27.2 beta. `[code]`
+The main display uses knob focus mode. Java splits DSI touch batches per event: touchscreen events go to DSI input 1; a single active pad finger goes through `TouchpadController`, which emits speed-adaptive focus steps. Horizontal steps become rotary ticks (±1); vertical steps become DPAD press/release events 7/8. The input sink is installed during init and cleared during deinit. Rotary, knob press and softkeys retain stock routing.
 
-```mermaid
-flowchart TB
-  accTitle: MMI touchpad input paths
-  accDescr: The shipped path turns pad touches into DPAD button events in Java while the main display stays in knob focus mode. The disabled path sends raw pad coordinates to the dio_manager HID trackpad and advertises trackpad focus mode, which crashes Apple Music on iOS 27.2 beta.
-
-  pad["MMI touchpad (DSI touch events)"]
-  split["updateTouchEvents: split per event"]
-  screen["Touchscreen events: DSI input 1"]
-  tpc["TouchpadController: speed-adaptive ticks"]
-  dpad["postButtonEvent 5/6/7/8 (DPAD)"]
-  knob_mode["iOS knob focus mode (primaryInputDevice 0, stock features)"]
-  raw["Raw pad events: DSI input 0"]
-  hid["dio_manager HID Eso_TrackPad"]
-  pad_mode["iOS trackpad focus mode (features | 0x10, primaryInputDevice 2)"]
-  crash["Apple Music NSAssert on iOS 27.2 beta"]
-
-  pad --> split
-  split --> screen
-  split -->|shipped| tpc --> dpad --> knob_mode
-  split -.->|disabled| raw -.-> hid -.-> pad_mode -.-> crash
-
-  classDef shipped fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
-  classDef disabled fill:#fee2e2,stroke:#dc2626,stroke-width:2px,color:#7f1d1d
-  class tpc,dpad,knob_mode shipped
-  class raw,hid,pad_mode,crash disabled
-```
-
-**What ships (2026-10-13).**
-
-- `CarplayDSILifecycleController.updateTouchEvents` splits each batch by event, where stock routes the whole batch by element 0: touchscreen events go to DSI input 1 with the screen offset removed; a single active pad finger goes to `com.luka.carplay.input.TouchpadController`, which emits speed-adaptive DPAD ticks through `postButtonEvent` 5/6/7/8 (west/east/north/south, press then release). The sink is installed in `init()` and cleared in `deinit()`, so no gesture reaches a torn-down DSI proxy. Test: `tests/TouchpadControllerTest.java`, run by `scripts/test_java_transports.sh`.
-- The hook's `main_disp_modernize` keeps the stock main display `features` and sends `primaryInputDevice = 0`, so iOS picks knob focus mode. The trackpad advert (`features | 0x10`, `primaryInputDevice = 2`) stays in the source under `#if 0` (`hook/altscreen/altscreen_hook.c`); flip it to `#if 1` and drop the Java bridge to return to native trackpad focus.
-
-**Why the stock trackpad only highlighted.** Stock MHI2Q already declares a touchpad: `EvoTMConfiguration.hasTouchpad()` is true, so DSI `inputFeatures` = 9 (knob + touchpad), stock posts pad events on DSI input 0 (touchscreen on 1), and `dio_manager` registers a real HID trackpad `Eso_TrackPad` (`libairplay` `HIDSingleTrackPadCreateDescriptor`: Digitizer/TouchPad, one finger, absolute X/Y, no physical units). On the car a pad touch only highlighted the focused item; focus never moved. `[car]` The cause is the display advert, not the pad: `dio_manager` `createMainDisplay` builds the main display's `features` from the knob (0x02) and touchscreen (0x04/0x08) flags only, never the trackpad bit 0x10, and sends no `primaryInputDevice`. iOS (CarKit `CARScreenInfo`: `primaryInputDevice` 1 touch, 2 trackpad, 3/4 knob; missing or 0 picks touch, then knob, then trackpad) therefore runs CarPlay in knob focus mode. Only the trackpad mode `_UIFocusBehavior_CarPlayTouchpad` enables `supportsIndirectPanningMovement` and focus-on-select, which make `_UIFocusEventRecognizer` attach its pan recognizer; knob mode has none, so swipes do nothing. Missing physical units are not the cause: iOS falls back to a 4×4 cm surface at sensitivity 0.5, which only sets the gain. `[decompile]` (iOS 26.1 pseudo-source, iOS 27 `UIKitCore`, stock `dio_manager` / `libairplay`)
-
-**Native trackpad focus mode (2026-09-23 to 2026-10-13, now disabled).**
-
-- The hook ORed 0x10 into the main display `features` and set `primaryInputDevice = 2`; `updateTouchEvents` posted raw pad events on DSI input 0, which `dio_manager` turns into the trackpad report (`sendTouchScreenHIDReport` → `HIDSingleTrackPadFillReport`: tip plus the first finger's X/Y).
-- On the car (owner, 2026-10-10): a pad swipe moved the CarPlay focus in discrete steps, "like a D-pad", the expected shape of CarPlay's pointer-less trackpad focus mode. `[car]`
-- **Apple Music crashed on any pad input** (owner, 2026-10-10/12); the knob and every other app were fine. The crash (iOS 27.2 beta 24B5099f) is a UIKit NSAssert in `-[_UIFocusEventRecognizer _panGestureStart:]`, "Attempted a pan-gesture-based focus movement without a touchpad.": on CarPlay the method looks the touch's `_senderID` up in `windowScene.carPlaySession touchpadForSenderID:` (the list DashBoard's `-[DBScreenController _UISceneTouchpads]` copies from its `CARInputDeviceManager`, unfiltered) and in `CARInputDeviceManager touchpadWithSenderID:`, and asserts when both are nil. CarKit makes a touchpad from an IOHID service whose `displayUUID` is a session screen ID and whose primary usage is Digitizer/TouchPad; stock `dio_manager` (MU1316 `fcn.00158ef8`) gives every HID `displayUUID` `e5f7a68d-7b0f-4305-984b-974f677a150b`, the registered main screen, so the HU side is consistent, and other apps find the pad. Read as an iOS beta bug in Music. `[decompile]` (iOS 27 dsc 24A5418b, stock `dio_manager`)
-- To re-enable: recheck Music on a newer iOS build first. The default 4 cm gain was never judged; `HIDSingleTrackPadCreateDescriptor` can be interposed to add physical units.
-
-**History.** The DPAD bridge first shipped before 2026-09-14 as a workaround for knob-mode highlighting. Commit `8c78e282` (2026-09-23) replaced it with native trackpad focus mode; it was restored on 2026-10-13 after the Music crash and confirmed working in the car by the owner on 2026-10-14. `[car]`
+The native trackpad-focus advertisement is disabled in the hook. Its historical iOS beta compatibility investigation is preserved in the [architecture snapshot](../archive/internal-reference-2026-10-29/reference/ARCHITECTURE.md); it is not an open defect in the selected Java input path. Sources: [TouchpadController](../../java_patch/com/luka/carplay/input/TouchpadController.java), [DSI lifecycle](../../java_patch/de/audi/app/terminalmode/dsi/carplay/CarplayDSILifecycleController.java).
 
 ### Cluster composition
 
-On non-G24 clusters (`kombiType != 4`) the patched DisplayManager declares two contexts (`java_patch/de/audi/tghu/fwhmi/DisplayManagerMIB2High.java:170-179`) **[code]**:
+On non-G24 clusters (`kombiType != 4`) the patched DisplayManager declares two contexts (`java_patch/de/audi/tghu/fwhmi/DisplayManagerMIB2High.java`) **[code]**:
 
 | Context | Displayables | Meaning |
 |---|---|---|
@@ -256,12 +206,12 @@ On non-G24 clusters (`kombiType != 4`) the patched DisplayManager declares two c
 
 98 belongs to `maneuver_render`, 99 to `altscreen_render`. `AltScreenModule` is the single writer of context changes ([Cluster Contexts](../cluster-and-rgi/CLUSTER_CONTEXTS.md)).
 
-**Context 90 is deliberately not declared here.** It was briefly, for RetroArch, and was removed: `DisplayManagerMIB2High` is a patched stock class carried only by `carplay_hook.jar`, so RetroArch would have silently depended on this repo. RetroArch owns context 90 from its own repository (`luka-dev/audi-mib2q-retroarch`) by extending the table at runtime, the way its `RuntimeSmmInjector` already extends the state machine.
+Context 90 belongs to the separate RetroArch integration and is not declared by this patch.
 
 ### Two deliberate policies that exceed the stock contract
 
-- **Strong terminal-1 context ownership.** While `AltScreenModule.isConnected()` is true, `DisplayManagerMIB2High.switchContext` rejects every terminal-1 physical context write except the AltScreen worker's own (`DisplayManagerMIB2High.java:307`). `isConnected` is `connected || videoAvailable`, so it can also block a legitimate stock transition while video is recovering. Treat it as product policy and check warning/safety screens on the car. **[code]** **[open]**
-- **Hidden map-scale sentinel.** `GatedCombiService` publishes `updateMapScale(15, false, 0xFFFF, 0xFF, false)` and a hidden altitude sentinel (`java_patch/com/luka/carplay/rgd/GatedCombiService.java:98`). Stock `CombiBAPListener.setMapScaleSetting` changes native map setup; the emitted hidden status does not. So the historical "Navigation currently unavailable" flashes during wheel zoom cannot be pinned on the sentinel from code alone. **[code]**
+- **Strong terminal-1 context ownership.** While `AltScreenModule.isConnected()` is true, `DisplayManagerMIB2High.switchContext` rejects every terminal-1 physical context write except the AltScreen worker's own (`DisplayManagerMIB2High.java`). `isConnected` is `connected || videoAvailable`, so it can also block a legitimate stock transition while video is recovering. This is the current context-ownership policy; changes must preserve stock warning/safety-screen behavior. **[code]**
+- **Hidden map-scale sentinel.** `GatedCombiService` publishes `updateMapScale(15, false, 0xFFFF, 0xFF, false)` and a hidden altitude sentinel (`java_patch/com/luka/carplay/rgd/GatedCombiService.java`). Stock `CombiBAPListener.setMapScaleSetting` changes native map setup; the emitted hidden status does not. **[code]**
 
 Sources: `ARCHITECTURE`, `STOCK_INTEGRATION_SEAM_AUDIT`
 
@@ -269,32 +219,18 @@ Sources: `ARCHITECTURE`, `STOCK_INTEGRATION_SEAM_AUDIT`
 
 | Process | Owner | Rule |
 |---|---|---|
-| `carplay_startup.sh` | smartphone_integrator child | Writes its generation to the owner file atomically (stage file + `mv`, `deploy/smartphone_integrator/carplay_startup.sh:40-42`), forks the monitor with `LD_PRELOAD=` cleared (`:45`), exports `LD_PRELOAD` (`:50`) and `exec`s `dio_manager` (`:95`) so SI keeps the exact PID for its watchdog |
-| `carplay_monitor.sh` | its own generation | Acts only while the owner file holds its dio PID and that PID is alive; waits 1 s before any `pidin`/EGL work so dio's 10 s SI startup budget is untouched; starts or adopts `altscreen_render` then `maneuver_render`; re-checks every 2 s; caps logs every 150 ticks (`carplay_monitor.sh:108-130`) |
-| Renderers | the generation monitor | Launched with `LD_PRELOAD=` and `GRAPHICS_ROOT=/proc/boot` (`carplay_monitor.sh:93`). When dio exits the monitor **leaves them running** for the next generation to adopt. Never add them as `servicemgr external:true` services |
-| `carplay_cleanup.sh` | SI `cleanupScript` | Does not know which generation it serves, so it only runs Audi's stock `/etc/scripts/carplay_cleanup.sh` for mdnsd/PPS (`carplay_cleanup.sh:21`); never overwrite that stock script |
+| `carplay_startup.sh` | smartphone_integrator child | Writes its generation to the owner file atomically (stage file + `mv`, `deploy/smartphone_integrator/carplay_startup.sh`), forks the monitor with `LD_PRELOAD=` cleared, exports `LD_PRELOAD` and `exec`s `dio_manager` so SI keeps the exact PID for its watchdog |
+| `carplay_monitor.sh` | its own generation | Acts only while the owner file holds its dio PID and that PID is alive; waits 1 s before any `pidin`/EGL work so dio's 10 s SI startup budget is untouched; starts or adopts `altscreen_render` then `maneuver_render`; re-checks every 2 s; caps logs every 150 ticks (`carplay_monitor.sh`) |
+| Renderers | the generation monitor | Launched with `LD_PRELOAD=` and `GRAPHICS_ROOT=/proc/boot` (`carplay_monitor.sh`). When dio exits the monitor **leaves them running** for the next generation to adopt. Never add them as `servicemgr external:true` services |
+| `carplay_cleanup.sh` | SI `cleanupScript` | Does not know which generation it serves, so it only runs Audi's stock `/etc/scripts/carplay_cleanup.sh` for mdnsd/PPS (`carplay_cleanup.sh`); never overwrite that stock script |
 
 The SI child is `deploy/smartphone_integrator/carplay_child.json`: keep `IPL_CONFIG_DIR_DIO_MANAGER=/etc/eso/production` in its env and keep `LD_PRELOAD` out of it; `restartDelay` is `3000` (`carplay_child.json:20`). **[code]**
 
-Superseded: the seam audit's "zero scheduling margin" finding (old monitor waited 2 s, equal to a 2 s restart delay, then stopped renderers the new generation meant to adopt) no longer applies. The current monitor never stops renderers on exit and `restartDelay` is 3000 ms. **[code]**
+## Verification boundaries
 
-Sources: `DEPLOYMENT`, `STOCK_INTEGRATION_SEAM_AUDIT`
+Build checks enforce constructor-free initialization and the exact export allowlist for the selected feature set. Host tests cover queue/generation and renderer ownership contracts. Deployment and physical checks belong to [Deploy and Release](../build-and-deploy/DEPLOY_AND_RELEASE.md), [frame-rate validation](../altscreen-and-video/ALTSCREEN_FRAME_RATE.md) and the [wireless acceptance ledger](../carplay-lab/WIRELESS_COMPLETION_PLAN.md).
 
-## ✅ Release verification matrix (seam audit)
-
-The seam audit (2026-08-11) confirmed the altScreen protocol and rendering, the hook ABI against MU1316 stock, and the Java outer-class ABI. It listed these focused on-car checks; status against today's code:
-
-| Check | Status |
-|---|---|
-| Cold boot with phone connected: no worker/log activity before the first NME callback | Closed in code: constructor-free lazy init, enforced by the `.init_array` assert **[code]** |
-| 20 quick replugs: no SETUP delay near 1.8 s | Closed in code: the same-slot reaper wait is gone; a new SETUP retires old generations and fails fast if all four slots are retiring (see [Production Audits](../build-and-deploy/PRODUCTION_AUDITS.md)) **[code]** |
-| Cold OMX start under socket pressure: no false disconnect at the 1000 ms send-stall limit | Still open: `AV_SEND_STALL_LIMIT_MS 1000L` (`hook/altscreen/altscreen_av.c:35`) **[open]** |
-| Kill dio at the restart boundary: old monitor must not kill adopted renderers | Closed in code (see above) **[code]** |
-| Forced EGL swap / plane-disown failures: VIDEO_OFF only after real failures | **[open]** on the car |
-| Context guard does not hide cluster warnings while 111 is down | **[open]** |
-| Only the intended interposes exported | Closed: exact allowlist, 26 in a quiet audio build ([Build System](../build-and-deploy/BUILD_SYSTEM.md)) **[code]** |
-
----
+The [historical seam audit and incident record](../archive/internal-reference-2026-10-29/reference/ARCHITECTURE.md) preserves earlier race explanations, version-specific observations and the original release matrix. Closed findings there are not current defects.
 
 ## 📚 Sources
 
@@ -304,4 +240,4 @@ Merged originals were removed from the tree after this note absorbed them; they 
 - `DEPLOYMENT`: SI child, process ownership, install/uninstall steps.
 - `STOCK_INTEGRATION_SEAM_AUDIT`: 2026-08-11 audit of every stock seam, Cinemo ABI, the iOS 26.6 contract, reconnect and supervisor risks.
 
-See also [Hook to Java Bus](HOOK_TO_JAVA_BUS.md), [Build System](../build-and-deploy/BUILD_SYSTEM.md), [Deploy and Release](../build-and-deploy/DEPLOY_AND_RELEASE.md), [Production Audits](../build-and-deploy/PRODUCTION_AUDITS.md), [AltScreen Cluster Video](../altscreen-and-video/ALTSCREEN_CLUSTER_VIDEO.md), [Cluster Contexts](../cluster-and-rgi/CLUSTER_CONTEXTS.md), [Home](../README.md), [Landmines](../LANDMINES.md).
+See also [Hook to Java Bus](HOOK_TO_JAVA_BUS.md), [Build System](../build-and-deploy/BUILD_SYSTEM.md), [Deploy and Release](../build-and-deploy/DEPLOY_AND_RELEASE.md), [Production Audits](../build-and-deploy/archive/PRODUCTION_AUDITS.md), [AltScreen Cluster Video](../altscreen-and-video/ALTSCREEN_CLUSTER_VIDEO.md), [Cluster Contexts](../cluster-and-rgi/CLUSTER_CONTEXTS.md), [Home](../README.md), [Landmines](../LANDMINES.md).

@@ -13,12 +13,12 @@
 //   oracle:      apac_decoder/reference/apac_fn_ref.cpp, command `scf`
 //   cases:       apac_decoder/tools/gen_scf_cases.py
 //
-// The scalefactors are compared as BIT PATTERNS, not as floats: the library
+// The scalefactors are compared as BIT PATTERNS, not as floats: the original
 // builds them by adding an exponent into the float's bit pattern rather than
-// with a pow, so anything short of bit-exact is a decoder that got the exponent
+// with a pow, so anything short of bit-exact is a port that got the exponent
 // arithmetic wrong.
 //
-// rc is the library's convention: 1 means ERROR.
+// rc is the original's convention: 1 means ERROR.
 
 #include "apac/spectrum.h"
 

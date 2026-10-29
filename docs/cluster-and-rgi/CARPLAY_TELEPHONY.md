@@ -236,7 +236,7 @@ Settled statically on 2026-09-23: the hold/mute parameter, the recents type valu
 
 ## ⚠️ Rules and traps
 
-- Touch only content on 0x28. **Never** touch HMIState or op-state on LSG 41: that produced two phone icons ([Phone Tab Gating](PHONE_TAB_GATING.md)).
+- Touch only content on 0x28. **Never** touch HMIState or op-state on LSG 41: that produced two phone icons ([Phone Tab Gating](archive/PHONE_TAB_GATING.md)).
 - `getTelMode()` returns the raw DSI value (HFP = 3). `moduleState` describes the NAD modem, not the BT phone.
 - Inject as an extra iAP2 message and never replace a stock one. Never call `SendIAP2` from shutdown ([Landmines](../LANDMINES.md)).
 - The telephony IDs ride `dio_manager.json`, not the Identify patch.
@@ -248,7 +248,7 @@ Settled statically on 2026-09-23: the hold/mute parameter, the recents type valu
 ## 🔗 Related
 
 - [VC Telephone Tab](VC_TELEPHONE_TAB.md) and [iAP2 Communications](IAP2_COMMUNICATIONS.md): the two companion notes.
-- [Phone Tab Gating](PHONE_TAB_GATING.md): the earlier attempt to hide the tab, the signal traps and the refuted levers.
+- [Phone Tab Gating](archive/PHONE_TAB_GATING.md): the earlier attempt to hide the tab, the signal traps and the refuted levers.
 - [RGI and BAP Bridge](RGI_AND_BAP_BRIDGE.md): the same hook → bus → gated BAP service pattern for navigation.
 - [Hook to Java Bus](../reference/HOOK_TO_JAVA_BUS.md): frame format and ID ranges.
 

@@ -109,8 +109,17 @@ public class TouchpadController {
         lastTpX = tpX;
         lastTpY = tpY;
 
-        accumDx += dx;
-        accumDy += dy;
+        /* Dominant-axis lock per sample: accumulate only on whichever axis
+         * moved more in this sample so slight diagonal finger drift during
+         * a vertical swipe never builds up enough accumDx to fire a phantom
+         * horizontal event at the top or bottom of a list. */
+        int absDx = dx < 0 ? -dx : dx;
+        int absDy = dy < 0 ? -dy : dy;
+        if (absDx >= absDy) {
+            accumDx += dx;
+        } else {
+            accumDy += dy;
+        }
 
         /* DEAD_ZONE gate: suppress emits until the cumulative drift
          * since touch-down exceeds it on either axis.  Once armed,

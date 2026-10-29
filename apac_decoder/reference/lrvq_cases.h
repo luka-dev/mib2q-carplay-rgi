@@ -12,7 +12,7 @@
 // starts from, and shipping those would bury the expectations.
 //
 // C++98-compatible, no STL: the oracle is built with the container's g++ and
-// the host test with our -fno-exceptions -fno-rtti flags.
+// the host test with the port's -fno-exceptions -fno-rtti flags.
 
 #ifndef APAC_LRVQ_CASES_H
 #define APAC_LRVQ_CASES_H
@@ -186,7 +186,7 @@ inline void LrvqEmitChannel(LrvqBitWriter& w, LrvqRandom& r, LrvqCase& c,
 //   * "exact" cases never enter lsfsToMdctSpectralEnvelope or
 //     ltpToMdctSpectralEnvelope, because every call sets reuseEnvelope and
 //     (for a long block) noLtpSection.  There is no FFT anywhere under them,
-//     so our decoder has to match the library BIT FOR BIT - including the
+//     so the port has to match the library BIT FOR BIT - including the
 //     envelope division, which runs against the seeded env, not against 1.0.
 //   * "full" cases run the envelope builders, so they agree only to float
 //     noise.  They are what covers the LSF chain, LTP, and the reversed short
@@ -352,7 +352,7 @@ inline int LrvqBuildCases(LrvqCase* out, int max)
 // and prevMode it puts on its own stack (0x9bf60 has no clear loop and no
 // memset - only the stack-clash probes), so channel 1 would then predict from
 // whatever the stack held.  That is not reproducible and not something to
-// encode in a fixture; our decoder closes it by zeroing, which is what
+// encode in a fixture; the port closes it by zeroing, which is what
 // SpectrumDeserializeSCE itself does.  See ResetPrediction in src/lrvq.cpp.
 
 enum { kLrvqElemSCE = 0, kLrvqElemCPE = 1, kLrvqElemLFE = 2 };
@@ -530,9 +530,9 @@ inline int LrvqBuildFrameCases(LrvqFrameCase* out, int max)
         w.Put((uint32_t)e.tns1, 1);
         if (e.tns1)
             LrvqEmitTNS(w, isShort, e.tnsFilter);
-        // If channel 1 has no TNS block and channel 0 did, the library reads
+        // If channel 1 has no TNS block and channel 0 did, the original reads
         // one more bit and throws it away.  Nothing has to be written for it -
-        // the padding is already there - but the case exists to catch a decoder
+        // the padding is already there - but the case exists to catch a port
         // that does not read it.
         e.nbytes = kLrvqMaxBytes;
         ++n;

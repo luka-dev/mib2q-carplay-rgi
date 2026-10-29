@@ -7,11 +7,11 @@
  * Timing.  The SCENE backend (stereo_upmix.c spa_scene_process) hands the net its 512 newest stereo frames
  * at every mask control boundary (pushed = 256 + 512 k) and, at the same boundary before submitting,
  * installs the newest completed row through scene_engine_set_mask().  The row of control k is therefore
- * applied from boundary k+1 on: ONE CONTROL (512 frames, 10.7 ms) after the Python's own timing
- * (stereo_upmix.h SPA_SCENE_MASK_PREFILL_FRAMES), plus one more control for every 10.7 ms the net needs
- * beyond its period.  The engine's instrument smoother (inst_attack_ms 300) makes a control of lateness
- * inaudible.  The net never runs on the audio thread: tools and tests use this worker too, without a
- * thread (SPA_SCENE_MASK_WORKER_NO_THREAD, stepped by the caller).
+ * applied from boundary k+1 on: ONE CONTROL (512 frames, 10.7 ms) later than the synchronous path, which
+ * installs it at boundary k (stereo_upmix.h SPA_SCENE_MASK_PREFILL_FRAMES), plus one more control for every
+ * 10.7 ms the net needs beyond its period.  The engine's instrument smoother (inst_attack_ms 300) makes a
+ * control of lateness inaudible; the synchronous path stays selectable (no provider: tools, tests, the unit
+ * with AUDIO_SCENE_MASK_SYNC=1) and is the reference the port tests check.
  *
  * Slower than realtime.  One job is in flight and one may wait; a submit while both slots are full is
  * refused (busy++) and its 512 frames never reach the net, which then sees a splice in its 2048-sample
@@ -36,7 +36,6 @@ struct spa_scene_mask_row {
     float prot[SMASK_BINS];
     float lfe_bass;
     float lfe_drum;
-    float voc[SMASK_BINS];     /* the vocal posterior (post[0]): the centre (scene_engine_set_vocal) */
 };
 
 /* The backend's view of a mask source (stereo_upmix.h spa_stereo_upmix_config.scene_mask_provider).
@@ -74,10 +73,12 @@ struct spa_scene_mask_worker_stats {
     uint32_t resets;
 };
 
-/* Fields are public so the hook can embed the complete object (the net is 215 KB) without a heap
+/* Fields are public so the hook can embed the complete object (the net is 193 KB) without a heap
  * allocation.  Callers must treat every field except provider as private. */
 struct spa_scene_mask_worker {
     pthread_t _thread;
+    pthread_mutex_t _wake_lock;
+    pthread_cond_t _wake_cond;
     struct scene_mask _net;             /* the worker thread's instance; the audio thread never touches it */
     struct spa_scene_mask_provider provider;
     struct spa_scene_mask_job _jobs[2];

@@ -38,10 +38,11 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
     private static final String TAG = "AltScreen";
 
     public static final int TERMINAL_CLUSTER  = 1;    /* LVDS2 */
-    /* The two CarPlay cluster contexts; composition is defined in DisplayManagerMIB2High. */
-    public static final int CTX_CLUSTER       = 80;   /* nav active: {98 maneuver, 101/102 backing, 99 map} */
-    public static final int CTX_CLUSTER_MAP   = 81;   /* no nav: {99 map} only (no backing box, no maneuver) */
-    public static final int CTX_STOCK_CLUSTER = 74;
+    /* The three CarPlay cluster contexts; composition is defined in DisplayManagerMIB2High. */
+    public static final int CTX_CLUSTER               = 80;   /* nav active + CarPlay map: {98 maneuver, 101/102 backing, 99 map} */
+    public static final int CTX_CLUSTER_MAP           = 81;   /* no nav + CarPlay map: {99 map} only (no backing box, no maneuver) */
+    public static final int CTX_CLUSTER_STOCK_MAP_NAV = 82;   /* nav active + stock map: {98 maneuver, 101/102 backing, 33 stock map} */
+    public static final int CTX_STOCK_CLUSTER         = 74;
     private static final int CTX_BOUNCE       = 72;   /* kombi map — never ours; forces a real ctx change */
     private static final int BOUNCE_SLEEP_MS  = 180;  /* preContextSwitchHook settle (proven driver) */
     private static final long CONTEXT_RECONCILE_MS = 250L;
@@ -89,7 +90,7 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
      * even if the bus is momentarily reconnecting.
      */
     public static boolean consumeSteeringWheelScale(int steps) {
-        if (!isConnected()) return false;
+        if (!isClusterMapActive()) return false;
 
         if (steps != 0) {
             if (steps > 127) steps = 127;
@@ -101,12 +102,24 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
         return true;
     }
 
-    /* true from start() (BEFORE any switch) until stop() — i.e. we intend to own the cluster this whole
-     * session.  The switchToTargetContext View-pin reads THIS, not clusterActive: pinning on the
+    /** True while CarPlay's map stream (plane 99, ctx 80/81) is intended for the cluster. */
+    public static boolean isClusterMapActive() {
+        return platformSupported
+            && com.luka.carplay.connectivity.CarPlaySettingsUi.isAltScreenEnabled()
+            && (connected || videoAvailable);
+    }
+
+    /* true from start() (BEFORE any switch) until stop() whenever CarPlay owns a cluster context
+     * (ctx 80/81 when Maps on Cluster is On, or ctx 82 when Maps on Cluster is Off and RGI is active).
+     * The switchToTargetContext View-pin reads THIS, not clusterActive: pinning on the
      * applied state leaves a ~180ms window during the first switch where a View press could steal
      * terminal 1 to the stock map (worker then thinks it still owns ctx → stuck).  Intent-based pin
      * closes that window from t0. */
-    public static boolean isConnected() { return platformSupported && (connected || videoAvailable); }
+    public static boolean isConnected() {
+        return platformSupported
+            && (connected || videoAvailable)
+            && (com.luka.carplay.connectivity.CarPlaySettingsUi.isAltScreenEnabled() || navActive);
+    }
 
     /** DisplayManagerMIB2High uses this to distinguish our serialized 72/80/81/74
      * writes from stock screen-controller requests while CarPlay owns terminal 1. */
@@ -282,6 +295,7 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
 
     public void onFrame(int type, int flags, byte[] payload, int len) {
         if (type == CarplayBus.EVT_HELLO) {
+            com.luka.carplay.connectivity.CarPlaySettingsUi.sendAltConfigToHook();
             sendViewAreaMode("hook-hello");
             synchronized (LOCK) { sendRgiStateLocked(); }
         } else if (type == CarplayBus.CMD_ALT_ZONE_ACK && payload != null && len >= 5) {
@@ -297,13 +311,21 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
 
     /** Recompute desiredCtx from connected/navActive and wake the worker. Caller must NOT hold LOCK. */
     private static void republish() {
-        boolean ownCluster;
+        boolean ownClusterMap;
         boolean rgi;
         boolean rgiQueued;
         synchronized (LOCK) {
-            ownCluster = connected || videoAvailable;
-            desiredCtx = !ownCluster ? CTX_STOCK_CLUSTER : (navActive ? CTX_CLUSTER : CTX_CLUSTER_MAP);
-            rgi = ownCluster && navActive;
+            boolean sessionActive = connected || videoAvailable;
+            ownClusterMap = com.luka.carplay.connectivity.CarPlaySettingsUi.isAltScreenEnabled()
+                && sessionActive;
+            if (!sessionActive) {
+                desiredCtx = CTX_STOCK_CLUSTER;
+            } else if (ownClusterMap) {
+                desiredCtx = navActive ? CTX_CLUSTER : CTX_CLUSTER_MAP;
+            } else {
+                desiredCtx = navActive ? CTX_CLUSTER_STOCK_MAP_NAV : CTX_STOCK_CLUSTER;
+            }
+            rgi = ownClusterMap && navActive;
             rgiQueued = sendRgiStateLocked();
             LOCK.notifyAll();
         }
@@ -318,7 +340,8 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
      *  at module-start and on the hook's hello, like the view-area mode, because a
      *  respawned hook starts at "off" and a session may end without stop(). */
     private static boolean sendRgiStateLocked() {
-        boolean rgi = (connected || videoAvailable) && navActive;
+        boolean rgi = com.luka.carplay.connectivity.CarPlaySettingsUi.isAltScreenEnabled()
+            && (connected || videoAvailable) && navActive;
         return CarplayBus.getInstance().sendBinary(CarplayBus.CMD_ALT_RGI,
             new byte[] { (byte) (rgi ? 1 : 0) });
     }
@@ -373,6 +396,12 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
 
     public static boolean isNavActive() { return navActive; }
 
+    /** Re-evaluate cluster ownership after a settings change. */
+    public static void onSettingsChanged() {
+        republish();
+        com.luka.carplay.cluster.ClusterLayerController.reapply();
+    }
+
     public String name() { return "altscreen"; }
 
     public boolean start(FrameworkRef fw) {
@@ -420,7 +449,8 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
             clusterActive = false;
             acceptVideoFallback = true;
             lifecycleGeneration++;
-            desiredCtx = CTX_CLUSTER_MAP;
+            desiredCtx = com.luka.carplay.connectivity.CarPlaySettingsUi.isAltScreenEnabled()
+                ? CTX_CLUSTER_MAP : CTX_STOCK_CLUSTER;
             sendRgiStateLocked();   /* navActive is false here: reset the hook's URL state */
         }
         synchronized (LOCK) {
@@ -483,27 +513,36 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
      * Switch worker — the single serialized DM writer.
      * ============================================================ */
 
+    private static boolean needsPlane99Renderer(int ctx) {
+        return ctx == CTX_CLUSTER || ctx == CTX_CLUSTER_MAP;
+    }
+
+    private static boolean isCarPlayClusterCtx(int ctx) {
+        return ctx == CTX_CLUSTER || ctx == CTX_CLUSTER_MAP || ctx == CTX_CLUSTER_STOCK_MAP_NAV;
+    }
+
     private void switchLoop() {
         contextWriterThread = Thread.currentThread();
         while (true) {
             refreshClusterStyleFromStock("context-reconcile");
             int target; IDisplayManager d; boolean reconcileOnly = false;
             synchronized (LOCK) {
-                /* Readiness gates only physical takeover. Ownership, input pinning
-                 * and the stock NAVSD bypass remain active from session start.
+                /* Readiness gates only physical takeover of plane 99 (ctx 80/81). Ownership,
+                 * input pinning and the stock NAVSD bypass remain active from session start.
+                 * ctx 82 uses stock map 33 + maneuver 98 and does not depend on plane 99.
                  * A stop must still restore stock if the renderer never came up. */
-                while (dm == null || (isConnected() && !rendererReady)) {
+                while (dm == null || (needsPlane99Renderer(desiredCtx) && !rendererReady)) {
                     try { LOCK.wait(); } catch (InterruptedException e) { /* persistent worker */ }
                 }
                 if (desiredCtx == currentCtx) {
                     try {
-                        if (desiredCtx == CTX_CLUSTER || desiredCtx == CTX_CLUSTER_MAP)
+                        if (isCarPlayClusterCtx(desiredCtx))
                             LOCK.wait(CONTEXT_RECONCILE_MS);
                         else
                             LOCK.wait();
                     } catch (InterruptedException e) { /* persistent worker */ }
                     if (dm == null || desiredCtx != currentCtx) continue;
-                    if (desiredCtx != CTX_CLUSTER && desiredCtx != CTX_CLUSTER_MAP) continue;
+                    if (!isCarPlayClusterCtx(desiredCtx)) continue;
                     reconcileOnly = true;
                 }
                 target = desiredCtx; d = dm;
@@ -545,18 +584,14 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
             if (ctx != CTX_STOCK_CLUSTER) {
                 int from;
                 synchronized (LOCK) { from = currentCtx; }
-                /* Bounce ONLY when the MOST encoder was off — i.e. we're coming from stock (74) or an
-                 * unknown state (-1, after a DM replace / prior error).  switchContext short-circuits
-                 * preContextSwitchHook + encoder re-point unless the ctx really changes, so the first
-                 * grab of the cluster needs a real change via a throwaway ctx (72) + settle.
-                 *
-                 * Between our OWN contexts (80<->81) the encoder is already running on the cluster and
+                boolean needPlane99 = needsPlane99Renderer(ctx);
+                /* Bounce ONLY when the MOST encoder was off or changing map producer —
+                 * Between our plane-99 contexts (80<->81) the encoder is already running on the cluster and
                  * both share plane 99 — a direct switchContext just recomposes the extra planes (98/101/
-                 * 102), no re-point needed.  Skipping the bounce there removes the visible ~180ms flash
-                 * through stock kombi-map (72) on every nav on/off.
-                 * If the driver turns out to need the bounce even for 80<->81 (encoder judder),
-                 * widen this back to "always bounce". */
-                boolean encoderRunning = (from == CTX_CLUSTER || from == CTX_CLUSTER_MAP);
+                 * 102), no re-point needed.  Likewise between stock 74 and 82 both share stock map 33. */
+                boolean encoderRunning = needPlane99
+                    ? (from == CTX_CLUSTER || from == CTX_CLUSTER_MAP)
+                    : (from == CTX_STOCK_CLUSTER || from == CTX_CLUSTER_STOCK_MAP_NAV);
                 if (!encoderRunning) {
                     int bounce = (ctx != CTX_BOUNCE) ? CTX_BOUNCE : CTX_STOCK_CLUSTER;
                     d.switchContext(bounce, TERMINAL_CLUSTER, null);
@@ -565,7 +600,7 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
                     /* Coalesce: if the desired target or the DM changed during the settle, abandon THIS
                      * switch (cluster is on the bounce ctx) and let the loop apply the latest desired. */
                     synchronized (LOCK) {
-                        if (dm != d || desiredCtx != ctx || !rendererReady) {
+                        if (dm != d || desiredCtx != ctx || (needPlane99 && !rendererReady)) {
                             currentCtx = -1;
                             clusterActive = false;
                             Log.i(TAG, "switch(" + ctx + ") superseded during bounce → " + desiredCtx);
@@ -576,7 +611,7 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
                 d.switchContext(ctx, TERMINAL_CLUSTER, null);
                 boolean stillValid;
                 synchronized (LOCK) {
-                    stillValid = (dm == d && desiredCtx == ctx && rendererReady);
+                    stillValid = (dm == d && desiredCtx == ctx && (!needPlane99 || rendererReady));
                     currentCtx = stillValid ? ctx : -1;
                     clusterActive = stillValid;
                     if (!stillValid)

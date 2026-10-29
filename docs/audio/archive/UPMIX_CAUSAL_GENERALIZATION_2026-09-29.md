@@ -152,9 +152,9 @@ flowchart LR
 | Artifact | Location |
 | --- | --- |
 | Frozen data/protocol manifest | [Exact PC manifest](UPMIX_CAUSAL_GENERALIZATION_2026-09-29_manifest.json) |
-| Trainer, sampler, crop monitor and CPU auditor | [train_causal_reference_generalization.py](../../../tools/stereo-upmix-render/train_causal_reference_generalization.py) |
-| Terminal source/entry/C comparison | [eval_causal_reference_generalization.py](../../../tools/stereo-upmix-render/eval_causal_reference_generalization.py) |
-| Exclusive supervised runner | [run_causal_reference_generalization.ps1](../../../tools/stereo-upmix-render/pc/run_causal_reference_generalization.ps1) |
+| Trainer, sampler, crop monitor and CPU auditor | [train_causal_reference_generalization.py](RETIRED_TOOLS.md#tool-7b9e59630ef1) |
+| Terminal source/entry/C comparison | [eval_causal_reference_generalization.py](RETIRED_TOOLS.md#tool-8e3c0ec1681e) |
+| Exclusive supervised runner | [run_causal_reference_generalization.ps1](RETIRED_TOOLS.md#tool-4a8d18f1863e) |
 | PC root | `D:\upmix\runs\causal_reference_generalization_v1` |
 | Each training arm | `last.pt`, `stepN.pt`, `progress.json`, `eval_stepN.json`, `train_complete.json` |
 | Terminal evidence | `audit.json`, `full40/`, `complete.json` |
@@ -171,7 +171,7 @@ The owner asked to give the new architecture the GPU before completing the contr
 
 Change **execution order only**: preserve the control's last complete checkpoint, optimizer, sampling digest and original logs; run residual96×4 to40k first; then resume the control to its original40k cap before final CPU/source-entry/C decisions. Keep all model/data/statistics/loss/learning-rate/crop/gain/gate definitions and the original manifest unchanged. The existing20k snapshots provide an earlier common-age comparison for information; they do not select a new checkpoint or replace the terminal gate.
 
-Before releasing its lease, validate ownership of the live original supervisor/worker tree, terminate only that tree, archive the last atomic checkpoint and verify it on CPU with [audit_causal_reference_priority_pause.py](../../../tools/stereo-upmix-render/audit_causal_reference_priority_pause.py). Strict checkpoint mode/protocol/stats, finite model/optimizer, fixed40k scheduler position, exposure counters and descriptor digest must pass. Interrupted work since the last250-step checkpoint may be replayed; the archived checkpoint is the authoritative effective training age, not a newer progress JSON. Keep the immutable pause archive and amendment record. The modified runner requires `-Resume -PrioritizeReference` and the verified pause evidence before starting the changed order.
+Before releasing its lease, validate ownership of the live original supervisor/worker tree, terminate only that tree, archive the last atomic checkpoint and verify it on CPU with [audit_causal_reference_priority_pause.py](RETIRED_TOOLS.md#tool-d1283d3f126a). Strict checkpoint mode/protocol/stats, finite model/optimizer, fixed40k scheduler position, exposure counters and descriptor digest must pass. Interrupted work since the last250-step checkpoint may be replayed; the archived checkpoint is the authoritative effective training age, not a newer progress JSON. Keep the immutable pause archive and amendment record. The modified runner requires `-Resume -PrioritizeReference` and the verified pause evidence before starting the changed order.
 
 Amendment/source freeze commit **`4e7c6913`** preceded the pause. The positively identified original supervisor10456 and child interpreter tree34632/29684 were terminated; no other Python work was active. The last complete checkpoint was **added step28,750**, 115,000 windows. CPU validation passed: strict original-mode/frozen-protocol/stats, finite weights and optimizer, exact saved scheduler position, exposure counts and sampling digest. The archived checkpoint is byte-identical to the resumable `original/last.pt`, SHA-256 **`0dd6f28ffb35579813c07643af6150a3f40247ee505da017a21dcd3b7b8b0c0e`**; sampled-descriptor digest **`3b10fb9573fb7221b816b3f0eaaba1b1c2a751282d9046f785df44f259175743`**. The original progress snapshot also ends28,750. The old lease was moved into this run's own pause archive after verification.
 

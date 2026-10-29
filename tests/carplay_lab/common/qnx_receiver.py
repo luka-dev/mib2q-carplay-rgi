@@ -140,11 +140,25 @@ def command(transport: str = "user") -> list[str]:
             "-display", "none", "-serial", "stdio", "-monitor", "none",
             "-netdev", ("socket,id=n0,listen=127.0.0.1:32501" if transport == "socket" else
                         "user,id=n0,hostfwd=tcp:127.0.0.1:32500-:5000"), "-device", "usb-net,netdev=n0"]
+    if transport == "vmnet":
+        if not record_value.get("native_api_daemon"):
+            raise ValueError("vmnet transport requires the owned native API daemon profile")
+        result[result.index("-netdev")+1] = "vmnet-shared,id=n0,isolated=off"
+        mac=record_value.get('qnx_mac','40:54:00:12:34:56')
+        if not re.fullmatch(r'(?:[0-9a-f]{2}:){5}[0-9a-f]{2}',mac) or int(mac[:2],16)&1:
+            raise ValueError('invalid owned QNX virtual NIC MAC')
+        result[result.index("-device",result.index("-netdev"))+1] = 'usb-net,netdev=n0,mac='+mac
     record = OUT / "build-record.json"
     if record.exists() and json.loads(record.read_text()).get("software_mfi"):
         mfi_network = "user,id=mfi,net=10.0.3.0/24"
+        relay_port=record_value.get('relay_host_port',32504)
+        input_port=record_value.get('input_host_port',32503)
+        if any(type(port) is not int or not 1024<=port<=65535 for port in (relay_port,input_port)) or relay_port==input_port:
+            raise ValueError('invalid isolated QNX forwarding ports')
+        if record_value.get("native_api_daemon"):
+            mfi_network += f',hostfwd=tcp:127.0.0.1:{relay_port}-10.0.3.15:32504'
         if json.loads(record.read_text()).get("input_control"):
-            mfi_network += ",hostfwd=tcp:127.0.0.1:32503-10.0.3.15:32503"
+            mfi_network += f',hostfwd=tcp:127.0.0.1:{input_port}-10.0.3.15:32503'
         result += ["-netdev", mfi_network, "-device",
                    "usb-net,netdev=mfi,mac=52:54:00:12:34:57"]
     return result
@@ -166,11 +180,11 @@ def build(image: str, pairing: bool = False, media: bool = False, software_mfi: 
           paired_altscreen: bool = False, request_ui_maps: bool = False,
           pacing_only: bool = False, input_control: bool = False,
           capture_memory: bool = False, clock_realtime: bool = False,
-          capture_only_altscreen: bool = False) -> None:
+          capture_only_altscreen: bool = False, hook_file: Path | None = None) -> None:
     if clock_realtime and not software_mfi:
         raise ValueError("realtime clock profile requires isolated software MFi")
-    if capture_only_altscreen and (not paired_altscreen or not capture_memory):
-        raise ValueError("capture-only AltScreen requires paired RAM capture")
+    if capture_only_altscreen and (not paired_altscreen or not (capture_memory or capture_video)):
+        raise ValueError("capture-only AltScreen requires paired RAM or UART capture")
     if capture_memory and (not input_control or not software_mfi or capture_video):
         raise ValueError("memory capture requires input control/software MFi and excludes UART video capture")
     if input_control and not software_mfi:
@@ -196,7 +210,10 @@ def build(image: str, pairing: bool = False, media: bool = False, software_mfi: 
     base = capture.CARPLAY / "dio_mesh_provider_twin.bin"
     if hashlib.sha256(base.read_bytes()).hexdigest() != IMAGE_HASH:
         raise RuntimeError("base QNX image hash changed")
-    hook = ROOT / ("build/wireless-alt-qemu/libcarplay_hook.so" if paired_altscreen else "build/wireless/libcarplay_hook.so")
+    hook = hook_file or ROOT / ("build/wireless-alt-qemu/libcarplay_hook.so" if paired_altscreen else "build/wireless/libcarplay_hook.so")
+    hook=hook.resolve()
+    if not hook.is_relative_to((ROOT/'build').resolve()):
+        raise ValueError('receiver hook must be a local build artifact')
     if paired_altscreen and (not hook.is_file() or
             b"paired stream 111 QEMU: fresh authenticated key claimed" not in hook.read_bytes()):
         raise ValueError("build the dedicated WIRELESS_ALT_QEMU hook before enabling paired AltScreen")
@@ -265,7 +282,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("build", "start", "stop", "status", "info"))
     parser.add_argument("--image", default="qnx65-armv7-toolchain:8.5")
-    parser.add_argument("--transport", choices=("user", "socket"), default="user")
+    parser.add_argument("--transport", choices=("user", "socket", "vmnet"), default="user")
     parser.add_argument("--trace-network", action="store_true", help="start the owned diagnostic QEMU with bounded TCP/USB stage timestamps")
     parser.add_argument("--lab-dir", type=Path, help="receiver artifacts inside the owned build tree")
     parser.add_argument("--pairing", action="store_true", help="build with the existing stock210 pairing hook and writable test store")
@@ -276,7 +293,7 @@ def main() -> None:
     parser.add_argument("--request-ui-maps", action="store_true", help="request the native Maps CarPlay UI URL")
     parser.add_argument("--pacing-only", action="store_true", help="disable AVC payload capture and sink socket probe traces to /dev/null; preserves authentication")
     parser.add_argument("--clock-realtime", action="store_true", help="correct pinned QNX qtime to the explicit 62.5 MHz QEMU timer")
-    parser.add_argument("--capture-only-altscreen", action="store_true", help="observe authenticated stream111 RAM without a renderer forwarder; no presentation success reported")
+    parser.add_argument("--capture-only-altscreen", action="store_true", help="capture authenticated stream111 without a renderer forwarder; requires RAM or UART capture; no presentation success reported")
     parser.add_argument("--input-control", action="store_true", help="register virtual primary touch HID and expose its bounded test endpoint on loopback")
     parser.add_argument("--capture-memory", action="store_true", help="retain a bounded AVC GOP per screen in RAM and retrieve through the owned loopback endpoint")
     parser.add_argument("--capture-video", action="store_true", help="capture bounded plaintext AVC at the mock decoder; requires --software-mfi")
@@ -353,7 +370,7 @@ def main() -> None:
     elif args.action == "status":
         transport = (OUT / "transport.txt").read_text().strip() if (OUT / "transport.txt").exists() else "user"
         print(json.dumps({"qnx_pid": running(), "transport": transport,
-                          "port": 32501 if transport == "socket" else 32500}))
+                          "port": 32501 if transport == "socket" else 5000 if transport == "vmnet" else 32500}))
     else:
         import urllib.request
         transport = (OUT / "transport.txt").read_text().strip() if (OUT / "transport.txt").exists() else "user"
@@ -364,7 +381,8 @@ def main() -> None:
                 raise RuntimeError("native QNX /info diagnostic is not ready")
             body = bytes.fromhex(packets[-1]).split(b"\r\n\r\n", 1)[1]
         else:
-            with urllib.request.urlopen("http://127.0.0.1:32500/info", timeout=5) as response:
+            url = "http://192.168.64.200:5000/info" if transport == "vmnet" else "http://127.0.0.1:32500/info"
+            with urllib.request.urlopen(url, timeout=5) as response:
                 body = response.read(65537)
         if len(body) > 65536:
             raise ValueError("receiver /info response too large")

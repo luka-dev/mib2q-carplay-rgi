@@ -5,7 +5,7 @@
 // APACBWE2Decoder - Apple's bandwidth extension: the header parser and the
 // synthesis.
 //
-// Reference: libSPF_CP_PlugInWrapper.so (Pioneer SPHERA 1.030010)
+// Original: libSPF_CP_PlugInWrapper.so (Pioneer SPHERA 1.030010)
 //
 //   0x00078a60  APACBWE2Decoder::Deserialize(BitstreamReader&, unsigned,
 //                                            APACSyntacticElement&)
@@ -69,9 +69,9 @@ const uint32_t kBWEMaxBands    = 8;
 
 class BWE2Decoder {
 public:
-    // `table` is the stream's scalefactor-band record, which the library
+    // `table` is the stream's scalefactor-band record, which the original
     // reaches through the APACInstanceConfig it holds at +80; `lpc` is the
-    // BWELPC the synthesis runs on.  The library builds ONE BWELPC PER
+    // BWELPC the synthesis runs on.  The original builds ONE BWELPC PER
     // CHANNEL in InitInterFrameMemory - a vector at +88, indexed by channel -
     // but nothing in it survives a call: MDCTCoefficientsToLPC and
     // DecodeLSFsToLPCs both overwrite every buffer they read, and its filters
@@ -81,7 +81,7 @@ public:
     // argument, and the same ownership, as LRVQDecoder.
     //
     // A null `lpc` means "this build has no BWE synthesis": DecodeFrame then
-    // returns kLimitNeedsBWE rather than silently leaving the band empty.
+    // returns kPortNeedsBWE rather than silently leaving the band empty.
     void Initialize(const SFBOffsets* table, BWELPC* lpc);
 
     // `channel` is the index of the element's FIRST channel.  Returns 0 on
@@ -122,9 +122,9 @@ private:
     uint32_t mActive;                                   // one bit per channel
     uint32_t mEnvelope[kBWEMaxChannels][2];             // the two 9-bit fields
     uint32_t mScale[kBWEMaxChannels][kBWEMaxBands];     // the 6-bit fields
-    // The library's `float v87[1026]` stack buffer, filled with 1.0 and then
+    // The original's `float v87[1026]` stack buffer, filled with 1.0 and then
     // written with the core envelope below bwStart and the extension envelope
-    // above it.  Our decoder cannot put a kilobyte of floats on the decode path's
+    // above it.  The port cannot put a kilobyte of floats on the decode path's
     // stack, so it is a member; nothing carries across calls, the fill is the
     // first thing DecodeFrame does.
     float    mEnv[kFrameLength];

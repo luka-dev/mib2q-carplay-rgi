@@ -5,7 +5,7 @@
 #   ./apac_decoder/reference/run.sh
 #
 # Builds the arm64 container image if it is missing, decodes the captured
-# CarPlay APAC 5.1 stream with Pioneer's decoder running
+# CarPlay APAC 5.1 stream with Pioneer's copy of Apple's decoder running
 # NATIVELY on this Apple Silicon machine, decodes the same packets with macOS
 # AudioToolbox, and prints a per-channel comparison.
 #
@@ -23,19 +23,19 @@
 #   ./apac_decoder/reference/run.sh fn bs < cases   # TBitstreamReader, per call
 #
 # And the stage-d composition test - the whole capture decoded twice, once with
-# Pioneer's filter bank and once with ours patched into its place:
+# Pioneer's filter bank and once with the port's patched into its place:
 #
 #   ./apac_decoder/reference/run.sh swap            # all 3977 packets
 #   ./apac_decoder/reference/run.sh swap 400        # the first 400
 #
-# And the stage-f/g acceptance test - the whole capture decoded by OUR decoder and
+# And the stage-f/g acceptance test - the whole capture decoded by the PORT and
 # compared against the library, both as float32 PCM and, bit for bit, as the
 # spectra the frame layer hands the filter bank:
 #
-#   ./apac_decoder/reference/run.sh ours            # all 3977 packets
-#   ./apac_decoder/reference/run.sh ours 400        # the first 400
+#   ./apac_decoder/reference/run.sh port            # all 3977 packets
+#   ./apac_decoder/reference/run.sh port 400        # the first 400
 #
-# and the stage-f/g COMPOSITION test, the counterpart of `swap`: our whole
+# and the stage-f/g COMPOSITION test, the counterpart of `swap`: the port's whole
 # frame layer patched into Pioneer's own decoder at APACCoreDecoder::
 # DecodeAPACFrame, with the library keeping the frame-type field, the trimming
 # record, ContentOutBuffer and the interleave:
@@ -63,8 +63,8 @@ FN=0
 if [ "${1:-}" = "fn" ]; then FN=1; shift; fi
 SWAP=0
 if [ "${1:-}" = "swap" ]; then SWAP=1; shift; fi
-OURS=0
-if [ "${1:-}" = "ours" ]; then OURS=1; shift; fi
+PORT=0
+if [ "${1:-}" = "port" ]; then PORT=1; shift; fi
 SWAPFRAME=0
 if [ "${1:-}" = "swapframe" ]; then SWAPFRAME=1; shift; fi
 
@@ -73,8 +73,8 @@ PROBE=0
 FLOAT=0
 COUNT=""
 EXTRA=()
-# The `fn`, `swap` and `ours` modes take their own arguments; do not eat them.
-while [ "$FN" = 0 ] && [ "$SWAP" = 0 ] && [ "$OURS" = 0 ] && [ "$SWAPFRAME" = 0 ] && [ $# -gt 0 ]; do
+# The `fn`, `swap` and `port` modes take their own arguments; do not eat them.
+while [ "$FN" = 0 ] && [ "$SWAP" = 0 ] && [ "$PORT" = 0 ] && [ "$SWAPFRAME" = 0 ] && [ $# -gt 0 ]; do
     case "$1" in
         --rebuild) REBUILD=1 ;;
         --probe)   PROBE=1 ;;
@@ -154,27 +154,27 @@ run_ref() {
 
 # ------------------------------------------------------- transform swap ----
 # Decode the whole capture twice: once with Pioneer's own filter bank and once
-# with ours patched into its place, then diff the two float32 streams.
+# with the port's patched into its place, then diff the two float32 streams.
 # This is the composition test for stage d - the per-function tests use
 # synthetic vectors, this one uses the coefficients the real stream produces.
 # See transform_swap_shim.cpp for how the substitution is made.
 run_swap() {
     local dec; dec="$(cd "$HERE/.." && pwd)"
     docker run --rm --platform linux/arm64 \
-        -v "$HERE:/src:ro" -v "$dec/src:/ours/src:ro" -v "$dec/include:/ours/include:ro" \
+        -v "$HERE:/src:ro" -v "$dec/src:/port/src:ro" -v "$dec/include:/port/include:ro" \
         -v "$CAPTURE:/data:ro" -v "$WORK:/out" \
         "$IMAGE" bash -c '
             set -e
             g++ -std=c++11 -O2 -g -Wall -o /tmp/apac_ref /src/apac_ref.cpp -ldl
             g++ -std=c++11 -O2 -g -Wall -Wextra -fno-exceptions -fno-rtti \
-                -I/ours/include -shared -fPIC -o /tmp/swap.so \
-                /src/transform_swap_shim.cpp /ours/src/transform.cpp \
-                /ours/src/transform_tables.cpp /ours/src/filterbank.cpp -ldl
+                -I/port/include -shared -fPIC -o /tmp/swap.so \
+                /src/transform_swap_shim.cpp /port/src/transform.cpp \
+                /port/src/transform_tables.cpp /port/src/filterbank.cpp -ldl
             echo "=== Pioneer, unmodified ==="
             /tmp/apac_ref --f32 "$@" /out/pioneer_plain.f32
             /tmp/apac_ref       "$@" /out/pioneer_plain.pcm
             echo
-            echo "=== Pioneer, with our transform patched in ==="
+            echo "=== Pioneer, with the ported transform patched in ==="
             APAC_SWAP_TRANSFORM=1 LD_PRELOAD=/tmp/swap.so \
                 /tmp/apac_ref --f32 "$@" /out/pioneer_swapped.f32
             APAC_SWAP_TRANSFORM=1 LD_PRELOAD=/tmp/swap.so \
@@ -182,57 +182,57 @@ run_swap() {
         ' _ "$@"
 }
 
-# --------------------------------------------------------- ours acceptance ----
+# --------------------------------------------------------- port acceptance ----
 # Decode the capture twice: once with the library, dumping the spectrum it hands
-# its own filter bank for every channel of every frame, and once with our decoder,
+# its own filter bank for every channel of every frame, and once with the port,
 # dumping the same thing.  The frame layer has no other observable output of its
 # own - everything below it is the transform, which cannot be bit exact because
 # the library's FFT is vDSP - so the spectra settle stages a..g on their own
 # terms and the PCM comparison shows what the transform then costs.
 #
-# The library's dump run substitutes OUR filter bank for its own, because
+# The library's dump run substitutes the PORT's filter bank for its own, because
 # the hook has to overwrite the entry point to see the buffer at all; that
 # substitution is the one `run.sh swap` measures, and it does not touch the
 # spectra, which are read before the transform runs.
 run_port() {
     local dec; dec="$(cd "$HERE/.." && pwd)"
     docker run --rm --platform linux/arm64 \
-        -v "$HERE:/src:ro" -v "$dec/src:/ours/src:ro" -v "$dec/include:/ours/include:ro" \
+        -v "$HERE:/src:ro" -v "$dec/src:/port/src:ro" -v "$dec/include:/port/include:ro" \
         -v "$CAPTURE:/data:ro" -v "$WORK:/out" \
         "$IMAGE" bash -c '
             set -e
             g++ -std=c++11 -O2 -g -Wall -o /tmp/apac_ref /src/apac_ref.cpp -ldl
             g++ -std=c++11 -O2 -g -Wall -Wextra -fno-exceptions -fno-rtti \
-                -I/ours/include -shared -fPIC -o /tmp/dump.so \
-                /src/spectrum_dump_shim.cpp /ours/src/transform.cpp \
-                /ours/src/transform_tables.cpp /ours/src/filterbank.cpp -ldl
+                -I/port/include -shared -fPIC -o /tmp/dump.so \
+                /src/spectrum_dump_shim.cpp /port/src/transform.cpp \
+                /port/src/transform_tables.cpp /port/src/filterbank.cpp -ldl
             APAC_DUMP_SPECTRA=/out/lib.spec LD_PRELOAD=/tmp/dump.so \
-                /tmp/apac_ref --f32 "$@" /out/pioneer_ours_ref.f32
+                /tmp/apac_ref --f32 "$@" /out/pioneer_port_ref.f32
         ' _ "$@"
 }
 
 # ------------------------------------------------------- frame-layer swap ----
-# Our element and core-decoder layers patched into the library at
+# The port's element and core-decoder layers patched into the library at
 # APACCoreDecoder::DecodeAPACFrame.  Everything above stays the library's, so
-# this measures stages f and g with our own top level taken out of the
+# this measures stages f and g with the port's own top level taken out of the
 # picture - which the plain end-to-end run cannot do.
 run_swapframe() {
     local dec; dec="$(cd "$HERE/.." && pwd)"
     docker run --rm --platform linux/arm64 \
-        -v "$HERE:/src:ro" -v "$dec/src:/ours/src:ro" -v "$dec/include:/ours/include:ro" \
+        -v "$HERE:/src:ro" -v "$dec/src:/port/src:ro" -v "$dec/include:/port/include:ro" \
         -v "$CAPTURE:/data:ro" -v "$WORK:/out" \
         -e APAC_COOKIE="/data/$(basename "$COOKIE")" \
         "$IMAGE" bash -c '
             set -e
             g++ -std=c++11 -O2 -g -Wall -o /tmp/apac_ref /src/apac_ref.cpp -ldl
             g++ -std=c++11 -O2 -g -Wall -Wextra -fno-exceptions -fno-rtti \
-                -I/ours/include -shared -fPIC -o /tmp/frame.so \
-                /src/frame_swap_shim.cpp /ours/src/*.cpp -ldl
+                -I/port/include -shared -fPIC -o /tmp/frame.so \
+                /src/frame_swap_shim.cpp /port/src/*.cpp -ldl
             echo "=== Pioneer, unmodified ==="
             /tmp/apac_ref --f32 "$@" /out/pioneer_plain.f32
             /tmp/apac_ref       "$@" /out/pioneer_plain.pcm
             echo
-            echo "=== Pioneer, with our frame layer patched in ==="
+            echo "=== Pioneer, with the ported frame layer patched in ==="
             APAC_SWAP_COOKIE="$APAC_COOKIE" LD_PRELOAD=/tmp/frame.so \
                 /tmp/apac_ref --f32 "$@" /out/pioneer_frameswap.f32
             APAC_SWAP_COOKIE="$APAC_COOKIE" LD_PRELOAD=/tmp/frame.so \
@@ -289,11 +289,11 @@ if [ "$SWAP" = 1 ]; then
     run_swap --list /out/ctr_list.txt "${COUNT_ARGS[@]+"${COUNT_ARGS[@]}"}" \
         "/data/$(basename "$COOKIE")"
     echo
-    echo "=== what our transform costs, end to end ==="
+    echo "=== what the ported transform costs, end to end ==="
     python3 "$HERE/compare_f32.py" "$WORK/pioneer_plain.f32" \
         "$WORK/pioneer_swapped.f32" 6
 
-    # The acceptance question is not "how far is our decoder from Pioneer" but
+    # The acceptance question is not "how far is the port from Pioneer" but
     # "does substituting it change how far Pioneer is from Apple".  Both are
     # already 1-2 LSB apart on this capture (NOTES.md), so that is the bar.
     ORACLE="$ROOT/build/apple_apac_oracle"
@@ -311,7 +311,7 @@ if [ "$SWAP" = 1 ]; then
         echo "=== Apple vs Pioneer, unmodified ==="
         python3 "$HERE/compare_pcm.py" "$WORK/apple.pcm" "$WORK/pioneer_plain.pcm" 6
         echo
-        echo "=== Apple vs Pioneer, with our transform ==="
+        echo "=== Apple vs Pioneer, with the ported transform ==="
         python3 "$HERE/compare_pcm.py" "$WORK/apple.pcm" "$WORK/pioneer_swapped.pcm" 6
     fi
     exit 0
@@ -324,15 +324,15 @@ if [ "$SWAPFRAME" = 1 ]; then
     run_swapframe --list /out/ctr_list.txt "${COUNT_ARGS[@]+"${COUNT_ARGS[@]}"}" \
         "/data/$(basename "$COOKIE")"
     echo
-    echo "=== what our frame layer costs, end to end ==="
+    echo "=== what the ported frame layer costs, end to end ==="
     python3 "$HERE/compare_f32.py" "$WORK/pioneer_plain.f32" \
         "$WORK/pioneer_frameswap.f32" 6
 
     # The measure that decides whether a substitution is acceptable: not how
-    # close the two Pioneer runs are to each other, but whether swapping our
-    # decoder in changes how well the decoder matches APPLE.  Both sides here come
+    # close the two Pioneer runs are to each other, but whether swapping the
+    # port in changes how well the decoder matches APPLE.  Both sides here come
     # out of the library's own S16 path, so the two tables are directly
-    # comparable and any change is ours.
+    # comparable and any change is the port's.
     ORACLE="$ROOT/build/apple_apac_oracle"
     if [ ! -x "$ORACLE" ] && [ "$(uname -s)" = "Darwin" ]; then
         mkdir -p "$ROOT/build"
@@ -352,14 +352,14 @@ if [ "$SWAPFRAME" = 1 ]; then
         echo "=== Pioneer, unmodified, against Apple AudioToolbox ==="
         python3 "$HERE/compare_pcm.py" "$WORK/apple_sf.pcm" "$WORK/pioneer_plain.pcm" 6
         echo
-        echo "=== Pioneer with our frame layer, against Apple AudioToolbox ==="
+        echo "=== Pioneer with the ported frame layer, against Apple AudioToolbox ==="
         python3 "$HERE/compare_pcm.py" "$WORK/apple_sf.pcm" "$WORK/pioneer_frameswap.pcm" 6
     fi
     exit 0
 fi
 
-# ------------------------------------------------------------------- ours ----
-if [ "$OURS" = 1 ]; then
+# ------------------------------------------------------------------- port ----
+if [ "$PORT" = 1 ]; then
     DEC="$(cd "$HERE/.." && pwd)"
     COUNT_ARGS=()
     HOST_LIST="$WORK/host_list.txt"
@@ -370,33 +370,33 @@ if [ "$OURS" = 1 ]; then
     fi
 
     echo
-    echo "=== the library, unmodified ==="
+    echo "=== the original, unmodified ==="
     run_ref --list /out/ctr_list.txt "${COUNT_ARGS[@]+"${COUNT_ARGS[@]}"}" \
         "/data/$(basename "$COOKIE")" /out/pioneer.f32 --f32
 
     echo
-    echo "=== the library again, with the frame layer's spectra dumped ==="
+    echo "=== the original again, with the frame layer's spectra dumped ==="
     run_port --list /out/ctr_list.txt "${COUNT_ARGS[@]+"${COUNT_ARGS[@]}"}" \
         "/data/$(basename "$COOKIE")"
 
     echo
-    echo "=== our decoder ==="
+    echo "=== the port ==="
     make -C "$DEC" tools >/dev/null
-    "$DEC/.build/apac_decode" "$COOKIE" "$WORK/ours.f32" \
-        --list "$HOST_LIST" --dump-spectra "$WORK/ours.spec"
+    "$DEC/.build/apac_decode" "$COOKIE" "$WORK/port.f32" \
+        --list "$HOST_LIST" --dump-spectra "$WORK/port.spec"
 
     echo
     echo "=== stages a..g: the spectra the frame layer hands the filter bank ==="
-    python3 "$HERE/compare_spectra.py" "$WORK/lib.spec" "$WORK/ours.spec"
+    python3 "$HERE/compare_spectra.py" "$WORK/lib.spec" "$WORK/port.spec"
 
     echo
-    echo "=== our decoder against the library, float32 (FFT-limited) ==="
-    python3 "$HERE/compare_f32.py" "$WORK/pioneer.f32" "$WORK/ours.f32" 6
+    echo "=== the port against the ORIGINAL, float32 (FFT-limited) ==="
+    python3 "$HERE/compare_f32.py" "$WORK/pioneer.f32" "$WORK/port.f32" 6
 
     echo
-    echo "=== our decoder against the library carrying our own transform,"
+    echo "=== the port against the original carrying the port's own transform,"
     echo "    float32 (expect exactly zero: this isolates the FFT) ==="
-    python3 "$HERE/compare_f32.py" "$WORK/pioneer_ours_ref.f32" "$WORK/ours.f32" 6
+    python3 "$HERE/compare_f32.py" "$WORK/pioneer_port_ref.f32" "$WORK/port.f32" 6
     exit 0
 fi
 

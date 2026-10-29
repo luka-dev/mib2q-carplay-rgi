@@ -78,10 +78,10 @@ The CPU auditor verifies checkpoint/head/source/window hashes and semantics, par
 
 | Artifact | Location |
 | --- | --- |
-| Reference model | [separator_causal_reference.py](../../../tools/stereo-upmix-render/separator_causal_reference.py) |
-| Paired experiment | [separator_causal_reference_probe.py](../../../tools/stereo-upmix-render/separator_causal_reference_probe.py) |
-| CPU auditor | [audit_separator_causal_reference.py](../../../tools/stereo-upmix-render/audit_separator_causal_reference.py) |
-| Exclusive runner | [run_separator_causal_reference.ps1](../../../tools/stereo-upmix-render/pc/run_separator_causal_reference.ps1) |
+| Reference model | [separator_causal_reference.py](RETIRED_TOOLS.md#tool-5d6951e839b0) |
+| Paired experiment | [separator_causal_reference_probe.py](RETIRED_TOOLS.md#tool-97df02643dec) |
+| CPU auditor | [audit_separator_causal_reference.py](RETIRED_TOOLS.md#tool-21e16219d904) |
+| Exclusive runner | [run_separator_causal_reference.ps1](RETIRED_TOOLS.md#tool-e5ea3ee492c7) |
 | PC smoke / full root | `D:\upmix\runs\separator_causal_reference_smoke_v1` / `separator_causal_reference_v1` |
 | Each arm | `architecture.json`, `progress.json`, `fit.pt`, `complete.json` |
 | Pair | `manifest.json`, `complete.json`, `audit.json` |

@@ -132,6 +132,11 @@ typedef struct {
     int                      presentRecoveryAttempts;
     int                      presentNeedsFullRebuild;
     unsigned long long       presentRecoveryAfterMs;
+    unsigned long            bitstreamErrors;
+    int                      bitstreamStallArmed;
+    unsigned long            bitstreamStallInputBase;
+    unsigned long            bitstreamStallInFlight;
+    unsigned long long       bitstreamStallSinceMs;
     uint8_t                  config[4096];
     uint32_t                 configLen;
     volatile int             viewAreaMode; /* control thread -> loader: 0=fullscreen, 1=smallscreen */
@@ -177,22 +182,39 @@ static OMX_ERRORTYPE _OnEvent(OMX_HANDLETYPE c, OMX_PTR app, OMX_EVENTTYPE ev,
          * creates a FillDone/FreeBuffer race on this component. */
         fprintf(stderr, "altscreen_render[qnx]: PortSettingsChanged(out) ignored (stock-210 parity)\n");
     } else if (ev == OMX_EventError) {
-        me->omxError = 1;
-        /* Vendor codes only while starting/decoding.  During OUR teardown the
-         * component legitimately reports InvalidState etc. as it is forced
-         * down — that is renderer-local, never "core is dead".  The teardown
-         * helper deadline is the wedge detector on that path. */
-        if (!me->callbacksClosing &&
-            (d1 == 0x80001011u /* vendor Timeout */ ||
-             d1 == 0x80001009u /* Hardware */ ||
-             d1 == 0x8000100Au /* Invalid */)) {
-            me->coreFatal = 1;
+        if (me->running && me->started &&
+            ((OMX_ERRORTYPE)d1 == OMX_ErrorStreamCorrupt ||
+             (OMX_ERRORTYPE)d1 == OMX_ErrorMbErrorsInFrame)) {
+            ++me->bitstreamErrors;
+            me->presentationHealthy = 0;
+            if (!me->bitstreamStallArmed) {
+                me->bitstreamStallArmed = 1;
+                me->bitstreamStallInputBase = me->inputSubmitted;
+                me->bitstreamStallInFlight = me->inputSubmitted >= me->inputReturned
+                    ? me->inputSubmitted - me->inputReturned : 0;
+                me->bitstreamStallSinceMs = 0;
+            }
             fprintf(stderr,
-                    "altscreen_render[qnx]: OMX_EventError 0x%x -> CORE FATAL\n",
-                    (unsigned)d1);
+                    "altscreen_render[qnx]: OMX_EventError 0x%x (bitstream error #%lu) -> keep decoding\n",
+                    (unsigned)d1, me->bitstreamErrors);
         } else {
-            fprintf(stderr, "altscreen_render[qnx]: OMX_EventError 0x%x\n",
-                    (unsigned)d1);
+            me->omxError = 1;
+            /* Vendor codes only while starting/decoding.  During OUR teardown the
+             * component legitimately reports InvalidState etc. as it is forced
+             * down — that is renderer-local, never "core is dead".  The teardown
+             * helper deadline is the wedge detector on that path. */
+            if (!me->callbacksClosing &&
+                (d1 == 0x80001011u /* vendor Timeout */ ||
+                 d1 == 0x80001009u /* Hardware */ ||
+                 d1 == 0x8000100Au /* Invalid */)) {
+                me->coreFatal = 1;
+                fprintf(stderr,
+                        "altscreen_render[qnx]: OMX_EventError 0x%x -> CORE FATAL\n",
+                        (unsigned)d1);
+            } else {
+                fprintf(stderr, "altscreen_render[qnx]: OMX_EventError 0x%x\n",
+                        (unsigned)d1);
+            }
         }
     }
     pthread_cond_broadcast(&me->cond);
@@ -428,6 +450,16 @@ static OMX_ERRORTYPE _OnFillDone(OMX_HANDLETYPE c, OMX_PTR app, OMX_BUFFERHEADER
             /* Never overwrite a queued/live GPU buffer on a broken callback. */
             me->omxError = 1;
             fprintf(stderr, "altscreen_render[qnx]: invalid/duplicate output ownership; decoder restart required\n");
+        } else if (b->nFlags & OMX_BUFFERFLAG_DATACORRUPT) {
+            /* A component may report a damaged/concealed picture through
+             * FillDone without OMX_EventError. Never publish it as healthy
+             * video. Keep returned buffers client-owned for normal teardown;
+             * the existing health/transport path obtains a fresh config+IDR. */
+            me->omxError = 1;
+            me->presentationHealthy = 0;
+            me->presentStop = 1;
+            fprintf(stderr, "altscreen_render[qnx]: corrupt decoded picture flags=0x%x; fresh decoder/IDR required\n",
+                    (unsigned)b->nFlags);
         } else {
             uint64_t pictureMs = b->nTimeStamp > 0 ? (uint64_t)b->nTimeStamp / 1000ULL : 0;
             uint64_t nowMs = _NowMs();
@@ -442,6 +474,15 @@ static OMX_ERRORTYPE _OnFillDone(OMX_HANDLETYPE c, OMX_PTR app, OMX_BUFFERHEADER
             me->presentQueue[(me->presentHead + me->presentCount) % me->nOutBufs] = slot;
             ++me->presentCount;
             ++me->outputFilled;
+            if (me->bitstreamStallArmed && b->nFilledLen > 0) {
+                if (me->bitstreamStallInFlight > 0) {
+                    --me->bitstreamStallInFlight;
+                } else if (me->inputSubmitted > me->bitstreamStallInputBase) {
+                    me->bitstreamStallArmed = 0;
+                    me->bitstreamStallSinceMs = 0;
+                    fprintf(stderr, "altscreen_render[qnx]: decoder output continued after bitstream error\n");
+                }
+            }
             if (me->outputFilled <= 3 || ((me->outputFilled % 600) == 0 && log_verbose_marker()))
                 fprintf(stderr, "altscreen_render[qnx]: FillBufferDone #%lu filled=%u queue=%u posted=%lu age=%llu ms\n",
                         me->outputFilled, (unsigned)b->nFilledLen, (unsigned)me->presentCount,
@@ -1150,6 +1191,11 @@ static void _Teardown(ScreenSink *me, int destroyPresent) {
     me->presentRecoveryAttempts = 0;
     me->presentNeedsFullRebuild = 0;
     me->presentRecoveryAfterMs = 0;
+    me->bitstreamErrors = 0;
+    me->bitstreamStallArmed = 0;
+    me->bitstreamStallInputBase = 0;
+    me->bitstreamStallInFlight = 0;
+    me->bitstreamStallSinceMs = 0;
     me->newestInputMs = 0;
     memset(me->trace, 0, sizeof(me->trace));
     me->trace_next = 0;
@@ -1309,8 +1355,19 @@ static int _FeedInput(ScreenSink *me, const uint8_t *data, uint32_t len, OMX_U32
     if (err == OMX_ErrorNone) {
         pthread_mutex_lock(&me->lock);
         if (received_ms > me->newestInputMs) me->newestInputMs = received_ms;
-        pthread_mutex_unlock(&me->lock);
         me->inputSubmitted++;
+        if (me->bitstreamStallArmed && !(flags & OMX_BUFFERFLAG_CODECCONFIG)) {
+            unsigned long long nowMs = _NowMs();
+            if (me->bitstreamStallSinceMs == 0) {
+                me->bitstreamStallSinceMs = nowMs;
+            } else if (nowMs >= me->bitstreamStallSinceMs + 2000ULL) {
+                me->omxError = 1;
+                fprintf(stderr,
+                        "altscreen_render[qnx]: bitstream error stall >2000 ms after input #%lu; decoder restart required\n",
+                        me->inputSubmitted);
+            }
+        }
+        pthread_mutex_unlock(&me->lock);
         if (me->inputSubmitted <= 3 || ((me->inputSubmitted % 600) == 0 && log_verbose_marker()))
             fprintf(stderr,
                     "altscreen_render[qnx]: EmptyThisBuffer OK #%lu requested=%u submitted=%u flags=0x%x in=%u\n",

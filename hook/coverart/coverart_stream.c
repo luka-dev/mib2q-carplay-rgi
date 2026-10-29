@@ -153,6 +153,14 @@ static void file_payload(coverart_stream_t *s, uint8_t session,
     }
 }
 
+void coverart_stream_file(coverart_stream_t *s,const uint8_t *p,size_t n,uint8_t **image,size_t *length)
+{
+    *image=NULL;*length=0;
+    /* This instance belongs to one negotiated wireless transfer session. */
+    s->session_kind[2]=2;
+    file_payload(s,2,p,n,image,length);
+}
+
 static void ordered_packet(coverart_stream_t *s, const uint8_t *p, size_t len,
                            uint8_t **image, size_t *image_len)
 {

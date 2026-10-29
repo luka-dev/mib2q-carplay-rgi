@@ -12,7 +12,7 @@ The predeclared architecture interpretation is: an 8 s history is adequate to mo
 
 ## Results
 
-The guarded CPU run completed all 12 songs. Output: `D:\upmix\runs\spatial_memory_horizon12\result.json` and `run.txt`; [`run_spatial_memory_horizon.ps1`](../../../tools/stereo-upmix-render/pc/run_spatial_memory_horizon.ps1) checks code hashes, the empty GPU queue and no competing run. The fixed 30 s reference reproduced the earlier oracle (eligible **.4617**, vocal/eligible **.3183**, drums/eligible **.0250**, bass/eligible **.0102**).
+The guarded CPU run completed all 12 songs. Output: `D:\upmix\runs\spatial_memory_horizon12\result.json` and `run.txt`; [`run_spatial_memory_horizon.ps1`](RETIRED_TOOLS.md#tool-887f743d6c3b) checks code hashes, the empty GPU queue and no competing run. The fixed 30 s reference reproduced the earlier oracle (eligible **.4617**, vocal/eligible **.3183**, drums/eligible **.0250**, bass/eligible **.0102**).
 
 | First-window fit | Eligible transmission | Vocal/eligible | Drums/eligible | Bass/eligible | Paired eligible minus 30 s | Paired error minus 30 s |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -26,7 +26,7 @@ Neither short *initial* window passed the frozen gate. The first 8 s fit often p
 
 To separate *short memory* from *uninformative intro*, fit the unchanged full 2×2 matrix on **all 0–29.9 s** of the same song but weight past frames by `exp((t − 29.9 s)/τ)` with τ = **2, 8, 30 s**, alongside the original uniform 30 s fit. Weighted least squares uses the same 1% ridge and true eligible target; only the time weights differ. All operators remain frozen for the identical 30.1–60 s test. Apply the same four short-history comparisons above to τ = 2 and 8 s, with the uniform fit as reference; τ = 30 s is a gradient between short and uniform. If τ = 8 s passes where first-8-s failed, a causal slow spatial state with an ≈8 s decay has upper-bound support; if it also fails, a faster-forgetting state has no support from this test. This is privileged inference with true-stem first-half fitting and says nothing yet about learning the state from stereo alone or meeting the real vocal-entry, C, device or car gates.
 
-The guarded CPU run completed all 12 songs. Output: `D:\upmix\runs\spatial_recency_bound12\result.json` and `run.txt`; [`run_spatial_recency_bound.ps1`](../../../tools/stereo-upmix-render/pc/run_spatial_recency_bound.ps1) checks source hashes, the GPU lease, queue and competing processes. The fit uses every first-half frame; τ only changes its weight. The reference column is the **same uniform operator** as the first-window run. Paired deltas are song medians, so they need not equal a difference of the two unpaired medians.
+The guarded CPU run completed all 12 songs. Output: `D:\upmix\runs\spatial_recency_bound12\result.json` and `run.txt`; [`run_spatial_recency_bound.ps1`](RETIRED_TOOLS.md#tool-a41291346db3) checks source hashes, the GPU lease, queue and competing processes. The fit uses every first-half frame; τ only changes its weight. The reference column is the **same uniform operator** as the first-window run. Paired deltas are song medians, so they need not equal a difference of the two unpaired medians.
 
 | First-half weighting | Eligible transmission | Vocal/eligible | Drums/eligible | Bass/eligible | Paired eligible Δ | Paired complex-error Δ | Frozen short-decay gate |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |

@@ -1,6 +1,6 @@
 # results
 
-The raw output the stage-k numbers in `../../STATUS.md` come from. Committed rather than
+The raw output the stage-k numbers in `../../PORT_STATUS.md` come from. Committed rather than
 regenerated on demand: the QNX run takes about twenty minutes, and the tree it measured is named
 below.
 
@@ -15,7 +15,7 @@ below.
 The armle-v7 log also carries the BWE and LRVQ case measurements — the two paths this capture never
 takes — and an `integrity:` line at the end. That line is not decoration: an earlier version of this
 benchmark corrupted its own calibration constant through a 512-float overrun, and the probes behind
-that line are what localised it. See STATUS.md, "The bench had a memory corruption".
+that line are what localised it. See PORT_STATUS, "The bench had a memory corruption".
 
 Tree: `4268ec4` for the capture-derived figures, with stage e (the BWE synthesis) landed and the decoder built under the unified
 flags of `scripts/apac_flags.sh`. `qnx_armv7_icount.txt` is byte identical to the run against the

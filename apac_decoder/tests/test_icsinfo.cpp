@@ -19,7 +19,7 @@
 // compared too, so a branch that reads the wrong width fails even when it
 // happens to land on the same field values.
 //
-// rc is the library's convention: TRUE means error.
+// rc is the original's convention: TRUE means error.
 
 #include "apac/ics_info.h"
 

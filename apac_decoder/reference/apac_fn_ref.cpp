@@ -7,8 +7,8 @@
 //
 // apac_ref.cpp drives the whole decoder through Apple's C API.  This is its
 // sibling: it reaches past that API and calls INDIVIDUAL C++ member functions
-// out of the library by their Itanium-mangled names, so a hand-written decoder can be
-// diffed against the library one function at a time.
+// out of the library by their Itanium-mangled names, so a hand port can be
+// diffed against the original one function at a time.
 //
 // Everything about loading the library - the arm64 container, the libMali /
 // OpenSSL-3 stub, the apluser group - is the same as apac_ref and is set up by
@@ -37,7 +37,7 @@
 //   apac_fn_ref gc-raw FILE [--offset N]     ... on a raw config blob (no atom walk)
 //   apac_fn_ref cookie  COOKIE               the pure C cookie parsers
 //   apac_fn_ref scene   COOKIE --at BITS     apac::AudioSceneConfig::Deserialize
-//                                            at a given bit position, so a decoder
+//                                            at a given bit position, so a port
 //                                            that stops there can prove it is
 //                                            standing in the right place
 //
@@ -351,7 +351,7 @@ int cmd_ics()
 //   R <idx> <rc> <bitsUsed> <nrecHex> <recHex> <scfHex>
 //
 // The object is zeroed first, so every byte in the reply is one this call
-// wrote.  rc is the library's convention: 1 means ERROR.  recHex and scfHex
+// wrote.  rc is the original's convention: 1 means ERROR.  recHex and scfHex
 // cover 15 * numWindowGroups entries, the stride the struct actually uses.
 int cmd_scf()
 {
@@ -634,7 +634,7 @@ int run_gc(const std::vector<uint8_t>& blob, uint32_t offset, bool dump)
 // apac::AudioSceneConfig is an 8-byte object - one owning pointer to an
 // SC_AudioScenes, which its Deserialize allocates - so unlike GlobalConfig it
 // needs nothing but zeroed memory.  GlobalConfig::Deserialize reaches it through
-// AncillaryConfig; running it here at an explicit bit offset is how a decoder that
+// AncillaryConfig; running it here at an explicit bit offset is how a port that
 // stops short of the audio-scene branch proves it stopped in the right place.
 int run_scene(const std::vector<uint8_t>& blob, uint32_t offset, uint32_t atBit)
 {
@@ -751,8 +751,8 @@ void print_floats(const float* v, size_t n)
 }
 
 // ------------------------------------------------------------------ win ----
-// Dumps every table the transform path reads, plus the NULL answers, so
-// our copies can be checked word for word and its size gate can be checked
+// Dumps every table the transform path reads, plus the NULL answers, so the
+// port's copies can be checked word for word and its size gate can be checked
 // at all.
 int cmd_win()
 {
@@ -1173,7 +1173,7 @@ int cmd_lpc()
 // The two MultiRadixRealFFT calls are dumped separately from the LPMDCTFilter
 // ones on purpose: they are Apple's vDSP real-FFT packing (DC in realp[0],
 // Nyquist in imagp[0], and a factor of two the wrapper divides back out), and
-// a decoder has to reproduce that convention before anything above it can agree.
+// a port has to reproduce that convention before anything above it can agree.
 
 typedef float   (*fn_lpm_init_t)(void*, uint16_t, uint16_t);
 typedef void    (*fn_dft_ctor_t)(void*);

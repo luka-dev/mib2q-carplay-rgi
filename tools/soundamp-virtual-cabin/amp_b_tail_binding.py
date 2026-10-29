@@ -20,7 +20,7 @@ from amp_b_output import BSixChannelTailReference, BFourChannelTailReference, BO
 from amp_b_pipeline import BMode5FixedReference, BSpectralFrameReference
 
 ROOT = Path(__file__).resolve().parents[2]
-LOADER = ROOT/'assets/soundamp/J525_8W0035465_SW0420_SHARC_SPI_bitrev.ldr.bin'
+LOADER = ROOT/'output/r2/soundamp/J525_8W0035465_SW0420_SHARC_SPI_bitrev.ldr.bin'
 PROOFS = [
     (0x12A7F9, 0x12AB01, 'fed3b6b0fa812567c8a37a622266c9c620e22f60341b2e3ae90a13e94505dc8a'),
     (0x12EDE6, 0x12EF05, '8537512b7c5577031fbde6886acf6c3e65c1fb239ffb740f3f5fea311693472d'),

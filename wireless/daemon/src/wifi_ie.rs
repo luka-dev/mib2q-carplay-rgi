@@ -4,6 +4,61 @@
 pub const IE_MASK_REQUIRED_FRAMES: u16 = 0x12a;
 
 #[cfg(any(test, target_os = "nto"))]
+const CONTROL_STOPPED: &str = "wifi control stopped:";
+
+// A marker is acquired before spawning, and removed only after the child
+// completes. A timeout, parent crash or failed cleanup keeps subsequent
+// daemon generations from issuing another ioctl into an uncertain driver.
+#[cfg(any(test, target_os = "nto"))]
+struct ControlLease(std::path::PathBuf);
+
+#[cfg(any(test, target_os = "nto"))]
+impl ControlLease {
+    fn begin(path: &std::path::Path) -> Result<Self, String> {
+        use std::io::Write;
+        #[cfg(unix)]
+        use std::os::unix::fs::OpenOptionsExt;
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        options.mode(0o600);
+        let mut marker = options.open(path).map_err(|error| {
+            format!("{CONTROL_STOPPED} cannot acquire {}: {error}; verify HU recovery before removing a pending marker", path.display())
+        })?;
+        writeln!(
+            marker,
+            "uaputl pending, daemon pid={}; recover HU before clearing",
+            std::process::id()
+        )
+        .map_err(|error| format!("{CONTROL_STOPPED} cannot write pending marker: {error}"))?;
+        Ok(Self(path.to_owned()))
+    }
+
+    fn complete(self) -> Result<(), String> {
+        std::fs::remove_file(&self.0)
+            .map_err(|error| format!("{CONTROL_STOPPED} cannot release pending marker: {error}"))
+    }
+    // Deliberately no Drop cleanup: unwinding is not proof of ioctl completion.
+}
+
+pub fn parse_monitor_seconds(value: &str) -> Result<u64, String> {
+    let seconds = value
+        .parse::<u64>()
+        .map_err(|_| "invalid IE monitor interval")?;
+    if seconds != 0 && !(5..=3600).contains(&seconds) {
+        return Err("IE monitor interval must be 0 (disabled) or 5..3600 seconds".into());
+    }
+    Ok(seconds)
+}
+
+#[cfg(target_os = "nto")]
+pub fn monitor_seconds_from_env() -> Result<u64, String> {
+    parse_monitor_seconds(
+        &std::env::var("MHI2Q_CP_IE_MONITOR_SECONDS").unwrap_or_else(|_| "5".into()),
+    )
+}
+
+#[cfg(any(test, target_os = "nto"))]
 #[derive(Debug, PartialEq, Eq)]
 struct CustomIeSlot {
     mask: u16,
@@ -138,6 +193,7 @@ pub fn install_on_qnx(bt_mac: [u8; 6], device_id: [u8; 6]) -> Result<(), String>
     for _ in 0..20 {
         match ensure_on_qnx(&binary, index, &ie, &args) {
             Ok(()) => return Ok(()),
+            Err(error) if error.starts_with(CONTROL_STOPPED) => return Err(error),
             Err(error) => last_error = error,
         }
         std::thread::sleep(std::time::Duration::from_millis(500));
@@ -194,6 +250,7 @@ pub fn run_uaputl_command(binary: &str, args: &[&str]) -> Result<String, String>
             argv: *const *mut c_char,
             output: *mut c_char,
             capacity: u32,
+            incomplete: *mut i32,
         ) -> i32;
     }
     let path = CString::new(binary).map_err(|_| "uaputl path contains NUL")?;
@@ -208,6 +265,8 @@ pub fn run_uaputl_command(binary: &str, args: &[&str]) -> Result<String, String>
         .collect::<Vec<_>>();
     argv.push(std::ptr::null_mut());
     let mut output = vec![0u8; 16 * 1024];
+    let lease = ControlLease::begin(std::path::Path::new("/tmp/mhi2q_wifi_control.pending"))?;
+    let mut incomplete = 0;
     // SAFETY: all C strings and argv pointers live through this synchronous
     // call; output is writable for its full reported capacity.
     let length = unsafe {
@@ -216,8 +275,16 @@ pub fn run_uaputl_command(binary: &str, args: &[&str]) -> Result<String, String>
             argv.as_ptr(),
             output.as_mut_ptr().cast(),
             output.len() as u32,
+            &mut incomplete,
         )
     };
+    if incomplete != 0 {
+        return Err(format!(
+            "{CONTROL_STOPPED} command did not complete (errno {}); pending marker retained; HU recovery required",
+            -length
+        ));
+    }
+    lease.complete()?;
     if length < 0 {
         return Err(format!("uaputl spawn/capture failed: errno {}", -length));
     }
@@ -251,6 +318,10 @@ pub fn monitor_on_qnx(
     active: &std::sync::atomic::AtomicBool,
 ) -> Result<(), String> {
     use std::sync::atomic::Ordering;
+    let interval = monitor_seconds_from_env()?;
+    if interval == 0 {
+        return Ok(());
+    }
     let index = std::env::var("MHI2Q_CP_IE_INDEX")
         .map_err(|_| "missing MHI2Q_CP_IE_INDEX")?
         .parse::<u8>()
@@ -261,7 +332,7 @@ pub fn monitor_on_qnx(
         std::env::var("MHI2Q_CP_UAPUTL").unwrap_or_else(|_| "/mnt/app/armle/sbin/uaputl".into());
     let mut last_error = String::new();
     while active.load(Ordering::Acquire) {
-        for _ in 0..10 {
+        for _ in 0..(interval * 2) {
             if !active.load(Ordering::Acquire) {
                 return Ok(());
             }
@@ -272,6 +343,7 @@ pub fn monitor_on_qnx(
         }
         match ensure_on_qnx(&binary, index, &ie, &args) {
             Ok(()) => last_error.clear(),
+            Err(error) if error.starts_with(CONTROL_STOPPED) => return Err(error),
             Err(error) if error != last_error => {
                 eprintln!("[wifi-ie] {error}");
                 last_error = error;
@@ -285,6 +357,34 @@ pub fn monitor_on_qnx(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn control_lease_survives_abandonment_and_excludes_other_generations() {
+        let root = std::env::temp_dir().join(format!("mhi2q-ie-lease-{}", std::process::id()));
+        std::fs::create_dir(&root).unwrap();
+        let marker = root.join("pending");
+        let lease = ControlLease::begin(&marker).unwrap();
+        assert!(ControlLease::begin(&marker).is_err());
+        lease.complete().unwrap();
+        assert!(!marker.exists());
+        let interrupted = ControlLease::begin(&marker).unwrap();
+        drop(interrupted);
+        assert!(ControlLease::begin(&marker).is_err());
+        std::fs::remove_file(&marker).unwrap();
+        assert!(ControlLease::begin(&root.join("missing-parent/pending")).is_err());
+        assert!(!root.join("missing-parent").exists());
+        std::fs::remove_dir(root).unwrap();
+    }
+
+    #[test]
+    fn first_test_can_disable_periodic_radio_queries() {
+        assert_eq!(parse_monitor_seconds("0").unwrap(), 0);
+        assert_eq!(parse_monitor_seconds("5").unwrap(), 5);
+        assert_eq!(parse_monitor_seconds("3600").unwrap(), 3600);
+        for invalid in ["", "-1", "1", "4", "3601", "no"] {
+            assert!(parse_monitor_seconds(invalid).is_err());
+        }
+    }
 
     #[test]
     fn carplay_ie_and_marvell_frame_mask() {

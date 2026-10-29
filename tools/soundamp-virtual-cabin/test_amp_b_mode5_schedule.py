@@ -14,7 +14,7 @@ from test_amp_b_bound_scenario import decoded_filter_smoothing_addresses
 class Mode5ScheduleTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        d=ROOT/'assets/soundamp/remaining-blocks-20260920-v3'
+        d=ROOT/'output/r2/soundamp/remaining-blocks-20260920-v3'
         cls.report=json.loads((d/'b_config_control.json').read_text())
         cls.maps=json.loads((d/'b_mode_control.json').read_text())['pointer_maps']
 

@@ -34,6 +34,7 @@ public class RouteGuidance implements CarplayBus.Listener {
      * lives in the hook (rgd_hook.c, RGD_STATE_REROUTING), not here. */
 
     /* State */
+    private static volatile RouteGuidance activeInstance;
     private BAPBridge bap;
     private volatile boolean running;
     private boolean rgActive = false;
@@ -313,6 +314,7 @@ public class RouteGuidance implements CarplayBus.Listener {
      */
     public void start() {
         if (running) return;
+        activeInstance = this;
         synchronized (this) {
             running = true;
             rgActive = false;
@@ -364,6 +366,7 @@ public class RouteGuidance implements CarplayBus.Listener {
      */
     public void stop() {
         if (!running) return;
+        if (activeInstance == this) activeInstance = null;
         CarplayBus.getInstance().off(CarplayBus.EVT_RGD_UPDATE);
         Thread worker;
         synchronized (presentationLock) {
@@ -503,7 +506,10 @@ public class RouteGuidance implements CarplayBus.Listener {
              * clears it before bap teardown. */
             if (!running) { state.clearDirty(); return; }
 
-            if (wantActive && !rgActive) {
+            boolean effectiveWant = wantActive
+                && com.luka.carplay.connectivity.CarPlaySettingsUi.isRgiEnabled();
+
+            if (effectiveWant && !rgActive) {
                 Log.i(TAG, "RG activate: route_state=" + state.routeState
                     + " maneuver_count=" + state.maneuverCount
                     + " visible_in_app=" + state.visibleInApp
@@ -525,7 +531,7 @@ public class RouteGuidance implements CarplayBus.Listener {
                 } else {
                     bapStartPendingLogged = false;
                 }
-            } else if (!wantActive && rgActive) {
+            } else if (!effectiveWant && rgActive) {
                 Log.i(TAG, "RG deactivate: route_state=" + state.routeState
                     + " maneuver_count=" + state.maneuverCount
                     + " visible_in_app=" + state.visibleInApp
@@ -568,6 +574,13 @@ public class RouteGuidance implements CarplayBus.Listener {
             if (updatePublished) state.clearDirty();
             if (bap.takePositionScrollChange() || !confirmed) wakePositionScroll();
             if (!confirmed || !updatePublished) requestPresentationCheck("presentation-update-pending");
+        }
+    }
+
+    public static void onRgiSettingsChanged() {
+        RouteGuidance rg = activeInstance;
+        if (rg != null) {
+            rg.requestPresentationCheck("rgi-settings-change");
         }
     }
 
@@ -758,7 +771,17 @@ public class RouteGuidance implements CarplayBus.Listener {
 
     /** Serialized with onFrame/stop so cached State and BAP are never mutated concurrently. */
     private synchronized boolean driveCachedPresentation() {
-        if (!running || bap == null || !routeWantsActive) return false;
+        if (!running || bap == null) return false;
+        if (!routeWantsActive || !com.luka.carplay.connectivity.CarPlaySettingsUi.isRgiEnabled()) {
+            if (rgActive) {
+                bap.onStop();
+                bap.onRouteEnd();
+                rgActive = false;
+                presentationConfirmed = false;
+                com.luka.carplay.core.AltScreenModule.setNavActive(false);
+            }
+            return false;
+        }
 
         if (!rgActive) {
             rgActive = bap.onStart();

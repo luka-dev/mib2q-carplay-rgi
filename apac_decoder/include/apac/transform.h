@@ -4,7 +4,7 @@
 
 // The APAC inverse transform: DCT_IV, MDCT and the window / modulation tables.
 //
-// Reference functions in libSPF_CP_PlugInWrapper.so (Pioneer SPHERA 1.030010):
+// Originals in libSPF_CP_PlugInWrapper.so (Pioneer SPHERA 1.030010):
 //
 //   0x000b6e80  DCT_IV::PreModulation(const float*, DSPSplitComplex*, float) const
 //   0x000b70b0  DCT_IV::PostModulationExtend(const DSPSplitComplex*, float*, float*) const
@@ -27,7 +27,7 @@
 // itself is *not* in the library: `MultiRadixFFT::CplxOutOfPlaceTransform` is a
 // three-line wrapper around `vDSP_DFT_Execute`, i.e. Apple's Accelerate
 // framework, which is closed and is not shipped on the head unit.  So the FFT
-// here is a fresh radix-2 implementation and the agreement with the library is
+// here is a fresh radix-2 implementation and the agreement with the original is
 // float-noise, not bit-exact.  tests/test_mdct.cpp measures it.
 //
 // Only n == 128 and n == 1024 exist: GetSineWindowCoefficientPtr and
@@ -55,13 +55,13 @@ const uint32_t kMaxFFT         = kMaxRealFFT / 2;
 // Not every transform length in this decoder is a power of two.  BWELPC (stage
 // e) builds filters of 768 and 96 points, which need complex transforms of 384
 // and 48 - both 3 * 2^k.  vDSP, which the library calls, takes f * 2^k for
-// f in {1, 3, 5, 15} and so never noticed; our radix-2 FFT did.
+// f in {1, 3, 5, 15} and so never noticed; the port's radix-2 FFT did.
 // ComplexFFT therefore also accepts m = 3 * p for a power-of-two p up to this
 // bound, which it transforms as three interleaved sub-FFTs of length p and one
 // three-point butterfly.  384 / 3 = 128 is the largest p any of it asks for.
 const uint32_t kMaxFFTRadix3   = 128;
 
-// The library's own return values, spelled as the FourCCs they are.
+// The original's own return values, spelled as the FourCCs they are.
 enum TransformStatus {
     kTransformOk      = 0,
     kTransformBadSize = 1936292453,  // 'size'
@@ -128,7 +128,7 @@ private:
 };
 
 // MDCT is DCT_IV plus a scale factor; the library expresses that as
-// `class MDCT : public DCT_IV`, which our decoder flattens because nothing else
+// `class MDCT : public DCT_IV`, which the port flattens because nothing else
 // derives from either and neither has any virtual worth keeping.
 class MDCT {
 public:
@@ -160,7 +160,7 @@ public:
     //
     // The output is antisymmetric in the first half and symmetric in the
     // second - `buf[j] == -buf[n-1-j]`, `buf2[j] == buf2[n-1-j]` - which is
-    // what "Extend" in the library's name refers to.
+    // what "Extend" in the original's name refers to.
     int32_t InverseInPlaceTransform(float* buf, float* buf2);
 
     uint32_t Size() const { return mN; }

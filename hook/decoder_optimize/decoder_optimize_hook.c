@@ -49,10 +49,9 @@
  *     anchors 0x201e4/0x20b40/0x220d0, both sites match.
  *   K1004 MU1003 CN: different lib - deltas/identity/signatures refuse.
  *
- * The installer patches the unit's own file by signature: production QNX
- * refuses mprotect on its shared text (EACCES). Already-patched images are
- * verified without opening a protection session; runtime patching remains a
- * fallback on systems which allow it. Both queues always target depth 2.
+ * The installer patches the unit's own file by signature because production
+ * QNX refuses writes to shared text. Already-patched queues are verified at
+ * depth 2; runtime patching is a fallback where text protection permits it.
  * scripts/test_decoder_optimize_site.sh re-verifies the signatures against
  * the unpacked firmware trees; tests/decoder_optimize_hook_test.c drives base
  * gating and decoder_optimize_apply on the host, including the partial-patch
@@ -71,8 +70,9 @@
 
 DEFINE_LOG_MODULE(DECODER_OPTIMIZE);
 
-/* libairplay 210.81 (P5087/P5092): three exports of known vaddr. Resolve
- * through its own handle: QNX RTLD_DEFAULT does not expose these exports. */
+/* libairplay 210.81 (P5087/P5092): three exports of known vaddr. The wireless
+ * bridge interposes all three, so resolve from the explicit library handle;
+ * RTLD_DEFAULT and RTLD_NEXT can both select the bridge in a preload chain. */
 #define ANCHOR_DELEGATE_NAME  "AirPlayReceiverServerSetDelegate"
 #define ANCHOR_DELEGATE_OFF   0x201e4u
 #define ANCHOR_CREATE_NAME    "AirPlayReceiverServerCreate"
@@ -155,18 +155,6 @@ DECODER_OPTIMIZE_TESTABLE uintptr_t dec_base_from_anchors(uintptr_t delegate_, u
     base = delegate_ - ANCHOR_DELEGATE_OFF;
     if (!dec_is_elf_image((const void*)base)) return 0;
     return base;
-}
-
-/* Keep the handle for the process lifetime. A global lookup can be empty on
- * QNX, or resolve an interposer instead of the stock image. */
-DECODER_OPTIMIZE_TESTABLE uintptr_t dec_base_from_library(
-        void* library, void* (*lookup)(void*, const char*)) {
-    uintptr_t delegate_, create, control;
-    if (!library || !lookup) return 0;
-    delegate_ = (uintptr_t)lookup(library, ANCHOR_DELEGATE_NAME);
-    create = (uintptr_t)lookup(library, ANCHOR_CREATE_NAME);
-    control = (uintptr_t)lookup(library, ANCHOR_CONTROL_NAME);
-    return dec_base_from_anchors(delegate_, create, control);
 }
 
 DECODER_OPTIMIZE_TESTABLE bool dec_site_matches(const uint8_t* site, const uint8_t sig[12]) {
@@ -273,12 +261,23 @@ DECODER_OPTIMIZE_TESTABLE bool decoder_optimize_apply(uintptr_t base) {
     return true;
 }
 
-static void decoder_optimize_init(void) {
-    static void* library;
-    uintptr_t base;
+DECODER_OPTIMIZE_TESTABLE uintptr_t dec_base_from_library(
+    void *library, void *(*lookup)(void *, const char *)) {
+    uintptr_t delegate_, create, control, base;
+    if (!library || !lookup) return 0;
+    delegate_ = (uintptr_t)lookup(library, ANCHOR_DELEGATE_NAME);
+    create    = (uintptr_t)lookup(library, ANCHOR_CREATE_NAME);
+    control   = (uintptr_t)lookup(library, ANCHOR_CONTROL_NAME);
+    base = dec_base_from_anchors(delegate_, create, control);
+    return base;
+}
 
+static void decoder_optimize_init(void) {
+    /* DIO already needs libairplay. Retain this handle for process lifetime:
+     * the patched code and all three anchors must keep the same owner. */
+    static void *library;
     if (!library) library = dlopen("/mnt/app/eso/lib/libairplay.so", RTLD_NOW | RTLD_LOCAL);
-    base = dec_base_from_library(library, dlsym);
+    uintptr_t base = dec_base_from_library(library, dlsym);
     if (!base) {
         LOG_WARN(LOG_MODULE, "anchors %s/%s/%s do not resolve to a stock 210.81 libairplay -"
                              " unsupported build, staying stock",

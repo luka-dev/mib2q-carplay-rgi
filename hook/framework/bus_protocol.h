@@ -106,12 +106,7 @@
                                         /* binary [u8 mode][i32 LE status]     */
                                         /* status 0 = phone applied it, else   */
                                         /* OSStatus/send error                 */
-/* More MHI3-ported session commands (Java→hook), all via AirPlayReceiverSessionSendCommand. */
-/* 0x0113 remains reserved (zoom uses the deployed 0x0110 ABI). */
-#define CMD_ALT_APPEARANCE      0x0114  /* binary [u8 target][u8 mode][u8 set] */
-                                        /* target 0=ui 1=map; day/night sync   */
-#define CMD_ALT_UICTX           0x0115  /* payload = UTF-8 url string — deep-  */
-                                        /* link cluster UI context             */
+/* 0x0113..0x0115 remain reserved (zoom uses the deployed 0x0110 ABI). */
 #define CMD_ALT_RGI             0x0116  /* binary [u8 0=off 1=on] — Java's     */
                                         /* confirmed RGI presentation; hook    */
                                         /* picks the Maps cluster URL (showUI) */
@@ -128,10 +123,14 @@
                                         /* Speed at most 10 Hz, slow fields on */
                                         /* change. Hook: $PASCD (0xFFFB) and   */
                                         /* VehicleStatusUpdate (0xA101).       */
-#define CMD_UPMIX               0x0119  /* binary [u8 level 0 off 1 moderate 2  */
-                                        /* normal 3 full 4 aggressive], the    */
-                                        /* MMI "CarPlay UpMix" row (Java keeps */
-                                        /* it; boot value via /tmp file)       */
+#define CMD_UPMIX               0x0119  /* binary [u8 level 0 off 1 normal     */
+                                        /* 2 intense], the MMI "UpMix" row     */
+                                        /* (boot value via /tmp/carplay_settings) */
+#define CMD_SPATIAL             0x011A  /* binary [u8 enable 0=off 1=on], the  */
+                                        /* MMI "Spatial Audio" checkbox (boot  */
+                                        /* value via /tmp/carplay_settings)    */
+#define CMD_ALT_CFG             0x011B  /* binary [u8 altscreen 0/1][u8 url_mode 0/1] */
+                                        /* [u8 layout 0=left 1=center 2=right] */
 /* NOTE: dispatchable inbound types must be < MAX_TYPES in bus.c (grown to      */
 /* cover this 0x11x block).                                                     */
 

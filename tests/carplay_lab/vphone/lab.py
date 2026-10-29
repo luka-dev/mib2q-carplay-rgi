@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import json
 from pathlib import Path
 import plistlib
@@ -11,6 +12,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from urllib.parse import urlparse
 
@@ -19,6 +21,7 @@ OUT = ROOT / "build/vphone-lab"
 CLI = Path("/Applications/vphone-launchpad.app/Contents/MacOS/vphone-launchpad-cli")
 PROFILE_PATH = Path(__file__).with_name("profile.json")
 LIBRARY = Path.home() / ".vphone/machines"
+_rpc_batch = threading.local()
 
 
 def profile() -> dict:
@@ -46,6 +49,10 @@ def client(*arguments: str, timeout: int | None = 30):
         raise RuntimeError("Launchpad CLI missing; run tests/carplay_lab/vphone/bootstrap.py")
     # The app streams progress and owns long creation operations. Never kill a
     # creation because a client-side deadline or cancelled waiter expired.
+    # Inventory scans can exceed 30 s after a long-lived VM has accumulated
+    # diagnostics. This read-only call gets a larger, still bounded deadline;
+    # mutation timeouts are unchanged and are never retried automatically.
+    if arguments == ('vm','list') and timeout == 30:timeout=90
     result = subprocess.run([str(CLI), *arguments], stdout=subprocess.PIPE,
                             text=True, timeout=timeout, check=False)
     if result.returncode:
@@ -171,6 +178,12 @@ def finish_creation(settings: dict, result: dict):
 
 
 def require_machine(settings: dict, state: str | None = None) -> dict:
+    batch=getattr(_rpc_batch,'value',None)
+    if batch is not None:
+        if settings!=batch['settings']:raise RuntimeError('guest RPC batch belongs to a different profile')
+        if time.monotonic()>batch['deadline']:raise TimeoutError('bounded guest RPC batch expired')
+        if state and state!=batch['machine']['state']:raise RuntimeError('guest RPC batch state mismatch')
+        return dict(batch['machine'])
     machine = owned_machine(settings, client("vm", "list"))
     if machine is None:
         raise RuntimeError("dedicated vphone guest does not exist")
@@ -188,6 +201,23 @@ def require_machine(settings: dict, state: str | None = None) -> dict:
     if recorded.get("udid") and recorded["udid"] != machine.get("udid"):
         raise RuntimeError("guest identity changed; inspect before operating it")
     return machine
+
+
+@contextmanager
+def rpc_batch(settings: dict, seconds: int = 600):
+    """Pin one verified running guest for a bounded, single-thread RPC job.
+
+    Each RPC still targets the exact machine/library through Launchpad. Avoid
+    repeated UI vm-list requests during media: a slow inventory request must
+    not interrupt an otherwise healthy native stream. No lifecycle operations
+    belong inside this scope; unrelated threads do their own verification.
+    """
+    if type(seconds) is not int or not 1<=seconds<=600:raise ValueError('RPC batch must be bounded to 1..600 seconds')
+    if getattr(_rpc_batch,'value',None) is not None:raise RuntimeError('nested guest RPC batches are unsupported')
+    machine=require_machine(settings,'running')
+    _rpc_batch.value={'settings':dict(settings),'machine':machine,'deadline':time.monotonic()+seconds}
+    try:yield dict(machine)
+    finally:del _rpc_batch.value
 
 
 def rpc(settings: dict, method: str, parameters: dict | None = None):

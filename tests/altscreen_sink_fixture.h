@@ -454,3 +454,55 @@ static void presentation_faults(void) {
     g_ss.callbacksClosing = 0;
     g_ss.running = 1;
 }
+
+static void presentation_corrupt_output(void) {
+    OMX_BUFFERHEADERTYPE b = {0};
+    OMX_BUFFERHEADERTYPE *out[] = {&b};
+    unsigned drawn = presents, returned = recycled;
+    g_ss.outBufs = out;
+    g_ss.nOutBufs = 1;
+    g_ss.winReady = g_ss.running = g_ss.started = 1;
+    g_ss.callbacksClosing = g_ss.omxError = 0;
+    g_ss.presentationHealthy = 1;
+    gpu_block = 0;
+    b.nFilledLen = 1024;
+    b.nFlags = OMX_BUFFERFLAG_DATACORRUPT;
+    assert(_StartPresentThread(&g_ss) == 0);
+    _OnFillDone(&component, &g_ss, &b);
+    assert(g_ss.omxError && g_ss.presentStop && !av_sink_video_ready());
+    assert(!g_ss.presentOwned[0] && !g_ss.presentCount);
+    _DrainCallbacksAndPresenter(&g_ss);
+    assert(presents == drawn && recycled == returned);
+    assert(!g_ss.callbacksActive && !g_ss.presentThreadStarted);
+
+    /* Bitstream errors while running are concealed: report unhealthy (STATUS 0)
+     * without latching omxError, clear the stall watch once a post-error input
+     * produces output, and latch omxError only if fed pictures stall >2000 ms. */
+    g_ss.callbacksClosing = g_ss.omxError = g_ss.presentStop = 0;
+    g_ss.winReady = g_ss.running = g_ss.started = 1;
+    g_ss.presentationHealthy = 1;
+    g_ss.inputSubmitted = g_ss.inputReturned = 10;
+    b.nFlags = 0;
+    b.nFilledLen = 1024;
+    assert(_StartPresentThread(&g_ss) == 0);
+    _OnEvent(&component, &g_ss, OMX_EventError, (OMX_U32)OMX_ErrorStreamCorrupt, 0, NULL);
+    assert(!g_ss.omxError && g_ss.bitstreamStallArmed && !av_sink_video_ready());
+    g_ss.inputSubmitted = 11;
+    present_and_wait(&b);
+    assert(!g_ss.bitstreamStallArmed && av_sink_video_ready());
+    _OnEvent(&component, &g_ss, OMX_EventError, (OMX_U32)OMX_ErrorMbErrorsInFrame, 0, NULL);
+    assert(!g_ss.omxError && g_ss.bitstreamStallArmed);
+    g_ss.bitstreamStallSinceMs = _NowMs() - 2001ULL;
+    {
+        const uint8_t pframe[] = {0, 0, 0, 1, 0x41, 0x66};
+        assert(_FeedInput(&g_ss, pframe, sizeof(pframe), OMX_BUFFERFLAG_ENDOFFRAME, 1400) == 0);
+    }
+    assert(g_ss.omxError);
+    _DrainCallbacksAndPresenter(&g_ss);
+    g_ss.outBufs = NULL;
+    g_ss.nOutBufs = 0;
+    g_ss.callbacksClosing = g_ss.omxError = g_ss.presentStop = 0;
+    g_ss.bitstreamStallArmed = 0;
+    g_ss.bitstreamStallSinceMs = 0;
+    g_ss.running = 1;
+}

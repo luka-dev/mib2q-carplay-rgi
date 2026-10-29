@@ -112,6 +112,8 @@ setup/teardown races. Commands: `scripts/test_supervisor_lifecycle.sh`,
 
 ### Remaining work / optional extensions
 
+- **Apple `duckAudio` / `unduckAudio` software volume ramp (`AudioStreamRampVolume`) on `mpl5_dio_ent` (type 103 & type 100):**
+  When a navigation prompt plays on `AltAudio` (101), iOS sends RTSP `POST /command` `type="duckAudio"` with `durationMs = 500` and `volume = -20.0 dB` (`0.100000` linear gain), followed by `type="unduckAudio"` (`1.000000` linear gain over `500 ms`). In Apple's reference CarPlay Receiver SDK (`AirPlayReceiverPOSIX.c:541-608`, `AirPlayReceiverSessionPlatformControl`, `libairplay.so @ 0x1f190`), `duckAudio` calls both `AudioStreamRampVolume(mainAudioCtx.stream, 0.1, 0.5, ...)` and `delegate.duckAudio_f(session, 0.5, 0.1)`. On MHI2Q (`libairplay.so` 210.81), Harman stubbed `AudioStreamRampVolume @ 0x49408` (`mov r0, #0; bx lr`) and `CDSICarplayImpl::onDuckAudio` discards the `0.1` target volume parameter (passing only `updateDuckAudio(durationMs)` to MMI). Meanwhile `AUDIO_VOICE_GAIN_DB=5.0` boosts `ann3_dio_ann` / `ann4_dio_voice` by `+5.0 dB` with a $C^1$ soft-knee limiter. If stronger media ducking during navigation prompts is desired, hook `CDIOManager::s_duckAudioCallback` / `s_unduckAudioCallback` (or `AirPlayReceiverSessionPlatformControl`) in `hook/audio/audio_hook.c` to apply a smooth software volume ramp (`1.0 -> volumeLinear -> 1.0` over `durationSecs`) to `mpl5_dio_ent` media frames.
 - OPS lower strip: **closed 2026-10-10** (owner: OPS beside CarPlay works great). On HU, APS masking
   (model 538) removed the warning and r3 removed status line 62; the remaining
   black block is the entertainment drawer, which stock toggles together with 62

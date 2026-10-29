@@ -100,4 +100,4 @@ Merged originals were removed from the tree after this note absorbed them; they 
 
 Related: [CarPlay Video Playback](CARPLAY_VIDEO_PLAYBACK.md), [AltScreen Cluster Video](ALTSCREEN_CLUSTER_VIDEO.md), [AltScreen and Video overview](README.md).
 
-[^input]: [Command policy](../../hook/altscreen/command_policy.h), [command worker](../../hook/altscreen/command_worker.h), [input/CF integration](../../hook/altscreen/altscreen_hook.c), [latest runner evidence](../../build/altscreen-input-refresh-final/summary.json).
+[^input]: [Command policy](../../hook/altscreen/command_policy.h), [command worker](../../hook/altscreen/command_worker.h), [input/CF integration](../../hook/altscreen/altscreen_hook.c), latest runner evidence (`build/altscreen-input-refresh-final/summary.json`; local generated artifact).

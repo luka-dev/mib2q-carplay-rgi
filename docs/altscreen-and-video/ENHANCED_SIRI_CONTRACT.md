@@ -129,7 +129,7 @@ No certificate-serial deny list sits on this path in AirPlaySender. The MFi/vehi
 
 **Minimal plan, button ZLL only:** (1) advertise `enhancedSiriInfo {enhancedSiriVoice: false, enhancedSiriNotMixable: false, voiceModelSupportedLanguages: []}`; (2) negotiate `enhancedSiri` only when it was proposed; (3) accept and log `'zll '`, keep `bufferSizeMs`/`bufferAudioFormat`; (4) on the Siri button, start the hook's own 16 kHz mono ring and send `requestSiri {2, siriTriggerTimestamp}`; (5) when stock opens the speech input, prepend the ring. With voice false the mode should resolve to `-1`, so the phone never expects action 4.
 
-**Risks:** the phone may never propose `enhancedSiri` for this vehicle, which is a hard stop that the HU cannot fix. An unanswered or 404'd `'zll '` might tear the session down, the same class as the `-6740` advertised-but-unhandled trap ([Landmines](../LANDMINES.md), [AltScreen RE History](ALTSCREEN_RE_HISTORY.md)). Microphone double-open can break calls. RTP/NTP misalignment would cut the first word. The gain is only a few hundred ms of Siri start-up.
+**Risks:** the phone may never propose `enhancedSiri` for this vehicle, which is a hard stop that the HU cannot fix. An unanswered or 404'd `'zll '` might tear the session down, the same class as the `-6740` advertised-but-unhandled trap ([Landmines](../LANDMINES.md), [AltScreen RE History](archive/ALTSCREEN_RE_HISTORY.md)). Microphone double-open can break calls. RTP/NTP misalignment would cut the first word. The gain is only a few hundred ms of Siri start-up.
 
 ## 🔬 Smallest safe probe
 

@@ -3,18 +3,18 @@
  */
 
 // Whole-frame differential test for stages f and g: six real packets out of the
-// live CarPlay 5.1 capture, decoded by our decoder and compared against the float32
-// PCM the reference library produced for exactly the same six.
+// live CarPlay 5.1 capture, decoded by the port and compared against the float32
+// PCM the ORIGINAL library produced for exactly the same six.
 //
 // FIXTURE: tests/fixtures/frames.bin, produced by
 //
 //   apac_decoder/tools/gen_frame_fixture.sh      (needs Docker)
 //
-// which runs Pioneer's decoder natively in a linux/arm64
+// which runs Pioneer's copy of Apple's decoder natively in a linux/arm64
 // container.  Every expectation in it is a value the library actually produced.
 //
 // WHICH SIX PACKETS, AND WHY.  429..434, contiguous, decoded from a fresh
-// decoder.  Instrumenting our decoder and replaying all 3977 packets of the
+// decoder.  Instrumenting the port and replaying all 3977 packets of the
 // capture shows what each one exercises; that window is the shortest run that
 // reaches every feature this content ever uses but one:
 //
@@ -29,15 +29,15 @@
 // are joint), an LRVQ frame, and an active bandwidth-extension channel.
 //
 // WHY THE TOLERANCE IS NOT ZERO.  The library's FFT is a wrapper around Apple's
-// vDSP_DFT_Execute, which is closed and is not on the head unit, so our decoder has
+// vDSP_DFT_Execute, which is closed and is not on the head unit, so the port has
 // its own and everything downstream of it agrees to float noise rather than bit
 // exactly.  Everything ABOVE the transform is bit exact and is checked that way
-// by `reference/run.sh ours`, which compares the spectra the frame layer hands
+// by `reference/run.sh port`, which compares the spectra the frame layer hands
 // the filter bank - 23 862 of them over the whole capture, byte for byte.
 //
 // The whole-capture run, which is too big to commit:
 //
-//   ./apac_decoder/reference/run.sh ours
+//   ./apac_decoder/reference/run.sh port
 
 #include <assert.h>
 #include <math.h>
@@ -54,7 +54,7 @@
 
 namespace {
 
-// What our decoder is allowed to differ by, as a fraction of the fixture's own
+// What the port is allowed to differ by, as a fraction of the fixture's own
 // peak.  The whole 3977-packet capture comes in at 3.5e-07 of each channel's
 // peak; this leaves an order of magnitude of headroom and would still catch any
 // real decode difference, which is never subtle.
@@ -247,12 +247,12 @@ void CheckLrvqSeam()
     }
 
     // And with no decoder supplied the same frame must be refused, not
-    // mis-parsed: that is the build this decoder shipped before stage h1 landed.
+    // mis-parsed: that is the build this port shipped before stage h1 landed.
     {
         PrependOneBit(cases[0].bits, cases[0].nbytes, shifted);
         assert(element.Configure(apac::kElementCPE, tab, 48000) == apac::kOk);
         apac::BitstreamReader bs(shifted, cases[0].nbytes + 1);
-        assert(element.Deserialize(bs, 0) == apac::kLimitNeedsLRVQ);
+        assert(element.Deserialize(bs, 0) == apac::kPortNeedsLRVQ);
     }
 }
 
@@ -380,18 +380,18 @@ void CheckLrvqSceLfeSeam()
 
 // Is ONE shared LRVQDecoder the same as one per element?
 //
-// Our decoder shares a single instance across the whole decoder because the
-// library has no decoder object at all - APACLRVQDecoder's members are static,
+// The port shares a single instance across the whole decoder because the
+// original has no decoder object at all - APACLRVQDecoder's members are static,
 // and env/env2/work/qidx/prevMode are stack locals of the wrapper (0x9bdc0 and
 // 0x9bf60 both open with `sub sp, sp, #0x2500`, 9472 bytes).  Sharing hoists
 // those off the stack, which is the one thing that could carry state between
-// elements where the library could not.
+// elements where the original could not.
 //
 // So drive every case twice - once with an instance reused across all of them,
 // once with a fresh one per case - and require identical output.  Including a
 // CPE whose FIRST channel is skipped, which NO generated case covers (they all
-// set skip0 = 0) and which is precisely where the library reads uninitialised
-// stack: if our carried-over envelope were ever observable, it would be
+// set skip0 = 0) and which is precisely where the original reads uninitialised
+// stack: if the port's carried-over envelope were ever observable, it would be
 // there.
 int g_shareChecked;
 
@@ -450,8 +450,8 @@ void CheckLrvqSharing()
                     if (memcmp(keep0[i], element.ChannelData(true), sizeof keep0[i]) != 0 ||
                         memcmp(keep1[i], element.ChannelData(false), sizeof keep1[i]) != 0) {
                         printf("FAIL lrvq sharing: %scase %d differs between a "
-                               "shared decoder and a fresh one - our "
-                               "hoisted envelope is carrying state the library "
+                               "shared decoder and a fresh one - the port's "
+                               "hoisted envelope is carrying state the original "
                                "could not\n", forced ? "forced-skip0 " : "", i);
                         exit(1);
                     }

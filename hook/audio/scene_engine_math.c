@@ -61,7 +61,7 @@ void scene_config_defaults(struct scene_config *cfg)
     cfg->same_sign_below_hz     = 550.0f;
     cfg->side_lp_hz             = 7000.0f;
     cfg->decorrelate_ambient    = 1;
-    cfg->rear_delay_ms          = 0.0f;      /* variant J: the J525 rear doors trail the front ~5.2 ms by themselves */
+    cfg->rear_delay_ms          = 0.0f;      /* variant J: the J525 rear bus is ~11.8 ms late by itself */
     cfg->bleed_cancel           = 0.0f;
     cfg->bleed_cancel_offset_ms = 0.0f;
     cfg->front_keep_db          = 0.0f;      /* front anchor off; > 0 = the most the transfers may take from the front, dB */

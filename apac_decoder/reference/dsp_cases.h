@@ -8,7 +8,7 @@
 //
 //   * reference/apac_fn_ref.cpp, which runs inside the arm64 container and
 //     calls the real library;
-//   * apac_decoder/tests/test_*.cpp, which run on the host against our decoder.
+//   * apac_decoder/tests/test_*.cpp, which run on the host against the port.
 //
 // It exists so the fixtures under tests/fixtures/ only have to carry the
 // EXPECTED OUTPUT.  Carrying the inputs too would be a megabyte of hex for the
@@ -279,7 +279,7 @@ inline void lpc_fill_autocorr(unsigned c, float* r, uint32_t order)
         for (i = 0; i < kLPCSignal; ++i) acc += x[i] * x[i + k];
         r[k] = acc;
     }
-    r[0] *= 1.0001f;                 // the ridge the library applies anyway
+    r[0] *= 1.0001f;                 // the ridge the original applies anyway
 }
 
 // Ascending LSFs in (0, fs/2).  `tight` bunches them so Condition_LSFs has
@@ -317,7 +317,7 @@ inline void lpc_fill_lsp(unsigned c, float* lsp, uint32_t order)
 //
 // `fftSize` is the transform length the filter is initialised with and `order`
 // its LPC order.  `divisor` is fftSize / n, the third argument every
-// LPMDCTFilter entry point takes: the library only ever compares it against 4,
+// LPMDCTFilter entry point takes: the original only ever compares it against 4,
 // and that comparison is what switches the output between stride 1 and stride
 // 2, so both values have to be exercised.
 struct LPMDCTCase {

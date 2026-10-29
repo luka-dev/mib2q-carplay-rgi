@@ -8,7 +8,7 @@ import struct
 import unittest
 from amp_b_control import curve_contribution, update_parameter_slot, branch_gain_targets
 
-OUT=Path(__file__).resolve().parents[2]/'assets/soundamp/remaining-blocks-20260919'
+OUT=Path(__file__).resolve().parents[2]/'output/r2/soundamp/remaining-blocks-20260919'
 
 
 def decoded_curve(x,records,base,slots):

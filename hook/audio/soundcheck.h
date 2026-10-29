@@ -91,16 +91,6 @@ void spa_soundcheck_apply_s16(spa_soundcheck_state_t *state,
                               int16_t *samples, size_t frames,
                               unsigned channels);
 
-/* The per-frame gains apply_s16 would use, advancing the same ramp, for a
- * stage that applies them itself (the upmix, ahead of its cabin guard).
- * Returns gains, or NULL when every frame is unity (nothing to apply). */
-const float *spa_soundcheck_take_gains(spa_soundcheck_state_t *state,
-                                       float *gains, size_t frames);
-
-/* Scale interleaved S16 by taken per-frame gains, rounded like apply_s16. */
-void spa_soundcheck_scale_s16(int16_t *samples, size_t frames,
-                              unsigned channels, const float *gains);
-
 /* Compatibility helper: observe, then apply to the same PCM. */
 void spa_soundcheck_process_s16(spa_soundcheck_state_t *state,
                                 int16_t *samples, size_t frames,

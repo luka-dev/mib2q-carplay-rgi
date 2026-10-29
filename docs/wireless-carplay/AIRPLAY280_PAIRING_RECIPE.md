@@ -68,7 +68,7 @@ in this workspace reports **320.17.1**, so its addresses are not 280 addresses.
 
 The decisive receiver handlers and HTTP completion ordering were also
 decompiled from this exact local 280 build. Excerpts:
-[output/airplay280_pairing](../../wireless/output/airplay280_pairing).
+output/airplay280_pairing (`wireless/output/airplay280_pairing`; local generated artifact).
 For the iOS endpoint requirement, see
 [ios_wireless_session_gates.md](IOS_WIRELESS_SESSION_GATES.md).
 
@@ -135,7 +135,7 @@ configured code is **`3939`**. This is corroborated on the phone side:
 - iOS 27 `_coreUtilsPairing_PerformSetup`, VA `0x25104E40C`, passes the same
   string at `0x25104E4D8` when `requirePIN` is false. CFString
   `0x275B009A0` resolves to `"3939"` at `0x2511BAE5D` in the extracted cache.
-  See [ios27_pair_setup.c](../../wireless/output/airplay280_pairing/ios27_pair_setup.c).
+  See ios27_pair_setup.c (`wireless/output/airplay280_pairing/ios27_pair_setup.c`; local generated artifact).
 
 This identifies the no-PIN protocol mode, not a Bluetooth PIN, a chip secret,
 or evidence that every AirPlay pairing mode uses that code.

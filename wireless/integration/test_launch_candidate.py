@@ -19,6 +19,9 @@ assert candidate.replace(LAUNCH, "") == source
 assert candidate.count(ANCHOR) == 1
 example = (OUT / "wireless_carplay.env.example").read_text()
 assert all(example.count(f"export {name}=''") == 1 for name in REQUIRED)
+assert 'dio_manager.json' in example
+assert all(f'export MHI2Q_CP_{field}=' not in example
+           for field in ('NAME', 'MANUFACTURER', 'FIRMWARE'))
 
 with tempfile.TemporaryDirectory(prefix="mhi2q-launch-") as temp:
     home = Path(temp)

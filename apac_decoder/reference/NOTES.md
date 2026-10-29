@@ -1,6 +1,6 @@
 # Native AArch64 reference harness for Apple's APAC decoder
 
-Status 2026-08-31. **Working end to end.** Pioneer's APAC decoder runs
+Status 2026-08-31. **Working end to end.** Pioneer's copy of Apple's APAC decoder runs
 *natively* on this Apple Silicon Mac in a `linux/arm64` container, decodes the captured
 CarPlay 5.1 stream, and its output matches macOS AudioToolbox to within one 16-bit LSB on
 every one of 24 434 688 samples.
@@ -10,7 +10,7 @@ every one of 24 434 688 samples.
 ./apac_decoder/reference/run.sh --count 64   # first 64 packets only
 ./apac_decoder/reference/run.sh --f32        # float32 out, skips the Apple compare
 ./apac_decoder/reference/run.sh --probe      # just load the library
-./apac_decoder/reference/run.sh ours         # OUR decoder against the library, whole capture
+./apac_decoder/reference/run.sh port         # the PORT against the library, whole capture
 ```
 
 ## Result
@@ -43,9 +43,9 @@ The residual is **purely int16 quantisation, not a decode difference.** Taking P
 
 Apple rounds to nearest and scales by 32768; the library's built-in S16 path truncates
 (`fcvtzs`) and scales positives by 32767. The float paths agree to ~1e-5 full scale.
-**For our decoder, compare in float32, not in S16.**
+**For the port, compare in float32, not in S16.**
 
-Decode speed, for our budget: 84.8 s of 48 kHz 5.1 audio in 0.79 s wall / 0.15 s user
+Decode speed, for the port's budget: 84.8 s of 48 kHz 5.1 audio in 0.79 s wall / 0.15 s user
 on an M-series core.
 
 ## How the library was made to load
@@ -111,9 +111,9 @@ techniques, in increasing order of how much they destroy:
    `APAC_STUB_RET0=1`. Return-1 answers "is this called at all"; return-0 answers "does it read
    bits, or change the output". Both questions are needed — `apac::TrimmingData::Deserialize` is
    called on every frame and cannot change anything, because it is the last thing that reads a bit.
-3. **Patch an entry to a jump into our decoder** — `reference/transform_swap_shim.cpp` and
+3. **Patch an entry to a jump into the port** — `reference/transform_swap_shim.cpp` and
    `reference/spectrum_dump_shim.cpp`. Needed for a function called directly rather than through a
-   vtable; `APACSynthesisFilterBank::FrequencyToTimeInPlace` is the one that matters. The library
+   vtable; `APACSynthesisFilterBank::FrequencyToTimeInPlace` is the one that matters. The original
    is gone, so the shim has to finish the job itself.
 
 Read every mangled name out of the binary with `gobjdump -T`. A hand-built name resolves to nothing
@@ -231,10 +231,10 @@ index 66 is an eight-channel stream and would be decoded at the wrong width.
 The sample-rate table is at `0x3483a8`:
 `96000 88200 64000 48000 44100 32000 24000 22050 16000 12000 11025 8000 7350`.
 
-## What this gives our decoder
+## What this gives the port
 
 `APACDecoder_DecodeFrame` is a whole-frame oracle. For the *per-function* differential testing
-our decoder plan asks for, everything needed is exported as well — in particular the bit reader,
+the port plan asks for, everything needed is exported as well — in particular the bit reader,
 which is what would otherwise have blocked calling any `Deserialize` directly:
 
 ```
@@ -286,7 +286,7 @@ it accepts. On the afconvert-generated cookie exactly one offset in +-4 bits doe
 ## The composition test: `run.sh swap`
 
 The per-function oracle proves each transform member against the library on synthetic vectors.
-`run.sh swap` answers the different question — what our decoder costs **in the finished audio**,
+`run.sh swap` answers the different question — what the port costs **in the finished audio**,
 driven by the coefficients the real stream actually produces.
 
 ```sh
@@ -295,7 +295,7 @@ driven by the coefficients the real stream actually produces.
 
 It decodes the capture twice. The second run preloads `transform_swap_shim.cpp`, which patches
 the entries of `APACSynthesisFilterBank::FrequencyToTimeInPlace` and `::Reset` with a 16-byte
-absolute jump into our filter bank:
+absolute jump into the ported filter bank:
 
 ```
 LDR X16, [PC, #8]   ; 0x58000050
@@ -305,8 +305,8 @@ BR  X16             ; 0xd61f0200
 
 Same technique as `scratch/stub_shim.c`, and for the same reason — the library is `DT_SYMBOLIC`
 so `LD_PRELOAD` cannot interpose its internals. Everything except the transform stage is still
-the library's code, so any difference in the output is our transform and nothing else.
-Our decoder keeps its own overlap state; the library's copy goes stale, which is safe because the
+the library's code, so any difference in the output is the port's transform and nothing else.
+The port keeps its own overlap state; the library's copy goes stale, which is safe because the
 only two functions that read it are the two being replaced.
 
 Result on the full capture — 3977 packets, 4 072 448 frames, 24.4 M samples:

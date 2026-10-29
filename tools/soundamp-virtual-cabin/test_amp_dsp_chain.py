@@ -16,7 +16,7 @@ from amp_complex_path import ComplexFullModeReference
 
 class AmpChainTests(unittest.TestCase):
     def complex_scenario(self, sideband=0):
-        path=Path(__file__).resolve().parents[2]/'assets/soundamp/remaining-blocks-20260919/audit.json'
+        path=Path(__file__).resolve().parents[2]/'output/r2/soundamp/remaining-blocks-20260919/audit.json'
         return dict(profile=json.loads(path.read_text())['complex_control_profiles'][0],
             fir_coefficients=np.zeros((10,512)),adaptive_enable=0,sideband=sideband,
             power_x_db=[0]*5,power_y_db=[0]*5,power_floor_db=[-200]*5,rounding='nearest')

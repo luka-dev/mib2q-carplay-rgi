@@ -8,6 +8,7 @@ force-spawn preloads. No head-unit connection or firmware file is modified.
 from __future__ import annotations
 
 import argparse
+import os
 from hashlib import sha256
 from pathlib import Path
 import plistlib
@@ -30,6 +31,7 @@ SDP = TOOLS / "qnx-65-sdp-docker"
 QEMU = TOOLS / "qemu-src/build/qemu-system-arm"
 OUT = REPO / "wireless/receiver_bridge/out"
 IMAGE = "qnx65-armv7-toolchain:latest"
+RUST_IMAGE = os.environ.get("QNX_RUST_IMAGE", "qnx65-armv7-toolchain:8.5-rust")
 
 
 def run(*args: str, **kwargs: object) -> subprocess.CompletedProcess[str]:
@@ -207,11 +209,8 @@ def make_manifest(work: Path, base_build: Path, start_experiment: bool,
     MHI2Q_CP_UAPUTL=/dev/shmem/fake_uaputl
     MHI2Q_CP_MFI_PATH=/dev/shmem/qemu_mfi
     MHI2Q_CP_BT_MAC=00:01:02:03:04:05
-    MHI2Q_CP_NAME=Audi
-    MHI2Q_CP_MANUFACTURER=Audi
     MHI2Q_CP_MODEL=MHI2Q
     MHI2Q_CP_SERIAL=QEMU
-    MHI2Q_CP_FIRMWARE=MU1316
     MHI2Q_CP_HARDWARE=MHI2Q
     MHI2Q_CP_SSID=QemuCarPlay
     MHI2Q_CP_PASSPHRASE=testpassword
@@ -414,6 +413,8 @@ def main() -> None:
                         help="QEMU: native supervisor restarts wireless after active-media USB release")
     parser.add_argument("--wireless-lifecycle-qemu", action="store_true",
                         help="stock210 hook + native supervisor + iAP2 + two media generations + USB handoff")
+    parser.add_argument("--wireless-active-stop-qemu", action="store_true",
+                        help="real stock210 active media: TERM/QUIESCE refusal and explicit recovery")
     parser.add_argument("--repeat-media-qemu", action="store_true",
                         help="QEMU only: two encrypted screen/PCM sessions on one receiver, then QUIESCE")
     parser.add_argument("--repeat-media-keep-server-qemu", action="store_true",
@@ -662,6 +663,8 @@ def main() -> None:
         parser.error("--existing-hook-qemu requires --bridge-first-start-qemu")
     if options.wireless_lifecycle_qemu and not options.wireless_media_qemu:
         parser.error("--wireless-lifecycle-qemu requires --wireless-media-qemu")
+    if options.wireless_active_stop_qemu and not options.wireless_lifecycle_qemu:
+        parser.error("--wireless-active-stop-qemu requires --wireless-lifecycle-qemu")
     if options.wireless_media_qemu and not options.wireless_hook_qemu:
         parser.error("--wireless-media-qemu requires --wireless-hook-qemu")
     if options.wireless_hook_qemu:
@@ -693,7 +696,7 @@ def main() -> None:
         subprocess.run(
             ["docker", "run", "--rm", "--platform=linux/amd64",
              "-v", f"{AUDI}:/src", "-w", "/src/Patches/mhi2-carplay",
-             IMAGE, "/opt/rust/qnx-cargo", "build", "-q",
+             RUST_IMAGE, "/opt/rust/qnx-cargo", "build", "-q",
              "--manifest-path",
              "/src/Patches/mhi2-carplay/wireless/daemon/Cargo.toml",
              "--features", "qemu-probe", "--bin", "receiver-control-qemu-probe"],
@@ -703,7 +706,7 @@ def main() -> None:
         subprocess.run(
             ["docker", "run", "--rm", "--platform=linux/amd64",
              "-v", f"{AUDI}:/src", "-w", "/src/Patches/mhi2-carplay",
-             IMAGE, "/opt/rust/qnx-cargo", "build", "-q",
+             RUST_IMAGE, "/opt/rust/qnx-cargo", "build", "-q",
              "--manifest-path",
              "/src/Patches/mhi2-carplay/wireless/daemon/Cargo.toml",
              "--bin", "mhi2q-wireless-daemon", "--bin", "phone-qemu-probe",
@@ -1000,6 +1003,11 @@ def main() -> None:
                 compiler.append("-DMHI2Q_PROPERTY_HANDOFF_FORCE_GUARD_FAIL_QEMU")
         if options.mdnsd:
             compiler.append("/work/mdnsd_blob.S")
+        if options.wireless_lifecycle_qemu:
+            # The real wrapper has two preload entries. Keep capture/bridge
+            # interposers in its second entry, with mesh stubs as dependencies.
+            compiler += ['-Wl,--no-as-needed', '-L/work/extracted/proc/boot',
+                         '-Wl,-rpath,/mnt/pairing/bin', '-l:libdioprobe.so']
         if options.start_experiment:
             compiler.append("-lsocket")
         if options.mdnsd:
@@ -1048,7 +1056,8 @@ def main() -> None:
                       options.screen_data_qemu, options.stock_mfi_probe_qemu)
         if options.wireless_hook_qemu:
             from tests.carplay_lab.qnx.wireless_hook_fixture import prepare
-            prepare(work, media=options.wireless_media_qemu, lifecycle=options.wireless_lifecycle_qemu)
+            prepare(work, media=options.wireless_media_qemu, lifecycle=options.wireless_lifecycle_qemu,
+                    active_stop=options.wireless_active_stop_qemu)
         software_fixture = None
         if options.software_mfi_qemu:
             import sys
@@ -1117,6 +1126,8 @@ def main() -> None:
             log_name = "qemu_stock210_hook_media.log" if options.wireless_media_qemu else "qemu_stock210_hook_pairing.log"
         if options.wireless_lifecycle_qemu:
             log_name = "qemu_stock210_lifecycle.log"
+        if options.wireless_active_stop_qemu:
+            log_name = "qemu_stock210_active_stop.log"
         if options.software_mfi_qemu:
             log_name = log_name.removesuffix(".log") + "_software_mfi.log"
         log = OUT / log_name
@@ -1144,13 +1155,21 @@ def main() -> None:
                     while process.poll() is None and time.monotonic() < deadline:
                         current = log.read_text(errors="replace")
                         if options.wireless_hook_qemu:
+                            from tests.carplay_lab.qnx.wireless_hook_fixture import unexpected_dio_signal
                             if any(marker in current for marker in (
-                                    "[independent-srp-qemu] pairing failed", "(dio_manager) terminated SIG",
-                                    "ldd:FATAL: Could not preload library /proc/boot/libcarplay_hook.so")):
+                                    "[independent-srp-qemu] pairing failed",
+                                    "ldd:FATAL: Could not preload library /proc/boot/libcarplay_hook.so")) or unexpected_dio_signal(current):
                                 break
                             if options.wireless_lifecycle_qemu:
-                                if "[stock210-lifecycle] two media generations, USB priority, wireless resume passed" in current:
-                                    time.sleep(1)
+                                if options.wireless_active_stop_qemu:
+                                    if '[active-stop-qemu] active media refusal and explicit recovery passed' in current:
+                                        break
+                                    time.sleep(0.2)
+                                    continue
+                                if ("[stock210-lifecycle] two media generations, USB priority, wireless resume passed" in current
+                                        and "[runtime-fault-qemu] all native runtime fault cases passed" in current):
+                                    break
+                                if '[runtime-fault-qemu] FAIL' in current:
                                     break
                                 time.sleep(0.2)
                                 continue
@@ -1261,10 +1280,11 @@ def main() -> None:
         if software_fixture is not None:
             from software_mfi_qemu import validate as validate_software_mfi
             validate_software_mfi(output, log, software_fixture,
-                                  sessions=3 if options.wireless_lifecycle_qemu else 1)
+                                  sessions=3 if options.wireless_lifecycle_qemu and not options.wireless_active_stop_qemu else 1)
         if options.wireless_hook_qemu:
             from tests.carplay_lab.qnx.wireless_hook_fixture import validate
-            validate(output, log, media=options.wireless_media_qemu, lifecycle=options.wireless_lifecycle_qemu)
+            validate(output, log, media=options.wireless_media_qemu, lifecycle=options.wireless_lifecycle_qemu,
+                     active_stop=options.wireless_active_stop_qemu)
             return
         if options.stock_mfi_probe_qemu:
             required = ("[stock-mfi-qemu] I2C mock preloaded",

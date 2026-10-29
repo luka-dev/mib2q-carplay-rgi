@@ -68,7 +68,7 @@ changes are not a measurement of video frame pacing.
 | Hook queue | At most 32 AUs / 8 MiB of buffer capacity; overflow fences the epoch and clears the dependent chain |
 | Renderer queue | At most 1024 items / 24 MiB of buffer capacity; startup retains this budget. A healthy, drained stream uses valid origin age to detect a multi-AU backlog over 1000 ms; that backlog is a latency condition, not a decoder fault: the frame is still queued, the picture stays, the 100 ms control tick reports STATUS 0 so the hook requests an IDR, and the IDR drops every compressed frame queued before it (`altscreen_render/main.c:435-486`, `:556-581`) |
 | Idle observation | Hook worker checks control/EOF every 100 ms while idle using a monotonic condition on QNX/Linux and relative wait on macOS. Wall-clock corrections do not postpone the tick. Frame silence is valid; there is no static-scene receive timeout |
-| Watchdogs | Screen/EGL startup: 15 s → `_exit(92)`; decode-worker exit wait: 1500 ms; OMX input-buffer wait 3000 ms on `CLOCK_MONOTONIC` (`ALT_INPUT_WAIT_MS`, `altscreen_render/pipeline_timing.h:14`, `sink_omx_qnx.c:453-472`); a stuck decoder worker is caught by the 20 s no-progress exit, not by the input wait. The whole OMX teardown (Idle, Loaded, FreeBuffer, FreeHandle, `OMX_Deinit`) runs on a helper thread with a 4 s deadline (`ALT_TEARDOWN_DEADLINE_MS`): on a wedged video core those calls never return |
+| Watchdogs | Screen/EGL startup: 15 s → `_exit(92)`; decode-worker exit wait: 1500 ms; OMX input-buffer wait 3000 ms on `CLOCK_MONOTONIC` (`ALT_INPUT_WAIT_MS`, `altscreen_render/pipeline_timing.h:14`, `sink_omx_qnx.c:453-472`); a stuck decoder worker is caught by the 20 s no-progress exit, not by the input wait |
 | Process priority | `setprio(0, 15)` on QNX (`altscreen_render/main.c:799`), the same value as `maneuver_render`; below the hook's audio receiver at SCHED_RR 18, above the default that let the compositor starve every renderer thread at once |
 
 Source: [hook forwarder](../../hook/altscreen/altscreen_av.c),
@@ -215,7 +215,6 @@ Sources: `MH2P_SCREEN_CRYPTO_320_2026_09_16`, `SHOWCASE_AIRPLAY2_REVIEW`
 | Screen format/usage | `0x1000C` (qcom tiled NV12) and `USAGE = 0x484` exactly (Screen reports `0x487` after adding its own bits). Extra READ/WRITE/GLES bits split the chroma storage and gave a solid-green picture (`screen_egl_present.c:46-51`). |
 | PortSettingsChanged | Ignored for stock-210 parity. Rebuilding live output buffers races `FillDone`/`FreeBuffer` (`sink_omx_qnx.c:141-145`). The early port's full output reconfig was dropped. |
 | Start failures | Capped at 3 consecutive `_StartDecoder` failures, then a 30 s cooldown: each failed `GetHandle` can hold a hardware slot, and starving the pool made dio's own decoder fail (`kBadReferenceErr`) into a CarPlay crash loop. A session that reached Executing refreshes the budget (`sink_omx_qnx.c:948-968`, `:1007-1035`). |
-| Wedged video core | A vendor `OMX_EventError` 0x80001011/0x80001009/0x8000100A while starting or decoding, a start-phase state edge that times out, a missed teardown deadline and the 86/88/90/93 watchdog exits all leave through `av_sink_fatal_exit`: one-shot (a second watchdog cannot count the same death twice), no OMX call on a fatal core, death marker `/tmp/carplay_altscreen_fatal.txt` (`v1 <ms> <deaths> <reason>`), one `sloginfo` snapshot to `/tmp/carplay_altscreen_slog.txt` (256 KB, 3 s, priority 10), then exit. The restarted renderer waits 60 s before the next decoder start and after 2 deaths keeps the stock map until the reboot that clears `/tmp`; frames are swallowed with success so the transport stays up. The first presented frame resets the count. Screen/EGL startup (92) is not counted: it happens before any decoder start. There is no start delay. |
 | IDR gate | A new or rebuilt decoder refuses picture NALs until an IDR (`needsIDR`); SPS/PPS survive a failed start so the next IDR is not mislabeled `CODECCONFIG`; a latched decoder error ends the transport instead of rebuilding on a P-frame (`sink_omx_qnx.c:936-985`). |
 | Reconnect | A normal TCP disconnect tears down OMX only; Screen buffers, pixmap aliases, EGLImages, context and the managed RGBA window persist ("reusing persistent EGL/Screen presenter across reconnect", `sink_omx_qnx.c:397`, `:992-1011`). |
 
@@ -237,39 +236,32 @@ The live `eglsub-screen.so` has an explicit format-`0x1000c` import branch at `0
 
 Sources: `ALTSCREEN_BLACK_DIAGNOSIS`, `IOS26_ALTSCREEN_REWORK_PLAN`
 
-## ✅ Receiver-robustness fixes (2026-09-11/12)
+## Receiver continuity and framing
 
-A review against Showcase (`4dbf3a2a…`, a full iOS CarPlay receiver), `airplay2` (`834c6c2e…`, Swift prototype whose mirroring/audio services only print) and `airplay2-receiver` (`6c343d36…`, Python handler without its `ap2` package) found five P2 continuity bugs, all fixed with host tests: **[code]**
+| Boundary | Current contract |
+| --- | --- |
+| Empty VideoConfig | Keep the current avcC; a zero-length config is valid |
+| Non-empty VideoConfig | Require complete SPS/PPS, including when ClearScreen is set; re-feed changed config to OMX |
+| SPS/PPS and picture in one AU | Scan NAL units separately; do not discard the picture as configuration |
+| Decoder start/restart | Require an IDR before dependent pictures |
+| Input rejection or oversize AU | End continuity and recover through config + IDR; never submit a clipped picture |
+| Worker failure | Shut down only the matching generation; the reader owns socket close |
+| Corrupt decoded output | `OMX_BUFFERFLAG_DATACORRUPT` closes health and stops queued presentation; normal teardown retains buffer ownership |
 
-| Trigger | Bug | Fix |
-|---|---|---|
-| New avcC mid-connection | cache updated but not re-fed to OMX once `fedConfig` was set | re-feed with `CODECCONFIG`; next picture must be IDR (replay: OMX now gets 3 packets, the last a whole 17-byte AU, instead of one 11-byte packet) |
-| SPS/PPS and IDR in one AU | whole AU classified as config and the picture skipped | NAL scan separates parameter sets, pictures and IDR (3- and 4-byte start codes) |
-| OMX rejects input or buffer too small | `_FeedInput` returned `void`; dependent P-frames kept coming | error reaches the decoder worker → queue cleared, socket `shutdown`, reader closes; the hook's config+IDR recovery takes over |
-| Decoder (re)start | a fresh decoder could get config + P-frame without IDR | continuity loss ends the connection; explicit IDR gate; 3-start/30 s cap kept |
-| Hook connect | `av_connect_locked` restored blocking mode, letting one send outlive the deadline | socket stays non-blocking |
+A delayed old-generation error cannot clear a replacement queue. Decoder recovery retains its bounded restart policy. Screen framing and buffered-audio framing are separate contracts; do not reuse a length/header layout merely because another receiver uses it.
 
-A delayed error from an old decoder generation cannot clear the new queue; the worker only `shutdown`s, the reader owns `close` so the fd number is not reused mid-read. Showcase's buffered-audio framing (2-byte length + 12-byte RTP) differs from our captured APAP (BE32 length, 15-byte header, 24-bit sequence) and must not be copied. The Monocypher cross-check (1000 Poly1305, 5000 ChaCha20 incl. 32-bit counter carry, 4000 APAP AEAD with tampered-tag rejection, IETF nonce `[0,0,0,0] + nonce8` equivalence) passed on synthetic data. Reference locations used: Showcase `source/Showcase.m:4222-4258` (new config → new format description + IDR required), `:4339-4360` and `:4407` (dependent-frame chain), `source/carplay_services.m:2804-2833` (new UI connection requests config + IDR), `:3821-3968` (128-byte header, opcode 1 avcC, opcode 0 video), `:4653-4689` (selective and full TEARDOWN); Python `ap2-receiver.py:463/493/765/850` (FLUSHBUFFERED, SETUP, TEARDOWN, FLUSH); Swift `Mirroring.swift:18`. The full host suite passed including the new `altscreen_sink_test` and `altscreen_worker_test` (and the private APAC capture: 3980 authenticated frames, 3977 byte-identical packets, 64 decoded), Clang Static Analyzer was clean, and `LOG=0 bash scripts/build_hook.sh` kept 26 allowed interpose exports; artefact hashes were hook `b7569509…7b27`, APAC `a6a7bc8c…044f`, renderer `a2ce321a…6c9d`. Presentation still ignores sender timestamps (Showcase honours `RespectTimestamps`); that difference is not proven to cause any fault.
+## Local forwarding and pacing
 
-On 2026-09-12, after `a05f774`, a parser hardening in `13801f2` rejected two formats the iPhone really sends. The altScreen one: at stream start the phone sends opcode 1 with **`bodySize 0`** (flags `0x56`); the avcC parser failed and the receiver closed before the first frame. An empty VideoConfig now keeps the current avcC; a non-empty one must still carry whole SPS/PPS, including with ClearScreen set (seen live with a valid 40-byte avcC). This matches Apple's `AirPlayReceiverSessionScreen.c` `kAirPlayScreenOpCode_VideoConfig`, which calls `ScreenStreamSetAVCC` only when `bodySize > 0`. After the fix the HU got avcC, the first IDR and more than 1000 (later 1200) frames. The cover-art half of that regression is in [Cover Art Pipeline](COVER_ART_PIPELINE.md). Hook SHA-256 `a565332a…48557`. **[car]**
+The hook-to-renderer socket stays nonblocking with `TCP_NODELAY`. `av_write_vectors_locked` batches header and payload while respecting bounded send progress. The renderer preserves compressed-frame continuity; mailbox selection happens only after decode.
 
-Sources: `SHOWCASE_AIRPLAY2_REVIEW`, `ALTSCREEN_COVERART_LIVE_REGRESSIONS`
+| Observation | Source | Boundary |
+| --- | --- | --- |
+| Hook arrival/read/work/PTS | `altscreen_hook.c`, `alt_pace_report` | Bounded summaries, verbose/pace trace |
+| Sender submissions/drops | `sender_telemetry.h`, plaintext opcode 5 | At most 1 Hz; absent values remain unknown |
+| Renderer socket arrival | `altscreen_render/main.c` | Separate record arrival from decode/presentation |
+| Worker entry and swap | `screen_egl_present.c` | Report startup separately from steady presentation |
 
-## ⚡ Rubber-banding = missing TCP_NODELAY
-
-Cluster video felt like rubber-banding (2026-09-06). Everything downstream looked innocent: EGL swap took 0.3 ms, there were no drops, and the decode queue never filled. Arrival at presentation was still avg 48 ms / max 204–233 ms against the advertised `maxFPS=30`. **[car]**
-
-In the measured build, the hook wrote each frame as **two** writes, `[u32 BE len]` then the access unit, and the socket had no `TCP_NODELAY`. The header ships at once and leaves data unacked. Nagle then holds the sub-MSS access unit until the header is ACKed. That renderer did not write back, so nothing carried the ACK early, and the hold lasts the delayed-ACK timer. The fix sets `TCP_NODELAY` on the renderer link (`hook/altscreen/altscreen_av.c:135-142`, @`cb94115`). That historical fix retained separate header/body sends through `av_send_all_locked`. The current candidate uses `av_write_vectors_locked` to batch header and payload and still keeps `TCP_NODELAY`; it has no new on-car timing measurement. After the fix the arrival counters agree at **avg 34 / max 71–99 ms** (29.4 fps). **[car]** / **[code]**
-
-The attribution is not airtight. The average had already recovered one window earlier, on the old hook, after a stream break. Something builds the 48 ms state during a session and resets it on reconnect, and that trigger is still **[open]**. Three arrival counters are in place to catch it:
-
-| Counter | Where | Cadence | Build |
-|---|---|---|---|
-| Hook pace (arrival/read/work/pts) | `altscreen_hook.c`, `alt_pace_report` | every 300 AUs | bounded summary with verbose logging or pace trace |
-| Render socket arrival | `altscreen_render/main.c`, `serve_client` | detailed summary every 300 video AUs | `carplay_verbose`; separate basic socket probe remains every 600 records |
-| Render worker-entry and swap | `altscreen_render/screen_egl_present.c` | detailed steady summary every 300 successful presents | `carplay_verbose`; startup reported separately |
-
-See `memory/altscreen_delivery_nagle.md`.
+Use [wired pacing investigation](WIRED_30FPS_INVESTIGATION.md) and [frame-rate validation](ALTSCREEN_FRAME_RATE.md) for measured boundaries. The [historical pipeline record](../archive/internal-reference-2026-10-29/altscreen-and-video/VIDEO_PIPELINE.md) retains the Nagle investigation, earlier timing windows, parser regressions and artifact hashes. Those measurements do not establish current-candidate HU latency.
 
 ## 📦 Decoded-output mailbox ownership
 
@@ -322,23 +314,13 @@ Neither has been proven redundant. The loader join at `:961` is also an ownershi
 
 ## 📊 Frame rate
 
-Recorded input ran at 20–27 fps against `maxFPS = 30`; there is no fixed 20 fps cap in the iOS sender, and the lower count was already present before our decoder. The renderer now matches the stock OEM decoder contract and presents from a worker, keeps swap interval 2, and has no output-age filter. The sender policy, the stock comparison, the age-filter regression, the capture-clock decision and the pace probe are all in [AltScreen Frame Rate](ALTSCREEN_FRAME_RATE.md). The live per-stage measurement is **[open]**.
+The advertised `maxFPS = 30` is a ceiling, not a guarantee that the sender emits 30 unique frames every second. Measure source cadence separately from receive, decode and presentation. The renderer now matches the stock OEM decoder contract and presents from a worker, keeps swap interval 2, and has no output-age filter. The sender policy, the stock comparison, the age-filter regression, the capture-clock decision and the pace probe are all in [AltScreen Frame Rate](ALTSCREEN_FRAME_RATE.md). Current per-stage acceptance is tracked in those measurement guides.
 
-<details>
-<summary>History: the black/green renderer, crashes and supervisor races (2026-08-03)</summary>
 
----
-
-- The first accepted colour run decoded real Maps video at 1440×542 and swapped more than 2,040 RGBA frames with readable road labels, closing the black/green renderer fault. **[car]**
-- A fast unplug/replug exposed a supervisor race: the old cleanup took a fresh process snapshot after its 1 s SIGTERM wait and SIGKILLed the **new** renderer (old PIDs `16244865/16269442`, new `20762758/20803713`). The hook got `EPIPE`; the new decoder had SPS/PPS but no IDR and showed green (native probe `UVavg=0 range=0..38`). Fix: snapshot renderer PIDs when dio exits and signal only that immutable set (`deploy/smartphone_integrator/carplay_startup.sh`, `carplay_processes.sh`). Renderer PID files reduce `pidin ar` snapshots to at most one adoption per boot/upgrade.
-- A reported whole-HU freeze ended in a full reboot, so the trigger is unrecoverable (RAM `/tmp` logs gone, clock reset, ~881 MiB of 2 GiB free after boot). Four persistent cores `/mnt/ota/system/core/altscreen_render{,.1,.2,.3}.core.gz` are all `SIGSEGV/MAPERR` in thread 1 at Qualcomm `egl14.so` `+0x16428`: evidence of EGL churn risk, not of the reboot. Mitigations: bounded IDR requests, persistent presenter across reconnect, no steady-state file I/O, no `fsync` after each hook log write, renderer keeps only current + one previous log (`altscreen_render/main.c:503`), counters every 600 frames.
-- Main-screen startup was measured at 2.9–3.4 s from hook init to stock 110 READY; the 111 setup took 6 ms inside `alt_setup`. At the time the renderer waited 750 ms (`ALTSCREEN_MAIN_GRACE_MS`) before opening its OMX/EGL pipeline to give 110 priority; that knob is no longer in the source.
-
-</details>
 
 ---
 
-**Related:** [Archive and History](../reference/ARCHIVE_AND_HISTORY.md) — the earlier video designs and why they were dropped.
+**Related:** [Archive and History](../reference/archive/ARCHIVE_AND_HISTORY.md) — the earlier video designs and why they were dropped.
 
 
 ---
@@ -357,7 +339,7 @@ Merged originals were removed from the tree after this note absorbed them; they 
 
 Related: [AltScreen Frame Rate](ALTSCREEN_FRAME_RATE.md), [AltScreen Cluster Video](ALTSCREEN_CLUSTER_VIDEO.md), [Cluster Loader](CLUSTER_LOADER.md), [Cluster Video Encoder](CLUSTER_VIDEO_ENCODER.md), [AltScreen and Video overview](README.md).
 
-[^pacing_source]: Current receiver/forwarder: [altscreen_hook.c](../../hook/altscreen/altscreen_hook.c), [avcc_frame.h](../../hook/altscreen/avcc_frame.h), [altscreen_av.c](../../hook/altscreen/altscreen_av.c); offline result index: [summary.json](../../build/altscreen-pacing-validation/summary.json).
+[^pacing_source]: Current receiver/forwarder: [altscreen_hook.c](../../hook/altscreen/altscreen_hook.c), [avcc_frame.h](../../hook/altscreen/avcc_frame.h), [altscreen_av.c](../../hook/altscreen/altscreen_av.c); offline result index: summary.json (`build/altscreen-pacing-validation/summary.json`; local generated artifact).
 [^control_source]: [altctl.c](../../altscreen_render/altctl.c), [protocol.h](../../altscreen_render/protocol.h), [AltscreenControlServer.java](../../java_patch/com/luka/carplay/core/AltscreenControlServer.java).
 [^wire_source]: [alt_video_wire.h](../../common/alt_video_wire.h), [frame_io.c](../../altscreen_render/frame_io.c), [control round-trip test](../../tests/altscreen_control_test.c), [fragmented control test](../../tests/altscreen_health_wire_test.c), [greeting negotiation test](../../tests/altscreen_negotiation_test.c).
 [^mailbox_source]: [sink_omx_qnx.c](../../altscreen_render/sink_omx_qnx.c), [mailbox test](../../tests/altscreen_mailbox_test.c).

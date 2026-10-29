@@ -4,6 +4,15 @@ _Native iOS sender and stock210 QNX receiver integration tests._
 
 [Laboratory documentation](../../docs/carplay-lab/README.md) · [vphone runbook](../../docs/carplay-lab/VPHONE_LAB.md) · [Timing evidence](../../docs/carplay-lab/VPHONE_TIMING.md)
 
+The [native wireless/QNX runbook](../../docs/carplay-lab/NATIVE_WIRELESS_QNX.md)
+uses the real Rust daemon through a byte-only API adapter. With the opt-in
+VM association backend, native wireless pairing/media now yield independently
+decoded 800×480 Maps. `wireless-native build --paired-altscreen` adds
+independently verified 1440×542 stream 111; both streams must decode to pass.
+The owned reconnect test reuses the receiver identity
+and independently decodes fresh video after native disconnect. Physical
+Wi-Fi/RFCOMM remain hardware tests.
+
 ## 🗂️ Ownership
 
 | Directory | Purpose |

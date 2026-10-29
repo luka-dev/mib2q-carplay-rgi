@@ -6,7 +6,7 @@ _2026-09-28. Offline real-C mechanism screen, not an in-car listening result._
 
 Do the two renderer settings that stabilised perfect oracle-injected audio also help the **deployable Track A mask**? The 20-song set is the enriched DEV selection from the [oracle renderer probe](UPMIX_ORACLE_RENDERER_PROBE_2026-09-28.md): all eight songs that swung with oracle audio plus 12 deterministic controls. It is useful for a paired mechanism comparison, but is selected on a failure endpoint and is not an independent validation set.
 
-[`run_production_renderer_probe20.ps1`](../../../tools/stereo-upmix-render/pc/run_production_renderer_probe20.ps1) runs three conditions, 60 seconds per song, stable input gain and the real C renderer:
+[`run_production_renderer_probe20.ps1`](RETIRED_TOOLS.md#tool-544a034c1ab2) runs three conditions, 60 seconds per song, stable input gain and the real C renderer:
 
 | Condition | Track A v21a mask, drive 1.5, vocal gate 0.5 |
 | --- | --- |

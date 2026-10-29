@@ -1,7 +1,7 @@
 # Continuous execution toward a vehicle candidate
 
 2026-09-13 latest scope correction: **direct stereo → 5.1**, per user.
-[P1-51 implementation and gates](UPMIX_P1_STEREO51.md) supersede the eight-output
+[P1-51 implementation and gates](../archive/LEGACY_REFERENCES.md#source-032f627f68e6) supersede the eight-output
 proposal below. Model/loader/trainer/offline reference are synthetic-tested;
 real-music target admission, role protection, native/QNX and vehicle approval
 remain open. Do not mistake synthetic optimizer updates for music training.
@@ -11,7 +11,7 @@ Two real 48 kHz targets are on private NAS with roles=pending; no admission bypa
 real-music training, export or vehicle write was performed.
 
 2026-09-13 active direction override:
-[G/H1 retrospective and direct stereo → 7.1 transition](../audio/UPMIX_TRAINING_HISTORY.md).
+[G/H1 retrospective and direct stereo → 7.1 transition](../audio/archive/UPMIX_TRAINING_HISTORY.md).
 Do not launch further G/H1 extensions. G17 and the three H1 256-update arms have
 completed; retain all artifacts. The historical gates/results below are evidence,
 not an instruction to resume superseded experiments. P1 data preparation is active;
@@ -30,14 +30,14 @@ audio, teachers, calculated caches, checkpoints and reports. No paid compute,
 new accounts or destructive cleanup is implicitly authorized.
 
 User requirement 2026-09-13: maximum genre-agnostic operation, explicitly even
-dubstep. Apply the [genre-agnostic acceptance contract](../audio/UPMIX_TRAINING_HISTORY.md)
+dubstep. Apply the [genre-agnostic acceptance contract](../audio/archive/UPMIX_TRAINING_HISTORY.md)
 to subsequent design, data-coverage audits and comparisons. Foreground bass/synth
 hooks and their upper harmonics are not automatic rear content; useful secondary
 parts must still survive. This requirement is not evidence of current corpus
 coverage or model acceptance, and does not mutate the frozen G17 continuation.
 
 New H1 implementation/execution is tracked separately in
-[UPMIX_H1_GENRE_AGNOSTIC.md](../audio/UPMIX_TRAINING_HISTORY.md): multiscale source model,
+[UPMIX_H1_GENRE_AGNOSTIC.md](../audio/archive/UPMIX_TRAINING_HISTORY.md): multiscale source model,
 individual-track role-target contract, and guarded Mac smoke/pilot sequence.
 Do not apply G17's PID or pause mechanism to the separate H1 supervisor.
 
@@ -1192,8 +1192,8 @@ remain open. A default-closed prototype is not a useful finished upmixer.
 
 G6 completed and was not promoted: the long invariant window improved candidate
 sum NMSE only0.73% versus its same-size short control, while both backing crops
-worsened. See [G6](UPMIX_V16_G6_PAST_CONTEXT.md) and
-[whole-chain G5 audit](../audio/UPMIX_TRAINING_HISTORY.md). At1024 updates the extended
+worsened. See [G6](../archive/LEGACY_REFERENCES.md#source-497a26745db0) and
+[whole-chain G5 audit](../audio/archive/UPMIX_TRAINING_HISTORY.md). At1024 updates the extended
 G5 control reaches complex loss0.178388 / candidate waveform NMSE0.330300,
 backing NMSE0.354306 and0.634725 on its two TRAIN crops. It is still not a qualified
 separator. Completed G7 did not beat G5 at matched milestones and is not promoted.

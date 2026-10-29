@@ -19,33 +19,33 @@
 // three random, 1e-12, 1e4, a ramp, and a sparse vector.  Both output halves
 // are checked, 36 864 floats in all.
 //
-// NOT bit-exact, and cannot be: the complex FFT inside the library is
+// NOT bit-exact, and cannot be: the complex FFT inside the original is
 // vDSP_DFT_Execute from Apple's Accelerate framework, which is closed and is
-// not on the head unit, so our decoder has its own. tests/dsp_fixture.h explains
+// not on the head unit, so the port has its own. tests/dsp_fixture.h explains
 // the tolerance. Everything else - the pre-modulation, the eight-store
 // post-modulation, the scale - is transcribed index for index and would show up
 // here as a gross mismatch, not as rounding.
 //
 // ============================ WHY THE TOLERANCE IS NOT A BUG ================
 //
-// Every other stage of this decoder is bit-exact, so a tolerance here needs more
+// Every other stage of this port is bit-exact, so a tolerance here needs more
 // than "it is small".  Two things are checked on every run rather than argued:
 //
 // 1. A DOUBLE-PRECISION REFERENCE.  RefMDCT below runs the same algorithm -
 //    the same pre-modulation, an O(m^2) DFT, the same eight-store post-
 //    modulation - entirely in double, using the library's own float32
 //    modulation table promoted to double.  It is therefore the exact answer
-//    our decoder and the library are both approximating.  The test measures how
+//    the port and the library are both approximating.  The test measures how
 //    far EACH of them lands from it and asserts
 //
-//        err(ours) <= 4 * err(library)
+//        err(port) <= 4 * err(library)
 //
-//    If our decoder had an off-by-one in a twiddle index, a window index or the
-//    post-modulation index map, err(ours) would be enormous while
+//    If the port had an off-by-one in a twiddle index, a window index or the
+//    post-modulation index map, err(port) would be enormous while
 //    err(library) stayed at one ULP, and that assertion would fail loudly.
 //    What is actually measured is that the two are the SAME SIZE: two
 //    different but equally valid factorisations of the same transform, each
-//    about one ULP from the truth.  Our decoder is not systematically the worse
+//    about one ULP from the truth.  The port is not systematically the worse
 //    of the two, and on many cases it is the better one.
 //
 // 2. THE ERROR TRACKS THE NUMBER OF TERMS SUMMED.  Cases 16..20 hold exactly
@@ -58,10 +58,10 @@
 //
 // The one case that reaches 2.1e-06 of full scale is `denormal`, where every
 // input is a denormal near 1e-39: there the ENTIRE precision available is a
-// few denormal ULPs, and the library is no closer to the truth than our decoder.
+// few denormal ULPs, and the library is no closer to the truth than the port.
 // It is not representative and is not the number to quote.
 //
-// 3. AND IT DOES NOT COMPOUND ON REAL DATA.  `run.sh swap` patches our
+// 3. AND IT DOES NOT COMPOUND ON REAL DATA.  `run.sh swap` patches the port's
 //    filter bank into the middle of Pioneer's own decoder - see
 //    reference/transform_swap_shim.cpp - and decodes the whole capture with it:
 //    3977 packets, 4 072 448 frames, 24.4 M samples of real coefficients in
@@ -74,8 +74,8 @@
 //    decoder is UNCHANGED to four significant figures - per-channel rms(diff)
 //    0.2637 / 0.5925 / 0.4724 / 0.2944 / 0.2967 / 0.2471 before the
 //    substitution and 0.2638 / 0.5925 / 0.4724 / 0.2944 / 0.2967 / 0.2471
-//    after.  Pioneer and Apple are already 1-2 LSB apart on this capture;
-//    our transform disappears inside that.
+//    after.  Pioneer and Apple are already 1-2 LSB apart on this capture; the
+//    port's transform disappears inside that.
 // ===========================================================================
 
 #include "apac/transform.h"
@@ -183,14 +183,14 @@ uint32_t activeBins(const float* v, uint32_t n)
 }
 
 // Per-case record of how far each side landed from the double reference.
-double g_ulpOurs = 0.0;      // worst, over every case
+double g_ulpPort = 0.0;      // worst, over every case
 double g_ulpLib = 0.0;
-double g_ulpOursNormal = 0.0;   // excluding the denormal case, see below
+double g_ulpPortNormal = 0.0;   // excluding the denormal case, see below
 double g_ulpLibNormal = 0.0;
 char g_ulpWhere[96] = { 0 };
 int g_precChecks = 0;
 
-// The accumulation curve, at n = 1024: how far our decoder lands from the exact
+// The accumulation curve, at n = 1024: how far the port lands from the exact
 // answer, in ULPs of the block's own peak, as the number of non-zero input
 // coefficients goes 1, 2, 4, 16, 64, 256, 1024.
 const unsigned kCurveCases[7] = { 1, 16, 17, 18, 19, 20, 9 };
@@ -250,7 +250,7 @@ int main(int argc, char** argv)
             }
 
             // The IMDCT's own structure: the first half is antisymmetric and
-            // the second symmetric.  Checked on our output, so a change
+            // the second symmetric.  Checked on the port's output, so a change
             // that broke the eight-store index map would fail even if the
             // fixture were stale.
             for (uint32_t i = 0; i < n; ++i) {
@@ -283,21 +283,21 @@ int main(int argc, char** argv)
                     ulp = 1.40129846432481707e-45;
                 const double up = ep / ulp, ul = el / ulp;
 
-                // THE claim: our decoder is not materially worse than the library
+                // THE claim: the port is not materially worse than the library
                 // at approximating the same exact transform.  An index error in
-                // our decoder would blow this up by orders of magnitude while the
+                // the port would blow this up by orders of magnitude while the
                 // library stayed at ~1 ULP.  The +0.5 ULP slack keeps the
                 // comparison meaningful when both are already sub-ULP.
                 if (up > 4.0 * ul + 0.5) {
                     fprintf(stderr,
-                            "\nPRECISION n=%u case %u (%s): ours is %.2f ULP from "
+                            "\nPRECISION n=%u case %u (%s): port is %.2f ULP from "
                             "the double reference, library only %.2f - that is a "
                             "factorisation difference no longer, it is a defect\n",
                             n, caseIdx, apac_cases::case_name(caseIdx), up, ul);
                     exit(1);
                 }
-                if (up > g_ulpOurs) {
-                    g_ulpOurs = up;
+                if (up > g_ulpPort) {
+                    g_ulpPort = up;
                     snprintf(g_ulpWhere, sizeof g_ulpWhere, "n=%u %s", n,
                              apac_cases::case_name(caseIdx));
                 }
@@ -307,7 +307,7 @@ int main(int argc, char** argv)
                 // exists for EITHER side.  Kept in the run, excluded from
                 // the headline figure because it is not representative.
                 if (caseIdx != 6) {
-                    if (up > g_ulpOursNormal) g_ulpOursNormal = up;
+                    if (up > g_ulpPortNormal) g_ulpPortNormal = up;
                     if (ul > g_ulpLibNormal) g_ulpLibNormal = ul;
                 }
                 if (n == 1024) {
@@ -348,13 +348,13 @@ int main(int argc, char** argv)
             }
             int32_t ours = mdct.Initialize(nn, 0.0f);
             if (ours != rc) {
-                fprintf(stderr, "\nMISMATCH MDCT::Initialize(%u): ours %d, library %d\n",
+                fprintf(stderr, "\nMISMATCH MDCT::Initialize(%u): port %d, library %d\n",
                         nn, ours, rc);
                 return 1;
             }
             // scale == 0 means 1/n, and it has to be the same float.
             if (dspfx::float_to_bits(mdct.Scale()) != sc) {
-                fprintf(stderr, "\nMISMATCH MDCT scale for n=%u: ours %08x, library %08x\n",
+                fprintf(stderr, "\nMISMATCH MDCT scale for n=%u: port %08x, library %08x\n",
                         nn, dspfx::float_to_bits(mdct.Scale()), sc);
                 return 1;
             }
@@ -405,7 +405,7 @@ int main(int argc, char** argv)
     // Measured in ULPs of the block's OWN peak, the error rises from half an
     // ULP with a single active coefficient to about one, and then saturates -
     // because as coefficients are added the output peak grows alongside the
-    // error.  Saturating AT one ULP is the point: our decoder is at float32's
+    // error.  Saturating AT one ULP is the point: the port is at float32's
     // representation limit, not past it.
     //
     // Measured in ULPs of the INPUT's full scale, the same error grows by two
@@ -421,9 +421,9 @@ int main(int argc, char** argv)
 
     // Neither side is systematically the better approximation - which is what
     // "the difference is factorisation order" means in one number.
-    assert(g_ulpOurs < 4.0 * g_ulpLib + 0.5);
-    assert(g_ulpOursNormal < 4.0 * g_ulpLibNormal + 0.5);
-    assert(g_ulpOursNormal < 8.0);
+    assert(g_ulpPort < 4.0 * g_ulpLib + 0.5);
+    assert(g_ulpPortNormal < 4.0 * g_ulpLibNormal + 0.5);
+    assert(g_ulpPortNormal < 8.0);
 
     // The size gate, and the not-initialised path.
     apac::MDCT fresh;
@@ -435,9 +435,9 @@ int main(int argc, char** argv)
 
     printf("OK  %d cases, %d floats, worst %.2g of full scale (%s)\n", g_cases,
            g_floats, g_worst, g_worstWhere);
-    printf("%40s vs exact (double): ours %.2f ULP, library %.2f ULP"
+    printf("%40s vs exact (double): port %.2f ULP, library %.2f ULP"
            " (worst, %s); excluding denormals %.2f vs %.2f\n", "",
-           g_ulpOurs, g_ulpLib, g_ulpWhere, g_ulpOursNormal, g_ulpLibNormal);
+           g_ulpPort, g_ulpLib, g_ulpWhere, g_ulpPortNormal, g_ulpLibNormal);
     printf("%40s accumulation, n=1024, by active bins (ULP of output peak /"
            " of input full scale):\n", "");
     printf("%40s ", "");

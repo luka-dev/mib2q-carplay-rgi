@@ -12,7 +12,7 @@ The predeclared interpretation is: if eligible transmission is ≥.432, vocal/el
 
 ## Results
 
-The guarded CPU run used the fixed source-loss checkpoint and produced `D:\upmix\runs\protected_veto_upper_bound\dev.{json,txt}`. The diagnostic source SHA-256 is `FB933061601ADDA6787A51E0816EDF34995145158D77F82BA0E1A08D0D4F155F`; [`run_protected_veto_upper_bound.ps1`](../../../tools/stereo-upmix-render/pc/run_protected_veto_upper_bound.ps1) verifies that, the unchanged transition/model code and checkpoint. The baseline exactly reproduced review 29's DEV12 source values and 43-entry retention.
+The guarded CPU run used the fixed source-loss checkpoint and produced `D:\upmix\runs\protected_veto_upper_bound\dev.{json,txt}`. The diagnostic source SHA-256 is `FB933061601ADDA6787A51E0816EDF34995145158D77F82BA0E1A08D0D4F155F`; [`run_protected_veto_upper_bound.ps1`](RETIRED_TOOLS.md#tool-839b9a5a2e06) verifies that, the unchanged transition/model code and checkpoint. The baseline exactly reproduced review 29's DEV12 source values and 43-entry retention.
 
 | Same frozen matrix output | Eligible transmission | Vocal/eligible | Drums/eligible | Bass/eligible | 43-entry retention median/p10 | Entry vocal leak, first 2 s |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |

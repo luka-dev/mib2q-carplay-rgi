@@ -20,7 +20,7 @@
 // k-1's shape, not its own.  The 30-step plan in dsp_cases.h interleaves three
 // channels, walks all four window sequences, flips the shape mid-stream, and
 // includes a step that changes shape while its channel is mid-transition.  If
-// our decoder kept only one shape, or kept it globally instead of per channel, or
+// the port kept only one shape, or kept it globally instead of per channel, or
 // applied the current shape to the rising half, the sequence would diverge and
 // never recover.
 //
@@ -114,7 +114,7 @@ int main(int argc, char** argv)
             assert(ch == apac_cases::kFBChannels && fr == kFrame);
             int32_t ours = fb.Initialize(ch, fr);
             if (ours != rc) {
-                fprintf(stderr, "\nMISMATCH Initialize: ours %d, library %d\n", ours, rc);
+                fprintf(stderr, "\nMISMATCH Initialize: port %d, library %d\n", ours, rc);
                 return 1;
             }
             fb.Reset();
@@ -158,7 +158,7 @@ int main(int argc, char** argv)
                 ? fb.FrequencyToTimeInPlace(apac_cases::kFBChannels, g_buf, 0, 0)
                 : fb.FrequencyToTimeInPlace(0, g_buf, 0, 4);
             if (ours != rc) {
-                fprintf(stderr, "\nMISMATCH REJECT %s: ours %d, library %d\n",
+                fprintf(stderr, "\nMISMATCH REJECT %s: port %d, library %d\n",
                         which, ours, rc);
                 return 1;
             }

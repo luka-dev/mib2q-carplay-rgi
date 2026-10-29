@@ -12,12 +12,12 @@
 // header, and shipping those would bury the expectations.
 //
 // The one thing this header does NOT hold is the scalefactor-band tables: each
-// side gets those from its own apac::GetSFBOffsetTable (the library's or
-// ours) through BweCoreEdge, which the including translation unit defines.
+// side gets those from its own apac::GetSFBOffsetTable (the library's or the
+// port's) through BweCoreEdge, which the including translation unit defines.
 // Retyping a table here would have made the two sides agree by construction.
 //
 // C++98-compatible, no STL: the oracle is built with the container's g++ and
-// the host test with our -fno-exceptions -fno-rtti flags.
+// the host test with the port's -fno-exceptions -fno-rtti flags.
 
 #ifndef APAC_BWE_CASES_H
 #define APAC_BWE_CASES_H
@@ -244,7 +244,7 @@ static inline void BweBuildFrameCases(BweFrameCase* c)
         for (int b = 0; b < kBweScaleBands; ++b)
             c[i].scale[b] = r.Below(64);
         // Spread the calls over channels so that a per-channel BWELPC (the
-        // library) and one shared instance (our decoder) are distinguishable if
+        // original) and one shared instance (the port) are distinguishable if
         // anything ever did carry across a call.
         c[i].channel = (uint32_t)(i % 6);
         BweFillSpectrum(c[i], kBweFramePlan[i].shape, (uint32_t)i);

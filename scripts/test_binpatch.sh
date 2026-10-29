@@ -5,10 +5,11 @@
 # MicroPython when installed (as on the unit) and CPython.  Skips without the unpacked trees.
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-U=$ROOT/../../Tools/mhi2q-qemu/out/unpacked
+U=${CARPLAY_UNPACKED_ROOT:-$ROOT/../../Tools/mhi2q-qemu/out/unpacked}
 SI=qnx6/MMX2QC/app/10/default/app/eso/bin/apps/smartphone_integrator
 AIRPLAY=qnx6/MMX2QC/app/10/default/app/eso/lib/libairplay.so
 MCD=qnx6/MMX2QC/app/10/default/app/armle/usr/sbin/mcd
+DEVA=qnx6/MMX2QC/app/10/default/app/armle/lib/dll/deva-ctrl-qc.so
 P=$ROOT/deploy/binpatch/binpatch.py
 
 # mcd.conf priority lever (mcd/README.md): shipped custom == stock with active Priority
@@ -30,6 +31,8 @@ for py in $pys; do
         [ "$(cmp -l "$U/$fw/$SI" "$T/out" | wc -l | tr -d ' ')" = 4 ] || { echo "FAIL ($py $fw): not exactly 4 bytes"; exit 1; }
         "$py" "$P" mcd "$U/$fw/$MCD" "$T/mout" > /dev/null
         [ "$(cmp -l "$U/$fw/$MCD" "$T/mout" | wc -l | tr -d ' ')" = 5 ] || { echo "FAIL ($py $fw): mcd not exactly 5 bytes"; exit 1; }
+        "$py" "$P" deva "$U/$fw/$DEVA" "$T/dout" > /dev/null
+        [ "$(cmp -l "$U/$fw/$DEVA" "$T/dout" | wc -l | tr -d ' ')" = 140 ] || { echo "FAIL ($py $fw): deva not 140 differing bytes"; exit 1; }
     done
     for fw in MHI2Q_US_AUG22_P5087_MU1316 MHI2Q_ER_AUG22_P5092_MU1329; do
         rm -f "$T/decoder" "$T/decoder-again" "$T/decoder-refused"
@@ -59,6 +62,10 @@ PY
     cmp -s "$T/us" "$ROOT/deploy/smartphone_integrator/smartphone_integrator" || { echo "FAIL ($py): P5087 differs from the shipped SI"; exit 1; }
     "$py" "$P" mcd "$U/MHI2Q_US_AUG22_P5087_MU1316/$MCD" "$T/mus" > /dev/null
     cmp -s "$T/mus" "$ROOT/mcd/mcd.custom" || { echo "FAIL ($py): P5087 mcd differs from the shipped mcd.custom"; exit 1; }
+    "$py" "$P" deva "$U/MHI2Q_US_AUG22_P5087_MU1316/$DEVA" "$T/dus" > /dev/null
+    cmp -s "$T/dus" "$ROOT/deploy/deva-ctrl-qc/deva-ctrl-qc.so.patched" || { echo "FAIL ($py): P5087 deva differs from the shipped deva-ctrl-qc.so.patched"; exit 1; }
+    rc=0; "$py" "$P" deva "$T/dus" "$T/dagain" > /dev/null || rc=$?
+    [ "$rc" = 3 ] && [ ! -e "$T/dagain" ] || { echo "FAIL ($py): patched deva not reported as already patched"; exit 1; }
     rc=0; "$py" "$P" mcd "$T/mus" "$T/magain" > /dev/null || rc=$?
     [ "$rc" = 3 ] && [ ! -e "$T/magain" ] || { echo "FAIL ($py): patched mcd not reported as already patched"; exit 1; }
     rc=0; "$py" "$P" smartphone_integrator "$T/us" "$T/again" > /dev/null || rc=$?

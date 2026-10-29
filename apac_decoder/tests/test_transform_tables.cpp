@@ -12,8 +12,8 @@
 //   regenerate:  apac_decoder/tools/gen_fixtures_transform.sh   (needs Docker)
 //   oracle:      apac_decoder/reference/apac_fn_ref.cpp, command `win`
 //
-// This is a BIT-EXACT test, not a tolerance one.  Our tables come
-// from reference/decomp/rodata/ by tools/gen_transform_tables.py and stored as
+// This is a BIT-EXACT test, not a tolerance one.  The port's tables are copied
+// out of reference/decomp/rodata/ by tools/gen_transform_tables.py and stored as
 // float32 bit patterns, so every one of the 3456 words has to match exactly.
 // The point of comparing against the library rather than against the .bin dumps
 // is that it also checks the dumps were taken from the right addresses.
@@ -40,7 +40,7 @@ int g_ptrChecks = 0;
 void expectPtr(bool ours, int theirs, const char* which, int n)
 {
     if (ours == (theirs != 0)) { ++g_ptrChecks; return; }
-    fprintf(stderr, "\nMISMATCH %s(%d): ours says %s, library says %s\n",
+    fprintf(stderr, "\nMISMATCH %s(%d): port says %s, library says %s\n",
             which, n, ours ? "non-NULL" : "NULL", theirs ? "non-NULL" : "NULL");
     exit(1);
 }
@@ -74,7 +74,7 @@ int main(int argc, char** argv)
             for (uint32_t i = 0; i < n; ++i) {
                 if (dspfx::float_to_bits(have[i]) != dspfx::float_to_bits(want[i])) {
                     fprintf(stderr,
-                            "\nMISMATCH %s %d word %u: ours %08x, library %08x\n",
+                            "\nMISMATCH %s %d word %u: port %08x, library %08x\n",
                             name, size, i, dspfx::float_to_bits(have[i]),
                             dspfx::float_to_bits(want[i]));
                     exit(1);
@@ -131,7 +131,7 @@ int main(int argc, char** argv)
     assert(g_words == 3456);        // 2*(128+1024) + (128+1024)
     assert(g_ptrChecks == 27);      // 9 sizes x 3 lookups
 
-    // Two properties our decoder relies on elsewhere, pinned here so a bad
+    // Two properties the port relies on elsewhere, pinned here so a bad
     // regeneration cannot quietly remove them.
     const float* w = apac::GetSineWindowCoefficientPtr(1024);
     assert(w[0] > 0.0f && w[1023] > w[0]);              // rising half only

@@ -1,11 +1,11 @@
 /*
  * Patched de.audi.tghu.tone.hmi.Activator: identical to stock except that the model bank and
- * screen factory come from com.luka.carplay.tone (adds the Sound effects "UpMix" row).
- * Any failure there falls back to the stock classes, so the worst case is "no UpMix row".
+ * screen factory come from com.luka.carplay.tone.SoundControlUi (adds the "Surround" checkbox
+ * in Sound effects and unlocks "Subwoofer" on subwoofer-equipped amplifiers).
  */
 package de.audi.tghu.tone.hmi;
 
-import com.luka.carplay.tone.UpmixToneUi;
+import com.luka.carplay.tone.SoundControlUi;
 import de.audi.atip.activator.AbstractHMIActivator;
 import de.audi.atip.hmi.HMIConditionBank;
 import de.audi.atip.hmi.view.AbstractScreenFactory;
@@ -25,7 +25,7 @@ public class Activator extends AbstractHMIActivator {
 
     private static ToneModelBank newBank() {
         try {
-            return UpmixToneUi.newBank();
+            return SoundControlUi.newBank();
         } catch (Throwable t) {
             return new ToneModelBank();
         }
@@ -34,7 +34,7 @@ public class Activator extends AbstractHMIActivator {
     protected synchronized AbstractScreenFactory getScreenFactory() {
         if (this.instance == null) {
             try {
-                this.instance = UpmixToneUi.newFactory(this.getFramework());
+                this.instance = SoundControlUi.newFactory(this.getFramework());
             } catch (Throwable t) {
                 this.instance = null;
             }

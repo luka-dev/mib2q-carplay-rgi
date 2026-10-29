@@ -6,20 +6,19 @@ _vphone sender, QNX/QEMU receiver and reproducible timing evidence._
 
 ## 📋 Current stand
 
-The active backend is vphone with native iOS 26.6.2 CarPlay, a software MFi
-fixture and the stock210 QNX receiver. Both Maps streams have independently
-decoded snapshots at 800×480 and 1440×542. The measured clock correction, BPF
-buffering and remaining QEMU queue are documented separately from physical
-wireless implementation and on-unit radio measurements.
+The active backend combines native iOS 26.6.2 in vphone with the stock210 ARM/QNX receiver. The stand provides independent video decode, AAC/APAC PCM inspection, input transport, lifecycle tests and native SI/J9 integration profiles.
 
-| Note | Scope |
-|---|---|
-| [vphone runbook](VPHONE_LAB.md) | Current setup, ownership checks, pairing, input and native video |
-| [Timing and queue evidence](VPHONE_TIMING.md) | Host/QNX clocks, native packet stages and sender sink pressure |
-| [Retained iOS 14 laboratory](IOS_VM_LAB.md) | Inferno build recipe and historical bring-up |
-| [Retained native screen tests](NATIVE_SCREEN_TEST.md) | Software-surface and paired-111 experiments on the older guest |
-| [iOS/stock210 review](IOS210_CODE_REVIEW.md) | Receiver/protocol findings and reproduced corrections |
-| [Wireless software MFi tests](../wireless-carplay/TEST_SOFTWARE_MFI.md) | Daemon crypto/control isolation and synthetic bootstrap tests |
+| Guide | Use it for |
+| --- | --- |
+| [vphone lab](VPHONE_LAB.md) | Sender setup, Bluetooth/bootstrap and operating commands |
+| [Native wireless QNX](NATIVE_WIRELESS_QNX.md) | Rust bootstrap, VM association adapter and receiver pairing |
+| [Native screen test](NATIVE_SCREEN_TEST.md) | Main and AltScreen decode checks |
+| [Timing](VPHONE_TIMING.md) | Clock correction, buffering and queue measurements |
+| [Media stress](MEDIA_STRESS_TEST.md) | Concurrent streams, pacing and fault injection |
+| [Media and native HMI validation](WIRELESS_MEDIA_VALIDATION.md) | Codec/PCM checks and real SI/Java integration |
+| [Wireless completion](WIRELESS_COMPLETION_PLAN.md) | Remaining production integration and vehicle acceptance gates |
+
+Individual profiles use explicit peripheral and association models. Inspect the profile's contract before interpreting a result as full-session coverage.
 
 ## 🔗 Source boundary
 
@@ -48,21 +47,6 @@ The stable launcher is `scripts/carplay_lab.sh`; Python modules now live under
 paths. Production receiver code stays in `wireless/receiver_bridge/`; the
 emulator harness and synthetic phones live in the test tree.
 
-## 🧪 Acceptance limits
+## 🧪 Profile boundaries
 
-Emulator results establish the exercised native protocol and decoded captures.
-They do not establish physical OMX presentation, a 2.4 GHz CarPlay session,
-stable 30 fps or turn-by-turn navigation. The [timing report](VPHONE_TIMING.md)
-records the remaining backlog and unsuccessful URB-count experiment.
-
-The source separation passes 101 vphone and 97 retained Python tests, native
-RAM/input tests with 10,000 seeded inputs, and 200,000 native trace-parser
-fuzzer inputs under ASan/UBSan. QNX toolchain 8.5 builds both the lab image and
-the ordinary stock210 receiver; the diagnostic QEMU relinks, boots and serves
-native `/info` and clock RPCs through the existing launcher.
-
-The broader repository Python run still reports one amplifier Java-contract
-failure and 16 errors from absent amplifier analysis artifacts (48 skipped).
-The unchanged root-only suite reproduces those same failures; they are outside
-the emulator test suite. Detailed local logs use the `layout-*` prefix under
-`build/vphone-lab/`.
+Use the [shared profile matrix and acceptance ledger](WIRELESS_COMPLETION_PLAN.md) to distinguish host contracts, native QNX, vphone media, real J9 startup and physical HU results. Run-specific receipts name every substituted peripheral and the exact input hashes. Dated suite counts and earlier failures are retained in the [historical lab overview](../archive/snapshots-2026-10-29/carplay-lab/README.md); they are not current test status.

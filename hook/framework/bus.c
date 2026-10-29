@@ -43,9 +43,9 @@ DEFINE_LOG_MODULE(BUS);
 #define SEND_QUEUE_CAPACITY   256        /* must be a power of two */
 #define BUS_SHUTDOWN_WAIT_MS 2500
 /* Directly indexed events and commands. The highest current command is
- * CMD_UPMIX (0x0119); keep Java CarplayBus.MAX_TYPES in sync. */
+ * CMD_SPATIAL (0x011A); keep Java CarplayBus.MAX_TYPES in sync. */
 #define MAX_TYPES             0x0120
-#if CMD_ALT_RGI >= MAX_TYPES || CMD_VEHICLE >= MAX_TYPES || CMD_UPMIX >= MAX_TYPES
+#if CMD_ALT_RGI >= MAX_TYPES || CMD_VEHICLE >= MAX_TYPES || CMD_UPMIX >= MAX_TYPES || CMD_SPATIAL >= MAX_TYPES
 #error a bus command is outside the bus dispatch table
 #endif
 

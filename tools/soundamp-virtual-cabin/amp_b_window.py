@@ -13,7 +13,7 @@ import sys
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
-LOADER = ROOT / 'assets/soundamp/J525_8W0035465_SW0420_SHARC_SPI_bitrev.ldr.bin'
+LOADER = ROOT / 'output/r2/soundamp/J525_8W0035465_SW0420_SHARC_SPI_bitrev.ldr.bin'
 RANGES = (
     (0x130a1c, 0x130aeb, '571e04d9240903bf8e441c51f086a22bf0dbf70387a78907a8766841a7e34708'),
     (0x130aeb, 0x130b6d, '36f8da5a939dad4e60c27b918e2be0c0a561fc2299a06b449422d040035d40c0'),

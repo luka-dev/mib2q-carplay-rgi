@@ -302,3 +302,55 @@ HOOK_EXPORT int AirPlayReceiverSessionTearDown(void *session, void *request, int
     }
     return result;
 }
+
+/* ── AirPlayReceiverSessionControl ──────────────────────────────────────────
+ * Stock 210's _requestProcessCommand calls this exported entry through the PLT
+ * for every RTSP POST /command request.  Modules run in priority order before
+ * stock (where a module may claim commands stock 210 rejects with -6714, such
+ * as suggestUI, by setting control.handled = 1) and after stock (where audio
+ * caches/publishes the realtime render clock on updateFeedback). */
+typedef int (*fn_sess_control_t)(void *, uint32_t, const void *, const void *,
+                                 const void *, void **);
+
+HOOK_EXPORT int AirPlayReceiverSessionControl(void *session, uint32_t flags, const void *command,
+                                              const void *qualifier, const void *params,
+                                              void **responseOut)
+{
+    static fn_sess_control_t real;
+    hook_control_ctx_t control;
+    size_t i, n;
+
+    seam_enter();
+    if (!real) real = (fn_sess_control_t)dlsym(RTLD_NEXT, "AirPlayReceiverSessionControl");
+
+    memset(&control, 0, sizeof(control));
+    control.session = session;
+    control.flags = flags;
+    control.command = command;
+    control.qualifier = qualifier;
+    control.params = params;
+    control.response_out = responseOut;
+    control.feedback_nonmedia = 1;
+
+    n = hook_framework_module_count();
+    for (i = 0; i < n; i++) {
+        const hook_module_def_t *def = hook_framework_module_at(i);
+        if (def && def->airplay.on_control)
+            def->airplay.on_control(&control);
+    }
+
+    if (!control.handled) {
+        if (!real) {
+            LOG_ERROR(LOG_MODULE, "SessionControl real==NULL");
+            return kNotHandledErr;
+        }
+        control.result = real(session, flags, command, qualifier, params, responseOut);
+    }
+
+    for (i = 0; i < n; i++) {
+        const hook_module_def_t *def = hook_framework_module_at(i);
+        if (def && def->airplay.on_control_response)
+            def->airplay.on_control_response(&control);
+    }
+    return control.result;
+}

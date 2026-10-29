@@ -1,0 +1,13 @@
+{
+  global:
+    spawn;
+    system;
+    open;
+    open64;
+    slogf;
+    _ZN8servmngt11Application16reportAppRunModeEj;
+    _ZN8servmngt11Application19reportSystemRunModeENS_13SystemRunModeEb;
+    _ZN8servmngt11Application17setWatchdogPeriodEj;
+  local:
+    *;
+};

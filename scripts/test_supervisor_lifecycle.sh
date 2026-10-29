@@ -39,6 +39,27 @@ IFS=$STARTUP_OLD_IFS
 [ -z "$STARTUP_MON_PRELOAD" ]
 [ "$STARTUP_MON_PID" = "$STARTUP_DIO_PID" ]
 
+# A stale QoS marker/helper must not start an updater in the Wi-Fi-only policy.
+STARTUP_TEST_QOS=$TEST_DIR/qos.env
+export STARTUP_TEST_QOS
+cat > "$STARTUP_HOOKS/carplay_pf_watch" <<'SH'
+#!/bin/sh
+printf '%s' "${LD_PRELOAD:-}" > "$STARTUP_TEST_QOS"
+SH
+chmod +x "$STARTUP_HOOKS/carplay_pf_watch"
+: > "$STARTUP_HOOKS/carplay_pf_dynamic.enabled"
+DIODIR=$STARTUP_APP H=$STARTUP_HOOKS WLOG=$TEST_DIR/startup.log \
+OWNER_FILE=$TEST_DIR/startup.owner \
+    sh "$ROOT/deploy/smartphone_integrator/carplay_startup.sh" alpha beta
+sleep 1
+[ ! -e "$STARTUP_TEST_QOS" ]
+rm "$STARTUP_HOOKS/carplay_pf_dynamic.enabled"
+DIODIR=$STARTUP_APP H=$STARTUP_HOOKS WLOG=$TEST_DIR/startup.log \
+OWNER_FILE=$TEST_DIR/startup.owner \
+    sh "$ROOT/deploy/smartphone_integrator/carplay_startup.sh" alpha beta
+sleep 1
+[ ! -e "$STARTUP_TEST_QOS" ]
+
 python3 - "$ROOT/deploy/smartphone_integrator/carplay_monitor.sh" "$TEST_DIR/functions.sh" <<'PY'
 import re, sys
 s = open(sys.argv[1]).read()

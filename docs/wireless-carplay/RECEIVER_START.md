@@ -6,7 +6,7 @@ _MHI2Q wireless CarPlay — technical reference, integrated 2026-09-29._
 
 [Wireless overview](README.md) · [Current stock210 lifecycle](STOCK210_RECEIVER_LIFECYCLE.md)
 
-Maintained technical reference. The evidence below distinguishes static analysis, local QNX tests and observations from the unit.
+This reference preserves stock start/stop ABI and dated isolated fixtures. Current child creation and restart belong to [SI](DIO_OWNERSHIP.md); historical standalone fixture results below do not establish SI/HMI acceptance.
 
 Implementation and local diagnostic paths in this record refer to the [original source directory](../../wireless/). Run `wireless/...` commands from the repository root; moving this note does not move binaries or logs.
 
@@ -15,7 +15,7 @@ Implementation and local diagnostic paths in this record refer to the [original 
 ```mermaid
 flowchart LR
     accTitle: Stock receiver startup and restart
-    accDescr: The bridge reaches the existing DIO start event; a full media teardown can exit DIO, requiring a new supervisor generation.
+    accDescr: The bridge reaches the existing DIO start event; a full media teardown can exit DIO, requiring a new SI-owned child generation in the current integration.
     capture["Capture real DIO manager"]
     display["Read stock display table"]
     start["Queue StartAirPlay event"]

@@ -2,8 +2,8 @@
 """Compare two spectrum dumps record for record.
 
 A record is [u32 channel][u32 windowSequence][1024 float32], written by
-reference/spectrum_dump_shim.cpp for the library and by
-`apac_decode --dump-spectra` for our decoder.  The frame layer has no other
+reference/spectrum_dump_shim.cpp for the original library and by
+`apac_decode --dump-spectra` for the port.  The frame layer has no other
 observable output of its own, so a match here is a match of stages f and g
 independent of the transform.
 
@@ -61,14 +61,14 @@ def main():
     print('max abs coefficient difference: %.6g' % maxdiff)
     if firstBad:
         i, ha, hb = firstBad
-        print('first mismatching record %d: lib(ch=%d seq=%d) ours(ch=%d seq=%d)'
+        print('first mismatching record %d: lib(ch=%d seq=%d) port(ch=%d seq=%d)'
               % (i, ha[0], ha[1], hb[0], hb[1]))
         fa = struct.unpack_from('<1024f', a, i * REC + 8)
         fb = struct.unpack_from('<1024f', b, i * REC + 8)
         shown = 0
         for k in range(1024):
             if fa[k] != fb[k]:
-                print('   [%4d] lib %+.9g  ours %+.9g' % (k, fa[k], fb[k]))
+                print('   [%4d] lib %+.9g  port %+.9g' % (k, fa[k], fb[k]))
                 shown += 1
                 if shown == 12:
                     break

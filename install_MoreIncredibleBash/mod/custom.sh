@@ -127,7 +127,7 @@ java_jar() {
 # P5152 is an ER train with the same main unit software as P5092 (MU1329; #61).
 train_verified() {
     case $TRAIN in
-        MHI2Q_US_AUG22_P5087|MHI2Q_ER_AUG22_P5092|MHI2Q_ER_AUG22_P5152|MHI2Q_JP_AUG22_P1017|MHI2Q_CN_AUG22_K1004) return 0 ;;
+        MHI2Q_US_AUG22_P5087|MHI2Q_US_AUG22_P5145|MHI2Q_ER_AUG22_P5092|MHI2Q_ER_AUG22_P5152|MHI2Q_JP_AUG22_P1017|MHI2Q_CN_AUG22_K1004) return 0 ;;
     esac
     return 1
 }
@@ -473,7 +473,7 @@ SI_BIN=/mnt/app/eso/bin/apps/smartphone_integrator
 patch_si() {
     find_mp || { echo "  smartphone_integrator left stock (the USB reconnect fix needs M.I.B. micropython)"; return 0; }
     [ -f "$SI_BIN" ] || { echo "  WARN no $SI_BIN"; return 0; }
-    src=$SI_BIN; [ -f "$SI_BIN.carplay-stock" ] && src=$SI_BIN.carplay-stock
+    src=$SI_BIN
     rm -f "$SI_BIN.carplay-new"
     # the SI is read whole (0.8 MB): default micropython heaps are smaller (MemoryError on the unit)
     # binpatch's own messages are for a manual run; the lines below say the same in plain words
@@ -496,7 +496,7 @@ AIRPLAY_LIB=/mnt/app/eso/lib/libairplay.so
 patch_airplay_decoder() {
     find_mp || { echo "  WARN no M.I.B. micropython - decoder queues stay stock"; return 0; }
     [ -f "$AIRPLAY_LIB" ] || { echo "  WARN no $AIRPLAY_LIB"; return 0; }
-    src=$AIRPLAY_LIB; [ -f "$AIRPLAY_LIB.carplay-stock" ] && src=$AIRPLAY_LIB.carplay-stock
+    src=$AIRPLAY_LIB
     rm -f "$AIRPLAY_LIB.carplay-new"
     "$mp" -X heapsize=8M "$RES/binpatch.py" airplay_decoder "$src" "$AIRPLAY_LIB.carplay-new"; rc=$?
     case $rc in
@@ -518,7 +518,7 @@ MCD_BIN=/mnt/app/armle/usr/sbin/mcd
 patch_mcd() {
     find_mp || { echo "  WARN no M.I.B. micropython - mcd stays stock (no fan-out coalescing)"; return 0; }
     [ -f "$MCD_BIN" ] || { echo "  WARN no $MCD_BIN"; return 0; }
-    src=$MCD_BIN; [ -f "$MCD_BIN.carplay-stock" ] && src=$MCD_BIN.carplay-stock
+    src=$MCD_BIN
     rm -f "$MCD_BIN.carplay-new"
     "$mp" -X heapsize=8M "$RES/binpatch.py" mcd "$src" "$MCD_BIN.carplay-new"; rc=$?
     case $rc in
@@ -547,6 +547,44 @@ patch_mcd_conf() {
         { rm -f "$tmp"; echo "FAILED patch $MCD_CONF"; return 1; }
     echo "  $MCD_CONF (detector priority 11,10 -> 11,3)"
 }
+
+
+# ---- deva-ctrl-qc.so: 6-channel PCM + 48 kHz nav + 24 kHz voice/calls on THIS unit's binary ----
+DEVA_LIB=/mnt/app/armle/lib/dll/deva-ctrl-qc.so
+patch_deva() {
+    find_mp || { echo "  WARN no M.I.B. micropython - deva-ctrl-qc.so stays stock"; return 0; }
+    [ -f "$DEVA_LIB" ] || { echo "  WARN no $DEVA_LIB"; return 0; }
+    src=$DEVA_LIB
+    rm -f "$DEVA_LIB.carplay-new"
+    "$mp" -X heapsize=8M "$RES/binpatch.py" deva "$src" "$DEVA_LIB.carplay-new"; rc=$?
+    case $rc in
+        0) backup_once "$DEVA_LIB" "$DEVA_LIB.carplay-stock" || { rm -f "$DEVA_LIB.carplay-new"; return 1; }
+           chmod 755 "$DEVA_LIB.carplay-new" && mv -f "$DEVA_LIB.carplay-new" "$DEVA_LIB" ||
+               { rm -f "$DEVA_LIB.carplay-new"; echo "FAILED activate $DEVA_LIB"; return 1; }
+           echo "  $DEVA_LIB (6ch PCM + 48kHz nav + 24kHz voice/calls patched in)" ;;
+        3) echo "  $DEVA_LIB already patched" ;;
+        *) rm -f "$DEVA_LIB.carplay-new"; echo "  WARN $DEVA_LIB stays stock (unsupported library)" ;;
+    esac
+    return 0
+}
+
+
+# Full MU1316/MU1329 runtime replaces all legacy Wi-Fi fragments. No process is restarted.
+WIFI_SO=/mnt/app/armle/lib/dll/devnp-mrvl_wlan-sdiorm.so
+WIFI_STACK=/sbin/io-pkt-v6-hc
+wifi_runtime_action() {
+    [ -f "$WIFI_SO" ] || { echo "  WARN no $WIFI_SO; Wi-Fi skipped"; return 0; }
+    find_mp || { echo "  FAILED no MicroPython for verified Wi-Fi operation"; return 1; }
+    [ -f "$RES/wifi_runtime.py" ] || { echo "  FAILED missing verified Wi-Fi helper"; return 1; }
+    if [ "$1" = restore ]; then
+        "$mp" -X heapsize=8M "$RES/wifi_runtime.py" restore "$RES/wifi/runtime" "$WIFI_SO"; rc=$?
+    else
+        "$mp" -X heapsize=8M "$RES/wifi_runtime.py" "$1" "$RES/wifi/runtime" "$WIFI_SO" "$WIFI_STACK"; rc=$?
+    fi
+    case $rc in 0|3|4) return 0 ;; *) echo "  FAILED verified Wi-Fi operation; file preserved"; return 1 ;; esac
+}
+patch_wifi() { wifi_runtime_action install; }
+restore_wifi() { wifi_runtime_action restore || echo "  WARN Wi-Fi preserved; continuing other uninstall restores"; }
 
 echo "custom.sh: CarPlay $ACTION"
 echo "Remounting app and system read-write..."
@@ -640,6 +678,9 @@ EOF
         fi
         echo "  WARN another CarPlay mod is installed ($MODS) - installing anyway (second run)"
     fi
+    wifi_runtime_action check || { rm -f "$LIST"; exit 1; }
+    # Retired IP-priority/QoS updater: disable leftovers from older packages.
+    rm -f /mnt/app/root/hooks/carplay_pf_dynamic.enabled /mnt/app/root/hooks/carplay_pf_watch
     JAVA_JAR=$(java_jar)
     if [ -n "$JAVA_JAR" ]; then echo "  Java: $JAVA_JAR"; else
         echo "  WARN region $(train_field 2) is not verified for the Java part:"
@@ -653,6 +694,16 @@ EOF
         # Never install it, and drop copies an older install put on the unit
         # (a "._carplay_hook.jar" in lsd/jars would land on j9's bootclasspath).
         case $f in */._*|*/.DS_Store) rm -f "$dest"; continue ;; esac
+        # Old cards must not re-enable QoS or replace SDIO/PF profiles.
+        # Required CarPlay port opening remains the narrow patch_pf step below.
+        case $dest in
+            */carplay_pf_dynamic.enabled|*/carplay_pf_watch)
+                rm -f "$dest"; echo "  skipped retired PF updater $dest"; continue ;;
+            */armle/sbin/io-sdiorm-mib2-qc|*/proc/boot/io-sdiorm-mib2-qc|*/etc/pf.conf|*/etc/pf.ecm0.conf|*/etc/pf.mlan0.conf|*/etc/pf.ppp0.conf)
+                echo "  skipped excluded network replacement $dest"; continue ;;
+            */armle/lib/dll/deva-ctrl-qc.so|*/eso/bin/apps/smartphone_integrator)
+                echo "  skipped legacy whole-file binary $dest (patched in place by binpatch.py)"; continue ;;
+        esac
         case $dest in */lsd/jars/carplay_hook.jar|*/lsd/jars/carplay_hook_cn.jar)
             # lsd.sh loads every jar in that folder: exactly one variant may stay, and the
             # other (or any jar on an unverified firmware) keeps the HMI from booting.
@@ -681,6 +732,8 @@ EOF
     done
     patch_si || exit 1
     patch_airplay_decoder || exit 1
+    patch_deva || exit 1
+    patch_wifi || exit 1
     patch_mcd || exit 1
     patch_mcd_conf || exit 1
     gate_audio || exit 1
@@ -696,6 +749,7 @@ EOF
     echo "DONE (install). Reboot the HU to load."
     ;;
 uninstall)
+    rm -f /mnt/app/root/hooks/carplay_pf_dynamic.enabled /mnt/app/root/hooks/carplay_pf_watch
     cd "$ROOT" || { rm -f "$LIST"; exit 1; }
     while IFS= read -r f; do
         case $f in *.DS_Store) continue ;; esac
@@ -711,7 +765,9 @@ uninstall)
     [ -e "$CFG.carplay-stock" ] && mv -f "$CFG.carplay-stock" "$CFG"
     [ -e "$DIO.carplay-stock" ] && mv -f "$DIO.carplay-stock" "$DIO"
     [ -e "$SI_BIN.carplay-stock" ] && mv -f "$SI_BIN.carplay-stock" "$SI_BIN"
+    restore_wifi || exit 1
     [ -e "$AIRPLAY_LIB.carplay-stock" ] && mv -f "$AIRPLAY_LIB.carplay-stock" "$AIRPLAY_LIB"
+    [ -e "$DEVA_LIB.carplay-stock" ] && mv -f "$DEVA_LIB.carplay-stock" "$DEVA_LIB"
     [ -e "$MCD_BIN.carplay-stock" ] && mv -f "$MCD_BIN.carplay-stock" "$MCD_BIN"
     [ -e "$MCD_CONF.carplay-stock" ] && mv -f "$MCD_CONF.carplay-stock" "$MCD_CONF"
     [ -e "$LANG_ZIP.carplay-stock" ] && mv -f "$LANG_ZIP.carplay-stock" "$LANG_ZIP" && echo "  restored $LANG_ZIP"

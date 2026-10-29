@@ -192,7 +192,13 @@ def handshake(phone, reports: list[tuple[int, int]], certificate: bytes | None =
               hid_interface: int = 2, hid_endpoint: int = 0x83,
               hold_seconds: int = 2, public_key: bytes | None = None,
               receiver_ipv6: str = "fe80::2", carplay_interface: int = 2,
-              signer=None) -> dict:
+              signer=None, identification_payload: bytes | None = None,
+              exchange_timeout: int | None = None) -> dict:
+    if exchange_timeout is not None and (type(exchange_timeout) is not int or not 10<=exchange_timeout<=45):
+        raise ValueError("exchange timeout must be 10..45 seconds")
+    if identification_payload is not None:
+        if not isinstance(identification_payload, bytes) or len(identification_payload)>4096 or parse_control_message(identification_payload)[0]!=0x1D01:
+            raise ValueError("expected a bounded IdentificationInformation message")
     def send(packet):
         for report in hid_reports(packet, reports):
             count = phone.ctrl_transfer(0x21, 9, 0x0200 | report[0], hid_interface, report, timeout=3000)
@@ -244,7 +250,7 @@ def handshake(phone, reports: list[tuple[int, int]], certificate: bytes | None =
         sequence = 2
         messages = ["0xaa00"]
         result["authentication_messages"] = messages
-        deadline = time.monotonic() + 15
+        deadline = time.monotonic() + (exchange_timeout or 15)
         while time.monotonic() < deadline:
             frame = receive(min(5, deadline - time.monotonic()))
             if frame["control"] & 0x10:
@@ -269,7 +275,7 @@ def handshake(phone, reports: list[tuple[int, int]], certificate: bytes | None =
                 result["authentication_failed"] = message == 0xAA04
                 if message == 0xAA05 and identify:
                     result["identification_messages"] = []
-                    deadline = time.monotonic() + 10
+                    deadline = time.monotonic() + (exchange_timeout or 10)
                     while time.monotonic() < deadline:
                         packet = receive(min(5, deadline - time.monotonic()))
                         if not packet["payload"]:
@@ -279,11 +285,12 @@ def handshake(phone, reports: list[tuple[int, int]], certificate: bytes | None =
                         send(link_frame(0x40, sequence, packet["sequence"]))
                         if mid == 0x1D00:
                             sequence += 1
-                            identity = identification_message(carplay_interface)
+                            identity = identification_payload if identification_payload is not None else identification_message(carplay_interface)
                             send(link_frame(0x40, sequence, packet["sequence"], 10, identity))
                             result["identification_sent"] = identity.hex()
                         elif mid == 0x1D03:
                             result["identification_rejected_parameters"] = sorted(params)
+                            result["identification_rejected_values"] = {str(kind):value.hex() for kind,value in params.items()}
                             result["identification_accepted"] = False
                             return result
                         elif mid == 0x1D02:

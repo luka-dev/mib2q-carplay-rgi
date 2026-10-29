@@ -20,6 +20,7 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/time.h>
+#include <sys/un.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -335,7 +336,7 @@ static int hook_media_run;
 
 /* Consume two independently authenticated HTTP responses. The two requests
  * share one incoming plaintext record, exercising stock Reset's extra bytes. */
-#ifndef MHI2Q_WIRELESS_MEDIA_QEMU
+#if !defined(MHI2Q_WIRELESS_MEDIA_QEMU) && !defined(MHI2Q_PEER_HEALTH_QEMU)
 static int hook_control_regression(int fd, const uint8_t shared[32], seal_fn seal,
                                    open_fn open_sealed, unsigned read_counter)
 {
@@ -418,7 +419,7 @@ static int probe_encrypted_info(int fd, const uint8_t shared[32],
     frame[1] = (uint8_t)((sizeof(request) - 1) >> 8);
     seal(write_key, nonce, frame, 2, request, sizeof(request) - 1,
          frame + 2, frame + 2 + sizeof(request) - 1);
-#if defined(MHI2Q_PAIRING_HOOK_QEMU) && !defined(MHI2Q_WIRELESS_MEDIA_QEMU)
+#if defined(MHI2Q_PAIRING_HOOK_QEMU) && !defined(MHI2Q_WIRELESS_MEDIA_QEMU) && !defined(MHI2Q_PEER_HEALTH_QEMU)
     {
         size_t offset = 0;
         unsigned part;
@@ -499,6 +500,12 @@ static void *respond_timing(void *argument)
         uint8_t packet[32];
         struct sockaddr_in peer;
         socklen_t peer_length = sizeof(peer);
+#ifdef MHI2Q_PEER_HEALTH_QEMU
+        /* QNX UDP receive timeout is not a cancellation primitive. */
+        fd_set readable;FD_ZERO(&readable);FD_SET(responder->fd,&readable);
+        struct timeval wait={0,200000};
+        if(select(responder->fd+1,&readable,NULL,NULL,&wait)<=0)continue;
+#endif
         ssize_t count = recvfrom(responder->fd, packet, sizeof(packet), 0,
                                  (struct sockaddr *)&peer, &peer_length);
         if (count != (ssize_t)sizeof(packet) || packet[0] != 0x80 ||
@@ -534,6 +541,9 @@ static int start_timing_responder(struct timing_responder *responder,
     }
     return 0;
 }
+#ifdef MHI2Q_PEER_HEALTH_QEMU
+#include "stock210_peer_health_qemu.h"
+#endif
 
 #ifdef MHI2Q_SCREEN_DATA_QEMU
 /* Minimal binary-plist reader for the SETUP response's streams[0].dataPort.
@@ -671,13 +681,202 @@ static int open_screen_port(int port)
     return fd;
 }
 
+#ifdef MHI2Q_INTEGRATED_MEDIA_QEMU
+#include "../../../wireless/si/si_child_state.h"
+static int features_mode(void);
+static int integrated_source_negative_controls(void) {
+    struct si_child_state current={0},old;unsigned char frame[SI_CHILD_STATE_SIZE];
+    current.epoch=strtoull(getenv("MHI2Q_PEER_HEALTH_EPOCH"),NULL,16);
+    current.session=(uint32_t)strtoul(getenv("MHI2Q_PEER_HEALTH_SESSION"),NULL,10);
+    current.link=(uint32_t)strtoul(getenv("MHI2Q_PEER_HEALTH_LINK"),NULL,10);
+    current.child=(uint32_t)strtoul(getenv("MHI2Q_PEER_HEALTH_CHILD"),NULL,10);
+    current.sequence=100000;
+    FILE *previous=fopen("/dev/shmem/integrated-old-asi","rb");
+    if(previous) {
+        size_t size=fread(frame,1,sizeof(frame),previous);fclose(previous);
+        if(!si_child_state_decode(frame,size,&old))return -1;
+    } else {old=current;++old.child;}
+    FILE *save=fopen("/dev/shmem/integrated-old-asi","wb");if(!save)return -2;
+    si_child_state_encode(&current,frame);size_t written=fwrite(frame,1,sizeof(frame),save);
+    int closed=fclose(save);if(written!=sizeof(frame)||closed)return -2;
+    for(unsigned kind=SI_ASI_STATE;kind<=SI_ASI_RESTART;++kind) {
+        old.kind=kind;old.state=kind==SI_ASI_STATE?5:0;old.cookie=0;
+        si_child_state_encode(&old,frame);
+        int fd=socket(AF_UNIX,SOCK_STREAM,0);if(fd<0)return -3;
+        struct sockaddr_un address;memset(&address,0,sizeof(address));address.sun_family=AF_UNIX;
+        strcpy(address.sun_path,"/tmp/mhi2q_si_control.sock");
+        struct timeval timeout={2,0};setsockopt(fd,SOL_SOCKET,SO_RCVTIMEO,&timeout,sizeof(timeout));
+        int failed=connect(fd,(struct sockaddr *)&address,sizeof(address))||
+            write_all(fd,frame,sizeof(frame))||read_all(fd,frame,sizeof(frame))||
+            memcmp(frame,"SIR2\2\10",6)||si_cs_get(frame+32)!=2;
+        close(fd);if(failed)return -4;
+    }
+    puts("[integrated-media] old-child ASI state/watchdog/flush/teardown/restart rejected PASS");fflush(stdout);
+    return 0;
+}
+static int integrated_semantic_negative_controls(void) {
+    for(unsigned operation=9;operation<=10;++operation)for(unsigned test=0;test<5;++test) {
+        uint8_t request[45]={0},response[8];memcpy(request,"CPRX",4);request[4]=3;request[5]=(uint8_t)operation;
+        uint64_t epoch=strtoull(getenv("MHI2Q_PEER_HEALTH_EPOCH"),NULL,16);
+        uint32_t session=(uint32_t)strtoul(getenv("MHI2Q_PEER_HEALTH_SESSION"),NULL,10);
+        uint32_t link=(uint32_t)strtoul(getenv("MHI2Q_PEER_HEALTH_LINK"),NULL,10);
+        if(test==0)epoch^=1;
+        if(test==1)session^=1;
+        if(test==2)link^=1;
+        for(unsigned i=0;i<4;++i)request[8+i]=(uint8_t)(link>>(8*i));
+        request[12]=(uint8_t)5000;request[13]=(uint8_t)(5000>>8);
+        for(unsigned i=0;i<8;++i)request[16+i]=(uint8_t)(epoch>>(8*i));
+        for(unsigned i=0;i<4;++i)request[24+i]=(uint8_t)(session>>(8*i));
+        size_t length=operation==9?sizeof(request):36;
+        if(operation==9) {request[32]=11;request[34]=3;request[35]=1;memcpy(request+39,"@@\0\6\122\1",6);}
+        else memset(request+32,255,4); /* Future ACK never consumes output. */
+        if(test==3){request[4]=2;length=16;}
+        int fd=open_screen_port(57343);if(fd<0)return -1;
+        struct timeval timeout={2,0};setsockopt(fd,SOL_SOCKET,SO_RCVTIMEO,&timeout,sizeof(timeout));
+        int failed=write_all(fd,request,length)||read_all(fd,response,sizeof(response))||
+            memcmp(response,"CPRA\2",5)||response[5]!=(operation==10&&test==4?1:2)||response[6]||response[7];
+        close(fd);if(failed)return -2;
+    }
+    puts("[integrated-media] native semantic stale epoch/session/link, legacy and malformed rejection PASS");fflush(stdout);
+    return 0;
+}
+static int integrated_metadata_negative_controls(void) {
+    for(unsigned test=0;test<5;++test) {
+        uint8_t request[40]={0},response[8];
+        memcpy(request,"CPRX\3\10",6);
+        uint64_t epoch=strtoull(getenv("MHI2Q_PEER_HEALTH_EPOCH"),NULL,16);
+        uint32_t session=(uint32_t)strtoul(getenv("MHI2Q_PEER_HEALTH_SESSION"),NULL,10);
+        uint32_t link=(uint32_t)strtoul(getenv("MHI2Q_PEER_HEALTH_LINK"),NULL,10);
+        if(test==0)epoch^=1;
+        if(test==1)session^=1;
+        if(test==2)link^=1;
+        for(unsigned i=0;i<4;++i)request[8+i]=(uint8_t)(link>>(8*i));
+        request[12]=(uint8_t)5000;request[13]=(uint8_t)(5000>>8);
+        for(unsigned i=0;i<8;++i)request[16+i]=(uint8_t)(epoch>>(8*i));
+        for(unsigned i=0;i<4;++i)request[24+i]=(uint8_t)(session>>(8*i));
+        request[32]=6;memcpy(request+34,"@@\0\6\120\1",6);
+        size_t length=sizeof(request);
+        if(test==3){request[4]=2;length=16;} /* legacy metadata never admitted */
+        if(test==4)request[39]=2; /* bound, but wrong CSM message id */
+        int fd=open_screen_port(57343);if(fd<0)return -1;
+        struct timeval timeout={2,0};setsockopt(fd,SOL_SOCKET,SO_RCVTIMEO,&timeout,sizeof(timeout));
+        int failed=write_all(fd,request,length)||read_all(fd,response,sizeof(response))||
+            memcmp(response,"CPRA\2\2\0\0",8);
+        close(fd);if(failed)return -2;
+    }
+    puts("[integrated-media] native metadata stale epoch/session/link, legacy and malformed rejection PASS");fflush(stdout);
+    return 0;
+}
+/* Check the actual report object, not incidental zero bytes in a plist
+ * offset table or HTTP header. Each native DSI input has one exact report. */
+static int integrated_hid_report(const uint8_t *data,size_t length,unsigned event) {
+    const uint8_t *body=NULL,*type,*report;
+    size_t body_length=0,top,type_ref,report_ref;
+    for(size_t i=0;i+4<=length;++i)if(!memcmp(data+i,"\r\n\r\n",4)) {
+        body=data+i+4;body_length=length-i-4;break;
+    }
+    if(!body||body_length<40||memcmp(body,"bplist00",8))return -1;
+    struct plist_view view={body,body_length,0,0,0,0};
+    view.offset_width=body[body_length-26];view.ref_width=body[body_length-25];
+    view.objects=(size_t)plist_be(body+body_length-24,8);
+    top=(size_t)plist_be(body+body_length-16,8);
+    view.table=(size_t)plist_be(body+body_length-8,8);
+    if(!view.offset_width||view.offset_width>8||!view.ref_width||view.ref_width>8||
+       view.table>=body_length-32||plist_dict_get(&view,top,"type",&type_ref)||
+       plist_object(&view,type_ref,&type))return -2;
+    if(features_mode()&&*type==0x5d&&(size_t)(type-body)+14<=body_length-32&&
+       !memcmp(type+1,"forceKeyFrame",13))return 1;
+    if(*type!=0x5d||
+       (size_t)(type-body)+14>body_length-32||memcmp(type+1,"hidSendReport",13))return -2;
+    if(plist_dict_get(&view,top,"hidReport",&report_ref)||
+       plist_object(&view,report_ref,&report)||*report!=0x44||
+       (size_t)(report-body)+5>body_length-32)return -4;
+    static const uint8_t expected[3][4]={{0,0,0,3},{1,0,0,0},{0,0,0,0}};
+    return event<3&&!memcmp(report+1,expected[event],4)?0:-5;
+}
+static int integrated_hid_events(int event_fd,const uint8_t shared[32],seal_fn seal,
+                                 open_fn open_sealed)
+{
+    uint8_t read_key[32],write_key[32],prefix[2],cipher[1024],tag[16],plain[1025],nonce[8];
+    static const char response[]="HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n";
+    unsigned events=0;
+    if(integrated_metadata_negative_controls())return -9;
+    if(integrated_semantic_negative_controls()||integrated_source_negative_controls())return -10;
+    if(hkdf32(shared,32,"Events-Salt","Events-Write-Encryption-Key",read_key) ||
+       hkdf32(shared,32,"Events-Salt","Events-Read-Encryption-Key",write_key))return -1;
+    for(unsigned i=0;i<32&&events<3;++i) {
+        fd_set ready;struct timeval wait={5,0};size_t length;
+        FD_ZERO(&ready);FD_SET(event_fd,&ready);
+        if(select(event_fd+1,&ready,NULL,NULL,&wait)<=0)return -2;
+        if(read_all(event_fd,prefix,2))return -3;
+        length=(size_t)prefix[0]|((size_t)prefix[1]<<8);
+        if(!length || length>sizeof(cipher) || read_all(event_fd,cipher,length) ||
+           read_all(event_fd,tag,sizeof(tag)))return -4;
+        memset(nonce,0,sizeof(nonce));nonce[0]=(uint8_t)i;
+        if(open_sealed(read_key,nonce,prefix,sizeof(prefix),cipher,length,plain,tag))return -5;
+        plain[length]=0;
+        if(length<5 || memcmp(plain,"POST ",5))return -6;
+        int report_status=integrated_hid_report(plain,length,events);
+        if(report_status<0) {
+            fprintf(stderr,"[integrated-media] HID report invalid event=%u status=%d plaintext=",i,report_status);
+            for(size_t j=0;j<length;++j)fprintf(stderr,"%02x",plain[j]);
+            fputc('\n',stderr);return -8;
+        }
+        prefix[0]=sizeof(response)-1;prefix[1]=0;
+        seal(write_key,nonce,prefix,sizeof(prefix),response,sizeof(response)-1,cipher,tag);
+        if(write_all(event_fd,prefix,sizeof(prefix)) ||
+           write_all(event_fd,cipher,sizeof(response)-1) || write_all(event_fd,tag,sizeof(tag)))return -7;
+        if(!report_status)++events;
+    }
+    if(events!=3)return -8;
+    puts("[integrated-media] native DSI HID events decrypted and acknowledged PASS");fflush(stdout);
+    return 0;
+}
+
+static int integrated_microphone_mode(void) {
+    const char *mode=getenv("MHI2Q_INTEGRATED_FAULT"),*session=getenv("MHI2Q_PEER_HEALTH_SESSION");
+    return mode && session && !strcmp(mode,"microphone") && !strcmp(session,"1");
+}
+static int integrated_microphone_socket(void) {
+    int fd=socket(AF_INET,SOCK_DGRAM,0);if(fd<0)return -1;
+    struct sockaddr_in address;memset(&address,0,sizeof(address));address.sin_family=AF_INET;
+    address.sin_addr.s_addr=htonl(INADDR_LOOPBACK);address.sin_port=htons(6011);
+    if(bind(fd,(struct sockaddr *)&address,sizeof(address))){close(fd);return -1;}
+    return fd;
+}
+static int integrated_microphone_check(int fd,const uint8_t shared[32],open_fn open_sealed) {
+    uint8_t key[32],packet[1500],plain[1500];size_t total=0;unsigned previous=0;
+    if(hkdf32(shared,32,"DataStream-Salt2","DataStream-Input-Encryption-Key",key))return -1;
+    for(unsigned i=0;i<4 && total<640;++i) {
+        fd_set ready;FD_ZERO(&ready);FD_SET(fd,&ready);struct timeval wait={3,0};
+        if(select(fd+1,&ready,NULL,NULL,&wait)<=0)return -2;
+        ssize_t length=recv(fd,packet,sizeof(packet),0);
+        if(length<38||length>1452||packet[0]!=0x80)return -3;
+        unsigned seq=((unsigned)packet[2]<<8)|packet[3];
+        if(i&&seq!=((previous+1)&65535))return -4;
+        previous=seq;
+        if(open_sealed(key,packet+length-8,packet+4,8,packet+12,(size_t)length-36,plain,packet+length-24))return -5;
+        for(size_t j=0;j<(size_t)length-36;j+=2)if(plain[j]!=0x10||plain[j+1]!=0)return -6;
+        total+=(size_t)length-36;
+    }
+    if(total<640)return -7;
+    puts("[integrated-media] native microphone capture encrypted to phone PASS");fflush(stdout);return 0;
+}
+#endif
+
 #ifdef MHI2Q_SCREEN_AUDIO_QEMU
 static int probe_audio_packets(const uint8_t *plist, size_t length,
                                const uint8_t shared[32], seal_fn seal)
 {
-    enum { samples_per_packet = 352, packet_count = 80 };
+    enum { packet_count = 80 };
+#ifdef MHI2Q_INTEGRATED_MEDIA_QEMU
+    const int microphone=integrated_microphone_mode();
+#else
+    const int microphone=0;
+#endif
+    const unsigned samples_per_packet=microphone?160:352,channels=microphone?1:2;
     struct sockaddr_in address;
-    uint8_t pcm_be[samples_per_packet * 4];
+    uint8_t pcm_be[samples_per_packet * channels * 2];
     uint8_t packet[12 + sizeof(pcm_be) + 16 + 8];
     uint8_t key[32];
     int port = stream_data_port(plist, length, 1);
@@ -695,7 +894,7 @@ static int probe_audio_packets(const uint8_t *plist, size_t length,
         pcm_be[i] = 0x20;
         pcm_be[i + 1] = 0x00;
     }
-#ifdef MHI2Q_WIRELESS_MEDIA_QEMU
+#if defined(MHI2Q_WIRELESS_MEDIA_QEMU) || defined(MHI2Q_INTEGRATED_MEDIA_QEMU)
     for (i = -2; i < packet_count; ++i) {
 #else
     for (i = 0; i < packet_count; ++i) {
@@ -703,6 +902,9 @@ static int probe_audio_packets(const uint8_t *plist, size_t length,
         unsigned seq = (unsigned)i + 1;
         unsigned timestamp = (unsigned)i * samples_per_packet;
         uint8_t nonce[8] = {0};
+#ifdef MHI2Q_INTEGRATED_MEDIA_QEMU
+        for(size_t sample=0;sample<sizeof(pcm_be);sample+=2)pcm_be[sample]=i<0?0x30:0x20;
+#endif
         memset(packet, 0, sizeof(packet));
         packet[0] = 0x80; /* RTP v2. */
         packet[1] = 100;  /* MainAudio payload type. */
@@ -714,14 +916,14 @@ static int probe_audio_packets(const uint8_t *plist, size_t length,
         packet[7] = (uint8_t)timestamp;
         packet[11] = 1; /* SSRC. */
         nonce[0] = (uint8_t)i;
-#ifdef MHI2Q_WIRELESS_MEDIA_QEMU
+#if defined(MHI2Q_WIRELESS_MEDIA_QEMU) || defined(MHI2Q_INTEGRATED_MEDIA_QEMU)
         seal(key, nonce, packet + 4, 8, pcm_be, sizeof(pcm_be),
 #else
         seal(key, nonce, packet, 12, pcm_be, sizeof(pcm_be),
 #endif
              packet + 12, packet + 12 + sizeof(pcm_be));
         memcpy(packet + sizeof(packet) - sizeof(nonce), nonce, sizeof(nonce));
-#ifdef MHI2Q_WIRELESS_MEDIA_QEMU
+#if defined(MHI2Q_WIRELESS_MEDIA_QEMU) || defined(MHI2Q_INTEGRATED_MEDIA_QEMU)
         if (i == -2) packet[12 + sizeof(pcm_be)] ^= 1; /* invalid tag */
         if (i == -1) packet[4] ^= 1; /* invalid timestamp AAD */
 #endif
@@ -731,7 +933,7 @@ static int probe_audio_packets(const uint8_t *plist, size_t length,
             close(fd);
             return -3;
         }
-        usleep(8000);
+        usleep(microphone?10000:8000);
     }
     close(fd);
     usleep(150000);
@@ -773,6 +975,9 @@ static int probe_screen_data(const uint8_t *plist, size_t length, int *out_fd,
         uint8_t ciphertext[sizeof(avcc_frame)], tag[16];
         uint32_t body_size = sizeof(avcc);
         float width = 800.0f, height = 480.0f;
+#ifdef MHI2Q_INTEGRATED_MEDIA_QEMU
+        width = 1024.0f;
+#endif
         memcpy(header, &body_size, 4);
         header[4] = 1; /* VideoConfig. */
         memcpy(header + 16, &width, sizeof(width));
@@ -828,6 +1033,9 @@ static int probe_screen_data(const uint8_t *plist, size_t length, int *out_fd,
 }
 #endif
 
+#ifdef MHI2Q_INTEGRATED_MEDIA_QEMU
+#include "paired_alt_forward_qemu.h"
+#endif
 static int probe_screen_command(int fd, const char *request,
                                 const uint8_t write_key[32],
                                 const uint8_t read_key[32],
@@ -990,7 +1198,34 @@ static int probe_control_setup(int fd, const uint8_t shared[32],
 #endif
 #ifdef MHI2Q_SCREEN_AUDIO_QEMU
     /* screen 110 plus main PCM audio 100; generated with Python plistlib. */
-#ifdef MHI2Q_WIRELESS_MEDIA_QEMU
+#ifdef MHI2Q_INTEGRATED_MEDIA_QEMU
+    static const uint8_t microphone_plist[] = {
+        0x62,0x70,0x6c,0x69,0x73,0x74,0x30,0x30,0xd1,0x01,0x02,0x57,0x73,0x74,0x72,0x65,
+        0x61,0x6d,0x73,0xa2,0x03,0x08,0xd2,0x04,0x05,0x06,0x07,0x5f,0x10,0x12,0x73,0x74,
+        0x72,0x65,0x61,0x6d,0x43,0x6f,0x6e,0x6e,0x65,0x63,0x74,0x69,0x6f,0x6e,0x49,0x44,
+        0x54,0x74,0x79,0x70,0x65,0x10,0x01,0x10,0x6e,0xd6,0x09,0x0a,0x0b,0x0c,0x04,0x05,
+        0x0d,0x0e,0x0f,0x10,0x11,0x12,0x5b,0x61,0x75,0x64,0x69,0x6f,0x46,0x6f,0x72,0x6d,
+        0x61,0x74,0x59,0x61,0x75,0x64,0x69,0x6f,0x54,0x79,0x70,0x65,0x58,0x64,0x61,0x74,
+        0x61,0x50,0x6f,0x72,0x74,0x55,0x69,0x6e,0x70,0x75,0x74,0x10,0x10,0x5f,0x10,0x11,
+        0x73,0x70,0x65,0x65,0x63,0x68,0x52,0x65,0x63,0x6f,0x67,0x6e,0x69,0x74,0x69,0x6f,
+        0x6e,0x11,0x17,0x7b,0x09,0x10,0x02,0x10,0x64,0x08,0x0b,0x13,0x16,0x1b,0x30,0x35,
+        0x37,0x39,0x46,0x52,0x5c,0x65,0x6b,0x6d,0x81,0x84,0x85,0x87,0x00,0x00,0x00,0x00,
+        0x00,0x00,0x01,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x13,0x00,0x00,0x00,0x00,
+        0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x89,
+    };
+    static const uint8_t screen_audio_plist[] = {
+        0x62,0x70,0x6c,0x69,0x73,0x74,0x30,0x30,0xd1,0x01,0x02,0x57,0x73,0x74,0x72,0x65,
+        0x61,0x6d,0x73,0xa2,0x03,0x08,0xd2,0x04,0x05,0x06,0x07,0x54,0x74,0x79,0x70,0x65,
+        0x5f,0x10,0x12,0x73,0x74,0x72,0x65,0x61,0x6d,0x43,0x6f,0x6e,0x6e,0x65,0x63,0x74,
+        0x69,0x6f,0x6e,0x49,0x44,0x10,0x6e,0x10,0x01,0xd4,0x04,0x05,0x09,0x0a,0x0b,0x0c,
+        0x0d,0x0e,0x5b,0x61,0x75,0x64,0x69,0x6f,0x46,0x6f,0x72,0x6d,0x61,0x74,0x59,0x61,
+        0x75,0x64,0x69,0x6f,0x54,0x79,0x70,0x65,0x10,0x64,0x10,0x02,0x11,0x80,0x00,0x55,
+        0x6d,0x65,0x64,0x69,0x61,0x08,0x0b,0x13,0x16,0x1b,0x20,0x35,0x37,0x39,0x42,0x4e,
+        0x58,0x5a,0x5c,0x5f,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x01,0x00,0x00,0x00,0x00,
+        0x00,0x00,0x00,0x0f,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+        0x00,0x00,0x00,0x65,
+    };
+#elif defined(MHI2Q_WIRELESS_MEDIA_QEMU)
     /* Include the phone's feature proposal to catch unsupported altScreen
      * negotiation under the production wrapper's enabled display flags. */
     static const uint8_t screen_audio_plist[] = {
@@ -1024,14 +1259,25 @@ static int probe_control_setup(int fd, const uint8_t shared[32],
     };
 #endif
     const uint8_t *plist = screen_audio_plist;
-    const size_t plist_length = sizeof(screen_audio_plist);
+    size_t plist_length = sizeof(screen_audio_plist);
 #else
     const uint8_t *plist = screen_plist;
-    const size_t plist_length = sizeof(screen_plist);
+    size_t plist_length = sizeof(screen_plist);
 #endif
 #else
     const uint8_t *plist = empty_plist;
-    const size_t plist_length = sizeof(empty_plist);
+    size_t plist_length = sizeof(empty_plist);
+#endif
+#ifdef MHI2Q_INTEGRATED_MEDIA_QEMU
+    int integrated_mic_fd=-1;
+    if(features_mode()) {
+        plist=alt_fixture_setup;plist_length=sizeof(alt_fixture_setup);
+        if(alt_forward_start())return -44;
+    }
+    if(integrated_microphone_mode()) {
+        plist=microphone_plist;plist_length=sizeof(microphone_plist);
+        integrated_mic_fd=integrated_microphone_socket();if(integrated_mic_fd<0)return -43;
+    }
 #endif
     uint8_t write_key[32], read_key[32], nonce[8] = {0};
     uint8_t request[512], frame[2 + sizeof(request) + 16];
@@ -1129,6 +1375,16 @@ static int probe_control_setup(int fd, const uint8_t shared[32],
                 line[sizeof(prefix) - 1 + content_length * 2] = '\n';
                 (void)write_all(1, line, sizeof(prefix) + content_length * 2);
             }
+#ifdef MHI2Q_INTEGRATED_MEDIA_QEMU
+            const char *fault=getenv("MHI2Q_INTEGRATED_FAULT");
+            if(features_mode()&&alt_forward_send(response+header_end,content_length,shared,seal)<0)return -45;
+            if(fault && !strcmp(fault,"partial-record") && !strcmp(getenv("MHI2Q_PEER_HEALTH_SESSION"),"1")) {
+                int health=integrated_partial_record(fd);
+                __sync_lock_test_and_set(&timing.stop,1);pthread_join(timing_thread,NULL);
+                timing_started=0;close(timing.fd);
+                return health?-42:200;
+            }
+#endif
 #ifdef MHI2Q_SCREEN_DATA_QEMU
             {
                 static const char record[] = "RECORD /stream RTSP/1.0\r\n"
@@ -1147,6 +1403,12 @@ static int probe_control_setup(int fd, const uint8_t shared[32],
                 teardown_nonce = 3;
 #endif
                 ++next_response;
+#ifdef MHI2Q_INTEGRATED_MEDIA_QEMU
+                if(record_status==200 && integrated_mic_fd>=0) {
+                    int checked=integrated_microphone_check(integrated_mic_fd,shared,open_sealed);
+                    if(checked){printf("[integrated-media] microphone check=%d\n",checked);fflush(stdout);return -44;}
+                }
+#endif
 #ifdef MHI2Q_WIRELESS_MEDIA_QEMU
                 if (record_status == 200) {
                     int checked = media_event_mic_check(screen_event_fd, mic_fd, shared, seal, open_sealed);
@@ -1159,9 +1421,22 @@ static int probe_control_setup(int fd, const uint8_t shared[32],
                                              content_length, &screen_data_fd,
                                              shared, seal);
 #ifdef MHI2Q_SCREEN_AUDIO_QEMU
-                if (port > 0)
-                    (void)probe_audio_packets(response + header_end,
-                                              content_length, shared, seal);
+                if (port > 0 && probe_audio_packets(response + header_end,
+                                              content_length, shared, seal)<0)return -41;
+#endif
+#ifdef MHI2Q_INTEGRATED_MEDIA_QEMU
+                /* Send VideoConfig/frame before signalling the HMI.  Native
+                 * manager state becomes READY only after that screen path;
+                 * waiting for an HID report first would deadlock both peers. */
+                if(record_status==200 && screen_event_fd>=0) {
+                    char ready[128];const char *session=getenv("MHI2Q_PEER_HEALTH_SESSION");
+                    int marker;
+                    if(!session || snprintf(ready,sizeof(ready),"/dev/shmem/integrated-events-ready-%s",session)>=(int)sizeof(ready))return -45;
+                    marker=open(ready,O_WRONLY|O_CREAT|O_TRUNC,0600);
+                    if(marker<0 || write_all(marker,"1",1)){if(marker>=0)close(marker);return -45;}
+                    close(marker);
+                    if(integrated_hid_events(screen_event_fd,shared,seal,open_sealed))return -46;
+                }
 #endif
                 {
                     int size = snprintf(line, sizeof(line),
@@ -1175,9 +1450,24 @@ static int probe_control_setup(int fd, const uint8_t shared[32],
                 if (size > 0 && (size_t)size < sizeof(line))
                     (void)write_all(1, line, (size_t)size);
                 if (screen_data_fd >= 0) {
+#ifndef MHI2Q_PEER_HEALTH_QEMU
                     close(screen_data_fd);
                     screen_data_fd = -1;
+#endif
                 }
+            }
+#endif
+#ifdef MHI2Q_PEER_HEALTH_QEMU
+            {
+                int health=peer_health_native(fd,&timing,timing_thread);
+                timing_started=0;
+                close(timing.fd);
+#ifdef MHI2Q_INTEGRATED_MEDIA_QEMU
+                if(integrated_mic_fd>=0)close(integrated_mic_fd);
+#endif
+                if(screen_data_fd>=0)close(screen_data_fd);
+                if(screen_event_fd>=0)close(screen_event_fd);
+                return health ? -40:200;
             }
 #endif
 #if defined(MHI2Q_ACTIVE_SESSION_QUIESCE_QEMU) && !defined(MHI2Q_SCREEN_ABRUPT_CLOSE_QEMU)
@@ -1287,6 +1577,9 @@ static int probe_control_setup(int fd, const uint8_t shared[32],
             }
 #else
 #ifdef MHI2Q_STOCK210_LIFECYCLE_QEMU
+            #ifdef MHI2Q_STOCK210_ACTIVE_STOP_QEMU
+            if(lifecycle_cycle==1&&lifecycle_active_stop())return -33;
+            #endif
             if(lifecycle_cycle==2) {
                 if(lifecycle_wired())return -32;
                 static const char marker[] =
@@ -1530,7 +1823,7 @@ static int verify_pairing(const struct pairing_identity *identity)
 #endif
         if (info_status) goto exit;
     }
-#if defined(MHI2Q_PAIRING_HOOK_QEMU) && !defined(MHI2Q_WIRELESS_MEDIA_QEMU)
+#if defined(MHI2Q_PAIRING_HOOK_QEMU) && !defined(MHI2Q_WIRELESS_MEDIA_QEMU) && !defined(MHI2Q_PEER_HEALTH_QEMU)
     {
         int check = hook_control_regression(fd, shared, seal, open_sealed, next_read_counter);
         if (check) {
@@ -1637,6 +1930,18 @@ int main(int argc, char **argv)
 #ifdef MHI2Q_STOCK210_LIFECYCLE_QEMU
     if(lifecycle_start_phone())goto exit;
 #endif
+#ifdef MHI2Q_INTEGRATED_MEDIA_QEMU
+    {
+        FILE *saved=fopen("/mnt/persist/integrated-phone-identity","rb");
+        if(saved) {
+            size_t size=fread(&identity,1,sizeof(identity),saved);
+            int tail=fgetc(saved);fclose(saved);
+            if(size!=sizeof(identity) || tail!=EOF)goto exit;
+            puts("[integrated-media] stored phone identity loaded");fflush(stdout);
+            goto integrated_pair_verify;
+        }
+    }
+#endif
     fd = open_receiver();
     if (fd < 0) goto exit;
     state = 0;
@@ -1658,6 +1963,13 @@ int main(int argc, char **argv)
     (void)write_all(1, srp_success, sizeof(srp_success) - 1);
     if (exchange_identity(fd, shared, values, &identity)) goto exit;
     (void)write_all(1, setup_success, sizeof(setup_success) - 1);
+#ifdef MHI2Q_INTEGRATED_MEDIA_QEMU
+    {
+        int saved=open("/mnt/persist/integrated-phone-identity",O_WRONLY|O_CREAT|O_EXCL,0600);
+        if(saved<0 || write_all(saved,&identity,sizeof(identity)))goto exit;
+        close(saved);
+    }
+#endif
     close(fd);
     fd = -1;
 #ifdef MHI2Q_REPEAT_MEDIA_QEMU
@@ -1672,7 +1984,15 @@ int main(int argc, char **argv)
     }
     repeat_media_cycle = 1;
 #endif
+#ifdef MHI2Q_INTEGRATED_MEDIA_QEMU
+integrated_pair_verify:
+#endif
     if (verify_pairing(&identity)) goto exit;
+#ifdef MHI2Q_PEER_HEALTH_QEMU
+    /* Native health closed this session. SI fixture owns cancel/re-admit;
+     * do not run unrelated reconnect/bad-signature tests against its child. */
+    result=0;goto exit;
+#endif
 #ifdef MHI2Q_PAIRING_HOOK_QEMU
     hook_bad_signature = 1;
     if (verify_pairing(&identity)) goto exit;
@@ -1723,6 +2043,9 @@ int main(int argc, char **argv)
     }
 #endif
 #ifdef MHI2Q_STOCK210_LIFECYCLE_QEMU
+#ifdef MHI2Q_STOCK210_ACTIVE_STOP_QEMU
+    if(lifecycle_active_recovery()||lifecycle_wait(lifecycle_phone))goto exit;
+#else
     if(lifecycle_wait(lifecycle_phone))goto exit;
     lifecycle_cycle=2;
     if(lifecycle_start_phone() || verify_pairing(&identity))goto exit;
@@ -1730,6 +2053,7 @@ int main(int argc, char **argv)
     lifecycle_cycle=3;hook_media_run=0;
     if(lifecycle_start_phone() || verify_pairing(&identity) || lifecycle_stop())goto exit;
     puts("[stock210-lifecycle] two media generations, USB priority, wireless resume passed");fflush(stdout);
+#endif
 #endif
     (void)write_all(1, info_success, sizeof(info_success) - 1);
     result = 0;

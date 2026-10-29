@@ -14,7 +14,7 @@ import sys
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
-LOADER = ROOT/'assets/soundamp/J525_8W0035465_SW0420_SHARC_SPI_bitrev.ldr.bin'
+LOADER = ROOT/'output/r2/soundamp/J525_8W0035465_SW0420_SHARC_SPI_bitrev.ldr.bin'
 PROOFS = (
     (0x124393,0x12440b,'4156768d627eaad2ae7407c871bce2086c1219583ab8a6c4d0d0de1759f9db7f'),
     (0x12d80b,0x12d844,'21cac447dae589b6e1eb2e9b65bffe805ae9f9b49710d7c91f25869099424b10'),

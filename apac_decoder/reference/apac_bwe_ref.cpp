@@ -3,7 +3,7 @@
  */
 
 // Per-function oracle for stage e (the bandwidth extension).  It dlopens
-// Pioneer's APAC decoder and calls BWELPC's and
+// Pioneer's copy of Apple's APAC decoder and calls BWELPC's and
 // APACBWE2Decoder's members directly, then prints what the library produced in
 // the fixture format tests/fixtures/ uses.
 //

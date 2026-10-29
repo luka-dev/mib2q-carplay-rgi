@@ -10,7 +10,7 @@
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 MOD=${MOD:-$ROOT/build/install_unprotected/install_MoreIncredibleBash/mod}
-UNPACKED=$ROOT/../../Tools/mhi2q-qemu/out/unpacked
+UNPACKED=${CARPLAY_UNPACKED_ROOT:-$ROOT/../../Tools/mhi2q-qemu/out/unpacked}
 FW=$UNPACKED/MHI2Q_US_AUG22_P5087_MU1316/qnx6/MMX2QC/efs-sys/10/default/system
 APP_SI=qnx6/MMX2QC/app/10/default/app/eso/bin/apps/smartphone_integrator
 US_SI=$UNPACKED/MHI2Q_US_AUG22_P5087_MU1316/$APP_SI
@@ -18,6 +18,11 @@ APP_AIRPLAY=qnx6/MMX2QC/app/10/default/app/eso/lib/libairplay.so
 US_AIRPLAY=$UNPACKED/MHI2Q_US_AUG22_P5087_MU1316/$APP_AIRPLAY
 CN_AIRPLAY=$UNPACKED/MHI2Q_CN_AUG22_K1004_MU1003_4M0906961EG/$APP_AIRPLAY
 CN_SI=$UNPACKED/MHI2Q_CN_AUG22_K1004_MU1003_4M0906961EG/$APP_SI
+APP_DEVA=qnx6/MMX2QC/app/10/default/app/armle/lib/dll/deva-ctrl-qc.so
+US_DEVA=$UNPACKED/MHI2Q_US_AUG22_P5087_MU1316/$APP_DEVA
+CN_DEVA=$UNPACKED/MHI2Q_CN_AUG22_K1004_MU1003_4M0906961EG/$APP_DEVA
+CN_WIFI=$UNPACKED/MHI2Q_CN_AUG22_K1004_MU1003_4M0906961EG/qnx6/MMX2QC/app/10/default/app/armle/lib/dll/devnp-mrvl_wlan-sdiorm.so
+CN_STACK=$UNPACKED/MHI2Q_CN_AUG22_K1004_MU1003_4M0906961EG/qnx6/MMX2QC/app/10/default/app/armle/sbin/io-pkt-v6-hc
 MP=$(command -v micropython || command -v python3)
 SH=$(command -v mksh || command -v ksh)
 [ -f "$MOD/custom.sh" ] && [ -d "$FW" ] && [ -f "$US_SI" ] && [ -f "$CN_SI" ] ||
@@ -31,21 +36,26 @@ e2p() { printf '0x000003a0 '; { printf '%s' "$1"; head -c $((25 - ${#1})) /dev/z
 
 unit() {   # unit [stock SI file] [stock deva size]: a fresh fake unit, BOTH jars left over from an older install
     U=$T/u; rm -rf "$U" "$T/mod"; mkdir -p "$U/$JARS" "$U/mnt/app/eso/bin/apps" "$U/mnt/app/armle/lib/dll" \
-        "$U/mnt/app/root/hooks" "$U/mnt/app/eso/lib" "$U/mnt/system/etc/scripts" "$U/mnt/system/etc/eso/production" "$U/tmp"
+        "$U/sbin" "$U/mnt/app/armle/usr/sbin" "$U/mnt/app/root/hooks" "$U/mnt/app/eso/lib" "$U/mnt/system/etc/scripts" "$U/mnt/system/etc/eso/production" "$U/tmp"
     cp "$FW/etc/eso/production/smartphone_integrator.json" "$FW/etc/eso/production/dio_manager.json" "$U/mnt/system/etc/eso/production/"
     cp "$FW"/etc/pf.*conf "$FW/etc/usblauncher_otg.lua" "$U/mnt/system/etc/"
     cp "$FW/etc/scripts/startncm.sh" "$FW/etc/scripts/stopncm.sh" "$U/mnt/system/etc/scripts/"
     cp "${1:-$US_SI}" "$U/mnt/app/eso/bin/apps/smartphone_integrator"
     cp "${3:-$US_AIRPLAY}" "$U/mnt/app/eso/lib/libairplay.so"
-    head -c "${2:-694904}" /dev/zero > "$U/mnt/app/armle/lib/dll/deva-ctrl-qc.so"
+    cp "$MOD/carplay/wifi/runtime/stock.so" "$U/mnt/app/armle/lib/dll/devnp-mrvl_wlan-sdiorm.so"
+    cp "$UNPACKED/MHI2Q_US_AUG22_P5087_MU1316/qnx6/MMX2QC/app/10/default/app/armle/sbin/io-pkt-v6-hc" "$U/sbin/io-pkt-v6-hc"
+    cp "$UNPACKED/MHI2Q_US_AUG22_P5087_MU1316/qnx6/MMX2QC/app/10/default/app/armle/usr/sbin/mcd" "$U/mnt/app/armle/usr/sbin/mcd"
+    cp "$FW/etc/mcd.conf" "$U/mnt/system/etc/mcd.conf"
+    cp "${2:-$US_DEVA}" "$U/mnt/app/armle/lib/dll/deva-ctrl-qc.so"
     echo old > "$U/$JARS/carplay_hook.jar"; echo old > "$U/$JARS/carplay_hook_cn.jar"
     cp -R "$MOD" "$T/mod"
     # the installer and the startup are sources: test the checked-in ones, binaries come from the stage
     cp "$ROOT/deploy/smartphone_integrator/carplay_startup.sh" "$T/mod/carplay/root/mnt/app/root/hooks/carplay_startup.sh"
     cp "$ROOT/deploy/binpatch/binpatch.py" "$T/mod/carplay/"
-    rm -f "$T/mod/carplay/root/mnt/app/eso/bin/apps/smartphone_integrator"   # an older stage still carried it
-    grep -v '/eso/bin/apps/smartphone_integrator$' "$MOD/carplay/manifest.txt" > "$T/mod/carplay/manifest.txt"
-    sed -e "s#/mnt/#$U/mnt/#g" -e "s#dest=/\${f\#./}#dest=$U/\${f\#./}#" -e "/carlife_active/!s#/tmp/#$U/tmp/#g" "$ROOT/install_MoreIncredibleBash/mod/custom.sh" > "$T/mod/custom.sh"
+    cp "$ROOT/deploy/binpatch/wifi_runtime.py" "$T/mod/carplay/"
+    rm -f "$T/mod/carplay/root/mnt/app/eso/bin/apps/smartphone_integrator" "$T/mod/carplay/root/mnt/app/armle/lib/dll/deva-ctrl-qc.so"
+    grep -Ev '/(eso/bin/apps/smartphone_integrator|armle/lib/dll/deva-ctrl-qc\.so)$' "$MOD/carplay/manifest.txt" > "$T/mod/carplay/manifest.txt"
+    sed -e "s#/mnt/#$U/mnt/#g" -e "s#WIFI_STACK=/sbin/#WIFI_STACK=$U/sbin/#" -e "s#dest=/\${f\#./}#dest=$U/\${f\#./}#" -e "/carlife_active/!s#/tmp/#$U/tmp/#g" "$ROOT/install_MoreIncredibleBash/mod/custom.sh" > "$T/mod/custom.sh"
     grep -q "dest=$U/" "$T/mod/custom.sh" || { echo "FAIL: harness could not redirect the install root"; exit 1; }
 }
 run() { CARPLAY_SAVE_WAIT=0 CARPLAY_MICROPYTHON=$MP E2P_READ="$1" E2P_AMP_READ="${2:-echo 0x000000fc 02}" "$SH" "$T/mod/custom.sh" install > "$T/log" 2>&1; }
@@ -65,6 +75,25 @@ cmp -s "$U/mnt/app/eso/bin/apps/smartphone_integrator" "$ROOT/deploy/smartphone_
 run "cat $T/us" && cmp -s "$U/mnt/app/eso/bin/apps/smartphone_integrator" "$ROOT/deploy/smartphone_integrator/smartphone_integrator" &&
     cmp -s "$U/mnt/app/eso/bin/apps/smartphone_integrator.carplay-stock" "$US_SI" || fail us-again "reinstall changed the SI or its stock copy"
 
+cmp -s "$U/mnt/app/armle/lib/dll/devnp-mrvl_wlan-sdiorm.so" "$MOD/carplay/wifi/runtime/driver.so" || fail wifi "full runtime not activated"
+cmp -s "$U/mnt/app/armle/lib/dll/devnp-mrvl_wlan-sdiorm.so.carplay-stock" "$MOD/carplay/wifi/runtime/stock.so" || fail wifi "stock backup changed"
+for profile in pf.conf pf.ecm0.conf pf.mlan0.conf pf.ppp0.conf; do
+    grep -q ' 6030:6032,' "$U/mnt/system/etc/$profile" || fail pf-ports "required AltScreen/audio ports missing"
+done
+cmp -s "$U/mnt/app/armle/usr/sbin/mcd" "$ROOT/mcd/mcd.custom" || fail mcd "detector patch missing"
+cmp -s "$U/mnt/system/etc/mcd.conf" "$ROOT/mcd/mcd.conf.custom" || fail mcd "priority patch missing"
+# An old card must not reinstall the retired IP/QoS marker or watcher.
+PF_STAGE=$T/mod/carplay/root/mnt/app/root/hooks
+cp "$T/mod/carplay/manifest.txt" "$T/static-manifest"
+echo 1 > "$PF_STAGE/carplay_pf_dynamic.enabled"
+printf '#!/bin/sh\nexit 0\n' > "$PF_STAGE/carplay_pf_watch"
+printf '%s\n' './mnt/app/root/hooks/carplay_pf_dynamic.enabled' './mnt/app/root/hooks/carplay_pf_watch' >> "$T/mod/carplay/manifest.txt"
+run "cat $T/us" || fail pf-dynamic "old-card compatibility install failed"
+[ ! -e "$U/mnt/app/root/hooks/carplay_pf_dynamic.enabled" ] && [ ! -e "$U/mnt/app/root/hooks/carplay_pf_watch" ] || fail pf-retired "retired QoS updater installed from old card"
+rm "$PF_STAGE/carplay_pf_dynamic.enabled" "$PF_STAGE/carplay_pf_watch"
+cp "$T/static-manifest" "$T/mod/carplay/manifest.txt"
+run "cat $T/us" || fail pf-static "static reinstall failed"
+[ ! -e "$U/mnt/app/root/hooks/carplay_pf_dynamic.enabled" ] && [ ! -e "$U/mnt/app/root/hooks/carplay_pf_watch" ] || fail pf-static "stale dynamic updater retained"
 # Decoder library install is byte-exact, keeps the original across reinstall,
 # and uninstall restores that original rather than deleting a firmware library.
 LIB=mnt/app/eso/lib/libairplay.so
@@ -77,7 +106,7 @@ assert len(stock) == len(new) and new[0x8c694] == new[0x8c6f4] == 2
 PY
 cmp -s "$U/$LIB.carplay-stock" "$US_AIRPLAY" || fail decoder "original backup changed"
 cp "$U/$LIB" "$T/decoder-installed"
-CARPLAY_SAVE_WAIT=0 "$SH" "$T/mod/custom.sh" uninstall > "$T/log" 2>&1 || fail decoder "uninstall failed"
+CARPLAY_SAVE_WAIT=0 CARPLAY_MICROPYTHON=$MP "$SH" "$T/mod/custom.sh" uninstall > "$T/log" 2>&1 || fail decoder "uninstall failed"
 cmp -s "$U/$LIB" "$US_AIRPLAY" && [ ! -e "$U/$LIB.carplay-stock" ] || fail decoder "uninstall did not restore original"
 run "cat $T/us" || fail decoder "reinstall after uninstall failed"
 cmp -s "$U/$LIB" "$T/decoder-installed" || fail decoder "reinstall differs"
@@ -105,13 +134,19 @@ spatial | grep -q '^export AUDIO_SPATIAL=0 ' && grep -q '^export AUDIO_SPATIAL_A
 unit; run "cat $T/us" false || fail amp-none "install failed"
 spatial | grep -q '^export AUDIO_SPATIAL=0 ' && grep -q 'amplifier coding unreadable' "$T/log" || fail amp-none "unreadable coding kept the 6-channel path"
 
-unit "$CN_SI" 694860 "$CN_AIRPLAY"; run "cat $T/cn" || fail cn "install failed"
+unit "$CN_SI" "$CN_DEVA" "$CN_AIRPLAY"
+cp "$CN_WIFI" "$U/mnt/app/armle/lib/dll/devnp-mrvl_wlan-sdiorm.so"
+cp "$CN_STACK" "$U/sbin/io-pkt-v6-hc"
+run "cat $T/cn" || fail cn "install failed"
 cmp -s "$U/$LIB" "$CN_AIRPLAY" && [ ! -e "$U/$LIB.carplay-stock" ] || fail decoder-cn "unsupported library changed"
+cmp -s "$U/mnt/app/armle/lib/dll/devnp-mrvl_wlan-sdiorm.so" "$CN_WIFI" &&
+    [ ! -e "$U/mnt/app/armle/lib/dll/devnp-mrvl_wlan-sdiorm.so.carplay-stock" ] || fail wifi-cn "foreign CN Wi-Fi driver changed"
 grep -q 'region CN, brand AU' "$T/log" || fail cn "train not read"
 [ "$(cmp -l "$U/mnt/app/eso/bin/apps/smartphone_integrator" "$CN_SI" | wc -l | tr -d ' ')" = 4 ] &&
     [ -f "$U/mnt/app/eso/bin/apps/smartphone_integrator.carplay-stock" ] || fail cn "CN SI not patched in place"
-cmp -s "$U/mnt/app/armle/lib/dll/deva-ctrl-qc.so" "$T/mod/carplay/root/mnt/app/armle/lib/dll/deva-ctrl-qc.so" &&
-    spatial | grep -qx 'export AUDIO_SPATIAL=1' || fail cn "CN deva not replaced or 5.1 off"
+[ "$(cmp -l "$U/mnt/app/armle/lib/dll/deva-ctrl-qc.so" "$CN_DEVA" | wc -l | tr -d ' ')" = 140 ] &&
+    cmp -s "$U/mnt/app/armle/lib/dll/deva-ctrl-qc.so.carplay-stock" "$CN_DEVA" &&
+    spatial | grep -qx 'export AUDIO_SPATIAL=1' || fail cn "CN deva not patched in place or 5.1 off"
 has carplay_hook_cn.jar && [ ! -e "$U/$JARS/carplay_hook.jar" ] || fail cn "want only carplay_hook_cn.jar"
 
 unit; run "cat $T/jp" || fail jp "install failed"
@@ -158,6 +193,32 @@ for brand in vw po none; do
         grep -q 'Audi MHI2Q units only' "$T/log" || fail $brand "no refusal message"; fi
     diff -r "$T/before" "$U" > /dev/null || fail $brand "the unit was changed"
     rm -rf "$T/before"
+done
+
+
+# Wi-Fi provenance failure must happen before the installer copies payload files.
+for issue in unknown-stack missing-stack unknown-driver stale-backup; do
+    unit
+    W=$U/mnt/app/armle/lib/dll/devnp-mrvl_wlan-sdiorm.so
+    case $issue in
+        unknown-stack) echo changed > "$U/sbin/io-pkt-v6-hc" ;;
+        missing-stack) rm "$U/sbin/io-pkt-v6-hc" ;;
+        unknown-driver) echo future-runtime > "$W" ;;
+        stale-backup) echo stale-backup > "$W.carplay-stock" ;;
+    esac
+    cp -R "$U" "$T/before"
+    run "cat $T/us" && fail "$issue" "unsafe install did not stop"
+    diff -r "$T/before" "$U" >/dev/null || fail "$issue" "preflight changed unit files"
+    rm -rf "$T/before"
+done
+# Stale saved SI/MCD/DEVA/decoder inputs may never replace a newer current file.
+unit
+for F in mnt/app/eso/bin/apps/smartphone_integrator mnt/app/armle/usr/sbin/mcd mnt/app/armle/lib/dll/deva-ctrl-qc.so mnt/app/eso/lib/libairplay.so; do
+    cp "$U/$F" "$U/$F.carplay-stock"; echo future-current > "$U/$F"
+done
+run "cat $T/us" || fail current-input "install failed"
+for F in mnt/app/eso/bin/apps/smartphone_integrator mnt/app/armle/usr/sbin/mcd mnt/app/armle/lib/dll/deva-ctrl-qc.so mnt/app/eso/lib/libairplay.so; do
+    grep -qx future-current "$U/$F" || fail current-input "stale backup downgraded $F"
 done
 
 echo "installer end-to-end: US/JP -> carplay_hook.jar, CN -> carplay_hook_cn.jar, SI patched in place on US and CN, NCM lua line-patched (stock/old fence/unknown), deva always replaced, other jar removed, unverified train and another CarPlay mod (MIBSI/AltScreen/mibr) refused untouched then installed on the second run, other region -> none, VW/Porsche/no E2P refused untouched, 5.1 only on an external amp ($SH) PASS"

@@ -20,72 +20,233 @@ pub fn receiver_device_id(mac: [u8; 6]) -> u64 {
     u64::from_be_bytes([0, 0, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]])
 }
 
-#[cfg(target_os = "nto")]
-pub fn start_background(
-    config: crate::control::Config,
-) -> std::sync::Arc<std::sync::atomic::AtomicBool> {
-    use std::sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
+/// The authenticated RFCOMM peer is mandatory: never select another phone
+/// merely because its Bonjour response arrived first.
+pub fn txt_matches_peer(txt: &[u8], peer: &str) -> bool {
+    let Some(mut address) = peer
+        .strip_prefix("bt:")
+        .and_then(|s| crate::wifi_ie::parse_mac(s).ok())
+    else {
+        return false;
     };
-    let active = Arc::new(AtomicBool::new(true));
-    let worker_active = Arc::clone(&active);
-    std::thread::spawn(move || {
-        let device_id = match crate::wifi_ie::parse_mac(&config.device_id) {
-            Ok(mac) => receiver_device_id(mac),
-            Err(error) => {
-                eprintln!("[carplay-control] invalid device ID: {error}");
-                return;
+    // Pinned btstack helper 0x157A8C formats SDK bytes [5]..[0]. Keep the
+    // established SI key unchanged; reverse only for conventional TXT MAC.
+    address.reverse();
+    let mut remaining = txt;
+    let mut id = None;
+    while !remaining.is_empty() {
+        let size = remaining[0] as usize;
+        remaining = &remaining[1..];
+        if size == 0 || size > remaining.len() {
+            return false;
+        }
+        let field = &remaining[..size];
+        remaining = &remaining[size..];
+        if field.len() >= 3 && field[..3].eq_ignore_ascii_case(b"id=") {
+            if id.is_some() {
+                return false;
             }
-        };
-        while worker_active.load(Ordering::Acquire) {
-            match qnx_dns_sd::discover_on("uap0", Duration::from_secs(15)) {
-                Ok(controller) if worker_active.load(Ordering::Acquire) => {
-                    match connect(&controller, device_id, &config.source_version) {
-                        Ok(status) => {
-                            eprintln!("[carplay-control] connect accepted: HTTP {status}");
-                            return;
-                        }
-                        Err(error) => eprintln!("[carplay-control] connect failed: {error}"),
-                    }
-                }
-                Ok(_) => return,
-                Err(error) => eprintln!("[carplay-control] discovery: {error}"),
-            }
-            if worker_active.load(Ordering::Acquire) {
-                std::thread::sleep(Duration::from_secs(2));
+            id = std::str::from_utf8(&field[3..])
+                .ok()
+                .and_then(|s| crate::wifi_ie::parse_mac(s).ok());
+            if id.is_none() {
+                return false;
             }
         }
-    });
-    active
+    }
+    id == Some(address)
 }
 
 #[cfg(target_os = "nto")]
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TaskMode {
+    Connect,
+    Probe,
+}
+#[cfg(target_os = "nto")]
+#[derive(Clone)]
+struct TaskSpec {
+    config: crate::control::Config,
+    peer: String,
+    generation: u32,
+    mode: TaskMode,
+}
+#[cfg(target_os = "nto")]
+struct Task {
+    spec: TaskSpec,
+    active: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    success: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    handle: std::thread::JoinHandle<()>,
+}
+#[cfg(target_os = "nto")]
 #[derive(Default)]
 pub struct ConnectorSlot {
-    active: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+    task: Option<Task>,
+    pending: Option<TaskSpec>,
 }
 
 #[cfg(target_os = "nto")]
 impl ConnectorSlot {
-    pub fn start(&mut self, config: crate::control::Config) {
-        if self.active.is_none() {
-            self.active = Some(start_background(config));
+    fn request(
+        &mut self,
+        config: crate::control::Config,
+        peer: String,
+        generation: u32,
+        mode: TaskMode,
+    ) {
+        if self.task.as_ref().is_some_and(|t| {
+            t.spec.generation == generation
+                && t.spec.peer == peer
+                && t.spec.mode == mode
+                && t.active.load(std::sync::atomic::Ordering::Acquire)
+        }) {
+            return;
+        }
+        self.reset();
+        self.pending = Some(TaskSpec {
+            config,
+            peer,
+            generation,
+            mode,
+        });
+    }
+    pub fn start(&mut self, config: crate::control::Config, peer: String, generation: u32) {
+        self.request(config, peer, generation, TaskMode::Connect);
+    }
+    pub fn probe(&mut self, config: crate::control::Config, peer: String, generation: u32) {
+        self.request(config, peer, generation, TaskMode::Probe);
+    }
+    pub fn reset(&mut self) {
+        self.pending = None;
+        if let Some(task) = &self.task {
+            task.active
+                .store(false, std::sync::atomic::Ordering::Release);
         }
     }
-
-    pub fn reset(&mut self) {
-        if let Some(active) = self.active.take() {
-            active.store(false, std::sync::atomic::Ordering::Release);
+    /// Retire cancelled work before launching its successor. Never join an
+    /// in-flight DNS/TCP operation on the iAP2 timer thread.
+    pub fn tick(&mut self) -> Option<u32> {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+        };
+        let mut reachable = None;
+        if self.task.as_ref().is_some_and(|t| t.handle.is_finished()) {
+            let task = self.task.take().unwrap();
+            if task.spec.mode == TaskMode::Probe
+                && task.active.load(Ordering::Acquire)
+                && task.success.load(Ordering::Acquire)
+            {
+                reachable = Some(task.spec.generation);
+            }
+            let _ = task.handle.join();
         }
+        if self.task.is_none() {
+            if let Some(spec) = self.pending.take() {
+                let active = Arc::new(AtomicBool::new(true));
+                let permission = active.clone();
+                let success = Arc::new(AtomicBool::new(false));
+                let complete = success.clone();
+                let worker = spec.clone();
+                let handle = std::thread::spawn(move || {
+                    let device_id = match crate::wifi_ie::parse_mac(&worker.config.device_id) {
+                        Ok(mac) => receiver_device_id(mac),
+                        Err(_) => return,
+                    };
+                    let interface = if cfg!(feature = "native-api-lab") {
+                        "ecm0"
+                    } else {
+                        "uap0"
+                    };
+                    while permission.load(Ordering::Acquire) {
+                        match qnx_dns_sd::discover_for(
+                            interface,
+                            &worker.peer,
+                            Duration::from_secs(15),
+                            &permission,
+                        ) {
+                            Ok(controller) if permission.load(Ordering::Acquire) => {
+                                let result = if worker.mode == TaskMode::Probe {
+                                    TcpStream::connect_timeout(
+                                        &controller.address,
+                                        Duration::from_secs(2),
+                                    )
+                                    .map(|_| 200)
+                                } else {
+                                    connect_cancellable(
+                                        &controller,
+                                        device_id,
+                                        &worker.config.source_version,
+                                        &permission,
+                                    )
+                                };
+                                match result {
+                                    Ok(status) if permission.load(Ordering::Acquire) => {
+                                        if worker.mode == TaskMode::Probe {
+                                            eprintln!(
+                                                "[carplay-control] same-peer reachability accepted"
+                                            );
+                                        } else {
+                                            eprintln!(
+                                                "[carplay-control] connect accepted: HTTP {status} (same RFCOMM peer)"
+                                            );
+                                        }
+                                        complete.store(true, Ordering::Release);
+                                        return;
+                                    }
+                                    Err(error) => eprintln!("[carplay-control] attempt: {error}"),
+                                    _ => return,
+                                }
+                            }
+                            Err(error) if permission.load(Ordering::Acquire) => {
+                                eprintln!("[carplay-control] discovery: {error}")
+                            }
+                            _ => return,
+                        }
+                        for _ in 0..20 {
+                            if !permission.load(Ordering::Acquire) {
+                                return;
+                            }
+                            std::thread::sleep(Duration::from_millis(100));
+                        }
+                    }
+                });
+                self.task = Some(Task {
+                    spec,
+                    active,
+                    success,
+                    handle,
+                });
+            }
+        }
+        reachable
     }
 }
-
 #[cfg(target_os = "nto")]
 impl Drop for ConnectorSlot {
     fn drop(&mut self) {
         self.reset();
     }
+}
+
+#[cfg(target_os = "nto")]
+fn connect_cancellable(
+    controller: &Controller,
+    id: u64,
+    version: &str,
+    permission: &std::sync::atomic::AtomicBool,
+) -> io::Result<u16> {
+    use std::sync::atomic::Ordering;
+    let mut stream = TcpStream::connect_timeout(&controller.address, Duration::from_secs(2))?;
+    stream.set_read_timeout(Some(Duration::from_secs(2)))?;
+    stream.set_write_timeout(Some(Duration::from_secs(2)))?;
+    if !permission.load(Ordering::Acquire) {
+        return Err(io::Error::new(
+            io::ErrorKind::Interrupted,
+            "cancelled CarPlay connect",
+        ));
+    }
+    send_connect(&mut stream, &controller.host_name, id, version)
 }
 
 fn valid_header_value(value: &str) -> bool {
@@ -181,6 +342,22 @@ pub fn send_connect<S: Read + Write>(
 mod tests {
     use super::*;
     use std::net::TcpListener;
+
+    #[test]
+    fn discovery_correlates_sdk_order_and_rejects_ambiguous_or_foreign_txt() {
+        let text = b"id=01:02:03:04:05:06";
+        let mut txt = vec![text.len() as u8];
+        txt.extend_from_slice(text);
+        assert!(txt_matches_peer(&txt, "bt:06:05:04:03:02:01"));
+        assert!(!txt_matches_peer(&txt, "bt:01:02:03:04:05:06"));
+        assert!(!txt_matches_peer(&txt, "bt:00:00:00:00:00:00"));
+        assert!(!txt_matches_peer(&[], "bt:06:05:04:03:02:01"));
+        for n in 1..txt.len() {
+            assert!(!txt_matches_peer(&txt[..n], "bt:06:05:04:03:02:01"));
+        }
+        txt.extend_from_slice(&txt.clone());
+        assert!(!txt_matches_peer(&txt, "bt:06:05:04:03:02:01"));
+    }
 
     #[test]
     fn sends_control_connect_to_discovered_phone() {

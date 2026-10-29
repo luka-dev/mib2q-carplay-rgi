@@ -50,6 +50,7 @@ struct GraftState {
     u8 from_daemon[8 + MAX_DATA];
     volatile u32 discovery_ready;
     volatile u32 bridge_ready;
+    u8 peer_address[6], peer_valid;
 };
 
 typedef char check_event_size[(sizeof(struct RfEvent) == 16) ? 1 : -1];
@@ -149,7 +150,13 @@ void graft_rf_callback(void *channel, const struct RfEvent *event) {
         guard_lock(s);
         ++s->generation;
         s->connected = 1;
-        if (!queue_push(s, FRAME_CONNECTED, s->generation, 0, 0))
+        /* Event 2 carries BtRemoteDevice*, as used by HfRfCallback 0x248370.
+         * Its six address bytes are at +13 (copy in 0x248370 event-1 path).
+         * Keep SDK byte order as an opaque stable peer key, not a USB serial. */
+        s->peer_valid = event->data != 0;
+        if (s->peer_valid) bytes_copy(s->peer_address,(const u8 *)event->data+13,6);
+        if (!queue_push(s, FRAME_CONNECTED, s->generation,
+                        s->peer_address, s->peer_valid?6:0))
             __atomic_store_n(&s->overflow, 1u, __ATOMIC_RELEASE);
         guard_unlock(s);
         return;
@@ -162,6 +169,7 @@ void graft_rf_callback(void *channel, const struct RfEvent *event) {
         }
         u32 previous = s->generation;
         s->connected = 0;
+        s->peer_valid = 0;
         ++s->generation;
         if (!queue_push(s, FRAME_DISCONNECTED, previous, 0, 0))
             __atomic_store_n(&s->overflow, 1u, __ATOMIC_RELEASE);

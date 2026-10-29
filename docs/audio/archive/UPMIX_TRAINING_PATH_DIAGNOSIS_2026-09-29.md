@@ -27,7 +27,7 @@ The model is the original 586,916-parameter BandSepNet, `norm=stream`, `mask=com
 
 ## 1. Cache and numerical path
 
-The [raw/cache audit](../../../tools/stereo-upmix-render/audit_fit_cache_consistency.py) re-read the original WAVs for the exact four windows. Its resampling origin is aligned to the 147/160 polyphase grid, with margins; a **single common scale per song across all seven groups** accounts for the historical peak normalization. Native rates were 44.1 kHz, expected files were present, and no selected cached sample hit the int16 clipping boundary.
+The [raw/cache audit](RETIRED_TOOLS.md#tool-615e96582253) re-read the original WAVs for the exact four windows. Its resampling origin is aligned to the 147/160 polyphase grid, with margins; a **single common scale per song across all seven groups** accounts for the historical peak normalization. Native rates were 44.1 kHz, expected files were present, and no selected cached sample hit the int16 clipping boundary.
 
 | TRAIN ID prefix | Raw/cache residual, dB | Maximum residual, int16 LSB |
 | --- | ---: | ---: |
@@ -42,7 +42,7 @@ STFT→ISTFT identity normalized squared error was **6.33e−14**. With `M = E c
 
 ## 2. Can the student fit its own four windows?
 
-The [finite-fit probe](../../../tools/stereo-upmix-render/separator_fit_probe.py) trains on one fixed resident GPU batch: no remix, gains, pseudo labels or new windows. It uses the existing linear magnitude-plus-complex loss and multiresolution magnitude bundle, constant AdamW learning rate `3e−4`, weight decay `1e−4`, and gradient clipping at 5. This is a deliberately favorable diagnostic, not the production cosine schedule. The frozen sanity gate was two evaluations closing at least 80% of the initial-to-ratio-oracle objective gap, capped at 10k steps.
+The [finite-fit probe](RETIRED_TOOLS.md#tool-ff094a02702d) trains on one fixed resident GPU batch: no remix, gains, pseudo labels or new windows. It uses the existing linear magnitude-plus-complex loss and multiresolution magnitude bundle, constant AdamW learning rate `3e−4`, weight decay `1e−4`, and gradient clipping at 5. This is a deliberately favorable diagnostic, not the production cosine schedule. The frozen sanity gate was two evaluations closing at least 80% of the initial-to-ratio-oracle objective gap, capped at 10k steps.
 
 | Step | Objective | Initial-to-oracle gap closed | Median waveform SI-SDR, dB |
 | --- | ---: | ---: | ---: |
@@ -58,7 +58,7 @@ A bounded real magnitude-ratio reference achieved objective **.037064**, lower t
 
 ## 3. Encoder/state inference versus decoder
 
-The [decoder-state probe](../../../tools/stereo-upmix-render/separator_decoder_oracle_probe.py) first captures the trained decoder's exact inputs and reproduces its output with **zero replay residual**. It then removes the encoder and optimizes a separate local state for each band/frame and a shared global state for each frame. Local states stay in `[−3,3]`, global states in `[−1,1]`, the amplitude ranges allowed by this baseline's recurrent and tanh residual paths. Two independent arms start from the same checkpoint states and run 2k steps each:
+The [decoder-state probe](RETIRED_TOOLS.md#tool-fbcc8dfed5c4) first captures the trained decoder's exact inputs and reproduces its output with **zero replay residual**. It then removes the encoder and optimizes a separate local state for each band/frame and a shared global state for each frame. Local states stay in `[−3,3]`, global states in `[−1,1]`, the amplitude ranges allowed by this baseline's recurrent and tanh residual paths. Two independent arms start from the same checkpoint states and run 2k steps each:
 
 | Arm | Objective | Remaining checkpoint objective | Median SI-SDR, dB |
 | --- | ---: | ---: | ---: |
@@ -74,7 +74,7 @@ The baseline has 32 local and 32 global state values and one linear per-band com
 
 For the mixture-inferred frozen operator, `M(V+D+B+E)` decomposes algebraically into four contributions. Their energies do not add: the contributions contain cross terms and can cancel. In the exact-ratio oracle, the sum reconstructs clean `E`, while vocal transmission on the four windows is **.186 / .080 / .111 / .244** and non-silent bass transmission is **.148 / .270 / .068**. Calling those numbers audible voice/bass contamination in the final summed eligible waveform is incorrect.
 
-The [real-C consistency audit](../../../tools/stereo-upmix-render/audit_separator_oracle_renderer.py) rendered the exact eligible target and the reconstructed ratio output through the same `upmix_render_inj.exe`, fixed historical harness `shipped` knobs, model and guard, `--mask-drive 1`, and one gain shared by every window and arm. It did not change renderer parameters or touch the hook.
+The [real-C consistency audit](RETIRED_TOOLS.md#tool-1e766b2a112f) rendered the exact eligible target and the reconstructed ratio output through the same `upmix_render_inj.exe`, fixed historical harness `shipped` knobs, model and guard, `--mask-drive 1`, and one gain shared by every window and arm. It did not change renderer parameters or touch the hook.
 
 | TRAIN ID prefix | Rear-input PCM maximum difference, LSB | Six-channel output NSE | Maximum output difference, LSB |
 | --- | ---: | ---: | ---: |
@@ -89,7 +89,7 @@ The harness's rear-share estimate is also conditional: it examines cells where a
 
 ## 5. Physical polarity stress check
 
-The [CPU audit](../../../tools/stereo-upmix-render/audit_separator_polarity.py) negates both mixture and target, then negates the inferred output back. A correct diagonal ratio is unchanged by this global polarity flip. Exact target audio, energy and source identities are otherwise unchanged.
+The [CPU audit](RETIRED_TOOLS.md#tool-245e220a132d) negates both mixture and target, then negates the inferred output back. A correct diagonal ratio is unchanged by this global polarity flip. Exact target audio, energy and source identities are otherwise unchanged.
 
 The finite-fit checkpoint's objective worsened **.05558→.13688**, with median SI-SDR **7.80→−.97 dB**. Thus its apparent four-window fitting gain includes sensitivity to the particular waveform realization; it is not evidence of source identity learning. The historical Cambridge 4k control was much less affected on those same TRAIN crops: objective **.11905→.11953**, median SI-SDR **1.50→1.58 dB**, although output-difference squared-energy ratios were **.0227–.0856**. This stress test does not establish polarity sensitivity as the main cause of the production frontier, and does not compare the two checkpoints as a matched efficacy pair.
 
@@ -97,7 +97,7 @@ An initial CPU launch failed before evaluation because the generic loader's CUDA
 
 ## 6. Encoder activations and gradients
 
-The [CPU activation audit](../../../tools/stereo-upmix-render/audit_separator_encoder.py) reproduced the fixed checkpoint objective within CPU/GPU arithmetic tolerance and measured both seed-1 initialization and the trained model on the identical batch/stats.
+The [CPU activation audit](RETIRED_TOOLS.md#tool-986d7604af06) reproduced the fixed checkpoint objective within CPU/GPU arithmetic tolerance and measured both seed-1 initialization and the trained model on the identical batch/stats.
 
 | Measurement | Initial encoder | Fitted encoder |
 | --- | ---: | ---: |
@@ -127,7 +127,7 @@ No new architecture/data efficacy job is queued by this report. The completed di
 | Decoder relaxation | `separator_decoder_oracle_probe_v1\decoder_result.json` | `e802c7a214b55c4eefa73feff9c2f5b174682b4d842ba71f9031f12c56f0ac0f` |
 | Real-C oracle parity | `separator_oracle_renderer_audit_v1\result.json` | `5c4f8d694e90e87083b71e4398ff5e07c08aa83667c95e198653a7ece87bd350` |
 
-The adjacent `manifest.json`, `references.json`, `progress.json`, `cache_audit.json`, `polarity_audit_v2.json`, `encoder_audit.json` and logs preserve the per-window results. Diagnostic sources are committed in `tools/stereo-upmix-render/`; guarded single-GPU runners are [`run_separator_fit_probe.ps1`](../../../tools/stereo-upmix-render/pc/run_separator_fit_probe.ps1) and [`run_separator_decoder_oracle_probe.ps1`](../../../tools/stereo-upmix-render/pc/run_separator_decoder_oracle_probe.ps1). Both refuse an existing output, pending rapid queue or existing lease and remove only their own lease token. A session interruption did not restart any completed work: terminal files and live state were checked before continuing.
+The adjacent `manifest.json`, `references.json`, `progress.json`, `cache_audit.json`, `polarity_audit_v2.json`, `encoder_audit.json` and logs preserve the per-window results. Diagnostic sources are committed in `tools/stereo-upmix-render/`; guarded single-GPU runners are [`run_separator_fit_probe.ps1`](RETIRED_TOOLS.md#tool-90eee3111837) and [`run_separator_decoder_oracle_probe.ps1`](RETIRED_TOOLS.md#tool-86a06d006d92). Both refuse an existing output, pending rapid queue or existing lease and remove only their own lease token. A session interruption did not restart any completed work: terminal files and live state were checked before continuing.
 
 ## Follow-up: input symmetry did not repair reconstruction
 

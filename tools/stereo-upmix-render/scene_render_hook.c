@@ -12,21 +12,17 @@
  *      tools/stereo-upmix-render/scene_render_hook.c hook/audio/stereo_upmix.c \
  *      hook/audio/soundcheck.c \
  *      hook/audio/scene_engine_math.c hook/audio/scene_clusters.c hook/audio/scene_engine.c \
- *      hook/audio/scene_mask.c hook/audio/scene_mask_worker.c \
+ *      hook/audio/scene_mask.c \
  *      -lm -lpthread -o build/scene_port/scene_render_hook
  *
  * Usage: scene_render_hook [--mode scene|off] [--lfe off|assist] [--block 1..1024]
  *        [--alpha A] [--inst-alpha A] [--inst-gamma G] [--duck-depth D]
  *        [--rear-delay-ms MS] [--sigma-min S] [--side-lp-hz HZ] [--bleed-cancel K] [--front-keep-db DB]
- *        [--centre F]
  *        [--mask-blob masknet.bin] [--mask-rows rows.f32]
  *        in.wav out.wav
  *
  * --mask-blob installs the fine mask net (scene_mask.h, the SMSKNET1 file of
- * port/export_masknet_weights.py) on the mask worker as AUDIO_SCENE_MASK_BLOB
- * does on the unit, without a thread: every job runs inside its submit, so each
- * row lands exactly one control after its boundary (the unit's timing while the
- * worker keeps up) and the render does not depend on --block.
+ * port/export_masknet_weights.py) as AUDIO_SCENE_MASK_BLOB does on the unit.
  * --mask-rows (a -DSPA_STEREO_UPMIX_TESTING build) writes the rows the backend
  * installed, one record of 257 elig + 257 prot float32 per 512-frame control
  * boundary (zeros while the net primes), and checks the cadence (boundaries at
@@ -123,33 +119,6 @@ static void observe_rows(uint64_t pushed, const float *elig, const float *prot)
 }
 #endif
 
-/* The worker without a thread, stepped inside submit (see --mask-blob). */
-static struct spa_scene_mask_worker worker;
-static const struct spa_scene_mask_provider *worker_provider;
-
-static int inline_submit(void *context, uint32_t generation, uint32_t sequence, const float *in512)
-{
-    int queued = worker_provider->submit(worker_provider->context, generation, sequence, in512);
-
-    (void)context;
-    while (spa_scene_mask_worker_step(&worker)) {}
-    return queued;
-}
-
-static int inline_receive(void *context, uint32_t generation, struct spa_scene_mask_row *row)
-{
-    (void)context;
-    return worker_provider->receive(worker_provider->context, generation, row);
-}
-
-static void inline_reset(void *context, uint32_t generation)
-{
-    (void)context;
-    worker_provider->reset(worker_provider->context, generation);
-}
-
-static const struct spa_scene_mask_provider inline_provider = { NULL, inline_submit, inline_receive, inline_reset };
-
 static int parse_float(const char *text, float *value)
 {
     char *end = 0;
@@ -164,7 +133,7 @@ static int parse_float(const char *text, float *value)
 
 int main(int argc, char **argv)
 {
-    static struct spa_stereo_upmix state;          /* 362 KB: never on the stack */
+    static struct spa_stereo_upmix state;          /* 700 KB: never on the stack */
     static uint8_t in_bytes[SPA_STEREO_UPMIX_MAX_FRAMES * 4];
     static uint8_t out_bytes[SPA_STEREO_UPMIX_MAX_FRAMES * 12];
     static int16_t pcm2[SPA_STEREO_UPMIX_MAX_FRAMES * 2];
@@ -206,13 +175,11 @@ int main(int argc, char **argv)
             int extra = f ? fgetc(f) : EOF;
 
             if (f) fclose(f);
-            if (!f || got != sizeof blob || extra != EOF ||
-                spa_scene_mask_worker_start(&worker, &blob, 1u, SPA_SCENE_MASK_WORKER_NO_THREAD) != 0) {
+            spa_stereo_upmix_config_set_scene_mask_blob(&config, &blob, got);
+            if (!f || extra != EOF || !config.scene_mask_blob) {
                 fprintf(stderr, "error: %s is not a %u-byte %s mask blob\n", v, (unsigned)sizeof blob, SMASK_MAGIC);
                 return 1;
             }
-            worker_provider = spa_scene_mask_worker_provider(&worker);
-            spa_stereo_upmix_config_set_scene_mask_provider(&config, &inline_provider);
             blob_path = v;
         } else if (!strcmp(a, "--mask-rows")) {
 #ifdef SPA_STEREO_UPMIX_TESTING
@@ -243,8 +210,6 @@ int main(int argc, char **argv)
             spa_stereo_upmix_config_set_scene_bleed_cancel(&config, x);
         } else if (!strcmp(a, "--front-keep-db")) {
             spa_stereo_upmix_config_set_scene_front_keep_db(&config, x);
-        } else if (!strcmp(a, "--centre")) {
-            spa_stereo_upmix_config_set_scene_centre(&config, x);
         } else {
             goto usage;
         }
@@ -304,7 +269,7 @@ int main(int argc, char **argv)
 usage:
     fprintf(stderr, "usage: %s [--mode scene|off] [--lfe off|assist] [--block 1..1024] "
             "[--alpha A] [--inst-alpha A] [--inst-gamma G] [--duck-depth D] [--rear-delay-ms MS] "
-            "[--sigma-min S] [--side-lp-hz HZ] [--bleed-cancel K] [--front-keep-db DB] [--centre F] [--mask-blob masknet.bin] "
+            "[--sigma-min S] [--side-lp-hz HZ] [--bleed-cancel K] [--front-keep-db DB] [--mask-blob masknet.bin] "
             "[--mask-rows rows.f32] in.wav out.wav\n", argv[0]);
     return 2;
 }

@@ -30,6 +30,16 @@
 #endif
 #include <string.h>
 #include <unistd.h>
+#ifdef MHI2Q_BRIDGE_STOCK210
+#include <stdlib.h>
+#include <fcntl.h>
+#include <signal.h>
+#include <devctl.h>
+#include <sys/procfs.h>
+#endif
+#ifdef MHI2Q_STOCK210_LIFECYCLE_QEMU
+#include <sys/wait.h>
+#endif
 
 #define MANAGER_NEW_RETURN ((uintptr_t)0x00171c48u)
 #define NEXT_NEW_RETURN    ((uintptr_t)0x00171c6cu)
@@ -69,10 +79,17 @@ typedef char video_omx_arm32_prefix[(sizeof(void *) == 4 && sizeof(struct video_
 struct video_omx_component_prefix {
     uint32_t size, version;
     void *private_data, *app_data;
-    void *methods[12];
+    void *methods[9];
+    uint32_t (*use_buffer)(void *, void **, uint32_t, void *, uint32_t, uint8_t *);
+    void *allocate_buffer;
+    uint32_t (*free_buffer)(void *, uint32_t, void *);
     uint32_t (*empty)(void *, void *);
+    uint32_t (*fill)(void *, void *);
 };
 typedef char video_omx_empty_slot[(offsetof(struct video_omx_component_prefix, empty) == 64) ? 1 : -1];
+typedef char video_omx_fill_slot[(offsetof(struct video_omx_component_prefix, fill) == 68) ? 1 : -1];
+typedef char video_omx_use_slot[(offsetof(struct video_omx_component_prefix, use_buffer) == 52) ? 1 : -1];
+typedef char video_omx_free_slot[(offsetof(struct video_omx_component_prefix, free_buffer) == 60) ? 1 : -1];
 static uint32_t (*video_omx_get_handle)(void **, char *, void *, void *);
 static uint32_t (*video_omx_empty)(void *, void *);
 static pthread_once_t video_omx_once = PTHREAD_ONCE_INIT;
@@ -81,10 +98,40 @@ static void *video_capture_handle;
 static unsigned video_capture_records;
 static size_t video_capture_bytes;
 static uint32_t video_omx_empty_tap(void *, void *);
+#ifdef MHI2Q_CAPTURE_INPUT_ONLY_OMX_QEMU
+/* The pinned base image has a fake OMX decoder. Its black output loop emits
+ * callbacks after Idle/Loaded acknowledgements, leaving renderer commands
+ * referencing freed buffers on native disconnect. This protocol-only profile
+ * captures genuine AVC input and independently decodes it on the host: do not
+ * fabricate decoded output or claim QNX hardware decode/presentation. */
+static unsigned video_capture_sessions;
+static int video_omx_fake_backend;
+#include "native_fake_omx.h"
+static uint32_t video_omx_sink_fill(void *handle, void *header)
+{
+    (void)handle; (void)header;
+    return 0;
+}
+uint32_t OMX_FreeHandle(void *handle)
+{
+    static uint32_t (*next)(void *);
+    if (!next) next = (uint32_t (*)(void *))dlsym(RTLD_NEXT, "OMX_FreeHandle");
+    if (!next) return 0x80001001u;
+    /* COMXVideoDecoder has stopped its input worker before FreeHandle. */
+    pthread_mutex_lock(&video_capture_lock);
+    if (handle == video_capture_handle) video_capture_handle = NULL;
+    pthread_mutex_unlock(&video_capture_lock);
+    return next(handle);
+}
+#endif
 
 static void video_omx_resolve(void)
 {
     video_omx_get_handle = (uint32_t (*)(void **, char *, void *, void *))dlsym(RTLD_NEXT, "OMX_GetHandle");
+#ifdef MHI2Q_CAPTURE_INPUT_ONLY_OMX_QEMU
+    const int *marker = dlsym(RTLD_DEFAULT, "__libomx_stub_present");
+    video_omx_fake_backend = marker && *marker == 1;
+#endif
 }
 
 static int video_capture_write(const char *data, size_t length)
@@ -152,6 +199,9 @@ uint32_t OMX_GetHandle(void **handle, char *name, void *context, void *callbacks
     uint32_t result;
     pthread_once(&video_omx_once, video_omx_resolve);
     if (!video_omx_get_handle) return 0x80001001u;
+#ifdef MHI2Q_CAPTURE_INPUT_ONLY_OMX_QEMU
+    if (!video_omx_fake_backend) return 0x80001001u;
+#endif
     result = video_omx_get_handle(handle, name, context, callbacks);
     if (!result && handle && *handle && name && !strcmp(name, "OMX.qcom.video.decoder.avc")) {
         pthread_mutex_lock(&video_capture_lock);
@@ -161,6 +211,29 @@ uint32_t OMX_GetHandle(void **handle, char *name, void *context, void *callbacks
              * per-instance slot, not an ELF symbol. Preserve its real method.
              */
             if (component->size >= sizeof(*component) && component->size <= 256 && component->empty) {
+#ifdef MHI2Q_CAPTURE_INPUT_ONLY_OMX_QEMU
+                /* At most four sequential sessions, 32 records/2 MiB each.
+                 * A new run's serial snapshot starts at record 1; global
+                 * capture remains bounded across repeated native reconnects. */
+                component->fill = video_omx_sink_fill;
+                if (!component->use_buffer || !component->free_buffer) {
+                    pthread_mutex_unlock(&video_capture_lock);
+                    return 0x80001001u;
+                }
+                video_omx_use_buffer = component->use_buffer;
+                video_omx_free_buffer = component->free_buffer;
+                component->use_buffer = video_omx_use_buffer_tap;
+                component->free_buffer = video_omx_free_buffer_tap;
+                if (video_capture_sessions >= 4) {
+                    fprintf(stderr, "[native-omx-qemu] input capture session bound reached\n");
+                    pthread_mutex_unlock(&video_capture_lock);
+                    return result;
+                }
+                ++video_capture_sessions;
+                video_capture_records = 0;
+                video_capture_bytes = 0;
+                fprintf(stderr, "[native-omx-qemu] input-only fake OMX session=%u\n", video_capture_sessions);
+#endif
                 video_omx_empty = component->empty;
                 video_capture_handle = *handle;
                 component->empty = video_omx_empty_tap;
@@ -393,15 +466,16 @@ static void native_ui_after_record(void *connection, void *message, int result)
     pthread_detach(thread);
 }
 #endif
-static int trace_http_handle(void *connection, void *message, void *context)
+int mhi2q_lab_http_request(void *connection,void *message,int *result)
 {
-    static const char marker[] = "[http-delegate-qemu] route-called\n";
-    (void)write(2, marker, sizeof(marker) - 1);
 #ifdef MHI2Q_CAPTURE_SOFTWARE_MFI_QEMU
-    int result;
-    if (sap_request(connection, message, &result)) return result;
+    return sap_request(connection,message,result);
+#else
+    (void)connection;(void)message;(void)result;return 0;
 #endif
-    int stock_result = stock_http_handle(connection, message, context);
+}
+void mhi2q_lab_http_done(void *connection,void *message,int stock_result)
+{
 #ifdef MHI2Q_CAPTURE_VIDEO_MEMORY_QEMU
     if (!stock_result && message && sap_word(message, 8224) == 6) {
         const char *method = (const char *)(uintptr_t)sap_word(message, 8220);
@@ -414,6 +488,15 @@ static int trace_http_handle(void *connection, void *message, void *context)
 #ifdef MHI2Q_CAPTURE_NATIVE_UI_QEMU
     native_ui_after_record(connection, message, stock_result);
 #endif
+}
+static int trace_http_handle(void *connection, void *message, void *context)
+{
+    static const char marker[] = "[http-delegate-qemu] route-called\n";
+    int result;
+    (void)write(2, marker, sizeof(marker) - 1);
+    if(mhi2q_lab_http_request(connection,message,&result))return result;
+    int stock_result=stock_http_handle(connection,message,context);
+    mhi2q_lab_http_done(connection,message,stock_result);
     return stock_result;
 }
 
@@ -439,6 +522,12 @@ int HTTPServerCreate(void **out_server, const void *delegate)
     /* This preload must precede libcarplay_hook. Let its guarded Create see
      * the original stock delegate, then wrap the copied request slot only. */
     int result = next(out_server, delegate);
+    const char *lab_http=getenv("MHI2Q_HTTP210_LAB");
+    if(lab_http && !strcmp(lab_http,"1")) {
+        static const char marker[]="[native-mfi-sap-qemu] module router preserved; lab callbacks composed\n";
+        (void)write(2,marker,sizeof(marker)-1);
+        return result;
+    }
     if (!result && out_server && *out_server && delegate &&
         dladdr((void *)slots[9], &owner) && owner.dli_fbase &&
         slots[9] - (uintptr_t)owner.dli_fbase == 0x302e0u) {
@@ -740,6 +829,120 @@ int AirPlayReceiverSessionScreen_ProcessFrames(void *session, void *socket,
 #endif
 
 #ifdef MHI2Q_CAPTURE_SCREEN_AUDIO_QEMU
+int AirPlayReceiverSessionSetup(void *session,void *request,void **response,int flags)
+{
+    typedef int (*fn)(void *,void *,void **,int);
+    fn real=(fn)dlsym(RTLD_NEXT,"AirPlayReceiverSessionSetup");
+    void *(*str)(void *,const char *,unsigned)=dlsym(RTLD_NEXT,"CFStringCreateWithCString");
+    void *(*get)(const void *,const void *)=dlsym(RTLD_NEXT,"CFDictionaryGetValue");
+    long (*count)(const void *)=dlsym(RTLD_NEXT,"CFArrayGetCount");
+    void *(*at)(const void *,long)=dlsym(RTLD_NEXT,"CFArrayGetValueAtIndex");
+    int64_t (*number)(const void *,const void *,int *)=dlsym(RTLD_NEXT,"CFDictionaryGetInt64");
+    void (*release)(const void *)=dlsym(RTLD_NEXT,"CFRelease");
+    if(str&&get&&count&&at&&number&&release){
+        const char *names[]={"streams","type","audioFormat","framesPerPacket"};void *keys[4];
+        for(unsigned j=0;j<4;++j)keys[j]=str(NULL,names[j],0x08000100);
+        void *streams=get(request,keys[0]);long n=streams?count(streams):0;
+        for(long i=0;i<n && i<8;++i){void *entry=at(streams,i);
+            fprintf(stderr,"[audio-qemu] SETUP stream type=%lld format=%llx fpp=%lld\n",
+                (long long)number(entry,keys[1],NULL),(unsigned long long)number(entry,keys[2],NULL),
+                (long long)number(entry,keys[3],NULL));
+            if(number(entry,keys[1],NULL)==103) {
+                const char *fields[]={"isMedia","packetFormatAPAP","spf","audioFormatIndex","audioFormat","ct"};
+                for(unsigned k=0;k<6;++k) {
+                    void *key=str(NULL,fields[k],0x08000100);int err=0;
+                    long long value=number(entry,key,&err);
+                    fprintf(stderr,"[audio-qemu] buffered %s present=%d int_error=%d value=%lld\n",fields[k],get(entry,key)!=NULL,err,value);
+                    release(key);
+                }
+            }
+        }
+        for(unsigned j=0;j<4;++j)release(keys[j]);
+    }
+    int result=real?real(session,request,response,flags):-1;
+    if(!result&&response&&*response&&str&&get&&count&&at&&number&&release){
+        const char *names[]={"streams","type","dataPort","controlPort","audioBufferSize","audioLatency"};void *keys[6];
+        for(unsigned j=0;j<6;++j)keys[j]=str(NULL,names[j],0x08000100);
+        void *streams=get(*response,keys[0]);long n=streams?count(streams):0;
+        for(long i=0;i<n&&i<8;++i){void *entry=at(streams,i);
+#ifdef MHI2Q_VPHONE_AUDIO_PERIPHERAL
+            if(number(entry,keys[1],NULL)==102){
+                extern unsigned mhi2q_audio_peripheral_control_port(void);
+                void (*set)(void *,const void *,int64_t)=dlsym(RTLD_NEXT,"CFDictionarySetInt64");
+                unsigned port=mhi2q_audio_peripheral_control_port();
+                if(!set||!port)abort();
+                set(entry,keys[3],port);
+            }
+#endif
+            fprintf(stderr,"[audio-qemu] SETUP response type=%lld dataPort=%lld controlPort=%lld buffer=%lld latency=%lld\n",
+                (long long)number(entry,keys[1],NULL),(long long)number(entry,keys[2],NULL),
+                (long long)number(entry,keys[3],NULL),(long long)number(entry,keys[4],NULL),
+                (long long)number(entry,keys[5],NULL));}
+        for(unsigned j=0;j<6;++j)release(keys[j]);
+    }
+    return result;
+}
+static FILE *audio_xml_file;
+FILE *fopen(const char *path,const char *mode)
+{
+    typedef FILE *(*fn)(const char *,const char *);
+    fn real=(fn)dlsym(RTLD_NEXT,"fopen");
+    FILE *file=real?real(path,mode):NULL;
+    int saved=errno;
+    if(path && strstr(path,"cinemo")) {
+        audio_xml_file=file;
+        fprintf(stderr,"[audio-qemu] fopen path=%s mode=%s opened=%d errno=%d\n",path,mode,file!=NULL,saved);
+    }
+    errno=saved;return file;
+}
+int fseek(FILE *file,long offset,int origin)
+{
+    typedef int (*fn)(FILE *,long,int);fn real=(fn)dlsym(RTLD_NEXT,"fseek");
+    int result=real?real(file,offset,origin):-1,saved=errno;
+    if(file==audio_xml_file)fprintf(stderr,"[audio-qemu] XML fseek offset=%ld origin=%d result=%d errno=%d\n",offset,origin,result,saved);
+    errno=saved;return result;
+}
+long ftell(FILE *file)
+{
+    typedef long (*fn)(FILE *);fn real=(fn)dlsym(RTLD_NEXT,"ftell");
+    long result=real?real(file):-1;int saved=errno;
+    if(file==audio_xml_file)fprintf(stderr,"[audio-qemu] XML ftell=%ld errno=%d\n",result,saved);
+    errno=saved;return result;
+}
+size_t fread(void *buffer,size_t size,size_t count,FILE *file)
+{
+    typedef size_t (*fn)(void *,size_t,size_t,FILE *);fn real=(fn)dlsym(RTLD_NEXT,"fread");
+    size_t result=real?real(buffer,size,count,file):0;int saved=errno;
+    if(file==audio_xml_file)fprintf(stderr,"[audio-qemu] XML fread size=%u count=%u result=%u errno=%d\n",(unsigned)size,(unsigned)count,(unsigned)result,saved);
+    errno=saved;return result;
+}
+/* Diagnostic boundary only: observe the real SDK used by this DIO process,
+ * without substituting its codec or class registry. */
+int CinemoCreateAudioCodec(void **codec)
+{
+    typedef int (*fn)(void **);
+    fn real=(fn)dlsym(RTLD_NEXT,"CinemoCreateAudioCodec");
+    int result=real?real(codec):-1;
+    fprintf(stderr,"[audio-qemu] CinemoCreateAudioCodec result=%d handle=%d\n",result,codec&&*codec!=NULL);
+    return result;
+}
+int ICinemoAudioCodec_Initialize(void *codec,void *context,void *callback,const void *input,const void *output)
+{
+    typedef int (*fn)(void *,void *,void *,const void *,const void *);
+    fn real=(fn)dlsym(RTLD_NEXT,"ICinemoAudioCodec_Initialize");
+    int result=real?real(codec,context,callback,input,output):-1;
+    fprintf(stderr,"[audio-qemu] ICinemoAudioCodec_Initialize result=%d\n",result);
+    return result;
+}
+int ICinemoConfig_SetPluginDirectory(void *config,const char *path)
+{
+    typedef int (*fn)(void *,const char *);
+    fn real=(fn)dlsym(RTLD_NEXT,"ICinemoConfig_SetPluginDirectory");
+    fprintf(stderr,"[audio-qemu] plugin directory entering path=%s\n",path?path:"(null)");
+    int result=real?real(config,path):-1;
+    fprintf(stderr,"[audio-qemu] plugin directory result=%d\n",result);
+    return result;
+}
 /* This call follows successful main-audio RTP authentication and jitter
  * insertion in the 280 receiver. Log only its result, never packet bytes. */
 int RTPJitterBufferPutBusyNode(void *context, void *node)
@@ -830,6 +1033,16 @@ static void trace_segv(int signo, siginfo_t *info, void *context)
         r[9], r[10], r[12]);
     if (length > 0 && (size_t)length < sizeof(line))
         (void)write(2, line, (size_t)length);
+    /* Failure-only lab diagnostics; never executed by shipping hooks. */
+    for(unsigned k=0;k<2;++k) {
+        uintptr_t address=k?r[14]:r[15];Dl_info owner={0};
+        if(dladdr((void *)address,&owner)) {
+            length=snprintf(line,sizeof(line),"[dio-crash-qemu] %s module=%s base=%p offset=%x symbol=%s\n",
+                k?"lr":"pc",owner.dli_fname?owner.dli_fname:"?",owner.dli_fbase,
+                (unsigned)(address-(uintptr_t)owner.dli_fbase),owner.dli_sname?owner.dli_sname:"?");
+            if(length>0 && (size_t)length<sizeof(line))(void)write(2,line,(size_t)length);
+        }
+    }
     /* At this fault the preceding load from r5+0x0c succeeded. Keep this
      * diagnostic QEMU-only and read only the same live object and stack. */
     if ((uintptr_t)info->si_addr == 4 && r[8] == 0 && r[5] && r[13]) {
@@ -1063,6 +1276,7 @@ int setsockopt(int fd, int level, int option, const void *value, socklen_t lengt
     return status;
 }
 
+#ifndef MHI2Q_STOCK210_LIFECYCLE_QEMU
 extern const uint8_t mhi2q_mdnsd_blob[];
 extern const uint8_t mhi2q_mdnsd_blob_end[];
 static void stage_factory_mdnsd(void)
@@ -1100,6 +1314,7 @@ static void stage_factory_mdnsd(void)
     else
         log_hid_result("mdnsd spawned pid", pid);
 }
+#endif
 #endif
 #ifdef MHI2Q_CAPTURE_TRACKF_GATE_QEMU
 static volatile int fail_getifaddrs_after_start;
@@ -1331,6 +1546,9 @@ static void probe_soft_restart(uintptr_t manager)
 }
 #endif
 
+#ifndef MHI2Q_CAPTURE_BRIDGE
+/* The integrated production bridge owns listener admission/bind. A second
+ * definition here would either fail linking or bypass that admission gate. */
 int bind(int fd, const struct sockaddr *address, socklen_t length)
 {
     static int (*real)(int, const struct sockaddr *, socklen_t);
@@ -1367,6 +1585,7 @@ int bind(int fd, const struct sockaddr *address, socklen_t length)
     }
     return status;
 }
+#endif
 
 #ifdef MHI2Q_CAPTURE_STAGE_MDNSD_QEMU
 int connect(int fd, const struct sockaddr *address, socklen_t length)
@@ -1569,12 +1788,30 @@ static void *post_start_event(void *arg)
     char state[220];
     int length;
 #ifdef MHI2Q_CAPTURE_STAGE_MDNSD_QEMU
+#ifndef MHI2Q_STOCK210_LIFECYCLE_QEMU
     stage_factory_mdnsd();
+#endif
 #endif
 #ifdef MHI2Q_CAPTURE_QEMU_REPEAT_MEDIA
     sleep(1);
 #else
     sleep(8);
+#endif
+#ifdef MHI2Q_STOCK210_LIFECYCLE_QEMU
+    /* Exercise the same stock kill seam with an unrelated, owned child:
+     * the mDNS lifetime guard must leave normal process shutdown intact. */
+    pid_t unrelated = spawnl(P_NOWAIT, "/mnt/pairing/bin/sleep", "sleep", "30", (char *)0);
+    if (unrelated > 1) {
+        ((void (*)(int64_t, int))0x00147294u)((int64_t)unrelated, 1);
+        int status = 0;
+        pid_t waited = 0; unsigned tick;
+        for (tick = 0; tick < 300 && waited == 0; ++tick) {
+            waited = waitpid(unrelated, &status, WNOHANG);
+            if (!waited) usleep(10000);
+        }
+        if (waited == unrelated && WIFSIGNALED(status) && WTERMSIG(status) == SIGTERM)
+            CAPTURE_TRACE("[mdns-ownership-qemu] unrelated process still terminated\n");
+    }
 #endif
     if (__sync_val_compare_and_swap(&captured_manager, manager, manager)
         != manager) {
@@ -1595,6 +1832,10 @@ static void *post_start_event(void *arg)
     *(uint32_t *)(manager + 0x22cu) = 800;
     *(uint32_t *)(manager + 0x230u) = 480;
     CAPTURE_TRACE("[dio-capture] seeded QEMU-only 800x480 display\n");
+#endif
+#ifdef MHI2Q_VPHONE_AUDIO_PERIPHERAL
+    extern void mhi2q_audio_peripheral_install(void *);
+    mhi2q_audio_peripheral_install((void *)manager);
 #endif
     length = snprintf(state, sizeof(state),
                       "[dio-capture] state flags=%02x dims=%u,%u/%u,%u "
@@ -1658,6 +1899,48 @@ static void *post_start_event(void *arg)
 }
 #endif
 
+#ifdef MHI2Q_BRIDGE_STOCK210
+/* Factory CProcessHandler also kills a responder it did not start. In a
+ * runtime-managed wireless generation its lifetime belongs to the runtime.
+ * Retain stock behavior for every other caller, mode and executable. */
+static int managed_mdns_target(pid_t pid, int signo, uintptr_t caller)
+{
+    static const uint8_t stop_call[] = {
+        0x00,0x00,0x58,0xe3, 0x05,0x00,0xa0,0xe1,
+        0x0f,0x10,0xa0,0x13, 0x09,0x10,0xa0,0x03,
+        0xfc,0x2e,0xff,0xeb
+    };
+    const char *mode = getenv("MHI2Q_DIO_OWNER_MODE");
+    const char *managed = getenv("MHI2Q_CP_MDNS_MANAGED");
+    const char *binary = getenv("MHI2Q_CP_MDNS_BINARY");
+    if (!capture_enabled || caller != 0x001472fcu || pid <= 1 ||
+        (signo != SIGTERM && signo != SIGKILL) || !mode || strcmp(mode,"wireless") ||
+        !managed || strcmp(managed,"1") || !binary || binary[0] != '/' ||
+        memcmp((const void *)0x001472e8u, stop_call, sizeof(stop_call))) return 0;
+    char path[80];
+    snprintf(path, sizeof(path), "/proc/%ld/as", (long)pid);
+    int fd = open(path, O_RDONLY);
+    if (fd < 0) return 0;
+    union { procfs_debuginfo info; char bytes[sizeof(procfs_debuginfo)+1024]; } debug;
+    memset(&debug, 0, sizeof(debug));
+    int result = devctl(fd, DCMD_PROC_MAPDEBUG_BASE, &debug, sizeof(debug), NULL);
+    close(fd);
+    debug.bytes[sizeof(debug.bytes)-1] = 0;
+    return result == 0 && (!strcmp(debug.info.path, binary) ||
+        (debug.info.path[0] != '/' && !strcmp(debug.info.path, binary+1)));
+}
+int kill(pid_t pid, int signo)
+{
+    static int (*real)(pid_t, int);
+    if (!real) real = (int (*)(pid_t, int))dlsym(RTLD_NEXT, "kill");
+    if (managed_mdns_target(pid, signo, (uintptr_t)__builtin_return_address(0))) {
+        CAPTURE_TRACE("[dio-capture] runtime-managed mDNS stop delegated\n");
+        return 0;
+    }
+    return real ? real(pid, signo) : -1;
+}
+#endif
+
 /* Optional exact-image interface repair. Stock dio hardcodes carplay0 even
  * though the MHI2Q AP observed on the unit is uap0. The compile-time target
  * is lo0 for QEMU or uap0 for a later production bridge. The stock property
@@ -1676,7 +1959,8 @@ int CFObjectSetPropertyCString(void *object, void *queue, void *setter,
                      strcmp(__progname, "dio_manager") == 0 &&
                      caller == 0x0015c580u &&
                      property == (void *)0x00195ef8u &&
-                     value && strcmp((const char *)value, "carplay0") == 0;
+                     value && (!strcmp((const char *)value, "carplay0") ||
+                               !strcmp((const char *)value, "uap0"));
     if (!real)
         real = (setter_fn)dlsym(RTLD_NEXT, "CFObjectSetPropertyCString");
     if (!real)

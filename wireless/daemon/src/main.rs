@@ -1,12 +1,15 @@
 #[cfg(not(target_os = "nto"))]
 use mhi2q_wireless_daemon::control::UnavailableAuth;
-use mhi2q_wireless_daemon::{
-    control::Config, receiver_control::LoopbackReceiverControl, serve_stream,
-};
+#[cfg(all(target_os = "nto", not(feature = "native-api-lab")))]
+use mhi2q_wireless_daemon::mfi::{MfiChip, qnx::QnxBus};
+#[cfg(not(unix))]
+use mhi2q_wireless_daemon::receiver_control::LoopbackReceiverControl;
+#[cfg(unix)]
+use mhi2q_wireless_daemon::si_control::ConfiguredReceiverControl;
 #[cfg(target_os = "nto")]
+use mhi2q_wireless_daemon::wifi_ie;
 use mhi2q_wireless_daemon::{
-    mfi::{MfiChip, qnx::QnxBus},
-    wifi_ie,
+    control::Config, receiver_control::ReceiverWorker, serve_stream_with_receiver,
 };
 use std::net::TcpListener;
 #[cfg(target_os = "nto")]
@@ -30,9 +33,13 @@ fn main() -> std::io::Result<()> {
     }
     if argument.as_deref() == Some("--check-config") {
         let config = Config::from_env().map_err(std::io::Error::other)?;
+        #[cfg(unix)]
+        let _ = ConfiguredReceiverControl::from_env(config.airplay_port)?;
         #[cfg(target_os = "nto")]
         {
+            #[cfg(not(feature = "native-api-lab"))]
             QnxBus::from_env().map_err(std::io::Error::other)?;
+            wifi_ie::monitor_seconds_from_env().map_err(std::io::Error::other)?;
             wifi_ie::parse_mac(&config.device_id).map_err(std::io::Error::other)?;
             let index = std::env::var("MHI2Q_CP_IE_INDEX").map_err(std::io::Error::other)?;
             let index = index.parse::<u8>().map_err(std::io::Error::other)?;
@@ -51,9 +58,15 @@ fn main() -> std::io::Result<()> {
         ));
     }
     let config = Config::from_env().map_err(std::io::Error::other)?;
-    let receiver_control = LoopbackReceiverControl::new(config.airplay_port)?;
     #[cfg(target_os = "nto")]
+    wifi_ie::monitor_seconds_from_env().map_err(std::io::Error::other)?;
+    #[cfg(unix)]
+    let receiver_control = ConfiguredReceiverControl::from_env(config.airplay_port)?;
+    #[cfg(not(unix))]
+    let receiver_control = LoopbackReceiverControl::new(config.airplay_port)?;
+    #[cfg(all(target_os = "nto", not(feature = "native-api-lab")))]
     let mfi_bus = QnxBus::from_env().map_err(std::io::Error::other)?;
+    let receiver = ReceiverWorker::new(receiver_control);
     // Reserve the transport before advertising wireless CarPlay. If another
     // daemon owns the port, startup fails without leaving a fresh Wi-Fi IE.
     let listener = TcpListener::bind("127.0.0.1:57342")?;
@@ -89,22 +102,28 @@ fn main() -> std::io::Result<()> {
             (active, monitor)
         };
         let start = Instant::now();
+        #[cfg(all(target_os = "nto", not(feature = "native-api-lab")))]
+        let auth_factory = || MfiChip::new(mfi_bus.clone());
+        #[cfg(all(target_os = "nto", feature = "native-api-lab"))]
+        let auth_factory = || mhi2q_wireless_daemon::native_api_mfi::NativeApiMfi;
         #[cfg(target_os = "nto")]
-        let result = serve_stream(
+        let result = serve_stream_with_receiver(
             &mut stream,
             || start.elapsed().as_millis() as u64,
             &config,
-            || MfiChip::new(mfi_bus.clone()),
-            receiver_control,
+            auth_factory,
+            &receiver,
         );
         #[cfg(not(target_os = "nto"))]
-        let result = serve_stream(
+        let result = serve_stream_with_receiver(
             &mut stream,
             || start.elapsed().as_millis() as u64,
             &config,
             || UnavailableAuth,
-            receiver_control,
+            &receiver,
         );
+        receiver.reset()?;
+        receiver.set_peer(None)?;
         #[cfg(target_os = "nto")]
         {
             ie_active.store(false, Ordering::Release);

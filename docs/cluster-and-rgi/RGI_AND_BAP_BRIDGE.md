@@ -241,7 +241,7 @@ Checks: `bash scripts/test_route_info.sh` (1,363 text checks, 1,088 maneuvers, 1
 - [Lane Guidance](LANE_GUIDANCE.md): FctID 24 lanes.
 - [VC Layout and Fonts](VC_LAYOUT_AND_FONTS.md): how the FctID 19 / 22 text fits on the VC.
 - [Cluster Video Encoder](../altscreen-and-video/CLUSTER_VIDEO_ENCODER.md): the cluster video path beside BAP.
-- [Archive and History](../reference/ARCHIVE_AND_HISTORY.md) · [MHI2 MU1439 Port](../reference/MHI2_MU1439_PORT.md): earlier bridge designs and the MU1439 port.
+- [Archive and History](../reference/archive/ARCHIVE_AND_HISTORY.md) · [MHI2 MU1439 Port](../reference/MHI2_MU1439_PORT.md): earlier bridge designs and the MU1439 port.
 
 ## 📚 Sources
 

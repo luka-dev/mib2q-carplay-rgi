@@ -39,8 +39,8 @@ void IndividualChannelStream::Clear()
 
 // 0x0009a610  APACIndividualChannelStream::Deserialize(BitstreamReader&,
 //                                                      APACICSInfo&, bool)
-// The third argument is unused in the library; every caller passes it and it
-// is never read, so our decoder does not carry it.
+// The third argument is unused in the original; every caller passes it and it
+// is never read, so the port does not carry it.
 bool IndividualChannelStream::Deserialize(BitstreamReader& bs,
                                           const APACICSInfo& ics,
                                           const SFBOffsets& table)
@@ -54,7 +54,7 @@ bool IndividualChannelStream::Deserialize(BitstreamReader& bs,
     return view.Deserialize(bs, ics, scf, bands);
 }
 
-// 0x000acd60  APACSyntacticElement::CreateList, for one element.  The library
+// 0x000acd60  APACSyntacticElement::CreateList, for one element.  The original
 // builds the ICSInfo's two band limits out of the SFB table record it is handed
 // - the u16 at +8 for a long block and the u16 at +24 for a short one - and
 // hands every APACTNSData the same instance config.
@@ -62,7 +62,7 @@ uint32_t SyntacticElement::Configure(uint32_t type, const SFBOffsets* table,
                                      uint32_t sampleRate)
 {
     if (type != kElementSCE && type != kElementCPE && type != kElementLFE)
-        return kLimitBadElementType;
+        return kPortBadElementType;
 
     mType  = type;
     mTable = table;
@@ -138,9 +138,9 @@ uint32_t SyntacticElement::ApplyTNS(uint32_t channel)
     return kOk;
 }
 
-// LRVQ, wired.  The stage-h1 code supplies the frame body
+// LRVQ, wired.  The stage-h1 port supplies the frame body
 // (apac::DeserializeLrvqFrame) and the three spectrum entry points;
-// LrvqFrameContext just names the seven things off `this` the library touches,
+// LrvqFrameContext just names the seven things off `this` the original touches,
 // and the offsets in its declaration are the ones this class reproduces.
 //
 // None of it is reachable on the CarPlay 5.1 content: patching each of
@@ -162,7 +162,7 @@ uint32_t SyntacticElement::Deserialize(BitstreamReader& bs, LRVQDecoder* lrvq)
         // reads BOTH ICS headers itself, at coding type 1.
         if (bs.GetBit()) {
             if (lrvq == 0)
-                return kLimitNeedsLRVQ;
+                return kPortNeedsLRVQ;
             LrvqFrameContext ctx;
             SpectralData sp0 = View(0), sp1 = View(1);
             ctx.ics[0]  = &mICS[0];   ctx.ics[1]  = &mICS[1];
@@ -185,7 +185,7 @@ uint32_t SyntacticElement::Deserialize(BitstreamReader& bs, LRVQDecoder* lrvq)
         return kBadValue;
     if (codingType == 1) {
         if (lrvq == 0)
-            return kLimitNeedsLRVQ;
+            return kPortNeedsLRVQ;
         SpectralData sp = View(0);
         const int32_t err = (mType == kElementLFE)
             ? lrvq->SpectrumDeserializeLFE(bs, mICS[0], sp)
@@ -223,7 +223,7 @@ uint32_t SyntacticElement::DeserializeSQFrame(BitstreamReader& bs)
         return kBadValue;
 
     // One bit selects the joint-coded pair.  When it is set the second channel
-    // inherits the first channel's window layout verbatim - the library copies
+    // inherits the first channel's window layout verbatim - the original copies
     // +10, +11, +12 and +16 across - is read against the FIRST channel's
     // ICSInfo, and the pair is then rotated by the CAC tool.
     const uint32_t joint = bs.GetBit();

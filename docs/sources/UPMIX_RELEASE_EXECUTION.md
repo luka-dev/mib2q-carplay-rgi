@@ -92,9 +92,9 @@ plus grounded residual. First build is a quality reference, not a claimed small
 ARM-ready student. Matched guidance-disabled and TRAIN-only oracle diagnostics
 will separate hint quality from decoder capacity. TEST remains inaccessible to
 the source reader. Original teacher/reference options are documented separately
-in [reference options](../audio/UPMIX_RELEASE_AND_ACCEPTANCE.md).
+in [reference options](../audio/archive/UPMIX_RELEASE_AND_ACCEPTANCE.md).
 The first fixed-budget comparison is specified in
-[Q2 source fit](UPMIX_Q2_SOURCE_FIT.md). It is24seconds of unique TRAIN material,
+[Q2 source fit](../archive/LEGACY_REFERENCES.md#source-1802f8ce85d4). It is24seconds of unique TRAIN material,
 not a substitute for the81-song full-timeline training pool.
 
 First Q2 CPU fit is complete (`output/q2-source-fit-b/`),576updates/arm,485.97s,
@@ -108,8 +108,8 @@ Direct carrier improves predicted bass/drums but still recovers backing/guitar/
 high percussion poorly. Oracle carrier performs substantially better, exposing
 the learned-hint gap. The next separate descriptor-mask experiment completed
 without improvement and is not promoted. See the full numerical record in
-[Q2 source fit](UPMIX_Q2_SOURCE_FIT.md). A prospective
-[full81TRAIN matched scale test](UPMIX_Q2_FULL_TRAIN_COMPARISON.md) now fixes
+[Q2 source fit](../archive/LEGACY_REFERENCES.md#source-1802f8ce85d4). A prospective
+[full81TRAIN matched scale test](../archive/LEGACY_REFERENCES.md#source-334c5f04d026) now fixes
 one epoch per predicted/disabled arm; this is not a release/convergence claim.
 
 CPU interrupted-process resume is bit-exact on authored qualification. MPS is
@@ -126,7 +126,7 @@ Full-song continuing-state preparation now preserves global FFT/hint cadence and
 all cross-crop windows, including independent-process exact resume. The final
 frozen NAS stage passed38authored tests. Full81TRAIN calibration completed
 13:36:03UTC:2064/2064crops,813sources, all776,489,835frames; independent sums/prior/
-scalar-control readback agrees exactly. See [calibration](UPMIX_Q2_FULL_TRAIN_CALIBRATION.md).
+scalar-control readback agrees exactly. See [calibration](../archive/LEGACY_REFERENCES.md#source-7b0d11cbf145).
 
 Both matched direct-power arms completed and paused after32jobs for independent
 weights/Adam/cursor/history/source verification at14:05:31UTC. The SAME owners
@@ -135,7 +135,7 @@ one-epoch plan is24,290forward jobs/24,288optimizer updates each,2CPUthreads,
 3GiB worker RSS,16h cumulative budget and shared100GiB disk/2GiB available-RAM
 reserves. Controller `B/runtime/q2-full-source-resume-a`, where B is the private
 NAS training root, runs detached without automatic retry or extra epochs.
-See [full comparison](UPMIX_Q2_FULL_TRAIN_COMPARISON.md) for exact owners, hashes,
+See [full comparison](../archive/LEGACY_REFERENCES.md#source-334c5f04d026) for exact owners, hashes,
 recorded process identities and STOP behavior. Inspect live state before acting;
 these timestamped counts do not establish full training, convergence or quality.
 
@@ -162,10 +162,10 @@ any real DEV scoring; the repair changes no musical threshold or candidate score
 The whole-DEV orchestrator is qualified for immutable complete-song commits,
 actual-process resume, fixed final-TRAIN checkpoint provenance and recovery of
 the exact final report after interrupted publication. No optimizer or TEST path
-is admitted. See [continuous scoring](UPMIX_Q2_CONTINUOUS_SOURCE_SCORING.md) and
-[whole-DEV evaluation](UPMIX_Q2_FULL_SOURCE_EVALUATION.md).
+is admitted. See [continuous scoring](../archive/LEGACY_REFERENCES.md#source-48617a885317) and
+[whole-DEV evaluation](../archive/LEGACY_REFERENCES.md#source-a7ba4acec612).
 
-The [portable paired summary](UPMIX_Q2_PAIRED_SOURCE_SUMMARY.md) was specified
+The [portable paired summary](../archive/LEGACY_REFERENCES.md#source-782f0336a502) was specified
 before the real pair completes. It binds both exact training plans, initial
 weights, source/calibration/software and complete DEV domains. Report distributions
 by song/family/metadata genre, retained quiet/unknown errors, worst cases, fixed
@@ -178,7 +178,7 @@ The43-test combined synthetic qualification passed12.582s; immutable proof
 These are diagnostic/software results, not a release-acceptance pass. No actual
 DEV music was evaluated by this qualification.
 
-[Hook boundary audit](UPMIX_Q2_HOOK_INTEGRATION.md) identifies explicit integration
+[Hook boundary audit](../archive/LEGACY_REFERENCES.md#source-ce17430ed176) identifies explicit integration
 requirements: S16 versus normalized FLOAT units, AoS-to-six-slot packing, independent
 1024-sample dry delay, actual768-frame sink period and one ramped SoundCheck/safety
 owner. The existing hook and frozen research renderer cannot simply be chained:
@@ -206,7 +206,7 @@ in14.670s. None of these counts is a musical release gate.
 
 ## Armed post-TRAIN continuation — 2026-09-16 14:32:09 UTC
 
-A [bounded post-TRAIN controller](UPMIX_Q2_POSTTRAIN_PIPELINE.md) is now detached
+A [bounded post-TRAIN controller](../archive/LEGACY_REFERENCES.md#source-6ab63d0d0098) is now detached
 on NAS (`runtime/q2-full-posttrain-a`, PID152803/start42311577). Readback verified
 `waiting_for_both_full_train`, no child processes and no DEV owners while the
 original TRAIN pair remained live at714/724jobs. Exact controller stage SHA:
@@ -230,7 +230,7 @@ waiting with no children/DEV owners. Snapshot
 Do not restart the live pair. Throughput-based finish estimates remain provisional,
 not a promised release time or evidence that one epoch meets convergence gates.
 
-[Common output](UPMIX_Q2_COMMON_OUTPUT.md) adds separately qualified common
+[Common output](../archive/LEGACY_REFERENCES.md#source-5d199e04e4e7) adds separately qualified common
 gain/safety/quantization infrastructure without altering hook/bridge/renderer or
 frozen training.26host tests,8all-field exact reference cases, ASan/UBSan and a
 fresh ARM32 QNX guest selftest passed. Host proofSHA
@@ -243,7 +243,7 @@ PASS4.464s. These are separate component tests, NOT an integrated audio callback
 Readback confirmed frozen trainer/evaluator/renderer/bridge and all inspected
 production hook/SoundCheck/matrix sources still have their prior hashes.
 
-An independent [native graph port map](../output/q2-native-port-audit-a/PORT_MAP.md)
+An independent [native graph port map](../archive/LEGACY_REFERENCES.md#source-a9d326dbcf68)
 binds15current source files and identifies exact tensor/cadence/window/GRU contracts.
 No checkpoint/model-forward/NAS work was involved. Reusing P1/R1 wholesale would
 be wrong: quadrature order, temporal taps, window and delay differ. Holding
@@ -259,7 +259,7 @@ final-envelope resume can restore the completed report but leave persisted
 `status=error`. It cannot falsely pass quality and does not block the uninterrupted
 armed pipeline, which does not auto-resume. Preserve the running frozen stage;
 use a separately qualified revision BEFORE any manual recovery. See the
-[pipeline issue record](UPMIX_Q2_POSTTRAIN_PIPELINE.md) and
+[pipeline issue record](../archive/LEGACY_REFERENCES.md#source-6ab63d0d0098) and
 `output/q2-evaluator-recovery-a/report.json`, SHA256
 `bd314305a2237ae6381155d4a2dad1e546614f1572f8de9b0281768c6faf8f71`.
 
@@ -276,7 +276,7 @@ Log-sidecar readback15:57:37UTC has four0-byte logs with stable signatures; live
 progress comes from status/history, not those empty logs. It does not establish
 convergence or guide checkpoint selection.
 
-The separate [native frame kernel](UPMIX_Q2_NATIVE_FRAME.md) now implements the
+The separate [native frame kernel](../archive/LEGACY_REFERENCES.md#source-97ae01eed9dd) now implements the
 complete existing reference24/48direct-power graph on C, preserving both modes,
 full513bins, recurrent control cadence and source-local intermediate outputs.
 Export is explicit diagnostic-only authored weights: no learned checkpoint or
@@ -305,8 +305,8 @@ Version2 restores direct boot execution and verifies named kernel exit0 in order
 with START/PASS/END; no numerical tolerance or fixture changed. All cases were
 rerun, no emulator processes remain, and no physical target was involved.
 
-Next-step [PCM port map](../output/q2-native-stream-port-a/PORT_MAP.md) and
-[cost review](../output/q2-native-cost-review-a/REVIEW.md) pin source hashes and
+Next-step [PCM port map](../archive/LEGACY_REFERENCES.md#source-375c9c4c5fde) and
+[cost review](../archive/LEGACY_REFERENCES.md#source-db4882ea35b9) pin source hashes and
 separate exact timeline work from caching/ring-buffer optimization candidates.
 The frozen TRAIN/evaluator/renderer/bridge/production-hook/SoundCheck source hashes
 were rechecked unchanged after this work. Mac free63GiB remains above40GiB reserve.
@@ -327,7 +327,7 @@ Snapshot `output/q2-full-source-live-20260916-1634-a/snapshot.json`, SHA256
 `af3b8c45145cd2c18c58af235e6b5809ed90a735351dcc61be3b18045b863bc0`.
 Loss/gradient finiteness is not convergence or quality approval.
 
-[Native original-PCM provider](UPMIX_Q2_NATIVE_PCM.md) implemented independently
+[Native original-PCM provider](../archive/LEGACY_REFERENCES.md#source-eb97e1cd30fa) implemented independently
 of all production hooks and frozen training: periodic-Hann1024/256, unchanged
 scalar frame graph,12stereo source WOLAs, byte-exact1024sample delayed dry,
 arithmetic residual, explicit finite EOF, metadata and whole-call rollback.

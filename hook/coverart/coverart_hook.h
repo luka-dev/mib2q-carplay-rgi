@@ -17,5 +17,6 @@
  * lifecycle entry is an LD_PRELOAD constructor: the receive tap goes live only
  * after the first real Cinemo call enters hook_framework_init(). */
 extern const hook_module_def_t coverart_module_def;
+void coverart_wireless_file(const uint8_t *,size_t);
 
 #endif /* COVERART_HOOK_H */

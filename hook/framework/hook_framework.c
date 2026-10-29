@@ -18,6 +18,23 @@
 
 DEFINE_LOG_MODULE(HOOK);
 
+#if HOOK_WIRELESS
+#include "../wireless/iap2_semantic.h"
+static pthread_mutex_t semantic_rx=PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t semantic_tx=PTHREAD_MUTEX_INITIALIZER;
+static struct { uint8_t bytes[512];size_t length; } semantic_queue[16];
+static unsigned semantic_head,semantic_count;
+static int semantic_active;
+static unsigned semantic_location;
+static hook_result_t semantic_send(const uint8_t *frame,size_t size) {
+    pthread_mutex_lock(&semantic_tx);
+    if(!semantic_active||semantic_count==16){pthread_mutex_unlock(&semantic_tx);return HOOK_ERR_IO;}
+    unsigned i=(semantic_head+semantic_count)%16;
+    memcpy(semantic_queue[i].bytes,frame,size);semantic_queue[i].length=size;++semantic_count;
+    pthread_mutex_unlock(&semantic_tx);return HOOK_OK;
+}
+#endif
+
 #define MAX_MODULES 16
 #define INJECT_QUEUE_CAPACITY 8
 #define INJECT_FRAME_CAPACITY 512
@@ -357,6 +374,7 @@ static void log_unknown_52xx_msg(const uint8_t* buf, size_t len, uint16_t msgid,
     if (is_known_52xx_msg(msgid)) return;
 
     const char* dir_str = (dir == MSG_DIR_INCOMING) ? "IN" : "OUT";
+    (void)dir_str;
     LOG_WARN(LOG_MODULE, "Unknown 0x52xx msgid=0x%04X dir=%s len=%zu", msgid, dir_str, len);
     LOG_HEXDUMP(LOG_MODULE, "IAP2 0x52xx raw", buf, len);
 }
@@ -423,17 +441,22 @@ static bool module_wants_message(hook_module_t* mod, uint16_t msgid) {
     return false;
 }
 
-static bool dispatch_message(const iap2_frame_t* frame) {
+static bool dispatch_message(const iap2_frame_t* frame, msg_direction_t direction,
+                             const uint8_t* raw_buf, size_t raw_len) {
     bool consumed = false;
+    hook_context_t ctx = g_fw.ctx;
+    ctx.direction = direction;
+    ctx.msgid = frame->msgid;
+    ctx.raw_buf = raw_buf;
+    ctx.raw_len = raw_len;
+    ctx._priv = NULL;
     for (int i = 0; i < g_fw.module_count && !consumed; i++) {
         hook_module_t* mod = &g_fw.modules[i];
         if (!mod->active || !mod->def.on_message) continue;
         if (!module_wants_message(mod, frame->msgid)) continue;
-        g_fw.ctx.current_module = mod;
-        g_fw.ctx.msgid = frame->msgid;
-        consumed = mod->def.on_message(&g_fw.ctx, frame);
+        ctx.current_module = mod;
+        consumed = mod->def.on_message(&ctx, frame);
     }
-    g_fw.ctx.current_module = NULL;
     return consumed;
 }
 
@@ -757,6 +780,9 @@ hook_result_t hook_inject_frame(const uint8_t* frame, size_t frame_len) {
         read_be16(frame + 2) != frame_len)
         return HOOK_ERR_PARAM;
     if (!g_fw.initialized || g_fw.shutting_down) return HOOK_ERR_INIT;
+#if HOOK_WIRELESS
+    if(cp_dio_owner_is_wireless())return semantic_send(frame,frame_len);
+#endif
 
     resolve_functions();
     if (!g_fw.real_iap_send_iap2 || !g_fw.real_iap_addref || !g_fw.real_iap_release)
@@ -916,10 +942,6 @@ HOOK_EXPORT int _ZN14NmeIAP2Message6DecodeEPKhi(void* self, const uint8_t* buf, 
 
     uint16_t msgid = read_be16(buf + 4);
 
-    g_fw.ctx.direction = MSG_DIR_INCOMING;
-    g_fw.ctx.raw_buf = buf;
-    g_fw.ctx.raw_len = (size_t)len;
-
     {
         size_t dump_len = (frame_len <= (uint16_t)len) ? (size_t)frame_len : (size_t)len;
         log_unknown_52xx_msg(buf, dump_len, msgid, MSG_DIR_INCOMING);
@@ -936,7 +958,7 @@ HOOK_EXPORT int _ZN14NmeIAP2Message6DecodeEPKhi(void* self, const uint8_t* buf, 
     };
     state_trace_note_iap_semantic(MSG_DIR_INCOMING, msgid,
                                   frame.payload, frame.payload_len);
-    dispatch_message(&frame);
+    dispatch_message(&frame, MSG_DIR_INCOMING, buf, (size_t)len);
 
     return ret;
 }
@@ -995,10 +1017,6 @@ HOOK_EXPORT int _ZNK14NmeIAP2Message6EncodeER8NmeArrayIhE(const void* self, void
         .payload_len = (len > 6) ? (len - 6) : 0
     };
 
-    g_fw.ctx.direction = MSG_DIR_OUTGOING;
-    g_fw.ctx.raw_buf = data;
-    g_fw.ctx.raw_len = len;
-
     {
         size_t dump_len = (frame.frame_len <= len) ? frame.frame_len : len;
         log_unknown_52xx_msg(data, dump_len, frame.msgid, MSG_DIR_OUTGOING);
@@ -1012,7 +1030,7 @@ HOOK_EXPORT int _ZNK14NmeIAP2Message6EncodeER8NmeArrayIhE(const void* self, void
     state_trace_note_iap_semantic(MSG_DIR_OUTGOING, frame.msgid,
                                   frame.payload, frame.payload_len);
 
-    dispatch_message(&frame);
+    dispatch_message(&frame, MSG_DIR_OUTGOING, data, (size_t)len);
 
     return ret;
 }
@@ -1109,6 +1127,105 @@ HOOK_EXPORT int _ZN12NmeTransport4RecvER8NmeArrayIhE(void* self, void* out_array
  * dio_manager's dlopen/link, before dio has initialised itself.  Every hooked Cinemo/NME
  * boundary lazily calls hook_framework_init() on its first invocation, so all hook-owned
  * work starts on the first real iAP2 call. */
+#if HOOK_WIRELESS
+HOOK_EXPORT int mhi2q_wireless_iap2_receive(unsigned kind,const uint8_t *data,size_t size) {
+    if(!cp_dio_owner_is_wireless()||!getenv("MHI2Q_CP_SI_EPOCH")||!data||!size||size>8191||
+       (kind!=CP_IAP2_FILE&&size>4096)||kind>CP_IAP2_FILE)return -1;
+    if(hook_framework_init()!=HOOK_OK||g_fw.shutting_down)return 0;
+    pthread_mutex_lock(&semantic_rx);
+    int result=-1;
+    if(kind==CP_IAP2_BEGIN) {
+        iap2_tlv_t component,id;
+        if(!iap2_validate_frame(data,size)||read_be16(data+2)!=size||read_be16(data+4)!=0x1d01||
+           !iap2_find_tlv(data+6,size-6,30,&component)||
+           !iap2_find_tlv(component.value,component.value_len,0,&id)||id.value_len!=2||read_be16(id.value)!=16)goto done;
+        pthread_mutex_lock(&semantic_tx);
+        int already=semantic_active;
+        pthread_mutex_unlock(&semantic_tx);
+        if(already){
+            notify_transport_recv_reset();
+            pthread_mutex_lock(&semantic_tx);semantic_head=semantic_count=0;pthread_mutex_unlock(&semantic_tx);
+            notify_state(HOOK_EVENT_RESYNC,NULL);
+            uint8_t request[144];size_t length=iap2_build_now_playing_start(request,sizeof(request));
+            if(length)(void)hook_inject_message(0x5000,request,length);
+            result=1;goto done;
+        }
+        handle_state_messages(IAP2_MSG_IDENTIFY_START);
+        semantic_location=0;
+        /* Run the same module preparation as wired Encode on bounded owned
+         * storage. Identification on the daemon already advertised these
+         * capabilities; this initializes their parsers/subscriptions. */
+        uint8_t identify[8192];memcpy(identify,data,size);size_t used=size;
+        for(int i=0;i<g_fw.module_count;++i) {
+            hook_module_t *mod=&g_fw.modules[i];
+            if(mod->active&&mod->def.on_identify)used=mod->def.on_identify(&g_fw.ctx,identify,used,sizeof(identify));
+            if(used>sizeof(identify))goto done;
+        }
+        pthread_mutex_lock(&semantic_tx);semantic_active=1;semantic_head=semantic_count=0;pthread_mutex_unlock(&semantic_tx);
+        handle_state_messages(IAP2_MSG_IDENTIFY_ACCEPTED);
+        handle_state_messages(IAP2_MSG_AUTH_SUCCESS);
+        /* Route subscription must not depend on an incidental GPS packet. */
+        notify_transport_send(IAP2_MSG_LOCATION_INFO);result=1;
+    } else if(semantic_active&&kind==CP_IAP2_CONTROL) {
+        iap2_frame_t frame;
+        if(!iap2_validate_frame(data,size)||read_be16(data+2)!=size||!iap2_find_frame(data,size,&frame))goto done;
+        switch(frame.msgid) {
+        case 0x5201:case 0x5202:case 0x5204:case 0xa100:case 0xa102:case 0xfffa:case 0xfffc:break;
+        default:goto done;
+        }
+        if(frame.msgid==0xfffc)semantic_location=0;
+        if(frame.msgid==0xfffa) {
+            unsigned requested=0;size_t off=6;
+            while(off<size) {
+                iap2_tlv_t t;if(!iap2_parse_tlv(data+off,size-off,&t))goto done;
+                if(t.id==1)requested|=1;
+                if(t.id==2)requested|=2;
+                off+=t.len;
+            }
+            semantic_location=requested;
+        }
+        (void)dispatch_message(&frame, MSG_DIR_INCOMING, data, size);result=1;
+    } else if(semantic_active&&kind==CP_IAP2_FILE) {
+        for(int i=0;i<g_fw.module_count;++i) {
+            hook_module_t *mod=&g_fw.modules[i];
+            if(mod->active&&mod->def.on_file_transfer)mod->def.on_file_transfer(data,size);
+        }
+        result=1;
+    }
+done:
+    pthread_mutex_unlock(&semantic_rx);return result;
+}
+HOOK_EXPORT int mhi2q_wireless_iap2_outgoing(uint8_t *data,size_t capacity) {
+    if(!data||capacity<512||!cp_dio_owner_is_wireless())return -1;
+    pthread_mutex_lock(&semantic_tx);int result=0;
+    if(semantic_active&&semantic_count) {
+        size_t size=semantic_queue[semantic_head].length;memcpy(data,semantic_queue[semantic_head].bytes,size);
+        semantic_head=(semantic_head+1)%16;--semantic_count;result=(int)size;
+    }
+    pthread_mutex_unlock(&semantic_tx);return result;
+}
+HOOK_EXPORT int mhi2q_wireless_iap2_nmea(const char *sentence,size_t length) {
+    if(!sentence||length<10||length>160||sentence[0]!='$'||!cp_dio_owner_is_wireless())return -1;
+    while(length&&(sentence[length-1]=='\r'||sentence[length-1]=='\n'))--length;
+    if(length<10||sentence[length-3]!='*')return -1;
+    unsigned checksum=0,expected=0;
+    for(size_t i=1;i<length-3;++i){if((unsigned char)sentence[i]<32||(unsigned char)sentence[i]>126)return -1;checksum^=(unsigned char)sentence[i];}
+    for(size_t i=length-2;i<length;++i) {
+        unsigned c=(unsigned char)sentence[i],v=c>='0'&&c<='9'?c-'0':c>='A'&&c<='F'?c-'A'+10:16;
+        if(v>15)return -1;expected=expected*16+v;
+    }
+    if(checksum!=expected)return -1;
+    unsigned type=!memcmp(sentence+3,"GGA,",4)?1:!memcmp(sentence+3,"RMC,",4)?2:0;
+    pthread_mutex_lock(&semantic_rx);
+    int result=0;
+    if(semantic_active&&(semantic_location&type)) {
+        uint8_t payload[168];char text[161];memcpy(text,sentence,length);text[length]=0;
+        size_t size=iap2_build_tlv_str(payload,sizeof(payload),0,text);
+        result=size&&hook_inject_message(0xfffb,payload,size)==HOOK_OK?1:0;
+    }
+    pthread_mutex_unlock(&semantic_rx);return result;
+}
+#endif
 __attribute__((destructor))
 static void hook_lib_fini(void) {
     hook_framework_shutdown();

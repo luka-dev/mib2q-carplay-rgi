@@ -176,7 +176,7 @@ extern "C" void spa_apac_reset(spa_apac_decoder_t* decoder)
 
 extern "C" void spa_apac_destroy(spa_apac_decoder_t* decoder)
 {
-    // spa_apac_decoder is trivially destructible (checked: our objects
+    // spa_apac_decoder is trivially destructible (checked: the port's objects
     // are plain arrays and scalars), so free() is the whole teardown.
     free(decoder);
 }

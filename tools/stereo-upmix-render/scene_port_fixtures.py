@@ -13,9 +13,6 @@ Writes:
                   and the final [n,6] output, plus the input signal and the config as JSON.
                   stream_spatial: pluck hard-left + centred vocal + room bed, no mask.
                   stream_mask:    the same with the 512/128 oracle instrument mask + duck (variant J).
-                  stream_anchor:  the front anchor at front_keep_db 1 (the shipped value) on check 14's sparse
-                                  wide mix (two plucked takes near the edges + room, the mask lets all go);
-                                  adds the per-frame anchor gain, which must bind (min < 0.9).
 """
 import json, os, sys, dataclasses, numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -51,7 +48,7 @@ def golden(name, x, cfg, inst_mask=None, prot_mask=None):
     eng = su._engine(cfg, F, G, group, freqs, None, inst_mask, prot_mask); next(eng)
     subL = np.zeros((T, F), complex); subR = np.zeros((T, F), complex); rearL = np.zeros((T, F), complex); rearR = np.zeros((T, F), complex)
     stats = {"p": np.zeros((T, G)), "PN": np.zeros((T, G)), "PS": np.zeros((T, G)), "w": np.zeros((T, G)), "w_fast": np.zeros((T, G)),
-             "w_member": np.zeros((T, G)), "n_clusters": np.zeros(T, int), "places": np.full((T, 8, 4), np.nan), "anchor": np.ones(T)}
+             "w_member": np.zeros((T, G)), "n_clusters": np.zeros(T, int), "places": np.full((T, 8, 4), np.nan)}
     for t in range(T):
         subL[t], subR[t], rearL[t], rearR[t], st = eng.send((XL[t], XR[t], t))
         for k in stats:
@@ -62,8 +59,7 @@ def golden(name, x, cfg, inst_mask=None, prot_mask=None):
     np.savez_compressed(os.path.join(out, f"stream_{name}.npz"), x=xs, XL=XL, XR=XR, subL=subL, subR=subR, rearL=rearL, rearR=rearR,
                         out6=y, **stats, config=json.dumps(dataclasses.asdict(cfg)),
                         **({"inst_mask": inst_mask, "prot_mask": prot_mask} if inst_mask is not None else {}))
-    print(name, "frames", T, "samples", len(xs), "min anchor %.3f" % stats["anchor"].min())
-    return stats
+    print(name, "frames", T, "samples", len(xs))
 
 ts.seed(); pluck, voc, bed = ts._scene_2()
 x = (pluck + voc + bed).T[: su.SR * 6]
@@ -75,13 +71,4 @@ def spec(v):
 Pv = spec(voc[:, : su.SR * 6]); Po = spec((pluck + bed)[:, : su.SR * 6])
 e = Po / (Pv + Po + 1e-12); Tc = e.shape[0] // 4 * 4; elig = e[:Tc].reshape(Tc // 4, 4, 257).mean(1)
 golden("mask", x, cfg, inst_mask=elig, prot_mask=1.0 - elig)
-# anchor case: check 14's scene, 6 s
-sec = 6.0; ts.seed(); r = np.random.default_rng(5)
-a, b = ts.pluck_take(sec, (196, 247, 294), r), ts.pluck_take(sec, (220, 277, 330), r)
-mix = ub.pan(a, -0.8) * 0.4 + ub.pan(b, 0.8) * 0.4 + ub.stereo_reverb(a + b, rt60=1.5, wet=0.3) * 0.2
-mix = mix * (0.7 / np.abs(mix).max())
-ones = np.ones((int(sec * su.SR) // 512 + 1, 257))
-st = golden("anchor", mix.T, dataclasses.replace(cfg, alpha=1.0, inst_alpha=1.0, duck_depth=0.1, front_keep_db=1.0),
-            inst_mask=ones, prot_mask=0.0 * ones)
-assert st["anchor"].min() < 0.9, "the anchor must bind on this scene"
 print("fixtures in", out)

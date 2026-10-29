@@ -60,7 +60,7 @@ sequenceDiagram
 
 - **Spec.** MFi R29 section 97.18 (R32 no longer contains it): `VehicleStatusComponent` (Identify param 21) lists what the car can report; the phone asks with `StartVehicleStatusUpdates` 0xA100 and the car answers with `VehicleStatusUpdate` 0xA101: `Range` (3, uint16 km), `OutsideTemperature` (4, int16 °C), `RangeWarning` (6, bool), on change, at most 1 Hz. `VehicleInformationComponent` (20) carries the `EngineType` (0 gasoline, 1 diesel, 2 electric, 3 CNG) and a display name. A car that reports `RangeWarning` must not itself offer to find fuel while CarPlay guides. **[doc]**
 - **Identify.** The hook appends component 21 (identifier `0x0F21`; range, temperature, warning) and, when stock's Identify has none, component 20 (identifier `0x0F20`, engine from `IAP2_VEHICLE_ENGINE`, display name `Audi`). Growth goes through the framework's `hook_identify_grow`, the same path route guidance uses. The installer registers `0xA100`/`0xA102` as received and `0xA101` as sent, so Cinemo declares them. **[code]**
-- **Declared messages first.** iOS accepts component 21 only when the Identify also declares all three messages; otherwise it rejects the component (`IdentificationRejected` 0x1D03, reason 14). Declared messages without the component are rejected one by one (iOS 26.1 CoreAccessories `_checkIdentificationInfo_19`). So the hook appends the components only when Cinemo's Identify lists `0xA101` as sent and `0xA100`/`0xA102` as received, that is, when the installer's `dio_manager.json` change is active. There is no rejection fallback. **[decompile]** / **[code]**
+- **Rejection fallback.** If the phone's `IdentificationRejected` 0x1D03 names component 20 or 21 or one of the three messages, the hook stops adding them until `dio_manager` restarts, so the next connect identifies like stock. **[code]**
 - **Values.** Range is `DSICarKombi` `BCTotalCurrentRange`, else `BCCurrentRange1`; outside temperature is `BCOutsideTemperature`; the warning is `DSIGeneralVehicleStates` `TankInfo.fuelWarning`. Miles and Fahrenheit are converted; a value is sent only while DSI marks it valid. **[code]**
 - **Native fuel prompt.** The spec forbids the car's own "find a fuel station" prompt while CarPlay guides once `RangeWarning` is advertised. The Audi MMI may still show its reserve hint from native navigation; that is a compliance gap, not a malfunction. **[open]**
 - **Open.** Whether iOS 26/27 starts vehicle-status updates for a petrol car over wired CarPlay, and what Maps shows, is unknown until the car session. The engine type is a knob because the HU does not know it; this unit ships `gasoline`. **[open]**
@@ -91,7 +91,7 @@ The phone side was decoded on 2026-10-10: [Enhanced Siri Contract](../altscreen-
 | `vehicle data: status=1 engine=0 speed=1` | knobs read at start |
 | `Identify: +VehicleStatus +VehicleInformation (N -> M bytes)` | components appended |
 | `Identify has no VehicleSpeedData: set dio_manager.json "nmea" bit 0x08` | installer change not active |
-| `Identify does not declare 0xA100/0xA101/0xA102 (dio_manager.json not patched): no VehicleStatus` | installer change not active; Identify left as stock |
+| `Identify rejected our vehicle components; off until dio_manager restarts` | the phone refused them; CarPlay continues without |
 | `phone started VehicleStatus updates: range=1 temp=1 warning=1` | the phone wants vehicle status |
 | `StartLocationInformation: VehicleSpeedData requested` | the phone wants PASCD |
 | `first PASCD sent: $PASCD,...` | the first sentence |

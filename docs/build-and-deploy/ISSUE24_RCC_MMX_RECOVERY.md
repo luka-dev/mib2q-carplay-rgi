@@ -143,11 +143,9 @@ The old rescue reuses M.I.B.'s component `Launcher`, version 1, and destination
 `/HBpersistence/SWDL/Log/service/MIB`. Existing version state is a plausible
 selection problem, NOT a confirmed diagnosis from the affected HU.
 
-The new [rescue card](../../rescue_Swdlautorun_v2/README.md) gives the component
-an independent identity and logs both launcher entry and verified JAR quarantine.
-It needs no RED/GEM and retains the original checksummed M.I.B. FinalScript.
-It cannot bypass `update.txt`, repair an inaccessible MMX filesystem, or execute
-when SWDL itself is dead. Do not describe it as a guaranteed unbrick.
+The proposed `rescue_Swdlautorun_v2` card with an independent component identity is **not present in this tree**. Its launcher and quarantine behavior must not be treated as an available, verified recovery path. The checked-in [M.I.B. rescue package](../../rescue_MoreIncredibleBash/README.md) is the older package described above; inspect its README and script for its actual JAR/Lua actions.
+
+Neither a proposed card nor the existing package can bypass `update.txt`, repair an inaccessible MMX filesystem, or run when SWDL itself is dead. This is not a guaranteed unbrick procedure.
 
 ### Why plain scripts on an M.I.B. SD are insufficient
 

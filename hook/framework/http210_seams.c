@@ -1,12 +1,14 @@
 /* Stock MU1316 210.81 HTTP boundary. Layout and call sites are verified in
  * docs/wireless-carplay/STOCK210_HTTP_PAIRING_ABI.md. No 280 HTTP structs are used here. */
 #include "hook_framework.h"
+#include "http210_seams.h"
 #include "../wireless/stock210_abi.h"
 #include "../wireless/wireless_hook.h"
 
 static int (*stock_open)(void *);
 static void (*stock_close)(void *);
 static int (*stock_request)(void *, void *);
+static int (*request_fallback)(void *, void *);
 
 static int connection_open(void *connection)
 {
@@ -42,7 +44,32 @@ static int connection_request(void *connection, void *message)
         const hook_module_def_t *m = hook_framework_module_at(i);
         if (m && m->http.on_request && m->http.on_request(connection, message, &result)) return result;
     }
-    return stock_request(connection, message);
+#ifdef MHI2Q_HTTP210_LAB
+    /* Explicit QEMU-only peripheral: software MFi and a RECORD observer.
+     * Run behind pairing/admission, without replacing the guarded callback.
+     * Shipping builds contain neither lookup nor callback. */
+    typedef int (*lab_request_fn)(void *,void *,int *);
+    typedef void (*lab_done_fn)(void *,void *,int);
+    lab_request_fn lab_request=(lab_request_fn)dlsym(RTLD_DEFAULT,"mhi2q_lab_http_request");
+    if(lab_request && lab_request(connection,message,&result))return result;
+#endif
+    int (*fallback)(void *,void *)=__sync_val_compare_and_swap(&request_fallback,NULL,NULL);
+    result=fallback ? fallback(connection,message) : stock_request(connection, message);
+#ifdef MHI2Q_HTTP210_LAB
+    lab_done_fn lab_done=(lab_done_fn)dlsym(RTLD_DEFAULT,"mhi2q_lab_http_done");
+    if(lab_done)lab_done(connection,message,result);
+#endif
+    return result;
+}
+
+int hook_http210_set_request_fallback(void *router, void *expected_stock,
+                                     int (*fallback)(void *, void *))
+{
+    if (router != (void *)connection_request || !stock_request ||
+        expected_stock != (void *)stock_request || !fallback ||
+        fallback == connection_request || fallback == stock_request) return 0;
+    int (*previous)(void *,void *)=__sync_val_compare_and_swap(&request_fallback,NULL,fallback);
+    return !previous || previous==fallback;
 }
 
 HOOK_EXPORT int HTTPServerCreate(void **out_server, const void *delegate)

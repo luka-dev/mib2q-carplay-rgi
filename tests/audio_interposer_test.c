@@ -33,7 +33,6 @@ static unsigned char *image_base;
 static int request_object, response_object, streams_object, desc_object, key_object;
 static int request_refs, response_refs, socket_opens, stock_teardowns;
 static int teardown_empty_array, teardown_stream_type = 103;
-static int desc_is_media = 1;   /* isMedia in the 103 descriptor: 1, 0, or -1 = absent */
 static void *native_teardown_request, *module_teardown_request;
 static pthread_mutex_t fault_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t fault_cond = PTHREAD_COND_INITIALIZER;
@@ -167,6 +166,17 @@ static void configure_ok(void)
     assert(snd_pcm_plugin_params(&media_device, &p) == 0);
     assert(spa_pcm_sink.paramsState == SPA_PCM_PARAMS_READY);
 }
+static unsigned metadata_channels,metadata_bits,metadata_rate;
+static int native_metadata(void *self,uint32_t channels,uint32_t bits,uint32_t rate,int encryption,int codec)
+{
+    (void)self;(void)encryption;(void)codec;
+    metadata_channels=channels;metadata_bits=bits;metadata_rate=rate;return 0;
+}
+static void check_metadata(unsigned rate,unsigned expected_channels,unsigned expected_bits)
+{
+    assert(!spa_create_metadata_common(native_metadata,"test",NULL,2,16,rate,0,0));
+    assert(metadata_channels==expected_channels && metadata_bits==expected_bits && metadata_rate==rate);
+}
 static void qsa_transactions(void)
 {
     snd_pcm_channel_params_t p = stereo_params();
@@ -181,6 +191,9 @@ static void qsa_transactions(void)
     probe_during_params = 1;
     configure_ok();
     assert(spa_pcm_sink.expandedParams && device_setup.format.voices == 6);
+    check_metadata(48000,6,24);
+    check_metadata(44100,2,16);
+    check_metadata(16000,2,16);
     calls = params_calls;
     spa_pcm_sink.reclaimStage = SPA_PCM_RECLAIM_OPEN;
     configure_ok();
@@ -207,6 +220,7 @@ static void qsa_transactions(void)
     params_failures = 1; p = stereo_params();
     assert(snd_pcm_plugin_params(&media_device, &p) == 0); /* verified stock rollback */
     assert(!spa_pcm_sink.expandedParams && device_setup.format.voices == 2);
+    check_metadata(48000,2,16); /* rejected widening / stock fallback */
     assert(snd_pcm_plugin_write(&media_device, source_pcm, sizeof(source_pcm)) == sizeof(source_pcm));
     readback_bad = 1; p = stereo_params();
     assert(snd_pcm_plugin_params(&media_device, &p) == -EIO);
@@ -256,6 +270,18 @@ static void qsa_transactions(void)
     assert(errno == ECANCELED && spa103_render.fill == 766 && spa103_render.head == 2);
     assert(spa103_render.reservedReadFrames == 0);
     cancelled_write = 0; spa_pcm_sink.transport.stopping = 0;
+    /* Alert (audio_type=2, e.g. iPhone alarm clock) opens mpl5_dio_ent too:
+     * it must preempt buffered 103 without consuming the 103 ring and without
+     * being cancelled as non-ent, whereas telephony (audio_type=3) cancels. */
+    calls = native_writes; errno = 0;
+    assert(spa_media_route_stock_begin_type(&spa_pcm_sink.route, &request_object, 2) == 1);
+    assert(snd_pcm_plugin_write(&media_device, source_pcm, sizeof(source_pcm)) == (ssize_t)sizeof(source_pcm));
+    assert(errno == 0 && native_writes == calls + 1 && spa103_render.fill == 766);
+    assert(spa_media_route_stock_begin_type(&spa_pcm_sink.route, &request_object, 3) == 0);
+    assert(snd_pcm_plugin_write(&media_device, source_pcm, sizeof(source_pcm)) == (ssize_t)sizeof(source_pcm));
+    assert(errno == ECANCELED && native_writes == calls + 1 && spa103_render.fill == 766);
+    assert(spa_media_route_stock_end(&spa_pcm_sink.route, &request_object, 0));
+    spa_pcm_sink.route.reacquire_after_ns = 0;
     free(spa103_render.ring); spa103_render.ring = NULL;
     spa103_render.state = SPA_103_RENDER_IDLE;
     spa103_render.fill = 0;
@@ -277,15 +303,17 @@ static void fake_release(const void *p)
     if (p == &request_object) --request_refs;
     if (p == &response_object) --response_refs;
 }
+static int fake_media_flag=1,fake_media_type=1;
 static void *fake_dict_get(const void *dict, const void *key)
 {
     const char *name = key;
     if (dict == &request_object && !strcmp(name, "streams")) return &streams_object;
     if (dict == &desc_object) {
-        if (!strcmp(name, "audioType")) return "media";
+        if (!strcmp(name, "audioType")) return fake_media_type?"media":"telephony";
+        if (!strcmp(name, "isMedia") && !fake_media_flag)return NULL;
         if (!strcmp(name, "shk")) return &key_object;
         if (!strcmp(name, "type") || !strcmp(name, "audioFormatIndex") ||
-            !strcmp(name, "spf") || (!strcmp(name, "isMedia") && desc_is_media >= 0) ||
+            !strcmp(name, "spf") || !strcmp(name, "isMedia") ||
             !strcmp(name, "packetFormatAPAP") || !strcmp(name, "audioFormat"))
             return &desc_object; /* presence check; numeric value comes from GetInt64 */
     }
@@ -299,7 +327,10 @@ static int64_t fake_dict_int(const void *dict, const void *key, int32_t *error)
         if (!strcmp(name, "type")) return teardown_stream_type;
         if (!strcmp(name, "audioFormatIndex")) return 65;
         if (!strcmp(name, "spf")) return 1024;
-        if (!strcmp(name, "isMedia")) return desc_is_media;
+        if (!strcmp(name, "isMedia")) {
+            if(fake_media_flag==3)*error=-1;
+            return fake_media_flag==1?1:0;
+        }
         if (!strcmp(name, "packetFormatAPAP")) return 1;
         if (!strcmp(name, "audioFormat")) return 0;
     }
@@ -678,15 +709,6 @@ static void teardown_scope_tests(void)
     puts("audio_interposer_test: NULL/missing/empty/selective TEARDOWN scope PASS");
 }
 
-static void setup_descriptor_tests(void)
-{
-    desc_is_media = 1;  assert(spa103_validate_setup_stream(&desc_object, 65, 1));
-    desc_is_media = -1; assert(spa103_validate_setup_stream(&desc_object, 65, 1)); /* iOS 26.6 */
-    desc_is_media = 0;  assert(!spa103_validate_setup_stream(&desc_object, 65, 1));
-    desc_is_media = 1;
-    puts("audio_interposer_test: 103 SETUP isMedia true/absent accepted, false rejected PASS");
-}
-
 static void observe_teardown(void *session, void *request, int reason)
 { (void)session; (void)reason; module_teardown_request = request; }
 static const hook_module_def_t teardown_observer = {
@@ -816,6 +838,26 @@ static void buffered_contract_tests(void)
 
     spa_on_setup_response_final(&setup);
     assert(!setup.result && spa_mainbuffered_session == &session_a);
+    assert(!spa_buffered_wireless_offer(&session_a)); /* no HTTP receiver */
+    void *dispatcher=NULL;
+    spa103_http_process_slot=&dispatcher;
+    assert(spa_buffered_wireless_offer(&session_a));
+    assert(!spa_buffered_wireless_offer(&session_b));
+    assert(!spa_buffered_wireless_offer(NULL));
+    cfa_dictget=fake_dict_get;cfa_dictgeti=fake_dict_int;cfa_strgetc=fake_string_copy;
+    assert(!spa_buffered_wireless_validate(&session_a,&desc_object));
+    fake_media_flag=0;
+    assert(!spa_buffered_wireless_validate(&session_a,&desc_object));
+    fake_media_type=0;
+    assert(spa_buffered_wireless_validate(&session_a,&desc_object)==kParamErr);
+    fake_media_type=1;fake_media_flag=2;
+    assert(spa_buffered_wireless_validate(&session_a,&desc_object)==kParamErr);
+    fake_media_flag=3;
+    assert(spa_buffered_wireless_validate(&session_a,&desc_object)==kParamErr);
+    fake_media_flag=1;
+    assert(spa_buffered_wireless_validate(&session_b,&desc_object)==kNotHandledErr);
+    assert(spa_buffered_wireless_validate(&session_a,NULL)==kNotHandledErr);
+    cfa_dictget=contract_dict_get;
     assert(contract_key_refs == 1 && contract_info_refs == 1);
     allocations = contract_allocations;
     contract_alloc_fail = contract_info_string_fail = 1;
@@ -830,6 +872,8 @@ static void buffered_contract_tests(void)
     response.enabled = &removed; ++setup.sequence;
     spa_on_setup_response_final(&setup);
     assert(!setup.result && !spa_mainbuffered_session);
+    assert(!spa_buffered_wireless_offer(&session_a));
+    spa103_http_process_slot=NULL;
     assert(!contract_key_refs && !contract_info_refs);
     memset(&info, 0, sizeof(info)); spa_augment_server_info(&session_a, &info);
     assert(!info.info);
@@ -876,24 +920,13 @@ static void buffered_contract_tests(void)
 }
 int main(void)
 {
-    /* Local environment parser only; no vehicle-side configuration. */
-    {
-        static const char *invalid[] = {"nan", "inf", "-inf", "-0.1", "1.1", "bad", "0.5x"};
-        unsigned i;
-        unsetenv(SPA_AUDIO_SCENE_INST_ALPHA_ENV);
-        assert(spa_parse_scene_float(SPA_AUDIO_SCENE_INST_ALPHA_ENV, 0.0, 1.0, 0.9f) == 0.9f);
-        setenv(SPA_AUDIO_SCENE_INST_ALPHA_ENV, "0.75", 1);
-        assert(spa_parse_scene_float(SPA_AUDIO_SCENE_INST_ALPHA_ENV, 0.0, 1.0, 0.9f) == 0.75f);
-        setenv(SPA_AUDIO_SCENE_INST_ALPHA_ENV, "1", 1);
-        assert(spa_parse_scene_float(SPA_AUDIO_SCENE_INST_ALPHA_ENV, 0.0, 1.0, 0.9f) == 1.0f);
-        for (i = 0; i < sizeof(invalid)/sizeof(invalid[0]); ++i) {
-            setenv(SPA_AUDIO_SCENE_INST_ALPHA_ENV, invalid[i], 1);
-            assert(spa_parse_scene_float(SPA_AUDIO_SCENE_INST_ALPHA_ENV, 0.0, 1.0, 0.9f) == 0.9f);
-        }
-        unsetenv(SPA_AUDIO_SCENE_INST_ALPHA_ENV);
-    }
     assert(!setenv("AUDIO_SPATIAL", "1", 1));
-    assert(!setenv("AUDIO_STEREO_UPMIX", "off", 1));
+    assert(spa_audio_config()->stereoUpmixBackend == SPA_STEREO_UPMIX_SCENE);
+    assert(spa_audio_config()->stereoLfeAssist == 1);
+    assert(spa_audio_config()->realtimeUpmix == 1);
+    assert(spa_audio_config()->stereoLfeGainQ15 == SPA_STEREO_UPMIX_LFE_Q15_DEFAULT);
+    assert(spa_audio_config()->voiceGainQ13 == SPA_VOICE_GAIN_Q13_DEFAULT);
+    assert(spa_probe103_extra_index(SPA_APAC_48K_5_1) == SPA_AAC_LC_48K_STEREO);
     assert(!pipe(poll_pipe));
     assert(!posix_memalign((void **)&image_base, 4096, 0xc0000));
     memset(image_base, 0, 0xc0000);
@@ -905,7 +938,6 @@ int main(void)
     absent_cleanup_generation();
     control_generation_tests();
     teardown_scope_tests();
-    setup_descriptor_tests();
     buffered_contract_tests();
     free(spa_pcm_sink.scratch);
     spa_pcm_sink.scratch = NULL; spa_pcm_sink.scratchBytes = 0;

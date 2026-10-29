@@ -4,7 +4,7 @@ import re
 import unittest
 from amp_b_control import api18_request_coordinate
 
-OUT=Path(__file__).resolve().parents[2]/'assets/soundamp/remaining-blocks-20260919'
+OUT=Path(__file__).resolve().parents[2]/'output/r2/soundamp/remaining-blocks-20260919'
 
 
 class API18SourceTests(unittest.TestCase):

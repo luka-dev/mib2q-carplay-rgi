@@ -11,7 +11,7 @@ int main(void)
     mhi2q_rbr_request decoded;
     assert(mhi2q_rbr_decode_request(request, &decoded) == 0);
     assert(decoded.operation == 5 && decoded.generation == 37 && decoded.airplay_port == 5000);
-    request[5] = 6;
+    request[5] = 8;
     assert(mhi2q_rbr_decode_request(request, &decoded) != 0);
     assert(mhi2q_rbr_copy_pairing_id("\6pi=abc\6pk=def", 14, id) == 0 && !strcmp(id, "abc"));
     assert(mhi2q_rbr_copy_pairing_id("\6pi=abc\6PI=def", 14, id) != 0 && !id[0]);

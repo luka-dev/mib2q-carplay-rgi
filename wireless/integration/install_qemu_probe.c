@@ -23,6 +23,16 @@ struct replacement {
     const char *reference;
 };
 static const struct replacement replacements[] = {
+#ifdef MHI2Q_STOCK210_TEST_INSTALL
+    {"bin/btstack", "/mnt/app/eso/bin/apps/btstack", "reference/btstack"},
+    {"pf/pf.conf", "/mnt/system/etc/pf.conf", "reference/pf.conf"},
+    {"pf/pf.ecm0.conf", "/mnt/system/etc/pf.ecm0.conf", "reference/pf.ecm0.conf"},
+    {"pf/pf.mlan0.conf", "/mnt/system/etc/pf.mlan0.conf", "reference/pf.mlan0.conf"},
+    {"pf/pf.ppp0.conf", "/mnt/system/etc/pf.ppp0.conf", "reference/pf.ppp0.conf"},
+    {"integration/carplay_startup.sh", "/mnt/app/root/hooks/carplay_startup.sh", "reference/carplay_startup.sh"},
+#define INSTALL_SCRIPT "install_stock210_test.sh"
+#define BACKUP_SUFFIX ".stock210-prev"
+#else
     {"bin/btstack", "/mnt/app/eso/bin/apps/btstack", "reference/btstack.stock"},
     {"lib/libairplay.so", "/mnt/app/eso/lib/libairplay.so", "reference/libairplay.stock.so"},
     {"pf/pf.conf", "/mnt/system/etc/pf.conf", "reference/pf.conf.wired"},
@@ -33,6 +43,9 @@ static const struct replacement replacements[] = {
      "reference/carplay_startup.wired.sh"},
     {"integration/rc.local.wireless.candidate.sh", "/mnt/app/root/rc.local",
      "reference/rc.local.before.sh"},
+#define INSTALL_SCRIPT "install_wireless_candidate.sh"
+#define BACKUP_SUFFIX ".wireless-prev"
+#endif
 };
 static const char *const owned[] = {
     "/mnt/app/root/hooks/mhi2q-wireless-daemon",
@@ -41,7 +54,23 @@ static const char *const owned[] = {
     "/mnt/app/root/hooks/libdio_receiver_bridge.so",
     "/mnt/app/root/hooks/wireless_dio_supervisor.sh",
     "/mnt/app/root/hooks/wireless_carplay.env",
+#ifdef MHI2Q_STOCK210_TEST_INSTALL
+    "/mnt/app/root/hooks/wireless_runtime",
+    "/mnt/app/root/hooks/mhi2q_mdns_probe",
+    "/mnt/app/root/hooks/libcarplay_wireless_stock210.so",
+    "/mnt/app/root/hooks/libcarplay_wireless_apac.so",
+#endif
 };
+#ifdef MHI2Q_STOCK210_TEST_INSTALL
+static const struct replacement untouched[] = {
+    {0, "/mnt/app/armle/usr/sbin/mdnsd", "reference/untouched.mdnsd"},
+    {0, "/mnt/app/armle/usr/lib/libdns_sd.so.1", "reference/untouched.libdns_sd.so.1"},
+    {0, "/mnt/app/eso/lib/libairplay.so", "reference/untouched.libairplay.so"},
+    {0, "/mnt/app/eso/bin/apps/dio_manager", "reference/untouched.dio_manager"},
+    {0, "/mnt/app/root/hooks/libcarplay_hook.so", "reference/untouched.libcarplay_hook.so"},
+    {0, "/mnt/app/root/rc.local", "reference/untouched.rc.local"},
+};
+#endif
 
 static int mkdir_parent(const char *path)
 {
@@ -107,7 +136,7 @@ static int run_mode(const char *mode, const char *fault)
         else unsetenv("MHI2Q_TEST_FAIL_PATH");
         char *const args[] = {
             "/mnt/owner/bin/sh",
-            "/mnt/owner/stage/integration/install_wireless_candidate.sh",
+            "/mnt/owner/stage/integration/" INSTALL_SCRIPT,
             (char *)mode, 0,
         };
         execv(args[0], args);
@@ -126,7 +155,7 @@ static int check_replacements(int installed)
         snprintf(target, sizeof(target), "/mnt/owner/target%s", item->path);
         snprintf(expected, sizeof(expected), "/mnt/owner/stage/%s",
                  installed ? item->payload : item->reference);
-        snprintf(backup, sizeof(backup), "%s.wireless-prev", target);
+        snprintf(backup, sizeof(backup), "%s" BACKUP_SUFFIX, target);
         if (!same_file(target, expected) ||
             (access(backup, F_OK) == 0) != installed) return 0;
     }
@@ -135,6 +164,14 @@ static int check_replacements(int installed)
         snprintf(target, sizeof(target), "/mnt/owner/target%s", owned[i]);
         if ((access(target, F_OK) == 0) != installed) return 0;
     }
+#ifdef MHI2Q_STOCK210_TEST_INSTALL
+    for (size_t i = 0; i < sizeof(untouched) / sizeof(untouched[0]); ++i) {
+        char target[512], expected[512];
+        snprintf(target, sizeof(target), "/mnt/owner/target%s", untouched[i].path);
+        snprintf(expected, sizeof(expected), "/mnt/owner/stage/%s", untouched[i].reference);
+        if (!same_file(target, expected)) return 0;
+    }
+#endif
     return 1;
 }
 
@@ -170,6 +207,14 @@ int main(void)
         snprintf(destination, sizeof(destination), "/mnt/owner/target%s", replacements[i].path);
         if (copy_file(source, destination, 0755, 0)) return 3;
     }
+#ifdef MHI2Q_STOCK210_TEST_INSTALL
+    for (size_t i = 0; i < sizeof(untouched) / sizeof(untouched[0]); ++i) {
+        char source[512], destination[512];
+        snprintf(source, sizeof(source), "/mnt/owner/stage/%s", untouched[i].reference);
+        snprintf(destination, sizeof(destination), "/mnt/owner/target%s", untouched[i].path);
+        if (copy_file(source, destination, 0755, 0)) return 3;
+    }
+#endif
     setenv("MHI2Q_STAGE", "/mnt/owner/stage", 1);
     setenv("MHI2Q_TARGET_ROOT", "/mnt/owner/target", 1);
     setenv("PATH", "/mnt/owner/bin:/proc/boot", 1);

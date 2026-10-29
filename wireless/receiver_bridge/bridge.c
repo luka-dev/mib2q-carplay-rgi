@@ -7,6 +7,11 @@
  * discovery still require validation before deployment.
  */
 #include "protocol.h"
+#include "si_guard.h"
+#include "semantic_delivery.h"
+#ifdef MHI2Q_BRIDGE_SI_TRANSPORT
+#include "now_playing.h"
+#endif
 
 #include <arpa/inet.h>
 #include <dlfcn.h>
@@ -21,6 +26,7 @@
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <unistd.h>
+#include "listener_policy.h"
 
 #define BRIDGE_PORT 57343
 #if defined(MHI2Q_BRIDGE_STOCK_QEMU) || defined(MHI2Q_BRIDGE_STOCK210)
@@ -61,9 +67,17 @@ extern void mhi2q_property_handoff_qemu_arm(unsigned int armed);
 static pthread_mutex_t bridge_lock = PTHREAD_MUTEX_INITIALIZER;
 static uint32_t active_generation;
 static int active;
+#ifdef MHI2Q_BRIDGE_SI_TRANSPORT
+static struct cp_semantic_delivery semantic_delivery;
+#endif
 static int event_posted;
+static int event_is_posted(void) { return __sync_val_compare_and_swap(&event_posted,0,0); }
 static int server_stopped;
 static void *retained_server;
+/* START waits for native callbacks under bridge_lock. Server publication
+ * must use an independent lock or cold START blocks its own creation. */
+static pthread_mutex_t server_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t start_lock = PTHREAD_MUTEX_INITIALIZER;
 static volatile unsigned int listener_started;
 static char advertised_pairing_id[MHI2Q_RBR_ID_MAX + 1];
 static pthread_mutex_t identity_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -72,6 +86,20 @@ static int wired_owner(void)
 {
     const char *mode = getenv("MHI2Q_DIO_OWNER_MODE");
     return mode && strcmp(mode, "wired") == 0;
+}
+
+int bind(int fd,const struct sockaddr *address,socklen_t length)
+{
+    typedef int (*bind_fn)(int,const struct sockaddr *,socklen_t);
+    bind_fn real=(bind_fn)dlsym(RTLD_NEXT,"bind");
+    if(!real){errno=ENOSYS;return -1;}
+#ifdef MHI2Q_BRIDGE_STOCK210
+    struct mhi2q_si_binding b=mhi2q_si_environment();
+    int enabled=b.enabled&&b.valid&&!wired_owner()&&mhi2q_probe_manager()&&
+        __progname&&!strcmp(__progname,"dio_manager");
+    if(mhi2q_prepare_airplay_listener(fd,address,length,enabled))return -1;
+#endif
+    return real(fd,address,length);
 }
 
 static int hook_ready(void)
@@ -139,12 +167,12 @@ int AirPlayReceiverServerCreate(void *out_server)
     if (status == 0 && !wired_owner() && out_server && *(void **)out_server && retain &&
         mhi2q_probe_manager() &&
         __progname && strcmp(__progname, "dio_manager") == 0) {
-        pthread_mutex_lock(&bridge_lock);
-        if (!retained_server) {
+        pthread_mutex_lock(&server_lock);
+        if (!retained_server && mhi2q_probe_manager()) {
             retained_server = retain(*(void **)out_server);
             mhi2q_probe_record_airplay_server(retained_server);
         }
-        pthread_mutex_unlock(&bridge_lock);
+        pthread_mutex_unlock(&server_lock);
     }
     bridge_log("AirPlayReceiverServerCreate status", status);
     return status;
@@ -397,22 +425,23 @@ static int stop_server_if_idle(void)
 }
 #endif
 
-/* Called under bridge_lock, after the guarded manager capture. The stock
- * dimension routine selects from dio's own three-entry display table. */
+/* A short independent posting lock serializes SI init/setup with early
+ * CPRX START. Never hold it while waiting for receiver callbacks. */
 static int post_first_start(void *manager)
 {
     uintptr_t address = (uintptr_t)manager;
     uint32_t dimensions[2] = { 0, 0 };
-    if (!manager || event_posted || MHI2Q_BRIDGE_DISPLAY_MODE > 2 ||
-        if_nametoindex(MHI2Q_BRIDGE_INTERFACE_NAME) == 0 ||
-        *(uintptr_t *)(address + 0x168u) != 0)
-        return -1;
+    int result=-1;
+    pthread_mutex_lock(&start_lock);
+    if (!manager || mhi2q_probe_manager()!=manager || MHI2Q_BRIDGE_DISPLAY_MODE > 2 ||
+        if_nametoindex(MHI2Q_BRIDGE_INTERFACE_NAME) == 0) goto done;
+    if(event_is_posted()) { result=0; goto done; }
+    if(*(uintptr_t *)(address + 0x168u) != 0) goto done;
     if (*(uint32_t *)(address + 0x224u) == 0 ||
         *(uint32_t *)(address + 0x228u) == 0) {
         ((void (*)(uint32_t *, unsigned int))0x001675a4u)(
             dimensions, MHI2Q_BRIDGE_DISPLAY_MODE);
-        if (dimensions[0] == 0 || dimensions[1] == 0)
-            return -1;
+        if (dimensions[0] == 0 || dimensions[1] == 0) goto done;
         *(uint32_t *)(address + 0x224u) = dimensions[0];
         *(uint32_t *)(address + 0x228u) = dimensions[1];
         *(uint32_t *)(address + 0x22cu) = dimensions[0];
@@ -420,10 +449,14 @@ static int post_first_start(void *manager)
         bridge_log("stock display width", (int)dimensions[0]);
         bridge_log("stock display height", (int)dimensions[1]);
     }
-    event_posted = 1;
-    bridge_log("posting first StartAirPlay", 1);
-    ((void (*)(void *, int))0x00157460u)(manager, 0);
-    return 0;
+    if (__sync_bool_compare_and_swap(&event_posted, 0, 1)) {
+        bridge_log("posting first StartAirPlay", 1);
+        ((void (*)(void *, int))0x00157460u)(manager, 0);
+    }
+    result=0;
+done:
+    pthread_mutex_unlock(&start_lock);
+    return result;
 }
 
 static uint8_t bridge_start(uint32_t generation)
@@ -451,20 +484,32 @@ static uint8_t bridge_start(uint32_t generation)
     }
     if (!manager)
         return MHI2Q_RBR_NOT_READY;
+#ifdef MHI2Q_BRIDGE_SI_TRANSPORT
+    extern int mhi2q_si_transport_initialized(void *);
+    if(mhi2q_si_environment().enabled && !mhi2q_si_transport_initialized(manager))
+        return MHI2Q_RBR_NOT_READY;
+#endif
     if (mhi2q_probe_airplay_server()) {
         if (server_stopped) {
             need_fresh_bonjour = 1;
             if (control_server("startServer") != 0)
                 return MHI2Q_RBR_NOT_READY;
             server_stopped = 0;
-        } else if (!event_posted && !probe_info()) {
+        } else if (!event_is_posted() && !probe_info()) {
             need_fresh_bonjour = 1;
             if (control_server("startServer") != 0)
                 return MHI2Q_RBR_NOT_READY;
         }
     } else {
+#ifdef MHI2Q_BRIDGE_SI_TRANSPORT
+        /* HMI startService owns the first start for an SI child: it sets
+         * dimensions, physical size, HID and initial resource modes first.
+         * A bootstrap readiness probe must not race that native operation. */
+        if (mhi2q_si_environment().enabled)
+            return MHI2Q_RBR_NOT_READY;
+#endif
         need_fresh_bonjour = 1;
-        if (!event_posted && post_first_start(manager) != 0)
+        if (!event_is_posted() && post_first_start(manager) != 0)
             return MHI2Q_RBR_NOT_READY;
     }
     for (attempt = 0; attempt < 60; ++attempt) {
@@ -617,7 +662,7 @@ static int write_full(int fd, const uint8_t *bytes, size_t length)
 {
     size_t used = 0;
     while (used < length) {
-        ssize_t n = write(fd, bytes + used, length - used);
+        ssize_t n = send(fd, bytes + used, length - used, MSG_NOSIGNAL);
         if (n < 0 && errno == EINTR) continue;
         if (n <= 0) return -1;
         used += (size_t)n;
@@ -660,12 +705,55 @@ static void serve_client(int fd)
     char identity[MHI2Q_RBR_ID_MAX + 1] = {0};
     mhi2q_rbr_request decoded;
     uint8_t status = MHI2Q_RBR_BAD_REQUEST;
+    uint8_t context[16] = {0};
+    unsigned version = 0;
+    int observation=-1;
+#ifdef MHI2Q_BRIDGE_SI_TRANSPORT
+    uint8_t metadata[8192];size_t metadata_length=0;
+    int iap2_length=0;uint32_t iap2_ack=0;
+#endif
     struct timeval timeout = { 7, 0 };
     (void)setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
     (void)setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
-    if (read_full(fd, request, sizeof(request)) == 0 &&
-        mhi2q_rbr_decode_request(request, &decoded) == 0) {
+    int envelope = read_full(fd, request, sizeof(request));
+    if (!envelope) {
+        version=request[4];
+        if (version==3) {
+            envelope=read_full(fd,context,sizeof(context));
+            request[4]=MHI2Q_RBR_VERSION;
+        }
+    }
+    if (!envelope && mhi2q_rbr_decode_request(request, &decoded) == 0 &&
+        mhi2q_si_authorize(mhi2q_si_environment(),(uint32_t)getppid(),version,
+                           decoded.operation,decoded.generation,context)) {
         if (decoded.airplay_port == AIRPLAY_PORT) {
+            if(decoded.operation==MHI2Q_RBR_NOW_PLAYING || decoded.operation==MHI2Q_RBR_IAP2) {
+                /* No legacy/unbound metadata writes. Parse the complete
+                 * bounded body before taking the control lock. */
+#ifdef MHI2Q_BRIDGE_SI_TRANSPORT
+                uint8_t size[2];
+                struct mhi2q_si_binding b=mhi2q_si_environment();
+                if(version!=3||!b.enabled||!b.valid||read_full(fd,size,2))goto respond;
+                metadata_length=(size_t)size[0]|((size_t)size[1]<<8);
+                if(!metadata_length||metadata_length>sizeof(metadata)||
+                   (decoded.operation==MHI2Q_RBR_NOW_PLAYING&&metadata_length>4096)||read_full(fd,metadata,metadata_length))goto respond;
+                if(!mhi2q_si_authorize(mhi2q_si_environment(),(uint32_t)getppid(),version,
+                     decoded.operation,decoded.generation,context))goto respond;
+#else
+                goto respond;
+#endif
+            }
+            if(decoded.operation==MHI2Q_RBR_IAP2_POLL) {
+#ifdef MHI2Q_BRIDGE_SI_TRANSPORT
+                uint8_t ack[4];struct mhi2q_si_binding b=mhi2q_si_environment();
+                if(version!=3||!b.enabled||!b.valid||read_full(fd,ack,sizeof(ack)))goto respond;
+                iap2_ack=cp_semantic_u32(ack);
+                if(!mhi2q_si_authorize(mhi2q_si_environment(),(uint32_t)getppid(),version,
+                     decoded.operation,decoded.generation,context))goto respond;
+#else
+                goto respond;
+#endif
+            }
             if (decoded.operation == MHI2Q_RBR_WIRED_DRAIN) {
                 /* sessionDied dispatches synchronously on the SDK HTTP
                  * queue; do not hold bridge_lock across its callbacks. */
@@ -679,15 +767,64 @@ static void serve_client(int fd)
                     status = bridge_stop(decoded.generation);
                 else if (decoded.operation == MHI2Q_RBR_IDENTITY)
                     status = bridge_identity(decoded.generation, identity);
+                else if(decoded.operation==MHI2Q_RBR_NOW_PLAYING) {
+#ifdef MHI2Q_BRIDGE_SI_TRANSPORT
+                    if(active && active_generation==decoded.generation && metadata_length) {
+                        int result=mhi2q_now_playing_submit(metadata,metadata_length);
+                        status=result<0?MHI2Q_RBR_BAD_REQUEST:result?MHI2Q_RBR_OK:MHI2Q_RBR_NOT_READY;
+                    }
+#endif
+                }
+                else if(decoded.operation==MHI2Q_RBR_IAP2 || decoded.operation==MHI2Q_RBR_IAP2_POLL) {
+#ifdef MHI2Q_BRIDGE_SI_TRANSPORT
+                    struct mhi2q_si_binding binding=mhi2q_si_environment();
+                    if(version==3&&binding.valid&&binding.enabled&&active&&active_generation==decoded.generation) {
+                        if(decoded.operation==MHI2Q_RBR_IAP2&&metadata_length>5) {
+                            int (*receive)(unsigned,const uint8_t *,size_t)=dlsym(RTLD_DEFAULT,"mhi2q_wireless_iap2_receive");
+                            int result=cp_semantic_input(&semantic_delivery,metadata,metadata_length,receive);
+                            status=result>0?MHI2Q_RBR_OK:result<0?MHI2Q_RBR_BAD_REQUEST:MHI2Q_RBR_NOT_READY;
+                        } else if(decoded.operation==MHI2Q_RBR_IAP2_POLL) {
+                            int (*outgoing)(uint8_t *,size_t)=dlsym(RTLD_DEFAULT,"mhi2q_wireless_iap2_outgoing");
+                            iap2_length=cp_semantic_output(&semantic_delivery,iap2_ack,outgoing);
+                            status=iap2_length>=0&&iap2_length<=512?MHI2Q_RBR_OK:MHI2Q_RBR_NOT_READY;
+                        }
+                    }
+#endif
+                }
+                else if (decoded.operation==MHI2Q_RBR_STATUS || decoded.operation==MHI2Q_RBR_HEALTH) {
+#ifdef MHI2Q_BRIDGE_STOCK210
+                    if(active && active_generation==decoded.generation) {
+                        observation=hook_control(mhi2q_probe_airplay_server(),
+                            decoded.operation==MHI2Q_RBR_STATUS?4:5);
+                        status=observation>=0 && observation<=7 ? MHI2Q_RBR_OK:MHI2Q_RBR_NOT_READY;
+                    }
+#else
+                    status=MHI2Q_RBR_NOT_READY;
+#endif
+                }
                 else
                     status = bridge_quiesce();
                 pthread_mutex_unlock(&bridge_lock);
             }
         }
     }
+respond:
     mhi2q_rbr_encode_response(response, status);
-    if (write_full(fd, response, sizeof(response)) == 0 &&
-        status == MHI2Q_RBR_OK && identity[0]) {
+    if(write_full(fd,response,sizeof(response))!=0)return;
+#ifdef MHI2Q_BRIDGE_SI_TRANSPORT
+    if(status==MHI2Q_RBR_OK&&decoded.operation==MHI2Q_RBR_IAP2_POLL) {
+        uint8_t header[6];
+        for(unsigned i=0;i<4;++i)header[i]=(uint8_t)(semantic_delivery.output_sequence>>(8*i));
+        header[4]=(uint8_t)iap2_length;header[5]=(uint8_t)(iap2_length>>8);
+        if(write_full(fd,header,sizeof(header)))return;
+        if(iap2_length>0)(void)write_full(fd,semantic_delivery.output,(size_t)iap2_length);
+    }
+#endif
+    if(status==MHI2Q_RBR_OK && observation>=0) {
+        uint8_t state[4]={(uint8_t)observation,0,0,0};
+        (void)write_full(fd,state,sizeof(state));
+    }
+    if (status == MHI2Q_RBR_OK && identity[0]) {
         size_t n = strlen(identity);
         uint8_t size[2] = {(uint8_t)n, (uint8_t)(n >> 8)};
         if (write_full(fd, size, sizeof(size)) == 0)
@@ -724,6 +861,17 @@ static void *serve_loop(void *ignored)
     }
     bridge_log("listening", BRIDGE_PORT);
     for (;;) {
+        /* Only this SI-bound wireless process exits. After parent death its
+         * immutable CPRX admission can never authorize another media start;
+         * the kernel must release its owner lock before the new SI spawns. */
+        if(mhi2q_si_parent_ended(mhi2q_si_environment(),(uint32_t)getppid())) {
+            bridge_log("SI parent ended; exiting own orphan receiver",70);
+            _exit(70);
+        }
+        fd_set reads;FD_ZERO(&reads);FD_SET(listener,&reads);struct timeval tick={1,0};
+        int ready=select(listener+1,&reads,NULL,NULL,&tick);
+        if(!ready || (ready<0 && errno==EINTR))continue;
+        if(ready<0)break;
         int client = accept(listener, NULL, NULL);
         if (client >= 0) {
             int client_flags = fcntl(client, F_GETFD);
@@ -755,7 +903,7 @@ static void *prestart_loop(void *ignored)
             return NULL;
         if (if_nametoindex(MHI2Q_BRIDGE_INTERFACE_NAME) != 0) {
             pthread_mutex_lock(&bridge_lock);
-            if (!event_posted && !mhi2q_probe_airplay_server() &&
+            if (!event_is_posted() && !mhi2q_probe_airplay_server() &&
                 post_first_start(manager) == 0) {
                 pthread_mutex_unlock(&bridge_lock);
                 bridge_log("prestarted stock receiver", 1);
@@ -781,7 +929,7 @@ static void *prestart_loop(void *ignored)
                 return NULL;
             }
             pthread_mutex_unlock(&bridge_lock);
-            if (event_posted || mhi2q_probe_airplay_server())
+            if (event_is_posted() || mhi2q_probe_airplay_server())
                 return NULL;
         }
         sleep(1);
@@ -943,6 +1091,13 @@ static void *selftest_loop(void *ignored)
 
 void mhi2q_bridge_on_manager(void *manager)
 {
+#ifdef MHI2Q_BRIDGE_SI_TRANSPORT
+    extern int mhi2q_si_transport_install(void *);
+    if(mhi2q_si_transport_install(manager)<0) {
+        bridge_log("SI transport guard rejected",1);
+        _exit(78);
+    }
+#endif
     pthread_t worker;
     (void)manager;
     /* SI's wired child carries the same preload chain. Its AirPlay lifecycle
@@ -958,6 +1113,9 @@ void mhi2q_bridge_on_manager(void *manager)
         return;
     }
 #ifdef MHI2Q_BRIDGE_PRESTART
+#ifdef MHI2Q_BRIDGE_SI_TRANSPORT
+    if(!mhi2q_si_environment().enabled)
+#endif
     if (pthread_create(&worker, NULL, prestart_loop, NULL) == 0)
         pthread_detach(worker);
 #endif
@@ -971,16 +1129,22 @@ void mhi2q_bridge_on_manager_release(void *manager)
 {
     typedef void (*release_fn)(void *);
     release_fn release = (release_fn)dlsym(RTLD_DEFAULT, "CFRelease");
+    void *server;
     (void)manager;
     pthread_mutex_lock(&bridge_lock);
+    pthread_mutex_lock(&start_lock);
+    pthread_mutex_lock(&server_lock);
     active = 0;
     server_stopped = 0;
-    event_posted = 0;
+    __sync_lock_test_and_set(&event_posted, 0);
     mhi2q_probe_record_airplay_server(NULL);
-    if (retained_server && release) {
-        release(retained_server);
+    server = retained_server;
+    retained_server = NULL;
+    pthread_mutex_unlock(&server_lock);
+    pthread_mutex_unlock(&start_lock);
+    pthread_mutex_unlock(&bridge_lock);
+    if (server && release) {
+        release(server);
         bridge_log("retained server released", 1);
     }
-    retained_server = NULL;
-    pthread_mutex_unlock(&bridge_lock);
 }

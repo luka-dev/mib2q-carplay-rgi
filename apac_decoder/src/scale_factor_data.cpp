@@ -25,7 +25,7 @@
 // deltas, clamped to [-256, 255]; the two out-of-range results are the
 // precomputed constants 0x13000000 (2^-89) and 0x52D744FD (2^38.75).
 //
-// Codebook 0 carries a 1-bit code `0` meaning "delta 0", and the library
+// Codebook 0 carries a 1-bit code `0` meaning "delta 0", and the original
 // hoists it into a fast path: if the top bit of the window is clear, one bit is
 // consumed and the previous exponent is re-used verbatim.
 
@@ -121,7 +121,7 @@ bool ScaleFactorData::Deserialize(BitstreamReader& bs, const APACICSInfo& ics)
                             w <<= (r & 0x3f);
                             value += (int32_t)(int16_t)r >> 6;
 
-                            // abs(value) <= 255, written as the library's
+                            // abs(value) <= 255, written as the original's
                             // value ^ (value >> 31), which admits -256 too.
                             if ((value ^ (value >> 31)) <= 255) {
                                 exp  = value - 100;

@@ -165,7 +165,7 @@ int main(int argc, char** argv)
     fclose(f);
 
     // The i^(4/3) table's negative wing: books 1..6 index it below zero, and a
-    // decoder that clamped the index to zero would still pass most of the sweep.
+    // port that clamped the index to zero would still pass most of the sweep.
     // The four values are -4^(4/3) .. -1, the mirror of X[1..4].
     for (int i = 1; i <= 4; ++i) {
         assert(apac::kInverseQuant[-i] == -apac::kInverseQuant[i]);

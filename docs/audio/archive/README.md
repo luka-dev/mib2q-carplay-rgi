@@ -1,7 +1,7 @@
 # Upmix Research Archive
 
 *Archived 2026-10-09 with the Universal retirement: the dated 2026-09-25 → 10-04 research notes (separator, oracle-renderer and Track B joint-scene work, one probe, trial or snapshot each) with their `.json` / `.csv` / `.log.txt` measurement sidecars.*
-*The code and tools these notes link to exist only at git tag `upmix-universal-last-2026-10-09` (commit 1501fc7d); their results are summarised in [Upmix History and Results](../UPMIX_HISTORY_AND_RESULTS_2026-10-09.md), the inventory of the retirement is [Upmix Code Retirement](../UPMIX_CODE_RETIREMENT_2026-10-09.md), the live map is [Audio](../README.md).*
+*The code and tools these notes link to exist only at git tag `upmix-universal-last-2026-10-09` (commit 1501fc7d); their results are summarised in [Upmix History and Results](UPMIX_HISTORY_AND_RESULTS_2026-10-09.md), the inventory of the retirement is [Upmix Code Retirement](UPMIX_CODE_RETIREMENT_2026-10-09.md), the live map is [Audio](../README.md).*
 
 ## 🗂️ Notes
 
@@ -74,3 +74,28 @@
 | 2026-10-04 | [Scene Encoded History16](UPMIX_SCENE_ENCODED_HISTORY_2026-10-04.md) | Current plus three past encoded frames before the GRU (history16) at 8192: rear .3026/.3431, 6.27 % / 8.99 % worse than MLP12, front/centre also worse; fails, MLP12 kept. |
 | 2026-10-04 | [Scene Interband Context](UPMIX_SCENE_INTERBAND_CONTEXT_2026-10-04.md) | One frequency GRU12 residual branch on the frozen MLP12 anchor at 8192: rear .2898/.3118 (+1.78 % / −0.95 %) at 122.06 M MAC/s; fails its predeclared rule. |
 | 2026-10-04 | [Scene Output Reachability](UPMIX_SCENE_OUTPUT_REACHABILITY_2026-10-04.md) | Target-informed bounded operator through the stock forward reaches rear NMSE .000265/.000317 on the fixed crop; the output family can reproduce the target, so the gap is learned inference, not reachability. |
+
+## 🗃️ Recovery and documentation snapshots
+
+- [Retired tools: verified Git recovery paths](RETIRED_TOOLS.md).
+- [Pre-audit stereo pipeline](STEREO_TO_5_1_UPMIX_PRE_AUDIT_2026-10-29.md): earlier diagrams and configuration.
+- [October 9–10 SCENE deployment](SCENE_BACKEND_DEPLOY_2026-10-09.md): original artifact hashes and measurements.
+- [Unavailable source references](../../archive/LEGACY_REFERENCES.md): explicit gaps in the original journals.
+
+## 🗃️ Retired runtime and integration notes
+
+- [HSSR Model](HSSR_MODEL.md)
+- [Upmix Calibration and Tuning](UPMIX_CALIBRATION_AND_TUNING.md)
+- [Upmix Code Retirement Map](UPMIX_CODE_RETIREMENT_2026-10-09.md)
+- [Upmix History and Results](UPMIX_HISTORY_AND_RESULTS_2026-10-09.md)
+- [UPMIX rework baseline (2026-10-07)](UPMIX_REWORK_BASELINE_2026-10-07.md)
+- [UPMIX rework proposal (2026-10-07)](UPMIX_REWORK_PROPOSAL_2026-10-07.md)
+- [UPMIX radical directions (2026-10-07)](UPMIX_RADICAL_DIRECTIONS_2026-10-07.md)
+- [Upmix Stability: "the sound goes back and front" (2026-09-25)](UPMIX_STABILITY_2026-09-25.md)
+- [Current Track A on the matched full40 harness](UPMIX_TRACKA_MATCHED40_2026-09-30.md)
+- [Upmix Training History](UPMIX_TRAINING_HISTORY.md)
+- [Upmix domain model and qualification map](UPMIX_DOMAIN_MODEL.md)
+- [CarPlay Upmix Listening Protocol](UPMIX_CARPLAY_LISTENING_PROTOCOL.md)
+- [Upmix Listening and Deploy Log](UPMIX_LISTENING_AND_DEPLOY_LOG.md)
+- [Upmix Release and Acceptance](UPMIX_RELEASE_AND_ACCEPTANCE.md)
+- [iOS 26 type-103 connection triage](IOS26_TYPE103_CONNECTION_TRIAGE_2026-10-03.md)

@@ -118,7 +118,7 @@ def main():
     from amp_complex_timing import ROOT,LOADER,load_builtin_records,CalibrationShapedNoise
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('image',type=Path)
-    parser.add_argument('--audit',type=Path,default=ROOT/'assets/soundamp/remaining-blocks-20260919/audit.json')
+    parser.add_argument('--audit',type=Path,default=ROOT/'output/r2/soundamp/remaining-blocks-20260919/audit.json')
     parser.add_argument('--output',type=Path)
     args=parser.parse_args()
     audit=json.loads(args.audit.read_text());p=audit['complex_control_profiles'][0]

@@ -19,6 +19,7 @@
 #include "audio_hook.h"
 #include "apac_codec_loader.h"
 #include "apap_crypto.h"
+#include "buffered_wireless.h"
 #include "apap_lifecycle.h"
 #include "feedback_clock.h"
 #include "scene_mask_worker.h"
@@ -33,6 +34,9 @@
 #include "media_transport.h"
 #include "../framework/logging.h"
 #include "../framework/state_trace.h"
+#if HOOK_WIRELESS
+#include "../framework/http210_seams.h"
+#endif
 
 #include <dlfcn.h>
 #include <stdint.h>
@@ -51,24 +55,45 @@
 #include <sys/asoundlib.h>
 #include <sys/socket.h>
 
-/* MMI "CarPlay UpMix" level (enum spa_upmix_level): Java's file (reloaded here
- * at hook init and at every stream start, so a hook that came up before Java
- * wrote it still catches up), then CMD_UPMIX (upmix_level.c).  Both scene
- * instances read it at init and on every period (an int store/load; the
- * instance applies it on its own thread). */
+/* MMI "CarPlay settings" controls (SPA_SETTINGS_FILE "/tmp/carplay_settings"):
+ *   - upmix=<0..2> (enum spa_upmix_level), updated live by CMD_UPMIX
+ *   - spatial=<0|1> (1 = allow discrete 5.1 APAC/PCM, 0 = force 2.0 stereo), updated live by CMD_SPATIAL
+ * Reloaded at hook init, /info, and every stream start so a hook that came up
+ * before Java wrote the file still catches up. */
 volatile int spa_upmix_level = SPA_UPMIX_LEVEL_NORMAL;
+volatile int spa_spatial_enable = 1;
 
-/* 1 = read from the file, 0 = no file or a bad one (the level is left as is) */
-int spa_upmix_level_reload(void)
+/* Bitmask of loaded keys: bit 0 = upmix, bit 1 = spatial (0 = missing/invalid). */
+int spa_settings_reload(void)
 {
-    FILE *f = fopen(SPA_UPMIX_LEVEL_FILE, "r");
-    int level = -1, ok;
+    FILE *f = fopen(SPA_SETTINGS_FILE, "r");
+    char line[64];
+    int mask = 0, val;
 
     if (!f) return 0;
-    ok = fscanf(f, "%d", &level) == 1 && level >= 0 && level < SPA_UPMIX_LEVEL_COUNT;
+    while (fgets(line, sizeof(line), f)) {
+        if (sscanf(line, "upmix=%d", &val) == 1 &&
+            val >= 0 && val < SPA_UPMIX_LEVEL_COUNT) {
+            spa_upmix_level = val;
+            mask |= 1;
+        } else if (sscanf(line, "spatial=%d", &val) == 1 &&
+                   (val == 0 || val == 1)) {
+            spa_spatial_enable = val;
+            mask |= 2;
+        }
+    }
     fclose(f);
-    if (ok) spa_upmix_level = level;
-    return ok;
+    return mask;
+}
+
+int spa_upmix_level_reload(void)
+{
+    return (spa_settings_reload() & 1) != 0;
+}
+
+int spa_spatial_reload(void)
+{
+    return (spa_settings_reload() & 2) != 0;
 }
 
 DEFINE_LOG_MODULE(audio);
@@ -96,23 +121,6 @@ DEFINE_LOG_MODULE(audio);
 
 /* ---- gating -------------------------------------------------------------------------------- */
 
-/* value-checked (mirrors the altscreen env_on / getenv-presence-check trap): "0"/"false"/"no"/"off"
- * /empty all mean OFF, so `export AUDIO_COLD_CONNECT=0` really disables it. */
-static int spa_env_on(const char *name)
-{
-    const char *v = getenv(name);
-    if (!v || !v[0]) return 0;
-    if (v[0] == '0' && !v[1]) return 0;
-    if (!strcmp(v, "false") || !strcmp(v, "no") || !strcmp(v, "off")) return 0;
-    return 1;
-}
-
-static int spa_cold_connect_enabled(void)
-{
-    const char *value = getenv(SPA_AUDIO_COLD_CONNECT_ENV);
-    return !value || spa_env_on(SPA_AUDIO_COLD_CONNECT_ENV);
-}
-
 enum {
     SPA_ATMOS_DOWNMIX = 1,
     SPA_ATMOS_DROP = 2,
@@ -126,11 +134,9 @@ typedef struct {
     int atmosMode;
     enum spa_stereo_upmix_backend stereoUpmixBackend;
     int stereoLfeAssist;
-    int realtimeUpmix;                /* AUDIO_REALTIME_UPMIX, default off */
-    uint32_t stereoLfeGainQ15;     /* assist level, 1..16384, default 4096 */
-    /* SCENE backend knobs (AUDIO_SCENE_*), engine units, range-checked at parse. */
-    float sceneAlpha, sceneInstAlpha, sceneInstGamma, sceneDuckDepth;
-    float sceneRearDelayMs, sceneSigmaMin, sceneSideLpHz, sceneBleedCancel, sceneFrontKeepDb, sceneCentre;
+    int realtimeUpmix;
+    uint32_t stereoLfeGainQ15;     /* calibrated 11585 Q15 */
+    uint32_t voiceGainQ13;         /* ann3/ann4 boost in Q13 (+5.0 dB = 14568) */
     spa_soundcheck_config_t soundCheck;
 } spa_audio_config_t;
 
@@ -155,117 +161,6 @@ static int spa_parse_bool(const char *name, int *present)
     return 0;
 }
 
-static enum spa_stereo_upmix_backend spa_parse_stereo_upmix(void)
-{
-    const char *value = getenv(SPA_AUDIO_STEREO_UPMIX_ENV);
-
-    if (!value || !value[0] || !strcasecmp(value, "off") ||
-        !strcasecmp(value, "0") || !strcasecmp(value, "false") ||
-        !strcasecmp(value, "no"))
-        return SPA_STEREO_UPMIX_OFF;
-    if (!strcasecmp(value, "on") || !strcasecmp(value, "1") ||
-        !strcasecmp(value, "true") || !strcasecmp(value, "yes"))
-        return SPA_STEREO_UPMIX_SCENE;
-
-    LOG_ERROR(LOG_MODULE,
-              "audio config: invalid %s='%s'; expected on/off; using off",
-              SPA_AUDIO_STEREO_UPMIX_ENV, value);
-    return SPA_STEREO_UPMIX_OFF;
-}
-
-/* Sub level: dB re the calibrated 4096 assist, -24..+12 (16384 = renderer max). */
-static uint32_t spa_parse_stereo_lfe_gain_q15(void)
-{
-    const char *value = getenv(SPA_AUDIO_STEREO_LFE_GAIN_ENV);
-    char *end = 0;
-    double db;
-
-    if (!value || !value[0]) return SPA_STEREO_UPMIX_LFE_Q15_DEFAULT;
-    errno = 0;
-    db = strtod(value, &end);
-    if (errno || end == value || *end || db != db || db > 12.0 || db < -24.0) {
-        LOG_ERROR(LOG_MODULE,
-                  "audio config: invalid %s='%s'; expected -24.0..12.0 dB; using 0",
-                  SPA_AUDIO_STEREO_LFE_GAIN_ENV, value);
-        return SPA_STEREO_UPMIX_LFE_Q15_DEFAULT;
-    }
-    db = SPA_STEREO_UPMIX_LFE_Q15_DEFAULT * pow(10.0, db / 20.0) + 0.5;
-    if (db < 1.0) db = 1.0;
-    if (db > SPA_STEREO_UPMIX_LFE_Q15_MAX) db = SPA_STEREO_UPMIX_LFE_Q15_MAX;
-    return (uint32_t)db;
-}
-
-static int spa_parse_stereo_lfe(void)
-{
-    const char *value = getenv(SPA_AUDIO_STEREO_LFE_ENV);
-
-    if (!value || !value[0] || !strcasecmp(value, "off")) return 0;
-    if (!strcasecmp(value, "assist")) return 1;
-
-    LOG_ERROR(LOG_MODULE,
-              "audio config: invalid %s='%s'; expected off/assist; using off",
-              SPA_AUDIO_STEREO_LFE_ENV, value);
-    return 0;
-}
-
-/* AUDIO_SCENE_* knob: a finite float in lo..hi, unset = the engine default. */
-static float spa_parse_scene_float(const char *name, double lo, double hi, float fallback)
-{
-    const char *value = getenv(name);
-    char *end = 0;
-    double v;
-
-    if (!value || !value[0]) return fallback;
-    errno = 0;
-    v = strtod(value, &end);
-    if (errno || end == value || *end || v != v || v < lo || v > hi) {
-        LOG_ERROR(LOG_MODULE, "audio config: invalid %s='%s'; expected %g..%g; using %g",
-                  name, value, lo, hi, (double)fallback);
-        return fallback;
-    }
-    return (float)v;
-}
-
-/* The scene knobs onto an upmix config, through the clamping setters. */
-static void spa_apply_scene_knobs(struct spa_stereo_upmix_config *upmix,
-                                  const spa_audio_config_t *config)
-{
-    spa_stereo_upmix_config_set_scene_alpha(upmix, config->sceneAlpha);
-    spa_stereo_upmix_config_set_scene_inst_alpha(upmix, config->sceneInstAlpha);
-    spa_stereo_upmix_config_set_scene_inst_gamma(upmix, config->sceneInstGamma);
-    spa_stereo_upmix_config_set_scene_duck_depth(upmix, config->sceneDuckDepth);
-    spa_stereo_upmix_config_set_scene_rear_delay_ms(upmix, config->sceneRearDelayMs);
-    spa_stereo_upmix_config_set_scene_sigma_min(upmix, config->sceneSigmaMin);
-    spa_stereo_upmix_config_set_scene_side_lp_hz(upmix, config->sceneSideLpHz);
-    spa_stereo_upmix_config_set_scene_bleed_cancel(upmix, config->sceneBleedCancel);
-    spa_stereo_upmix_config_set_scene_front_keep_db(upmix, config->sceneFrontKeepDb);
-    spa_stereo_upmix_config_set_scene_centre(upmix, config->sceneCentre);
-}
-
-static int spa_parse_soundcheck_fallback(void)
-{
-    const char *value = getenv(SPA_AUDIO_SOUNDCHECK_FALLBACK_ENV);
-    if (!value || !value[0] || !strcasecmp(value, "off"))
-        return SPA_SOUNDCHECK_FALLBACK_OFF;
-    if (!strcasecmp(value, "rms")) return SPA_SOUNDCHECK_FALLBACK_RMS;
-    LOG_ERROR(LOG_MODULE,
-              "audio config: invalid %s='%s'; expected off/rms; using off",
-              SPA_AUDIO_SOUNDCHECK_FALLBACK_ENV, value);
-    return SPA_SOUNDCHECK_FALLBACK_OFF;
-}
-
-static int spa_parse_soundcheck_limiter(void)
-{
-    const char *value = getenv(SPA_AUDIO_SOUNDCHECK_LIMITER_ENV);
-    if (!value || !value[0] || !strcasecmp(value, "off"))
-        return SPA_SOUNDCHECK_LIMITER_OFF;
-    if (!strcasecmp(value, "peak")) return SPA_SOUNDCHECK_LIMITER_SAMPLE_PEAK;
-    LOG_ERROR(LOG_MODULE,
-              "audio config: invalid %s='%s'; expected off/peak; using off",
-              SPA_AUDIO_SOUNDCHECK_LIMITER_ENV, value);
-    return SPA_SOUNDCHECK_LIMITER_OFF;
-}
-
 static void spa_audio_config_init_once(void)
 {
     const char *modeValue;
@@ -275,51 +170,15 @@ static void spa_audio_config_init_once(void)
 
     memset(&spa_audio_config_value, 0, sizeof(spa_audio_config_value));
     spa_audio_config_value.atmosMode = SPA_ATMOS_DOWNMIX;
-    spa_audio_config_value.stereoUpmixBackend = spa_parse_stereo_upmix();
-    {
-        struct scene_config d;
-
-        scene_config_defaults(&d);
-        spa_audio_config_value.sceneAlpha = spa_parse_scene_float(SPA_AUDIO_SCENE_ALPHA_ENV, 0.0, 1.0, d.alpha);
-        spa_audio_config_value.sceneInstAlpha = spa_parse_scene_float(SPA_AUDIO_SCENE_INST_ALPHA_ENV, 0.0, 1.0, d.inst_alpha);
-        spa_audio_config_value.sceneInstGamma = spa_parse_scene_float(SPA_AUDIO_SCENE_INST_GAMMA_ENV, 0.1, 4.0, d.inst_gamma);
-        spa_audio_config_value.sceneDuckDepth = spa_parse_scene_float(SPA_AUDIO_SCENE_DUCK_DEPTH_ENV, 0.0, 1.0, d.duck_depth);
-        spa_audio_config_value.sceneRearDelayMs = spa_parse_scene_float(SPA_AUDIO_SCENE_REAR_DELAY_MS_ENV, -50.0, 50.0, d.rear_delay_ms);
-        spa_audio_config_value.sceneSigmaMin = spa_parse_scene_float(SPA_AUDIO_SCENE_SIGMA_MIN_ENV, 0.01, 1.0, d.sigma_min);
-        spa_audio_config_value.sceneSideLpHz = spa_parse_scene_float(SPA_AUDIO_SCENE_SIDE_LP_HZ_ENV, 0.0, 24000.0, d.side_lp_hz);
-        /* the setter's range: 0 = off, else 1000..24000 (it would clamp 1..999 up to 1000 silently) */
-        if (spa_audio_config_value.sceneSideLpHz > 0.0f && spa_audio_config_value.sceneSideLpHz < 1000.0f) {
-            LOG_ERROR(LOG_MODULE, "audio config: invalid %s='%s'; expected 0 (off) or 1000..24000; using %g",
-                      SPA_AUDIO_SCENE_SIDE_LP_HZ_ENV, getenv(SPA_AUDIO_SCENE_SIDE_LP_HZ_ENV), (double)d.side_lp_hz);
-            spa_audio_config_value.sceneSideLpHz = d.side_lp_hz;
-        }
-        spa_audio_config_value.sceneBleedCancel = spa_parse_scene_float(SPA_AUDIO_SCENE_BLEED_CANCEL_ENV, 0.0, 0.5, d.bleed_cancel);
-        spa_audio_config_value.sceneFrontKeepDb = spa_parse_scene_float(SPA_AUDIO_SCENE_FRONT_KEEP_DB_ENV, 0.0, 12.0, d.front_keep_db);
-        /* the setter's range: 0 = off, else 0.5..12 (it would clamp 0..0.5 up to 0.5 silently) */
-        if (spa_audio_config_value.sceneFrontKeepDb > 0.0f && spa_audio_config_value.sceneFrontKeepDb < 0.5f) {
-            LOG_ERROR(LOG_MODULE, "audio config: invalid %s='%s'; expected 0 (off) or 0.5..12; using %g",
-                      SPA_AUDIO_SCENE_FRONT_KEEP_DB_ENV, getenv(SPA_AUDIO_SCENE_FRONT_KEEP_DB_ENV), (double)d.front_keep_db);
-            spa_audio_config_value.sceneFrontKeepDb = d.front_keep_db;
-        }
-        spa_audio_config_value.sceneCentre = spa_parse_scene_float(SPA_AUDIO_SCENE_CENTRE_ENV, 0.0, 1.0, 1.0f);
-    }
-    spa_audio_config_value.stereoLfeAssist = spa_parse_stereo_lfe();
-    {
-        int present = 0;
-        spa_audio_config_value.realtimeUpmix =
-            spa_parse_bool(SPA_AUDIO_REALTIME_UPMIX_ENV, &present);
-    }
-    spa_audio_config_value.stereoLfeGainQ15 = spa_parse_stereo_lfe_gain_q15();
+    /* Stereo upmix (buffered type 103 and realtime type 100) is always armed on
+     * the SCENE renderer; the user-facing MMI "CarPlay UpMix" menu controls
+     * OFF bypass vs active upmix levels (SPA_SETTINGS_FILE / CMD_UPMIX). */
+    spa_audio_config_value.stereoUpmixBackend = SPA_STEREO_UPMIX_SCENE;
+    spa_audio_config_value.stereoLfeAssist = 1;
+    spa_audio_config_value.realtimeUpmix = 1;
+    spa_audio_config_value.stereoLfeGainQ15 = SPA_STEREO_UPMIX_LFE_Q15_DEFAULT;
+    spa_audio_config_value.voiceGainQ13 = SPA_VOICE_GAIN_Q13_DEFAULT;
     spa_soundcheck_default_config(&spa_audio_config_value.soundCheck);
-    {
-        int present = 0;
-        int enabled = spa_parse_bool(SPA_AUDIO_SOUNDCHECK_ENV, &present);
-        if (present) spa_audio_config_value.soundCheck.enabled = enabled;
-    }
-    spa_audio_config_value.soundCheck.fallbackMode =
-        spa_parse_soundcheck_fallback();
-    spa_audio_config_value.soundCheck.limiterMode =
-        spa_parse_soundcheck_limiter();
 
     spa_audio_config_value.atmos = atmos;
     spa_audio_config_value.buffered = spatial || atmos;
@@ -378,6 +237,10 @@ static const char *spa_fmt_desc(uint64_t fmt)
     if (fmt == 0) return "0 (invalid/none)";
     if (__builtin_popcountll(fmt) == 1) {
         switch (__builtin_ctzll(fmt)) {
+            case 4:  return "bit4 PCM 16k/16/1 (stock voice/nav)";
+            case 6:  return "bit6 PCM 24k/16/1 (wideband voice/call/mic)";
+            case 14: return "bit14 PCM 48k/16/1 (48k mono nav/alt)";
+            case 15: return "bit15 PCM 48k/16/2 (stereo media)";
             case 38: return "bit38 PCM 48k/16/5.1.2 (multichannel PCM)";
             case 44: return "bit44 PCM 48k/16/5.1 (multichannel PCM = our target)";
             case 47: return "bit47 PCM 48k/32f/5.1 (multichannel PCM)";
@@ -392,10 +255,29 @@ static const char *spa_fmt_desc(uint64_t fmt)
     return "multi-bit mask (see hex)";
 }
 
-/* ---- AudioSessionGetSupportedOutputFormats -------------------------------------------------
- * The 64-bit capability mask the AirPlay negotiation offers the phone. OR-in the 5.1 bit so the
- * phone is allowed to send 6ch. Stereo path untouched. */
+/* ---- AudioSessionGetSupportedInputFormats & AudioSessionGetSupportedOutputFormats -----------
+ * The 64-bit capability masks the AirPlay negotiation offers the phone in /info audioFormats. */
 typedef int64_t (*fn_get_formats_t)(int /*streamType*/);
+
+HOOK_EXPORT int64_t AudioSessionGetSupportedInputFormats(int streamType)
+{
+    static fn_get_formats_t real;
+    if (!real) real = (fn_get_formats_t)dlsym(RTLD_NEXT, "AudioSessionGetSupportedInputFormats");
+    int64_t base = real ? real(streamType) : 0x10;
+    /* Stock libairplay.so @ 0x493fc returns 0x10 (bit 4 = PCM/16000/16/1).
+     * iOS AirPlaySender (_carPlayAudioFormat_getFormatsKeyForAudioType @ 0x2277f318c)
+     * uses "audioInputFormats" to negotiate the symmetric format for BOTH mic input
+     * and speaker output on duplex MainAudio (streamType=100) voice streams:
+     *   - "telephony" (tel2_dio_phone + mic2_dio, iOS mask 0x8003c000154)
+     *   - "speechRecognition" / "spokenAudio" (ann4_dio_voice + mic2_dio, iOS mask 0x28000040)
+     *   - "default" (iOS mask 0x1fc004550)
+     * Advertising 0x40 (bit 6 = PCM/24000/16/1) upgrades Siri, dictation, phone calls,
+     * and microphone capture from 16 kHz to native 24 kHz wideband. */
+    int64_t caps = 0x40;
+    LOG_INFO(LOG_MODULE, "getSupportedInputFormats(type=%d): stock=%#llx offered=%#llx (24kHz/16b/1ch)",
+             streamType, (unsigned long long)base, (unsigned long long)caps);
+    return caps;
+}
 
 HOOK_EXPORT int64_t AudioSessionGetSupportedOutputFormats(int streamType)
 {
@@ -405,13 +287,22 @@ HOOK_EXPORT int64_t AudioSessionGetSupportedOutputFormats(int streamType)
     int64_t caps = base;
     unsigned bit, channels;
 
+    if (streamType == 101 /* AltAudio -> ann3_dio_ann navigation announcements */) {
+        /* iOS AirPlaySender table (0x27d0eed08) masks AltAudio (101) with 0x1c300cc00
+         * (44.1 kHz / 48 kHz only). Stock 0x10 (16 kHz) only worked via zero-intersection
+         * fallback. Offer bit 14 (0x4000 = PCM/48000/16/1) to match patched ann3_dio_ann (48 kHz). */
+        caps = 0x4000;
+        LOG_INFO(LOG_MODULE, "getSupportedFormats(type=%d): stock=%#llx offered=%#llx (48kHz/16b/1ch)",
+                 streamType, (unsigned long long)base, (unsigned long long)caps);
+        return caps;
+    }
+
+    (void)spa_spatial_reload();
     spa_tune(&bit, &channels);
-    if (spa_enabled() && streamType == 100 /* main audio only */)
+    if (spa_enabled() && spa_spatial_enable && streamType == 100 /* main audio only */)
         caps |= (int64_t)((uint64_t)1 << bit);
 
-    /* PROBE (always): what we advertise to the phone, per stream type. Stock main is 0x8010 = bits
-     * {4,15} = PCM/48000/16/2 (+mic), measured on-unit (AUDIO.md section 24) — so `stock` here is the
-     * regression check, and `offered` is what the phone gets to choose from. */
+    /* PROBE (always): what we advertise to the phone, per stream type. */
     if (caps != base)
         LOG_INFO(LOG_MODULE, "getSupportedFormats(type=%d): stock=%#llx offered=%#llx (+bit%u, %uch)",
                  streamType, (unsigned long long)base, (unsigned long long)caps, bit, channels);
@@ -434,6 +325,10 @@ typedef uint32_t (*fn_fmt_to_asbd_t)(uint64_t /*fmt*/, uint32_t * /*asbd*/, uint
 
 HOOK_EXPORT uint32_t AirPlayAudioFormatToASBD(uint64_t fmt, uint32_t *asbd, uint32_t *bits_out)
 {
+#if HOOK_WIRELESS
+    extern int cp_wireless_audio_asbd(uint64_t,uint32_t *,uint32_t *);
+    if (cp_wireless_audio_asbd(fmt,asbd,bits_out)) return 0;
+#endif
     /* PROBE (always): the phone's NEGOTIATED format arrives here during SETUP/_UpdateStreams. This is
      * the decisive line — it says exactly what iOS chose. A bit50/53 here = Dolby Atmos bitstream (we
      * must decode, not PCM). A bit44/etc = multichannel PCM (our path works). NOTE: if the phone picks
@@ -734,50 +629,21 @@ static unsigned spa_probe103_mode(void)
     return spa_probe103() ? SPA_103_MODE_BOTH : 0;
 }
 
-/* Primary buffered format index: APAC/48k 5.1, or 5.1.2 when Atmos is enabled. */
+/* Primary buffered format index: APAC/48k 5.1 (or 5.1.2 when Atmos is enabled),
+ * or AAC-LC/48k/stereo (23) when the user disables Spatial Audio in the MMI. */
 static int spa_probe103_index(void)
 {
+    (void)spa_spatial_reload();
+    if (!spa_spatial_enable)
+        return SPA_AAC_LC_48K_STEREO;
     return spa_audio_config()->atmos ? SPA_APAC_48K_5_1_2 : SPA_APAC_48K_5_1;
 }
 
-/* Experimental AAC bridge: iOS's spatial gate looks for at least one APAC-family index in the
- * extended array, while the type-103 format copier preserves lower AAC indices.  Keep the normal
- * profiles single-format.  An explicit extra 65/66 lets us test [40,65] or [42,65] without
- * weakening the primary selector or silently changing proven APAC negotiation. */
+/* Secondary buffered format index: AAC-LC/48k/stereo (23) so non-spatial tracks
+ * arrive in the same buffered session at native 48 kHz without resampling. */
 static int spa_probe103_extra_index(int primaryIndex)
 {
-    /* The new-controls path used to refuse a second index outright.  That is what left the
-     * advertisement at [65] no matter what SPATIAL_103_EXTRA_INDEX said, and a non-spatial track
-     * with no format it can arrive in is a track the phone skips.  The variable is explicit, so
-     * honour it here too; absent or empty still means one index. */
-    const char *value = getenv(SPA_103_EXTRA_INDEX_ENV);
-    char *end = 0;
-    long candidate;
-
-    if (!value || !value[0]) return -1;
-    candidate = strtol(value, &end, 0);
-    /* 22 is AAC-LC/44.1/stereo.  It is allowed because the sender's own buffered set contains it
-     * unconditionally: APAudioFormatGetSupportedTransportAudioFormatsForBufferedSender returns
-     * 0x400000 (bit 22) plus the spatial bits, and APAudioFormatCopyPreferredBufferedAudioFormats
-     * reaches for 0x400000 first.  Advertising 65 alone leaves a non-spatial track with no format
-     * it can arrive in, which is why the phone skips those.  PCM is not an option despite being
-     * third in that preference list: APAudioFormatGetBufferedPassthroughSupportedFormats returns
-     * zero unless the device is an APM speaker, so bit 11 never reaches a CarPlay session. */
-    if (end && end != value && !*end &&
-        (candidate == SPA_APAC_48K_5_1 || candidate == SPA_APAC_48K_5_1_2 ||
-         candidate == SPA_APAC_48K_STEREO || candidate == SPA_AAC_LC_44K_STEREO ||
-         candidate == SPA_AAC_LC_48K_STEREO || candidate == SPA_ALAC_48K_24_STEREO)) {
-        if (candidate == primaryIndex) return -1;
-        return (int)candidate;
-    }
-
-    LOG_ERROR(LOG_MODULE,
-              "probe103: invalid %s value '%s'; allowed extra gate indices: "
-              "%d/%d/%d/%d/%d/%d; ignored",
-              SPA_103_EXTRA_INDEX_ENV, value, SPA_ALAC_48K_24_STEREO, SPA_AAC_LC_44K_STEREO,
-              SPA_AAC_LC_48K_STEREO, SPA_APAC_48K_STEREO, SPA_APAC_48K_5_1,
-              SPA_APAC_48K_5_1_2);
-    return -1;
+    return primaryIndex == SPA_AAC_LC_48K_STEREO ? -1 : SPA_AAC_LC_48K_STEREO;
 }
 
 /* iOS repackages every bit in the legacy mask into one buffered-engine codec family. On wired
@@ -897,13 +763,17 @@ static int spa103_validate_setup_stream(const void *streamDesc,
                   (long long)value, 1024u);
         return 0;
     }
-    /* iOS 26.6 sends no isMedia (nor clientID) for Apple Music; audioType below
-     * identifies the stream.  Only an explicit false is not ours (issue #42). */
-    value = -1;
-    if (spa_cf_get_i64(streamDesc, "isMedia", &value) && !value) {
-        LOG_ERROR(LOG_MODULE, "buffer103: rejecting SETUP with isMedia=false");
+    /* New senders may omit this redundant flag on a typed media stream.
+     * Explicit false/malformed values still contradict the contract. */
+    void *mediaKey=cfa_str(0,"isMedia",SPA_CFENC_UTF8);
+    if(!mediaKey)return 0;
+    int mediaPresent=cfa_dictget(streamDesc,mediaKey)!=NULL;
+    cfa_rel(mediaKey);
+    if (mediaPresent && (!spa_cf_get_i64(streamDesc, "isMedia", &value) || !value)) {
+        LOG_ERROR(LOG_MODULE, "buffer103: rejecting SETUP with contradictory isMedia");
         return 0;
     }
+    if(!mediaPresent)LOG_INFO(LOG_MODULE,"buffer103: SETUP omits isMedia; validating explicit audioType=media");
     if (!spa_cf_get_string(streamDesc, "audioType", text, sizeof(text)) ||
         strcmp(text, "media")) {
         LOG_ERROR(LOG_MODULE,
@@ -1668,7 +1538,6 @@ typedef struct {
     struct spa_scene_mask_worker sceneMaskWorker;
     int sceneMaskWorkerStarted;
     spa_soundcheck_state_t soundCheck;
-    float soundCheckGain[SPA_STEREO_UPMIX_MAX_FRAMES];   /* one upmix run's SoundCheck gains */
 } spa103_render_t;
 
 static spa103_render_t spa103_render = {
@@ -1687,11 +1556,11 @@ static void spa103_render_wait_for_read_locked(void)
         pthread_cond_wait(&spa103_render.readDone, &spa103_render.lock);
 }
 
-/* SCENE: the mask net's weight blob, AUDIO_SCENE_MASK_BLOB (unset = spatial
- * only).  The file is the memory image of struct scene_mask_weights
- * (scene_mask.h): exact size and magic here, the dimensions again when the
- * worker starts.  Loaded once from audio_init(), never from the sink params
- * path.  Set but unusable = no upmix (spa_scene_mask_worker_attach). */
+/* SCENE: the mask net's weight blob, AUDIO_SCENE_MASK_BLOB (default: none =
+ * spatial only).  The file is the memory image of struct scene_mask_weights
+ * (scene_mask.h): exact size and magic here, the dimensions again in the
+ * config setter.  Loaded once from audio_init(), never
+ * from the sink params path. */
 static struct scene_mask_weights spa_scene_mask_blob_value;
 static int spa_scene_mask_blob_status = -1;
 
@@ -1705,7 +1574,7 @@ static void spa_scene_mask_blob_init_once(void)
     if (!path || !path[0]) return;
     file = fopen(path, "rb");
     if (!file) {
-        LOG_ERROR(LOG_MODULE, "SCENE: mask blob unreadable path=%s errno=%d; upmix off",
+        LOG_ERROR(LOG_MODULE, "SCENE: mask blob unreadable path=%s errno=%d; running without a mask",
                   path, errno);
         return;
     }
@@ -1714,7 +1583,7 @@ static void spa_scene_mask_blob_init_once(void)
     fclose(file);
     if (got != sizeof(spa_scene_mask_blob_value) || extra != EOF ||
         memcmp(spa_scene_mask_blob_value.magic, SMASK_MAGIC, sizeof(spa_scene_mask_blob_value.magic)) != 0) {
-        LOG_ERROR(LOG_MODULE, "SCENE: mask blob rejected path=%s bytes=%u%s (expected %u bytes of %s); upmix off",
+        LOG_ERROR(LOG_MODULE, "SCENE: mask blob rejected path=%s bytes=%u%s (expected %u bytes of %s); running without a mask",
                   path, (unsigned)got, extra != EOF ? "+" : "",
                   (unsigned)sizeof(spa_scene_mask_blob_value), SMASK_MAGIC);
         memset(&spa_scene_mask_blob_value, 0, sizeof(spa_scene_mask_blob_value));
@@ -1731,37 +1600,47 @@ static const struct scene_mask_weights *spa_scene_runtime_mask_blob(void)
     return spa_scene_mask_blob_status == 0 ? &spa_scene_mask_blob_value : NULL;
 }
 
-static int spa_scene_mask_blob_configured(void)
+/* SCENE: calibrated vehicle tuning applied identically on buffered (type 103)
+ * and realtime (type 100) stereo upmix instances:
+ *  - front_keep_db = 1.5 dB (Normal) / 2.8 dB (Intense) midband front anchor
+ *  - wide_pair = 0.35 (Normal) / 0.55 (Intense) for double-tracked stereo pairs
+ *  - inst_gamma_lo = 1.5 below 700 Hz to keep chest vocals/snare body out of rears
+ *  - bleed_cancel = 0.15 (> 190 Hz) to counteract J525 Bank 1's -3 dB front->rear bleed */
+static void spa_configure_vehicle_scene(struct spa_stereo_upmix_config *upmix)
 {
-    const char *path = getenv(SPA_AUDIO_SCENE_MASK_BLOB_ENV);
-    return path && path[0];
+    spa_stereo_upmix_config_set_scene_front_keep_db(upmix, 1.5f);
+    spa_stereo_upmix_config_set_scene_wide_pair(upmix, 0.35f);
+    spa_stereo_upmix_config_set_scene_inst_gamma_lo(upmix, 1.5f);
+    spa_stereo_upmix_config_set_scene_bleed_cancel(upmix, 0.15f);
 }
 
-/* SCENE: the mask net on its worker (scene_mask_worker.h; priority 17), the
- * only place it runs.  The upmix is whole or absent: a blob that is set but
- * unusable, or a worker that cannot start, returns -1 and the caller plays
- * plain stereo; 0 = no blob set (spatial only), 1 = the net is attached.  A
- * worker already running (the realtime path keeps its one across re-params)
- * is reused.  Not on the audio thread (scene_mask_init builds tables). */
-static int spa_scene_mask_worker_attach(struct spa_scene_mask_worker *worker, int *started,
-                                        struct spa_stereo_upmix_config *upmix, const char *path)
+/* SCENE: the blob onto an upmix config (NULL = no mask); the setter validates. */
+static void spa_apply_scene_mask_blob(struct spa_stereo_upmix_config *upmix)
 {
     const struct scene_mask_weights *blob = spa_scene_runtime_mask_blob();
 
-    if (!blob) {
-        if (!spa_scene_mask_blob_configured()) return 0;
-        LOG_WARN(LOG_MODULE, "audio upmix %s: mask blob set but unusable; upmix off", path);
-        return -1;
-    }
+    spa_stereo_upmix_config_set_scene_mask_blob(upmix, blob, blob ? sizeof(*blob) : 0u);
+}
+
+/* SCENE: the mask net on its worker (scene_mask_worker.h; priority 17)
+ * when a blob is loaded.  A worker already running (the realtime path keeps its
+ * one across re-params) is reused; one that fails to start leaves the net on
+ * the audio thread, logged.  Not on the audio thread (scene_mask_init builds
+ * tables). */
+static void spa_scene_mask_worker_attach(struct spa_scene_mask_worker *worker, int *started,
+                                         struct spa_stereo_upmix_config *upmix,
+                                         const char *path)
+{
+    if (!upmix->scene_mask_blob) return;
     if (!*started) {
-        if (spa_scene_mask_worker_start(worker, blob, 1u, 17) != 0) {
-            LOG_WARN(LOG_MODULE, "audio upmix %s: scene mask worker failed to start; upmix off", path);
-            return -1;
+        if (spa_scene_mask_worker_start(worker, upmix->scene_mask_blob, 1u, 17) != 0) {
+            LOG_WARN(LOG_MODULE, "audio upmix %s: scene mask worker failed to start; net on the audio thread",
+                     path);
+            return;
         }
         *started = 1;
     }
     spa_stereo_upmix_config_set_scene_mask_provider(upmix, spa_scene_mask_worker_provider(worker));
-    return 1;
 }
 
 static void spa_scene_mask_worker_log_stop(struct spa_scene_mask_worker *worker, const char *path)
@@ -1927,14 +1806,15 @@ static void spa103_render_start(uint32_t generation, int64_t formatIndex, int ha
     spa_stereo_upmix_default_config(&upmixConfig);
     upmixConfig.backend = config->stereoUpmixBackend;
     upmixConfig.lfe_gain_q15 = config->stereoLfeGainQ15;
-    spa_apply_scene_knobs(&upmixConfig, config);
-    (void)spa_upmix_level_reload();
+    spa_configure_vehicle_scene(&upmixConfig);
+    (void)spa_settings_reload();
     upmixConfig.level = spa_upmix_level;
-    if (upmixConfig.backend == SPA_STEREO_UPMIX_SCENE &&
+    if (upmixConfig.backend == SPA_STEREO_UPMIX_SCENE) {
+        spa_apply_scene_mask_blob(&upmixConfig);
         spa_scene_mask_worker_attach(&spa103_render.sceneMaskWorker,
                                      &spa103_render.sceneMaskWorkerStarted,
-                                     &upmixConfig, "103") < 0)
-        upmixConfig.backend = SPA_STEREO_UPMIX_OFF;
+                                     &upmixConfig, "103");
+    }
     spa_stereo_upmix_config_set_lfe(
         &upmixConfig,
         config->stereoLfeAssist &&
@@ -1990,7 +1870,8 @@ static void spa103_render_start(uint32_t generation, int64_t formatIndex, int ha
              spa_stereo_upmix_backend_name(activeUpmixBackend),
              (unsigned)activeFrontGainQ15,
              activeUpmixBackend != SPA_STEREO_UPMIX_SCENE ? "off" :
-             spa103_render.stereoUpmix.config.scene_mask_provider ? "worker" : "none",
+             spa103_render.stereoUpmix.config.scene_mask_provider ? "worker" :
+             spa103_render.stereoUpmix.config.scene_mask_blob ? "sync" : "none",
              activeLfeAssist ? "assist" : "off",
              (unsigned)activeLfeGainQ15,
              config->soundCheck.enabled ? "on" : "off",
@@ -3302,29 +3183,43 @@ static int spa103_render_frame(const uint8_t *packet, size_t length,
                 spa103_render.decodedPcmKind, dch, out,
                 spa103_render.sampleRate);
             size_t run = renderFrames - at;
-            int soundCheckApplied = 0;
 
             if (run > SPA_STEREO_UPMIX_MAX_FRAMES)
                 run = SPA_STEREO_UPMIX_MAX_FRAMES;
 
-            if (action == SPA_DECODED_PCM_ACTION_REORDER_5_1) {
+            if (action == SPA_DECODED_PCM_ACTION_REORDER_5_1 && !spa_spatial_enable) {
+                /* Live Spatial Audio = Off override during an active APAC 5.1 session:
+                 * fold decoder-order (C, L, R, Ls, Rs, LFE) to ITU 2.0 stereo (L, R)
+                 * and route through the stereo upmixer (or 2.0 passthrough when UpMix=Off). */
+                static int16_t foldedStereo[SPA_STEREO_UPMIX_MAX_FRAMES * 2];
+                size_t f;
+                for (f = 0; f < run; f++) {
+                    const int16_t *s = src + f * SPA_PCM_5_1_CHANNELS;
+                    int32_t c_m3db  = ((int32_t)s[0] * 23170) >> 15;
+                    int32_t ls_m3db = ((int32_t)s[3] * 23170) >> 15;
+                    int32_t rs_m3db = ((int32_t)s[4] * 23170) >> 15;
+                    int32_t l = (int32_t)s[1] + c_m3db + ls_m3db;
+                    int32_t r = (int32_t)s[2] + c_m3db + rs_m3db;
+                    if (l > 32767) l = 32767; else if (l < -32768) l = -32768;
+                    if (r > 32767) r = 32767; else if (r < -32768) r = -32768;
+                    foldedStereo[f * 2 + 0] = (int16_t)l;
+                    foldedStereo[f * 2 + 1] = (int16_t)r;
+                }
+                spa_stereo_upmix_set_level(&spa103_render.stereoUpmix, spa_upmix_level);
+                rc = spa_stereo_upmix_process_s16(&spa103_render.stereoUpmix,
+                                                  foldedStereo, run, rendered, run);
+                if (rc != SPA_STEREO_UPMIX_OK)
+                    spa103_widen_s16(foldedStereo, 2u, rendered, out, run);
+            } else if (action == SPA_DECODED_PCM_ACTION_REORDER_5_1) {
                 if (out == SPA_PCM_5_1_CHANNELS)
                     spa_reorder_5_1_decoder_to_declared_s16(src, run,
                                                             rendered);
                 else
                     spa103_reorder_5_1_s16(src, rendered, out, run);
             } else if (action == SPA_DECODED_PCM_ACTION_STEREO_UPMIX) {
-                /* SoundCheck goes in ahead of the upmix's cabin guard, so
-                 * the guard bounds the J525 buses at the played level: a
-                 * positive gain would pass them unguarded, a negative one
-                 * would leave guard action the attenuated frame never needed. */
-                const float *gain = spa_soundcheck_take_gains(
-                    &spa103_render.soundCheck, spa103_render.soundCheckGain, run);
-
-                soundCheckApplied = 1;
                 spa_stereo_upmix_set_level(&spa103_render.stereoUpmix, spa_upmix_level);
-                rc = spa_stereo_upmix_process_gain_s16(&spa103_render.stereoUpmix,
-                                                       src, run, rendered, run, gain);
+                rc = spa_stereo_upmix_process_s16(&spa103_render.stereoUpmix,
+                                                  src, run, rendered, run);
                 if (rc != SPA_STEREO_UPMIX_OK) {
                     spa103_render.upmixFailed++;
                     if (spa103_render.upmixFailed == 1)
@@ -3333,7 +3228,6 @@ static int spa103_render_frame(const uint8_t *packet, size_t length,
                                   "falling back to exact L/R widening",
                                   rc);
                     spa103_widen_s16(src, dch, rendered, out, run);
-                    spa_soundcheck_scale_s16(rendered, run, out, gain);
                 }
             } else if (dch < out) {
                 spa103_widen_s16(src, dch, rendered, out, run);
@@ -3359,12 +3253,11 @@ static int spa103_render_frame(const uint8_t *packet, size_t length,
             }
 
             /* MainLoudnessParameters is a programme gain, not an upmix input
-             * feature. Apply it uniformly after reorder/upmix (the upmix took
-             * it above) so AAC gain does not shift the model's absolute
-             * log-energy features or alter its semantic/object masks. */
-            if (!soundCheckApplied)
-                spa_soundcheck_apply_s16(&spa103_render.soundCheck, rendered,
-                                         run, out);
+             * feature. Apply it uniformly after reorder/upmix so AAC gain does
+             * not shift the model's absolute log-energy features or alter its
+             * semantic/object masks. */
+            spa_soundcheck_apply_s16(&spa103_render.soundCheck, rendered,
+                                     run, out);
             spa_soundcheck_limit_s16(&spa103_render.soundCheck, rendered,
                                      run, out);
             spa103_pcm_stats_locked(rendered, run);
@@ -3756,6 +3649,7 @@ typedef void (*spa_dio_audio_torn_down_callback_t)(void *);
 #define SPA_DIO_AUDIO_TORN_DOWN_CALLBACK_SYM \
     "_ZN3dio11CDIOManager23s_audioTornDownCallbackEPv"
 #define SPA_DIO_AUDIO_TYPE_MEDIA 1
+#define SPA_DIO_AUDIO_TYPE_ALERT 2
 
 enum {
     SPA_PCM_RECLAIM_NONE = 0,
@@ -3770,6 +3664,8 @@ typedef struct {
     pthread_t ioOwner;
     int ioOwned;                   /* under lock; no __thread/emutls on QNX */
     snd_pcm_t *handle;
+    snd_pcm_t *ann3Handle;          /* ann3_dio_ann (48 kHz mono nav prompts) */
+    snd_pcm_t *ann4Handle;          /* ann4_dio_voice (24 kHz mono Siri/spokenAudio) */
     int writeFd;
     enum { SPA_PCM_PARAMS_UNKNOWN, SPA_PCM_PARAMS_CONFIGURING,
            SPA_PCM_PARAMS_READY, SPA_PCM_PARAMS_FAILED } paramsState;
@@ -3855,7 +3751,7 @@ static uint64_t spa_monotonic_ns(void);
 static void spa_pcm_expand_fallback(const int16_t *input, size_t frames,
                                     unsigned sourceChannels, int16_t *output,
                                     unsigned outputChannels);
-/* Deadline policy (budget, warmup grace, revival after a break) lives in rt_upmix_guard.h. */
+/* Deadline policy (budget, warmup grace, backoff) lives in rt_upmix_guard.h. */
 /* Track change for the SCENE renderer on this path: raised by the iAP2
  * NowPlayingUpdate handler (Cinemo's receive thread, spa_audio_on_message),
  * consumed by the next realtime period on stock's audio thread, which is the
@@ -3918,14 +3814,14 @@ static void spa_rt_upmix_start(snd_pcm_t *handle)
     spa_stereo_upmix_default_config(&upmixConfig);
     upmixConfig.backend = config->stereoUpmixBackend;
     upmixConfig.lfe_gain_q15 = config->stereoLfeGainQ15;
-    spa_apply_scene_knobs(&upmixConfig, config);
-    (void)spa_upmix_level_reload();
+    spa_configure_vehicle_scene(&upmixConfig);
+    (void)spa_settings_reload();
     upmixConfig.level = spa_upmix_level;
+    spa_apply_scene_mask_blob(&upmixConfig);
+    spa_scene_mask_worker_attach(&spa_rt_upmix.sceneMaskWorker, &spa_rt_upmix.sceneMaskWorkerStarted,
+                                 &upmixConfig, "rt");
     spa_stereo_upmix_config_set_lfe(&upmixConfig, config->stereoLfeAssist);
-    status = spa_scene_mask_worker_attach(&spa_rt_upmix.sceneMaskWorker, &spa_rt_upmix.sceneMaskWorkerStarted,
-                                          &upmixConfig, "rt") < 0
-        ? SPA_STEREO_UPMIX_ERROR_CONFIG                 /* not armed: zero rears, no upmix */
-        : spa_stereo_upmix_init(&spa_rt_upmix.upmix, &upmixConfig);
+    status = spa_stereo_upmix_init(&spa_rt_upmix.upmix, &upmixConfig);
     pthread_mutex_lock(&spa_pcm_sink.lock);
     spa_rt_upmix.ready = status == SPA_STEREO_UPMIX_OK &&
                          handle == spa_pcm_sink.handle && spa_pcm_sink.expandedParams;
@@ -3938,7 +3834,7 @@ static void spa_rt_upmix_start(snd_pcm_t *handle)
              spa_rt_upmix.ready ? "armed" : "NOT armed",
              spa_stereo_upmix_backend_name(upmixConfig.backend), status,
              (unsigned)SPA_PCM_SINK_PERIOD_FRAMES,
-             upmixConfig.scene_mask_provider ? "worker" : "none");
+             upmixConfig.scene_mask_provider ? "worker" : upmixConfig.scene_mask_blob ? "sync" : "none");
 }
 
 /* Sink handle really closed (not kept for type 103).  Sink lock NOT held. */
@@ -4073,9 +3969,11 @@ static int spa_stock_main_audio_begin(const void *stream, int32_t audioType,
     pthread_mutex_lock(&spa_pcm_sink.routeLock);
     pthread_mutex_lock(&spa_pcm_sink.lock);
     added = spa_media_route_stock_begin_type(&spa_pcm_sink.route, stream, audioType);
-    /* Only a new media timeline, not a pause/hangup, permits realtime fallback
-     * after an unexpected 103 transport failure. */
-    if (added == 1 && audioType == SPA_DIO_AUDIO_TYPE_MEDIA &&
+    /* Only a new mpl5_dio_ent timeline (media or alert), not a pause/hangup,
+     * permits realtime fallback after an unexpected 103 transport failure. */
+    if (added == 1 &&
+        (audioType == SPA_DIO_AUDIO_TYPE_MEDIA ||
+         audioType == SPA_DIO_AUDIO_TYPE_ALERT) &&
         !strcmp(phase, "prepare"))
         spa_media_transport_media_prepare(&spa_pcm_sink.transport);
     pthread_mutex_unlock(&spa_pcm_sink.lock);
@@ -4349,7 +4247,8 @@ static int spa_qsa_cancelled(void *opaque)
         spa_pcm_sink.paramsState != SPA_PCM_PARAMS_READY ||
         spa_media_transport_blocked(&spa_pcm_sink.transport) ||
         (io->detached ? spa_media_route_blocked(&spa_pcm_sink.route) :
-                        spa_media_route_nonmedia(&spa_pcm_sink.route));
+         io->buffered ? spa_media_route_nonmedia(&spa_pcm_sink.route) :
+                        spa_media_route_non_ent(&spa_pcm_sink.route));
     pthread_mutex_unlock(&spa_pcm_sink.lock);
     return cancelled;
 }
@@ -4481,7 +4380,6 @@ static void spa103_retry_now_playing_after_media(void)
     hook_result_t result;
     int hasMedia;
 
-    if (!spa_cold_connect_enabled()) return;
     pthread_mutex_lock(&spa103_render.lock);
     hasMedia = spa103_render.state == SPA_103_RENDER_RUNNING &&
                spa_apap_lifecycle_playing(&spa103_render.lifecycle) &&
@@ -5097,21 +4995,8 @@ static unsigned spa_audio_requested_output_channels(void)
  * The function documents its own arguments in its log string:
  *     "[%s]<AUDIO>nChannels: %u, nBitsPerChannel: %u, nSampleRate: %u"
  * so a2/a3/a4 are channels, bits, rate.  Both template instantiations are exported weak, and
- * libairplay reaches them through its PLT, which is the same seam SessionSetup uses.
- *
- * AUDIO_SAD_CHANNELS / AUDIO_SAD_BITS override the forced values; 0 disables the override. */
+ * libairplay reaches them through its PLT, which is the same seam SessionSetup uses. */
 typedef int (*spa_create_meta_t)(void *, uint32_t, uint32_t, uint32_t, int, int);
-
-static unsigned spa_env_uint(const char *name, unsigned fallback)
-{
-    const char *v = getenv(name);
-    char *end;
-    unsigned long n;
-    if (!v || !*v) return fallback;
-    n = strtoul(v, &end, 0);
-    if (*end) return fallback;
-    return (unsigned)n;
-}
 
 static int spa_create_metadata_common(spa_create_meta_t real, const char *which,
                                       void *self, uint32_t channels, uint32_t bits,
@@ -5120,11 +5005,20 @@ static int spa_create_metadata_common(spa_create_meta_t real, const char *which,
     unsigned want = spa_audio_requested_output_channels();
     uint32_t forcedCh = channels, forcedBits = bits;
 
+    /* Params widening is limited to the tracked 48-kHz media sink. A global
+     * AUDIO_SPATIAL flag is not evidence that a 44.1-kHz AAC or voice device
+     * became PCM6. Its SAD must keep the actual stock geometry. */
+    pthread_mutex_lock(&spa_pcm_sink.lock);
+    if(rate!=SPA_SR || !spa_pcm_sink.handle ||
+       spa_pcm_sink.paramsState!=SPA_PCM_PARAMS_READY ||
+       !spa_pcm_sink.expandedParams || spa_pcm_sink.outputChannels!=want ||
+       spa_pcm_sink.sourceChannels!=channels)
+        want=0;
+    pthread_mutex_unlock(&spa_pcm_sink.lock);
+
     if (want) {
-        forcedCh   = spa_env_uint("AUDIO_SAD_CHANNELS", want);
-        forcedBits = spa_env_uint("AUDIO_SAD_BITS", 24u);
-        if (!forcedCh)   forcedCh = channels;
-        if (!forcedBits) forcedBits = bits;
+        forcedCh   = want;
+        forcedBits = 24u;
     }
     if (forcedCh != channels || forcedBits != bits)
         LOG_WARN(LOG_MODULE,
@@ -5213,7 +5107,6 @@ static int spa_pcm_sink_bootstrap_buffered(void)
     int result = -1;
     int writeFd = -1;
 
-    if (!spa_cold_connect_enabled()) return 0;
     channels = spa_buffered_pcm_channels();
     if (!channels || channels > SPA_103_RENDER_MAX_CHANNELS) return 0;
     pending = spa_buffered_pcm_pending(channels);
@@ -5517,6 +5410,23 @@ HOOK_EXPORT int snd_pcm_open_name(snd_pcm_t **handle, char *name, int mode)
         pthread_mutex_unlock(&spa_pcm_sink.lock);
         LOG_INFO(LOG_MODULE, "audio sink: captured %s playback handle=%p",
                  SPA_PCM_SINK_NAME, *handle);
+    } else if (result == 0 && handle && *handle && name &&
+               (mode & SND_PCM_OPEN_PLAYBACK)) {
+        if (!strcmp(name, "ann3_dio_ann")) {
+            pthread_mutex_lock(&spa_pcm_sink.lock);
+            spa_pcm_sink.ann3Handle = *handle;
+            pthread_mutex_unlock(&spa_pcm_sink.lock);
+            LOG_INFO(LOG_MODULE,
+                     "audio sink: captured ann3_dio_ann playback handle=%p (voiceGainQ13=%u)",
+                     *handle, (unsigned)spa_audio_config()->voiceGainQ13);
+        } else if (!strcmp(name, "ann4_dio_voice")) {
+            pthread_mutex_lock(&spa_pcm_sink.lock);
+            spa_pcm_sink.ann4Handle = *handle;
+            pthread_mutex_unlock(&spa_pcm_sink.lock);
+            LOG_INFO(LOG_MODULE,
+                     "audio sink: captured ann4_dio_voice playback handle=%p (voiceGainQ13=%u)",
+                     *handle, (unsigned)spa_audio_config()->voiceGainQ13);
+        }
     }
     if (sinkPlayback)
         STATE_TRACE("QSA_OPEN",
@@ -6172,6 +6082,36 @@ HOOK_EXPORT ssize_t snd_pcm_write_internal(snd_pcm_t *handle, const void *buffer
     return real(handle, buffer, size);
 }
 
+/* Soft-knee voice/announcement booster for ann3_dio_ann and ann4_dio_voice.
+ * Linear below 24576 (-2.5 dBFS); C1-continuous rational soft knee above
+ * 24576 into the remaining 8191 headroom so boosted peaks never hard-clip. */
+static ssize_t spa_voice_write_boosted(spa_snd_write_t real, snd_pcm_t *handle,
+                                       const void *buffer, size_t size,
+                                       uint32_t gainQ13)
+{
+    int16_t staged[2048];
+    const int16_t *src = (const int16_t *)buffer;
+    size_t samples = size / sizeof(int16_t);
+    size_t i;
+
+    if (!buffer || size < sizeof(int16_t) || (size & 1u) != 0 ||
+        samples > sizeof(staged) / sizeof(staged[0]) ||
+        gainQ13 <= SPA_VOICE_GAIN_Q13_UNITY) {
+        return real(handle, buffer, size);
+    }
+    for (i = 0; i < samples; i++) {
+        int32_t x = ((int32_t)src[i] * (int32_t)gainQ13 + 4096) >> 13;
+        int32_t ax = x < 0 ? -x : x;
+        if (ax > 24576) {
+            int32_t excess = ax - 24576;
+            ax = 24576 + (excess * 8191) / (excess + 8191);
+            x = x < 0 ? -ax : ax;
+        }
+        staged[i] = (int16_t)x;
+    }
+    return real(handle, staged, size);
+}
+
 HOOK_EXPORT ssize_t snd_pcm_plugin_write(snd_pcm_t *handle, const void *buffer, size_t size)
 {
     static spa_snd_write_t real;
@@ -6204,13 +6144,24 @@ HOOK_EXPORT ssize_t snd_pcm_plugin_write(snd_pcm_t *handle, const void *buffer, 
     if (!real) return -1;
 
     /* Unrelated stock devices (phone/Siri) never wait for media QSA I/O. */
-    pthread_mutex_lock(&spa_pcm_sink.lock);
-    useBridge = handle && handle == spa_pcm_sink.handle;
-    if (useBridge && spa_pcm_sink.paramsState != SPA_PCM_PARAMS_READY)
-        writeError = spa_pcm_sink.paramsState == SPA_PCM_PARAMS_CONFIGURING ? EBUSY : EIO;
-    pthread_mutex_unlock(&spa_pcm_sink.lock);
-    if (writeError) return spa_stock_write_result(-writeError, size, writeError);
-    if (!useBridge) return real(handle, buffer, size);
+    {
+        int isVoice = 0;
+        pthread_mutex_lock(&spa_pcm_sink.lock);
+        useBridge = handle && handle == spa_pcm_sink.handle;
+        if (!useBridge && handle)
+            isVoice = (handle == spa_pcm_sink.ann3Handle ||
+                       handle == spa_pcm_sink.ann4Handle);
+        if (useBridge && spa_pcm_sink.paramsState != SPA_PCM_PARAMS_READY)
+            writeError = spa_pcm_sink.paramsState == SPA_PCM_PARAMS_CONFIGURING ? EBUSY : EIO;
+        pthread_mutex_unlock(&spa_pcm_sink.lock);
+        if (writeError) return spa_stock_write_result(-writeError, size, writeError);
+        if (!useBridge) {
+            if (isVoice)
+                return spa_voice_write_boosted(real, handle, buffer, size,
+                                               spa_audio_config()->voiceGainQ13);
+            return real(handle, buffer, size);
+        }
+    }
 
     spa_pcm_io_lock();
     pthread_mutex_lock(&spa_pcm_sink.lock);
@@ -6287,8 +6238,12 @@ HOOK_EXPORT ssize_t snd_pcm_plugin_write(snd_pcm_t *handle, const void *buffer, 
     }
 
     /* One locked channel snapshot is also the ownership snapshot.  Avoid two
-     * independently timed active/channels reads across a concurrent teardown. */
-    bufferedOwnsMedia = spa_buffered_pcm_channels() == outputChannels;
+     * independently timed active/channels reads across a concurrent teardown.
+     * When a non-media stream (e.g. audio_type=2 alert/alarm on mpl5_dio_ent)
+     * owns the route, buffered type-103 must yield so the alert's own type-100
+     * stereo PCM plays instead of buffered music or pause silence. */
+    bufferedOwnsMedia = !spa_media_route_nonmedia(&spa_pcm_sink.route) &&
+                        spa_buffered_pcm_channels() == outputChannels;
     if (bufferedOwnsMedia)
         bufferedFrames = spa_buffered_pcm_peek(spa_pcm_sink.scratch, frames,
                                                outputChannels);
@@ -6563,6 +6518,12 @@ HOOK_EXPORT int snd_pcm_close(snd_pcm_t *handle)
 
     if (!real) real = (spa_snd_close_t)dlsym(RTLD_NEXT, "snd_pcm_close");
     if (!real) return -1;
+    if (handle) {
+        pthread_mutex_lock(&spa_pcm_sink.lock);
+        if (handle == spa_pcm_sink.ann3Handle) spa_pcm_sink.ann3Handle = 0;
+        if (handle == spa_pcm_sink.ann4Handle) spa_pcm_sink.ann4Handle = 0;
+        pthread_mutex_unlock(&spa_pcm_sink.lock);
+    }
     if (!spa_pcm_tracked_handle(handle)) return real(handle);
     spa_pcm_io_lock();
     pthread_mutex_lock(&spa_pcm_sink.lock);
@@ -7502,6 +7463,19 @@ static int spa103_install_buffered_dispatcher(void)
         goto done;
     }
     if (*callbackSlot != (void *)(imageBase + profile->httpProcessVA)) {
+#if HOOK_WIRELESS
+        /* Keep pairing/authentication and SETUP normalization outermost.
+         * This framework API accepts only its own router with this exact
+         * fingerprinted stock fallback. Never wrap an unknown callback. */
+        spa103_original_http_process=(spa_http_process_t)(imageBase + profile->httpProcessVA);
+        if (hook_http210_set_request_fallback(*callbackSlot,
+                (void *)(imageBase + profile->httpProcessVA),spa103_http_process)) {
+            spa103_http_process_slot=callbackSlot;
+            LOG_WARN(LOG_MODULE,"buffer103: composed buffered RTSP dispatcher behind verified wireless router");
+            installed=1;
+            goto done;
+        }
+#endif
         LOG_ERROR(LOG_MODULE,
                   "buffer103: HTTPServer request slot mismatch actual=%p expected=%p; refusing patch",
                   *callbackSlot, (void *)(imageBase + profile->httpProcessVA));
@@ -7746,12 +7720,9 @@ static void *spa103_thread_main(void *opaque)
      * receiver on this image. */
     if (!isControl) {
         struct sched_param sched;
-        unsigned priority = spa_env_uint("AUDIO_BUFFERED_THREAD_PRIO",
-                                         spa_env_uint("AUDIO_RECEIVER_THREAD_PRIO", 18u));
+        unsigned priority = 18u;
         int result;
 
-        if (priority < 1u) priority = 1u;
-        if (priority > 63u) priority = 63u;
         memset(&sched, 0, sizeof(sched));
         sched.sched_priority = (int)priority;
         result = pthread_setschedparam(pthread_self(), SCHED_RR, &sched);
@@ -8267,11 +8238,8 @@ static int spa103_stop_receiver(void *session, int anySession, uint32_t expected
  * matched latency. Those 512 frames were never reported (the response has carried 0 since the first
  * build and the car is tuned to it), so OFF keeps reporting 0 and SCENE reports only the extra 512
  * frames: 10.7 ms at 48 kHz, rounded to 11 (the 44.1 k AAC formats would be 11.6 ms; the
- * difference is below the resolution of the field). The SETUP is answered before the stream's codec is
- * known (the cookie decides, mid-session too), so the 11 goes out for every stream of a SCENE session,
- * native 5.1 included, which plays with 0 (a pure reorder). The realtime type-100 upmix adds its 21.3 ms
- * with no field to report it in. Read under the render lock: render_start() has already chosen the
- * backend when the SETUP response is built. */
+ * difference is below the resolution of the field). Read under the render lock: render_start() has
+ * already chosen the backend when the SETUP response is built. */
 #define SPA_UPMIX_REPORTED_LATENCY_BASE_FRAMES 512
 
 static int64_t spa103_upmix_extra_latency_ms(const char **backendName)
@@ -8284,6 +8252,31 @@ static int64_t spa103_upmix_extra_latency_ms(const char **backendName)
     *backendName = spa_stereo_upmix_backend_name(backend);
     if (backend != SPA_STEREO_UPMIX_SCENE) return 0;
     return ((int64_t)(SPA_SCENE_LATENCY_FRAMES - SPA_UPMIX_REPORTED_LATENCY_BASE_FRAMES) * 1000 + SCENE_SR / 2) / SCENE_SR;
+}
+
+int spa_buffered_wireless_offer(void *session)
+{
+    int negotiated;
+    if(!session || !spa_probe103() || !spa_cf_resolve())return 0;
+    pthread_mutex_lock(&spa103_http_lock);
+    int dispatcher_ready=spa103_http_process_slot!=NULL;
+    pthread_mutex_unlock(&spa103_http_lock);
+    if(!dispatcher_ready)return 0;
+    pthread_mutex_lock(&spa_contract_lock);
+    negotiated=spa_mainbuffered_session==session && spa_mainbuffered_info_key && spa_mainbuffered_info_value;
+    pthread_mutex_unlock(&spa_contract_lock);
+    return negotiated;
+}
+
+int spa_buffered_wireless_validate(void *session,const void *descriptor)
+{
+    uint8_t shk[SPA_APAP_KEY_SIZE]={0};int64_t index=0;int valid;
+    if(!descriptor || !spa_buffered_wireless_offer(session))return kNotHandledErr;
+    int have_key=spa103_read_shk(descriptor,shk);
+    if(!spa_cf_get_i64(descriptor,"audioFormatIndex",&index))index=0;
+    valid=spa103_validate_setup_stream(descriptor,index,have_key);
+    memset(shk,0,sizeof(shk));
+    return valid?0:kParamErr;
 }
 
 static int spa_setup_buffered_receiver(void *session, void *request, void *response,
@@ -8816,74 +8809,71 @@ static void spa_capture_server_info(void *info)
  * sender's only clock reference even while buffered media is active. Preserve it.
  * The old empty-list rewrite remains only behind explicit AUDIO_FEEDBACK_BLANK=1
  * for reproducing that failure; SPATIAL_103 gates logs and plist files. */
-typedef int (*fn_session_control_t)(void *, uint32_t, const void *, const void *,
-                                    const void *, void **);
-
-HOOK_EXPORT int AirPlayReceiverSessionControl(void *session, uint32_t flags, const void *command,
-                                  const void *qualifier, const void *params, void **responseOut)
+static void spa_on_control(hook_control_ctx_t *control)
 {
-    static fn_session_control_t real;
 #if ENABLE_AUDIO_DIAGNOSTICS
     static volatile uint32_t controlSequence;
-    uint32_t sequence = 0;
     char path[144];
-    int tracing = 0;
 #endif
-    char commandText[96];
-    int result;
-    uint64_t feedbackEpoch = 0;
-    int feedbackQuery = 0, feedbackNonmedia = 1;
-    int feedbackAllowed = 0, feedbackMedia = 0;
 
-    if (!real)
-        real = (fn_session_control_t)dlsym(RTLD_NEXT, "AirPlayReceiverSessionControl");
-    if (!real) {
-        LOG_ERROR(LOG_MODULE, "probe103 control: AirPlayReceiverSessionControl real==NULL");
-        return kNotHandledErr;
-    }
-
-    commandText[0] = '\0';
+    control->command_text[0] = '\0';
     if (spa_probe103() && spa_cf_resolve()) {
-        if (!command || !cfa_strgetc ||
-            !cfa_strgetc(command, commandText, sizeof(commandText)))
-            snprintf(commandText, sizeof(commandText), "<non-string:%p>", command);
+        if (!control->command || !cfa_strgetc ||
+            !cfa_strgetc(control->command, control->command_text, sizeof(control->command_text)))
+            snprintf(control->command_text, sizeof(control->command_text),
+                     "<non-string:%p>", control->command);
 
 #if ENABLE_AUDIO_DIAGNOSTICS
         if (log_verbose()) {
-        sequence = __sync_add_and_fetch(&controlSequence, 1);
-        tracing = 1;
+        control->trace_sequence = __sync_add_and_fetch(&controlSequence, 1);
+        control->tracing = 1;
         LOG_WARN(LOG_MODULE,
                  "probe103 control[%u]: -> command=%s flags=%#x session=%p qualifier=%p params=%p",
-                 (unsigned)sequence, commandText, (unsigned)flags, session, qualifier, params);
-        if (qualifier) {
+                 (unsigned)control->trace_sequence, control->command_text,
+                 (unsigned)control->flags, control->session, control->qualifier, control->params);
+        if (control->qualifier) {
             snprintf(path, sizeof(path), "/tmp/spatial_controlcmd_%u_qualifier.bplist",
-                     (unsigned)sequence);
-            spa_write_plist_path(qualifier, path);
+                     (unsigned)control->trace_sequence);
+            spa_write_plist_path(control->qualifier, path);
         }
-        if (params) {
+        if (control->params) {
             snprintf(path, sizeof(path), "/tmp/spatial_controlcmd_%u_params.bplist",
-                     (unsigned)sequence);
-            spa_write_plist_path(params, path);
+                     (unsigned)control->trace_sequence);
+            spa_write_plist_path(control->params, path);
         }
         }
 #endif
     }
 
-    feedbackQuery = strcmp(commandText, "updateFeedback") == 0;
-    if (feedbackQuery) {
+    control->feedback_query = strcmp(control->command_text, "updateFeedback") == 0;
+    if (control->feedback_query) {
         pthread_mutex_lock(&spa_pcm_sink.lock);
-        feedbackEpoch = spa_pcm_sink.route.epoch;
-        feedbackNonmedia = spa_media_route_nonmedia(&spa_pcm_sink.route);
+        control->feedback_epoch = spa_pcm_sink.route.epoch;
+        control->feedback_nonmedia = spa_media_route_nonmedia(&spa_pcm_sink.route);
         pthread_mutex_unlock(&spa_pcm_sink.lock);
     }
-    result = real(session, flags, command, qualifier, params, responseOut);
+}
+
+static void spa_on_control_response(hook_control_ctx_t *control)
+{
+#if ENABLE_AUDIO_DIAGNOSTICS
+    char path[144];
+#endif
+    void *session = control->session;
+    void **responseOut = control->response_out;
+    const char *commandText = control->command_text;
+    int result = control->result;
+    int feedbackQuery = control->feedback_query;
+    int feedbackAllowed = 0, feedbackMedia = 0;
+
     if (feedbackQuery) {
         /* Do not hold routeLock across stock Control (it may re-enter us).
          * Serialize cache publication with voice Prepare's invalidation. */
         pthread_mutex_lock(&spa_pcm_sink.routeLock);
         pthread_mutex_lock(&spa_pcm_sink.lock);
         feedbackAllowed = spa_media_route_feedback_allowed(&spa_pcm_sink.route,
-                                            feedbackEpoch, feedbackNonmedia);
+                                            control->feedback_epoch,
+                                            control->feedback_nonmedia);
         feedbackMedia = spa_media_route_has_media(&spa_pcm_sink.route);
         pthread_mutex_unlock(&spa_pcm_sink.lock);
     }
@@ -8899,7 +8889,6 @@ HOOK_EXPORT int AirPlayReceiverSessionControl(void *session, uint32_t flags, con
      * detached QSA ownership state is unavailable. */
     if (feedbackAllowed && result == 0 && responseOut &&
         strcmp(commandText, "updateFeedback") == 0 &&
-        !spa_env_on("AUDIO_FEEDBACK_BLANK") &&
         spa103_is_active_for_session(session)) {
         if (*responseOut) {
             if (feedbackMedia) spa_feedback_cache(session, *responseOut);
@@ -8947,44 +8936,17 @@ HOOK_EXPORT int AirPlayReceiverSessionControl(void *session, uint32_t flags, con
         }
     }
 
-    /* Blanking the feedback's stream list is how the phone was told nothing about our buffer.
-     * The failing session shows what that costs: a flush boundary armed at 00:44:31 took until
-     * 00:47:42 to clear, 191 seconds during which 212 packets arrived -- about one a second
-     * against the ~47 a second the stream needs.  We discard until the boundary, the boundary
-     * needs packets, and the phone will not send them because its flow control has been handed
-     * an empty list.  AUDIO_FEEDBACK_BLANK=1 restores the old behaviour for an A/B. */
-    if (feedbackAllowed && result == 0 && responseOut && *responseOut &&
-        strcmp(commandText, "updateFeedback") == 0 &&
-        spa_env_on("AUDIO_FEEDBACK_BLANK") &&
-        spa103_is_active_for_session(session)) {
-        void *streamsKey = cfa_str(0, "streams", SPA_CFENC_UTF8);
-        void *emptyStreams = cfa_arrm(0, 0, cfa_arr_cb);
-
-        if (streamsKey && emptyStreams) {
-            cfa_dictset(*responseOut, streamsKey, emptyStreams);
-            LOG_WARN(LOG_MODULE,
-                     "buffer103: updateFeedback stock streams replaced with [] for active "
-                     "type-103 session=%p",
-                     session);
-        } else {
-            LOG_ERROR(LOG_MODULE,
-                      "buffer103: failed to build empty updateFeedback streams array; "
-                      "leaving stock response unchanged");
-        }
-        if (emptyStreams) cfa_rel(emptyStreams);
-        if (streamsKey) cfa_rel(streamsKey);
-    }
     if (feedbackQuery) pthread_mutex_unlock(&spa_pcm_sink.routeLock);
 
 #if ENABLE_AUDIO_DIAGNOSTICS
-    if (tracing) {
+    if (control->tracing) {
         LOG_WARN(LOG_MODULE,
                  "probe103 control[%u]: <- command=%s result=%d%s response=%p",
-                 (unsigned)sequence, commandText, result, ap_status(result),
+                 (unsigned)control->trace_sequence, commandText, result, ap_status(result),
                  responseOut ? *responseOut : (void *)0);
         if (responseOut && *responseOut) {
             snprintf(path, sizeof(path), "/tmp/spatial_controlcmd_%u_response.bplist",
-                     (unsigned)sequence);
+                     (unsigned)control->trace_sequence);
             spa_write_plist_path(*responseOut, path);
         }
     }
@@ -8998,12 +8960,11 @@ HOOK_EXPORT int AirPlayReceiverSessionControl(void *session, uint32_t flags, con
         STATE_TRACE("AIRPLAY_CONTROL",
                     "command=%s flags=0x%x session=%p result=%d response=%d "
                     "realtime_clock=%d buffered_active=%d",
-                    commandText, (unsigned)flags, session, result,
+                    commandText, (unsigned)control->flags, session, result,
                     hasResponse ? 1 : 0, hasClock ? 1 : 0,
                     spa103_is_active_for_session(session));
     }
 #endif
-    return result;
 }
 
 /* ---- module init ---------------------------------------------------------------------------- */
@@ -9128,8 +9089,7 @@ static void audio_init(void)
             config->stereoUpmixBackend != SPA_STEREO_UPMIX_OFF) {
             /* Load the mask blob now: the sink params path must not read files. */
             LOG_WARN(LOG_MODULE, "audio realtime upmix: enabled, scene renderer, mask net %s",
-                     spa_scene_runtime_mask_blob() ? "loaded, on the worker" :
-                     spa_scene_mask_blob_configured() ? "unusable (upmix off)" : "none (spatial only)");
+                     !spa_scene_runtime_mask_blob() ? "none (spatial only)" : "loaded, on the worker");
         }
     }
     else
@@ -9200,6 +9160,8 @@ const hook_module_def_t audio_module_def = {
         .on_setup_response = spa_on_setup_response,
         .on_setup_response_final = spa_on_setup_response_final,
         .on_server_info_final = spa_capture_server_info_seam,
-        .on_teardown = spa_on_teardown
+        .on_teardown = spa_on_teardown,
+        .on_control = spa_on_control,
+        .on_control_response = spa_on_control_response
     }
 };

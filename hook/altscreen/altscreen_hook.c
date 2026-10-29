@@ -38,13 +38,18 @@
 #include "../../common/alt_timing_stats.h"
 #include "avcc_config.h"
 #include "command_policy.h"
+#include "receiver_io.h"
 #include "../../common/alt_monotonic_condition.h"
-#ifdef MHI2Q_WIRELESS_ALT_QEMU
+#ifdef __QNX__
+#include "receiver_runtime.h"
+#endif
+#ifdef MHI2Q_WIRELESS_ALT
 #include "../wireless/media.h"
 #include "../wireless/paired_screen_crypto.h"
 #endif
 #if ENABLE_LOGGING || ENABLE_ALTSCREEN_PACE_TRACE
 #include "pace_trace.h"
+#include "sender_telemetry.h"
 #endif
 
 #include <unistd.h>
@@ -52,13 +57,14 @@
 #include <dlfcn.h>
 #include <stdint.h>
 #include <stdlib.h>   /* realloc/free (self-contained receiver) */
-#include <errno.h>    /* EINTR/EAGAIN in read_exact */
+#include <errno.h>
 #include <string.h>   /* memcpy */
-#include <poll.h>     /* poll() in read_exact — wait for data + honor teardown stop */
+#include <poll.h>
 #include <stdio.h>    /* snprintf for avcC diagnostics */
 #include <sys/time.h> /* rate-limit key-frame recovery without frame-rate assumptions */
 #include <fcntl.h>    /* explicit O_NONBLOCK on accepted stream socket */
 #include <time.h>     /* clock_gettime + timespec for the bounded alt_setup close-wait (R2) */
+#include <sys/socket.h>
 
 DEFINE_LOG_MODULE(altscreen);
 
@@ -78,6 +84,9 @@ typedef int   (*cf_dictseti_t)(void *, const void *, int64_t);     /* CFDictiona
 typedef int64_t (*fn_cfdict_geti64_t)(void *, const void *, void *); /* CFDictionaryGetInt64      */
 typedef int64_t (*fn_cf_geti64_t)(void *, void *);                  /* CFGetInt64                 */
 typedef void *(*fn_cfdict_getval_t)(void *, const void *);          /* CFDictionaryGetValue       */
+typedef unsigned long (*fn_cf_typeof_t)(const void *);              /* CFGetTypeID                */
+typedef unsigned long (*fn_cf_typeid_t)(void);                      /* CF*GetTypeID               */
+typedef int (*fn_cf_getcstr_t)(const void *, char *, long, uint32_t); /* CFStringGetCString       */
 /* AirPlayReceiverSessionScreen_CopyDisplaysInfo(screenSession, outErr) — 280 ref
  * ignores the session arg ((void)inSession) and builds the MAIN display dict via
  * ScreenCopyMain(); we pass NULL. */
@@ -97,6 +106,11 @@ static fn_cfdict_geti64_t cf_geti64;
 static fn_cf_geti64_t cf_geti64_value;
 static fn_copydisp_t fn_copydisp;
 static fn_cfdict_getval_t cf_getval;   /* resolved in alt_resolve(); used by main_disp_modernize */
+static fn_cf_typeof_t cf_typeof;
+static fn_cf_typeid_t cf_arrtype;
+static fn_cf_typeid_t cf_strtype;
+static fn_cf_typeid_t cf_dicttype;
+static fn_cf_getcstr_t cf_getcstr;
 static const void  *arr_cb;          /* array callbacks constant (CFLite)            */
 static const void  *dict_keycb;      /* dictionary key callbacks constant            */
 static const void  *dict_valcb;      /* dictionary value callbacks constant          */
@@ -110,8 +124,11 @@ static pthread_mutex_t advert_lock = PTHREAD_MUTEX_INITIALIZER;
 static void           *g_advert_session;
 static void           *g_advert_displays;
 static void           *g_advert_features;
+static void           *g_advert_suggest_urls;
 static int             g_advert_ready;
 static int             g_advert_published;
+static int             g_advert_night_mode;
+static int             g_advert_zone_mode;
 static uint32_t        g_advert_sequence;
 /* Seeded from stock /info's nightMode, then updated by the
  * dio->libairplay AirPlayReceiverSessionSetNightMode boundary call.  The /info
@@ -121,6 +138,8 @@ static uint32_t        g_advert_sequence;
 static volatile int g_alt_night_mode;
 static void *volatile g_alt_night_dio_session;
 static void advert_apply_night_locked(int night);
+static int alt_zone_mode_get(void);
+static const char *alt_cluster_url(void);
 
 /* the CFLite array-callbacks constant has moved names across builds; try both */
 static const void *resolve_arr_cb(void)
@@ -163,6 +182,11 @@ static int cf_init(void)
         cf_geti64  = (fn_cfdict_geti64_t)dlsym(RTLD_DEFAULT, "CFDictionaryGetInt64");
         cf_geti64_value = (fn_cf_geti64_t)dlsym(RTLD_DEFAULT, "CFGetInt64");
         fn_copydisp= (fn_copydisp_t)dlsym(RTLD_DEFAULT, "AirPlayReceiverSessionScreen_CopyDisplaysInfo");
+        cf_typeof  = (fn_cf_typeof_t) dlsym(RTLD_DEFAULT, "CFGetTypeID");
+        cf_arrtype = (fn_cf_typeid_t) dlsym(RTLD_DEFAULT, "CFArrayGetTypeID");
+        cf_strtype = (fn_cf_typeid_t) dlsym(RTLD_DEFAULT, "CFStringGetTypeID");
+        cf_dicttype= (fn_cf_typeid_t) dlsym(RTLD_DEFAULT, "CFDictionaryGetTypeID");
+        cf_getcstr = (fn_cf_getcstr_t)dlsym(RTLD_DEFAULT, "CFStringGetCString");
         arr_cb     = resolve_arr_cb();
         dict_keycb = dlsym(RTLD_DEFAULT, "kCFLDictionaryKeyCallBacksCFLTypes");
         dict_valcb = dlsym(RTLD_DEFAULT, "kCFLDictionaryValueCallBacksCFLTypes");
@@ -207,6 +231,40 @@ static void *build_extfeatures(void)
         if (!s) { if (cf_rel) cf_rel(arr); return 0; }
         cf_arrapp(arr, s);
         if (cf_rel) cf_rel(s);
+    }
+    return arr;
+}
+
+/* Build the top-level /info altScreenSuggestUIURLs array so CarKit's
+ * CARHandleSuggestUI filter (CarKit.mm:3945-4009) intersects the app's
+ * suggested cluster URLs instead of returning an empty urls:[] list. */
+static void *build_suggest_urls(void)
+{
+    static const char *const urls[] = {
+        "maps:/car/instrumentcluster",
+        "maps:/car/instrumentcluster/map",
+        "maps:/car/instrumentcluster/instructioncard",
+        "maps:/",
+        NULL
+    };
+    void *arr = cf_arrm(0, 4, arr_cb);
+    int i;
+    if (!arr) return 0;
+    for (i = 0; urls[i]; ++i) {
+        if (cf_arrappc) {
+            if (cf_arrappc(arr, urls[i], -1) != 0) {
+                if (cf_rel) cf_rel(arr);
+                return 0;
+            }
+        } else {
+            void *s = cf_str(0, urls[i], CFENC_UTF8);
+            if (!s) {
+                if (cf_rel) cf_rel(arr);
+                return 0;
+            }
+            cf_arrapp(arr, s);
+            if (cf_rel) cf_rel(s);
+        }
     }
     return arr;
 }
@@ -407,20 +465,23 @@ fail:
     return 0;
 }
 
-static void *build_cluster_dict(int night)
+#define CLUSTER_DISPLAY_UUID "C1057E12-A0D1-4E20-B0C0-1057E12A0D10"
+
+static void *build_cluster_dict(int night, int zone_mode)
 {
     int properties_ok = 0;
     int view_areas_ok = 0;
     int initial_stream_ok = 0;
     int adjacent_ok = 0;
+    int initial_area = (zone_mode == 1) ? 1 : ((zone_mode == 2) ? 2 : 0);
     void *d = cf_dictm(0, 0, dict_keycb, dict_valcb);
     if (!d) return 0;
     if (set_str(d, "name", "Instrument Cluster") != 0 ||
         set_i64(d, "type", 111) != 0 ||
-        /* 30, matching stock: dio_manager.json declares "screen": { "maxFPS": 30 } for the main
-         * screen, and 30 is also what we actually deliver on the cluster - AltScreenModule's
-         * CLUSTER_FPS is 30, maneuver_render's CR_TARGET_FPS is 30, and altscreen_render presents
-         * at 30.  Advertising 60 promised twice the rate that exists. */
+        /* Match the stock maximum: dio_manager.json declares screen.maxFPS=30.
+         * This is a video limit, not a measured source/presentation cadence.
+         * Maps can independently request 15; the vphone capabilities control
+         * mapsRefreshRate=30 changes that map policy without changing maxFPS. */
         set_i64(d, "maxFPS", 30) != 0 ||
         set_i64(d, "widthPixels", CLUSTER_W) != 0 ||
         set_i64(d, "heightPixels", CLUSTER_H) != 0 ||
@@ -431,13 +492,13 @@ static void *build_cluster_dict(int night)
      * iOS 26.1 CarKit decompile — initWithPhysicalScreenDictionary reads objectForKey:@"uid";
      * a missing uid → CARDisplayInfo init returns nil → the whole displays array is rejected →
      * the phone teardown-loops the session).  We previously sent "uuid" → that was the reject. */
-    if (set_str(d, "uid", "C1057E12-A0D1-4E20-B0C0-1057E12A0D10") != 0)
+    if (set_str(d, "uid", CLUSTER_DISPLAY_UUID) != 0)
         goto fail;  /* CarKit displayPanels reads "uid" */
     /* AirPlaySender's raw "displays" path reads "uuid" and picks stream 110 vs 111 by whether a
      * display's uuid DIFFERS from display-0's uuid (VERIFIED in iOS 26.6 AirPlaySender: 110/111 is a
      * UUID compare, NOT the type:111 field).  The dict is injected under BOTH "displays" (uuid consumer)
      * and "displayPanels" (uid consumer), so carry BOTH ids.  Cluster uuid MUST differ from main's. */
-    if (set_str(d, "uuid", "C1057E12-A0D1-4E20-B0C0-1057E12A0D10") != 0)
+    if (set_str(d, "uuid", CLUSTER_DISPLAY_UUID) != 0)
         goto fail;
     /* properties = ["Instrument Cluster"] → CarKit supportsInstrumentClusterContent (+0xB).  NOTE
      * (verified 26.6): this is NOT the stream-111 gate and NOT hasGaugeClusterScreen (that predicate =
@@ -502,11 +563,11 @@ static void *build_cluster_dict(int night)
         }
         if (k && cf_rel) cf_rel(k);
     }
-    if (!view_areas_ok || set_i64(d, "initialViewArea", 0) != 0) goto fail;
+    if (!view_areas_ok || set_i64(d, "initialViewArea", initial_area) != 0) goto fail;
     {
         void *k = cf_str(0, "adjacentViewAreas", CFENC_UTF8);
-        void *a = cf_arrm(0, 0, arr_cb);
-        if (k && a) {
+        void *a = cf_arrm(0, initial_area == 0 ? 0 : 1, arr_cb);
+        if (k && a && (initial_area == 0 || (cf_arrappi64 && cf_arrappi64(a, 0) == 0))) {
             cf_dictset(d, k, a);
             adjacent_ok = 1;
         }
@@ -514,6 +575,7 @@ static void *build_cluster_dict(int night)
         if (k && cf_rel) cf_rel(k);
     }
     if (!adjacent_ok) goto fail;
+    if (set_str(d, "initialURL", alt_cluster_url()) != 0) goto fail;
     /* Extra fields a real HU (MHI3 libairplay 450) sends in each display dict — our subset was
      * incomplete, which the phone accepts to ADD the car but rejects at SESSION start (0s teardown).
      *
@@ -535,7 +597,7 @@ static void *build_cluster_dict(int night)
     /* REQUIRED by CarKit (else display rejected → teardown loop) */
     {
         void *k   = cf_str(0, "initialVideoStreams", CFENC_UTF8);
-        void *arr = build_stream_array("D1057E12-A0D1-4E20-B0C0-1057E12A0D11");
+        void *arr = build_stream_array(CLUSTER_DISPLAY_UUID);
         if (k && arr) {
             cf_dictset(d, k, arr);
             initial_stream_ok = 1;
@@ -669,7 +731,7 @@ static int main_disp_modernize(void *mainDisp, int night)
     return 0;
 }
 
-static void *build_displays(int night)
+static void *build_displays(int night, int zone_mode)
 {
     int err = 0;
     void *mainDisp = fn_copydisp(0, &err);      /* arg ignored; builds via ScreenCopyMain */
@@ -687,7 +749,7 @@ static void *build_displays(int night)
         if (cf_rel) cf_rel(mainDisp);
         return 0;
     }
-    void *cluster  = build_cluster_dict(night);
+    void *cluster  = build_cluster_dict(night, zone_mode);
     if (!cluster) {
         if (cf_rel) cf_rel(mainDisp);
         return 0;
@@ -707,11 +769,15 @@ static void advert_clear_locked(void)
 {
     if (g_advert_displays && cf_rel) cf_rel(g_advert_displays);
     if (g_advert_features && cf_rel) cf_rel(g_advert_features);
+    if (g_advert_suggest_urls && cf_rel) cf_rel(g_advert_suggest_urls);
     g_advert_displays = NULL;
     g_advert_features = NULL;
+    g_advert_suggest_urls = NULL;
     g_advert_session = NULL;
     g_advert_ready = 0;
     g_advert_published = 0;
+    g_advert_night_mode = 0;
+    g_advert_zone_mode = 0;
 }
 
 static void advert_clear_for_session(void *session)
@@ -772,7 +838,7 @@ static int g_forward_available = 1; /* module init clears this on worker failure
 static int alt_wireless_blocked(void)
 {
     if (!cp_dio_owner_is_wireless()) return 0;
-#ifdef MHI2Q_WIRELESS_ALT_QEMU
+#ifdef MHI2Q_WIRELESS_ALT
     return !cp_media_alt_available();
 #else
     return 1;
@@ -790,18 +856,71 @@ static void cluster_capture_native(const void *data, uint32_t length)
 }
 #endif
 
+#define ALT_SETTINGS_FILE "/tmp/carplay_settings"
+
+enum {
+    ALT_URL_MODE_MAP_WHEN_RGI = 0,
+    ALT_URL_MODE_CARDS_ALWAYS = 1
+};
+
+enum {
+    ALT_LAYOUT_LEFT   = 0,
+    ALT_LAYOUT_CENTER = 1,
+    ALT_LAYOUT_RIGHT  = 2
+};
+
+static volatile int g_alt_user_enable = 1;
+static volatile int g_alt_url_mode = ALT_URL_MODE_MAP_WHEN_RGI;
+static volatile int g_alt_layout = ALT_LAYOUT_RIGHT;
+
+static int alt_user_enable_get(void) { return __atomic_load_n(&g_alt_user_enable, __ATOMIC_ACQUIRE); }
+static void alt_user_enable_set(int v) { __atomic_store_n(&g_alt_user_enable, v ? 1 : 0, __ATOMIC_RELEASE); }
+static int alt_url_mode_get(void) { return __atomic_load_n(&g_alt_url_mode, __ATOMIC_ACQUIRE); }
+static void alt_url_mode_set(int v) { __atomic_store_n(&g_alt_url_mode, v ? 1 : 0, __ATOMIC_RELEASE); }
+static int alt_layout_get(void) { return __atomic_load_n(&g_alt_layout, __ATOMIC_ACQUIRE); }
+static void alt_layout_set(int v)
+{
+    if (v < ALT_LAYOUT_LEFT || v > ALT_LAYOUT_RIGHT) v = ALT_LAYOUT_RIGHT;
+    __atomic_store_n(&g_alt_layout, v, __ATOMIC_RELEASE);
+}
+
+static void alt_settings_reload(void)
+{
+    FILE *f = fopen(ALT_SETTINGS_FILE, "r");
+    char line[64];
+    int val;
+    if (!f) return;
+    while (fgets(line, sizeof(line), f)) {
+        if (sscanf(line, "altscreen=%d", &val) == 1 && (val == 0 || val == 1)) {
+            alt_user_enable_set(val);
+        } else if (sscanf(line, "alt_url=%d", &val) == 1 && (val == 0 || val == 1)) {
+            alt_url_mode_set(val);
+        } else if (sscanf(line, "alt_layout=%d", &val) == 1 && val >= 0 && val <= 2) {
+            alt_layout_set(val);
+        }
+    }
+    fclose(f);
+}
+
 static int advert_preflight(void *session, uint32_t sequence)
 {
     if (!g_forward_available) return 0;
+    alt_settings_reload();
+    if (!alt_user_enable_get()) return 0;
     void *displays = NULL;
     void *features = NULL;
+    void *suggest_urls = NULL;
+    int night_mode = g_alt_night_mode ? 1 : 0;
+    int zone_mode = alt_zone_mode_get();
     if (alt_wireless_blocked() || !session ||
         !env_on("ALTSCREEN_ADVERT_DISPLAYS") || disp_ok != 1)
         goto fail;
-    displays = build_displays(g_alt_night_mode ? 1 : 0);
+    displays = build_displays(night_mode, zone_mode);
     if (!displays) goto fail;
     features = build_extfeatures();
     if (!features) goto fail;
+    suggest_urls = build_suggest_urls();
+    if (!suggest_urls) goto fail;
 
     pthread_mutex_lock(&advert_lock);
     /* A slow control SETUP from the superseded RTSP session must never replace
@@ -812,6 +931,7 @@ static int advert_preflight(void *session, uint32_t sequence)
         pthread_mutex_unlock(&advert_lock);
         if (cf_rel) cf_rel(displays);
         if (cf_rel) cf_rel(features);
+        if (cf_rel) cf_rel(suggest_urls);
         LOG_INFO(LOG_MODULE,
                  "altScreen advert preflight ignored stale session=%p seq=%u owner=%u",
                  session, (unsigned)sequence, (unsigned)ownerSequence);
@@ -822,8 +942,11 @@ static int advert_preflight(void *session, uint32_t sequence)
     g_advert_session = session;
     g_advert_displays = displays;
     g_advert_features = features;
+    g_advert_suggest_urls = suggest_urls;
     g_advert_ready = 1;
     g_advert_published = 0;
+    g_advert_night_mode = night_mode;
+    g_advert_zone_mode = zone_mode;
     pthread_mutex_unlock(&advert_lock);
     LOG_INFO(LOG_MODULE,
              "altScreen advert preflight OK session=%p (real main uuid + 2 displays)",
@@ -833,6 +956,7 @@ static int advert_preflight(void *session, uint32_t sequence)
 fail:
     if (displays && cf_rel) cf_rel(displays);
     if (features && cf_rel) cf_rel(features);
+    if (suggest_urls && cf_rel) cf_rel(suggest_urls);
     pthread_mutex_lock(&advert_lock);
     /* A newer failed preflight also retires an older cached contract. Otherwise
      * an even older SETUP which completes late could reclaim the advert owner. */
@@ -849,12 +973,26 @@ fail:
     return 0;
 }
 
+static int advert_published_state(void *session, int *night_out, int *zone_out)
+{
+    int ok = 0;
+    pthread_mutex_lock(&advert_lock);
+    if (g_advert_published && (!session || g_advert_session == session)) {
+        if (night_out) *night_out = g_advert_night_mode;
+        if (zone_out) *zone_out = g_advert_zone_mode;
+        ok = 1;
+    }
+    pthread_mutex_unlock(&advert_lock);
+    return ok;
+}
+
 static int advert_ready_for_session(void *session)
 {
     int ready;
     pthread_mutex_lock(&advert_lock);
     ready = g_advert_ready && g_advert_session == session &&
-            g_advert_displays != NULL && g_advert_features != NULL;
+            g_advert_displays != NULL && g_advert_features != NULL &&
+            g_advert_suggest_urls != NULL;
     pthread_mutex_unlock(&advert_lock);
     return ready;
 }
@@ -870,6 +1008,7 @@ static void alt_on_server_info(void *session, void *info)
     /* Production stream111 uses legacy AES and stays blocked for paired
      * media. Only the explicit QEMU build adds an authenticated alternative. */
     if (alt_wireless_blocked()) return;
+    if (!alt_user_enable_get()) return;
     if (cf_init() == 1 && env_on("ALTSCREEN_HANDLE_ALT") &&
         alt_resolve() == 1 && advert_ready_for_session(session)) {
         /* Hold the retained contract stable until BOTH extendedFeatures and
@@ -878,7 +1017,7 @@ static void alt_on_server_info(void *session, void *info)
          * /info, producing the exact partial advert this preflight prevents. */
         pthread_mutex_lock(&advert_lock);
         if (!g_advert_ready || g_advert_session != session ||
-            !g_advert_displays || !g_advert_features) {
+            !g_advert_displays || !g_advert_features || !g_advert_suggest_urls) {
             pthread_mutex_unlock(&advert_lock);
             return;
         }
@@ -933,36 +1072,46 @@ static void alt_on_server_info(void *session, void *info)
              * the whole session. */
             void *dv;
             void *fv;
+            void *uv;
             void *fk;
             void *dk;
             void *pk;
+            void *uk;
             dv = (g_advert_ready && g_advert_session == session)
                 ? g_advert_displays : NULL;
             fv = (g_advert_ready && g_advert_session == session)
                 ? g_advert_features : NULL;
-            fk = (dv && fv) ? cf_str(0, "extendedFeatures", CFENC_UTF8) : 0;
+            uv = (g_advert_ready && g_advert_session == session)
+                ? g_advert_suggest_urls : NULL;
+            fk = (dv && fv && uv) ? cf_str(0, "extendedFeatures", CFENC_UTF8) : 0;
             dk = dv ? cf_str(0, "displays", CFENC_UTF8) : 0;
             pk = dv ? cf_str(0, "displayPanels", CFENC_UTF8) : 0;
-            if (dv && fv && fk && dk && pk) {
+            uk = uv ? cf_str(0, "altScreenSuggestUIURLs", CFENC_UTF8) : 0;
+            if (dv && fv && uv && fk && dk && pk && uk) {
                 /* Mutate the retained array only before its first publication;
                  * subsequent /info dictionaries may still retain it. Runtime
                  * night changes are carried by the generation-scoped command. */
-                if (!g_advert_published) advert_apply_night_locked(infoNight);
+                if (!g_advert_published) {
+                    advert_apply_night_locked(infoNight);
+                    g_advert_night_mode = infoNight;
+                }
                 cf_dictset(info, fk, fv);
                 cf_dictset(info, dk, dv);
                 cf_dictset(info, pk, dv);
+                cf_dictset(info, uk, uv);
                 g_advert_published = 1;
                 LOG_INFO(LOG_MODULE,
-                         "injected atomic extendedFeatures+displays+displayPanels contract into /info=%p",
+                         "injected atomic extendedFeatures+displays+displayPanels+altScreenSuggestUIURLs contract into /info=%p",
                          info);
             } else {
                 LOG_ERROR(LOG_MODULE,
-                          "atomic /info contract skipped fv=%p dv=%p fk=%p dk=%p pk=%p",
-                          fv, dv, fk, dk, pk);
+                          "atomic /info contract skipped fv=%p dv=%p uv=%p fk=%p dk=%p pk=%p uk=%p",
+                          fv, dv, uv, fk, dk, pk, uk);
             }
             if (fk && cf_rel) cf_rel(fk);
             if (dk && cf_rel) cf_rel(dk);
             if (pk && cf_rel) cf_rel(pk);
+            if (uk && cf_rel) cf_rel(uk);
         }
         pthread_mutex_unlock(&advert_lock);
     }
@@ -1116,7 +1265,7 @@ typedef struct {
     int         inUse;
     uint8_t     key[16];     /* self-contained receiver: AES-CTR key ...  */
     uint8_t     iv[16];      /* ... + iv (derived in alt_setup)           */
-#ifdef MHI2Q_WIRELESS_ALT_QEMU
+#ifdef MHI2Q_WIRELESS_ALT
     int paired;
     uint8_t paired_key[32];
 #endif
@@ -1285,30 +1434,8 @@ static int alt_add_response_stream(void *responseParams, void *streamDesc)
  * OMX FreeBufferUnexpected crash (verified on-unit).  Wire = 128-byte screen header
  * + body, matching stock ProcessFrames (sub_2b154 reads 128 @0x2b450, body @0x2b510):
  *   hdr[0..3]=bodySize(LE), hdr[4]=opcode.  opcode 1 = unencrypted avcC config;
- *   opcode 0 = AES-CTR-encrypted AVCC access unit; 2/4/5 = ignore. */
-/* poll-then-read: the accepted socket is non-blocking, and teardown cannot close this
- * thread-local fd, so we poll with a 500ms tick and bail when *stop is set (teardown) —
- * that unblocks the pthread_join in the teardown interpose. */
-static int read_exact(int fd, uint8_t *buf, uint32_t n, volatile int *stop)
-{
-    uint32_t got = 0;
-    while (got < n) {
-        if (stop && *stop) return -1;
-        struct pollfd pfd; pfd.fd = fd; pfd.events = POLLIN; pfd.revents = 0;
-        int pr = poll(&pfd, 1, 60);   /* short tick so teardown stop is noticed in <=60ms
-                                       * (fast reconnect); during streaming poll returns on
-                                       * data anyway, so the idle-only tick cost is trivial */
-        if (pr == 0) continue;                            /* tick → re-check stop */
-        if (pr < 0) { if (errno == EINTR) continue; return -1; }
-        if (pfd.revents & (POLLHUP | POLLERR | POLLNVAL)) return -1;
-        ssize_t r = read(fd, buf + got, n - got);
-        if (r > 0) { got += (uint32_t)r; continue; }
-        if (r == 0) return -1;                            /* peer closed */
-        if (r < 0 && (errno == EINTR || errno == EAGAIN)) continue;
-        return -1;
-    }
-    return 0;
-}
+ *   opcode 0 = AES-CTR-encrypted AVCC access unit; 2/4 need no reply;
+ *   plaintext opcode 5 carries optional numeric sender diagnostics. */
 
 #define ALT_HDR_SIZE  128
 #define ALT_MAX_BODY  (4u * 1024 * 1024)
@@ -1320,7 +1447,7 @@ static uint64_t alt_pace_now_us(void)
     return (uint64_t)ts.tv_sec * UINT64_C(1000000) + (uint64_t)ts.tv_nsec / 1000;
 }
 
-static void alt_pace_report(alt_pace_trace_t *s, uint32_t generation)
+static void alt_pace_report(alt_pace_trace_t *s, uint32_t generation, alt_receiver_io_t *io)
 {
 #if !ENABLE_ALTSCREEN_PACE_TRACE
     if (!log_verbose()) { alt_pace_reset_window(s); return; }   /* only with carplay_verbose */
@@ -1330,15 +1457,19 @@ static void alt_pace_report(alt_pace_trace_t *s, uint32_t generation)
      * Arrival alone cannot distinguish a slow sender from local backpressure. */
     log_write(LOG_LEVEL_WARN, "altscreen",
         "111 pace gen=%u n=%u fwd=%u arrival_us=%llu/%llu samples=%u zero=%u "
-        "read_us=%llu/%llu work_us=%llu/%llu pts_us=%llu/%llu pts_n=%u bad=%u",
+        "read_us=%llu/%llu work_us=%llu/%llu pts_us=%llu/%llu pts_n=%u bad=%u "
+        "recv_calls=%llu poll_calls=%llu would_block=%llu bytes=%llu",
         (unsigned)generation, s->frames, s->forwarded,
         (unsigned long long)alt_pace_mean(&s->arrival), (unsigned long long)s->arrival.max,
         s->arrival.count, s->arrival.zero,
         (unsigned long long)alt_pace_mean(&s->read), (unsigned long long)s->read.max,
         (unsigned long long)alt_pace_mean(&s->work), (unsigned long long)s->work.max,
         (unsigned long long)alt_pace_mean(&s->pts), (unsigned long long)s->pts.max,
-        s->pts.count, s->pts_invalid);
+        s->pts.count, s->pts_invalid,
+        (unsigned long long)io->recv_calls, (unsigned long long)io->poll_calls,
+        (unsigned long long)io->would_block, (unsigned long long)io->bytes);
     alt_pace_reset_window(s);
+    memset(io, 0, sizeof(*io));
 }
 #endif
 
@@ -1354,14 +1485,24 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
     unsigned long nframes = 0;
     int stream_has_idr = 0;
     int renderer_wait_idr = 1;
+    unsigned invalid_au_streak = 0;
+    alt_receiver_io_t *io = NULL;
 
 #if ENABLE_LOGGING || ENABLE_ALTSCREEN_PACE_TRACE
     alt_pace_trace_t pace;
+    alt_receiver_io_t io_stats = {0};
+    alt_sender_parser_t sender_parser;
+    uint64_t sender_last_us = 0;
+    unsigned sender_seen = 0, sender_parsed = 0, sender_invalid = 0, sender_throttled = 0;
+    int sender_trace = ENABLE_ALTSCREEN_PACE_TRACE || log_verbose();
+    int sender_ready = 0;
+    if (sender_trace) io = &io_stats;
     memset(&pace, 0, sizeof(pace));
+    memset(&sender_parser, 0, sizeof(sender_parser));
 #endif
 
     int use_aes = 1;
-#ifdef MHI2Q_WIRELESS_ALT_QEMU
+#ifdef MHI2Q_WIRELESS_ALT
     cp_screen_crypto paired_crypto = {0,0};
     use_aes = !slot->paired;
 #endif
@@ -1372,15 +1513,13 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
     }
     aes_ready = use_aes;
 #if ENABLE_LOGGING || ENABLE_ALTSCREEN_PACE_TRACE
+    if (sender_trace) sender_ready = alt_sender_parser_init(&sender_parser, RTLD_DEFAULT) == 0;
     log_write(LOG_LEVEL_WARN, "altscreen", "111 pace begin gen=%u maxFPS=30; times are mean/max microseconds",
               (unsigned)av_gen);
 #endif
 
-    /* A decoder cannot start mid-GOP. Ask for a cluster-targeted IDR. The
-     * forwarding worker owns generation-scoped retry backoff, including while
-     * this receiver waits for another phone AU. */
-    alt_request_cluster_idr(av_gen, "stream-start");
-
+    /* iOS starts stream 111 with an IDR access unit; only ask for a keyframe
+     * when a non-IDR arrives while the decoder is still waiting for one. */
 
     for (;;) {
         /* A later receiver (fast reconnect) may have claimed the single renderer
@@ -1394,7 +1533,7 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
 #if ENABLE_LOGGING || ENABLE_ALTSCREEN_PACE_TRACE
         uint64_t read_started_us = alt_pace_now_us();
 #endif
-        if (read_exact(fd, hdr, ALT_HDR_SIZE, &slot->stop) != 0) {
+        if (alt_receiver_read_exact(fd, hdr, ALT_HDR_SIZE, &slot->stop, io) != 0) {
             LOG_INFO(LOG_MODULE,
                      "alt recv: header read ended stop=%d errno=%d after %lu frames",
                      slot->stop, errno, nframes);
@@ -1412,7 +1551,7 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
             if (!nb) break;
             body = nb; bodycap = bodySize;
         }
-        if (bodySize && read_exact(fd, body, bodySize, &slot->stop) != 0) {
+        if (bodySize && alt_receiver_read_exact(fd, body, bodySize, &slot->stop, io) != 0) {
             LOG_INFO(LOG_MODULE,
                      "alt recv: body read ended opcode=%u body=%u stop=%d errno=%d after %lu frames",
                      opcode, bodySize, slot->stop, errno, nframes);
@@ -1473,7 +1612,7 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
                 sender_pts |= (uint64_t)hdr[8 + pace_i] << (8 * pace_i);
 #endif
             int crypto_error;
-#ifdef MHI2Q_WIRELESS_ALT_QEMU
+#ifdef MHI2Q_WIRELESS_ALT
             if (slot->paired)
                 crypto_error=cp_screen_open(&paired_crypto,slot->paired_key,hdr,body,&bodySize,cp_pair_open);
             else
@@ -1485,9 +1624,27 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
             }
             frame_valid=alt_avcc_prepare(body,bodySize,ls,ls==4,&prepared)==0;
             is_idr=frame_valid && prepared.idr;
-            if(!frame_valid){if(!alt_qemu_capture_only())altav_note_input_loss(av_gen);renderer_wait_idr=1;alt_request_cluster_idr(av_gen,"invalid-AU");}
-            /* Re-check ownership here: the header/body read above can block in poll for
-             * up to 500 ms, during which a reconnect may have superseded us.  The control
+            if (!frame_valid) {
+                char auHex[49];
+                uint32_t hi, hn = (bodySize < 24U) ? bodySize : 24U;
+                for (hi = 0; hi < hn; ++hi)
+                    snprintf(auHex + (hi * 2), sizeof(auHex) - (hi * 2), "%02x", body[hi]);
+                auHex[hn * 2] = 0;
+                ++invalid_au_streak;
+                LOG_WARN(LOG_MODULE,
+                         "alt recv: invalid AU frame#%lu body=%u ls=%u streak=%u bytes=%s%s",
+                         nframes, bodySize, (unsigned)ls, invalid_au_streak,
+                         auHex, (bodySize > hn) ? "..." : "");
+                if (!stream_has_idr || invalid_au_streak >= 30U) {
+                    if (!alt_qemu_capture_only()) altav_note_input_loss(av_gen);
+                    renderer_wait_idr = 1;
+                }
+                alt_request_cluster_idr(av_gen, "invalid-AU");
+            } else {
+                invalid_au_streak = 0;
+            }
+            /* Re-check ownership here: the header/body read above waits for
+             * data in 60 ms ticks, during which a reconnect may supersede us. The control
              * commands below target g_alt_session and must never run for a stale stream. */
             if (!altav_is_owner(av_gen)) break;
 #ifdef MHI2Q_WIRELESS_ALT_QEMU
@@ -1495,18 +1652,24 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
                 cluster_capture_native(body,prepared.annexb_len);
 #endif
             if (is_idr && !stream_has_idr) {
+                int adv_night = -1, adv_zone = -1;
+                int have_adv = advert_published_state(slot->session, &adv_night, &adv_zone);
+                int cur_night = g_alt_night_mode ? 1 : 0;
+                int cur_zone = alt_zone_mode_get();
                 stream_has_idr = 1;
                 LOG_INFO(LOG_MODULE,
                          "alt recv: first IDR arrived at frame#%lu (body=%u)",
                          nframes, bodySize);
                 /* A live video stream is only the canvas.  Select the Maps instrument-cluster
-                 * UI explicitly, then tell the encoder which predeclared view area is visible. */
+                 * UI explicitly; nightMode and viewArea only need a follow-up command when
+                 * their state changed after /info was published. */
                 alt_kick_show_ui(av_gen);
-                /* Never call back through the live stock session from this
-                 * receiver thread: teardown may free it after its bounded reap.
-                 * /info and dio's SetNightMode boundary keep this cache current. */
-                alt_send_cluster_night_mode(av_gen, g_alt_night_mode, "first-IDR");
-                alt_kick_viewarea(av_gen);
+                if (!have_adv || cur_night != adv_night)
+                    alt_send_cluster_night_mode(av_gen, cur_night, "first-IDR");
+                if (!have_adv || cur_zone != adv_zone)
+                    alt_kick_viewarea(av_gen);
+            } else if (frame_valid && !is_idr && !stream_has_idr) {
+                alt_request_cluster_idr(av_gen, "stream-start");
             }
 
             if (!alt_qemu_capture_only() && altav_take_failure(av_gen)) {
@@ -1559,7 +1722,7 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
                     arrived_us >= read_started_us ? arrived_us - read_started_us : 0,
                     done_us >= arrived_us ? done_us - arrived_us : 0,
                     sender_pts, pace_forwarded);
-                if (pace.frames >= 300) alt_pace_report(&pace, av_gen);
+                if (pace.frames >= 300) alt_pace_report(&pace, av_gen, &io_stats);
             }
 #endif
             if ((nframes & 0xFF) == 0)
@@ -1567,11 +1730,40 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
                          "alt recv: %lu video frames received (last body=%u waitIDR=%d)",
                          nframes, bodySize, renderer_wait_idr);
         }
-        /* opcodes 2/4/5 (keepalive/misc): body already consumed → ignore */
+#if ENABLE_LOGGING || ENABLE_ALTSCREEN_PACE_TRACE
+        else if (opcode == 5 && sender_trace) {
+            uint64_t now = alt_pace_now_us();
+            ++sender_seen;
+            /* The native payload is plaintext; never advance the AES stream
+             * for telemetry. Bound diagnostic parsing/logging to at most 1 Hz.
+             * Its counters describe the phone's own reporting interval. */
+            if (!now || (sender_last_us &&
+                (now < sender_last_us || now - sender_last_us < 1000000))) {
+                ++sender_throttled;
+            } else {
+                alt_sender_sample_t sample;
+                sender_last_us = now;
+                if (sender_ready && alt_sender_parse(&sender_parser, body, bodySize, &sample) == 0) {
+                    char fields[768];
+                    alt_sender_format(&sample, fields, sizeof(fields));
+                    ++sender_parsed;
+                    log_write(LOG_LEVEL_WARN, "altscreen",
+                        "111 sender gen=%u after_au=%lu valid=0x%x %s",
+                        (unsigned)av_gen, nframes, (unsigned)sample.valid, fields);
+                } else ++sender_invalid;
+            }
+        }
+#endif
+        /* opcodes 2/4: body already consumed; stock also needs no reply. */
     }
 
 #if ENABLE_LOGGING || ENABLE_ALTSCREEN_PACE_TRACE
-    if (pace.frames) alt_pace_report(&pace, av_gen);
+    if (pace.frames) alt_pace_report(&pace, av_gen, &io_stats);
+    if (sender_trace)
+        log_write(LOG_LEVEL_WARN, "altscreen",
+            "111 sender summary gen=%u seen=%u parsed=%u invalid=%u throttled=%u available=%d",
+            (unsigned)av_gen, sender_seen, sender_parsed, sender_invalid, sender_throttled, sender_ready);
+    alt_sender_parser_close(&sender_parser);
 #endif
     if (aes_ready && aes_ctr_final) aes_ctr_final(aesctx);
     free(body);
@@ -1589,6 +1781,20 @@ static void *alt_thread_main(void *arg)
     int        ls;
     free(threadArg);
 
+#ifdef __QNX__
+    {
+        alt_receiver_set_priority_t set_priority =
+            (alt_receiver_set_priority_t)dlsym(RTLD_DEFAULT, "SetCurrentThreadPriority");
+        alt_receiver_schedule_t schedule = alt_receiver_schedule(set_priority);
+        log_write(LOG_LEVEL_WARN, "altscreen",
+            "111 receiver schedule gen=%u requested=%d rc=%d "
+            "before=%d/%d get=%d after=%d/%d get=%d",
+            (unsigned)av_gen, schedule.requested, schedule.result,
+            schedule.before_policy, schedule.before_priority, schedule.before_error,
+            schedule.after_policy, schedule.after_priority, schedule.after_error);
+    }
+#endif
+
     /* Use a finite accept tick.  Cross-thread close normally wakes QNX
      * SocketAccept, but this loop does not depend on that undocumented detail:
      * teardown's stop flag is observed within one second even if close alone
@@ -1598,9 +1804,22 @@ static void *alt_thread_main(void *arg)
         if (sock_accept(listenSock, 1, &fd, NULL) == 0 && fd >= 0) break;
     }
     if (fd < 0 || slot->stop) goto done;
-    /* Do not rely on undocumented SocketAccept flags.  read_exact() polls first,
-     * but an explicit non-blocking fd also closes the tiny poll->read race and
-     * guarantees teardown responsiveness on QNX io-pkt. */
+    {
+        int receive_buffer = -1, receive_low_water = -1;
+        socklen_t size = sizeof(receive_buffer);
+        int buffer_rc = getsockopt(fd, SOL_SOCKET, SO_RCVBUF, &receive_buffer, &size);
+        int buffer_error = buffer_rc ? errno : 0;
+        size = sizeof(receive_low_water);
+        int low_water_rc = getsockopt(fd, SOL_SOCKET, SO_RCVLOWAT, &receive_low_water, &size);
+        int low_water_error = low_water_rc ? errno : 0;
+        log_write(LOG_LEVEL_WARN, "altscreen",
+            "111 receiver socket gen=%u rcvbuf=%d get=%d errno=%d rcvlowat=%d get=%d errno=%d",
+            (unsigned)av_gen, receive_buffer, buffer_rc, buffer_error,
+            receive_low_water, low_water_rc, low_water_error);
+    }
+    /* Preserve the stock accepted-socket mode explicitly. The read helper also
+     * uses MSG_DONTWAIT per call, so cancellation never depends on a readiness
+     * observation remaining valid until the next socket operation. */
     {
         int fdFlags = fcntl(fd, F_GETFL, 0);
         if (fdFlags >= 0 && fcntl(fd, F_SETFL, fdFlags | O_NONBLOCK) != 0)
@@ -1620,10 +1839,10 @@ static void *alt_thread_main(void *arg)
     if (ls >= 0) close(ls);
 
     LOG_INFO(LOG_MODULE, "alt-screen receiver started (self-contained)");
-#ifdef MHI2Q_WIRELESS_ALT_QEMU
+#ifdef MHI2Q_WIRELESS_ALT
     /* The instrument scene may be empty until selected. Wait for the actual
      * stream socket, after committed SETUP, before selecting that native UI. */
-    if (slot->paired) alt_show_ui_for_mode(av_gen,alt_zone_mode_get(),"qemu-stream-connected");
+    if (slot->paired) alt_show_ui_for_mode(av_gen,alt_zone_mode_get(),"paired-stream-connected");
 #endif
     alt_recv_loop(slot, fd, av_gen);
 
@@ -1633,7 +1852,7 @@ done:
      * exit must not tear down the new owner's connection (that caused black 111 on
      * fast reconnect). */
     altav_shutdown_if_owner(av_gen);
-#ifdef MHI2Q_WIRELESS_ALT_QEMU
+#ifdef MHI2Q_WIRELESS_ALT
     /* No reaper may reuse this slot until threadExited is published below. */
     {
         volatile uint8_t *key_bytes = slot->paired_key;
@@ -1729,13 +1948,13 @@ static int alt_setup(void *session, void *streamDesc, void *responseParams)
     LOG_INFO(LOG_MODULE, "alt_setup: connID=%llu", (unsigned long long)connID);
 
     int use_legacy = 1;
-#ifdef MHI2Q_WIRELESS_ALT_QEMU
+#ifdef MHI2Q_WIRELESS_ALT
     if (cp_dio_owner_is_wireless()) {
         err=cp_media_alt_claim(session,(uint64_t)connID,slot->paired_key);
         if(err)goto fail;
         slot->paired=1;
         use_legacy=0;
-        LOG_INFO(LOG_MODULE,"paired stream 111 QEMU: fresh authenticated key claimed");
+        LOG_INFO(LOG_MODULE,"paired stream 111: fresh authenticated key claimed");
     }
 #endif
     if (use_legacy) {
@@ -1779,7 +1998,7 @@ static int alt_setup(void *session, void *streamDesc, void *responseParams)
     if (!rdesc) { err = kNoMemoryErr; goto fail; }
     set_i64(rdesc, "type", ALT_STREAM_TYPE);
     set_i64(rdesc, "dataPort", port);
-#ifdef MHI2Q_WIRELESS_ALT_QEMU
+#ifdef MHI2Q_WIRELESS_ALT
     if (slot->paired) set_i64(rdesc,"streamConnectionID",connID);
 #endif
     /* Start the acceptor before publishing its descriptor into the response.
@@ -1964,8 +2183,9 @@ static void alt_on_setup_response(hook_setup_ctx_t *setup)
     int setupHas111 = 0;
 
     if (alt_enabled < 0) alt_enabled = env_on("ALTSCREEN_HANDLE_ALT") ? 1 : 0;
+    alt_settings_reload();
 
-    if (alt_enabled && ret == 0 && respOut && session && request && alt_resolve() == 1) {
+    if (alt_enabled && alt_user_enable_get() && ret == 0 && respOut && session && request && alt_resolve() == 1) {
         /* NEGOTIATION — the REAL altScreen gate (VERIFIED against iOS 26.6 AirPlaySender/CarKit disasm):
          * The feature exchange is ASYMMETRIC — the phone proposes in the control-SETUP *request* under
          * "features", but reads the NEGOTIATED set from the SETUP *response* under **"enabledFeatures"**
@@ -2156,9 +2376,6 @@ static void alt_on_teardown(void *session, void *request, int reason)
     }
 }
 
-/* MUST match the cluster display uuid advertised in build_cluster_dict() (#1b). */
-#define CLUSTER_DISPLAY_UUID "C1057E12-A0D1-4E20-B0C0-1057E12A0D10"
-
 /* ════════════════════════════════════════════════════════════════════════════
  * working zone (fullscreen / sportscreen / classicscreen) live-switch — Java-driven via the bus.
  *
@@ -2239,11 +2456,6 @@ static void zone_cmd_done(int status, void *resp, void *ctx)
     LOG_INFO(LOG_MODULE, "updateViewArea ack: mode=%d gen=%u status=%d%s",
              mode, (unsigned)gen, status, ap_status(status));
     zone_send_ack(mode, status);
-    /* Maps scene options are independent of safeArea. Apply the matching URL
-     * only after this view area succeeded, and ignore a stale ACK after a rapid
-     * second View-button press. */
-    if (status == 0 && mode == alt_zone_mode_get())
-        alt_show_ui_for_mode(gen, mode, "viewArea-accepted");
 }
 
 static uint32_t alt_generation_for_session(void *session)
@@ -2382,16 +2594,14 @@ static void zone_on_cmd(uint16_t type, uint8_t flags, const uint8_t *payload, ui
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
- * More MHI3-ported session commands — same {type,params}+SendCommand pattern as
+ * MHI3-ported session commands — same {type,params}+SendCommand pattern as
  * the zone switch, so factored into one shipper.  Each targets the cluster
- * (CLUSTER_DISPLAY_UUID); changeUIContext is session-global (no uuid).
+ * (CLUSTER_DISPLAY_UUID).
  *
  * NOTE: changeMapZoomLevel is a SEMANTIC command (zoomDirection int), NOT a HID
  * report — it zooms the map deterministically regardless of input focus, unlike
  * the knob (whose rotation the CarPlay UI interprets contextually).
- * RE recipes (MHI3 450, keys verified): changeMapZoomLevel{uuid,zoomDirection};
- * uiAppearanceUpdate/mapAppearanceUpdate{uuid,appearanceMode,appearanceSetting};
- * changeUIContext{url}.
+ * RE recipes (MHI3 450, keys verified): changeMapZoomLevel{uuid,zoomDirection}.
  * ════════════════════════════════════════════════════════════════════════════ */
 
 /* logging completion — confirmation for the fire-and-relay commands.  ctx = the
@@ -2404,19 +2614,15 @@ static void alt_cmd_done(int status, void *resp, void *ctx)
 
 }
 
-/* showUI has a stateful follow-up, so unlike logging-only completions it carries
- * the immutable transport generation in ctx. A delayed response from an old
- * HTTP client must never force a keyframe on a replacement session. */
+/* showUI carries the immutable transport generation in ctx for logging.
+ * Do not chain forceKeyFrame on completion: each keyframe request triggers
+ * ~1s of heavy refining P-frames from the phone. */
 static void alt_showui_done(int status, void *resp, void *ctx)
 {
     uint32_t gen = (uint32_t)(uintptr_t)ctx;
     (void)resp;
     LOG_INFO(LOG_MODULE, "session command 'showUI' ack: gen=%u status=%d%s",
              (unsigned)gen, status, ap_status(status));
-    if (status == 0 && alt_generation_is_current(gen))
-        alt_request_cluster_idr(gen, "showUI-accepted");
-    else if (status == 0)
-        LOG_INFO(LOG_MODULE, "showUI stale ack dropped gen=%u", (unsigned)gen);
 }
 
 /* new params dict (uuid preset when wantUuid); NULL if CF syms not ready. */
@@ -2444,11 +2650,9 @@ static int alt_ship(uint32_t gen, const char *type, void *params) {
         pk = cf_str(0, "params", CFENC_UTF8);
         if (!pk) goto done;
         cf_dictset(cmd, pk, params);
-        unsigned key = !strcmp(type, "showUI")                ? ALT_COMMAND_SHOW_UI
-                       : !strcmp(type, "setNightMode")        ? ALT_COMMAND_NIGHT_MODE
-                       : !strcmp(type, "mapAppearanceUpdate") ? ALT_COMMAND_MAP_APPEARANCE
-                       : !strcmp(type, "uiAppearanceUpdate")  ? ALT_COMMAND_UI_APPEARANCE
-                                                              : ALT_COMMAND_GENERIC;
+        unsigned key = !strcmp(type, "showUI")         ? ALT_COMMAND_SHOW_UI
+                       : !strcmp(type, "setNightMode") ? ALT_COMMAND_NIGHT_MODE
+                                                       : ALT_COMMAND_GENERIC;
         if (!strcmp(type, "showUI"))
             rc = alt_send_async_for_gen_key(gen, cmd, (void *)alt_showui_done,
                                             (void *)(uintptr_t)gen, key);
@@ -2636,12 +2840,24 @@ static void alt_kick_viewarea(uint32_t gen)
  *   RGI on  -> /map = itemType 1 (map only): the root URL is "anyContent" and Maps keeps
  *              drawing its turn card + ETA there even with showETA=no (seen 2026-09-19);
  *              maneuvers and ETA come from BAP/KDK. */
-#define ALT_CLUSTER_URL_RGI_OFF "maps:/car/instrumentcluster?showETA=yes&maneuverLayout=rightAligned&showSpeedLimit=no"
-#define ALT_CLUSTER_URL_RGI_ON  "maps:/car/instrumentcluster/map?showETA=no&maneuverLayout=no&showSpeedLimit=no"
+#define ALT_CLUSTER_URL_RGI_OFF_LEFT   "maps:/car/instrumentcluster?showETA=yes&maneuverLayout=leftAligned&showSpeedLimit=no"
+#define ALT_CLUSTER_URL_RGI_OFF_CENTER "maps:/car/instrumentcluster?showETA=yes&maneuverLayout=topAligned&showSpeedLimit=no"
+#define ALT_CLUSTER_URL_RGI_OFF_RIGHT  "maps:/car/instrumentcluster?showETA=yes&maneuverLayout=rightAligned&showSpeedLimit=no"
+#define ALT_CLUSTER_URL_RGI_ON         "maps:/car/instrumentcluster/map?showETA=no&maneuverLayout=no&showSpeedLimit=no"
 
 static const char *alt_cluster_url(void)
 {
-    return alt_rgi_active_get() ? ALT_CLUSTER_URL_RGI_ON : ALT_CLUSTER_URL_RGI_OFF;
+    if (alt_rgi_active_get() && alt_url_mode_get() == ALT_URL_MODE_MAP_WHEN_RGI) {
+        return ALT_CLUSTER_URL_RGI_ON;
+    }
+    switch (alt_layout_get()) {
+    case ALT_LAYOUT_LEFT:
+        return ALT_CLUSTER_URL_RGI_OFF_LEFT;
+    case ALT_LAYOUT_CENTER:
+        return ALT_CLUSTER_URL_RGI_OFF_CENTER;
+    default:
+        return ALT_CLUSTER_URL_RGI_OFF_RIGHT;
+    }
 }
 
 static int alt_show_ui_for_mode(uint32_t gen, int mode, const char *reason)
@@ -2672,37 +2888,6 @@ static void alt_kick_show_ui(uint32_t gen)
     alt_show_ui_for_mode(gen, alt_zone_mode_get(), "first-IDR");
 }
 
-static void appearance_on_cmd(uint16_t type, uint8_t flags, const uint8_t *payload, uint32_t len, void *ctx)
-{
-    (void)type; (void)flags; (void)ctx;
-    if (!payload || len < 3) return;                    /* [target][mode][setting] */
-    void *p = alt_params_new(1);
-    if (!p) return;
-    if (set_i64(p, "appearanceMode", (uint8_t)payload[1]) != 0 ||
-        set_i64(p, "appearanceSetting", (uint8_t)payload[2]) != 0) {
-        cf_rel(p);
-        return;
-    }
-    alt_ship(0, payload[0] ? "mapAppearanceUpdate" : "uiAppearanceUpdate", p);   /* Java → current session */
-}
-
-static void uictx_on_cmd(uint16_t type, uint8_t flags, const uint8_t *payload, uint32_t len, void *ctx)
-{
-    (void)type; (void)flags; (void)ctx;
-    if (!payload || len == 0) return;
-    void *p = alt_params_new(0);                        /* changeUIContext has no uuid */
-    if (!p) return;
-    char url[512];
-    size_t n = (len < sizeof(url) - 1) ? len : sizeof(url) - 1;
-    memcpy(url, payload, n);
-    url[n] = 0;
-    if (set_str(p, "url", url) != 0) {
-        cf_rel(p);
-        return;
-    }
-    alt_ship(0, "changeUIContext", p);   /* Java → current session */
-}
-
 /* Java's confirmed RGI presentation edge.  Cached like the zone mode so a
  * pre-session edge is applied on the first IDR; a live session re-targets the
  * Maps scene at once (alt_show_ui_for_mode resolves the current generation). */
@@ -2718,6 +2903,100 @@ static void rgi_on_cmd(uint16_t type, uint8_t flags, const uint8_t *payload, uin
              active, alt_cluster_url(), rc, ap_status(rc));
 }
 
+static void cfg_on_cmd(uint16_t type, uint8_t flags, const uint8_t *payload, uint32_t len, void *ctx)
+{
+    int en, url_mode, layout;
+    int url_changed;
+    (void)type; (void)flags; (void)ctx;
+    if (!payload || len < 3) return;
+    en = payload[0] ? 1 : 0;
+    url_mode = payload[1] ? 1 : 0;
+    layout = (payload[2] <= 2) ? (int)payload[2] : ALT_LAYOUT_RIGHT;
+    url_changed = (url_mode != alt_url_mode_get()) || (layout != alt_layout_get());
+    alt_user_enable_set(en);
+    alt_url_mode_set(url_mode);
+    alt_layout_set(layout);
+    if (url_changed && en) {
+        int rc = alt_show_ui_for_mode(0, alt_zone_mode_get(), "cfg-change");
+        (void)rc;
+        LOG_WARN(LOG_MODULE, "alt: cfg enable=%d url_mode=%d layout=%d -> cluster url %s rc=%d%s",
+                 en, url_mode, layout, alt_cluster_url(), rc, ap_status(rc));
+    } else {
+        LOG_INFO(LOG_MODULE, "alt: cfg enable=%d url_mode=%d layout=%d", en, url_mode, layout);
+    }
+}
+
+/* RTSP POST /command "suggestUI" (MHI3 libairplay 450.14.2 @ 0x5d080; CarKit
+ * _CARHandleSuggestUI).  When a navigation app on the phone (Apple Maps, Google
+ * Maps, Waze, Yandex Maps, 2GIS, etc.) activates or changes state, iOS sends
+ * {type:"suggestUI", params:{urls:[...]}} over the control channel.  Stock 210
+ * forwards unknown commands to CDIOManager, which logs -6714 kNotHandledErr and
+ * answers 422 Unprocessable Entity.
+ *
+ * Claim suggestUI before stock runs so the phone receives 200 OK, log the
+ * suggested URL list, and re-assert the cluster scene URL for the current RGI
+ * presentation when stream 111 is active (a pre-stream suggestion is satisfied
+ * by initialURL in /info and by first-IDR showUI once stream 111 starts). */
+static void alt_on_control(hook_control_ctx_t *control)
+{
+    char cmdName[64];
+    char list[384];
+    long n = 0;
+    uint32_t gen;
+
+    if (!control || control->handled || !control->command) return;
+    if (alt_wireless_blocked()) return;
+    if (alt_enabled < 0) alt_enabled = env_on("ALTSCREEN_HANDLE_ALT") ? 1 : 0;
+    if (!alt_enabled || !alt_user_enable_get()) return;
+    if (alt_syms_ok != 1) (void)alt_resolve();
+    if (!cf_getcstr) return;
+    if (cf_typeof && cf_strtype && cf_typeof(control->command) != cf_strtype()) return;
+    if (!cf_getcstr(control->command, cmdName, sizeof(cmdName), CFENC_UTF8)) return;
+    if (strcmp(cmdName, "suggestUI") != 0) return;
+
+    if (control->response_out) *control->response_out = NULL;
+    control->result = 0;
+    control->handled = 1;
+
+    list[0] = '\0';
+    if (control->params && cf_str && cf_getval && cf_arrcount && cf_arridx &&
+        (!cf_typeof || !cf_dicttype || cf_typeof(control->params) == cf_dicttype())) {
+        void *k = cf_str(0, "urls", CFENC_UTF8);
+        void *arr = k ? cf_getval((void *)control->params, k) : NULL;
+        if (k && cf_rel) cf_rel(k);
+        if (arr && (!cf_typeof || !cf_arrtype || cf_typeof(arr) == cf_arrtype())) {
+            size_t w = 0;
+            long i;
+            n = cf_arrcount(arr);
+            for (i = 0; i < n; i++) {
+                void *e = cf_arridx(arr, i);
+                char url[128];
+                int r;
+                if (!e || (cf_typeof && cf_strtype && cf_typeof(e) != cf_strtype()))
+                    continue;
+                if (!cf_getcstr(e, url, sizeof(url), CFENC_UTF8))
+                    continue;
+                r = snprintf(list + w, sizeof(list) - w, "%s%s", w ? "," : "", url);
+                if (r < 0 || (size_t)r >= sizeof(list) - w)
+                    break;
+                w += (size_t)r;
+            }
+        }
+    }
+
+    gen = alt_generation_for_session(control->session);
+    if (gen) {
+        int rc = alt_show_ui_for_mode(gen, alt_zone_mode_get(), "suggestUI");
+        LOG_WARN(LOG_MODULE,
+                 "suggestUI: phone suggests %ld urls [%s] session=%p -> showUI gen=%u url=%s rc=%d%s",
+                 n, list, control->session, (unsigned)gen, alt_cluster_url(), rc, ap_status(rc));
+    } else {
+        LOG_WARN(LOG_MODULE,
+                 "suggestUI: phone suggests %ld urls [%s] session=%p -> acked (deferred to first-IDR)",
+                 n, list, control->session);
+    }
+}
+
 static void alt_forward_failed(uint32_t gen, void *context)
 {
     (void)context;
@@ -2729,12 +3008,12 @@ static void altscreen_init(void)
     g_forward_available = altav_async_start(alt_forward_failed, NULL) == 0;
     if (!g_forward_available)
         LOG_ERROR(LOG_MODULE, "AltScreen forwarding worker create failed; advert suppressed");
+    alt_settings_reload();
     bus_on(CMD_ALT_ZOOM, zoom_on_cmd, NULL);
     bus_on(CMD_ALT_ZONE, zone_on_cmd, NULL);
-    bus_on(CMD_ALT_APPEARANCE, appearance_on_cmd, NULL);
-    bus_on(CMD_ALT_UICTX, uictx_on_cmd, NULL);
     bus_on(CMD_ALT_RGI, rgi_on_cmd, NULL);
-    LOG_INFO(LOG_MODULE, "AltScreen injector loaded (control negotiation + self-contained stream 111; cluster ZOOM/ZONE/APPEARANCE/UICTX/RGI registered; NIGHT mirrored from stock /info + SetNightMode)");
+    bus_on(CMD_ALT_CFG, cfg_on_cmd, NULL);
+    LOG_INFO(LOG_MODULE, "AltScreen injector loaded (control negotiation + self-contained stream 111; cluster ZOOM/ZONE/RGI registered; NIGHT mirrored from stock /info + SetNightMode)");
 }
 
 static void altscreen_shutdown(void)
@@ -2758,6 +3037,7 @@ const hook_module_def_t altscreen_module_def = {
     .airplay = {
         .on_setup_response = alt_on_setup_response,
         .on_server_info = alt_on_server_info,
-        .on_teardown = alt_on_teardown
+        .on_teardown = alt_on_teardown,
+        .on_control = alt_on_control
     }
 };

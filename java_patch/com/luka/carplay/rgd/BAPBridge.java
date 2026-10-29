@@ -472,9 +472,14 @@ public class BAPBridge {
     /** @return true only after RouteManager supplied a definite result.  A null singleton,
      *  null RouteManager or transient exception is PENDING and must be retried by startRetry. */
     private boolean tryStopNativeNavigation() {
-        /* Always issue the cluster-side abort signal first — at minimum it
-         * resets cluster UI state even if RouteManager is unavailable. */
-        if (!nativeAbortIssued && csRef != null) {
+        DSIResponseContainer container = csRef != null ? csRef.getDSIResponseContainer() : null;
+        boolean nativeRgRunning = container != null
+            && (container.isRgActive() || container.getRgRouteCalculationState() != 0);
+
+        /* Issue the cluster-side abort signal only when native RG is actually running
+         * or calculating; otherwise calling setRouteGuidanceAborted() and queueing
+         * RgStopGuidanceGeneralCommand on NavigationJobs races with CarPlay RGI startup. */
+        if (nativeRgRunning && !nativeAbortIssued && csRef != null) {
             try {
                 csRef.setRouteGuidanceAborted();
                 nativeAbortIssued = true;
@@ -499,6 +504,22 @@ public class BAPBridge {
                 logNativeStopEdge(2,
                     "Pre-gate: PENDING — RouteManager is null", true);
                 return false;
+            }
+            if (!nativeRgRunning) {
+                /* Scrub any stale savedRGActive=true in NVRAM from older builds that
+                 * forged DSIResponseContainer.setRgActive(true), so RoutePersistenceController
+                 * never auto-resumes a historical Audi Nav route on a subsequent stop/start. */
+                if (container != null && !container.isRgActive()
+                        && rm instanceof de.audi.tghu.navi.app.routeguidance.RouteManager) {
+                    try {
+                        ((de.audi.tghu.navi.app.routeguidance.RouteManager) rm)
+                            .notifyPowerListenerOnEnterState(2, 0);
+                    } catch (Throwable ignore) {}
+                }
+                nativeStopWasRouteAbsent = true;
+                logNativeStopEdge(3,
+                    "Pre-gate: DONE — native RG already inactive", false);
+                return true;
             }
             /* Skip work if no active route — stopRouteGuidance() is a heavy
              * CommandList walk; harmless on idle but spammy in the log. */
@@ -554,25 +575,15 @@ public class BAPBridge {
 
     /**
      * Force cluster acceptance flags so VC accepts RGI BAP messages.
+     * Uses ClusterService.setCarPlayRgiActive(active) instead of mutating
+     * DSIResponseContainer.setRgActive(true), so RoutePersistenceController
+     * never mistakes CarPlay RGI for an active Audi Nav route on standby entry.
      */
     private void forceClusterRouteInfoState(boolean active) {
         if (csRef == null) return;
 
         try {
-            DSIResponseContainer container = csRef.getDSIResponseContainer();
-            if (container != null) {
-                if (active) {
-                    if (!rgActiveForced) {
-                        rgActiveSaved = container.isRgActive();
-                        rgActiveForced = true;
-                    }
-                    container.setRgActive(true);
-                } else if (rgActiveForced) {
-                    rgActiveForced = false;
-                    container.setRgActive(rgActiveSaved);
-                    Log.i(TAG, "rgActive overlay released (restored " + rgActiveSaved + ")");
-                }
-            }
+            csRef.setCarPlayRgiActive(active);
         } catch (Exception e) {
         }
 
@@ -993,6 +1004,8 @@ public class BAPBridge {
                 || type0 == ManeuverMapper.MT_ARRIVE_DESTINATION_RIGHT);
             boolean nowApproach = isArrival
                 || (hasUsableDistance ? (distM <= prepareThreshold) : inApproachZone);
+            boolean showFollowStraight = com.luka.carplay.connectivity.CarPlaySettingsUi.isRgiFarStraight()
+                && !nowApproach;
             boolean approachChanged = hasUsableDistance
                 && (nowApproach != inApproachZone)
                 && showManeuver && hasManeuverList;
@@ -1000,6 +1013,7 @@ public class BAPBridge {
                 dirty |= RouteGuidance.State.DIRTY_DIST_MAN
                        | RouteGuidance.State.DIRTY_LANE_GUIDANCE
                        | RouteGuidance.State.DIRTY_MANEUVER_TEXT
+                       | RouteGuidance.State.DIRTY_MANEUVER_STATE
                        | RouteGuidance.State.DIRTY_MANEUVER_ICON;  /* BAP needs icon refresh for approach/follow */
                 inApproachZone = nowApproach;
                 Log.i(TAG, "Approach zone " + (nowApproach ? "ENTER" : "EXIT")
@@ -1030,9 +1044,11 @@ public class BAPBridge {
                     descriptorSent = true;
                 } else if (hasManeuverList) {
                     if (showManeuver) {
-                        /* Always expose the real next maneuver. Distance affects
-                         * only bargraph/action timing, never icon selection. */
-                        sendManeuvers(s);
+                        if (showFollowStraight) {
+                            sendFollowStreet();
+                        } else {
+                            sendManeuvers(s);
+                        }
                         descriptorSent = true;
                     } else if (shouldClearManeuver) {
                         sendNoSymbol();
@@ -1134,7 +1150,9 @@ public class BAPBridge {
                 } else if (shouldClearManeuver || (hasManeuverList && showManeuver)) {
                     int bapState;
                     if (showManeuver) {
-                        if (hasUsableDistance && bargraphDenominatorM > 0 && distM <= bargraphDenominatorM) {
+                        if (showFollowStraight) {
+                            bapState = 1;   /* Follow */
+                        } else if (hasUsableDistance && bargraphDenominatorM > 0 && distM <= bargraphDenominatorM) {
                             bapState = 4;   /* Action */
                         } else {
                             bapState = 2;   /* Prepare */
@@ -1221,7 +1239,7 @@ public class BAPBridge {
                 boolean iconChanged = false;
                 if ((dirty & crIconMask) != 0) {
                     if (showManeuver && hasManeuverList && !explicitClear && !shouldClearManeuver) {
-                        iconChanged = updateRendererIfChanged(s, bargraphDenominatorM);
+                        iconChanged = updateRendererIfChanged(s, bargraphDenominatorM, showFollowStraight);
                     }
                 }
                 /* Maneuver packets carry initial progress. Replays and distance
@@ -1858,6 +1876,7 @@ public class BAPBridge {
     private int lastCrIdx = -1;
     private int[] lastCrJunctionAngles;
     private boolean lastCrSnapToRoad;
+    private boolean lastCrFollowStraight;
 
     /* Link recovery: count consecutive renderer-side TCP send failures.  When the link to the
      * always-on renderer drops (it was re-exec'd by the framework, or lsd's link reset), drop
@@ -1908,6 +1927,7 @@ public class BAPBridge {
                 lastCrExitAngle = -9999;
                 lastCrDrivingSide = -1;
                 lastCrVer = -1;
+                lastCrFollowStraight = false;
                 boolean sent = rendererClient.sendManeuver(
                     RendererMapper.ICON_APPROACH, 0, 0, 0, null, 0, 0, 1);
                 noteRendererSendResult(sent);
@@ -1993,22 +2013,34 @@ public class BAPBridge {
 
     /** Send only changed maneuver geometry; viewport changes use their own command. */
     private synchronized boolean updateRendererIfChanged(RouteGuidance.State s, int bargraphDenominatorM) {
+        return updateRendererIfChanged(s, bargraphDenominatorM, false);
+    }
+
+    private synchronized boolean updateRendererIfChanged(RouteGuidance.State s, int bargraphDenominatorM,
+                                                         boolean followStraight) {
         if (rendererClient == null || !customRendererStarted) return false;
 
         try {
             int firstIdx = primaryManeuverIndex(s);
             if (firstIdx < 0 || s.maneuverCount == 0) return false;
-            int[] bap = mapManeuver(s, firstIdx);
-            RendererMapper.Mapping mapped = RendererMapper.map(bap[0], bap[1],
-                s.mDrivingSide[firstIdx], s.mType[firstIdx], s.mTurnAngle[firstIdx],
-                anglePresent(s, firstIdx), s.mJunctionAngles[firstIdx]);
+            RendererMapper.Mapping mapped;
+            if (followStraight) {
+                mapped = RendererMapper.map(ManeuverMapper.FOLLOW_STREET, ManeuverMapper.DIR_STRAIGHT,
+                    s.mDrivingSide[firstIdx], ManeuverMapper.MT_FOLLOW_ROAD, 0, false, null);
+            } else {
+                int[] bap = mapManeuver(s, firstIdx);
+                mapped = RendererMapper.map(bap[0], bap[1],
+                    s.mDrivingSide[firstIdx], s.mType[firstIdx], s.mTurnAngle[firstIdx],
+                    anglePresent(s, firstIdx), s.mJunctionAngles[firstIdx]);
+            }
             int icon = mapped.icon;
             int direction = mapped.direction;
             int exitAngle = mapped.exitAngle;
             int drivingSide = mapped.drivingSide;
             int[] junctionAngles = mapped.junctionAngles;
             int ver = s.mVer[firstIdx];
-            boolean sameGeometry = icon == lastCrIcon && direction == lastCrDirection
+            boolean sameGeometry = followStraight == lastCrFollowStraight
+                && icon == lastCrIcon && direction == lastCrDirection
                 && exitAngle == lastCrExitAngle && drivingSide == lastCrDrivingSide
                 && mapped.snapToRoad == lastCrSnapToRoad
                 && sameIntArray(junctionAngles, lastCrJunctionAngles);
@@ -2046,7 +2078,8 @@ public class BAPBridge {
 
             int perspective = 1;  /* always 3D — 2D/3D switch disabled for now */
 
-            boolean roadsOnly = icon == lastCrIcon && direction == lastCrDirection
+            boolean roadsOnly = !followStraight && !lastCrFollowStraight
+                && icon == lastCrIcon && direction == lastCrDirection
                 && exitAngle == lastCrExitAngle && drivingSide == lastCrDrivingSide
                 && mapped.snapToRoad == lastCrSnapToRoad
                 && firstIdx == lastCrIdx && ver == lastCrVer
@@ -2066,6 +2099,7 @@ public class BAPBridge {
                 lastCrIdx = firstIdx;
                 lastCrJunctionAngles = junctionAngles;
                 lastCrSnapToRoad = mapped.snapToRoad;
+                lastCrFollowStraight = followStraight;
                 rendererManeuverPending = false;
             }
             noteRendererSendResult(ok);

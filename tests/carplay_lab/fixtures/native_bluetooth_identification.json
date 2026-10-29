@@ -1,0 +1,12 @@
+{
+  "source": "Owned vphone native CoreAccessories iAP2, 2026-10-18",
+  "ios": "26.6.2",
+  "build": "23G90",
+  "connection_type": 2,
+  "endpoint_transport": 2,
+  "endpoint_protocol": 4,
+  "identification_rejected_body": "404000161d03000600061d01000a00071d001d021d03",
+  "corrected_observed_messages": ["aa05", "1d02", "5702"],
+  "physical_bluetooth_verified": false,
+  "wireless_carplay_verified": false
+}

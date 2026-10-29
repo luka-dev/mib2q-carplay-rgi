@@ -28,13 +28,13 @@ void BWE2Decoder::Initialize(const SFBOffsets* table, BWELPC* lpc)
 
 bool BWE2Decoder::GetActiveFlag(uint32_t channel) const
 {
-    // 0x00079730: (1 << ch) & bits[ch >> 6].  Our decoder caps at 16 channels.
+    // 0x00079730: (1 << ch) & bits[ch >> 6].  The port caps at 16 channels.
     return channel < kBWEMaxChannels && ((mActive >> channel) & 1u) != 0;
 }
 
 // The payload of one active channel: two 9-bit envelope fields and one 6-bit
 // scale per window group.  `groups` is always the FIRST channel's group count,
-// even for the second half of a channel pair - that is what the library reads.
+// even for the second half of a channel pair - that is what the original reads.
 //
 // The number of 6-bit reads is NOT clamped, deliberately: it is what keeps the
 // bitstream in step, and shortening it would desynchronise every later field
@@ -60,7 +60,7 @@ uint32_t BWE2Decoder::Deserialize(BitstreamReader& bs, uint32_t channel,
                                   SyntacticElement& element)
 {
     if (channel >= kBWEMaxChannels)
-        return kLimitTooManyChannels;
+        return kPortTooManyChannels;
 
     const uint32_t type = element.Type();
     mActive &= ~(1u << channel);
@@ -80,7 +80,7 @@ uint32_t BWE2Decoder::Deserialize(BitstreamReader& bs, uint32_t channel,
 
     const uint32_t second = channel + 1;
     if (second >= kBWEMaxChannels)
-        return kLimitTooManyChannels;
+        return kPortTooManyChannels;
     mActive &= ~(1u << second);
 
     const uint32_t flag0 = bs.GetBit();
@@ -137,16 +137,16 @@ uint32_t BWE2Decoder::DecodeFrame(const APACICSInfo& ics, float* spec,
     if (!GetActiveFlag(channel) || ics.maxSfb == 0)
         return kOk;
     if (mLPC == 0 || mTable == 0)
-        return kLimitNeedsBWE;
+        return kPortNeedsBWE;
 
     // The core's width in coefficients: the offset of the band maxSfb names,
     // times eight for a short block because that table is per window.
     //
-    // CLAMPED, and the library does not clamp it.  DecodeFrame is handed the
+    // CLAMPED, and the original does not clamp it.  DecodeFrame is handed the
     // PARSED APACICSInfo rather than the bitstream, so nothing here enforces
     // the bound APACICSInfo::Deserialize applies to maxSfb - and this indexes a
     // .rodata table with it, which is exactly the shape of the ProcessCac
-    // read-past-the-table this decoder already found.  A maxSfb past the table is
+    // read-past-the-table this port already found.  A maxSfb past the table is
     // impossible from any bitstream and is a hard error here rather than a
     // silent out-of-bounds load.
     uint32_t coreEnd;
@@ -169,7 +169,7 @@ uint32_t BWE2Decoder::DecodeFrame(const APACICSInfo& ics, float* spec,
 
     // `v83 = 1.0; vDSP_vfill(&v83, v87, 1, 1024)`.  Only the bins the two
     // envelope calls write are ever read back, so the fill only matters as the
-    // library's own initial state; it is kept because it is cheap and because
+    // original's own initial state; it is kept because it is cheap and because
     // a divisor of 1.0 is the one value that cannot turn a missing envelope
     // into an infinity.
     for (uint32_t i = 0; i < kFrameLength; ++i)
@@ -194,7 +194,7 @@ uint32_t BWE2Decoder::DecodeLong(const APACICSInfo& ics, float* spec,
     mLPC->MDCTCoefficientsToLPC(spec, kFrameLength, bwStart, 1);
     mLPC->LPCToMDCTSpectrum(mLPC->CoreLPC(), mEnv, bwStart);
 
-    // The two 9-bit header fields, which the library reads back out of its
+    // The two 9-bit header fields, which the original reads back out of its
     // envelope array as a pair of uint16 (`v85`, `v86`) and hands to
     // DecodeLSFsToLPCs as a `const unsigned short*`.
     const uint16_t idx[2] = { (uint16_t)mEnvelope[channel][0],
@@ -236,7 +236,7 @@ uint32_t BWE2Decoder::DecodeShort(const APACICSInfo& ics, float* spec,
     const uint32_t kWin = kFrameLength / kWindows;      // 128
     const uint32_t core = bwStart >> 3;                 // 48 or 32
 
-    // The library scans window by window and stops at the first non-zero; if
+    // The original scans window by window and stops at the first non-zero; if
     // all eight cores are silent there is nothing to replicate.
     bool any = false;
     for (uint32_t w = 0; w < kWindows && !any; ++w)

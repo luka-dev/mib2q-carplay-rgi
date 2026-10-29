@@ -133,9 +133,9 @@ Even a fitting pass would leave the original full40/untouched20 source protectio
 
 ## 📁 Implementation and next decision
 
-- [scene_joint_net.py](../../../tools/stereo-upmix-render/scene_joint_net.py): shared estimator, projection, declared effect and finite analysis/synthesis.
-- [test_scene_joint_net.py](../../../tools/stereo-upmix-render/test_scene_joint_net.py): signal, causality/state and gradient contracts.
-- [train_scene_joint_nas.py](../../../tools/stereo-upmix-render/train_scene_joint_nas.py): finite NAS runner, frozen catalog validation, monitoring and terminal report.
+- [scene_joint_net.py](RETIRED_TOOLS.md#tool-4f996c57d64f): shared estimator, projection, declared effect and finite analysis/synthesis.
+- [test_scene_joint_net.py](RETIRED_TOOLS.md#tool-e90d78658c0e): signal, causality/state and gradient contracts.
+- [train_scene_joint_nas.py](RETIRED_TOOLS.md#tool-e602dc3f4215): finite NAS runner, frozen catalog validation, monitoring and terminal report.
 
 The terminal result fails both rear fitting gates. Retain this run and diagnose target recoverability and the optimization/estimator mechanism before extending the same recipe. A follow-up should distinguish recoverable coherent rear content from ambiguous diffuse effects and compare target-informed operator reachability with estimator fitting on the same excerpts. Changing encoder, loss and dataset together would again obscure the cause. A future fitting pass would still require recording-disjoint authored data and protected-source/entry analysis before considering a hook port.
 

@@ -1,7 +1,7 @@
-# bench — does our decoder fit in real time on the head unit?
+# bench — does the port fit in real time on the head unit?
 
-Everything else about this decoder is about correctness. This is the one question that is about
-cost, and the answer is written up in [`../STATUS.md`](../STATUS.md), stage k. This
+Everything else about this port is about correctness. This is the one question that is about
+cost, and the answer is written up in [`../PORT_STATUS.md`](../PORT_STATUS.md), stage k. This
 directory is how it was obtained, so it can be obtained again.
 
 ## The instrument, and what it is not

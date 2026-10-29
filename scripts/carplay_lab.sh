@@ -18,6 +18,20 @@ case "$action" in
         exec python3 -m tests.carplay_lab.vphone.iap "$@" ;;
     mfi-probe)
         exec build/vphone-lab/venv/bin/python -m tests.carplay_lab.vphone.mfi_probe "$@" ;;
+    wireless-native)
+        if [[ "${1:-}" == build ]]; then
+            for option in "$@"; do
+                if [[ "$option" == --paired-altscreen ]]; then
+                    source scripts/build_hook_common.sh
+                    OUTDIR_REL=build/wireless-alt-qemu HOOK_WIRELESS=1 HOOK_AUDIO=0 \
+                        WIRELESS_ALT_QEMU=1 QNX_TOOLCHAIN_VARIANT=8.5 carplay_build_hook
+                    break
+                fi
+            done
+        fi
+        exec python3 -m tests.carplay_lab.vphone.wireless_native "$@" ;;
+    wireless-adapter)
+        exec python3 -m tests.carplay_lab.vphone.network_adapter "$@" ;;
     ethernet)
         exec python3 -m tests.carplay_lab.vphone.ethernet "$@" ;;
     queue-report)

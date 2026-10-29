@@ -564,6 +564,10 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
 
     public void updateRgActive(boolean flag) {
         this.logChannel.log(100000000, "ClusterService#updateRgActive( %1 )", flag);
+        if (!flag && this.carplayRgiActive) {
+            this.refreshRGIValid();
+            return;
+        }
         this.refreshRGIValid();
         this.clusterViewMode.refreshRGState();
         if (!flag) {
@@ -586,8 +590,8 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
     }
 
     private void refreshRGIValid() {
-        boolean flag = this.env.getContainer().isRgActive();
-        boolean flag1 = flag && this.rgiDataValid;
+        boolean flag = this.carplayRgiActive || this.env.getContainer().isRgActive();
+        boolean flag1 = flag && (this.carplayRgiActive || this.rgiDataValid);
         this.logChannel
             .log(
                 100000000, "ClusterService#refreshRGIValid() - rgActive: %1, rgiDataValid: %2", flag, this.rgiDataValid
@@ -1103,6 +1107,12 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
 
     public void triggerRefreshRGIValid() {
         this.refreshRGIValid();
+    }
+
+    private volatile boolean carplayRgiActive = false;
+
+    public void setCarPlayRgiActive(boolean flag) {
+        this.carplayRgiActive = flag;
     }
 
     public CombiBAPServiceNavi getCombiBAPListenerCombiService() {

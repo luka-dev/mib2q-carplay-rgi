@@ -27,10 +27,10 @@
 // the metadata helpers report 96000 Hz, 32 channels and frame length 0.  The
 // test asserts the +2 relationship from the library's own numbers.
 //
-// WHAT IS NOT PROVEN HERE.  Our decoder stops on two branches it will not guess:
+// WHAT IS NOT PROVEN HERE.  The port stops on two branches it will not guess:
 // apac::AudioSceneConfig (out of scope for CarPlay 5.1) and
 // apac::LoudnessDRCConfig (stage h).  The generated cookie takes the first, so
-// for it only the geometry is compared, plus the bit position at which our decoder
+// for it only the geometry is compared, plus the bit position at which the port
 // stops - and that position is checkable, because the fixture shows the library
 // accepts an AudioSceneConfig at exactly one offset in that neighbourhood.
 // The live cookie has neither, so it is compared end to end: every field, and
@@ -99,7 +99,7 @@ void check(const Expect& e)
     apac::GlobalConfig gc;
     uint32_t rc = gc.Deserialize(bs);
 
-    // Fields the library exposes, whatever branch our decoder stopped on.
+    // Fields the library exposes, whatever branch the port stopped on.
     eq(e.name, "profile",      gc.profileLevel.profile, e.profile);
     eq(e.name, "profileLevel", gc.profileLevel.level,   e.profileLevel);
     eq(e.name, "sampleRate",   gc.sampleRate,           e.sampleRate);
@@ -127,9 +127,9 @@ void check(const Expect& e)
         eq(e.name, "deserialized (+248)", gc.deserialized, e.flag248);
         eq(e.name, "bits consumed", gc.bitsConsumed, e.bitsUsed);
     } else {
-        // Our decoder stopped on a branch it will not guess.  Only these two are
+        // The port stopped on a branch it will not guess.  Only these two are
         // acceptable; anything else means the parse went wrong.
-        if (rc != apac::kLimitNeedsAudioScene && rc != apac::kLimitNeedsLoudnessDRC) {
+        if (rc != apac::kPortNeedsAudioScene && rc != apac::kPortNeedsLoudnessDRC) {
             fprintf(stderr, "\n%s: unexpected status %u (0x%x)\n", e.name, rc, rc);
             exit(1);
         }
@@ -245,7 +245,7 @@ int main(int argc, char** argv)
         apac::BitstreamReader bs(gen.cookie + gen.configOffset,
                                  (uint32_t)(gen.cookieLen - (size_t)gen.configOffset));
         apac::GlobalConfig gc;
-        assert(gc.Deserialize(bs) == apac::kLimitNeedsAudioScene);
+        assert(gc.Deserialize(bs) == apac::kPortNeedsAudioScene);
         assert(sceneProbes >= 5 && sceneOk >= 0);
         eq("generated", "bit position where the audio scene begins",
            gc.bitsConsumed, sceneOk);

@@ -26,6 +26,8 @@ def main() -> None:
         return data[offset : offset + size]
 
     expected_bytes = {
+        # CProcessHandler's kill-friendly selector and call/return seam.
+        0x1472E8: bytes.fromhex("000058e30500a0e10f10a0130910a003fc2effeb"),
         0x171C10: bytes.fromhex("f0452de90040a0e1"),
         0x171C38: bytes.fromhex("2f0ea0e3037095e70710a0e15f83feeb401084e2"),
         0x171C50: bytes.fromhex("03a1ffeb000056e3386084e5"),

@@ -17,7 +17,7 @@ from extract_amp_sharc_app import parse_blocks
 from audit_amp_output_bindings import loader_dm, SOURCE_SHA256, SOURCE_SIZE
 from audit_amp_b_config_control import config_crc
 
-LOADER = Path(__file__).resolve().parents[1]/'assets/soundamp/J525_8W0035465_SW0420_SHARC_SPI_bitrev.ldr.bin'
+LOADER = Path(__file__).resolve().parents[1]/'output/r2/soundamp/J525_8W0035465_SW0420_SHARC_SPI_bitrev.ldr.bin'
 IMAGE = Path(__file__).resolve().parents[3]/'Firmwares/SoundAmp/uPD70f3479_8W0035465_0420_H11/CodeFlash_24082026_172027.bin'
 RANGES = [
     (0x12D844, 0x12D94C, 'c3a7203aac9df26c895d227ab67675a81544ce2da925a2e23ffd7e7ec7f13ab2'),

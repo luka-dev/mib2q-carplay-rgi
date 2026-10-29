@@ -41,7 +41,7 @@ inline float LrvqZero()
 
 LRVQDecoder::LRVQDecoder() : mPrevMode(0)
 {
-    // The library leaves all of this uninitialised on its own stack.  A decoder
+    // The original leaves all of this uninitialised on its own stack.  A port
     // cannot: see the note in ResetPrediction, and the envelope note below.
     for (uint32_t i = 0; i < 1024; ++i) {
         mEnv[i] = 1.0f;
@@ -61,7 +61,7 @@ LRVQDecoder::LRVQDecoder() : mPrevMode(0)
 // FIRST channel carries the skip bit lets the second channel's `sameMode` reuse
 // predict from whatever was there.  That is a real uninitialised read in the
 // library, and it is also the only route by which the `-1` stage-1 sentinel
-// could ever reach a codebook index (see LrvqDeserialize).  Our decoder calls this
+// could ever reach a codebook index (see LrvqDeserialize).  The port calls this
 // from both, which is deterministic and is what the library itself does in the
 // one place it initialises at all.
 //
@@ -81,7 +81,7 @@ int32_t LRVQDecoder::DequantizeGain(uint16_t gainIndex, uint16_t gainMode,
                                     float* out)
 {
     const float t = (float)gainIndex / 511.0f;
-    // The library calls the FLOAT powf.  Our decoder evaluates the same power in
+    // The original calls the FLOAT powf.  The port evaluates the same power in
     // double and rounds once, because powf is not correctly rounded everywhere:
     // glibc/aarch64's is (checked against a 200-bit reference on all 1024
     // inputs, 0 disagreements), macOS's is off by one ULP on 6 of them, and
@@ -97,13 +97,13 @@ int32_t LRVQDecoder::DequantizeGain(uint16_t gainIndex, uint16_t gainMode,
 }
 
 // ------------------------------------------------ ltpToMdctSpectralEnvelope --
-// 0x9aee0.  The library builds the 2048-tap impulse response of
+// 0x9aee0.  The original builds the 2048-tap impulse response of
 // A(z) = 1 - g*z^-lag, takes a 2048-point real FFT magnitude, keeps 256 bins
 // and scales by 1/(1+g).  That has a closed form and the closed form is what
-// our decoder uses - it agrees with the library to 4.05e-06 relative over 136 192
+// the port uses - it agrees with the library to 4.05e-06 relative over 136 192
 // bins and saves a 2048-point transform and its 47 KiB of state.
 //
-// ONE case the closed form does not cover.  The library writes impulse[0] = 1
+// ONE case the closed form does not cover.  The original writes impulse[0] = 1
 // and THEN impulse[lag] = -g, so lag == 0 overwrites the 1.0f and the response
 // is the constant -g, whose magnitude is g at every bin.  lag is a 10-bit field
 // so 0 is perfectly reachable; the sweep in env_probe.cpp started at lag 1 and
@@ -137,14 +137,14 @@ int32_t LRVQDecoder::LtpToMdctSpectralEnvelope(uint16_t gainIndex, uint16_t lag,
 // magnitudes.  The `bool` picks the *_SHORT variants of the two stage-1 books
 // and nothing else - stage 2 is shared.
 //
-// The library stack-constructs an APACLRVQDecoder::LRVQLPC and an
+// The original stack-constructs an APACLRVQDecoder::LRVQLPC and an
 // APACLRVQDecoder::LPMDCT_LONG for this.  Neither overrides anything that runs
 // here (LRVQLPC's only overrides are Initialize, which throws, and the
 // destructors), so the concrete chain is apac::LSFTools' and apac::LPMDCTFilter's
-// and our decoder holds one of each as a member.
+// and the port holds one of each as a member.
 //
 // No bounds check is emitted on idx[0..4] and each book has exactly 512 rows,
-// so a 9-bit field is in range by construction rather than by check.  Our decoder
+// so a 9-bit field is in range by construction rather than by check.  The port
 // keeps it that way; the caller reads exactly 9 bits.
 int32_t LRVQDecoder::LsfsToMdctSpectralEnvelope(bool shortBooks,
                                                 const uint16_t idx[5],
@@ -168,7 +168,7 @@ int32_t LRVQDecoder::LsfsToMdctSpectralEnvelope(bool shortBooks,
 
     mLSF.LSF_To_LPC(lsf, mLPC);
 
-    // The library memsets impulse[17..511] and memcpys lpc[0..16] into a
+    // The original memsets impulse[17..511] and memcpys lpc[0..16] into a
     // 512-float stack buffer, which is exactly what LPCToSpecEnvelope does with
     // fftSize 512 and order 16.
     mLPMDCT.LPCToSpecEnvelope(mLPC, out, kLrvqEnvelopeBins);
@@ -215,7 +215,7 @@ int32_t LRVQDecoder::LrvqDeserialize(BitstreamReader& bs,
     if (err)
         return err;
 
-    // var_94 in the library, and it means two different things at two points:
+    // var_94 in the original, and it means two different things at two points:
     // before the VQ section "no VQ data follows, keep the previous channel's
     // work", and after it "an LTP envelope was decoded, fold it into env".  The
     // transition happens inside the LTP block.
@@ -438,7 +438,7 @@ int32_t LRVQDecoder::SpectrumDeserializeCPE(BitstreamReader& bs,
     }
 
     ZeroSpectrum(spec1);
-    // ics1's window sequence is read BEFORE the skip bit in the library, which
+    // ics1's window sequence is read BEFORE the skip bit in the original, which
     // matters only if the two aliased - they cannot.
     const bool short1 = ics1.windowSequence == 2;
     if (bs.GetBits(1)) {

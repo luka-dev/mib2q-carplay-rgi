@@ -20,14 +20,13 @@ fn main() {
         for source in sources {
             let object = output.join(format!("{}.o", source.replace(['/', '.'], "_")));
             let mut command = std::process::Command::new(&compiler);
-            command.args(["-std=c11", "-D_DEFAULT_SOURCE", "-fPIC", "-c", source, "-o"])
+            command
+                .args(["-std=c11", "-D_DEFAULT_SOURCE", "-fPIC", "-c", source, "-o"])
                 .arg(&object);
             if source == "probes/software_mfi_verify_qemu.c" {
                 command.args(["-Wall", "-Wextra", "-Werror"]);
             }
-            let compile = command
-                .status()
-                .expect("run QNX C compiler");
+            let compile = command.status().expect("run QNX C compiler");
             assert!(compile.success(), "QNX C shim compilation failed: {source}");
             objects.push(object);
             println!("cargo:rerun-if-changed={source}");

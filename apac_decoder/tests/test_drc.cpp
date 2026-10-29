@@ -10,19 +10,19 @@
 // themselves (include/apac/drc.h lists them with their addresses and sizes);
 // every bit of the payload is read by mpddrc::UniDrc::Deserialize, the MPEG-D
 // DRC parser Apple links in whole - 62 classes and 51 Deserialize members in
-// this binary.  That parser is not implemented, so there is no fixture of its
+// this binary.  That parser is not ported, so there is no fixture of its
 // output to compare against and this is not a differential test.
 //
-// What matters for the decoder that IS implemented is the bit accounting, and that
+// What matters for the decoder that IS ported is the bit accounting, and that
 // has exactly two cases:
 //
-//   no payload   the library returns 1 from DynRangeCompressor::Deserialize
+//   no payload   the original returns 1 from DynRangeCompressor::Deserialize
 //                without touching the reader.  This is the case every CarPlay
-//                frame takes, and the test checks our decoder moves the reader by
-//                zero bits in it - a decoder that consumed even one bit here
+//                frame takes, and the test checks the port moves the reader by
+//                zero bits in it - a port that consumed even one bit here
 //                would desynchronise every frame.
-//   a payload    our decoder must refuse, not guess.  The test checks it reports
-//                kLimitNeedsLoudnessDRC and, again, has not moved the reader -
+//   a payload    the port must refuse, not guess.  The test checks it reports
+//                kPortNeedsLoudnessDRC and, again, has not moved the reader -
 //                so the refusal names an exact bit position.
 //
 // The claim that the first case is the only reachable one is measured, not
@@ -30,7 +30,7 @@
 // in the running library and the whole capture decoded again
 // (reference/scratch/reach_shim.c).  Over all 3977 packets - 97 738 752 bytes
 // of float32 - the output is byte-identical to the unpatched decode, for both
-// return values.  STATUS.md, stage h, records that run.
+// return values.  PORT_STATUS.md, stage h, records that run.
 
 #include "apac/config.h"
 #include "apac/drc.h"
@@ -72,7 +72,7 @@ int main(void)
         const int32_t before = bs.BitsRemaining();
         const uint32_t rc = dec.Deserialize(bs);
         expectQuiet(bs, before, "APACDRCDecoder::Deserialize (no payload)");
-        // The library's literal `return 1` from the null-payload branch.
+        // The original's literal `return 1` from the null-payload branch.
         if (rc != apac::kBadValue) {
             printf("FAIL APACDRCDecoder::Deserialize returned %u, expected 1\n", rc);
             return 1;
@@ -118,7 +118,7 @@ int main(void)
     {
         apac::LoudnessDRCConfig cfg;
         cfg.Clear();
-        // The library only builds a compressor when it has none; here one
+        // The original only builds a compressor when it has none; here one
         // already exists and Initialize gave it a payload.
         cfg.initialized                = 1;
         cfg.compressor.hasPayload      = 1;
@@ -126,8 +126,8 @@ int main(void)
         apac::BitstreamReader bs(buf, (uint32_t)sizeof buf);
         const int32_t before = bs.BitsRemaining();
         const uint32_t rc = cfg.Deserialize(bs, apac::kHeaderPayloadConfig);
-        if (rc != apac::kLimitNeedsLoudnessDRC) {
-            printf("FAIL a DRC payload must report kLimitNeedsLoudnessDRC, got %u\n", rc);
+        if (rc != apac::kPortNeedsLoudnessDRC) {
+            printf("FAIL a DRC payload must report kPortNeedsLoudnessDRC, got %u\n", rc);
             return 1;
         }
         expectQuiet(bs, before, "LoudnessDRCConfig::Deserialize (payload present)");
@@ -140,7 +140,7 @@ int main(void)
         dec.compressor.payload.present = 1;
         apac::BitstreamReader bs(buf, (uint32_t)sizeof buf);
         const int32_t before = bs.BitsRemaining();
-        if (dec.Deserialize(bs) != apac::kLimitNeedsLoudnessDRC) {
+        if (dec.Deserialize(bs) != apac::kPortNeedsLoudnessDRC) {
             printf("FAIL the frame side must refuse a payload it cannot parse\n");
             return 1;
         }
@@ -159,7 +159,7 @@ int main(void)
         memcpy(copy0, ch0, sizeof ch0);
         memcpy(copy1, ch1, sizeof ch1);
         if (dec.DecodeFrame(planes)) {
-            printf("FAIL DecodeFrame should return false, as the library does\n");
+            printf("FAIL DecodeFrame should return false, as the original does\n");
             return 1;
         }
         if (memcmp(copy0, ch0, sizeof ch0) != 0 || memcmp(copy1, ch1, sizeof ch1) != 0) {
@@ -173,7 +173,7 @@ int main(void)
     // A cookie whose ancillary block sets the DRC flag must come back as a
     // refusal.  Anything else - kOk in particular - would mean the parser had
     // walked past a payload it never read.
-    assert(apac::kLimitNeedsLoudnessDRC >= apac::kStatusLimitBase);
+    assert(apac::kPortNeedsLoudnessDRC >= apac::kStatusPortBase);
     ++checks;
 
     printf("OK  %d checks: the DRC layer reads zero bits with no payload and "

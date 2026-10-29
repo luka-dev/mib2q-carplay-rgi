@@ -41,7 +41,7 @@ All decoder parameters must remain bit-identical to the anchor. Report curves, p
 
 ## Reproducibility and execution
 
-[Probe source](../../../tools/stereo-upmix-render/separator_state_supervision_probe.py) and [guarded PC runner](../../../tools/stereo-upmix-render/pc/run_separator_state_supervision_probe.ps1). Output: `D:\upmix\runs\separator_state_supervision_v1`, with `targets.pt`, `teacher.json`, `calibration.json`, `manifest.json`, two arm directories and final `complete.json`. Model checkpoints retain the ordinary baseline feature semantics; `targets.pt` is a training artifact, not an inference model input.
+[Probe source](RETIRED_TOOLS.md#tool-f4d611c0aad0) and [guarded PC runner](RETIRED_TOOLS.md#tool-ca95c6c6db55). Output: `D:\upmix\runs\separator_state_supervision_v1`, with `targets.pt`, `teacher.json`, `calibration.json`, `manifest.json`, two arm directories and final `complete.json`. Model checkpoints retain the ordinary baseline feature semantics; `targets.pt` is a training artifact, not an inference model input.
 
 The runner checks source, anchor and privileged-reference hashes, refuses an existing output/pending rapid queue/Python or rapid-daemon process, and acquires an exclusive GPU lease. Target optimization and the two continuations run sequentially on that one tenant. It releases only its own token. No package install, head-unit restart/deployment or Track A file change is included. Device int8 cost, full-chain latency, untouched instrument coverage and owner listening remain separate gates.
 
@@ -71,7 +71,7 @@ The audio continuation's small objective improvement over the .055586 anchor doe
 
 ### Independent CPU audit and target mismatch
 
-The [CPU auditor](../../../tools/stereo-upmix-render/audit_separator_state_supervision.py) replayed the saved targets through the original decoder (objective **.01671428**, within CPU/GPU tolerance of .016716), reloaded both student checkpoints, verified both decoders against the original anchor and recomputed audio/state losses, waveform scores and all frozen gates. All consistency checks passed.
+The [CPU auditor](RETIRED_TOOLS.md#tool-37e4d2438203) replayed the saved targets through the original decoder (objective **.01671428**, within CPU/GPU tolerance of .016716), reloaded both student checkpoints, verified both decoders against the original anchor and recomputed audio/state losses, waveform scores and all frozen gates. All consistency checks passed.
 
 It also measured decoder-visible state error as a descriptive check, **without changing the loss or promotion rule**. For each band, a rank-truncated SVD at relative singular-value threshold `1e−6` splits the concatenated local/shared-global error into a decoder row-space projection and an error in that band's null space. The first eleven four-bin decoders have rank **16** for 64 input coordinates; the next eleven rank **32**; the remaining 26 rank **64**.
 

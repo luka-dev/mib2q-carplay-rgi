@@ -26,7 +26,7 @@
 //
 // Every coefficient is X[q] * scalefactor, where X is the i^(4/3) table at
 // 0x003308c0.  Books 1..6 index it with NEGATIVE q; the library's table has a
-// mirrored negative wing in front of it and our decoder copies that wing rather
+// mirrored negative wing in front of it and the port copies that wing rather
 // than branching on the sign.  Escapes above 1023 use pow(v, 4/3) instead.
 //
 // Eight-short-window frames are coded band-interleaved.  Groups longer than one
@@ -44,7 +44,7 @@ namespace apac {
 namespace {
 
 // The largest spectrum the decoder has: offset[numBands] is 1024 for a long
-// block, and a short block stages at most 8 x 128.  The library's scratch is
+// block, and a short block stages at most 8 x 128.  The original's scratch is
 // 4104 bytes of stack; this is the same buffer, sized in floats.
 const uint32_t kScratchFloats = 1026;
 
@@ -175,16 +175,16 @@ bool SpectralData::Deserialize(BitstreamReader& bs, const APACICSInfo& ics,
             dst = scratch + base;
         }
 
-        // Defensive, and the one place this decoder does not reproduce the
-        // library: a staged group that does not fit the scratch buffer would
-        // smash the library's stack.  Unreachable from APACICSInfo, which only
+        // Defensive, and the one place this port does not reproduce the
+        // original: a staged group that does not fit the scratch buffer would
+        // smash the original's stack.  Unreachable from APACICSInfo, which only
         // ever groups eight-short frames, where coefPerWindow is 128.
         if (groupLen != 1 && (uint64_t)base + (uint64_t)coefPerWindow * groupLen
                                  > kScratchFloats)
             return true;
 
         uint32_t coef     = 0;      // floats written into dst so far
-        uint32_t lastBand = nrec;   // the library seeds this with nrec
+        uint32_t lastBand = nrec;   // the original seeds this with nrec
 
         if (nrec != 0) {
             lastBand = 0;
@@ -235,7 +235,7 @@ bool SpectralData::Deserialize(BitstreamReader& bs, const APACICSInfo& ics,
                                 dst[0] = dst[1] = dst[2] = dst[3] = 0.0f;
                             } else {
                                 const uint16_t r16 = win.code(t, clamp);
-                                // The library leaves the zero lanes at 0.0f
+                                // The original leaves the zero lanes at 0.0f
                                 // and multiplies all four by the scalefactor,
                                 // so a negative scalefactor yields -0.0 there.
                                 float q[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
@@ -317,7 +317,7 @@ bool SpectralData::Deserialize(BitstreamReader& bs, const APACICSInfo& ics,
                         }
                     }
                     // codebook 12..15 cannot occur: ScaleFactorData rejects
-                    // them, and the library falls straight through as well.
+                    // them, and the original falls straight through as well.
 
                     lastBand = b;
                     if (b >= band)

@@ -10,6 +10,29 @@ fn main() {
 
     let bt_mac = [0, 1, 2, 3, 4, 5];
     let ap_mac = [6, 7, 8, 9, 10, 11];
+    if std::env::var_os("MHI2Q_QEMU_UAPUTL_HANG").is_some() {
+        let marker = std::path::Path::new("/tmp/mhi2q_wifi_control.pending");
+        let pending = marker.exists();
+        let start = std::time::Instant::now();
+        let error = wifi_ie::install_on_qnx(bt_mac, ap_mac).unwrap_err();
+        assert!(error.starts_with("wifi control stopped:"), "{error}");
+        assert!(marker.exists());
+        assert!(start.elapsed() < Duration::from_secs(if pending { 1 } else { 5 }));
+        assert!(
+            wifi_ie::remove_on_qnx(bt_mac, ap_mac)
+                .unwrap_err()
+                .starts_with("wifi control stopped:")
+        );
+        eprintln!(
+            "[wifi-ie-qemu] {}=ok",
+            if pending {
+                "quarantine across generation"
+            } else {
+                "timeout and no retry"
+            }
+        );
+        return;
+    }
     wifi_ie::install_on_qnx(bt_mac, ap_mac).expect("initial custom IE install");
     eprintln!("[wifi-ie-qemu] initial=ok");
     let active = Arc::new(AtomicBool::new(true));

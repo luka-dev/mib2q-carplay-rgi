@@ -25,7 +25,7 @@ from inspect_amp_visa import load_shortwords, decode
 class RealSpectralLayoutTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        raw = (ROOT / 'assets/soundamp/J525_8W0035465_SW0420_SHARC_SPI_bitrev.ldr.bin').read_bytes()
+        raw = (ROOT / 'output/r2/soundamp/J525_8W0035465_SW0420_SHARC_SPI_bitrev.ldr.bin').read_bytes()
         source = (ROOT.parents[1] / 'Firmwares/SoundAmp/uPD70f3479_8W0035465_0420_H11/CodeFlash_24082026_172027.bin').read_bytes()
         if hashlib.sha256(raw).hexdigest() != BITREV_SHA256 or hashlib.sha256(source).hexdigest() != SOURCE_SHA256:
             raise AssertionError('audited firmware hashes required')

@@ -1,12 +1,12 @@
 # Call and Siri Routing
 
-*How the hook's buffered type-103 media stream shares the head unit's main-audio route with stock CarPlay telephony, Siri and realtime media: the device map, the route-ownership rules in `hook/audio/media_route.h`, the PCM I/O hardening around it, and the never-negative write contract with stock dio. Owner-confirmed closed on the current vehicle setup (2026-09-17).*
+The buffered media route shares the head unit with stock calls, Siri and realtime media. This guide defines stream priority, PCM I/O and feedback ownership.
 
 ---
 
-## 📋 Status
+## 📋 Current behavior
 
-Implemented 2026-09-10, host-tested, then confirmed by the owner on the car: mode transitions including music ↔ calls/Siri are closed (2026-09-17) `[car]`. No voice codec, microphone PCM, upmix, LFE or loudness path was changed by this work. The detailed per-case vehicle checklist below remains the regression recipe.
+The hook advertises 24 kHz voice/call/microphone formats and 48 kHz navigation announcements. `ann3_dio_ann` and `ann4_dio_voice` receive fixed +5 dB gain with a soft knee above −2.5 dBFS. Music upmix is restricted to media. Format definitions are in [audio_hook.c](../../hook/audio/audio_hook.c); the matching driver geometry is in [deva-ctrl-qc](../stock-patches/deva-ctrl-qc.so.md).
 
 ## 🔗 What stock does with each stream
 
@@ -32,7 +32,7 @@ Sources: `AUDIO_CALL_ROUTING`, `AUDIO_5_1_STATE` §22
 
 ## ⚙️ Route ownership rules
 
-The race that motivated this: a retained media QSA handle used to schedule a Media declaration 50 ms after stock close without knowing whether phone/Siri had started, and before checking whether 103 was playing — a paused 103 could overwrite a newer Telephony declaration; teardown also cleared its flag under a lock but called tornDown after unlocking.
+Stock main-audio ownership takes priority over hook media-route claims throughout Prepare, Stop and teardown.
 
 ```mermaid
 stateDiagram-v2
@@ -78,17 +78,13 @@ Sources: `AUDIO_CALL_ROUTING`
 
 ## 🚫 Never return a negative to stock
 
-Core dump 2026-09-19 (`dio_manager.core.gz`, uptime 00:01:44): stock `CAudioOutputThread::thread` (libairplay `+0x4bcb0`, main type 100) died in libc `memset` with `r4 = 0xffffffd1` (−47 = `ECANCELED`). Stock `CQNXSoundIF::write` (`+0x484c8` / `+0x471bc`) returns a negative errno unchanged; the output thread treats it as an unsigned byte count, and `RTPJitterBufferRead(jb, buf + v6 + 47, -47)` memsets ~4 GB. libasound itself never returns negative from `snd_pcm_plugin_write` except `-EINVAL`.
-
-Fix **[code]**: `spa_stock_write_result()` (`hook/audio/audio_hook.c:3769-3774`) — every bridge failure becomes a stock-native short write `0`; a deliberately cancelled fragment reports `size` consumed with errno `ECANCELED` so stock keeps pacing instead of spinning on its 30 ms select. Pinned by `tests/audio_interposer_test.c`. Trap entry in [Landmines](../LANDMINES.md).
+Stock `CAudioOutputThread` consumes the write result as a byte count. Preserve the bridge contract: `spa_stock_write_result()` converts failures into stock-native short writes; deliberately cancelled fragments report consumed size with `ECANCELED` to preserve pacing. Negative errno values must not reach the stock byte-count consumer. [audio_interposer_test.c](../../tests/audio_interposer_test.c) covers this boundary.
 
 Sources: `AUDIO_CALL_ROUTING`
 
 ## 🔧 Tests and the vehicle checklist
 
 Host: `scripts/run_tests.sh` (includes `tests/media_route_test.c`, `pcm_io_test.c`, `media_transport_test.c`, `receiver_wait_test.c`); `scripts/test_audio_interposers.sh` compiles the real `audio_hook.c` with mocked QSA/CF/AirPlay (run with `SANITIZE=address,undefined` or `thread`). Coverage: music→call→resume, cancelled/failed/duplicate Prepare, phone/Siri overlap, cold 103 during a call, pause, teardown 103 during a call, capacity overflow, 20,000 concurrent iterations per thread, 64 concurrent SETUP/teardown and 32 late-SETUP cases. None of this exercises native ARM code, real QSA timing or audible playback.
-
-On-unit partial validation 2026-09-10 (hook `55acdb1d…`): ~207 s music, four AAC/APAC switches, 14 FLUSH, 49 QSA health snapshots with no underrun/write/recovery failure; both `QSA_IO_ABORT` error 47 events were teardown cancellations (stop 70/66 ms).
 
 Vehicle regression recipe: incoming answer/reject, outgoing, remote/local hangup, Siri, phone foreground/background, reconnect mid-call; check mic and remote voice, then music resume (including deliberately paused). Between `AUDIO_ROUTE action=stock_begin phase=prepare audio_type=3/4` and `stock_end phase=stop_done` there must be **no** hook `action=request` or `action=release`. Also: kill the APAP TCP sender → `BUFFERED_TRANSPORT_FAILED`, then fresh SETUP → new generation.
 
@@ -100,3 +96,5 @@ Merged originals were removed from the tree after this note absorbed them; they 
 
 - `AUDIO_CALL_ROUTING` — the call/Siri priority design, hardening passes, QSA re-entry evidence, test coverage and the negative-return core analysis.
 - `AUDIO_5_1_STATE` §22 — the cold-connect media-route callback and the stock→hook inverse transition that this ownership machine completes.
+
+Earlier crash analysis and dated validation are in the [archived routing record](../archive/snapshots-2026-10-29/audio/CALL_AND_SIRI_ROUTING.md).

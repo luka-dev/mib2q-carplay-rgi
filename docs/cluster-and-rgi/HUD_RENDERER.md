@@ -312,7 +312,7 @@ Historical notes, not current code:
 - [VC FPK State Machine](VC_FPK_STATE_MACHINE.md): the VC states the HUD and KDK depend on.
 - [iAP2 Route Guidance TLVs](IAP2_ROUTE_GUIDANCE_TLVS.md): the wire fields behind every maneuver packet.
 - [Cluster Video Encoder](../altscreen-and-video/CLUSTER_VIDEO_ENCODER.md): the stock cluster video path next to the HUD.
-- [Archive and History](../reference/ARCHIVE_AND_HISTORY.md): earlier HUD/renderer designs and why they were dropped.
+- [Archive and History](../reference/archive/ARCHIVE_AND_HISTORY.md): earlier HUD/renderer designs and why they were dropped.
 
 ## 📚 Sources
 

@@ -13,7 +13,7 @@ BWELPC::BWELPC()
     Initialize();
 }
 
-// BWELPC::Initialize, 0xb1030.  The library's body is: apac::LSFTools::
+// BWELPC::Initialize, 0xb1030.  The original's body is: apac::LSFTools::
 // Initialize(), which sizes the six float vectors and builds the two
 // apac::LPCodeBook records out of the descriptor pair at 0x00425ad8 and then
 // calls Reset(); then six `new apac::LPMDCTFilter` with fftSize taken from
@@ -55,7 +55,7 @@ uint32_t BWELPC::FFTSizeFor(uint32_t n)
     return 1024;
 }
 
-// Two objects standing in for the library's six.  See the header for why that
+// Two objects standing in for the original's six.  See the header for why that
 // is observationally identical, and for what it costs: the Initialize below
 // rebuilds ~768 sin/cos whenever the geometry changes between frames, which is
 // +34 % per channel on an alternating stream.  This function is the whole of
@@ -97,7 +97,7 @@ bool BWELPC::DecodeLSFsToLPCs(const uint16_t idx[kBWELsfBooks])
     return true;
 }
 
-// BWELPC::MDCTCoefficientsToLPC, 0xb0e10.  The library allocas
+// BWELPC::MDCTCoefficientsToLPC, 0xb0e10.  The original allocas
 // (4 * order + 19) & 0x7fff0 bytes for the autocorrelation - 80 for order 16 -
 // and hands that buffer to apac::LPMDCTFilter::MDCTToAutoCorr with the argument
 // order (spec, r, hop, blocks, len); `len` is also what selects the filter.

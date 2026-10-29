@@ -23,7 +23,7 @@ from amp_second_b_control import load_control_inventory, target_overlay, MASTER
 from amp_complex_path import load_calibrated_fir
 
 ROOT=Path(__file__).resolve().parents[2]
-AUDIT_DIRECTORY=ROOT/'assets/soundamp/remaining-blocks-20260920-v3'
+AUDIT_DIRECTORY=ROOT/'output/r2/soundamp/remaining-blocks-20260920-v3'
 FACTORY_VERSION='explicit-e2e-diagnostic-v3'
 POINTER_VARIANTS=('default','20:3')
 SPECTRAL_CHOICES=('neutral_diagnostic','retained_calibration')

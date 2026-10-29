@@ -1,5 +1,8 @@
 {
     global:
+        mhi2q_wireless_iap2_receive;
+        mhi2q_wireless_iap2_outgoing;
+        mhi2q_wireless_iap2_nmea;
         HTTPServerCreate;
         HTTPMessageReadMessage;
         SocketWriteData;
@@ -15,6 +18,11 @@
         SocketRecvFrom;
         sendto;
         close;
+        RTPJitterBufferInit;
+        RTPJitterBufferRead;
+        RTPJitterBufferFree;
+        RTPJitterBufferReset;
+        RTPJitterBufferPutBusyNode;
         AirPlayAudioFormatToASBD;
         AirPlayCopyServerInfo;
         AirPlayReceiverServerPlatformCopyProperty;
@@ -23,6 +31,7 @@
         AirPlayReceiverSessionSetup;
         AirPlayReceiverSessionTearDown;
         AirTunesServer_EnsureCreated;
+        AudioSessionGetSupportedInputFormats;
         AudioSessionGetSupportedOutputFormats;
         AudioStreamPrepare;
         AudioStreamStop;

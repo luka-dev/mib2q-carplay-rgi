@@ -14,7 +14,7 @@ Families:
      field values, so the NEGATIVE WING of the i^(4/3) table (books 1..6 index
      it at -4 .. -1) is reached deliberately and not by luck
   C  codebook 11's escape, every prefix length k = 0..8, including magnitudes
-     above 1023 where the library leaves the table for pow(v, 4/3)
+     above 1023 where the original leaves the table for pow(v, 4/3)
   D  mixed record sets, including codebook-0 runs (whole bands zeroed) and a
      maxSfb below numBands, which leaves a tail to zero
   E  the real 48 kHz LONG layout, 49 bands, 1024 coefficients
@@ -133,7 +133,7 @@ def randbuf(n):
 def mkrecords(maxsfb, maxrec, zerop=0.25):
     """Partition maxsfb bands into at most maxrec (codebook, run) records.
 
-    A run of ZERO would be fatal: the library zeroes a codebook-0 band with a
+    A run of ZERO would be fatal: the original zeroes a codebook-0 band with a
     do/while that decrements by four and stops only on exactly zero, so an
     empty run runs away and writes over everything.  APACScaleFactorData
     rejects a zero run, and so must every case here.
@@ -265,7 +265,7 @@ for n in (1, 2, 3, 4, 7, 8, 16, 32, 64):
 emit(0, 15, 1, 1, OFF_15x8, [1], [0 | (15 << 8)], randscf(15), randbuf(64))
 emit(2, 14, 1, 0x00000008, OFF_SHORT, [1], [0 | (14 << 8)], randscf(14), randbuf(64))
 # maxSfb below numBands: a tail of bands the records never reach, which the
-# library zeroes with the trailing memset
+# original zeroes with the trailing memset
 for maxsfb in (2, 5, 9, 13):
     n, rec = mkrecords(maxsfb, 15)
     emit(0, maxsfb, 1, 1, OFF_15x8, [n], rec, randscf(15), randbuf(384))

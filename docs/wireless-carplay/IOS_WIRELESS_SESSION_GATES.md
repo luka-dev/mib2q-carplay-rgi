@@ -77,7 +77,7 @@ All iOS 27 addresses below are unslid ARM64 virtual addresses from build
   not a separately verified numeric argument.
 
 IDA decompilation was checked against ARM64 instructions for the decisive
-property names. Extracts are in [output/ios_static_audit](../../wireless/output/ios_static_audit).
+property names. Extracts are in output/ios_static_audit (`wireless/output/ios_static_audit`; local generated artifact).
 Imported prototypes in these extracts are incomplete: `MEMORY[...]()` calls
 must not be treated as accurate C ABI declarations.
 

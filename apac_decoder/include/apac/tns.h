@@ -5,7 +5,7 @@
 // APACTNSData - temporal noise shaping: the per-filter parcor coefficients in
 // the bitstream, and the all-pole filter they drive along the spectrum.
 //
-// Reference: libSPF_CP_PlugInWrapper.so (Pioneer SPHERA 1.030010)
+// Original: libSPF_CP_PlugInWrapper.so (Pioneer SPHERA 1.030010)
 //
 //   0x000aed10  APACTNSData::APACTNSData(APACInstanceConfig&)
 //   0x000aedc0  APACTNSData::ParseTNSData(TBitstreamReader<unsigned>&, const APACICSInfo&)
@@ -43,7 +43,7 @@ namespace apac {
 
 // 23 bytes.  `coef` holds INDICES into apac::tables::kTNSCoefficients, already
 // combined as (coefRes << 4) | (value + 8) by the parser - the same byte the
-// library stores, so a filter record can be handed straight to Apply.
+// original stores, so a filter record can be handed straight to Apply.
 struct TNSFilter {
     uint8_t direction;      // +0  1 = filter downwards, from the top band
     uint8_t length;         // +1  extent in scalefactor bands
@@ -68,7 +68,7 @@ struct TNSData {
     // gives 0 / 0, which switches TNS off for every band.
     void Configure(uint32_t sampleRate);
 
-    // Returns TRUE on ERROR, the library's convention.  The only error is a
+    // Returns TRUE on ERROR, the original's convention.  The only error is a
     // filter whose band length is zero.  Does not touch `present`.
     bool ParseTNSData(BitstreamReader& bs, const APACICSInfo& ics);
 

@@ -60,11 +60,8 @@ Sources: `SCENE_ENGINE`
 
 | Property | Value |
 |---|---|
-| Cell pitch | 33 source px like the stock HUD, glyph size never changes (`Pitch = 33`, `Padding = 8`) |
-| Capacity | `floor((min(w, 328) − 16) / 33)`, capped at 8: 5 cells in the 210 px popup, 8 in the 328 px frame |
-| Glyphs | Stock HUD `lg_dr_*` geometry: 5 px shaft, 11 px heads (5.5 px long, 7 px for straight), 26 px tall (y 3..29), the shaft rises high before the turn; a cell's arrows are centred as a whole, so a turn's shaft sits off-centre |
-| Combined cells | Like the HUD `kurz`/`lang` variants: a branch with a smaller turn straight ahead or to the same side in the cell is lowered (90° by 6 px, 135° by 8, U-turn by 9) or, at 45°, leaves the shaft lower and wider |
-| Dividers | Between lanes only: 2 px white, dashed 8/4 over the full 32 px row (stock r0764/r0765 screens) |
+| Cell pitch | 36 source px, glyph size never changes (`Pitch = 36`, `Padding = 8`) |
+| Capacity | `floor((min(w, 328) − 16) / 36)`: 5 cells in the 210 px popup, 8 in the 328 px frame (`lane_panel.cpp:152`) |
 | Panel height, feather | 32 px, top feather 12 px, side fade 8 px (`maneuver_render/lane_panel.h:11`) |
 | Order | Sorted by position when all positions are known and unique; otherwise received order, nothing invented |
 | Overflow | One end cell becomes `…`. Keep the end nearest to a best recommendation; ties/default keep the right end (the verified HUD fallback) |

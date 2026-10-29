@@ -1,5 +1,6 @@
 /* QEMU-only fake for the MU1316 custom-IE CLI. Never deployed. */
 #include <fcntl.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -11,6 +12,13 @@ struct state {
 };
 
 int main(int argc, char **argv) {
+    if (getenv("MHI2Q_QEMU_UAPUTL_HANG")) {
+        int started = open("/dev/shmem/wifi_ie_hang_started", O_WRONLY | O_CREAT | O_EXCL, 0600);
+        if (started < 0) return 8; /* A second command must never reach here. */
+        close(started);
+        signal(SIGTERM, SIG_IGN);
+        for (;;) pause();
+    }
     int fd = open("/dev/shmem/wifi_ie_probe_state", O_RDWR | O_CREAT, 0600);
     if (fd < 0) return 2;
     struct state s = {0};

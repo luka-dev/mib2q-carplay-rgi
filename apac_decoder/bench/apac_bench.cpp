@@ -2,7 +2,7 @@
  * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
-// apac_bench - how long the APAC decoder takes per packet, on the host and on the
+// apac_bench - how long the APAC port takes per packet, on the host and on the
 // target, driven by the live capture rather than by synthetic input.
 //
 // WHAT IT MEASURES.  Five passes over the same 3980-record blob that
@@ -870,7 +870,7 @@ int main(int argc, char** argv)
     // ---- where the time goes inside a packet -----------------------------
     //
     // The sink split above says how much of a packet is transform; this says
-    // how much of the transform is the FFT, which is the one part of our decoder
+    // how much of the transform is the FFT, which is the one part of the port
     // that is not bit exact and therefore the one part free to change.  Both
     // pieces are driven directly, at the long-block size and six times over -
     // one packet's worth for this stream, whose window sequence is LONG on most
@@ -1025,12 +1025,12 @@ int main(int argc, char** argv)
             steady[k] = (best == ~0ull) ? 0 : best;
         }
 
-        // 4. The transient.  The library keeps six persistent LPMDCTFilters;
-        //    this decoder keeps TWO and re-Initializes on demand - a deliberate
+        // 4. The transient.  The original keeps six persistent LPMDCTFilters;
+        //    this port keeps TWO and re-Initializes on demand - a deliberate
         //    190 KiB saving that is observationally identical but not free in
         //    time, because Initialize rebuilds the FFT twiddles.  A stream whose
-        //    geometry ALTERNATES between frames pays that on every call, so
-        //    our real worst case is not the steady-state one.  Measured by
+        //    geometry ALTERNATES between frames pays that on every call, so the
+        //    port's real worst case is not the steady-state one.  Measured by
         //    alternating the two long shapes, which is the dearest pair.
         uint64_t alternating = 0;
         if (pick[0] >= 0 && pick[1] >= 0) {
@@ -1170,7 +1170,7 @@ int main(int argc, char** argv)
         // converted correctly in the same run.  The host cannot reproduce it,
         // with the conversion forced on or off.  Until that is understood,
         // this section publishes what it measured and the conversion is done
-        // in STATUS.md with the constant the calibration printed; the live
+        // in PORT_STATUS with the constant the calibration printed; the live
         // value is echoed here so the log says whether it was still intact.
         printf("\n  composed onto the measured worst packet (%llu ticks),"
                " five BWE channels"

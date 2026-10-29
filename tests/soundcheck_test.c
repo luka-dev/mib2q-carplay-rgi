@@ -126,42 +126,12 @@ static void test_observe_and_apply_are_separate(void)
             (rendered[i] >= 0 ? 0.5f : -0.5f)));
 }
 
-/* take_gains + scale_s16 (the upmix's path) is apply_s16 bit for bit, ramp
- * included; unity and disabled hand out nothing. */
-static void test_taken_gains_match_apply(void)
-{
-    static const float unity[3] = { -16.0f, -1.0f, -2.0f };
-    static const float quiet[3] = { -6.0f, -1.0f, -2.0f };
-    spa_soundcheck_config_t config;
-    spa_soundcheck_state_t a, b;
-    int16_t x[1500 * 2], y[1500 * 2];
-    float gains[1500];
-    size_t i;
-
-    for (i = 0; i < 1500 * 2; i++) x[i] = y[i] = (int16_t)((int)(i * 7919u % 60001u) - 30000);
-    spa_soundcheck_default_config(&config);
-    spa_soundcheck_init(&a, &config, 1, 1, -16);
-    spa_soundcheck_init(&b, &config, 1, 1, -16);
-    assert(spa_soundcheck_take_gains(&a, gains, 1500) == NULL);       /* no gain yet */
-    assert(spa_soundcheck_update_main(&a, 1, unity) && spa_soundcheck_update_main(&b, 1, unity));
-    assert(spa_soundcheck_take_gains(&a, gains, 1500) == NULL);       /* unity */
-    assert(spa_soundcheck_update_main(&a, 1, quiet) && spa_soundcheck_update_main(&b, 1, quiet));
-    spa_soundcheck_apply_s16(&b, y, 1500, 2);                         /* 960-frame ramp, then flat */
-    assert(spa_soundcheck_take_gains(&a, gains, 1500) == gains);
-    spa_soundcheck_scale_s16(x, 1500, 2, gains);
-    assert(memcmp(x, y, sizeof(x)) == 0 && a.currentGain == b.currentGain);
-    config.enabled = 0;
-    spa_soundcheck_init(&a, &config, 1, 1, -16);
-    assert(spa_soundcheck_take_gains(&a, gains, 1500) == NULL);
-}
-
 int main(void)
 {
     test_pioneer_main_gain();
     test_metadata_and_ramp();
     test_bypass_fallback_and_limiter();
     test_observe_and_apply_are_separate();
-    test_taken_gains_match_apply();
     puts("OK  Pioneer main loudness, smooth metadata changes, exact bypass, opt-in RMS/peak guards");
     return 0;
 }

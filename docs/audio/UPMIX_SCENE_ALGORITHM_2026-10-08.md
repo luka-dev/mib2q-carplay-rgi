@@ -1,499 +1,104 @@
-# Stereo-to-rear scene algorithm (2026-10-08, v2)
+# SCENE stereo-to-surround algorithm
 
-*The algorithm proposed for building a strong, stable rear scene from the two front channels, with relocation (transfer) out of the front. Written 2026-10-08 as a design, before any code, host run or car listen; v2 after three adversarial reviews (DSP mathematics, stability on real music, relocation/protection/learning). It rests on the [rework baseline](UPMIX_REWORK_BASELINE_2026-10-07.md); evidence tags are the baseline's ([car] > [log] > [offline] > [model] > [inferred]).*
+This reference describes the implemented SCENE renderer and fine mask net c. The filename is retained for existing source references; the original proposal and numbered implementation journal are in the [historical design paper](../archive/internal-reference-2026-10-29/audio/UPMIX_SCENE_ALGORITHM_2026-10-08.md).
 
-> **Read §13 first if the goal is a second stage.** §13 (added the same day after a four-lens review of what "excellent" requires) overrides §4, §5, §10 and §11 wherever they conflict: at the v2 defaults the front remainder reaches the ears ~17 ms before the rear copy (corrected 2026-10-17 from ~24 ms, which counted the amp's rear-bus delay twice, §18) and precedence resolves α 0.5–0.7 as "wider"; the stage needs rear-lead or α ≥ 0.9, cluster membership instead of per-cell weights, energy-conserving transfer matched at the head, the bleed cancel on from the first listen, a lookahead program limiter, and a lower duck floor under rear-lead.
+SCENE is active on eligible stereo media in the six-channel path. MMI controls Off, Normal and Intense. It does not process discrete APAC 5.1 as stereo. Installation gates, settings and signal-chain order are defined in [Audio runtime](STEREO_TO_5_1_UPMIX.md); timing and benchmarking are in [Compute budget](UPMIX_COMPUTE_BUDGET.md).
 
----
+## Engine contract
 
-## 1. Contract
+The engine accepts interleaved stereo float32 at 48 kHz and emits `L R C LFE Ls Rs`. Its own C and LFE outputs are zero; the surrounding upmix backend supplies bass processing. Synthesized stereo has no centre feed, while the separate discrete path preserves the source centre channel.
 
-- Input: stereo PCM 48 kHz (type-100 realtime or type-103 AAC stereo). Output: `L R C LFE Ls Rs`; C = 0 (the amp derives it), LFE = the existing V2 assist, unchanged. (Since 2026-10-17 the hook adds a centre stage outside this spec: [Stereo to 5.1, Centre](STEREO_TO_5_1_UPMIX.md#centre).)
-- Rear = a **structural decomposition** of the stereo signal into a coherent primary with a direction and an orthogonal residual, rendered with **static or slow gains**. No classifier decides *whether* a cell goes behind; no slots, holds, owners, latches or attack detectors anywhere in the rear path.
-- The only asymmetry allowed is the safe one: **protection acts within one hop, permission opens slowly**. Every other gain is symmetric and slow.
-- Front = the bit-exact delayed input minus a **transferred** fraction α of the coherent off-centre primary (energy conserved: what leaves the front arrives behind at the same level). The ambient residual and the air copy are never subtracted from the front.
-- Protection of a dry centred lead, main bass and drum core is **geometric** (they are centred and coherent, so they land in the primary with pan ≈ 0 and never enter the residual or the off-centre object); the cases geometry cannot solve (a vocal sharing a cell with a panned instrument, wide or doubled vocals) are handled by a **floored learned duck**, on by default at −6 dB in the body band.
-- Learning is **bounded**: a learned component may only attenuate (duck) or scale gains within fixed limits; it can never create, gate or hold a rear decision.
+Analysis uses a sine window, 1024-point FFT and 256-sample hop. Paired real transforms implement stereo analysis and four-channel synthesis with three complex FFTs per hop. Front subtraction and rear signals are reconstructed by overlap-add; the front output is delayed input minus the reconstructed subtraction. The engine has 1024 samples of streaming delay, plus any configured pair delay. The hook's current rear delay is zero.
 
-## 2. Signal model and statistics
+The C engine allocates no memory after initialization. The port contract uses float32 without fused multiply-add and compares function/stream fixtures against [scene_upmix.py](../../tools/stereo-upmix-render/scene_upmix.py). The header specifies intermediate tolerance `1e-4` relative and output error below −60 dB relative to reference RMS. These are comparison criteria, not a claim that a new fixture run occurred during this documentation review.
 
-Per STFT cell (N = 512, hop 128, sine window, 257 bins, as today; **1024/256 is the recommended analysis geometry** for the decomposition: it halves the number of cells where two coherent sources share a bin, at +10.7 ms latency):
+## Spatial statistics and stable places
+
+For each frequency bin, the engine tracks left/right power and complex cross-power with exponential averages. The update coefficient is:
 
 ```text
-L = a·S + N_L        R = b·e^{jθ}·S + N_R
+alpha(tau) = 1 - exp(-hop / (sample_rate * tau))
+stat_next  = stat + alpha * (observation - stat)
 ```
 
-S is the coherent ("primary") component with amplitude pan (a, b) and inter-channel phase θ; N_L, N_R are mutually uncorrelated, equal-power ambience (reverb, width, double tracks). This is the Avendano–Jot / Faller stereo model with phase.
+The implementation keeps separate 43 ms statistics for decomposition, 8 ms statistics for fast protection and 300 ms statistics for direction. Direction uses a bin's own averaged covariance; a single instantaneous stereo sample would make every bin appear rank one. ERB pooling supports stable pan estimation without assigning a neighbouring instrument's direction to a centred drum bin.
 
-Statistics per bin, exponential moving averages (the existing `scene_pl / scene_pr / scene_cross` EMAs at 0.06 per hop are τ ≈ 43 ms; use 0.05/hop below 1 kHz and 0.10 above at 512/128, re-derive for 1024/256):
+[scene_clusters.c](../../hook/audio/scene_clusters.c) maintains a 21-bin pan histogram, admits persistent off-centre places and fades departing places. Current defaults include a 3 s histogram time constant, 0.34 s selection interval, 1.5 s admission and up to three places. Membership and held pan/transfer values keep places from jumping with every FFT frame. A track-change reset fades places over 1.5 s and clears song memory; a stream reset clears the entire streaming state.
+
+## Object extraction and transfer
+
+The active unmix branch separates a place from the centre using a two-source model:
 
 ```text
-P_L = E|L|²      P_R = E|R|²      C = E[L*·R]      Φ = |C| / sqrt(P_L·P_R)
+[L; R] = [a_c; b_c] * s + [1; 1] / sqrt(2) * m
+ a_c = sqrt((1 - p_c) / 2)
+ b_c = sqrt((1 + p_c) / 2)
+ det = a_c - b_c
+ s   = (L - R) / det
 ```
 
-(The existing `scene_cross` stores E[L·R*], the conjugate: flip its sign when porting.) Before the direction is derived, **pool P_L, P_R, C energy-weighted over ERB-like groups of 2–4 bins**: the 43 ms EMA alone averages only ~4 independent frames and makes Φ wander 0–0.6 in pure-ambience cells, which would paint random panned grains. Pooling before the decomposition is the variance fix; a box over gains after the smoothstep is not.
+Near the centre (`abs(det) <= 0.5`), the inverse becomes `det / (det² + lambda)` with `lambda = 0.05`. The extracted object's energy is capped at the bin's input energy. Exactly centred input (`L == R`) therefore gives zero extracted object for every place.
 
-## 3. Closed-form primary/ambient decomposition (per cell, ~60 flops)
-
-The 2 × 2 cross-spectral matrix of the cell is `M = [[P_L, C*], [C, P_R]]`. Under the model its eigenvalues are `λ1 = P_S + P_N` and `λ2 = P_N`, and the principal eigenvector is the primary direction including the phase θ = arg(C). Numerically verified 2026-10-08 on synthetic cells (centred, panned, phase-panned, anti-phase, mono, hard-panned): P_N, P_S, p and θ recovered to three decimals; primary power in the residual below 1e-6.
+The object leaves the front at its original pan and enters the rear at the widened place pan. For transfer fraction `a`, the energy-conserving rear gain is:
 
 ```text
-T   = P_L + P_R
-Dt  = max(P_L·P_R − |C|², 0)                  (clamp before the sqrt: float rounding can take it below 0)
-Rt  = sqrt((P_L − P_R)² + 4·|C|²)            (= sqrt(T² − 4·Dt), always real)
-P_N = (T − Rt) / 2                            = λ2, ambience power; 0 for mono or any single panned source, min(P_L,P_R) for uncorrelated channels
-P_S = Rt                                      = λ1 − λ2, primary power
-P_a = max(P_L − P_N, 0)     P_b = max(P_R − P_N, 0)
-â   = sqrt(P_a / (P_a + P_b + ε))   b̂ = sqrt(P_b / (P_a + P_b + ε))
-p   = (P_b − P_a) / (P_a + P_b + ε_abs)       energy pan, −1 (left) .. +1 (right); ε_abs = 1e-4 × the block's maximum cell power, so quiet, tail and post-reset cells default to CENTRE, never to a random direction
-v   = (â, b̂·e^{jθ})                           primary direction (unit vector)
+g_rear = sqrt(1 - (1 - a)^2)
 ```
 
-Primary and residual audio per cell:
+Held membership, high-pass shape, protection and the startup/front-anchor gain bound the transfer. The non-unmix projection branch remains available in the standalone engine; it is not the hook's selected spatial mode.
+
+## Semantic protection and instrument transfer
+
+[scene_mask.c](../../hook/audio/scene_mask.c) analyses 2048 samples every 512 input frames. Features are left/right log power and cosine/sine interchannel phase. The network produces vocal, drum-core, bass and other posteriors on a 257-bin grid. Eligibility and protection rows are mapped to the renderer's frequency bins.
+
+Protection attenuates transfer with `D = duck_depth * smoothed_protection`. Instrument eligibility is exponent-shaped and smoothed before applying it to the **remaining front signal**:
 
 ```text
-y   = v^H·x = â·L + b̂·e^{−jθ}·R              projection on the primary direction: signal power P_S, ambience leakage power P_N
-W   = P_S / (P_S + P_N)                       Wiener scalar, used for the OBJECT term only
-Ŝ_L = â·W·y          Ŝ_R = b̂·e^{jθ}·W·y
-u   = v⊥^H·x = b̂·L − â·e^{−jθ}·R             orthogonal residual: contains NO primary at all, by construction (W is never applied here)
+O = eligibility * (input - spatial_subtraction)
+front_subtraction += a * O
+rear              += sqrt(1 - (1 - a)^2) * O
 ```
 
-Facts that shape the design:
+The conserving gain uses the transfer fraction, not `a * eligibility`; putting eligibility inside the square root would amplify weak eligibility. Normal/Intense tuning, low-frequency exponent and front retention are applied by `spa_configure_vehicle_scene()` and the live level setter, not inferred from the standalone engine's defaults.
 
-- **The residual of a two-channel cell is one signal, not two.** The orthogonal complement of a 1-D primary direction in two channels is 1-D, so the "ambient" per cell is `u` placed with the complementary weights `(b̂, −â·e^{jθ})`. For a centred primary that is exactly the passive side signal `(L − R)/2`: the pan-adaptive generalisation of the matrix that sat on the student frontier for free [offline, baseline §3.3a]. Consequence: the ambient layer is an (anti-)phase pair of one signal and **must be decorrelated between Ls and Rs** by the renderer (§4).
-- **Protection of an unshared cell is exact.** A dry centred lead, bass, kick or snare has p ≈ 0, Φ ≈ 1, lands in `y` and is absent from `u` sample-exactly. (A Wiener-scaled residual `L − â·W·y` would leave `P_N/(P_S+P_N)` of the primary in the ambience: half the vocal's amplitude whenever reverb and vocal have equal power in a cell; the orthogonal residual leaves none.) The price: the in-phase half of the true ambience is indistinguishable from the primary and stays with it; `G_A` compensates the level.
-- **Protection of a shared cell is not geometric.** Two coherent sources in one cell (a centred vocal and a panned guitar at equal level) give one averaged direction (p ≈ −0.7 for a hard-left guitar) and both land in `y`: the vocal would enter the off-centre object at ~0 dB·G_O and be transferred out of the front with it. Finer bins (1024/256) halve the shared cells; the duck (§6) covers the rest. This is the one place a learned component is required, not optional.
-- **Phase.** With θ in the direction, anti-phase or delay-panned content stays in the primary instead of being dumped into `u`; a real-valued |C| formulation would send every out-of-phase widening trick straight behind at full level. Intentionally widened content (|θ| near π) is treated as wide by the object map (§4), not as a leak.
-- A dry centred source sharing a cell with reverb (Φ ≈ 0.6): the reverb's orthogonal part goes to `u`, the vocal does not. The 2026-09-26 PAD baseline instead scaled the *mixture* by (1 − Φ) and sent 40 % of such a vocal behind ("vocal wash", 12/40 vocal swings [offline]).
-- Guards: ε in every ratio; a NaN flush on the EMA state (the state persists across hops; `spa_hssr_dsp_finite` exists for this); after every generation reset the statistics are initialised from the first frame and `A_k`, `O_k` ramp up over the first 32 hops by hop count (not a detector): a cold EMA must never send the whole mix behind for 40 ms at every track start, Siri return or guard revival.
+The persistent mask worker supplies rows asynchronously. If no mask is installed, the engine disables semantic transfer and mask-based ducking and continues spatial rendering. A busy worker retains the last row. New-stream generations reject stale jobs/results. The synchronous provider-free path is used by standalone tools/fixtures and is the logged fallback if worker startup fails; it is not an `AUDIO_SCENE_MASK_SYNC` production environment switch.
 
-## 4. Rear composition
+## Ambience, wide pairs and front retention
 
-Two pans, two speeds. The **direction** (â, b̂, θ) from the 43 ms statistics is used for the residual and for protection. The **object map** uses a slow energy-pooled pan `p_slow` (EMA τ ≥ 400 ms of p, energy-weighted over the ERB group), because placement must not follow syllables, and permission must open slowly:
+The ambience path uses the residual orthogonal to the bin's averaged primary direction:
 
 ```text
-w_pan   = smoothstep(|p_slow|, p0, p1)                  p0 = 0.10, p1 = 0.35 in energy pan (MoisesDB guitars sit at ±0.1–0.4; q5's map gave guitars −6…−8 dB)
-w_phase = smoothstep(|θ_slow|, 60°, 120°)              intentionally widened (anti-phase) content counts as wide
-w_slow  = max(w_pan, w_phase)
-w_fast  = the same map evaluated on the 43 ms statistics
-w       = min(w_fast, w_slow)                           PROTECTION WITHIN ONE HOP, PERMISSION OVER ≥ 400 ms: a vocal entering a shared cell pulls w down immediately; the guitar's placement comes back slowly
-O_k     = α · w · (1 − D_k)                             transferred object gain (α = relocation fraction, §5; D = duck, §6)
-A_k     = G_A(b) · (1 − D_A,k)                          ambient gain, G_A ≈ 0.7 cap; 0.5 in 250–680 Hz (the 17.09 "bass everywhere" band: rear-door 350–800 Hz must stay ≥ 3 dB under the front mid on the AmpChain prediction)
-F_k     = G_air(b)                                      static air copy above 2.5 kHz at −9 dB; NO mid-band floor (a −16 dB mid floor lands 13 dB under the amp's own L → busLs −3 dB bleed [model]: inaudible, and it only costs harness vocal numbers)
+u = b * L - a * exp(-i * theta) * R
 ```
 
-Object placement: **widened, not true-pan, and without tracking.** Rendering each cell at its true (â, b̂) collapses the rear to near-mono (TRUEPAN: Ls/Rs correlation 0.86–0.90, rejected [offline]); rendering it at a widened image derived from the cell's own slow pan keeps the second-scene width without a tracker:
+Frequency shaping and independent fixed phase tables produce the ambient rear pair. The low-frequency sign rule avoids opposite-polarity rear energy below 550 Hz. The wide-pair path transfers eligible remaining stereo content using an ERB-group envelope measure, while protection limits vocal/bass/drum transfer. Bleed cancellation subtracts a shaped part of the remaining front from the rears.
+
+The front anchor prevents a sparse, wide mix from leaving the front too quiet. It tracks one-second midband sums for input `X`, full-transfer subtraction `S`, and their cross term. The retained front energy is:
 
 ```text
-q      = sign(p_slow) · (0.78 + 0.17·smoothstep(|p_slow|, 0.05, 0.92))        the existing steering focus, from the cell's own pan
-(c_L, c_R) = (sqrt((1−q)/2), sqrt((1+q)/2))                                   constant-power
-obj_L  = O_k · c_L · y          obj_R = O_k · c_R · e^{jθ} · y                  the COHERENT object: same y as subtracted from the front, no decorrelator (an all-pass would smear attacks 2–6 ms, against 21.09 "a hit from one place", and only moves the amp-bleed comb's notches instead of removing them)
-amb_L  = A_k · b̂ · u            amb_R = −A_k · â · e^{jθ} · u                   (same sign, +â, in bands with upper edge ≤ 550 Hz: no low-mid hole at the rear seats)
-rear_L = obj_L + 𝒟_A(amb_L) + F_k·𝒟_F(L)
-rear_R = obj_R + 𝒟_A(amb_R) + F_k·𝒟_F(R)
+E_front(a) = E_X - 2*a*R_XS + a^2*E_S
+keep       = 10^(-front_keep_db / 10)
+E_front(a) >= keep * E_X
 ```
 
-- 𝒟_A decorrelates the ambient layer **between Ls and Rs**, mandatory: `amb_L` and `amb_R` are the same signal `u` with opposite signs. Cheapest: a static per-bin phase table in the STFT domain, different for Ls and Rs (the existing universal-bed conjugate twiddle is this, free); or the existing per-band bed-delay comb (`0.79·now + 0.60·delayed_same − 0.14·delayed_cross`, MSC 0.50 → 0.40 [offline]). Target: Ls/Rs magnitude-squared coherence of the ambient layer below ~0.3 per band, measured with `bed_metrics`.
-- 𝒟_F: the air copy rides the same bed delays it rides today.
-- Band shaping: nothing below 190 Hz (doors HP ~100 Hz, Ls → LFE bus −14 dB [model]); ramp 190 → 250 Hz; body 250 Hz–1 kHz kept at the 0.5/0.7 caps above (the amp's Ls door path peaks +4.5 dB @ 500 Hz [model]); no −4 dB body shelf; the +3 dB @ 4 kHz presence shelf stays.
-- Gain smoothing: `A_k`, `W`, the direction and `w_slow` are smooth by construction (EMAs); `w_fast` and `D` are the two fast-down terms. No per-bin unity clamp (an unsmoothed per-hop gate): the caps bound the sum; if headroom needs a clamp, it is a per-band soft knee `tanh(band rear / band input)` smoothed at τ_g, applied to `O_k` **before** composition so the front subtraction uses the clamped value (§5).
-- Then the time-domain chain: `SURROUND` applies to the ambient and air layers only (default 0.50, cap 0.71); the object layer is at the level it left the front (§5); rear delay as a **signed knob** (default +12 ms; 0 or negative = front delayed, for the rear-lead condition); linked limiter release ≥ 500 ms or a per-block gain smoothed at τ_g (a 150 ms release on a rear 8–10 dB hotter than any build ever run would breathe on every chorus hit); rear-first cabin guard with `guard_hits` counters; the busLs bleed cancel `Ls −= k·L` as a knob (default off, k ≈ 0.355 doors / 0.251 effect bus [model], offset from the cabin sweep) because the comb between our delayed object copy and the amp's own undelayed L → busLs −3 dB bleed lives in the amp, not in the hook.
-- Realtime path: this decomposition without any net is cheap enough to be the **middle tier** of the realtime guard (static rear on an overrun strike instead of silent rears); the four-strike full disable stays as last resort.
+The smaller quadratic root bounds the permitted transfer where the energy would cross the retention threshold. The bound is clamped to `[0,1]`, follows reductions over 0.3 s and recovers over 2 s. It scales transfer and ambience together. The hook uses 1.5 dB front retention for Normal and 2.8 dB for Intense.
 
-## 5. Front and relocation (transfer, not duplication)
+## Backend and output boundaries
 
-```text
-front_L = L_delayed − α · w_slow · (1 − D_k) · c0_L · y         c0 = the cell's own (â, b̂): the subtraction keeps the primary's pan in the front
-front_R = R_delayed − α · w_slow · (1 − D_k) · c0_R · e^{jθ} · y
-rear object = α · w · (1 − D_k) · y  at the widened image (§4), NOT scaled by SURROUND
-```
+The surrounding [stereo_upmix.c](../../hook/audio/stereo_upmix.c) owns wet/dry control, LFE, cabin protection and conversion to the native output layout. Full Off delays dry L/R, zeros the synthesized extra channels and skips the network. LFE steering uses bass/drum posteriors; it is not part of `scene_engine_frame()`.
 
-- α ∈ [0, 1]: the fraction of the coherent off-centre primary **moved** behind. α = 0: front bit-exact, no object layer (ambient + air only). α = 0.7: a hard-panned guitar loses 10.5 dB in the front and arrives behind at −3 dB re its original level, 12 ms later (or earlier, in the rear-lead condition). The reviews' arithmetic on the v1 form (α 0.35 of an object that was then scaled by SURROUND) showed the front copy staying 5 dB louder and earlier, which precedence resolves as "wider": energy must move for "behind" (the only in-car "wow" ran with full transfer [car 17.09]).
-- Only the coherent off-centre primary moves: 3–18 % of a mix [offline, baseline §3.3b], so the front keeps its mids (today's retention-0.5 transfer of projected objects depleted the front 500–2000 Hz by −4.5 dB [model]). `u`, the air and the ambient layer are never subtracted (owner 10-03: never subtract a decorrelated copy).
-- **Which gain the front follows** is a documented trade-off: the front subtraction uses `w_slow` (stable front), the rear object uses `w = min(w_fast, w_slow)` (fast protection). When protection pulls the rear down at a vocal entry, the ducked part is briefly *lost* (a ≤ 3 dB dip of the shared cells for ≤ 400 ms) rather than returned to the front (which would be "goes back and front" in one line [offline 25.09 mechanism]). `AUDIO_SCENE_FRONT_FOLLOWS=fast|slow` is the knob; slow is the default.
-- Coupled guard (G5 lesson): one state drives both the rear object and the subtraction; when the rear is muted (guard strike, fallback) α ramps to 0 over 2–3 blocks (a one-block step is a click), so the front is dry and the rear closed, never a hole in front with nothing behind.
+The cabin guard precedes SoundCheck in the output path. SoundCheck is owner-confirmed working; that ordering is not an open playback defect. Its positive gain is capped from metadata headroom before rounding. See [SoundCheck](STEREO_TO_5_1_UPMIX.md#-soundcheck-and-output-order) for the precise metadata contract.
 
-## 6. Protection beyond geometry (the duck; learned, bounded, on by default)
+## Implementation and evidence
 
-Geometry keeps dry centred sources front. It cannot see a vocal inside a cell shared with a panned instrument, nor a wide or doubled vocal (q5: in-mix lead leak −5…−12 dB came from the vocal's own width; Joy's lead only 48 % centre [offline]). So:
+| Source | Responsibility |
+| --- | --- |
+| [scene_engine.h](../../hook/audio/scene_engine.h) / [scene_engine.c](../../hook/audio/scene_engine.c) | State, defaults, per-bin processing, FFT/overlap-add and stream API |
+| [scene_clusters.c](../../hook/audio/scene_clusters.c) | Place admission, membership, fading and memory |
+| [scene_mask.h](../../hook/audio/scene_mask.h) / [scene_mask.c](../../hook/audio/scene_mask.c) | Blob format, features and inference |
+| [scene_mask_worker.c](../../hook/audio/scene_mask_worker.c) | Bounded async jobs/results and generations |
+| [audio_hook.c](../../hook/audio/audio_hook.c) | Production configuration, worker lifecycle and AirPlay latency |
+| [scene_port_fixtures.py](../../tools/stereo-upmix-render/scene_port_fixtures.py) | Python reference fixtures |
+| [scene_mask_fixtures.py](../../tools/stereo-upmix-render/scene_mask_fixtures.py) | Mask reference fixtures |
 
-```text
-D_k = d · smoothstep(q_k, q0, q1) · V      applied to O_k (the object) — on by default, d = 0.5 (−6 dB); `AUDIO_SCENE_VOCAL_DUCK_DB` off / −6 / −12
-D_A,k = the same on A_k, OFF by default     (owner question: backing vocals and vocal reverb behind, yes or no)
-```
-
-- q_k: the mask net's per-bin vocal posterior (Platt-calibrated, a = 1.03, b = 0.00 [offline]) is the right source; q6d's band vocal probability is the cheaper one but reads processed leads at 0.19–0.40, so its thresholds must be `q0:q1 = 0.25:0.60`, not 0.5:0.9.
-- V: `max(V_fast, V_slow)` of the existing global vocal presence, V_fast = one control at a high threshold (so the first 100–150 ms of a vocal entry, the documented worst case, is not missed), V_slow = the existing 0.10/0.02 EMA (so a single-band false call, V11-style "solo keys are vocal", cannot pull one band forward).
-- Dynamics: **exempt from τ_g** — applied on the control it arrives (10.7–21 ms), release EMA ≈ 270 ms. It attenuates, never gates; floored at d, so the rear never empties.
-
-## 7. Scene prior (learned calibration, bounded, optional)
-
-The static gains G_A(b), G_air(b), α and the map (p0, p1) are first set by ear and, better, from a measured professional profile (corpus medians from Apple Atmos renders: two Mac nights, the real deliverable of this line). The learned part is a bounded calibration layer, not a generator:
-
-```text
-m_O(b), m_A(b) ∈ [0.5, 2.0]      multipliers on α·w and G_A per band, EMA τ ≈ 1–2 s; the air gain is FIXED (never fitted)
-```
-
-- Predicted by the existing HSSR graph (368 features → GRU160 → GRU160 → linear; 42 M MAC/s, same HSSRNEO1 ABI) with the output head re-purposed; V11 retires from the amount path; the body is frozen for a 40-pair fit, trained only with ≥ 1,000 pairs.
-- Target: for each aligned (stereo master, Apple Atmos 5.1 render) pair, over 1–2 s windows **where Apple's rear correlates > 0.5 with our `u` + off-centre `y`** (windows where the professional put centred objects behind are excluded: our structure cannot match them and the fit would drift to "louder mix copy"), the per-band multipliers that make this structural rear's rear/front energy ratio match the render. Loss on the log-ratio per band; no coherence target; outputs squashed into the bounds. Per-pair alignment check: front cross-correlation > 0.9 after the integer lag (Atmos and stereo masters are often different masters).
-- Kill before training: a GRU must beat a 2-feature ridge baseline (log loudness, side/mid ratio) by ≥ 0.1 in held-out R² on the per-band log-ratio after removing the per-track mean; otherwise the corpus medians ship as the static gains and no controller ships. Honest expected gain of the learned part over the medians: within-track ratio spread ≈ 3 dB RMS, so a good fit removes a few dB of slow breathing; it is a calibration, not a new experience.
-- Legal/data: captured Apple Atmos output is DRM-decoded; weights are development-only, like MoisesDB; captures never enter the repo.
-
-Why not an end-to-end network: waveform regression toward authored rears averages incompatible decorrelated tails toward a weak rear (NAS joint-scene pilot: rear NMSE ≈ 1.0 on TRAIN, cosine .05–.20 [frag]); per-cell eligibility students at 512/128 plateaued on the guitars ≈ 1.4 × voice line in ~30 variants; causal separators at ≤ 150 M MAC/s plateaued at guitar .09–.12 in ~45 variants [offline]. A bounded controller on a physical decomposition is the only learned form that cannot reproduce those failures.
-
-## 8. Why it is stable, mechanism by mechanism
-
-| Failure of the shipped path [baseline §2] | What replaces it |
-|---|---|
-| Rear amount set by stacked multiplicative vetoes on classifier outputs | amount = static gains × smooth functions of slow pan and coherence; a floored duck |
-| Three fast-attack/slow-release memories (0.13 s / 0.3 s / 1 s) between decision and audio | one slow permission (τ ≥ 400 ms) and one fast protection (one hop); the only asymmetry is fast-down/slow-up |
-| Rank-one projection onto a tracked, snapped pan (+6.14 dB rear energy per source between depth extremes, 8/40 swings with true audio) | each cell placed from its own slow pan, no tracking, no snapping (the direct own-image route: 0/40 [oracle]), widened by a static map |
-| Slot confidence, hold 250 ms, owner attack, collapse | none |
-| Rear high-passed at 220 Hz, body −4 dB, presence ramp 0.05–0.85 to 1 kHz | nothing below 190 Hz, body from 250 Hz at bounded caps |
-| Rear pinned at surround 0.40, −34 dBFS; ambience ≤ 0.04, universal ≤ 0.55 | ambient at 0.5–0.7 caps × surround 0.50–0.71; the object at the level it left the front |
-| Front loses half of each projected object (−4.5 dB mid) | front minus the transferred off-centre primary only, following the slow gain |
-
-Residual hazards and their bounds:
-
-- **The object layer ducks at phrase rate in vocal-shared cells no matter the τ** (a vocal entering a cell with a guitar moves the cell's pan toward centre). This is accepted and bounded: the stable, strong part of the rear is the residual `u` (the rotated passive matrix, 4/39 guitar swings [offline]) plus the air; the object layer is a bounded extra whose fast term only goes down. The harness measures the phrase-rate dip of the object layer in isolation (§11).
-- **Drum-tail breathing of the ambient layer.** The 2026-09-26 PAD baseline swung drums 18/40 [offline] because (1 − Φ) on the mixture rose per hit. Here the ambient layer is `u` itself (the tail, not a gain on the mixture), the direction comes from pooled statistics with ε-centring, and `G_A` is static; a centred snare hit after a tail cannot land in `u` because the orthogonal projection cancels it along the current direction instantly (no Wiener scalar on the residual). Gate: relative swing (range/median) of the ambient-only render ≤ the passive matrix's at matched rear RMS (§11); if it fails, τ_s pooling wider, never a transient detector.
-- **Comb between the rear object copy and the amp's own bleed** (busLs = 0.708·L undelayed + 2.0·Ls 12 ms later: ±2.7 dB ripple at 83 Hz spacing [model]): accepted for the first listen (the 17.09 "wow" had exactly this comb); the cure, if heard, is the bleed-cancel knob, not a decorrelator on the object.
-- **Rear level and headroom.** The caps put the rear 8–10 dB above any build ever run; the limiter (≥ 500 ms release), the rear-first guard and `SURROUND` are the bounds; the AmpChain bus prediction and a per-song rear/front dB column set the operating point before the car. Two reviewers disagreed on whether the defaults land too hot or too quiet; the harness column decides, not either arithmetic.
-- **Hard-panned old mixes** send a whole instrument behind: α and the per-band soft knee bound it (a 1960s mono-left instrument: P_N = 0, p = −1, w = 1, obj_L = α·y, obj_R = 0 — bounded, no flicker).
-- **Narrow or mono masters**: u ≈ 0 and |p| ≈ 0 everywhere; the rear is the air copy only (thin, honestly). The scene prior (§7) or a venue layer are the fills.
-- **Linear-power EMAs are fast-attack/slow-release in dB** (a −20 dB drop takes 4.6τ): harmless once nothing in the residual path depends on them, but the limiter, the duck and V remain asymmetric gains and are listed as such.
-
-## 9. Compute and latency
-
-- Decomposition ~60 flops per cell plus one sqrt and one complex rotation: 257 × 375 cells/s × 60 ≈ 5.8 Mflop/s (half that at 1024/256). ERB pooling and EMAs: < 2 Mflop/s. Ambient decorrelation as a static per-bin phase table: free. Total well under the measured 1.81 ms no-net DSP per 21.3 ms block [log]; the slot search, ridge gate, comodulation `logf`, universal/diffuse targets and projection/steering are removed. A second (source-image) iFFT pair is needed whenever α > 0 (the object and its front subtraction are rendered from `y`), as today.
-- Nets: the duck needs the mask net's vocal posterior (1.33 ms/control) or q6d (42 M MAC/s); V11 retires. The scene prior reuses the q6d graph.
-- Latency: 10.667 ms front at 512/128 (21.3 ms at 1024/256), rear delay knob; rear-lead variants add ~8–13 ms more (corrected 2026-10-17 from 15–20 ms: the amp's own rear lag is ~5.2 ms, not 11.8, §18) and must update the advertised `ALL_OUT_LATENCY`.
-
-## 10. Knobs (env, read per CarPlay generation)
-
-*2026-10-17: the design table of 10-08, not the shipped set. The hook ships nine `AUDIO_SCENE_*` tuning knobs plus `AUDIO_SCENE_MASK_BLOB`; the live table is in [Stereo to 5.1 Upmix](STEREO_TO_5_1_UPMIX.md).*
-
-| Knob | Range | Default |
-|---|---|---|
-| `AUDIO_HSSR_STRUCTURAL` | 0/1 | 1 in the test build; 0 = bit-identical Track A |
-| `AUDIO_SCENE_ALPHA` (transfer fraction) | 0..1 | 0.5 first listen; 0 = additive-only, 0.7 = "behind" condition |
-| `AUDIO_SCENE_AMBIENT_GAIN` (G_A cap) | 0..1 | 0.7 (0.5 in 250–680 Hz) |
-| `AUDIO_STEREO_SURROUND` (ambient + air level) | 0..0.71 | 0.50 |
-| `AUDIO_SCENE_PAN_LO:HI` (p0:p1, energy pan) | 0..1 | 0.10:0.35 |
-| `AUDIO_SCENE_TAU_SLOW_MS` (permission) | 200..1000 | 400 |
-| `AUDIO_SCENE_FRONT_FOLLOWS` | slow / fast | slow |
-| `AUDIO_STEREO_REAR_AIR_DB` | off, −24..0 | −9 |
-| `AUDIO_STEREO_REAR_DELAY_MS` (signed) | −20..+20 | +12 |
-| `AUDIO_SCENE_VOCAL_DUCK_DB` (on the object) | off, −6, −12 | −6 |
-| `AUDIO_SCENE_AMBIENT_DUCK_DB` | off, −6, −12 | off |
-| `AUDIO_STEREO_BLEED_CANCEL` (k:offset) | 0..0.4 : frames | 0:0 (off until the cabin sweep) |
-| `AUDIO_SCENE_PRIOR` (§7) | off/on | off |
-
-## 11. Evaluation, in order
-
-1. **One hour, no C, no car** (the reviews' common test): `--mode proj` in `tools/stereo-upmix-render/baseline_upmix.py` (~40 numpy lines) implementing §3–§4 at 512/128 and 1024/256, ambient-only and ambient + object (α 0.5), with and without the phase term, run through `upmix_stem_tests` on DEV40. Columns: vocal/bass/drums rear share; guitar/keys share; relative swing (range/median) vs the passive-matrix row (4/39) and the PAD row (18/40); vocal share in the 150 ms after each vocal onset (the statistics-lag burst); per-band Ls/Rs MSC of the ambient layer; rear/front dB per song; and a "behind-ness" proxy = max over guitar-owned cells of (rear − front) dB with delay alignment. If that last column never exceeds 0 dB, nothing is behind and §5's α must rise before the car. The ±0.5 dB rear-RMS gate is a report column, not a gate.
-2. Host renderer (`stereo_upmix_render`, bit-exact with the hook) parity once ported; library flicker and swing regression (`upmix_music_tests`); AmpChain bus prediction at the chosen operating point (rear-door 350–800 Hz vs front mid; effect-bus headroom; limiter engagement).
-3. Car, one `.so`, conditions by phone replug, phone mic at the headrest, level-matched, verdicts written per song before the next song, the 28.09 blind X/Y protocol for the decisive pair: A = Track A (switch 0); B = structural, α 0.5, +12 ms; B+ = α 0.7; C = rear-lead (front delayed, rear 0, α 0.7) once the cabin sweep gives the Ls−L arrival. One question per song: behind, or only wider; anything moving per hit or syllable; lead or its double behind; front identical to the α = 0 condition where it should be.
-
-## 12. What this algorithm deliberately does not try, and what it cannot do
-
-- It does not decide per cell whether a sound "is" a guitar, keys or a vocal; does not hold, latch or track objects; does not separate sources at the head unit's budget; does not regress authored rears as waveforms; does not synthesise reverb (a venue layer is a separate, policy-gated addition).
-- It cannot put a centred instrument behind the listener (a centred piano stays front by geometry).
-- "Bass guitar behind" (owner, 19.09) is unreachable by geometry: the main bass is centred, its fundamentals are under the doors' ~100 Hz HP and the 113/138/174 Hz notches [model], and Ls reaches the LFE bus at −14 dB; this spec picks the 09-13 policy (main bass front) and says so.
-- Backing vocals and the vocal's own reverb are wide by nature and land in `u`: they are behind at the ambient level unless `AUDIO_SCENE_AMBIENT_DUCK_DB` is on. That is an owner decision, not a defect.
-
----
-
-## 13. Making it a true double stage (what "excellent" requires)
-
-*Synthesis of four review lenses (psychoacoustics, stage membership, rear-speaker ownership, skeptic), 2026-10-08. Adds to §1–§12; does not restate them. Evidence tags as in the baseline.*
-
-### 13.1 What the driver must experience, and what this cabin can give
-
-Eyes closed in the driver seat, a panned rhythm guitar, keys part or doubled-guitar pair stands behind-left or behind-right of the shoulder at the SAME loudness and tone it had in front, with its body (250 Hz–1 kHz) and its top in one place, every pick attack arriving from that place as one hit. Lead vocal, bass, kick, snare and the riff are indistinguishable from the α = 0 condition (phone-mic A/B ≤ 0.5 dB per band), and the vocal is never above or behind, not even for a syllable. Toggling α the guitar walks straight back and nothing else moves; nothing moves per hit or per phrase; once admitted, the player stays for the whole section. The two stages share one room: dry front, dry rear object, one faint ambience that is the record's own residual, never a tail the record did not have. On a narrow or mono master the rear stage is honestly empty and the driver is told so.
-
-Achievable here [model + literature, nothing measured in the cabin]: the rear image sits at the C-pillars (behind, slightly above, lateralised) with the knee-height doors supplying body underneath; width = pillar spacing; behind-left is always stronger than behind-right for the driver (inverse distance plus seat screening [inferred]; FA2026 front-left bias [literature]); only the 3–18 % of a mix that is off-centre AND coherent can go there [offline, baseline §3.3b]; nothing below ~190 Hz. "Double stage" therefore means: front untouched, plus 1–3 coherent whole instruments standing at the pillars at matched loudness and timbre, stable for the whole song. The discrete APAC tracks prove the route and cabin can render "behind" [car]; whether OUR render reads as behind is decided by one arithmetic (13.2 item 1) that has never been tested in this car.
-
-### 13.2 The prioritised recipe (ordered by how much each changes what is heard)
-
-**1. Precedence geometry: rear leads, or the front copy is ≥ 20 dB down. [P0]**
-Mechanism: at v2's defaults the front remainder (1−α)·y reaches the ears ~17 ms BEFORE the rear object (12 ms knob + ~5.2 ms amp rear-door lag [model]; corrected 2026-10-17: the earlier 6.6 ms bus + 5.2 ms output counted the bus delay twice, the 5.2 ms total already contains it, §18). Haas/Litovsky: a lag arriving 5–30 ms late is still localised at the lead even when up to +10 dB louder; ~15 dB louder is needed to dominate [literature, https://en.wikipedia.org/wiki/Precedence_effect]. α 0.5 gives the rear +0 dB over the remainder, α 0.7 gives +7.5 dB: both read as "wider", the rejected outcome. The 17.09 wow had full transfer (no front copy to lead) [car]. Two exits: (a) rear-lead: delay the FRONT by (measured Ls−L arrival at the head) + 3–4 ms, rear delay 0, so the object arrives first from behind and the lagging front copy may even be louder; (b) lag geometry with α ≥ 0.9 (front copy −20 dB).
-Numbers: lead window 3–8 ms (above the ~1–2 ms summing window, below click fusion ~5–10 ms so a panned hit is ONE event; music fuses to ~40 ms). Expected front delay 5.2 + 4 ≈ 9 ms ≈ 440 frames; algorithmic 21.3 (1024/256) + 9 ≈ 30 ms; `ALL_OUT_LATENCY` 80 → ~89 ms in the firmware's dio_manager.json (corrected 2026-10-17 from 11.8 + 4 ≈ 16 ms = 768 frames, ≈ 37 ms and ~96 ms). With rear-lead, α 0.5 (0 dB margin) still owns the image with ~6–10 dB precedence margin, which makes "behind" robust to ±3 dB rear level jitter (limiter, EQ bank, seat).
-Hears: the category changes from "bigger front" to "a player behind". Kills it: Ls−L arrival at the head > ~25 ms (first-B live with its 32 ms tail, long effect-bus delay) → no front delay inside the gate makes the rear lead, and only (b) remains; under rear-lead every leak (duck floor, wide vocal double, partial bleed cancel) becomes a leading copy that drags the vocal to the near pillar (Q2 "dragged the image" [car]) → item 7.
-Test: the one-hour cabin sweep (`AUDIO_STEREO_PROBE`, Mac mic at the headrest; the phone cannot record), read Ls−L arrival; same day one replug, hard-panned rock: B = +12 ms α 0.5 vs C = rear-lead 4 ms α 0.5 vs α 1.0 +12 ms; one question: behind, or only wider.
-
-**2. Stage membership by slow pan clustering: the stage is a set of PLACES, not of cells. [P0]**
-Mechanism: per hop, every cell with Φ ≥ 0.6, P_S ≥ −40 dB re the block max and |θ| ≤ 120° (anti-phase never becomes an object) adds P_S to a 21-bin histogram of the energy pan p, EMA τ_h = 3 s (one global map over 190 Hz–6 kHz, so an instrument's body and top share one cluster). Every ~340 ms pick peaks: prominence ≥ 15 % of mass, separation ≥ 0.25, K ≤ 3 rear clusters with |p_c| ≥ 0.18; front cluster fixed at p = 0, σ 0.10. Cluster state: centre p_c (EMA τ 2 s, slew ≤ 0.05/s), σ_c ∈ [0.08, 0.25], mass m_c. Assignment: soft kernel membership m_{k,c} ∝ m_c·exp(−(p_slow,k − p_c)²/2σ_c²), front mass floor 0.2; w_member,k = Σ_c g_c·m_{k,c} REPLACES v2's per-cell w_slow; w_fast and the duck stay exactly as v2 (the only fast direction is down). Dwell asymmetry: admit after m_c ≥ 8 % and |p_c| ≥ 0.18 for 1.5 s continuously, g_c rises as a 600 ms raised cosine; drop only after m_c < 2 % for 30 s, on merge (centres within 0.15, loser fades 1.5 s), or on CarPlay reset. Render one image per cluster: q_c = sign(p_c)·(0.78 + 0.17·smoothstep(|p_c|, 0.05, 0.92)) shared by all owned cells; per-cluster α_c = α_max·smoothstep(|p_c|, 0.18, 0.45); non-member off-centre cells transfer nothing (no half-moved sources).
-Why: Avendano 2003 panning-index histograms of real mixes show one peak per panned source and the whole source recovers by selecting cells near the peak [literature]; MoisesDB: lead/bass 100 % centre, guitars ±0.1–0.4 [offline]; `sharedmask` (one stereo-consistent gain per cell) flattened depth-follows-level +0.12 → +0.02 [offline, baseline §4.1]. The failed 2026-09-28 latches held an ACTIVITY (closing erased eligible audio, per-stem dwell killed percussion); here the state is a POSITION and closing is never needed for protection, so the second chorus re-enters instantly.
-Hears: "a hit from one place" (21.09) and no "back and front" (25.09) because the place cannot move faster than 0.05/s; the first chorus of a song arrives behind ~2 s late, later choruses instantly. Kills it: the energy-pan histogram of real mixes not carrying whole instruments as peaks (see kill test); two instruments at one pan go behind together (accepted by the no-classes rule).
-Test: `baseline_upmix.py --mode cluster` (~60 numpy lines) on DEV40: ≥ 80 % of guitar/keys stem energy within ±2σ_c of an admitted cluster on songs with ≥ 10 % off-centre coherent energy; vocal/bass/drum energy inside rear clusters ≤ 3 %; ≤ 2 state changes/min after 3 s. One hour, no C.
-
-**3. Transfer level: energy-conserving, matched at the head, full body on the object. [P0]**
-Mechanism: (a) rear object gain g_r = sqrt(1 − (1−α)²), not α: v2's form loses 3 dB of the instrument at α 0.5 ("the guitar got weaker and smeared") [derived from §5]. (b) `AUDIO_SCENE_REAR_MATCH_DB`: a static trim on the object layer only so the moved instrument has the same loudness at the driver's head as its front remainder, 300 Hz–5 kHz, within ±3 dB; prior from the amp model −3…−6 dB (rear buses +6/+9 vs front −2, second mixer front +3.8, doors 0 [model]); the sweep's L-only vs Ls-only pink-noise LAeq at the headrest sets it. (c) The object carries its FULL body from 190 Hz at its transferred level; the 0.5/0.7 body caps of §4 apply to the ambient layer only. Without body the instrument splits in height (body front at the knees, top at the pillars): the 25.09 complaint in the vertical; the 17.09 "bass everywhere" was MIXTURE body at front level, not object body [car].
-Hears: the same player, same loudness, standing behind at shoulder height. Kills it: object louder than the remainder by > 3 dB = "the rear shouts"; quieter than −6 dB = a tint. Test: two pink bursts in the sweep; harness column "object dB at head re front remainder" through the measured IRs.
-
-**4. Own the rear speakers: bleed cancel, ear-level EQ, driver-seat trim, first-B check. [P0 check / P1 build]**
-(a) Step 0, zero code, 5 min: with our PCM6 session playing, MMI Surround min → max → min; any audible rear change = the amp's first-B upmixer is live and adds a 32 ms diffuse tail on our rear (rear-lead then likely impossible; a free venue stacks on ours). (b) Bleed cancel: busLs = 0.708·L + 2.0·Ls, bus6 = 0.708·L + 2.82·Ls [model]; one k cannot null both: k 0.354 nulls the doors (effect −10.8 dB residual, inverted), 0.251 nulls the pillars (doors −13.7 dB), ship k 0.30 (both ≤ −17 dB). The cancel term is −k·L read 316 frames (6.58 ms) EARLIER than the front lane, a second tap on the FRONT delay line, never on the rear path; a 1-sample offset error leaves the null at −17.7 dB @ 1 kHz but −3.7 dB @ 5 kHz, so low-pass the cancel at ~3 kHz until the sweep gives a sub-sample offset (a fractional phase ramp in the STFT is free). The cabin guard's bus model must use |0.708 − g_bus·k| per bus or it scales everything against a bleed that no longer exists. With cancel the doors play only the rear stage and the front vocal in the doors drops from −3 dB to ≈ −19 dB. (c) Ear-level timbre: 1/3-octave table on the object layer = (L→head)/(Ls→head), bounded ±6 dB (±8 on the per-bin trim), 200 Hz–8 kHz; prior −4 dB @ 500 Hz (door path +4.5 dB), +2 dB @ 1 kHz, 0 dB @ 4 kHz, +2 dB 8–11 kHz. Drop v2's +3 dB @ 4 kHz presence shelf: 2.9–5.8 kHz is a Blauert FRONT band, boosting it on the rear works against "behind" at a pillar whose lateral angle mirrors the front doors [literature, moderate transfer]. (d) Driver-seat trim `AUDIO_STEREO_REAR_SEAT_TRIM`: the near rear (left door ~0.5 m, pillar ~0.7 m) arrives ~2–3 ms earlier and several dB hotter than the far side; prior Rs +3 dB, Ls +1–2 ms, bounds ±4 dB / ±2 ms, keep the Ls lead over the front ≥ 3 ms after the trim; off until measured. Uncorrected, every rear object folds to behind-left and "double stage" is "one speaker behind my left shoulder" [inferred; FA2026 front-left bias, literature].
-Hears: a rear that plays only the rear stage, centred behind the driver, with the same instrument timbre as in front. Kills it: the bleed being level- or lane-dependent (EQ bank, live first-B) so no integer offset nulls ≥ 15 dB in 200 Hz–2 kHz. Test: phone at the rear-door grille, probe sequencer stepping the offset 308…324 every 2 s at k 0.354; deepest door null = the offset. One parked hour.
-
-**5. Keep the attacks: nothing on the object path moves per hit. [P1]**
-Everything the object passes through is static and short: the per-bin ear trim (zero-phase, 1/3-oct smooth so the kernel is ≤ 1 ms), the signed delay, the cancel tap (a delayed subtraction), the program limiter (one gain per block). Forbidden on y: all-pass/comb, any limiter with < 20 ms attack, decorrelation (𝒟_A on u only). Bounds: group-delay ripple ≤ 1 ms across 250 Hz–5 kHz; gain change ≤ 1 dB per 21 ms block except the lookahead ramp; panned-percussion lead/lag |dt| ≤ 8 ms for "one hit". Autopan AM at centre crossings is a known residual: `AUDIO_SCENE_OWNED_FAST_EXEMPT` exempts owned cells from w_pan (keeps w_phase and the duck). Test: impulse through the rear path, energy outside ±1 ms of the main peak ≤ −30 dB.
-
-**6. Headroom: a lookahead program limiter and a guard that never touches α. [P1]**
-At stage level the rear is 8–10 dB above any build ever run and the object and its front remainder are the same source, so bus peaks add coherently. Budget with k 0.30: door bus 2.0·Ls + 0.108·L ≤ 0.81 (amp door limiter group, feedback, no lookahead) and effect bus 2.82·Ls + 0.138·L ≤ 0.985 → Ls/Rs peak ≤ 0.28 FS (≈ −23…−25 dBFS RMS at 12 dB crest), 0.25 with the Rs trim. Use the block already buffered (21.3 ms) as true lookahead: one linked gain, attack = one block ramp, release 800 ms, GR ≤ 6 dB; GR > 6 dB for > 2 s = "rear too hot", lower the operating point, do not tune the limiter. Drop the existing 42 ms linked rear limiter. Rear-first guard order: ambient/air first, then the program gain, never per-block α (α ramps only for mute/fallback as §5). Any rear duck > 6 dB for > 50 ms hands the image back to the front copy ("goes back and front" in a new disguise), so the guard's rear attenuation must be bounded and slow (release ≥ 500 ms). Kills it: the linked cabin guard pumping all six channels on every guitar hit (at α 0.7 a −6 dBFS hard-panned peak predicts effect bus ≈ 1.27 FS) [model]; Q2's 50 ms shared detector made the rear breathe [offline]. Test: AmpChain on the 200-song library at Ls peak 0.28, k 0.30: limiter engaged in < 1 % of blocks or the point is too hot.
-
-**7. Leak policy under rear-lead: the floor must drop. [P0 if item 1 is rear-lead]**
-v2's −6 dB duck floor ("the rear never empties") is safe only for a LAGGING rear, where precedence fuses the leak forward. With the rear leading by 3 ms, a vocal fraction behind at −6 dB with the front vocal at 0 dB is inside the Haas window and pulls the fused vocal image toward the near pillar (up and back): the first thing the owner will report. Rear-lead defaults: object duck −12 dB, true gate (−∞) for cells with vocal posterior q > q1, D_A on; V_fast attack one hop, release ≥ 270 ms. Price: harder phrase-rate dips of the object layer in shared cells (already accepted in §8); u and the air carry continuity. Test: synthetic centred vocal + hard-left guitar under rear-lead; vocal energy in Ls/Rs ≤ −20 dB re front at the ear-aligned time.
-
-**8. The shared room: u is the room, SURROUND 0.35, never the stage. [P2]**
-Rear ambience = the decorrelated residual only (Ls/Rs MSC < 0.3, LP 7 kHz), 3–6 dB under the front's side energy at the head and 6–9 dB under the object layer, same rear delay as the objects, no pre-delay. Bradley–Soulodre: early lateral energy (< 80 ms) makes stage/width, late makes envelopment [literature]; objects are early/coherent, u is diffuse; keep them separate, never decorrelate y, never make u coherent. First listen SURROUND 0.35, not 0.5. Backing vocals and the vocal's own reverb live in u and will be behind at the ambient level: the §12 owner decision, now with D_A on by default under rear-lead. The venue layer (ER+FDN) stays behind the owner's gate, kill-tested venue-only. Test: object-only, object + u −3 dB, object + u −6 dB; one question: one room or two radios.
-
-**9. Fallback for mono-ish masters and the realtime tier. [P2]**
-No admitted cluster or off-centre coherent energy < 5 % = reported state "no second stage" (health line), rear = u + air only; never raise the air or add a venue silently (13.09/17.09 policy). Realtime (type-100/Spotify) middle tier on a worker overrun: decomposition-only on the stock thread (< 0.5 ms/block), α_fallback 0.3, no duck, ear trim and bleed cancel unchanged (a switching cancel is an audible front copy appearing in the doors), tier switch over 2–3 blocks. Today four overruns silence the rear until a 500 ms gap ("rears blinking" 21.09 [log]).
-
-**10. Wide incoherent pairs (double-tracked guitars) and blinding. [P1 / P0]**
-By §3's own identities an equal-power uncorrelated pair (take 1 left, take 2 right) has P_S ≈ 0 and is filed ENTIRELY as ambience: −9 dB, decorrelated, never subtracted, i.e. the "mix copy" the owner rejected, applied to the instruments he most wants behind [derived]. Candidate: per ERB group E = corr(|L|², |R|²) over 300 ms; cells with Φ < 0.35, E > 0.7, |p_slow| < 0.3, 250 Hz–6 kHz, stationary (band range over 1 s < 6 dB) are a stereo pair of takes: transfer α_w·L → Ls, α_w·R → Rs with front subtraction, α_w 0.5 (cap 0.7), same permission/duck. Risk: stereo vocal reverb and wide backing vocals have the same signature, so D_A must be on. Build only if the DEV40 column shows guitar + keys energy in such cells exceeding vocal + vocal-reverb energy by ≥ 6 dB; else write "double-tracked instruments will never be behind" into §12. Blind randomiser `AUDIO_SCENE_BLIND=seed:A,B,C` (~15 lines, no UI): condition picked per track start, logged, one verdict per track; 10 songs × 3 conditions = 30 verdicts ≥ the frozen 24. Every verdict on record, the 17.09 wow included, is one sighted listener [process].
-
-### 13.3 v2 content that works against a stage, with the replacement
-
-- `AUDIO_STEREO_REAR_DELAY_MS` +12 with α 0.5–0.7 as the "behind" condition → predicted "wider" by precedence. Replace: rear-lead default (front delayed to Ls−L + 3–4 ms, rear 0) once the sweep allows; +12 ms becomes control B, run only at α ≥ 0.9. Re-advertise latency; pick 512/128 for rear-lead if the 40 ms gate is kept.
-- "Energy conserved" is amplitude conservation (−3 dB at α 0.5) → g_r = sqrt(1 − (1−α)²), and conservation stated at the head via `AUDIO_SCENE_REAR_MATCH_DB`.
-- Per-cell w_slow and per-cell widened image q(p_slow,k) → cluster membership w_member and one image q_c per cluster; per-cluster α_c, α_max 0.9 (lag) / 0.5–0.7 (lead); non-member off-centre cells transfer nothing. `AUDIO_SCENE_CLUSTER=0` keeps v2 bit-identical.
-- w_phase granting object permission to anti-phase/delay-widened content → exclude |θ| > 120° from the histogram and from O_k; such content reaches the rear only through u.
-- +3 dB @ 4 kHz presence shelf on the rear → measured inverse rear/front head EQ, bounded ±6 dB.
-- 0.5/0.7 body caps on everything 250 Hz–1 kHz → caps on the ambient layer only; the object carries full body from 190 Hz.
-- Duck floor −6 dB as a universal "never empties" → floor tied to the delay sign: −12 dB / gate and D_A on under rear-lead.
-- Linked limiter "release ≥ 500 ms or per-block gain" and the surviving 42 ms limiter → lookahead program limiter at Ls/Rs peak 0.28 FS, release 800 ms, GR ≤ 6 dB; guard order ambient/air → program gain → never α.
-- One symmetric rear delay knob → plus `AUDIO_STEREO_REAR_SEAT_TRIM` (Ls/Rs dB:ms), off until measured.
-- Single-k bleed cancel "off until the sweep" → on from the first listen with the measured offset, k 0.30 compromise, LP 3 kHz, guard model rewritten; document that one k nulls one bus.
-- SURROUND first-listen 0.50 → 0.35; the ambient layer is the shared room, not the second stage.
-- §8 "no tracking, no snapping" → "cluster centres tracked at ≤ 0.05/s with 1.5 s admission, 600 ms crossfades, 30 s drop; nothing tracked ever gates protection."
-- §11 behind-ness proxy = max (rear − front) dB → precedence margin at the head through the IRs: behind if lead ≥ +3 ms and margin ≥ −6 dB, or lead ≤ 0 and margin ≥ +10 dB; plus transient |dt| ≤ 8 ms.
-- §11 step 3 sighted by construction → in-hook blind randomiser, ≥ 24 blind verdicts before any "wow" is recorded.
-- §2/§3 cold start by 32 hops → the object layer stays closed until the first cluster passes the 1.5 s dwell; ambient/air keep the 32-hop ramp.
-- "Cabin localisation 67 % within ±20°" as evidence for behind → drop it: FA2026 used a Harman cabin with rear-deck surrounds and did not test front/back [literature caveat].
-
-### 13.4 What cannot be fixed here, and must be said to the owner
-
-- Centred instruments (lead, main bass, kick, snare, a centred piano) never go behind: geometry, by design and by his 13.09 policy. "Bass guitar behind" (19.09): bass is centred, doors HP ~100 Hz with −8 dB notches at 113/138/174 Hz, Ls → LFE −14 dB [model]; rear bass lands in the single sub, which is not "behind".
-- The rear stage is at the C-pillars (behind, above, lateralised) with the doors underneath; there is no ear-height rear stage, no rear-centre phantom for the off-centre driver, and no separate door/pillar addressing (one Ls feeds both at +6/+9 dB): height is set by spectrum only.
-- Behind-right is always weaker and more diffuse than behind-left for the driver; the trim fixes level, not angle; the passenger hears the mirror error.
-- Only 3–18 % of a mix is off-centre and coherent; a double-tracked pair is coherent only under item 10; on centred pop and mono masters the second stage is thin or empty regardless of rendering.
-- The bleed cancel is exact on one bus only (−7.7 / −10.7 dB residual on the other) and limited above ~3 kHz; nothing cancels what a live first-B adds; the level-selected EQ bank (±5.9 dB) moves the balance with volume.
-- Shared vocal cells: a vocal inside a cell with a panned instrument cannot be separated at this budget; the object dips at every vocal entry in shared bands, harder under rear-lead. Structural.
-- The first admission in any song or after any CarPlay reset is ~2 s late.
-- Every amp number above is [model]; until the one-hour sweep the first listen is a guess either way.
-
-### 13.5 The cheapest decisive test and what must precede it
-
-Harness first (one PC day, no C, no car): (1) `--mode cluster` on DEV40 with the columns stage_count, member_stability (≤ 2 changes/min, |Δp_c| ≤ 0.05/s), cell_churn (≤ 5 %), owned_share (guitar/keys ≥ 0.6, vocal/bass/drums ≤ 0.03), object energy front+rear vs original (0 ± 0.5 dB), object dip at vocal entry (150 ms), swing on the object layer in isolation, all gated on stem energy ≥ −45 dBFS; (2) the precedence-margin column (level AND lead at the head through the IRs once they exist, model IRs until then) over owned cells; (3) the wide-pair energy column from item 10; (4) AmpChain bus peaks at Ls 0.28 FS, k 0.30. Kill: fewer than half of the songs with ≥ 10 % off-centre coherent energy yield a stable owning cluster → the histogram does not carry whole instruments and the membership lens dies in one numpy hour.
-
-Car, one session: hour 1, parked: Surround min/max (first-B live?), the probe sweep L/R/Ls/Rs → headrest (Ls−L arrival, Ls/Rs level and arrival, head EQ table) and → rear-door grille (bleed k and offset). Hour 2, blind-randomised per track start, α 0 as control, audio-only sources: an oracle master built on the PC from htdemucs stems of one of his three songs, guitar (or keys) stem hard-LEFT only, everything else dead-centre (p = −1, Φ = 1 in the guitar cells, zero estimation error), plus two real double-tracked-guitar songs. Conditions: α 1.0 / +12 ms; α 0.7 / +12 ms; α 0.7 / rear-lead (front delayed to Ls−L + 3 ms); with REAR_MATCH, the seat trim, bleed cancel and the ear EQ from hour 1 applied to all. One question per track: "the guitar is behind me, stable, full" / "wider, over my shoulder, phasey". Step 0 for zero code: the same oracle file through today's Track A hook with FRONT_RETENTION 0 and surround 0.5 already moves ~0.68 of hard-panned coherent energy [offline 17.09], a 70 % oracle. Verdict "behind" in at least one condition → the cabin can do a double stage and the remaining question is how much of real mixes qualifies (the §11 column on his three songs; < 10 % means the double stage will be rare and he must hear that). "Wider" in all conditions → the premise is dead for this cabin and no estimator, net or knob changes it.
-
----
-
-## 14. Implementation and offline results (2026-10-08, no car)
-
-**Files** (all in `tools/stereo-upmix-render/`): `scene_upmix.py` (numpy reference renderer, 630 lines, ~5 s per 60 s of audio; CLI compatible with `upmix_stem_tests.py` and `upmix_behavior_tests.py`: unknown renderer flags ignored, last two positionals = stereo in / 6-ch out; `--alpha --surround --ambient-gain --air-db --rear-delay-ms --pan-lo/--pan-hi --tau-slow-ms --tau-fast-ms --tau-dir-ms --release-ms --no-cluster --no-unmix --wide-pair --duck-mask --dump`), `test_scene_upmix.py` (ten synthetic checks, 37 rows, stem-attributed with the harness's `rear_share`; prints the module md5; 37/37 OK at md5 `ce8d9db9`; 46/46 at md5 `6cee0450` after §16–§17 added checks 11 and 12; 51/51 at md5 `317fb8d5` with check 13, ~30 s), `scene_albumdb_eval.py` (the ten AlbumDB songs with real stems against the passive matrix and the PAD baseline; writes a Markdown table and JSON into `--out-dir`), `scene_oracle_master.py` (one AlbumDB stem hard-panned, everything else dead-centre: the exact-decomposition test offline and the in-car oracle file of §13.5).
-
-**What the implementation changed in the design** (each forced by a measurement, in order):
-
-1. **The object is an exact two-source unmix against the centre, not a rank-one projection.** On the oracle master (guitar hard-left, everything else centred mono) the §4 projection transferred the centred drums at .44, keys .53 and bass .25 rear share: a bin shared by a panned and a centred source has one averaged direction and the projection takes both. With a place at pan `p_c` (gains `a_c, b_c`) every bin decomposes exactly into `[L; R] = [a_c; b_c]·s + [1; 1]/√2·m`: `s = (L − R)/(a_c − b_c)`, `m = (a_c·R − b_c·L)/(a_c − b_c)`. A centred source gives `s = 0` sample-exactly for any place. Regularised `det/(det² + 0.05)` below |det| 0.5, bounded by the bin energy, subtracted from the front at the same pan. Oracle after the change: guitar .78–.90 rear at α 0.7–0.9 with lead vocal .006–.011, bass .07, drums .13 (the drums/bass remainder is the metric's floor: a full-band hard-left guitar sits at −10 dB in every cell those stems own).
-2. **Membership, clustering and the unmix pan use the centre-removed pan, not the eigen pan.** With `num = P_L − Re C` and `den = Re C − P_R`, `a/b = num/den` and `num + den = S·(a² − b²)` are free of a centred source of any level (the eigen pan collapses toward centre when a loud vocal enters a guitar's cells). Ambience pushes `den` below zero for a hard-panned source, so the sign test tolerates 1.5·P_N and the clamped ratio biases a mild pan outward, never toward the centre (the safe error). Numerically verified on synthetic cells.
-3. **Three statistics, not one.** 8 ms per-bin stats for the fast pan gate of the rank-one path only; 43 ms for the Wiener scalar and the pooled clustering; **300 ms for the direction of the residual `u`**: with an instantaneous direction every bin is rank-one and `u` vanishes (the first build's ambient layer sat at −52 dBFS), and double-tracked guitars read as side only when the direction is averaged long enough to sit at the centre. The direction is regularised toward the centre as the primary vanishes (`k = 0.5·P_N`).
-4. **Permission opens with the dwell and releases over 2 s, and the place's image, alpha scale and pan are held with it.** A vocal singing the same notes as the guitar (two coherent sources at one frequency, which no two-channel statistic can separate) moved the bin pan and collapsed the transfer by 21 dB within 0.3 s; with the hold the transfer stays within 0.6 dB and the unmix keeps the vocal out (check 9). Protection no longer needs a fast-down term on the unmix path.
-5. **Shadow places are rejected**: a candidate cluster whose energy-weighted bin membership overlaps an admitted place by more than 0.5 is the same instrument seen through shared cells (a −0.5 peak beside a −1.0 place) and never admits.
-6. **The slow-pan EMA weight is bounded** (2× the accumulated weight): cross terms of two coherent sources can otherwise move an energy-weighted estimate in one hop regardless of τ.
-7. **Cluster housekeeping** from the audit: the centre EMA is per pick (τ 2 s, slew 0.05/s binding), σ from the peak width in [0.08, 0.25], K ≤ 3 admitted places (the weakest fade), merges fade the loser over 1.5 s, a weak matched candidate loses its dwell, the front floor is flat 0.2 and kernels are clipped at 2.5 σ.
-8. **Ambient Ls/Rs decorrelation is a static per-bin phase table**; a Welch magnitude-squared coherence at 23 Hz resolution stays ≈ 1 for any LTI phase (the audit measured .84–.87), so the §4 "MSC < 0.3" target must be read as band-limited IACC over ERB bands; the bed-delay comb remains the alternative. The air copy ramps 2.0–2.5 kHz.
-9. **Anti-phase content goes behind through `u` by design** (matrix-surround tradition, §3's "treated as wide"); it never becomes an object. The wide-pair transfer (§13.2 item 10) is implemented but parked: its coherence gate never opens on real mixes because every pooled group is shared with the coherent centre.
-
-**Synthetic verification** (`test_scene_upmix.py`, limits in the file): centred source + room → source rear share .009, front unchanged, room layer .20; hard-left pluck + centred vocal at α 0.7 → pluck .83 rear, vocal .063 (metric floor ≈ .05–.08: the pluck at −10 dB in vocal-owned cells moves at .95); energy conservation of the transfer within 0.03 dB, no inverted copy in the front right (−300 dB); centred drums + reverb → range_1s .024, onset_jump .021 (the PAD failure does not reappear); mono input → rear −300 dBFS and the front bit-exact; pluck entering at 5 s → admitted after 2.17 s, member weight .83, zero state changes; vocal entry into guitar cells → transferred fraction −0.6 dB within 0.3 s; cold start → no burst.
-
-**Real stems, ten AlbumDB songs** (loudest 60 s, mix = sum of heads, peak 0.7; median rear share per class over songs; "swinging" = songs with any head range_1s > 0.30; rear RMS over Ls+Rs):
-
-| condition | voc | bvoc | bass | drums | hperc | gtr | keys | swinging/10 | behind gtr dB | rear dBFS |
-|---|---|---|---|---|---|---|---|---|---|---|
-| passive matrix | .01 | .10 | .02 | .09 | .11 | .16 | .37 | 3 | −11.4 | −30.4 |
-| PAD baseline | .01 | .05 | .03 | .07 | .12 | .08 | .19 | 1 | −11.8 | −35.4 |
-| scene α 0 (side + air only) | .01 | .03 | .02 | .03 | .09 | .03 | .08 | 0 | −12.8 | −37.5 |
-| scene α 0.5 | .02 | .07 | .03 | .07 | .18 | .11 | .19 | 2 | −9.5 | −32.7 |
-| **scene α 0.7 (default)** | .02 | .09 | .03 | .09 | .21 | .13 | .25 | 5 | −8.9 | −31.9 |
-| scene α 0.9 | .03 | .10 | .03 | .10 | .24 | .16 | .29 | 7 | −8.5 | −31.2 |
-| scene α 0.7, no cluster (rank-one path) | .20 | .32 | .21 | .32 | .48 | .37 | .27 | 9 | −4.7 | −29.7 |
-| scene α 0.7, n_fft 512 / hop 128 (the hook's frame) | .02 | .09 | .03 | .09 | .24 | .15 | .28 | 6 | −9.2 | −31.7 |
-| scene α 0.7 + wide-pair transfer | .02 | .09 | .03 | .09 | .21 | .14 | .25 | 5 | −8.8 | −31.8 |
-
-The table was measured with the side layer full-band; with the 7 kHz side low-pass that became the default after DEV40 (§15) the α 0.7 row reads voc .02, bvoc .08, bass .03, drums .09, hperc .20, gtr .13, keys .25, swinging 5/10, rear −31.9 dBFS: only high percussion moves.
-
-Reading: these indie mixes have **no coherent off-centre places** (stem energy pans within ±0.1, guitars and keys double-tracked with L/R coherence .4–.75), so the stage there is the generalised side signal `u` at `ambient_gain 1.0 × surround 0.7`, about 3 dB under the passive matrix's side level; the scene renderer lands in the matrix's league for guitar and keys with the same or better protection of lead vocal, bass and drums, more cymbal top behind (hperc .21 vs .11: the overheads' width lives in the side), and five songs with a guitar or high-percussion head moving more than 0.30 over a second against the matrix's three. The rank-one path without places (last row) is what the v2 spec would have shipped: it moves everything, including .20 of the lead vocal. Places appear on hard-panned material, where the oracle shows what the transfer does (guitar .78–.90 behind, vocal ≤ .01). Song 10 has a wide lead (voc .10 at α 0.7 against .07 for the matrix): the duck's case, not yet wired to a posterior offline.
-
-**Not done offline, needs the car or the hook**: the duck with the mask net's posterior, the rear-first cabin guard, the program limiter, level matching at the head, bleed cancel, rear-lead, the C port into `hssr_dsp.c` (the numpy loop is the reference it must match bit-for-bit on the host renderer).
-
----
-
-## 15. DEV40 against Track A and the passive matrix (2026-10-08, training PC)
-
-**Protocol.** The same 40 MoisesDB songs, excerpts, gain and metrics as the Track A host baseline of 2026-09-30 (`D:\upmix\runs\tracka_matched40_2026_09_30`, `docs/audio/UPMIX_TRACKA_MATCHED40_2026-09-30.md`): `upmix_stem_tests.py` (sha 184cc28b) with `--split-file masknet_cache\split.json --split dev --songs 40 --seconds 60 --variant shipped`, renderer swapped to `--render "python D:\upmix\tools\scene_upmix.py"` with `--render-extra` overriding the variant's `--surround`; the passive matrix through `--render "python baseline_upmix.py --mode matrix"` (its first `--mode` wins). Rows = 231 (song, stem) pairs. Runs live in `D:\upmix\runs\scene_dev40_2026_10_08\<cond>\`. Launch runners on the PC detached (`Invoke-CimMethod Win32_Process Create`): a tree started from an ssh session dies with it.
-
-**Median rear share per stem over songs** (n songs in brackets), swings = songs with any stem whose 1 s medians range more than 0.30 inside the minute, rear = mean Ls/Rs RMS:
-
-| condition | vocals (40) | bass (28) | drums (40) | guitar (39) | keys (27) | piano (15) | strings (6) | percussion (10) | other (9) | swings | rear dBFS |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| Track A host baseline (q6d + V11 + v21a, 30.09) | .076 | .149 | .296 | .165 | .152 | .095 | .069 | .200 | .169 | 29/40 | −34.4 |
-| passive matrix (L−R, 7 kHz, 12 ms) | .052 | .019 | .048 | .129 | .210 | .190 | .332 | .010 | .170 | 15/40 | −31.9 |
-| scene α 0 (side + air, no transfer) | .019 | .009 | .079 | .032 | .044 | .030 | .090 | .066 | .131 | 1/40 | −39.0 |
-| scene α 0.7 (spec defaults) | .081 | .029 | .172 | .163 | .213 | .185 | .282 | .178 | .249 | 30/40 | −32.5 |
-| scene α 0.9 | .089 | .033 | .189 | .185 | .246 | .191 | .321 | .199 | .272 | 36/40 | −31.9 |
-| scene α 0.7, σ_min 0.15 | .087 | .035 | .192 | .211 | .255 | .190 | .371 | .214 | .321 | 34/40 | −31.9 |
-| scene α 0.7, σ_min 0.15, no mass scaling | .128 | .047 | .251 | .283 | .332 | .287 | .437 | .268 | .367 | 39/40 | −30.3 |
-| scene α 0.7, side layer low-passed 7 kHz (**new default**) | .075 | .029 | .134 | .163 | .196 | .162 | .282 | .159 | .234 | 29/40 | −32.5 |
-| scene α 0.7, σ_min 0.15 + side 7 kHz | .084 | .035 | .159 | .211 | .255 | .190 | .371 | .183 | .307 | 33/40 | −31.9 |
-
-Songs with the lead vocal above .15 rear: Track A 4, matrix 3, scene α 0.7 1 (James Graydon "Our Love" .27: a wide, doubled lead, the duck's case), α 0.9 5, σ_min 0.15 5, no mass scaling 12. Steady swings (1 s medians from 5 s on): α 0.7 30, σ_min 0.15 33, no mass scaling 38.
-
-**Reading against Track A.** Vocal protection equal (.08), bass and drums far better protected (.03 vs .15, .17 vs .30), guitar equal (.16), keys/piano/strings higher. The rear is 2 dB louder and lives in every band (guitar .18–.24 from 300 Hz to 16 kHz: body and attack behind) where Track A's rear was a 2–10 kHz top only (guitar .10 at 300 Hz–1 kHz, .45 at 4–6 kHz) with the lead vocal's air behind at .33 in 4–6 kHz. Stability by the swing count is the same (30 vs 29 songs); the steady re-measure (`scene_dev40_remeasure_steady.py`, 1 s medians from 5 s on, after the stage has formed) keeps 30 songs for the scene renderer and 27 for Track A, start-up rise +0.03 median: the swings are not the 3 s stage formation.
-
-**Reading against the passive matrix.** Below 2 kHz the two are the same rear (guitar .17/.13 vs .18/.18, keys .24/.22 vs .22/.22 per band): on these mixes the stage is the side signal either way. Above 4 kHz the matrix stops (its 7 kHz low-pass) while the scene renderer carries the air layer (−9 dB copy above 2.5 kHz, a static .11 floor of rear share in every treble cell) and the full-band side: that is the whole drums difference (.17 vs .05, all of it in 4–16 kHz) and most of the "other"/high-percussion difference. Low-passing the side layer at 7 kHz changed nothing on AlbumDB (hperc .21 → .20) but took DEV40 drums from .17 to .13 and percussion from .18 to .16 with guitar, keys, strings and the rear level unchanged and one swinging song fewer, so 7 kHz is now the renderer default (`side_lp_hz`, `--side-lp-hz 0` for full band); the treble that remains behind is the air layer by design. The places add what the matrix cannot: hard-panned percussion (+.28 … +.55 on four songs) and the hard-panned guitars (oracle .79 vs .32), at the price of 16 more swinging songs (13 guitar stems, 9 drums).
-
-**Where the swings come from** (four worst songs dumped with `scene_dev40_dump_stems.py` and read with `scene_swing_audit.py`, which prints the harness's rear share per second next to the renderer's own places, member weight, pooled pan):
-- *Arrangement, not the tracker*: in "It's Your Money" the guitar stem holds a rhythm part near +0.2 and a lead part at +0.9; the lead is a member of the +1.0 place (w .7–.85, rear .5–.68), the rhythm is not (rear .2–.3). The 1 s medians swing with the parts. A vocal stem's rear share spikes to .25–.36 for the bars where its owned cells read pan +0.8: a doubled or panned vocal part, transferred as any off-centre content.
-- *Membership too narrow for real pans*: a guitar at −0.75…−0.85 ("Take Another Line") against a place snapped to −1.00 got member weight .02–.09 because the place width is always its floor (a 3-bin histogram peak is narrower than 0.08) and the kernel is clipped at 2.5 σ = 0.2. With σ_min 0.15 the weight rises to .23 (rear .15 → .19 on the minute), with the mass scaling removed to .20, with both to .50 (rear .29).
-- *Mass scaling is the vocal/drum protection on real mixes*: AlbumDB ablation (10 songs, α 0.7): σ 0.15 alone guitar .13 → .18, keys .25 → .27, drums .09 → .12, vocal/bass unchanged, swinging 5 → 6; removing the mass scaling guitar .27 but drums .16, backing vocals .17, high percussion .33, swinging 9/10. Keep the mass scaling.
-- *Wide leads* ("Our Love": lead vocal with side/front energy ratio .3–.5 in its own cells) go behind at .2–.6 through the side layer and partial membership of the ±0.7 places; only a vocal posterior (the duck, parked) can hold them in front.
-
-**Decision (updated 2026-10-09 04:25, §16).** The car candidate is the scene renderer with the fine-grid net c and the full-rear shaping (gamma 1, inst_alpha 0.9, duck 0.25, kit letter I): on DEV40 it holds the lead vocal at Track A's level (.076 median, four songs above .15, +2.2 dB at the rear doors over the amp's own bleed) with bass .061 and drums .148 against Track A's .149 and .296, and puts guitar .26, keys .35, piano .21, strings .39 behind against Track A's .17 / .15 / .10 / .07: roughly 60 % of the oracle-plus-duck ceiling at 192 M MAC/s. The balanced shaping (letter H: gamma 2, α 0.7, duck 0.25) is the fallback if the car says 'too much'. Spatial-only defaults for the renderer without a mask: α 0.7, σ_min 0.08, mass-scaled membership, side layer low-passed at 7 kHz (module md5 ce8d9db9, 37/37): on DEV40 they hold vocal leak to one song with Track A's guitar and better bass/drum protection. `--sigma-min 0.15` is the documented candidate for the car: guitar .16 → .21, keys .21 → .26, strings .28 → .37 at Track A's vocal-leak count (5 songs vs 4) and four more swinging songs; it is one of the six blinded conditions in the car kit. Removing the mass scaling is rejected (vocal .13, 12 leak songs, 39/40 swinging). The swing count itself cannot pick between the matrix (15) and the scene renderer (30): the audited swings are parts of one stem at different pans going behind and coming back, which is the stage working; only the car says whether it reads as a stage or as movement.
-
-**TEST20, the untouched set** (`--split test --songs 20`, 103 rows, never used for a choice): Track A vocals .093 / bass .108 / drums .262 / guitar .241 / keys .122, swings 9/20, 3 songs with the vocal above .15; passive matrix .092 / .014 / .086 / .148 / .293, swings 9/20, 4 leak songs; scene α 0.7 defaults .103 / .013 / .259 / .194 / .184, swings 18/20, **9 leak songs**; σ_min 0.15 .127 / .018 / .291 / .225 / .255, 18/20, 9. The DEV40 picture (vocal leak in one song, drums .13) does not carry: these mixes have doubled or hard-panned vocals and panned drum elements, which the spatial model moves like any other off-centre content and the matrix moves less (it has no places). The fix is semantic, not spatial: the protect mask of §16 as a duck on the spatial path (vocal/bass/drum-dominant cells keep their place membership from moving them), measured there.
-
-**Headphone and car material.** `~/Desktop/AUDI_2/upmix-data/scene_audition_2026-10-08/` (front-only and rear-only stereo files of the oracle and a real mix, scene vs matrix); `~/Desktop/AUDI_2/upmix-data/scene_car_kit_2026-10-08/` from `scene_car_kit.py`: three sources (oracle, its real mix, a MoisesDB mix with a guitar 80 % left) × five blinded conditions (matrix, α 0.7, α 0.7 rear-lead, α 0.9, α 0) as headerless 6-voice S16 for `qsa_play` on the unit, a rear-only tone to verify the SAD before scoring, the key sealed in `KEY.txt`, protocol in its README.
-
----
-
-## 16. Semantic stage: instruments behind by an external mask (2026-10-08, late)
-
-Owner, 08.10: "not only the guitar should go behind, some extraction of instruments in general; whatever it takes, a good full rear scene." The spatial model (§4–§15) can only move what is off-centre; a centred piano, keys or synth pad stays in front by design. The semantic stage adds the other axis: an external per-cell **eligibility** (instrument vs lead vocal / bass / drums) decides what else goes behind, at the cell's own pan, after the spatial transfer has taken its part.
-
-**Mechanics** (`scene_upmix.py`, `inst_*` knobs, `--protect-mask` / `--instrument-mask`):
-- Input: the harness's `HSSRMSK0` protect mask (eligibility = 1 − protect) on the hook's grid (512-point STFT, one row per 4 hops of 128 = 512 samples), or a plain `.npy` [Tc, 257]; `inst_mask_nfft`/`inst_mask_hop` map any other grid (2048/512 for a "fine" net). Mapping to the renderer's 1024/256 bins is nearest-bin, nearest-row.
-- Shaping: `e ← clip((e − thresh)/(1 − thresh))`, `e ← e^gamma` (default gamma 2), then an asymmetric EMA: **slow attack (300 ms), fast release (30 ms)**. An instrument has to earn the rear; a vocal entering the cell wins at once. The first build smoothed the other way (80 ms up, 400 ms down) and the vocal rode 400 ms of leftover piano eligibility into the rear (.41 of the vocal behind on the synthetic).
-- Object: `O = e · (X − sub_spatial)` per channel, the instrument part of what is still in front. Transfer with the constant fraction `a = inst_alpha (0.7)`: `front −= a·O`, `rear += sqrt(1 − (1 − a)²)·O` at the cell's own L/R (no widening: a centred instrument becomes a phantom centre behind). The first build applied the conserving gain to `a·e`, and `sqrt(1 − (1 − a e)²) ≈ sqrt(2 a e)` turned every small eligibility into a loud rear copy (vocal .62 behind); the gains must come from the constant fraction and the mask only scales the object.
-- Interaction: the duck mask, the cold ramp and the 190 Hz high-pass apply as to the spatial object; the semantic rear is added to Ls/Rs before the side and air layers.
-
-**Why a 94 Hz-bin ratio mask leaks the vocal.** On the hook's 512-point grid a vocal harmonic and a piano harmonic 40 Hz apart share one bin; the oracle ratio mask there reads .3–.5 in cells the vocal owns at 23 Hz resolution. Synthetic check (centred formant voice a fifth above a centred strummed chord with reverb, `test_scene_upmix.py` check 11): raw 512-grid oracle, no smoothing: piano .90 behind, vocal .24; with gamma 2 and the slow-attack/fast-release EMA: piano .88, vocal .065; the same oracle on a 2048/512 grid: vocal .21 raw, and the vocal-owned cells have mean eligibility .018 there. A future net should run on the fine grid (mask_net has `N_FFT_FINE 2048`) or output a sharper posterior.
-
-**Oracle ceiling on AlbumDB** (ten songs with real stems, loudest 60 s, `scene_albumdb_eval.py --conds inst-oracle,...`; the mask = instrument power / total power per cell from the heads, protected = lead, backing and other vocals, bass, drums; median rear share per class):
-
-| condition | voc | bvoc | bass | drums | hperc | gtr | keys | swinging/10 | behind gtr dB | behind keys dB | rear dBFS |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| passive matrix | .01 | .10 | .02 | .09 | .11 | .16 | .37 | 3 | −11.4 | −3.1 | −30.4 |
-| scene α 0.7 (defaults, no mask) | .02 | .08 | .03 | .09 | .20 | .13 | .25 | 5 | −10.3 | −5.0 | −31.9 |
-| + oracle instrument mask, inst_alpha 0.7 | .03 | .10 | .08 | .21 | .60 | .54 | .54 | 10 | −0.4 | +3.1 | −28.4 |
-| + oracle mask, inst_alpha 0.9 | .03 | .10 | .09 | .24 | .68 | .64 | .60 | 10 | +1.2 | +4.4 | −28.2 |
-| + oracle mask, σ_min 0.15 | .03 | .11 | .08 | .22 | .61 | .56 | .59 | 10 | −0.0 | +2.2 | −28.3 |
-| + oracle mask on a 23 Hz grid (2048/512) | .03 | .09 | .05 | .15 | .59 | .60 | .64 | 10 | −0.1 | +3.9 | −28.1 |
-
-Reading: with a perfect mask the instruments stand behind as loud as in front (guitar −0.4 dB, keys +3 dB) while the lead vocal stays at .03; the rear is 3.5 dB louder than the spatial-only default. Costs: drums .21 (cymbal cells shared with high percussion and guitars on the 94 Hz grid), and every song "swings" by the range metric because the transferred fraction follows the arrangement (which instrument plays), not because anything flickers. High percussion (.60) is an instrument here by the class list; protect it if shakers behind read as wrong. The same oracle on the 23 Hz grid is better on every axis (drums .15, bass .05, guitar .60, keys .64): the grid, not the idea, sets the drum leak; a mask net for this stage should run on mask_net's fine analysis (2048/512), which the hook's control cadence (512 samples) already matches in time.
-
-**The same mask as a duck on the spatial path.** TEST20 (§15) showed the spatial model moving doubled vocals and panned drum elements through places in 9 of 20 untouched songs. With a protect mask present the renderer now also ducks the spatial transfer and the side layer by `D = duck_depth · protect` (per cell, 30 ms attack, 300 ms release, `duck_from_mask`, depth 0.5 default, `--duck-depth`, `--no-duck-from-mask`). AlbumDB with the oracle mask:
-
-| condition | voc | bvoc | bass | drums | hperc | gtr | keys | swinging/10 | rear dBFS |
-|---|---|---|---|---|---|---|---|---|---|
-| scene α 0.7, no mask | .02 | .08 | .03 | .09 | .20 | .13 | .25 | 5 | −31.9 |
-| semantic stage, no duck | .03 | .10 | .08 | .21 | .60 | .54 | .54 | 10 | −28.4 |
-| semantic stage + duck 0.5 (**defaults with a mask**) | .02 | .06 | .06 | .15 | .53 | .48 | .46 | 10 | −29.2 |
-| semantic stage + duck 1.0 | .01 | .01 | .04 | .08 | .45 | .41 | .36 | 10 | −30.2 |
-| duck 0.5 only (no semantic transfer) | .01 | .05 | .02 | .06 | .17 | .11 | .21 | 3 | −33.1 |
-
-Depth 0.5 keeps most of the instruments (.48/.46) while halving the backing-vocal and drum leaks; depth 1.0 also ducks the semantic transfer in every shared cell and costs the instruments (.41/.36). The duck alone makes the spatial-only renderer cleaner than its own default (drums .06, swinging 3/10) at a small guitar cost: the mask is worth carrying even before the semantic stage is trusted.
-
-**DEV40 oracle ceilings and the trained net** (same protocol as §15; the oracle mask built by the harness's `--oracle-mask` from the MoisesDB stems, protected = vocals, bass, drums; medians over songs):
-
-| condition | vocals | bass | drums | guitar | keys | piano | strings | percussion | other | swings | vocal >.15 | rear dBFS |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| Track A host baseline | .076 | .149 | .296 | .165 | .152 | .095 | .069 | .200 | .169 | 29/40 | 4 | −34.4 |
-| passive matrix | .052 | .019 | .048 | .129 | .210 | .190 | .332 | .010 | .170 | 15/40 | 3 | −31.9 |
-| scene α 0.7 defaults (spatial only) | .075 | .029 | .134 | .163 | .196 | .162 | .282 | .159 | .234 | 29/40 | 1 | −32.5 |
-| + oracle instrument mask, semantic 0.7, no duck | .090 | .061 | .167 | .494 | .640 | .459 | .588 | .411 | .422 | 39/40 | 5 | −30.3 |
-| + oracle mask, σ_min 0.15 | .102 | .068 | .181 | .552 | .655 | .520 | .614 | .434 | .485 | 40/40 | 6 | −29.9 |
-| + oracle mask, inst_alpha 0.9 | .093 | .064 | .175 | .582 | .686 | .521 | .662 | .444 | .441 | 39/40 | 6 | −30.1 |
-| **+ trained mask net v21a** (the hook's int8 net, 128 M MAC/s, no duck) | .133 | .151 | .239 | .380 | .420 | .296 | .502 | .349 | .407 | 40/40 | **19** | −30.7 |
-| + oracle mask + duck 0.5 (the defaults with a mask) | .055 | .044 | .108 | .420 | .545 | .375 | .517 | .304 | .297 | 39/40 | **1** | −31.4 |
-| + oracle mask + duck 1.0 | .016 | .035 | .049 | .315 | .400 | .264 | .408 | .177 | .169 | 39/40 | 0 | −33.0 |
-| duck 0.5 only, no semantic transfer (spatial renderer + oracle protect) | .045 | .020 | .091 | .132 | .169 | .127 | .209 | .119 | .193 | **20/40** | 1 | −34.2 |
-| **+ trained net v21a + its own duck 0.5** | .098 | .113 | .178 | .280 | .357 | .243 | .392 | .276 | .300 | 38/40 | **9** | −31.7 |
-| + net v21a + duck 0.5 + long gate τ 3 s | .083 | .075 | .139 | .230 | .328 | .194 | .362 | .237 | .265 | 38/40 | 7 | −32.2 |
-| + fine net b (conv2048, ctx 16 / hidden 8, 3.8 k params, 90 M MAC/s, 4000 steps, cymbals protected), no duck | .082 | .045 | .139 | .255 | .259 | .188 | .469 | .167 | .273 | 36/40 | 6 | −31.1 |
-| + fine net b + its own duck 0.5 | .050 | .026 | .095 | .166 | .171 | .148 | .319 | .106 | .167 | 32/40 | 2 | −32.8 |
-| + fine net b + duck 0.5 + long gate τ 3 s | .048 | .021 | .094 | .146 | .136 | .133 | .277 | .104 | .157 | 30/40 | 2 | −33.1 |
-| + fine net c (ctx 24 / hidden 12, 8.1 k params, 192 M MAC/s, 6000 steps), no duck | .085 | .049 | .141 | .261 | .296 | .217 | .382 | .169 | .257 | 37/40 | 6 | −30.8 |
-| + fine net c + duck 0.5 | .049 | .032 | .099 | .160 | .226 | .148 | .239 | .107 | .154 | 32/40 | 2 | −32.4 |
-| + fine net c + duck 0.5 + long gate | .048 | .026 | .097 | .153 | .166 | .130 | .222 | .105 | .142 | 31/40 | 2 | −32.6 |
-| + fine net c + duck 0.25 | .067 | .041 | .120 | .217 | .261 | .168 | .310 | .139 | .204 | 36/40 | 3 | −31.5 |
-| **+ fine net c, full-rear shaping (gamma 1, α 0.9, duck 0.25) = car kit letter I** | .076 | .061 | .148 | .264 | .345 | .212 | .392 | .175 | .259 | 38/40 | 4 | −31.0 |
-
-**The duck on DEV40.** Depth 0.5 with the oracle mask: vocal .090 → .055 (leak songs 5 → 1), bass .061 → .044, drums .167 → .108 for 15 % of the instruments; depth 1.0 protects everything (vocal .016, drums .049) but costs a third of the instruments (guitar .315, keys .400). The duck alone, with no semantic transfer, is the cleanest spatial renderer measured: vocal .045, drums .091 and the swinging songs down from 29 to 20 of 40, at guitar .132. The protect posterior is worth carrying on both paths at depth 0.5.
-
-**The gap.** The shipped net (v21a: outputs vocals / drum core / cymbals / bass / other, eligible = other + cymbals, 173 k parameters) reaches about two thirds of the ceiling on the instruments (guitar .38 vs .49, keys .42 vs .64, piano .30 vs .46) but leaks what the oracle protects: the lead vocal above .15 in 19 of 40 songs (oracle 5, Track A 4), bass .151 (Track A's level), drums .239 (its cymbals are eligible by design). With its own protect posterior as the duck the shipped net lands at the edge of the amp-bleed tolerance (vocal .098 median, +2.7 dB at the rear doors, nine songs still above .15, p90 .24) with the instruments at .28–.39: still 1.7× the spatial renderer and Track A, about two thirds of the oracle-plus-duck row. Instruments behind are within reach of a net of the hook's size; the protection is not yet, on the 94 Hz grid and with cymbals eligible. Next: the same training recipe on the fine grid (`--arch conv2048`, never trained so far), cymbals protected, evaluated through this harness against the oracle rows; and the net's own protect posterior as the duck (queued).
-
-With a perfect mask the instruments stand behind at .46–.66 on real multitracks (three to four times the spatial-only renderer and Track A) while the lead vocal stays at .09 (five leak songs, Track A has four) and bass/drums at .06/.17; the rear is 2 dB louder. "Swings 39/40" is the range metric reading the arrangement: the transferred fraction follows which instruments play, nothing flickers (the smoothers are 300 ms up, 30 ms down).
-
-
----
-
-**Long-term evidence gate and the trained net's masks (2026-10-09 02:20).** `inst_long_tau_s` gates the eligibility by a long EMA of itself (smoothstep between .15 and .40): a cell must have been an instrument cell for a while before it earns the rear; a track-change reset clears it. Screened on the five worst DEV40 songs with the v21a net's own masks (median rear share):
-
-| condition | vocals | bass | drums | guitar | keys | piano |
-|---|---|---|---|---|---|---|
-| net, no duck | .168 | .156 | .294 | .462 | .259 | .530 |
-| net + duck 0.5 | .127 | .132 | .232 | .378 | .199 | .432 |
-| net + duck + long gate τ 3 s | .095 | .077 | .179 | .361 | .149 | .423 |
-| net + duck + long gate τ 10 s | .090 | .069 | .174 | .316 | .127 | .404 |
-| net + long gate τ 10 s, no duck | .118 | .074 | .219 | .383 | .166 | .496 |
-
-The gate removes the transient mislabels (bass .13 → .08, vocal .13 → .095) for five percent of the guitar at τ 3 s; τ 10 s starts eating the instruments. **Eligibility shaping for a clean net** (five worst songs, net c's masks): gamma 1 instead of 2 lifts guitar .28 → .36 and piano .36 → .46 but lets bass through (.06 → .14) and the vocal up .02; a light duck 0.25 pulls the vocal back and leaves the bass; sharpening only below 700 Hz does not help the bass at all (.136), the leaking bass cells are its harmonics above the split, shared with the instruments. Two shaped candidates go to the car kit as letters H (gamma 2, α 0.7, duck 0.25: balanced) and I (gamma 1, α 0.9, duck 0.25: full rear, bass harmonics behind too), both with net c. With the fine net b the duck is counter-productive: its protect posterior is already clean (vocal .082 without any duck) and the duck halves what the semantic stage adds (guitar .255 → .166, below the spatial renderer alone); the duck depth has to be tuned per net, 0.5 fits the eager v21a, a clean fine net wants 0–0.25. On the 40 songs the gate at τ 3 s with the duck took the v21a vocal from .098 to .083 (leak songs 9 → 7), bass .113 → .075, drums .178 → .139, and the guitar from .280 to .230, keys .357 → .328: protection and instruments move together, no better trade than the duck alone. The gate stays a knob with default 0; the net is the lever.
-
-**Song-level memory, track-change reset, silence (2026-10-09 02:30).** `StageClusters` remembers the pans of admitted places for the song (`memory_s` 120 s); a remembered pan is re-admitted after `admit_s · (1 − memory_boost)` = 0.4 s instead of 1.5 s. `reset()` (the engine's control message `{"reset": True}`, `SceneStream.reset()`, meant for the Now Playing track change in the hook) marks every place dying (the 1.5 s fade), clears the histogram, the memory and the long gate; the next song's content at the same pan needs the full dwell again (check 13: old place gone at 1.5 s, the next song's same-pan pluck admitted 3.3 s after the reset; a remembered pan re-admits 0.67 s after a 36 s silence against 2.0 s for a first admission). The check also found two latent faults: a place never dropped during silence (the decayed histogram keeps its relative shape, so its peak kept its mass share; an absolute gate, eligible primary power 30 dB below its 60 s maximum = silence, no peaks, fixes it), and a newly created cluster had its dwell zeroed in the pick that created it (every first admission paid one extra pick, 2.3 s instead of 2.0 s). Suite 51/51 at md5 `317fb8d5`.
-
-## 17. Streaming reference and the compute envelope (2026-10-09)
-
-The per-frame loop of `render()` now lives in one generator, `_engine()`, which holds every table and every piece of state (the three EMA sets, the slow pans, the holds, the clusters, the mask smoothers, the cold ramp) and is driven one STFT frame at a time. Two drivers use it: the batch `render()` (whole-file STFT, as before) and `SceneStream.push(block)`, which frames the input with the same sine window and hop, overlap-adds the four output spectra (window-power sum is exactly 2 for a sine window at hop n_fft/4, so a sample is final once its last covering frame is added) and runs the signed rear delay as a delay line. `stream_render(x, cfg, block)` wraps it. Measured: `|stream − render| ≤ 1.1e−16` for blocks of 256, 768 (the hook's 16 ms), 1000 and 4096 samples and both delay signs; zeroing the input after sample m changes nothing before m − n_fft (suite check 12, 46/46 rows). The C port has a sample-exact reference to match block by block, and the batch numbers in §14–§16 are the streaming numbers.
-
-**Latency.** The output lags the input by n_fft samples (the analysis frame must be complete): 21.3 ms at 1024/256, 10.7 ms at 512/128 (the hook's current "512 frames of matched latency"), plus 12 ms on the rear pair only (or 15 ms on the front pair under rear-lead). The mask stages add nothing: their control rows arrive on the hook's own 512-sample cadence.
-
-**Compute (estimate, not a measurement).** Per hop at 1024/256: two forward and four inverse real FFTs of 1024 (about 150 kflop) and about 400 flops per bin over 513 bins (three closed-form 2×2 decompositions, the centre-removed pan, the bounded slow pan, the membership kernel over at most three places, the exact unmix, the transfer, the ambient pair with its phase tables, the mask smoothers): about 350 kflop per hop, 187.5 hops/s, about 65 Mflop/s; at 512/128 about 50 Mflop/s. The cluster histogram is 21 bins per hop and a pick every ~0.4 s. This is well inside the 12 ms period budget the hook already spends on the q6d GRU and the v21a mask net; the QEMU instruction-count bench (`tools/stereo-upmix-render/bench/`) is the place to measure the port, not this estimate.
-
----
-
-## 18. Everything under variant I: defaults and the port plan (2026-10-09)
-
-**Defaults (module md5 39a11af0, suite 51/51, 09.10 04:45; bleed-cancel knob added at 05:05, md5 7671d6f6, 51/51).** With a mask present the renderer now runs variant I: `inst_gamma 1.0`, `inst_alpha 0.9`, `duck_depth 0.25` (the coarse-grid shaping gamma 2 / α 0.7 / duck 0.5 stays available by flags and is what suite check 11 pins for its 512/128 oracle). Spatial defaults unchanged (α 0.7, σ_min 0.08, mass scaling, side layer low-passed at 7 kHz, +12 ms rear delay).
-
-**Timing in the amp (static RE of the J525 chain, §4 of the baseline, never measured in the cabin).** The front channels reach the front speakers through the L/R buses (87-sample input delay). The front L also enters the rear-door bus at −3 dB and the effect bus at −3 dB; the rear buses have a 403-sample input delay (6.6 ms after the fronts' 87), but the front mid/treble outputs carry 67 samples more output delay than the rear doors, so in total (rear doors 2035 samples, front mid/treble 1786, front woofers 1719: [J525 wiring](J525_WIRING_AND_SPEAKERS.md)) **the amp's own front bleed reaches the rear doors about 5.2 ms after the front mid/treble** (6.6 ms after the front woofers), and our Ls/Rs, which take the same bus, 5.2 ms plus the renderer's 12 ms: ~17 ms after the front. The bleed is delayed by the bus, not by us. Under rear-lead (kit conditions with the front delayed 15 ms) the bleed is delayed with the front input it is taken from, so our rear object arrives first by ~10 ms and the bleed copy ~20 ms later; under +12 ms the bleed arrives between the front and our object. (corrected 2026-10-17: this paragraph first added the 6.6 ms bus offset to the 5.2 ms total that already contains it, giving 11.8 / ~24 / 3–4 / ~27 ms. Variant J's choice below is unaffected: it was accepted by ear, and with rear delay 0 our rear still trails the front by the amp's own ~5.2 ms.) The one-tone probe of the radical-directions doc measures both the bus delay and the bleed coefficient (0.355 doors / 0.251 effect) and decides the bleed-cancel offset.
-
-**The bleed comb (owner's worry, 09.10 05:00).** Whatever we send on Ls and the amp's own −3 dB copy of the front L meet in the rear-door bus; with our +12 ms they are 12 ms apart there, so every component present in both combs at 83 Hz spacing. Measured on the kit renders with the bus model (door = 0.707·L + 2.0·Ls): our Ls is coherent with the front L by .05–.18 below 1 kHz, .15–.28 in 1–2.5 kHz and .3–.5 above (the remainder of transferred objects, partially eligible cells; the side and air layers are phase-scrambled by design and do not comb); the door-to-ours spectrum ripple is 1.4–2.4 dB std with +12 ms and 0.7–2.0 dB when the rear is not delayed. Two answers in the kit: **J** = variant I with rear delay 0 (our rear and the bleed aligned at the doors; the amp's rear doors are ~5.2 ms late by themselves (corrected 2026-10-17 from 11.8 ms), so the rear still lags the front by the Haas-safe amount), **K** = J plus a bleed cancel of 0.355 at offset 0 (`bleed_cancel`, `bleed_cancel_offset_ms`; the cancel removes the amp's copy if the bleed tap shares the bus timing, otherwise it adds a second copy: K against J by ear is the probe). Metric caveat: with the cancel on, the raw Ls channel carries −0.355·L, so the harness's rear-share rows must be read through the door model, not from the channels.
-
-**Variant J (owner, 09.10 05:20: "getting ready, full J").** The target is I's shaping with the rear not delayed: `rear_delay_ms 0` is now the renderer default (module md5 4531e77a, 51/51). The amp's rear doors supply the ~5.2 ms lag (corrected 2026-10-17 from ~11.8 ms); our rear and the amp's front bleed meet the rear doors in phase; the bleed cancel stays a knob (K in the kit) until the cabin probe. The kit carries J on six songs (oracle, album01, guitarleft and three more MoisesDB mixes).
-
-**Port surface.** `hook/audio/stereo_upmix.c` already routes every PCM2 → PCM6 call through `spa_stereo_upmix_process_s16(state, pcm2, frames ≤ 1024, pcm6, capacity)` with a backend enum, `init`/`reset`, config setters for models and no allocation in processing; the scene renderer becomes a third backend (`SCENE`) beside OFF and Universal, with its own state inside `struct spa_stereo_upmix`, the LFE V2 assist and the realtime guard kept. New files: `hook/audio/scene_engine.c/.h` (the engine: `scene_engine_init/reset/frame/push`), `hook/audio/scene_fft.c` (real FFT 1024 and 2048: the hook's `hssr_neon.c` has 512 only), `hook/audio/scene_mask.c/.h` (net c runtime). Host build follows `tools/stereo-upmix-render/bench/build_host.sh` (`-ffp-contract=off`); the reference is `stream_render` (float64); acceptance for the float32 port: output error below −60 dB of the output RMS on the suite scenes and the kit sources, and the per-frame intermediates (`tools/stereo-upmix-render/scene_port_fixtures.py`) within 1e−4 relative. Instruction count and L1D on the QEMU bench before any unit test.
-
-**Port scope (hook, C, QNX 6.5 / ARMv7 NEON, no FMA).**
-1. Scene engine: a C transcription of `_engine()` driven per 1024/256 frame (or 512/128: the harness rows at n512 were within .02 of 1024), state struct = the generator's locals; `SceneStream` is the block-exact reference (`stream_render`, check 12) so the C output can be diffed block by block on the host build with `-ffp-contract=off`. Estimated ~65 Mflop/s (§17); measure with the QEMU bench.
-2. Mask net c runtime: the hook's int8 runtime (`hook/audio/hssr_mask.c`) implements the `full_probe` architecture only (`export-blob` refuses anything else); net c is `conv2048`: 2048-point analysis (4 features per bin: log power L/R and pan-type features, hop 512 = the control cadence) → Conv1d k 8 stride 4 (1025 → 257) → two Conv1d k 5 → per-channel GRU (hidden 12) over time → linear head to 4 posteriors (vocals, drum core, bass, other). New: a conv1d int8 kernel, the GRU (the q6d GRU code exists), the 2048-point FFT per control, the blob exporter for this architecture. 8.1 k parameters, 2.0 M MAC per control = 192 M MAC/s: at the budget's top, the first thing to measure.
-3. Eligibility = other posterior, protect = vocals + drum core + bass, on the 2048 grid mapped to the engine's bins (§16 mapping), shaping = variant I, duck 0.25.
-4. LFE: the renderer writes LFE 0; keep the hook's Cabin-Aware LFE V2 and feed it net c's bass and drum-core posteriors instead of q6d's.
-5. Now Playing track change → engine reset (§16): places fade 1.5 s, histogram, song memory and long gate cleared.
-6. Knobs as env (`AUDIO_SCENE_ALPHA`, `_INST_ALPHA`, `_INST_GAMMA`, `_DUCK_DEPTH`, `_REAR_DELAY_MS`, `_SIGMA_MIN`, `_SIDE_LP_HZ`) read once at start, like Track A's `AUDIO_STEREO_*`.
-7. Retired: q6d routing, V11 guard, v21a mask, the subtractive mask DSP; the realtime guard (silence rears after 4 overruns) and the program limiter stay. (corrected 2026-10-17: no program limiter was carried into the SCENE backend; the hook keeps only the per-frame cabin guard in `stereo_upmix.c` and the SoundCheck sample-peak limiter, which ships off.)
-
-**Port status (2026-10-09 06:30).** Stage 1 done by a four-agent workflow: `hook/audio/scene_engine_math.c` (helpers, tables, 1024-point real FFT), `scene_clusters.c/.h` (StageClusters with song memory, reset, silence gate), `scene_engine.c` (the frame and the block driver), ctypes tests under `tools/stereo-upmix-render/port/`. Against the regenerated fixtures: helpers 1e-7, FFT 2.5e-7, cluster state exact with membership 1e-6, per-frame spectra 2e-6 of the frame maximum, final output **−131 dB** of its RMS against `stream_render`, blocks of 1000 and 768 bit-identical; QNX 6.5 cross-build warning-free with zero double-precision and zero fused instructions; stack 23 KB on the calling thread, state 265 KB (static). One deviation adopted into the reference: the noise power in the per-bin decomposition is computed as 2(P_L·P_R − |C|²)/(T + R) instead of (T − R)/2, which loses 40 % of the minor eigenvector in float32 on coherent hard-panned bins (reference md5 ec8500e8, 51/51). Stage 2 (running): the QEMU instruction/L1D bench of the engine, the fine net c runtime `scene_mask.c` against torch goldens (`scene_mask_fixtures.py`, 3750 controls of the oracle source: weights, features, every layer, posteriors, protect), and the `SCENE` backend inside `stereo_upmix.c` with the `AUDIO_SCENE_*` knobs and a host renderer through the hook path.
-
-**Stage 2 (2026-10-09 07:10).** `hook/audio/scene_mask.c/.h`: the fine net c runtime (2048-point Hann analysis with torch's centred reflect padding reproduced exactly, the four features, standardise and clamp, conv1 k8/s4, conv2/3 with residuals, the per-bin GRU with persistent state, head, sigmoid, rear eligibility, protect = 1 − elig; weights blob `SMSKNET1`, 32,544 B, exported by `port/export_masknet_weights.py`): the port's arithmetic agrees with torch run on the C features to 3.5e-6; end to end against the stored goldens 4.2e-3, which is the reference's own float32 noise (torch re-run against its own fixture differs by the same 4.2e-3). `stereo_upmix.c/.h` + `audio_hook.c/.h`: backend `SPA_STEREO_UPMIX_SCENE = 2`, the engine state inside the static runtime (the state object grows 394 → 717 KB, two instances), a 1024-frame zero-primed FIFO so every call still emits its frame count (latency 1024 frames), int16 conversion with the existing clamp, LFE V2 from the front, the cabin guard; knobs `AUDIO_SCENE=1`, `AUDIO_SCENE_{ALPHA,INST_ALPHA,INST_GAMMA,DUCK_DEPTH,REAR_DELAY_MS,SIGMA_MIN,SIDE_LP_HZ,BLEED_CANCEL}` parsed once; `scene_render_hook.c` renders through the hook path: −69.6 dB against the Python on album01 (hook int16 = the C engine rounded, 0 LSB apart), Universal checksums unchanged, `scripts/run_tests.sh` green, QNX cross-build of all of hook/audio warning-free, the full library builds (1.5 MB). **Cost (QEMU, -icount, Krait L1D model):** 2.40 M instructions per 256-sample hop (-O2), 2.14 M at -O3, +2.3 % with the mask; 0.92 M L1D accesses, 1.5 % misses per hop; 2.1× the Universal backend's audio-thread count; the naive scaling of the only car timing data puts worst 768-frame periods at 8.6–13.2 ms against the 12 ms guard budget: the engine must get cheaper (the scalar FFT is 37 %, libm 24 %) or the first car run reads the guard histogram before any verdict. Findings carried into stage 3: file reads must stay on the preload path (SCENE skipped the Universal-gated preload), `AUDIO_SCENE=1` must not override the OFF bypass, the reset must not rebuild the 265 KB tables inside the realtime callback.
-
-**Stage 3 (2026-10-09 08:40).** Wiring: the mask runtime runs inside the backend at the 512-frame cadence (rows installed so that the hook reproduces the Python's `inst_mask[(t·256)//512]`: hook versus the bare engine 0 LSB apart, versus the Python on the same rows −71.7 dB), blob from `AUDIO_SCENE_MASK_BLOB` loaded on the preload path, LFE V2 fed with the net's bass and drum-core posteriors through the existing normalised assist, track change → `scene_engine_reset` (type-103: the APAP transition id; realtime: the iAP2 NowPlayingUpdate persistent identifier, an atomic flag consumed on the audio thread), `AUDIO_SCENE` no longer overrides the OFF bypass, the reset re-arms state without rebuilding tables. **Engine cost:** NEON Stockham radix-4 real-pair FFTs (three complex transforms per hop instead of six), NEON window and overlap-add, `atan2`/`sin`/`cos` replaced by one-division polynomial forms and the group gate by a squared-cosine comparison, dead per-bin work removed: **2.45 M → 0.83 M instructions per hop (−66 %), 0.80 M at the production flags**, bit-identical −O2/−O3, scalar fallback bit-identical to NEON; fixtures still −125.8 / −131.3 dB. Naive car scaling: 2.9–4.5 ms of the 16 ms period. **Net cost:** 19.4 M instructions per 512-sample control (9.7 M per hop-equivalent, twelve times the engine): the two residual convolutions are 47 %, soft-double libm `tanhf/expf/logf` 33 %; the 2048-point FFT was never the cost. **Package:** `build/install_scene_unprotected.zip` (3.8 MB; hook 1.85 MB with the 10 `AUDIO_SCENE*` knobs, blob `scene_masknet_c.bin` 32,544 B at `/mnt/app/root/hooks/`, `carplay_startup.sh` with the variant-J block commented out, boots Universal exactly as today), `docs/build-and-deploy/SCENE_BACKEND_DEPLOY.md`; verifier: READY TO DEPLOY OFF BY DEFAULT, do not enable the blob line until the net runtime is cheap enough (stage 4).
-
-**Stage 4, optimisation to the budget (owner 09.10 07:40: "optimise to the max"; starts when stage 3 lands, same files).** Targets on the QEMU bench: engine ≤ 1.2 M instructions per 256-sample hop (3.6 M per 16 ms period, Universal's audio-thread level), mask net ≤ 1.5 M per control and off the audio thread; the fixture gates stay the acceptance (engine −120 dB class against the reference, net 1e-3). Levers, in order of expected gain: (1) NEON real FFT 1024 and the 4→2 packing of the inverse transforms (stage 3); (2) the per-bin loops as structure-of-arrays with 16-byte alignment and NEON over four bins: the three EMA sets, `decompose_frame`, `centre_removed_pan`, the bounded slow pan, membership kernel, unmix, transfer, ambient; (3) transcendental calls per bin replaced by exact-enough forms (rotation from C/|C| instead of atan2/cos/sin, `expf` kernels via a clipped polynomial, `logf` in the net's features via the float exponent bit trick + a short polynomial, which the ±6 clamp after standardisation tolerates); (4) the mask net on the persistent worker (`hssr_control_worker.c` pattern: double-buffered job/result, generation and sequence numbers, stale results discarded; the row is applied one control late, which the Python's slow-attack smoother already tolerates), its convolutions in int8 NEON like `hssr_mask.c`'s gemv where the fixture gate allows; (5) the clusters are already cheap (a pick every 0.34 s); (6) measure the 512/128 analysis as an option only if (1)–(4) fall short (AlbumDB n512 rows were within .02 of 1024/256 but the cell count per second is the same, so no large gain expected). Each step: QEMU instructions and L1D per hop, the fixture tests, the kit sources through `scene_render_hook` against the Python; then the car's guard histogram is the only real number.
-
-**Stage 4 (2026-10-09 10:00), verdict READY, off by default, net on a worker.** Engine: every per-bin loop four bins wide (`scene_simd.h`: a lane type with a bit-identical scalar fallback, exact per-lane division and square root through pinned VFP registers because GCC 8.5 routes lane access through core registers, polynomial atan2/sincos/exp), SoA intermediates in the FFT scratch, pooling by group runs: **0.83 M → 0.34 M instructions per hop** (0.33 M at the production flags, 0.31 M spatial only), engine L1D 180 k accesses / 8.3 k misses per hop. Net runtime: one source on the four-lane type, clamped rational tanh (the hook's own form), sigmoid from it, log by exponent extraction and a short series, NEON tiles for conv1 (4ch×4 bins), conv2/3 (8ch×4), GRU and head (4 gates×8 bins), weights re-laid at init: **19.4 M → 1.37 M instructions per control** (2.05 M MAC, 0.67 instructions per MAC; int8 rejected: no gain in this layout, the weight load per eight MACs is the floor); posteriors against torch 4.2e-4 on the C features, 5.2e-3 end to end (the reference's own float32 noise). Worker: `scene_mask_worker.c/.h` on the HSSR mailbox pattern (two job slots of 512 frames, two result slots, generation and sequence, stale results dropped, refusal when busy, never a wait; SCHED_RR 17 like the HSSR worker; `AUDIO_SCENE_MASK_SYNC=1` keeps the synchronous path for tests and the host renderer; 2026-10-17: the audio-thread path and AUDIO_SCENE_MASK_SYNC are removed; the net runs only on the worker, and a blob that is set but unusable means no upmix); hand-off +1.1 k instructions per push; rows arrive one control late (two under load), the test proves none is applied before its frames and none is lost. Latency: the SETUP response's `arrivalToRenderLatencyMs` was 0 for every backend; SCENE now reports its 1024 frames. **Audio-thread estimate per 16 ms period by the stage-2 scaling: 1.1–1.8 ms (9–19 % of the 12 ms guard budget), worst push 1.4–2.2 ms; the worker 1.6–2.5 ms per 10.7 ms control; even the synchronous mode fits (3.5–5.6 ms).** Package rebuilt: `build/install_scene_unprotected.zip` (3.81 MB; hook 2.12 MB, the 103 render state now carries the worker's copy of the net), blob unchanged (`SMSKNET1`), `carplay_startup.sh` scene block still commented, `docs/build-and-deploy/SCENE_BACKEND_DEPLOY.md` rewritten with the costs and the enable order. Known LOW items left for after the car: the file-wide `no-schedule-insns` pragma in `scene_mask.c` (use `-fno-schedule-insns` for that file in `apac_flags.sh`), the unbarriered one-time table init flag in `scene_mask.c`, the job slot held for the whole control, a stats-naming nit; the ARMv7 VFP denormal mode of the pinned division cannot be checked without the unit.
-
-**Order.** Car first (kit letters I / H / scene without a net), then 1 + 2 in parallel against the numpy references, then 3–6 on the unit.
+The historical paper retains alternative derivations, listening comparisons and dated port measurements. Its stage numbers cited in source comments are historical references, not pending implementation tasks.

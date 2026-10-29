@@ -15,7 +15,7 @@ from amp_b_bound_scenario import (retained_config, bind_effective_output, build_
     api21_22_parameter_targets, replay_bound_scalar_targets)
 from test_amp_b_control import OUT, decoded_curve
 
-sys.path.insert(0, str(OUT.parents[2]/'tools'))
+sys.path.insert(0, str(OUT.parents[3]/'tools'))
 from audit_amp_b_pointer_aliases import (analyze_instructions, audit as audit_pointer_aliases,
                                         smoothing_caller_domains)
 

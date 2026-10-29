@@ -1,0 +1,8 @@
+{
+  "target_sha256": "47a370bc30ca1b038fa5baee1c3eb6f3ef567788a70f57aed3957e98a35a1f05",
+  "stock_sha256": "d7fbf49b297665cbb8c6ba71b41ac892ccd062e0dcbd8339f3286555db1f394a",
+  "io_pkt_sha256": "baf6e5df318ba3ea22cf669017b04185a4da8abb77adb4cd6e40629a8e80dae7",
+  "io_pkt_on_device_sha256": "2f8b1ae6a80a0d0b925996c16288375c76628a470992ed350742dfc06adbf890",
+  "activation": "verified MU1316/P5087 disk install only; owner reboot required; no restart",
+  "supersedes": "legacy three Wi-Fi fragments; never run fragments over this runtime"
+}

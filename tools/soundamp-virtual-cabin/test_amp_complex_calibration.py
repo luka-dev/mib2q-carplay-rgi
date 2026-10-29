@@ -12,7 +12,7 @@ from amp_complex_path import ComplexFullModeReference
 
 
 def profile():
-    return json.loads((ROOT/'assets/soundamp/remaining-blocks-20260919/audit.json').read_text())['complex_control_profiles'][0]
+    return json.loads((ROOT/'output/r2/soundamp/remaining-blocks-20260919/audit.json').read_text())['complex_control_profiles'][0]
 
 
 def state_args(p=None,seq=None):

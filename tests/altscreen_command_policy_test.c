@@ -60,11 +60,11 @@ int main(void) {
     alt_command_generation(&q, 2, 0, retired);
     assert(q.live && q.generation == 3);
     item.gen = 3;
-    item.key = ALT_COMMAND_MAP_APPEARANCE;
+    item.key = ALT_COMMAND_VIEW_AREA;
     assert(!alt_command_offer(&q, item, &replaced, &has));
-    item.key = ALT_COMMAND_UI_APPEARANCE;
+    item.key = ALT_COMMAND_NIGHT_MODE;
     assert(!alt_command_offer(&q, item, &replaced, &has));
-    item.key = ALT_COMMAND_MAP_APPEARANCE;
+    item.key = ALT_COMMAND_VIEW_AREA;
     assert(!alt_command_offer(&q, item, &replaced, &has) && has && q.count == 2);
     alt_command_generation(&q, 4, 1, retired);
     /* Sustained layout/startup work admits normal/zoom after four choices. */

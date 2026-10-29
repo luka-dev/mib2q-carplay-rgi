@@ -79,7 +79,7 @@ The night report's historical phrases “capacity ruled out” and “spectral s
 
 ## The architectural difference that deserves a serious test
 
-Source audit of [`sep_net.py`](../../../tools/stereo-upmix-render/sep_net.py), SHA-256 `11e0c4fe89c82d3be3814e5d2a421c5fd73c40d4e3fa505904c57ae1d7dba905`:
+Source audit of [`sep_net.py`](RETIRED_TOOLS.md#tool-9d28f37ffbb4), SHA-256 `11e0c4fe89c82d3be3814e5d2a421c5fd73c40d4e3fa505904c57ae1d7dba905`:
 
 | Stage | Current original BandSepNet | Proposed causal reference |
 | --- | --- | --- |

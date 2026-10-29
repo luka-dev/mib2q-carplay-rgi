@@ -114,6 +114,8 @@ All of these are validated as `0`/`1` in `build_hook_common.sh:54-66`, except th
 | `LOG_RGD_PACKET_RAW` | `0` | `1` sets `-DRGD_TRACE_RAW_FULL=1`, which logs raw RGD packets. Not with a trace build. |
 | `QNX_TOOLCHAIN_VARIANT` | `latest` | `latest`, `4.9` or `8.5` (`:44-48`). The default `latest` is GCC 8.5. |
 
+<a id="logging-options"></a>
+
 There is one production image; the old `LOG=0` variant was removed on 2026-09-24 and `LOG=0` now stops the build. A trace build (`AUDIO_STATE_TRACE=1` or `ALTSCREEN_PACE_TRACE=1`) compiles the normal hook log out on its own and writes only its compact ledger. Everything else is switched at runtime by one marker file, `/mnt/app/carplay_verbose` or `/tmp/carplay_verbose`:
 
 | Part | Without the marker | With the marker | When the marker is read |
@@ -178,13 +180,13 @@ Provenance: `scripts/build_hook.sh`, `scripts/build_hook_common.sh`, `scripts/bu
 
 ## 🔍 Checking a build beyond the asserts
 
-The asserts gate the hook `.so` only. The Java jar and the cross-process wire are checked by separate scripts, used by every production audit ([Production Audits](PRODUCTION_AUDITS.md)):
+The asserts gate the hook `.so` only. The Java jar and the cross-process wire are checked by separate scripts, used by every production audit ([Production Audits](archive/PRODUCTION_AUDITS.md)):
 
 - `scripts/audit_java_stock.sh` rebuilds the jar and checks every reference both ways against the real MU1316 J9 classes (`MU1316-final.jar`, `MU1316-combined.jar`, the firmware `jcl.jar`), never the JDK 8 `rt.jar`. This is what catches a 1.5 API that `-target 1.4` lets through.
 - `scripts/check_local_protocols.py` checks that the Java and C wire constants match (39–41 of them across audits) and that every shipped class is version 48.0.
 - After a Java build, `javap -verbose` on a class should show the real build ID; a literal `@BUILD_ID@` means the generated source was not used.
 
-History: before the Docker image the hook was built by `compile_c.sh` over SSH on a QNX 6.5 SDP VM, and the jar was described as "Java 1.2" but compiled with `-source 8 -target 8`; both are superseded ([Archive and History](../reference/ARCHIVE_AND_HISTORY.md)). The 2026-09-14 baseline audit removed an unused `-lm` from the altScreen link; the later PRISM loader needs libm again, so both renderer links carry `-lm` today (`scripts/build_renderers.sh:74`, `:92`). **[code]**
+History: before the Docker image the hook was built by `compile_c.sh` over SSH on a QNX 6.5 SDP VM, and the jar was described as "Java 1.2" but compiled with `-source 8 -target 8`; both are superseded ([Archive and History](../reference/archive/ARCHIVE_AND_HISTORY.md)). The 2026-09-14 baseline audit removed an unused `-lm` from the altScreen link; the later PRISM loader needs libm again, so both renderer links carry `-lm` today (`scripts/build_renderers.sh:74`, `:92`). **[code]**
 
 ---
 
@@ -196,3 +198,15 @@ Merged originals were removed from the tree after this note absorbed them; they 
 - `HOOK_RELEASE_SAFETY_AUDIT`: origin of the hidden-visibility export allowlist.
 - `FRIDAY_BASELINE_AUDIT_2026_09_14`: the `-lm` removal.
 - `oldREADME`: the pre-Docker build.
+
+## 📚 Documentation checks
+
+Run these from the repository root when changing documentation:
+
+```sh
+python3 scripts/gen_docs_map.py --check
+python3 scripts/check_docs.py
+python3 scripts/test_check_docs.py
+```
+
+If the generated map is stale, update its topic placement and run `python3 scripts/gen_docs_map.py`. The link checker covers the root README and all `docs/` Markdown, including historical sources. It ignores code examples and external websites. Public export also runs it and fails on broken targets/anchors; new documentation and the checker must be deliberately tracked before export, because the snapshot uses `git ls-files`.

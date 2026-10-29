@@ -1,6 +1,6 @@
 # apac_decoder/tests/fixtures/bitreader.fixture
 # GENERATED - do not edit.  Regenerate with tools/gen_fixtures.sh (needs Docker).
-# Every R line is what Pioneer's TBitstreamReader<unsigned>
+# Every R line is what Pioneer's copy of Apple's TBitstreamReader<unsigned>
 # actually returned, and what its 24 bytes of state actually held afterwards.
 #   CASE <idx> <align> <bufferHex|-> <op,op,...>
 #   R <opIdx> <op> <ret> <curOffsetFromBufferBase> <cache> <bitsLeft>

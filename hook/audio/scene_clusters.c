@@ -1,7 +1,7 @@
 /* scene_clusters.c — StageClusters of tools/stereo-upmix-render/scene_upmix.py in C (variant J).
  *
  * Slow pan clustering: the rear stage is a small set of PLACES (13.2 item 2). Float32 only, no
- * allocation, no dependency on the rest of the hook beyond scene_engine_math.c. The Python's
+ * allocation, no libm beyond expf/sqrtf/fabsf, no dependency on the rest of the hook. The Python's
  * order of operations is kept wherever a rounding could cross one of its thresholds; the Python's
  * unbounded lists (clusters, song memory) are the fixed arrays of scene_engine.h, see the two
  * ponytail notes for what happens when they are full. */
@@ -11,7 +11,24 @@
 #include "scene_clusters.h"
 #include "scene_simd.h"
 
-/* ----------------------------------------------------------------------------- local helpers */
+/* ----------------------------------------------------------------------------- local helpers
+ * Copies of the Python helpers (scene_engine.c has scene_smoothstep/scene_ema_alpha; this file
+ * stays linkable on its own, so it carries its own four-line versions). */
+static float smoothstep_f(float x, float lo, float hi)
+{
+    float d = hi - lo;
+    float t = (x - lo) / (d > 1e-9f ? d : 1e-9f);
+    if (t < 0.0f) t = 0.0f;
+    if (t > 1.0f) t = 1.0f;
+    return t * t * (3.0f - 2.0f * t);
+}
+
+static float ema_alpha_f(float tau_ms, int hop)
+{
+    if (tau_ms <= 0.0f) return 1.0f;
+    return 1.0f - expf(-(float)hop / (float)SCENE_SR / (tau_ms / 1000.0f));
+}
+
 static float sign_f(float x) { return x > 0.0f ? 1.0f : (x < 0.0f ? -1.0f : 0.0f); }
 
 /* np.linspace(-1, 1, 22): edges[i] = i * (2/21) + (-1), the last one exactly the stop value */
@@ -265,12 +282,12 @@ void scene_clusters_init(struct scene_clusters *c, const struct scene_config *cf
     c->frame_s = frame_s;
     for (i = 0; i < SCENE_HIST_BINS; i++)              /* 0.5 * (edges[:-1] + edges[1:]) */
         c->centres_h[i] = 0.5f * (hist_edge(i) + hist_edge(i + 1));
-    c->a_hist = scene_ema_alpha(cfg->hist_tau_s * 1000.0f, cfg->hop);
+    c->a_hist = ema_alpha_f(cfg->hist_tau_s * 1000.0f, cfg->hop);
     /* Python round() is half-even; +0.5 truncation differs only at an exact .5 (0.34 s / 5.33 ms = 63.75) */
     c->pick_every = (int)(cfg->pick_every_s / frame_s + 0.5f);
     if (c->pick_every < 1) c->pick_every = 1;
     c->dt_pick = (float)c->pick_every * frame_s;
-    c->a_centre = scene_ema_alpha(cfg->centre_tau_s * 1000.0f, cfg->hop * c->pick_every);   /* per PICK */
+    c->a_centre = ema_alpha_f(cfg->centre_tau_s * 1000.0f, cfg->hop * c->pick_every);   /* per PICK */
     /* tot_ref: slow maximum of the eligible primary power: silence = 30 dB below it (no peaks, places go absent) */
 }
 
@@ -334,8 +351,8 @@ void scene_clusters_membership(struct scene_clusters *c, const float *p_slow, co
         const struct scene_place *k = &c->c[j];
         if (k->gain <= 0.0f) continue;
         den2[nl] = 2.0f * (k->sigma * k->sigma);
-        qk[nl] = sign_f(k->centre) * (0.78f + 0.17f * scene_smoothstep(fabsf(k->centre), 0.05f, 0.92f));
-        ak[nl] = scene_smoothstep(fabsf(k->centre), cfg->min_abs_pan, 0.45f);
+        qk[nl] = sign_f(k->centre) * (0.78f + 0.17f * smoothstep_f(fabsf(k->centre), 0.05f, 0.92f));
+        ak[nl] = smoothstep_f(fabsf(k->centre), cfg->min_abs_pan, 0.45f);
         live[nl++] = j;
     }
     for (i = 0; i < n; i += 4) {

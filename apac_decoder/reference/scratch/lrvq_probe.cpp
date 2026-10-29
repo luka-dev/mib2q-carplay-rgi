@@ -8,7 +8,7 @@
 //
 //   g++ -std=c++11 -O2 -o /tmp/lrvq_probe /src/scratch/lrvq_probe.cpp -ldl -lm
 //
-// Owned by the LRVQ-semantics investigation; not part of our decoder.
+// Owned by the LRVQ-semantics investigation; not part of the port.
 #include <dlfcn.h>
 #include <cstdint>
 #include <cstdio>

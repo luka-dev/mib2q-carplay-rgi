@@ -13,9 +13,7 @@ enum {
     ALT_COMMAND_IDR,
     ALT_COMMAND_SHOW_UI,
     ALT_COMMAND_VIEW_AREA,
-    ALT_COMMAND_NIGHT_MODE,
-    ALT_COMMAND_MAP_APPEARANCE,
-    ALT_COMMAND_UI_APPEARANCE
+    ALT_COMMAND_NIGHT_MODE
 };
 enum { ALT_COMMAND_NONE = -1, ALT_COMMAND_ZOOM = -2 };
 typedef struct {
@@ -50,8 +48,7 @@ static inline unsigned alt_command_priority(unsigned key) {
                                                                           : 2u;
 }
 static inline int alt_command_replaceable(unsigned key) {
-    return key == ALT_COMMAND_VIEW_AREA || key == ALT_COMMAND_NIGHT_MODE ||
-           key == ALT_COMMAND_MAP_APPEARANCE || key == ALT_COMMAND_UI_APPEARANCE;
+    return key == ALT_COMMAND_VIEW_AREA || key == ALT_COMMAND_NIGHT_MODE;
 }
 /* Caller supplies room for 32 retired items and completes/releases them outside
  * its mutex. A generation can only advance; revoke never clears a newer owner. */

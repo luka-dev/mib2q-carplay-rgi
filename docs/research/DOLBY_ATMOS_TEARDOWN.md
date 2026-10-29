@@ -80,8 +80,7 @@ stock 210 libairplay never decodes AAC (`AudioConverterNew_compat` is a dead stu
 returning −6735; `AudioSessionGetSupportedOutputFormats` advertises PCM only)
 (`memory/audio_210_pcm_passthrough.md`). **CONFIRMED-on-car:** realtime CarPlay =
 `'lpcm'` 48 kHz/16/stereo on `mpl5_dio_ent` (`docs/reference/IOS_CARPLAY_SPATIAL_WIREFORMAT.md §24`). Our hook
-does run the HSSR upmix on that stereo realtime PCM (`AUDIO_REALTIME_UPMIX=on`,
-`carplay_startup.sh:86`), but that is a head-unit upmix, not phone-side spatial.
+runs SCENE on stereo realtime media under the live MMI UpMix setting; see [current pipeline](../audio/STEREO_TO_5_1_UPMIX.md). This is head-unit synthesis, not phone-side spatial. References to HSSR later in this paper describe the retired comparison engine.
 
 ## 🔍 What "Dolby Atmos" is on the CarPlay transport
 

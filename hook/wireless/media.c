@@ -3,13 +3,15 @@
  * This module is opt-in until the complete offline/media validation passes. */
 #include "media.h"
 #include "stock210_abi.h"
+#include "audio_stream.h"
+#include "../audio/buffered_wireless.h"
 #include <sys/socket.h>
 #include <unistd.h>
 #include <limits.h>
 
 DEFINE_LOG_MODULE(WMEDIA);
 #define SESSIONS 8
-#ifdef MHI2Q_WIRELESS_ALT_QEMU
+#ifdef MHI2Q_WIRELESS_ALT
 #define STREAMS 4
 #else
 #define STREAMS 3
@@ -20,8 +22,8 @@ DEFINE_LOG_MODULE(WMEDIA);
 enum { S_EVENT_CLIENT=704, S_MAIN=720, S_ALT=2896, S_SCREEN=5140,
        SCREEN_HEADER=72, SCREEN_AES_VALID=484, NET_READ=20 };
 struct media_stream {
-    int active, type;
-    uint64_t id, send_nonce, receive_nonce;
+    int active, type, wire_type;
+    uint64_t id, generation, send_nonce, receive_nonce, audio_format;
     int failed;
     uint8_t read_key[32], write_key[32];
     uint16_t send_sequence;
@@ -29,7 +31,8 @@ struct media_stream {
 };
 struct media_session {
     void *owner, *session;
-    int retired;
+    uint64_t generation;
+    int retired, timing_fd;
     uint8_t event_read[32], event_write[32];
     struct media_stream streams[STREAMS];
     uint64_t used[HISTORY];
@@ -37,6 +40,25 @@ struct media_session {
 };
 static struct media_session sessions[SESSIONS];
 static pthread_mutex_t media_lock = PTHREAD_MUTEX_INITIALIZER;
+/* Fixed direction gates pin audio sidecars while I/O uses them. Registry
+ * lookups never wait for I/O with media_lock held. Mutations take TX -> RX ->
+ * media; data operations take only their direction -> media for revalidation.
+ * Stock owns/join-cancels native workers before final context destruction. */
+static pthread_mutex_t media_tx_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t media_rx_lock = PTHREAD_MUTEX_INITIALIZER;
+static uint64_t media_generation;
+static void media_mutation_lock(void)
+{
+    pthread_mutex_lock(&media_tx_lock);
+    pthread_mutex_lock(&media_rx_lock);
+    pthread_mutex_lock(&media_lock);
+}
+static void media_mutation_unlock(void)
+{
+    pthread_mutex_unlock(&media_lock);
+    pthread_mutex_unlock(&media_rx_lock);
+    pthread_mutex_unlock(&media_tx_lock);
+}
 static pthread_mutex_t event_lock = PTHREAD_MUTEX_INITIALIZER;
 static struct { int used, fd; cp_pair_connection *transport; } events[SESSIONS];
 static void erase(void *p, size_t n) { volatile uint8_t *b=p; while (n--) *b++=0; }
@@ -91,10 +113,13 @@ int cp_media_enabled(void)
 { const char *s=getenv("MHI2Q_CP_WIRELESS_MEDIA"); return s && !strcmp(s,"1"); }
 int cp_media_available(void)
 { pthread_once(&cf_once,resolve_cf); return cp_media_enabled() && cf.ready; }
-#ifdef MHI2Q_WIRELESS_ALT_QEMU
+#ifdef MHI2Q_WIRELESS_ALT
 int cp_media_alt_available(void)
 {
-    const char *flag=getenv("MHI2Q_CP_WIRELESS_ALT_QEMU");
+    const char *flag=getenv("MHI2Q_CP_WIRELESS_ALT");
+#ifdef MHI2Q_WIRELESS_ALT_QEMU
+    if(!flag)flag=getenv("MHI2Q_CP_WIRELESS_ALT_QEMU");
+#endif
     return cp_dio_owner_is_wireless() && flag && !strcmp(flag,"1") && cp_media_available();
 }
 #endif
@@ -134,13 +159,44 @@ int cp_media_normalize_setup(void *message)
 }
 static struct media_session *find_session(void *session)
 { unsigned i;for(i=0;i<SESSIONS;++i)if(sessions[i].owner && sessions[i].session==session)return &sessions[i];return NULL; }
+struct media_ticket {
+    struct media_session *session;
+    uint64_t generation, streams[STREAMS];
+};
+static struct media_ticket media_capture(void *identity,int owner)
+{
+    struct media_ticket t={0};
+    pthread_mutex_lock(&media_lock);
+    for(unsigned i=0;i<SESSIONS;++i)if(sessions[i].owner &&
+        (owner?sessions[i].owner:sessions[i].session)==identity) {
+        t.session=&sessions[i];t.generation=sessions[i].generation;
+        for(unsigned j=0;j<STREAMS;++j)t.streams[j]=sessions[i].streams[j].generation;
+        break;
+    }
+    pthread_mutex_unlock(&media_lock);return t;
+}
+/* media_lock held; static slots stay addressable even after their owner died. */
+static int media_matches(struct media_ticket t)
+{ return t.session && t.session->owner && t.session->generation==t.generation; }
+uint64_t cp_media_audio_format(void *jitter)
+{
+    uint64_t format=0;
+    unsigned i,j;
+    pthread_mutex_lock(&media_lock);
+    for(i=0;i<SESSIONS;++i)if(sessions[i].owner)for(j=0;j<2;++j)
+        if(sessions[i].streams[j].active &&
+           (uint8_t *)sessions[i].session+(j?S_ALT:S_MAIN)+32==(uint8_t *)jitter)
+            format=sessions[i].streams[j].audio_format;
+    pthread_mutex_unlock(&media_lock);
+    return format;
+}
 static int slot_for(int type) {
-#ifdef MHI2Q_WIRELESS_ALT_QEMU
+#ifdef MHI2Q_WIRELESS_ALT
     if(type==111 && cp_media_alt_available())return 3;
 #endif
-    return type==100?0:type==101?1:type==110?2:-1;
+    return type==100 || (type==102 && cp_wireless_audio_enabled())?0:type==101?1:type==110?2:-1;
 }
-#ifdef MHI2Q_WIRELESS_ALT_QEMU
+#ifdef MHI2Q_WIRELESS_ALT
 int cp_media_alt_claim(void *session, uint64_t connection_id, uint8_t key[32])
 {
     int err=kStateErr;
@@ -175,16 +231,20 @@ int cp_media_prepare(void *owner,void *session,void *request,cp_pair_connection 
     void *array;
     long count,i;
     unsigned j;
-    int err=0, fresh=0;
+    int err=0, fresh=0, buffered_seen=0;
     pthread_once(&cf_once,resolve_cf);
     if(!cf.ready || !cp_pair_is_encrypted(pair))return kStateErr;
-    pthread_mutex_lock(&media_lock);
+    struct media_ticket ticket=media_capture(session,0);
+    media_mutation_lock();
     m=find_session(session);
+    if((ticket.session && !media_matches(ticket)) || (!ticket.session && m)) {err=kStateErr;goto exit;}
     if(!m)for(j=0;j<SESSIONS;++j)if(sessions[j].owner==owner){err=kStateErr;goto exit;}
     if(!m){for(j=0;j<SESSIONS;++j)if(!sessions[j].owner){m=&sessions[j];break;}fresh=1;}
     if(!m || m->retired){err=kStateErr;goto exit;}
     pending=*m;
     if(fresh){
+        if(media_generation==UINT64_MAX){err=kStateErr;goto exit;}
+        pending.generation=++media_generation;
         pending.owner=owner;pending.session=session;
         err=cp_pair_derive(pair,"Events-Salt","Events-Read-Encryption-Key",pending.event_read);
         if(!err)err=cp_pair_derive(pair,"Events-Salt","Events-Write-Encryption-Key",pending.event_write);
@@ -193,33 +253,57 @@ int cp_media_prepare(void *owner,void *session,void *request,cp_pair_connection 
     array=stream_array(request);
     if(get(request,"streams") && !array){err=kParamErr;goto exit;}
     count=array?cf.count(array):0;
-    if(count<0 || count>STREAMS){err=kUnsupportedErr;goto exit;}
+    if(count<0 || count>STREAMS+1){err=kUnsupportedErr;goto exit;}
     for(i=0;i<count;++i){
         void *desc=cf.at(array,i);
         if(!desc || cf.type(desc)!=cf.dict_type()){err=kParamErr;goto exit;}
         int type=(int)number(desc,"type",&err), slot=slot_for(type);
+        if(!err && type==103){
+            /* APAP carries its own authenticated SETUP shk, format index and
+             * lifecycle. Delegate to the same receiver used by wired, before
+             * committing any new realtime stream or mutating the request. */
+            if(buffered_seen++ || !spa_buffered_wireless_validate){err=kUnsupportedErr;goto exit;}
+            err=spa_buffered_wireless_validate(session,desc);
+            if(err)goto exit;
+            continue;
+        }
         if(err || slot<0){err=kUnsupportedErr;goto exit;}
         struct media_stream *s=&pending.streams[slot];
         if(s->active || pending.used_count==HISTORY){err=kStateErr;goto exit;}
         uint64_t id=(uint64_t)number(desc,"streamConnectionID",&err);
+        uint64_t format=0;
         if(err || !id){err=kParamErr;goto exit;}
         for(j=0;j<pending.used_count;++j)if(pending.used[j]==id){err=kStateErr;goto exit;}
         if(type!=110 && type!=111){
-            uint64_t format=(uint64_t)number(desc,"audioFormat",&err);
-            /* Target worker always swaps 16-bit PCM. No compressed or 24-bit paths. */
+            format=(uint64_t)number(desc,"audioFormat",&err);
             uint64_t pcm16=0;
             for(j=2;j<=11;++j)pcm16|=UINT64_C(1)<<j;
             pcm16|=(UINT64_C(1)<<14)|(UINT64_C(1)<<15);
-            if(err || !format || (format&(format-1)) || !(format&pcm16)) {err=kUnsupportedErr;goto exit;}
+            uint64_t supported=pcm16;
+            if(cp_wireless_audio_enabled()) supported|=cp_audio_codec_formats();
+            /* Wireless MainHigh is AAC media on the wire. Stock210 has one
+             * native main-audio context (100); alias only this admitted path,
+             * never calls/PCM or buffered103. */
+            if(type==102) supported&=CP_AUDIO_AAC;
+            if(err || !format || (format&(format-1)) || !(format&supported)) {err=kUnsupportedErr;goto exit;}
         }
-        memset(s,0,sizeof(*s));s->type=type;s->id=id;s->active=1;
+        memset(s,0,sizeof(*s));s->wire_type=type;s->type=type==102?100:type;
+        s->id=id;s->active=1;s->audio_format=format;
         err=derive_stream(pair,s);if(err)goto exit;
+        if(media_generation==UINT64_MAX){err=kStateErr;goto exit;}
+        s->generation=++media_generation;
         pending.used[pending.used_count++]=id;
     }
     *m=pending;
+    /* Publish only after validating the entire request and deriving all
+     * keys. Native platform callbacks must see main100 as well. The response
+     * restores the phone's 102; connection IDs and keys are unchanged. */
+    for(i=0;i<count;++i){void *desc=cf.at(array,i);
+        if(number(desc,"type",NULL)==102)set_number(desc,"type",100);
+    }
 exit:
     erase(&pending,sizeof(pending));
-    pthread_mutex_unlock(&media_lock);
+    media_mutation_unlock();
     if(err)LOG_WARN(LOG_MODULE,"SETUP crypto rejected status=%d%s",err,ap_status(err));
     return err;
 }
@@ -228,43 +312,64 @@ void cp_media_setup_response(hook_setup_ctx_t *setup)
     struct media_session *m;
     pthread_mutex_lock(&media_lock);
     m=find_session(setup->session);
+    if(m && !setup->result)m->timing_fd=(int)cp210_get(setup->session,5076);
     if(m && !setup->result && setup->response){
         void *a=stream_array(setup->response);
         long i,n=a?cf.count(a):0;
         for(i=0;i<n;++i){
             void *desc=cf.at(a,i);
             int slot=slot_for((int)number(desc,"type",NULL));
-            if(slot>=0 && m->streams[slot].active)
+            if(slot>=0 && m->streams[slot].active) {
                 set_number(desc,"streamConnectionID",(int64_t)m->streams[slot].id);
+                set_number(desc,"type",m->streams[slot].wire_type);
+            }
         }
     }
     /* On failure stock performs teardown itself before returning. Keep the
      * history until the HTTP finalizer so IDs/nonces cannot be reused. */
     pthread_mutex_unlock(&media_lock);
 }
+void cp_media_teardown_request(void *session,void *request,int reason)
+{
+    (void)reason;
+    if(!request || !cp_wireless_audio_enabled())return;
+    pthread_mutex_lock(&media_lock);
+    struct media_session *m=find_session(session);
+    if(m && m->streams[0].active && m->streams[0].wire_type==102){
+        void *array=stream_array(request);long n=array?cf.count(array):0;
+        for(long i=0;i<n;++i){void *desc=cf.at(array,i);
+            if(number(desc,"type",NULL)==102)set_number(desc,"type",100);
+        }
+    }
+    pthread_mutex_unlock(&media_lock);
+}
 void cp_media_teardown(void *session,void *request,int reason)
 {
     unsigned i;
     (void)reason;
-    pthread_mutex_lock(&media_lock);
-    struct media_session *m=find_session(session);
+    struct media_ticket ticket=media_capture(session,0);
+    if(!ticket.session)return;
+    media_mutation_lock();
+    struct media_session *m=media_matches(ticket)?ticket.session:NULL;
     if(m){
         for(i=0;i<STREAMS;++i){
             int stopped=!request;
             if(request){void *a=stream_array(request);long j,n=a?cf.count(a):0;
                 for(j=0;j<n;++j)if(number(cf.at(a,j),"type",NULL)==m->streams[i].type)stopped=1;}
-            if(stopped)erase(&m->streams[i],sizeof(m->streams[i]));
+            if(stopped && (!request || m->streams[i].generation==ticket.streams[i]))
+                erase(&m->streams[i],sizeof(m->streams[i]));
         }
         if(!request){m->retired=1;erase(m->event_read,32);erase(m->event_write,32);}
     }
-    pthread_mutex_unlock(&media_lock);
+    media_mutation_unlock();
 }
 void cp_media_forget(void *owner)
 {
-    unsigned i;
-    pthread_mutex_lock(&media_lock);
-    for(i=0;i<SESSIONS;++i)if(sessions[i].owner==owner)erase(&sessions[i],sizeof(sessions[i]));
-    pthread_mutex_unlock(&media_lock);
+    struct media_ticket ticket=media_capture(owner,1);
+    if(!ticket.session)return;
+    media_mutation_lock();
+    if(media_matches(ticket))erase(ticket.session,sizeof(*ticket.session));
+    media_mutation_unlock();
 }
 
 /* Events share stock HTTP message machinery but have their own transport. */
@@ -343,6 +448,12 @@ struct screen_reader {
     size_t body;int encrypted;
 };
 static struct screen_reader *readers[SESSIONS];
+/* The native ProcessFrames invocation owns each stack reader and calls its
+ * NetSocket reader synchronously until it returns. This mutex only protects
+ * registry publication/lookup, never network I/O or AEAD. In particular, the
+ * per-read lookup must not wait behind media_lock's audio decode/encode/send.
+ * Registration/removal lock order is media_lock -> screen_readers_lock. */
+static pthread_mutex_t screen_readers_lock = PTHREAD_MUTEX_INITIALIZER;
 static struct media_stream *screen_stream(void *screen)
 {
     unsigned i;
@@ -353,9 +464,9 @@ static struct media_stream *screen_stream(void *screen)
 static int screen_read(void *net,size_t min,size_t max,void *buffer,size_t *length,int flags,int timeout)
 {
     unsigned i;struct screen_reader *r=NULL;int err;size_t got=0;
-    pthread_mutex_lock(&media_lock);
+    pthread_mutex_lock(&screen_readers_lock);
     for(i=0;i<SESSIONS;++i)if(readers[i] && readers[i]->net==net){r=readers[i];break;}
-    pthread_mutex_unlock(&media_lock);
+    pthread_mutex_unlock(&screen_readers_lock);
     if(length)*length=0;
     if(!r || min!=max)return kStateErr;
     if(!r->body){
@@ -407,15 +518,22 @@ HOOK_EXPORT int AirPlayReceiverSessionScreen_ProcessFrames(void *screen,void *ne
     struct media_stream *stream=screen_stream(screen);
     if(!stream){pthread_mutex_unlock(&media_lock);return real(screen,net,timeout);}
     if(stream->failed){pthread_mutex_unlock(&media_lock);return kAuthenticationErr;}
+    pthread_mutex_lock(&screen_readers_lock);
     for(i=0;i<SESSIONS;++i)if(!readers[i])break;
-    if(i==SESSIONS){pthread_mutex_unlock(&media_lock);return kStateErr;}
+    if(i==SESSIONS){
+        pthread_mutex_unlock(&screen_readers_lock);
+        pthread_mutex_unlock(&media_lock);return kStateErr;
+    }
     r.net=net;r.real=(net_read_fn)cp210_ptr(net,NET_READ);
     memcpy(r.key,stream->read_key,32);r.nonce=stream->receive_nonce;
     readers[i]=&r;cp210_set(net,NET_READ,(uint32_t)(uintptr_t)screen_read);
+    pthread_mutex_unlock(&screen_readers_lock);
     pthread_mutex_unlock(&media_lock);
     result=real(screen,net,timeout);
     pthread_mutex_lock(&media_lock);
+    pthread_mutex_lock(&screen_readers_lock);
     cp210_set(net,NET_READ,(uint32_t)(uintptr_t)r.real);readers[i]=NULL;
+    pthread_mutex_unlock(&screen_readers_lock);
     stream->receive_nonce=r.nonce;stream->failed=1; /* No resumed TCP stream with reused nonce. */
     pthread_mutex_unlock(&media_lock);
     erase(&r,sizeof(r));return result;
@@ -434,6 +552,32 @@ static struct media_stream *audio_stream(int fd,void **context)
     }
     return NULL;
 }
+struct audio_ticket {
+    struct media_stream *stream;
+    void *context;
+    uint64_t generation;
+};
+/* Snapshot BEFORE a blocking receive or waiting for a direction gate. Never
+ * attribute a delayed old packet/caller to a replacement using the same fd. */
+static struct audio_ticket audio_capture(int fd)
+{
+    struct audio_ticket t={0};
+    pthread_mutex_lock(&media_lock);
+    t.stream=audio_stream(fd,&t.context);
+    if(t.stream)t.generation=t.stream->generation;
+    pthread_mutex_unlock(&media_lock);
+    return t;
+}
+static int audio_begin(const struct audio_ticket *t,pthread_mutex_t *direction)
+{
+    int valid;
+    pthread_mutex_lock(direction);
+    pthread_mutex_lock(&media_lock);
+    valid=t->stream->active && t->stream->generation==t->generation;
+    pthread_mutex_unlock(&media_lock);
+    if(!valid)pthread_mutex_unlock(direction);
+    return valid;
+}
 HOOK_EXPORT int SocketRecvFrom(int fd,void *buffer,size_t capacity,size_t *length,void *from,
                                size_t from_max,size_t *from_len,uint64_t *ticks,uint32_t *ifindex,char *ifname)
 {
@@ -441,40 +585,100 @@ HOOK_EXPORT int SocketRecvFrom(int fd,void *buffer,size_t capacity,size_t *lengt
     fn real=(fn)dlsym(RTLD_NEXT,"SocketRecvFrom");
     int err;uint8_t *packet=buffer;
     if(!real)return kUnsupportedErr;
+    struct audio_ticket ticket=audio_capture(fd);
     err=real(fd,buffer,capacity,length,from,from_max,from_len,ticks,ifindex,ifname);
-    if(err)return err;
-    pthread_mutex_lock(&media_lock);
-    void *ctx=NULL;
-    struct media_stream *s=audio_stream(fd,&ctx);
-    if(s){
+    if(err){
+        /* Stock TimingThread ignores recv errors and spins at priority19 on
+         * ICMP readiness. Keep this fd until native teardown has joined the
+         * threads: HTTP on_close runs BEFORE AudioStreamStop/TimingFinalize. */
+        int owned=0;
+        if(fd>2 && err!=EINTR) {
+            pthread_mutex_lock(&media_lock);
+            for(unsigned i=0;i<SESSIONS;++i)
+                if(sessions[i].owner && !sessions[i].retired && sessions[i].timing_fd==fd){owned=1;break;}
+            pthread_mutex_unlock(&media_lock);
+        }
+        if(owned){int saved_errno=errno;usleep(100000);errno=saved_errno;}
+        return err;
+    }
+    if(ticket.stream){
+        if(!audio_begin(&ticket,&media_rx_lock)){
+            if(length)*length=0;
+            return kStateErr;
+        }
+        void *ctx=ticket.context;
+        struct media_stream *s=ticket.stream;
         size_t n=length?*length:0;
         unsigned frame_bytes=cp210_get(ctx,1600);
+        int compressed=(s->audio_format&(CP_AUDIO_AAC|CP_AUDIO_OPUS))!=0;
         if(n<=36 || n>capacity || packet[0]!=0x80 || !frame_bytes ||
-            (n-36)%frame_bytes)err=kParamErr;
+            (!compressed && (n-36)%frame_bytes))err=kParamErr;
         else {
             /* Modern iOS (OS build >13A1): timestamp+SSRC are the AAD. */
             err=cp_pair_open(s->read_key,packet+n-8,packet+4,8,packet+12,n-36,packet+n-24,packet+12);
+            if(!err && compressed) {
+                uint32_t stamp=((uint32_t)packet[4]<<24)|((uint32_t)packet[5]<<16)|
+                               ((uint32_t)packet[6]<<8)|packet[7];
+                err=cp_wireless_audio_receive((uint8_t *)ctx+32,stamp,packet+12,n-36);
+            }
             if(!err)*length=n-24;
         }
         if(err && length)*length=0;
+        pthread_mutex_unlock(&media_rx_lock);
     }
-    pthread_mutex_unlock(&media_lock);return err;
+    return err;
+}
+struct audio_send {
+    ssize_t (*send)(int,const void *,size_t,int,const struct sockaddr *,socklen_t);
+    struct media_stream *stream;
+    const uint8_t *header;
+    int fd,flags;
+    const struct sockaddr *to;
+    socklen_t to_len;
+};
+static int send_compressed(void *context,const uint8_t *au,size_t length,uint32_t timestamp)
+{
+    struct audio_send *c=context;
+    struct media_stream *s=c->stream;
+    uint8_t packet[1452],nonce[8];
+    if(!length || length>CP_AUDIO_AU_MAX || s->send_nonce==UINT64_MAX) { errno=EOVERFLOW;return -1; }
+    memcpy(packet,c->header,12);
+    packet[2]=(uint8_t)(s->send_sequence>>8);packet[3]=(uint8_t)s->send_sequence++;
+    packet[4]=(uint8_t)(timestamp>>24);packet[5]=(uint8_t)(timestamp>>16);
+    packet[6]=(uint8_t)(timestamp>>8);packet[7]=(uint8_t)timestamp;
+    nonce_bytes(s->send_nonce++,nonce);
+    cp_pair_seal(s->write_key,nonce,packet+4,8,au,length,packet+12,packet+12+length);
+    memcpy(packet+12+length+16,nonce,8);
+    ssize_t n=c->send(c->fd,packet,12+length+24,c->flags,c->to,c->to_len);
+    erase(packet,sizeof(packet));
+    if(n!=(ssize_t)(12+length+24)) { if(n>=0)errno=EIO;return -1; }
+    return 0;
 }
 HOOK_EXPORT ssize_t sendto(int fd,const void *buffer,size_t length,int flags,const struct sockaddr *to,socklen_t to_len)
 {
     typedef ssize_t (*fn)(int,const void *,size_t,int,const struct sockaddr *,socklen_t);
     fn real=(fn)dlsym(RTLD_NEXT,"sendto");
-    void *ctx=NULL;ssize_t result;size_t offset=0;
+    ssize_t result;size_t offset=0;
     uint8_t packet[1452],nonce[8];const uint8_t *source=buffer;
     if(!real){errno=ENOSYS;return -1;}
-    pthread_mutex_lock(&media_lock);
-    struct media_stream *s=audio_stream(fd,&ctx);
-    if(!s){pthread_mutex_unlock(&media_lock);return real(fd,buffer,length,flags,to,to_len);}
+    struct audio_ticket ticket=audio_capture(fd);
+    if(!ticket.stream)return real(fd,buffer,length,flags,to,to_len);
+    if(!audio_begin(&ticket,&media_tx_lock)){errno=ECANCELED;return -1;}
+    void *ctx=ticket.context;
+    struct media_stream *s=ticket.stream;
     unsigned frame_bytes=cp210_get(ctx,1600);
     if(length<12 || length>1452 || source[0]!=0x80 || !frame_bytes || frame_bytes>8 ||
         (length-12)%frame_bytes){errno=EINVAL;result=-1;goto exit;}
     if(!s->sequence_set){s->send_sequence=(uint16_t)((source[2]<<8)|source[3]);s->sequence_set=1;}
     uint32_t timestamp=((uint32_t)source[4]<<24)|((uint32_t)source[5]<<16)|((uint32_t)source[6]<<8)|source[7];
+    if(s->audio_format&(CP_AUDIO_AAC|CP_AUDIO_OPUS)) {
+        struct audio_send context={real,s,source,fd,flags,to,to_len};
+        int err=cp_wireless_audio_encode((uint8_t *)ctx+32,timestamp,source+12,length-12,
+                                         send_compressed,&context);
+        result=err?-1:(ssize_t)length;
+        if(err)errno=EIO;
+        goto exit;
+    }
     while(offset<length-12){
         size_t n=length-12-offset, limit=1416/frame_bytes*frame_bytes;
         if(n>limit)n=limit;
@@ -492,5 +696,5 @@ HOOK_EXPORT ssize_t sendto(int fd,const void *buffer,size_t length,int flags,con
     }
     result=(ssize_t)length;
 exit:
-    erase(packet,sizeof(packet));pthread_mutex_unlock(&media_lock);return result;
+    erase(packet,sizeof(packet));pthread_mutex_unlock(&media_tx_lock);return result;
 }

@@ -14,7 +14,7 @@ from scipy.signal import freqz, sosfilt
 from amp_b_eq_design import design_b_eq
 from amp_b_filters import LibraryFilterCascade, stable_section
 
-OUT = Path(__file__).resolve().parents[2]/'assets/soundamp/remaining-blocks-20260919'
+OUT = Path(__file__).resolve().parents[2]/'output/r2/soundamp/remaining-blocks-20260919'
 
 
 def bits(value): return struct.unpack('<I', struct.pack('<f', value))[0]

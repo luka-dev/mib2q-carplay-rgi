@@ -1,5 +1,7 @@
 """Bounds and framing checks for the native API test peer, without a guest."""
 import base64
+import json
+from pathlib import Path
 import random
 import struct
 import unittest
@@ -97,6 +99,8 @@ class NativePeerTests(unittest.TestCase):
 
     def test_invalid_session_options_fail_before_fixture_or_guest_access(self):
         variants = [{"identify": 1}, {"identify": True, "negative": "signature"},
+                    {"transport": "wifi"},
+                    {"transport": "bluetooth", "start_carplay": True},
                     {"start_carplay": True}, {"hold_seconds": True}, {"hold_seconds": 121},
                     {"receiver_ipv6": "::1"}, {"receiver_ipv6": "fe80::2%en0"},
                     {"public_key": bytes(31)}, {"public_key": "0" * 32},
@@ -107,6 +111,63 @@ class NativePeerTests(unittest.TestCase):
                     mfi_probe.run(**options)
             fixture.assert_not_called()
             rpc.assert_not_called()
+
+    def test_bluetooth_identity_has_only_bluetooth_and_wireless_transport_components(self):
+        mid,fields=wire.parse_control_message(mfi_probe.bluetooth_identification())
+        self.assertEqual(mid,0x1D01)
+        self.assertNotIn(15,fields);self.assertNotIn(16,fields)
+        nested=lambda data:wire.parse_control_message(b"\x40\x40"+struct.pack(">HH",len(data)+6,0x1D01)+data)[1]
+        bt=nested(fields[17]);wifi=nested(fields[24])
+        self.assertEqual(bt[0],b"\0\0");self.assertEqual(bt[3],bytes.fromhex("020000000001"))
+        self.assertEqual(wifi[0],b"\0\x01");self.assertEqual(wifi[4],b"")
+        self.assertIn(bytes.fromhex("5703"),fields[6]);self.assertIn(bytes.fromhex("5702"),fields[7])
+
+    def test_cached_retransmissions_are_drained_without_another_rpc(self):
+        first=wire.link_frame(0x40,4,1,10,wire.control_message(0xAA00))
+        second=wire.link_frame(0x40,5,2,10,wire.control_message(0xAA02,b"x"*32))
+        log="\n".join(f"native iAP2 outgoing length={len(p)} hex={p.hex()}" for p in (first,first,second))+"\n"
+        with patch.object(mfi_probe.lab,"rpc",return_value={"result":{"content":log}}) as rpc:
+            self.assertEqual(self.peer.read(0x83,1025,1000)[2:],first)
+            self.assertEqual(self.peer.read(0x83,1025,1000)[2:],second)
+            self.assertEqual(rpc.call_count,1)
+        self.assertEqual(self.peer.discarded_data_retransmits,1)
+
+    def test_only_native_authenticated_bluetooth_wifi_request_proves_bootstrap(self):
+        log=("native iAP2 profile connection_type=2 endpoint_transport=2 endpoint_protocol=4\n"
+             "native iAP2 readback connection_type=11 endpoint_transport=18 endpoint_protocol=0\n")
+        packet={"session":10,"control":0x40,"payload":wire.control_message(0x5702).hex()}
+        result={"authentication_succeeded":True,"identification_accepted":True,"post_identification_packets":[packet]}
+        proof=mfi_probe.verify_bluetooth_bootstrap(result,log,identify=True)
+        self.assertTrue(proof["wireless_bootstrap_requested"])
+        self.assertTrue(proof["transport_verification"]["non_usb_endpoint_verified"])
+        self.assertFalse(proof["transport_verification"]["connection_info_published"])
+        self.assertFalse(proof["transport_verification"]["wireless_carplay_verified"])
+        for change in ({"session":11},{"control":0x50},{"payload":wire.control_message(0x4300).hex()}):
+            with self.subTest(change=change),self.assertRaises(ValueError):
+                mfi_probe.verify_bluetooth_bootstrap(result|{"post_identification_packets":[packet|change]},log,identify=True)
+        for missing in ("authentication_succeeded","identification_accepted"):
+            with self.subTest(missing=missing),self.assertRaises(ValueError):
+                mfi_probe.verify_bluetooth_bootstrap(result|{missing:False},log,identify=True)
+        with self.assertRaises(ValueError):
+            mfi_probe.verify_bluetooth_bootstrap(result,log.replace("profile connection_type=2 endpoint_transport=2","profile connection_type=6 endpoint_transport=0"),identify=True)
+
+    def test_rejected_identification_ids_are_not_declared_as_capabilities(self):
+        _,fields=wire.parse_control_message(mfi_probe.bluetooth_identification())
+        capture=json.loads((Path(__file__).parents[1]/"fixtures/native_bluetooth_identification.json").read_text())
+        mid,rejected_params=wire.parse_control_message(bytes.fromhex(capture["identification_rejected_body"]))
+        self.assertEqual(mid,0x1D03)
+        for kind,raw in rejected_params.items():
+            rejected={int.from_bytes(raw[i:i+2],"big") for i in range(0,len(raw),2)}
+            ids={int.from_bytes(fields[kind][i:i+2],"big") for i in range(0,len(fields[kind]),2)}
+            self.assertFalse(ids & rejected)
+
+    def test_api_codec_options_reject_unbounded_or_wrong_messages_before_io(self):
+        for value in (True,9,46,"45"):
+            with self.subTest(timeout=value),self.assertRaises(ValueError):
+                wire.handshake(object(),[],exchange_timeout=value)
+        for payload in (b"",b"bad",wire.control_message(0x4301),"not bytes",b"x"*4097):
+            with self.subTest(payload=repr(payload)[:30]),self.assertRaises(ValueError):
+                wire.handshake(object(),[],identification_payload=payload)
 
 
 if __name__ == "__main__":

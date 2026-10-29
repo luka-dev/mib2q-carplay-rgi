@@ -1,6 +1,6 @@
 #!/bin/sh
 # M.I.B. -> Advanced Settings -> Run Custom Script.  QNX 6.5 /bin/sh is ksh.
-# Self-contained CarPlay uninstaller: needs no payload tree.
+# CarPlay uninstaller; Wi-Fi restore requires verified helper/resources.
 #   - restore every *.carplay-stock the installer left (firmware binaries,
 #     smartphone_integrator.json, all pf profiles, dio_manager.json, lang_data.zip) by renaming
 #     the backup back;
@@ -22,6 +22,8 @@ fi
 
 # Files we OWN (added at install; no stock backup exists for these).
 OWNED="/mnt/app/root/hooks/libcarplay_hook.so
+/mnt/app/root/hooks/carplay_pf_dynamic.enabled
+/mnt/app/root/hooks/carplay_pf_watch
 /mnt/app/root/hooks/libcarplay_apac.so
 /mnt/app/root/hooks/hssr_model.bin
 /mnt/app/root/hooks/hssr_guard.bin
@@ -45,12 +47,28 @@ echo "Remounting app and system read-write..."
 mount -uw /mnt/app    2>/dev/null || true
 mount -uw /mnt/system 2>/dev/null || true
 
+
+restore_wifi_verified() {
+    mp=
+    for candidate in "$D/../apps/sbin/beta/micropython" "$(command -v micropython 2>/dev/null)" /mnt/app/root/micropython /mnt/app/root/M.I.B./apps/micropython /mnt/sdcard10t12/Tools/micropython; do
+        [ -x "$candidate" ] && { mp=$candidate; break; }
+    done
+    [ -n "${CARPLAY_MICROPYTHON:-}" ] && mp=$CARPLAY_MICROPYTHON
+    if [ -z "$mp" ] || [ ! -f "$D/carplay/wifi_runtime.py" ]; then
+        echo "  WARN Wi-Fi preserved: verified helper/resources or MicroPython unavailable"
+        return 0
+    fi
+    "$mp" -X heapsize=8M "$D/carplay/wifi_runtime.py" restore "$D/carplay/wifi/runtime" "$1"; rc=$?
+    case $rc in 0|3) : ;; *) echo "  WARN Wi-Fi restore refused; current driver and backups preserved" ;; esac
+}
+
 # 1. restore stock: every *.carplay-stock -> original (firmware, SI json, pf).
 LIST=/tmp/carplay_stock.$$
 find /mnt/app /mnt/system -name '*.carplay-stock' > "$LIST" 2>/dev/null || : > "$LIST"
 while IFS= read -r bak; do
     [ -n "$bak" ] || continue
     orig=${bak%.carplay-stock}
+    case $orig in */devnp-mrvl_wlan-sdiorm.so) restore_wifi_verified "$orig"; continue ;; esac
     mv -f "$bak" "$orig" && echo "  restored $orig" || echo "  WARN restore $orig"
 done < "$LIST"
 rm -f "$LIST"
@@ -64,6 +82,6 @@ rm -rf /mnt/persist/var/app/luka_carplay_altscreen /mnt/persist/var/app/luka_car
 
 sync
 echo "Making sure it is saved (20 s)..."
-sleep "${CARPLAY_SAVE_WAIT:-20}"   # host tests set 0
+sleep "${CARPLAY_SAVE_WAIT:-20}"
 sync
 echo "DONE (uninstall). Reboot the HU."

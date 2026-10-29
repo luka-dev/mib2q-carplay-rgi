@@ -128,7 +128,7 @@ was not deployed or measured on the car during this work.
 - The unit's SSH target defaults to `root@10.173.189.1` (`scripts/carplay_state_trace.sh:5`). Pass ssh options inline, not through a shell variable, because macOS ssh breaks otherwise (operational note, **[open]**).
 - The live Java tree is `java_patch/`. Never reboot the unit without asking.
 
-**Related:** [Production Audits](../build-and-deploy/PRODUCTION_AUDITS.md) (the lifecycle deadlock and later audit findings) · [Architecture](../reference/ARCHITECTURE.md) (the process map).
+**Related:** [Production Audits](../build-and-deploy/archive/PRODUCTION_AUDITS.md) (the lifecycle deadlock and later audit findings) · [Architecture](../reference/ARCHITECTURE.md) (the process map).
 
 ## 📚 Sources
 

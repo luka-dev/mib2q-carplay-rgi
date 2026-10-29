@@ -5,7 +5,7 @@
 // Stage h1 - APACLRVQDecoder and the LRVQ frame - against the real library.
 //
 // Fixtures: tests/fixtures/lrvq_{gain,ltp,lsfs,frame,elem}.fixture, produced by
-// reference/apac_lrvq_ref.cpp calling Pioneer's decoder.  The
+// reference/apac_lrvq_ref.cpp calling Pioneer's copy of Apple's decoder.  The
 // inputs are regenerated here from reference/lrvq_cases.h, which the oracle
 // includes too, so the fixtures carry only the library's answers.
 //
@@ -20,15 +20,15 @@
 //
 // The two envelope builders cannot be bit-exact.  lsfsToMdctSpectralEnvelope
 // ends in a 512-point real FFT and the library's is Apple's closed
-// vDSP_DFT_Execute, which is not on the head unit; our decoder has its own.  Same
+// vDSP_DFT_Execute, which is not on the head unit; the port has its own.  Same
 // reason as stage d, same tolerance machinery (tests/dsp_fixture.h).
-// ltpToMdctSpectralEnvelope is a further step removed: our decoder replaces its
+// ltpToMdctSpectralEnvelope is a further step removed: the port replaces its
 // 2048-point transform with the closed form of what it computes.
 //
 // The reversed short layout is only reachable from a channel that read its own
 // LSFs, so end to end it inherits that tolerance.  It is ALSO checked
-// bit-exactly, by replaying the library's own post-call `work` through
-// our layout function - which is why LRVQDecoder exposes the three layouts.
+// bit-exactly, by replaying the library's own post-call `work` through the
+// port's layout function - which is why LRVQDecoder exposes the three layouts.
 
 #include <math.h>
 #include <stdint.h>
@@ -217,7 +217,7 @@ void checkTables()
         if (m.cb1 >= 0 && m.n1 != (int16_t)(1 << m.bits1))
             fail("n1 != 1 << bits1", i);
         // Every vector a legal index can reach lies inside the block.  The two
-        // reads the library's own checks would let through - index == n,
+        // reads the original's own checks would let through - index == n,
         // because the compare is `n < idx` and not `n <= idx`, and the -1
         // stage-1 sentinel - do NOT: row 3's stage 0 sits at the very start of
         // the block and row 4's stage 1 at the very end.  Neither is reachable
@@ -314,7 +314,7 @@ double checkLtp(int* cases)
             fail("ltp return", i);
         for (int k = 256; k < 1024; ++k)
             if (got[k] != 0.0f)
-                fail("our decoder left out[256..1023] non-zero", i);
+                fail("the port left out[256..1023] non-zero", i);
         // Relative, per bin: the envelope spans 1/(1+g) .. 1 and a peak-scaled
         // tolerance would say nothing about the small bins, which are exactly
         // where a wrong grid would show.
@@ -341,8 +341,8 @@ double checkLtp(int* cases)
 // are approximating, and comparing each to it is the only way to tell severe
 // cancellation from a wrong index.  Same argument test_mdct.cpp makes for the
 // transform.
-// The library's own LPC coefficients, kept so that checkLsfs can drive
-// our 512-point envelope from them and test the FFT half on its own.
+// The library's own LPC coefficients, kept so that checkLsfs can drive the
+// port's 512-point envelope from them and test the FFT half on its own.
 float gLibLpc[kLrvqLsfCases][17];
 
 void lspPolyDouble(const float* lsp, double* out, int n)
@@ -385,10 +385,10 @@ void lspToLpcDouble(const float* lsp, double* lpc, int order)
 // This part has no FFT under it - but it does have the double cos / acos the
 // LSF trig uses, so it is compared with the stage-d tolerance rather than as
 // bit patterns.
-double checkLsfToLpc(int* cases, double* lspWorst, double* ulpOurs,
+double checkLsfToLpc(int* cases, double* lspWorst, double* ulpPort,
                      double* ulpLib)
 {
-    double worstLsp = 0.0, worstUlpOurs = 0.0, worstUlpLib = 0.0;
+    double worstLsp = 0.0, worstUlpPort = 0.0, worstUlpLib = 0.0;
     Fixture f;
     f.Open("lrvq_lsf2lpc.fixture");
     float in[16], conditioned[16], wantLsp[16], wantLpc[17];
@@ -453,14 +453,14 @@ double checkLsfToLpc(int* cases, double* lspWorst, double* ulpOurs,
         for (int k = 0; k <= 16; ++k) {
             const double a = fabs((double)ours[k] - exact[k]);
             const double b = fabs((double)wantLpc[k] - exact[k]);
-            if (a > worstUlpOurs) worstUlpOurs = a;
+            if (a > worstUlpPort) worstUlpPort = a;
             if (b > worstUlpLib) worstUlpLib = b;
-            // Our decoder must not be MUCH further from the exact answer than the
+            // The port must not be MUCH further from the exact answer than the
             // library is.  A wrong index or a swapped polynomial fails this by
             // orders of magnitude; accumulated cancellation does not.
             if (a > 8.0 * b + 1e-7) {
                 fprintf(stderr,
-                        "\nLSP_To_LPC case %d coefficient %d: ours is %.3g from "
+                        "\nLSP_To_LPC case %d coefficient %d: port is %.3g from "
                         "exact, library %.3g\n", i, k, a, b);
                 exit(1);
             }
@@ -478,7 +478,7 @@ double checkLsfToLpc(int* cases, double* lspWorst, double* ulpOurs,
     }
     *cases = n;
     *lspWorst = worstLsp;
-    *ulpOurs = worstUlpOurs;
+    *ulpPort = worstUlpPort;
     *ulpLib = worstUlpLib;
     return worst;
 }
@@ -516,10 +516,10 @@ double checkLsfs(int* cases, double* fftWorst)
             fail("lsfs return", i);
         for (int k = 256; k < 1024; ++k)
             if (got[k] != 0.0f)
-                fail("our decoder left out[256..1023] non-zero", i);
+                fail("the port left out[256..1023] non-zero", i);
         // TWO comparisons, because the chain has two very different halves.
         //
-        // First the FFT half ALONE: our 512-point |A(w)| driven from the
+        // First the FFT half ALONE: the port's 512-point |A(w)| driven from the
         // LIBRARY's own LPC coefficients.  Nothing but the transform differs
         // there, so it gets the stage-d tolerance.
         if (!gFiltReady) { gFilt.Initialize(512, 16); gFiltReady = true; }
@@ -604,7 +604,7 @@ void checkFrame(FrameStats& st)
         f.Expect("SPEC");
         f.Floats(wantSpec, 1024);
 
-        // ---- run our decoder on the same bits and the same starting state ----
+        // ---- run the port on the same bits and the same starting state ----
         memcpy(env, c.env, sizeof env);
         memcpy(env2, c.env2, sizeof env2);
         memcpy(work, c.work, sizeof work);
@@ -878,8 +878,8 @@ void checkElem(ElemStats& st)
 
 // -------------------------------------------------- DeserializeLrvqFrame -----
 // The LRVQ frame body: two ICS headers at coding type 1, the channel pair, both
-// TNS blocks and the extra bit the library reads when the SECOND channel has
-// no TNS block and the first one did.  Our LrvqFrameContext stands in for
+// TNS blocks and the extra bit the original reads when the SECOND channel has
+// no TNS block and the first one did.  The port's LrvqFrameContext stands in for
 // the APACChannelPairElement the library was handed.
 struct FrameStats2 {
     int cases, withFilter, extraBit, shortBlocks;
@@ -1005,8 +1005,8 @@ int main(int argc, char** argv)
     const int gains = checkGain();
     int ltpCases = 0, lsfCases = 0, lpcCases = 0;
     const double worstLtp = checkLtp(&ltpCases);
-    double worstLsp = 0.0, ulpOurs = 0.0, ulpLib = 0.0;
-    const double worstLpc = checkLsfToLpc(&lpcCases, &worstLsp, &ulpOurs,
+    double worstLsp = 0.0, ulpPort = 0.0, ulpLib = 0.0;
+    const double worstLpc = checkLsfToLpc(&lpcCases, &worstLsp, &ulpPort,
                                           &ulpLib);
 double worstLsfFFT = 0.0;
     const double worstLsf = checkLsfs(&lsfCases, &worstLsfFFT);
@@ -1035,8 +1035,8 @@ double worstLsfFFT = 0.0;
            "ONLY because 1/env is ill-conditioned at a null of |A(w)|: at the "
            "worst bin env is 8.2e-04 against the library's 9.1e-04, an absolute "
            "gap of 3.5e-05 of the envelope's own peak, and dividing by it "
-           "magnifies that to 10%%.  The library divides by its own equally "
-           "imprecise envelope; see STATUS.md\n",
+           "magnifies that to 10%%.  The original divides by its own equally "
+           "imprecise envelope; see PORT_STATUS.md\n",
            fr.worstResidual, fr.worstWork, fr.worstSpec);
     printf("    element spectra %.2e of full scale, same cause\n", el.worstSpec);
     printf("    DeserializeLrvqFrame: %d frames, bit count and both 190-byte "
@@ -1046,12 +1046,12 @@ double worstLsfFFT = 0.0;
     printf("    LSF -> LPC has no FFT under it: %d cases, 1024 codebook sums "
            "and every conditioned LSF bit-exact, LSPs %.2e and coefficients "
            "%.2e of full scale\n", lpcCases, worstLsp, worstLpc);
-    printf("    lsfs, FFT half alone (our 512-point envelope from the "
+    printf("    lsfs, FFT half alone (the port's 512-point envelope from the "
            "library's own LPC): %.2e of full scale over %d cases\n",
            worstLsfFFT, lsfCases);
     printf("    LSP -> LPC vs the same recursion in double, on the library's "
-           "own LSPs: ours %.2e, library %.2e - the same size, so the spread "
-           "is order-16 cancellation, not an index\n", ulpOurs, ulpLib);
+           "own LSPs: port %.2e, library %.2e - the same size, so the spread "
+           "is order-16 cancellation, not an index\n", ulpPort, ulpLib);
     (void)ltpCases;
     (void)lsfCases;
     return 0;

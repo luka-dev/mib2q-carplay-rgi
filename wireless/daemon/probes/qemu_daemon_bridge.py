@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import json
+import os
 from hashlib import sha256
 from pathlib import Path
 import re
@@ -31,6 +33,8 @@ def main() -> None:
                         help="fake receiver rejects one START; phone retries without replacing iAP2 link")
     parser.add_argument("--control-probe", action="store_true",
                         help="QEMU-only DNS-SD and HTTP CarPlay Control exchange")
+    parser.add_argument("--recovery-qemu", action="store_true",
+                        help="same RFCOMM link, modeled SI/DIO end and Wi-Fi-only recovery")
     parser.add_argument("--mfi-retry-qemu", action="store_true",
                         help="QEMU-only transient NACK and short-transfer MFi retry")
     parser.add_argument("--repeat-phone-qemu", action="store_true",
@@ -42,6 +46,8 @@ def main() -> None:
     parser.add_argument("--ie-lifecycle", action="store_true",
                         help="verify IE absent before graft connect and removed after EOF")
     options = parser.parse_args()
+    if options.recovery_qemu and (not options.control_probe or options.repeat_phone_qemu or options.reject_once):
+        parser.error("--recovery-qemu requires --phone-probe --control-probe; excludes repeat/reject")
     if options.software_mfi_qemu and not options.phone_probe:
         parser.error("--software-mfi-qemu requires --phone-probe")
     if options.software_mfi_tamper_qemu and not options.software_mfi_qemu:
@@ -88,6 +94,7 @@ def main() -> None:
             "pipe": SYS / "sbin/pipe",
             "cp": TOOLS / "bsp-qemu-arm/extract/cp",
             "random": SYS / "usr/sbin/random",
+            "sleep": SYS / "usr/bin/sleep",
             "io-pkt-v4-hc": SYS / "sbin/io-pkt-v4-hc",
             "ifconfig": SYS / "sbin/ifconfig",
             "procnto-smp": TOOLS / "bsp-qemu-arm/extract/procnto-smp",
@@ -96,6 +103,7 @@ def main() -> None:
             "libsocket.so.3": SYS / "lib/libsocket.so.3",
             "libz.so.2": SYS / "usr/lib/libz.so.2",
             "mhi2q-wireless-daemon": DAEMON_BIN,
+            "dio_manager.json": DAEMON / "probes/dio_manager.fixture.json",
         }
         if options.phone_probe:
             files["phone-qemu-probe"] = DAEMON / (
@@ -145,11 +153,10 @@ def main() -> None:
     MHI2Q_CP_IE_INDEX=2
     MHI2Q_CP_UAPUTL=/dev/shmem/fake_uaputl
     MHI2Q_CP_BT_MAC=00:01:02:03:04:05
-    MHI2Q_CP_NAME=Audi
-    MHI2Q_CP_MANUFACTURER=Audi
+    IPL_CONFIG_DIR_DIO_MANAGER=/proc/boot
+    MHI2Q_PHONE_QEMU_FACTORY_FIXTURE=1
     MHI2Q_CP_MODEL=MHI2Q
     MHI2Q_CP_SERIAL=QEMU
-    MHI2Q_CP_FIRMWARE=MU1316
     MHI2Q_CP_HARDWARE=MHI2Q
     MHI2Q_CP_SSID=QemuCarPlay
     MHI2Q_CP_PASSPHRASE=testpassword
@@ -168,6 +175,7 @@ def main() -> None:
 }
 [type=link] /usr/lib/ldqnx.so.2=/proc/boot/libc.so.3
 [type=link] /dev/console=/dev/ser1
+[type=link] /tmp=/dev/shmem
 [perms=+r,+x]
 /proc/boot/libc.so.3=/work/libc.so.3
 /proc/boot/libm.so.2=/work/libm.so.2
@@ -179,11 +187,13 @@ def main() -> None:
 /proc/boot/pipe=/work/pipe
 /proc/boot/cp=/work/cp
 /proc/boot/random=/work/random
+/proc/boot/sleep=/work/sleep
 /proc/boot/io-pkt-v4-hc=/work/io-pkt-v4-hc
 /proc/boot/ifconfig=/work/ifconfig
 /proc/boot/fake_uaputl=/work/fake_uaputl
 /proc/boot/bridge_client=/work/bridge_client
 /proc/boot/mhi2q-wireless-daemon=/work/mhi2q-wireless-daemon
+/proc/boot/dio_manager.json=/work/dio_manager.json
 """
         if options.phone_probe:
             reject_once = ("    MHI2Q_PHONE_QEMU_REJECT_ONCE=1\n"
@@ -214,6 +224,19 @@ def main() -> None:
             )
             if options.control_probe:
                 manifest += "/proc/boot/libqemu_dns_sd.so=/work/libqemu_dns_sd.so\n"
+            if options.recovery_qemu:
+                # This fixture models SI/DIO and has no hardware entropy.
+                # Supply fresh HOST CSPRNG bytes as a disposable peripheral;
+                # production still requires /dev/urandom, with no fallback.
+                (work / "recovery-entropy").write_bytes(os.urandom(32))
+                manifest=manifest.replace("    MHI2Q_PHONE_QEMU_CONTROL=1\n",
+                    "    MHI2Q_PHONE_QEMU_CONTROL=1\n    MHI2Q_PHONE_QEMU_RECOVERY=1\n"
+                    "    MHI2Q_CP_SI_CONTROL=/dev/shmem/recovery-si.sock\n"
+                    "    /proc/boot/sleep 2\n")
+                manifest=manifest.replace("/proc/boot/random -t\n","/proc/boot/random -t -p\n")
+                manifest=manifest.replace("procmgr_symlink /dev/random /dev/urandom",
+                    "procmgr_symlink /proc/boot/recovery-entropy /dev/urandom")
+                manifest+="\n/proc/boot/recovery-entropy=/work/recovery-entropy\n"
             if options.repeat_phone_qemu:
                 marker = "    /proc/boot/phone-qemu-probe\n"
                 if manifest.count(marker) != 1:
@@ -273,6 +296,8 @@ def main() -> None:
         if options.software_mfi_qemu:
             log = log.with_name(log.stem + ("_software_mfi_tamper" if options.software_mfi_tamper_qemu
                                            else "_software_mfi") + ".log")
+        if options.recovery_qemu:
+            log=log.with_name("qemu_daemon_same_bt_recovery.log")
         with log.open("w") as stream:
             process = subprocess.Popen(
                 [str(QEMU), "-M", "virt", "-m", "512", "-cpu", "cortex-a15",
@@ -322,9 +347,15 @@ def main() -> None:
                         "[phone-qemu] wifi=1",
                         "[phone-qemu] receiver START=1",
                         "[phone-qemu] CarPlayStartSession=1",
-                        "[phone-qemu] receiver STOP=1",
                         "[phone-qemu] full daemon path=1",
                         "(phone-qemu-probe) exited status=0"]
+            if options.recovery_qemu:
+                markers += ["[recovery-qemu] two sessions on RFCOMM generation=1; duplicate suppressed; cleanup before rearm PASS",
+                            "[recovery-qemu] same-phone TCP reachability probe"]
+                if output.count("[phone-qemu] CarPlayStartSession=1")!=2 or output.count("[phone-qemu] signature=1")!=1:
+                    markers.append("one MFi exchange and two media starts on the same RFCOMM link")
+            else:
+                markers.append("[phone-qemu] receiver STOP=1")
             if options.reject_once:
                 markers += ["[phone-qemu] receiver rejected first START=1",
                             "[receiver-control] START generation 1:"]
@@ -361,16 +392,33 @@ def main() -> None:
                         if output.count(repeated) != 2:
                             markers.append(f"two instances of {repeated}")
             if options.control_probe:
-                markers += ["[dns-qemu] daemon DNS-SD mock loaded",
-                            "[phone-qemu] CarPlay Control connect=1",
-                            "[carplay-control] connect accepted: HTTP 200"]
+                markers += ["[dns-qemu] daemon DNS-SD mock loaded"]
+                if not options.recovery_qemu:
+                    markers += ["[phone-qemu] CarPlay Control connect=1",
+                                "[carplay-control] connect accepted: HTTP 200"]
         else:
             markers.append("[bridge-client] daemon_bridge=1")
+        if options.phone_probe:
+            markers.append("[phone-qemu] factory JSON identity verified on wire")
         if options.ie_lifecycle:
             markers += ["[bridge-client] IE before connect sets=0 clears=0 present=0",
                         "[bridge-client] IE after disconnect sets=1 clears=1 present=0",
                         "(bridge_client) exited status=0"]
         missing = [marker for marker in markers if marker not in output]
+        if options.recovery_qemu:
+            inputs = [DAEMON_BIN, DAEMON/'target/armv7-unknown-nto-qnx650/release/phone-qemu-probe',
+                      Path(__file__), DAEMON/'probes/recovery_fixture.rs',
+                      DAEMON/'probes/phone_qemu_probe.rs', DAEMON/'probes/mock_dns_sd_qemu.c',
+                      *sorted((DAEMON/'src').rglob('*.rs'))]
+            (OUT/'qemu_daemon_same_bt_recovery.json').write_text(json.dumps({
+                'status': 'FAIL' if missing else 'PASS', 'checks': {m:m in output for m in markers},
+                'log_sha256': sha256(log.read_bytes()).hexdigest(),
+                'input_sha256': {str(p.relative_to(AUDI)):sha256(p.read_bytes()).hexdigest() for p in inputs},
+                'real': ['production Rust daemon', 'iAP2 link and receiver worker', 'DNS-SD parser', 'TCP connector'],
+                'modeled': ['phone', 'MFi hardware', 'SI/DIO replies', 'DNS-SD service', 'Wi-Fi availability'],
+                'one_rfcomm_generation': 1, 'media_sessions': 2,
+                'hu_deployed': False,
+            }, indent=2)+'\n')
         if missing:
             raise SystemExit(f"QNX daemon bridge failed, missing={missing}; inspect {log}")
         if software_fixture is not None:

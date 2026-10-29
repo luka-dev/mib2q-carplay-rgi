@@ -2,24 +2,22 @@
 
 Current relevant Python validation: **704 tests (121 extraction +583 model/cabin)**.
 
-Newest [static full-path extensions and limits](<../../docs/audio/UPMIX_CALIBRATION_AND_TUNING.md>):
+Newest [static full-path extensions and limits](<../../docs/audio/archive/UPMIX_CALIBRATION_AND_TUNING.md>):
 opt-in source-derived log/pow + internal FFT table, full target publication and
 mode5 coefficient access schedule. `full_static_nearest_zero_aux` selects the new
 numerical reference; `floor` is a separate explicit FIX hypothesis. Dynamic
 audio transitions and complete pointer alias closure are NOT established.
 
-Previous: [retained first-B spectral binding](<../../docs/audio/UPMIX_CALIBRATION_AND_TUNING.md>).
+Previous: [retained first-B spectral binding](<../../docs/audio/archive/UPMIX_CALIBRATION_AND_TUNING.md>).
 `full_retained_zero_aux` and `full_retained_aux_probe` use real common-header
 coefficients, spatial controls,74-band map and firmware-derived transform tables;
 the level-mask min/max binding bug is fixed. Live state/hardware rounding/cabin
 acoustics remain unverified. Old neutral diagnostic scenarios are preserved.
 
-Practical whole-upmix entry point: render PCM6 with the hook's own scene
-renderer, then run it through the explicit DSP model
-([below](#run-an-upmix-render-through-the-proven-j525-matrix)). The fresh-render
-runners `audit_upmix_end_to_end.py` and `_batch.py` drove the retired
-`--mode hssr-universal` and were removed on 2026-10-17; their provenance and
-scenario helpers live in `audit_amp_retained_state_grid.py`. Runtime scenarios
+Practical whole-upmix entry point:
+[C → PCM6 → explicit DSP → paired metrics](<../../docs/audio/archive/UPMIX_CALIBRATION_AND_TUNING.md>).
+`audit_upmix_end_to_end.py` performs fresh C renders; the `_batch.py` companion
+adds isolated parallel track runs and verified aggregation. Runtime scenarios
 are separate from test fixtures. Positive model peaks are preserved; unknown
 spectral/live controls remain explicit, not a production preset recommendation.
 
@@ -42,8 +40,8 @@ No live-state or measured acoustic fidelity claim.
 
 Previous static closure: [B effective-output/scalar bindings](<../../docs/audio/SHARC_B_PROCESSORS.md>),
 [C4D17 calibration timing and second-B ancestry](<../../docs/audio/SHARC_DSP_BLOCKS.md>),
-[electronic/acoustic bridge and legacy matrix repair](<../../docs/audio/UPMIX_RELEASE_AND_ACCEPTANCE.md>),
-and [machine-readable readiness gates](<../../docs/audio/UPMIX_TRAINING_HISTORY.md>).
+[electronic/acoustic bridge and legacy matrix repair](<../../docs/audio/archive/UPMIX_RELEASE_AND_ACCEPTANCE.md>),
+and [machine-readable readiness gates](<../../docs/audio/archive/UPMIX_TRAINING_HISTORY.md>).
 490 relevant Python tests pass (121 extraction +369 all model/cabin tests).
 No complete/live cabin fidelity claim: actual acoustic responses and selected
 state are still absent. The legacy documentary matrix is now corrected too;
@@ -53,7 +51,7 @@ The current conditional electronic model is
 [`amp_dsp_chain.py`](amp_dsp_chain.py), version `bank1-known-electronics-v7`.
 **v7/v8 correct a matrix transpose error in v5/v6**: A07/RAM rows are outputs,
 not inputs. Old speaker-group bass numbers and “sub only LFE” calculations are
-superseded by the [seven-track rerender and controls](<../../docs/audio/UPMIX_CALIBRATION_AND_TUNING.md>).
+superseded by the [seven-track rerender and controls](<../../docs/audio/archive/UPMIX_CALIBRATION_AND_TUNING.md>).
 See [proof and coefficient side paths](<../../docs/audio/VIRTUAL_CABIN_AND_AMP_RE.md>).
 It includes the recovered second pair mixer, both pre-EQ delay vectors,
 packed post-EQ binding and the input-matrix floor. Explicit runtime scenarios
@@ -170,14 +168,14 @@ writers with explicit inputs, verified against bounded decoded execution.
 only the old transpose and zeroes only LFE in memory. No fresh upmix or vehicle I/O.
 `audit_amp_midrange.py` decomposes fixed-path per-input powers and signed L/R
 cross terms, checks closure against the v7 music report, and renders float-only
-diagnostic front blends. See [results and stale C guard warning](<../../docs/audio/UPMIX_CALIBRATION_AND_TUNING.md>).
+diagnostic front blends. See [results and stale C guard warning](<../../docs/audio/archive/UPMIX_CALIBRATION_AND_TUNING.md>).
 `audit_amp_retention_candidates.py` runs fresh S16/float C candidates on the
-hash-verified seven-track source set. [Corrected C guards and35-render results](<../../docs/audio/UPMIX_CALIBRATION_AND_TUNING.md>)
+hash-verified seven-track source set. [Corrected C guards and35-render results](<../../docs/audio/archive/UPMIX_CALIBRATION_AND_TUNING.md>)
 include downstream peak limits and full-suite installer failures.
 `audit_amp_tuning.py` adds a9-point retention/rear grid, bass/LFE alternatives,
 whole-clip downstream headroom, limiter telemetry, explicit EQ/B sensitivity
 and reread-verified level-matched PCM6 files. See the
-[105-render tuning sweep](<../../docs/audio/UPMIX_CALIBRATION_AND_TUNING.md>).
+[105-render tuning sweep](<../../docs/audio/archive/UPMIX_CALIBRATION_AND_TUNING.md>).
 Next: candidate listening/selectivity evaluation (not a model verdict);
 unbound pointer consumers,
 outermost request semantics, API29, nonzero EQ designer,
@@ -387,5 +385,5 @@ split-half mixing, explicit OFF-row/gate hypotheses, packed EQ sign/order and
 state continuity, and schedule-local buffer reuse. Supplied five-word EQ
 coefficients are required; OEM design-record conversion and coefficient
 transition timing are still unimplemented. See the
-[float candidate results](<../../docs/audio/UPMIX_TRAINING_HISTORY.md>) for the first
+[float candidate results](<../../docs/audio/archive/UPMIX_TRAINING_HISTORY.md>) for the first
 upmix integration: a detector using only the proven input matrix.

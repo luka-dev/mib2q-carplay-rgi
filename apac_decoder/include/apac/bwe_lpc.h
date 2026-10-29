@@ -4,7 +4,7 @@
 
 // BWELPC - the LPC machinery APACBWE2Decoder::DecodeFrame runs on.
 //
-// Reference functions in libSPF_CP_PlugInWrapper.so (Pioneer SPHERA 1.030010):
+// Originals in libSPF_CP_PlugInWrapper.so (Pioneer SPHERA 1.030010):
 //
 //   0x000b1030  BWELPC::Initialize()
 //   0x000b0d70  BWELPC::LPCToMDCTSpectrum(const float*, float*, unsigned)
@@ -46,7 +46,7 @@
 // and apac::LSFTools::Initialize sizes every vector from those.  None of it is
 // read from the bitstream, so none of it can be attacker-controlled.
 //
-// THE FILTER BANK, and where our decoder differs.  BWELPC::Initialize builds SIX
+// THE FILTER BANK, and where the port differs.  BWELPC::Initialize builds SIX
 // apac::LPMDCTFilter objects, one per entry of BWELPC::kDftSizes at 0x00331a58
 // - {1024, 768, 512, 128, 96, 64} - each with LPC order 16, and picks one by a
 // switch on the caller's `n`:
@@ -54,10 +54,10 @@
 //     n     32   48   64   256  384  512 and anything else
 //     fft   64   96   128  512  768  1024
 //
-// i.e. fftSize is always 2n.  In this decoder a single apac::LPMDCTFilter is 47
-// KiB (kMaxRealFFT-sized scratch that the library heap-allocates per size), so
-// six of them would put 282 KiB into a decoder that is already 1.46 MB.  Our
-// decoder keeps TWO and re-Initializes on demand, which is observationally
+// i.e. fftSize is always 2n.  In this port a single apac::LPMDCTFilter is 47
+// KiB (kMaxRealFFT-sized scratch that the original heap-allocates per size), so
+// six of them would put 282 KiB into a decoder that is already 1.46 MB.  The
+// port keeps TWO and re-Initializes on demand, which is observationally
 // identical: apac::LPMDCTFilter holds NO state across calls - its members are
 // the size, the order, 2/fftSize, the FFT twiddles and pure scratch - and
 // Initialize is a pure function of (fftSize, order) that returns early when the
@@ -70,7 +70,7 @@
 // twiddle rebuild - about 768 sin/cos for the 1024-point filter - every time
 // the GEOMETRY changes between frames, per channel per frame.  On the host,
 // one channel, warmed: 7 252 ns steady state against 9 695 ns alternating
-// narrow-long / wide-long, i.e. +34 %.  The library does not pay it, so it
+// narrow-long / wide-long, i.e. +34 %.  The original does not pay it, so it
 // must never be quoted as the decoder's cost without saying whose it is.
 //
 // The decision is deliberate: the path does not execute at all on the CarPlay
@@ -80,7 +80,7 @@
 // filters (core-long, core-short, ext-long, ext-short) for +94 KiB, or all six
 // for +188 KiB, and change FilterFor below to pick between them.  The bit-exact
 // "fresh vs reused filter" assertion in tests/test_bwe.cpp is what makes any of
-// those counts legal.  Written up in STATUS.md, "The two-filter trade".
+// those counts legal.  Written up in PORT_STATUS.md, "The two-filter trade".
 
 // SIZE.  `sizeof(apac::BWELPC)` is 107 456 bytes - the LARGEST single object in
 // this decoder, ahead of `APACSynthesisFilterBank`'s 94 832 - because it holds
@@ -122,10 +122,10 @@ public:
     BWELPC();
 
     // BWELPC::Initialize + apac::LSFTools::Initialize + ::Reset, folded.  The
-    // library's Reset also fills the vector at +120 with sixteen constants
+    // original's Reset also fills the vector at +120 with sixteen constants
     // from 0x00332fc0; nothing on the DECODE path reads it - its only reader is
     // apac::LSFTools::QuantizeLSF, the encoder half, which has no call site in
-    // this library at all - so our decoder does not carry it.
+    // this library at all - so the port does not carry it.
     void Initialize();
 
     // BWELPC::DecodeLSFsToLPCs, 0xb0f60.  idx[0] indexes kBWELsfCB0 and idx[1]
@@ -134,10 +134,10 @@ public:
     //
     // Returns FALSE on an index the codebook cannot hold.  This function is
     // handed a PARSED value rather than the bitstream, which is the shape of
-    // every memory-safety defect this decoder has found in the library
+    // every memory-safety defect this port has found in the original
     // (APACChannelRemapper::Process, APACCACDecoder::ProcessCac,
     // TNSData::Apply), so the invariant is checked here where it is relied on
-    // rather than assumed from the parser two layers up.  The library checks
+    // rather than assumed from the parser two layers up.  The original checks
     // nothing and would read up to 4 GiB past the codebook.
     bool DecodeLSFsToLPCs(const uint16_t idx[kBWELsfBooks]);
 
@@ -152,7 +152,7 @@ public:
     // of the LP spectrum, through the 2n-point filter.
     void LPCToMDCTSpectrum(const float* lpc, float* env, uint32_t n);
 
-    // The two coefficient buffers the library keeps at +24 (apac::LPCBase's
+    // The two coefficient buffers the original keeps at +24 (apac::LPCBase's
     // own, written by LevinsonDurbin) and +48 (written by LSP_To_LPC).
     const float* CoreLPC() const { return mLPC; }
     const float* LsfLPC()  const { return mLsfLPC; }
@@ -162,7 +162,7 @@ public:
     const float* LSF() const { return mLSF; }
     const float* LSP() const { return mLSP; }
 
-    // The library's switch, exposed so the test can assert the mapping rather
+    // The original's switch, exposed so the test can assert the mapping rather
     // than restate it.  Returns 1024 for any n the switch does not name.
     static uint32_t FFTSizeFor(uint32_t n);
 

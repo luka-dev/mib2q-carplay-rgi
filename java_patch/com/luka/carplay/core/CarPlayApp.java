@@ -19,6 +19,7 @@
 package com.luka.carplay.core;
 
 import com.luka.carplay.bus.CarplayBus;
+import com.luka.carplay.connectivity.CarPlaySettingsUi;
 import com.luka.carplay.framework.Log;
 import com.luka.carplay.pdc.PdcSmallStageGuard;
 
@@ -75,7 +76,7 @@ public final class CarPlayApp {
                 ensureLifecycleWorkerLocked();
             }
             /* the class itself may fail to link on an odd firmware: guard at the call */
-            try { UpmixSetting.boot(fwRef.framework()); } catch (Throwable t) { Log.w(TAG, "upmix level: " + t); }
+            try { CarPlaySettingsUi.boot(fwRef.framework()); } catch (Throwable t) { Log.w(TAG, "carplay settings: " + t); }
         }
         Log.i(TAG, "transport up (bus always-on) build=" + BUILD_ID);
     }

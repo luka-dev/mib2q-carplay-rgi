@@ -43,6 +43,19 @@ def read_exact(connection, size):
     return bytes(data)
 
 
+def respond_request(request: bytes, key, certificate: bytes) -> bytes:
+    """Bounded public-fixture requests from the explicitly built QNX lab."""
+    if len(request) != 33:
+        raise ValueError('expected a 33-byte lab MFi request')
+    if request[0] == 1:
+        return respond(request, key, certificate)
+    if request[0] == 2:
+        return sign_digest(key, request[1:])
+    if request[0] == 3 and request[1:] == bytes(32):
+        return certificate
+    raise ValueError('unknown lab MFi operation')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--seconds', type=int, default=300)
@@ -79,7 +92,7 @@ def main():
                 try:
                     if address[0] != '127.0.0.1' or not qnx_network.running():
                         raise ValueError('owned loopback VM only')
-                    response = respond(read_exact(connection, 33), key, certificate)
+                    response = respond_request(read_exact(connection, 33), key, certificate)
                     connection.sendall(struct.pack('>I', len(response)) + response)
                     print(json.dumps({'mfi_sap_signed': True, 'response_bytes': len(response)}), flush=True)
                 except (ValueError, EOFError, OSError) as error:

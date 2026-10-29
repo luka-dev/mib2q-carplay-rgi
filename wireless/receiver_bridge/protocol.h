@@ -15,6 +15,11 @@ enum {
     MHI2Q_RBR_QUIESCE = 3,
     MHI2Q_RBR_WIRED_DRAIN = 4,
     MHI2Q_RBR_IDENTITY = 5,
+    MHI2Q_RBR_STATUS = 6,
+    MHI2Q_RBR_HEALTH = 7,
+    MHI2Q_RBR_NOW_PLAYING = 8, /* v3 SI only; u16 LE size + iAP2 CSM */
+    MHI2Q_RBR_IAP2 = 9, /* v3 SI: u16 size + kind + u32 LE sequence + payload */
+    MHI2Q_RBR_IAP2_POLL = 10, /* v3 SI: u32 ACK; reply u32 sequence/u16 size/CSM */
     MHI2Q_RBR_ID_MAX = 252,
     MHI2Q_RBR_OK = 0,
     MHI2Q_RBR_NOT_READY = 1,
@@ -66,7 +71,10 @@ static inline int mhi2q_rbr_decode_request(
         bytes[4] != MHI2Q_RBR_VERSION ||
         (bytes[5] != MHI2Q_RBR_START && bytes[5] != MHI2Q_RBR_STOP &&
          bytes[5] != MHI2Q_RBR_QUIESCE &&
-         bytes[5] != MHI2Q_RBR_WIRED_DRAIN && bytes[5] != MHI2Q_RBR_IDENTITY) ||
+         bytes[5] != MHI2Q_RBR_WIRED_DRAIN && bytes[5] != MHI2Q_RBR_IDENTITY &&
+         bytes[5] != MHI2Q_RBR_STATUS && bytes[5] != MHI2Q_RBR_HEALTH &&
+         bytes[5] != MHI2Q_RBR_NOW_PLAYING && bytes[5] != MHI2Q_RBR_IAP2 &&
+         bytes[5] != MHI2Q_RBR_IAP2_POLL) ||
         bytes[6] != 0 || bytes[7] != 0 ||
         bytes[14] != 0 || bytes[15] != 0)
         return -1;

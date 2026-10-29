@@ -13,7 +13,7 @@ from amp_b_spatial_binding import (ROOT, bind_effective_spatial, build_effective
 class SpatialBindingTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        directory=ROOT/'assets/soundamp/remaining-blocks-20260920-v3'
+        directory=ROOT/'output/r2/soundamp/remaining-blocks-20260920-v3'
         cls.report=json.loads((directory/'b_config_control.json').read_text())
         cls.maps=json.loads((directory/'b_mode_control.json').read_text())['pointer_maps']
         cls.edges=spatial_binding_evidence()['edges']

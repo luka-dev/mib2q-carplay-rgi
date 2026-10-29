@@ -4,7 +4,7 @@ Declared 2026-09-16 before any new release-candidate evaluation. This is a
 prospective engineering specification, not evidence that any model passes.
 Machine source: `tools/stereo-upmix-render/release_acceptance_v2.json`.
 This is the self-contained prospective v2 specification; the v1 sealed owner is
-retained unchanged. See [repair rationale](../audio/UPMIX_RELEASE_AND_ACCEPTANCE.md).
+retained unchanged. See [repair rationale](../audio/archive/UPMIX_RELEASE_AND_ACCEPTANCE.md).
 V2 numerical thresholds and gate IDs remain unchanged; valid domains, independent
 count units and integrity requirements below are mandatory.
 Seal exact protocol AND this specification into each study's fresh owner before

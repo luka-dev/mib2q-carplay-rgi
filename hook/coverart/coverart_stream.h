@@ -55,4 +55,7 @@ void coverart_stream_feed(coverart_stream_t *s, const uint8_t *bytes, size_t len
 /* Identify resets transfers and sequencing but keeps negotiated session IDs. */
 void coverart_stream_reset(coverart_stream_t *s);
 void coverart_stream_dispose(coverart_stream_t *s);
+/* Ordered payload from a link engine which already checked sequencing and
+ * the negotiated file-transfer session. Same file parser and limits. */
+void coverart_stream_file(coverart_stream_t *,const uint8_t *,size_t,uint8_t **,size_t *);
 #endif

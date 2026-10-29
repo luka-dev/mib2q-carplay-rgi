@@ -32,9 +32,9 @@ The runner verifies the frozen split hash, every UUID's TRAIN membership, exact 
 
 | Artifact | Location |
 | --- | --- |
-| Strict inference script | [bsrnn_reference_infer.py](../../../tools/stereo-upmix-render/bsrnn_reference_infer.py) |
-| Exclusive GPU runner | [run_bsrnn_reference.ps1](../../../tools/stereo-upmix-render/pc/run_bsrnn_reference.ps1) |
-| Isolated dependency recipe | [bsrnn_reference_requirements.txt](../../../tools/stereo-upmix-render/pc/bsrnn_reference_requirements.txt) |
+| Strict inference script | [bsrnn_reference_infer.py](RETIRED_TOOLS.md#tool-1f6cd0685264) |
+| Exclusive GPU runner | [run_bsrnn_reference.ps1](RETIRED_TOOLS.md#tool-92c6b990a489) |
+| Isolated dependency recipe | [bsrnn_reference_requirements.txt](RETIRED_TOOLS.md#tool-aaa67e6f3379) |
 | PC result root | `D:\upmix\runs\bsrnn_pretrained_train4_v1` |
 | PC progress / final audit | `progress.json` / `complete.json` under that root |
 | PC execution log | `D:\upmix\runs\bsrnn_pretrained_train4_v1.log` |

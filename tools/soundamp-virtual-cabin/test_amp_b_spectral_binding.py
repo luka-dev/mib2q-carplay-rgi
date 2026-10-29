@@ -11,7 +11,7 @@ from amp_b_bound_scenario import retained_config
 from amp_b_spatial_binding import build_effective_spatial
 from inspect_amp_visa import load_shortwords, decode
 
-OUT=ROOT/'assets/soundamp/remaining-blocks-20260920-v3'
+OUT=ROOT/'output/r2/soundamp/remaining-blocks-20260920-v3'
 
 
 def caller_trace(start,end):
