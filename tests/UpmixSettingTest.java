@@ -43,6 +43,7 @@ public final class UpmixSettingTest {
         int[] boseAmps = {17, 18, 19};
         for (int i = 0; i < boseAmps.length; i++) {
             if (!SoundControlUi.boseAudioPilotAmp(boseAmps[i])) throw new AssertionError("bose expected for " + boseAmps[i]);
+            if (!SoundControlUi.separateThreeDGatingAmp(boseAmps[i])) throw new AssertionError("separate 3D gate expected for bose " + boseAmps[i]);
             if (SoundControlUi.vncMaxLevel(boseAmps[i]) != 0) throw new AssertionError("bose vncMax 0 for " + boseAmps[i]);
             if (SoundControlUi.vncDefaultLevel(boseAmps[i]) != 1) throw new AssertionError("bose default 1 for " + boseAmps[i]);
             if (SoundControlUi.soundSystemChoice(boseAmps[i], 3) != 4) throw new AssertionError("bose choice 4 for " + boseAmps[i]);
@@ -50,12 +51,14 @@ public final class UpmixSettingTest {
         int[] rotary7Amps = {1, 2, 3, 4, 5};
         for (int i = 0; i < rotary7Amps.length; i++) {
             if (SoundControlUi.boseAudioPilotAmp(rotary7Amps[i])) throw new AssertionError("not bose " + rotary7Amps[i]);
+            if (SoundControlUi.separateThreeDGatingAmp(rotary7Amps[i])) throw new AssertionError("Alpine B&O / internal gates 3D via PosX=3 Row 0 " + rotary7Amps[i]);
             if (SoundControlUi.vncMaxLevel(rotary7Amps[i]) != 7) throw new AssertionError("vncMax 7 for " + rotary7Amps[i]);
             if (SoundControlUi.vncDefaultLevel(rotary7Amps[i]) != 2) throw new AssertionError("vncDefault 2 for " + rotary7Amps[i]);
         }
         int[] rotary24Amps = {21, 22, 23};
         for (int i = 0; i < rotary24Amps.length; i++) {
             if (SoundControlUi.boseAudioPilotAmp(rotary24Amps[i])) throw new AssertionError("not bose " + rotary24Amps[i]);
+            if (!SoundControlUi.separateThreeDGatingAmp(rotary24Amps[i])) throw new AssertionError("separate 3D gate expected for B&O Adv " + rotary24Amps[i]);
             if (SoundControlUi.vncMaxLevel(rotary24Amps[i]) != 24) throw new AssertionError("vncMax 24 for " + rotary24Amps[i]);
             if (SoundControlUi.vncDefaultLevel(rotary24Amps[i]) != 12) throw new AssertionError("vncDefault 12 for " + rotary24Amps[i]);
             if (SoundControlUi.soundSystemChoice(rotary24Amps[i], 10) != 6) throw new AssertionError("adv choice 6 for " + rotary24Amps[i]);

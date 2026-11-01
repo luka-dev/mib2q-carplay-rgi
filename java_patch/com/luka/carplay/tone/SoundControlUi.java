@@ -2,10 +2,11 @@
  * Native Amplifier Unlock on Sound (tone screen 1000001), Sound -> Sound effects
  * (tone screen 1000006), and VNC/GALA rotary (tone screen 1000007):
  *   1. Exposes the stock TONE_SURROUND_ON_OFF_CHOICE (1000116) model as a top-of-menu
- *      "Surround" checkbox (wired by stock de.audi.tone.app.sound.SurroundRange to
+ *      "Sound processing" checkbox (wired by stock de.audi.tone.app.sound.SurroundRange to
  *      DSISound.setSurroundOnOff -> MOST FktID 0x0D28 PosX=3, toggling Row 0 Linear
- *      passthrough on Alpine B&O 0x140, Centerpoint on Bose 0x160/0x161, and Symphoria
- *      on B&O Advanced 0x181), with Infoline hint 1001007 from lang_data.zip.
+ *      passthrough on Alpine B&O 0x140, and paired with THREE_D_MODE_CHOICE 1000152 /
+ *      PosX=4 on Bose 0x160/0x161 and B&O Advanced 0x181), gating both Surround Level
+ *      (1000040) and 3D effect (1000152), with Infoline hint 1001007 from lang_data.zip.
  *   2. Unlocks the stock SUBWOOFER_RANGE (1000015, -9..+9) control on amplifiers with
  *      a physical subwoofer channel (Bose 3D 0x160, B&O Advanced 0x181, etc.) while
  *      keeping it hidden on 2ch/4ch internal amps without a subwoofer.
@@ -53,6 +54,8 @@ public final class SoundControlUi {
     private static final int INDEX_VNC = MODEL_VNC % 100000;
     public static final int MODEL_AUDIOPILOT = ICoreToneModelBank.AUDIOPILOT_CHOICE;                // 1000046
     private static final int INDEX_AUDIOPILOT = MODEL_AUDIOPILOT % 100000;
+    public static final int MODEL_THREE_D = ICoreToneModelBank.THREE_D_MODE_CHOICE;                 // 1000152
+    private static final int INDEX_THREE_D = MODEL_THREE_D % 100000;
 
     private static final int SCREEN_SOUND_EFFECTS = 1000006;
     public static final int TEXT_SURROUND_LABEL = 1001006; // tone table slot 1006 in lang_data.zip
@@ -61,6 +64,8 @@ public final class SoundControlUi {
 
     private static volatile int amplifier = -1;
     private static volatile ChoiceModel surroundModel;
+    private static volatile ChoiceModel threeDModel;
+    private static volatile int savedThreeDMode = -1;
     private static volatile ChoiceModel amplifierVariantModel;
     private static volatile ChoiceModel audioPilotModel;
     private static volatile int lastRawAmplifierVariant;
@@ -69,6 +74,7 @@ public final class SoundControlUi {
     private static volatile boolean vncValueReceived;
     private static volatile MenuItemController surroundItem;
     private static volatile MenuItemController surroundLevelItem;
+    private static volatile MenuItemController threeDModeItem;
 
     private SoundControlUi() {}
 
@@ -97,6 +103,27 @@ public final class SoundControlUi {
     /** True on Bose amplifiers (0x160=17, 0x161=18, Porsche Bose=19) whose hardware AudioPilot is a boolean 0..1 checkbox. */
     public static boolean boseAudioPilotAmp(int type) {
         return type == 17 || type == 18 || type == 19;
+    }
+
+    public static boolean boseAudioPilotAmp() {
+        return boseAudioPilotAmp(amplifier);
+    }
+
+    /**
+     * True on amplifiers where PosX=3 (SurroundOnOff) does NOT gate 3D in hardware:
+     *   - Bose (17, 18, 19): PosX=3 is mis-mapped to SurrVol in BOSE_TRICORE_80000000.bin;
+     *     PosX=4 (THREE_D_MODE_CHOICE) switches DSPMde between FDB[55] flat_surround and FDB[57] flat.
+     *   - B&O Adv / Bentley Adv / Burmester (21, 22, 23): PosX=3 only zeroes 2D Surround_S_gain (mod[50]);
+     *     PosX=4 (THREE_D_MODE_CHOICE) gates the 3D Symphoria upmixer (mod[63]/mod[65]/mod[66]).
+     * False on Alpine B&O 16ch / Bentley (4, 5), where PosX=3 (SurroundOnOff=0) forces Row 0
+     * (Linear passthrough) in V850 hardware, muting both Surround and 3D while preserving 3DMode in NVRAM.
+     */
+    public static boolean separateThreeDGatingAmp(int type) {
+        return boseAudioPilotAmp(type) || type == 21 || type == 22 || type == 23;
+    }
+
+    public static boolean separateThreeDGatingAmp() {
+        return separateThreeDGatingAmp(amplifier);
     }
 
     /** Max rotary level for VNC/GALA (DSP_LEVELLING_RANGE 1000039): 0 on Bose checkbox amps, 24 on B&O Adv / Burmester, 7 on Internal / Alpine B&O. */
@@ -180,19 +207,27 @@ public final class SoundControlUi {
         } catch (Throwable t) { /* ignore */ }
     }
 
+    private static void applyItemEnabled(MenuItemController item, boolean enabled, boolean suppressDisabledInfoline) {
+        if (item == null) return;
+        if (suppressDisabledInfoline) {
+            item.setInfoLineEnabled(false);
+        }
+        if (!enabled && !item.isEnabled()) {
+            item.setEnabled(true);
+        }
+        item.setEnabled(enabled);
+    }
+
     static void syncSurroundLevelEnabled(int terminal) {
         try {
             boolean stockDisabled = Factory.isSurroundLevelDisabledByStock(terminal);
-            MenuItemController sItem = surroundItem;
-            if (sItem != null) {
-                sItem.setEnabled(!stockDisabled);
-            }
-            MenuItemController slItem = surroundLevelItem;
-            if (slItem != null) {
-                ChoiceModel m = surroundModel;
-                boolean surroundOn = (m == null || m.getValue() != 0);
-                slItem.setEnabled(surroundOn && !stockDisabled);
-            }
+            applyItemEnabled(surroundItem, !stockDisabled, true);
+            ChoiceModel m = surroundModel;
+            boolean surroundOn = (m == null || m.getValue() != 0);
+            boolean subItemsEnabled = surroundOn && !stockDisabled;
+            boolean disabledByCheckbox = !surroundOn && !stockDisabled;
+            applyItemEnabled(surroundLevelItem, subItemsEnabled, disabledByCheckbox);
+            applyItemEnabled(threeDModeItem, subItemsEnabled, disabledByCheckbox);
         } catch (Throwable t) { /* ignore */ }
     }
 
@@ -207,12 +242,47 @@ public final class SoundControlUi {
                     }
                     public void itemSelected(int value, int terminal) {
                         this.setValue(value);
-                        super.itemSelected(value, terminal);
+                        if (!boseAudioPilotAmp()) {
+                            super.itemSelected(value, terminal);
+                        }
+                        if (separateThreeDGatingAmp()) {
+                            ChoiceModel td = threeDModel;
+                            if (td != null) {
+                                if (value == 0) {
+                                    int cur = td.getValue();
+                                    if (savedThreeDMode < 0 && cur >= 0) savedThreeDMode = cur;
+                                    td.itemSelected(0, terminal);
+                                } else {
+                                    int restore = boseAudioPilotAmp()
+                                        ? (savedThreeDMode > 0 ? savedThreeDMode : 1)
+                                        : savedThreeDMode;
+                                    if (restore > 0) {
+                                        td.itemSelected(restore, terminal);
+                                    }
+                                }
+                            }
+                        }
                     }
                 };
                 m.setValue(1);
                 this.models[i] = m;
                 surroundModel = m;
+                return;
+            }
+            if (i == INDEX_THREE_D) {
+                if (this.models[i] != null) return;
+                ChoiceModel m = new ChoiceModel(MODEL_THREE_D) {
+                    public void setValue(int value) {
+                        ChoiceModel sm = surroundModel;
+                        if (sm != null && sm.getValue() == 0 && value == 0 && savedThreeDMode > 0) {
+                            return;
+                        }
+                        savedThreeDMode = value;
+                        super.setValue(value);
+                    }
+                };
+                this.models[i] = m;
+                threeDModel = m;
                 return;
             }
             if (i == INDEX_SUBWOOFER) {
@@ -327,8 +397,8 @@ public final class SoundControlUi {
             return s;
         }
 
-        public void executeCondition(int screenId, int modelId, HMIView[] views, int terminal) {
-            super.executeCondition(screenId, modelId, views, terminal);
+        public void executeCondition(int modelId, int screenId, HMIView[] views, int terminal) {
+            super.executeCondition(modelId, screenId, views, terminal);
             if (screenId == SCREEN_SOUND_EFFECTS) {
                 syncSurroundLevelEnabled(terminal);
             }
@@ -337,8 +407,8 @@ public final class SoundControlUi {
         public String getText(int id) {
             String s = super.getText(id);
             if (s == null || s.length() == 0) {
-                if (id == TEXT_SURROUND_LABEL) return "Surround";
-                if (id == TEXT_SURROUND_HINT) return "Turn off to bypass surround processing for direct linear audio";
+                if (id == TEXT_SURROUND_LABEL) return "Sound processing";
+                if (id == TEXT_SURROUND_HINT) return "Turn off to bypass Surround and 3D processing for direct linear audio";
             }
             return s;
         }
@@ -355,6 +425,7 @@ public final class SoundControlUi {
             AbstractScreenWidget screen = (AbstractScreenWidget) s;
             HMIView[] refViews = screen.findViews(ICoreToneModelBank.THREE_D_MODE_CHOICE);
             MenuItemController ref = (MenuItemController) refViews[0];
+            threeDModeItem = ref;
             AbstractWidget parent = ref.getParent();
             if (!(parent instanceof MenuController)) return;
             MenuController menu = (MenuController) parent;
