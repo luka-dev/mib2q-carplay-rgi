@@ -245,8 +245,8 @@ static int ep_make_program(screen_egl_present_t *p) {
     p->attr_pos = glGetAttribLocation(p->program, "a_pos");
     p->attr_uv = glGetAttribLocation(p->program, "a_uv");
     p->uniform_tex = glGetUniformLocation(p->program, "u_tex");
-    glDeleteShader(vs);
-    glDeleteShader(fs);
+    if (vs) glDeleteShader(vs);
+    if (fs) glDeleteShader(fs);
     return (p->attr_pos >= 0 && p->attr_uv >= 0 && p->uniform_tex >= 0) ? 0 : -1;
 
 fail:
@@ -297,8 +297,8 @@ static int ep_make_loader_program(screen_egl_present_t *p) {
     p->loader_u_sigrect = glGetUniformLocation(p->loader_program, "uSigRect");
     p->loader_u_logo = glGetUniformLocation(p->loader_program, "uMaterial");
     p->loader_u_sig = glGetUniformLocation(p->loader_program, "uSig");
-    glDeleteShader(vs);
-    glDeleteShader(fs);
+    if (vs) glDeleteShader(vs);
+    if (fs) glDeleteShader(fs);
     return (p->loader_attr_pos >= 0 && p->loader_u_ires >= 0 &&
             p->loader_u_itime >= 0 && p->loader_u_content >= 0 &&
             p->loader_u_sigrect >= 0 && p->loader_u_logo >= 0 &&
@@ -866,8 +866,15 @@ static void *ep_loader_thread_main(void *context) {
             ? alt_loader_decode_remaining_ns(now, end)
             : alt_frame_remaining_ns(now, end);
         if (remaining) {
-            struct timespec pause = {0, (long)remaining};
-            while (nanosleep(&pause, &pause) != 0 && errno == EINTR && !p->loader_stop) {}
+            uint64_t sleep_end = end + remaining;
+            while (!__sync_fetch_and_add(&p->loader_stop, 0)) {
+                uint64_t cur = ep_monotonic_ns();
+                if (!cur || cur >= sleep_end) break;
+                uint64_t step = sleep_end - cur;
+                if (step > 2000000ULL) step = 2000000ULL;
+                struct timespec pause = {0, (long)step};
+                nanosleep(&pause, NULL);
+            }
         }
     }
     __sync_synchronize();
@@ -915,6 +922,7 @@ void screen_egl_present_stop_loader(screen_egl_present_t *p) {
     int started;
     uint64_t deadline;
     if (!p || !p->gl_lock_initialized) return;
+    if (!p->loader_thread_started && p->loader_stop) return;
 
     /* Do not take gl_lock to request stop: the loader deliberately holds that
      * lock across eglSwapBuffers(), and an Adreno/WFD wedge there would block
@@ -927,7 +935,7 @@ void screen_egl_present_stop_loader(screen_egl_present_t *p) {
     deadline = ep_monotonic_ns() + ALT_LOADER_STOP_WAIT_MS * 1000000ULL;
     while (!p->loader_exited) {
         uint64_t now = ep_monotonic_ns();
-        struct timespec pause = { 0, 10L * 1000000L };
+        struct timespec pause = { 0, 1L * 1000000L };
         if (now == 0 || now >= deadline) {
             fprintf(stderr,
                     "altscreen_render[loader]: stop TIMEOUT in EGL/Adreno handoff; exiting isolated renderer safely\n");

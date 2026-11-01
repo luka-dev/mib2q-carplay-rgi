@@ -52,7 +52,7 @@ static int ctl_connect(void) {
         pfd.fd = fd;
         pfd.events = POLLOUT;
         pfd.revents = 0;
-        if (poll(&pfd, 1, 250) > 0 && (pfd.revents & POLLOUT) &&
+        if (poll(&pfd, 1, 50) > 0 && (pfd.revents & POLLOUT) &&
             getsockopt(fd, SOL_SOCKET, SO_ERROR, &socket_error, &error_len) == 0 &&
             socket_error == 0)
             connected = 1;
@@ -68,6 +68,7 @@ static void *ctl_loop(void *arg) {
     (void)arg;
     int fd = -1;
     int last_sent = -1;
+    int ever_connected = 0;
     unsigned char rx[ALTCTL_PKT_SIZE];
     unsigned int rx_used = 0;
     while (g_run) {
@@ -78,10 +79,11 @@ static void *ctl_loop(void *arg) {
             last_sent = -1;                       /* force resend of the current state on (re)connect */
             rx_used = 0;
             if (fd < 0) {                          /* Java control server not up yet — retry */
-                struct timespec retry = { 0, 200L * 1000000L };
+                struct timespec retry = { 0, (ever_connected ? 200L : 50L) * 1000000L };
                 nanosleep(&retry, NULL);
                 continue;
             }
+            ever_connected = 1;
             fprintf(stderr, "%s altscreen_render: control link to lsd up (:%d)\n", log_stamp(), ALTCTL_PORT);
         }
 
@@ -97,26 +99,33 @@ static void *ctl_loop(void *arg) {
             fprintf(stderr, "%s altscreen_render: -> VIDEO_%s\n", log_stamp(), state ? "ON" : "OFF");
         }
 
-        /* ~10 Hz idle: catch state changes promptly + notice a peer close. */
-        struct timespec ts = { 0, 100L * 1000000L };
-        nanosleep(&ts, NULL);
-        ssize_t r = recv(fd, rx + rx_used, ALTCTL_PKT_SIZE - rx_used, MSG_DONTWAIT);
-        if (r == 0) { close(fd); fd = -1; }        /* lsd closed the control link */
-        else if (r > 0) {
-            rx_used += (unsigned int)r;
-            if (rx_used == ALTCTL_PKT_SIZE) {
-                if (rx[0] == ALTCMD_VIEW_AREA) {
-                    av_sink_set_layout(rx[1] == 1 ? 1 : 0,
-                                       (int)rx[2], (int)rx[3]);
-                } else {
-                    fprintf(stderr, "altscreen_render: unknown control command 0x%02x\n",
-                            (unsigned int)rx[0]);
-                }
-                rx_used = 0;
-            }
+        /* 20 ms poll (~50 Hz state sampling) with instant wakeup on incoming
+         * Java commands (ALTCMD_VIEW_AREA) or peer close. */
+        struct pollfd pfd = { fd, POLLIN, 0 };
+        int pr = poll(&pfd, 1, 20);
+        if (pr < 0 && errno != EINTR) {
+            close(fd); fd = -1;
+            continue;
         }
-        else if (r < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
-            close(fd); fd = -1;                    /* RST / hard error → drop dead fd, reconnect */
+        if (pr > 0) {
+            ssize_t r = recv(fd, rx + rx_used, ALTCTL_PKT_SIZE - rx_used, MSG_DONTWAIT);
+            if (r == 0) { close(fd); fd = -1; }    /* lsd closed the control link */
+            else if (r > 0) {
+                rx_used += (unsigned int)r;
+                if (rx_used == ALTCTL_PKT_SIZE) {
+                    if (rx[0] == ALTCMD_VIEW_AREA) {
+                        av_sink_set_layout(rx[1] == 1 ? 1 : 0,
+                                           (int)rx[2], (int)rx[3]);
+                    } else {
+                        fprintf(stderr, "altscreen_render: unknown control command 0x%02x\n",
+                                (unsigned int)rx[0]);
+                    }
+                    rx_used = 0;
+                }
+            }
+            else if (r < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
+                close(fd); fd = -1;                /* RST / hard error → drop dead fd, reconnect */
+            }
         }
     }
     if (fd >= 0) close(fd);

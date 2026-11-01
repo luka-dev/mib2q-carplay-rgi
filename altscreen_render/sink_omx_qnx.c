@@ -48,7 +48,7 @@
 #include <sys/wait.h>
 #include <sys/types.h>
 #include <fcntl.h>
-#if defined(__QNX__)
+#if defined(__QNX__) && !defined(__APPLE__)
 #include <sys/neutrino.h>   /* setprio() */
 #endif
 
@@ -655,7 +655,7 @@ static void _FatalSlogSnapshot(void) {
     if (pid == 0) {
         int fd = open(tmp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
         if (fd >= 0) { dup2(fd, 1); dup2(fd, 2); close(fd); }
-#if defined(__QNX__)
+#if defined(__QNX__) && !defined(__APPLE__)
         /* Not at the renderer's 15: a full slog dump froze playback on a busy
          * unit (docs/LANDMINES.md, "Never pull a full sloginfo"). */
         setprio(0, 10);
@@ -1132,7 +1132,6 @@ static int _TeardownOmxJoined(ScreenSink *me) {
     if (pthread_create(&th, NULL, _TeardownHelper, job) != 0) {
         /* No helper available: inline is the historical behavior. */
         _TeardownOmxSection(me);
-        done = 1;
     } else {
         _AbsTimeoutMs(&ts, _TeardownDeadlineMs());
         pthread_mutex_lock(&job->lock);
@@ -1414,22 +1413,24 @@ int av_sink_open(void) {
 enum { NAL_PARAMETER_SET = 1, NAL_PICTURE = 2, NAL_IDR = 4 };
 
 /* A picture may contain in-band SPS/PPS as well as AUD/SEI. Recognise the
- * entire access unit; any parameter set alone does not make it config-only. */
+ * entire access unit; any parameter set alone does not make it config-only.
+ * Both 3-byte (00 00 01) and 4-byte (00 00 00 01) start codes end in 00 00 01
+ * immediately before the NAL header byte. */
 static unsigned _AnnexBFlags(const uint8_t *p, uint32_t len) {
     uint32_t i;
     unsigned flags = 0;
     if (!p) return 0;
     for (i = 0; i + 3 < len; ++i) {
-        uint32_t start = 0;
-        if (i + 3 < len && p[i] == 0 && p[i + 1] == 0 && p[i + 2] == 1)
-            start = i + 3;
-        else if (i + 4 < len && p[i] == 0 && p[i + 1] == 0
-                 && p[i + 2] == 0 && p[i + 3] == 1) start = i + 4;
-        if (start) {
-            unsigned type = p[start] & 0x1f;
+        if (p[i + 1] != 0) {
+            ++i;
+            continue;
+        }
+        if (p[i] == 0 && p[i + 2] == 1) {
+            unsigned type = p[i + 3] & 0x1f;
             if (type == 7 || type == 8) flags |= NAL_PARAMETER_SET;
             if (type >= 1 && type <= 5) flags |= NAL_PICTURE;
             if (type == 5) flags |= NAL_IDR;
+            i += 2;
         }
     }
     return flags;

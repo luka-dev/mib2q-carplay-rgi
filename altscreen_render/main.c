@@ -687,9 +687,10 @@ static void socket_pace_sample(void) {
 
 /* Serve one connected client until it disconnects or a protocol error. */
 static void serve_client(int cfd, uint32_t generation) {
-    int one = 1, descriptor_flags = fcntl(cfd, F_GETFL, 0);
+    int one = 1, rcvbuf = 512 * 1024, descriptor_flags = fcntl(cfd, F_GETFL, 0);
     if (descriptor_flags < 0 || fcntl(cfd, F_SETFL, descriptor_flags | O_NONBLOCK) != 0)
         return;
+    setsockopt(cfd, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(rcvbuf));
     setsockopt(cfd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
     /* A static/occluded instrument-cluster scene is allowed to stop producing
      * encoded frames without closing the stream.  Do NOT put SO_RCVTIMEO on this
