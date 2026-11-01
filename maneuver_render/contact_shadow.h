@@ -15,8 +15,8 @@
 #define CR_CONTACT_MIN_GAP 0.00001f
 #define CR_CONTACT_MAX_GAP 0.140f
 
-typedef struct { int a,b,uses; } cr_contact_edge_t;
-typedef struct { float v[7]; } cr_contact_point_t; /* xyz, across/radius, along, gap, edge clearance */
+typedef struct { int a,b,uses,prev,next; } cr_contact_edge_t;
+typedef struct { float v[8]; } cr_contact_point_t; /* xyz, across/radius, along_start, gap, edge clearance, along_end */
 
 static inline uint32_t cr_contact_hash_point(const float *p) {
     uint32_t h=2166136261u,bits;
@@ -39,7 +39,7 @@ static inline int cr_contact_clip(cr_contact_point_t *dst,const cr_contact_point
         if((da>=0)!=(db>=0)) {
             float t=da/(da-db);
             if(count>=12)return 0;
-            for(j=0;j<7;j++)dst[count].v[j]=a->v[j]+t*(b->v[j]-a->v[j]);
+            for(j=0;j<8;j++)dst[count].v[j]=a->v[j]+t*(b->v[j]-a->v[j]);
             count++;
         }
         if(db>=0) { if(count>=12)return 0;dst[count++]=*b; }
@@ -47,12 +47,39 @@ static inline int cr_contact_clip(cr_contact_point_t *dst,const cr_contact_point
     return count;
 }
 
-/* Returns vertices written, or -1 if the bounded output cannot hold the result.
- * Inputs use the existing position+normal (6 floats) vertex layout. */
+static inline int cr_contact_emit_clipped(cr_contact_point_t poly[2][12],
+                                          const int axes[6],const float bounds[6],
+                                          float *output,int capacity,int *written,float *max_clearance) {
+    int k,n=3,src=0;
+    for(k=0;k<6 && n;k++) {
+        n=cr_contact_clip(poly[1-src],poly[src],n,axes[k],bounds[k],k%2?-1:1);src=1-src;
+    }
+    int result=1-src;
+    int filtered=cr_contact_clip(poly[result],poly[src],n,6,CR_CONTACT_MIN_GAP,1);
+    for(k=1;k+1<filtered;k++) {
+        const cr_contact_point_t *tri[3]={&poly[result][0],&poly[result][k],&poly[result][k+1]};
+        float area=(tri[1]->v[0]-tri[0]->v[0])*(tri[2]->v[2]-tri[0]->v[2])-
+                   (tri[1]->v[2]-tri[0]->v[2])*(tri[2]->v[0]-tri[0]->v[0]);
+        int t;
+        if(fabsf(area)<1e-10f)continue;
+        if(*written+3>capacity)return -1;
+        for(t=0;t<3;t++) {
+            float *out=output+6*(*written)++;
+            memcpy(out,tri[t]->v,3*sizeof(float));
+            out[3]=tri[t]->v[3];out[4]=tri[t]->v[5];
+            /* Clearance grows continuously from the true crease.
+             * Normalize across the mesh, never per triangle/edge,
+             * so the width taper cannot restart at tessellation seams. */
+            out[5]=tri[t]->v[6];
+            *max_clearance=fmaxf(*max_clearance,out[5]);
+        }
+    }
+    return 0;
+}
 static inline int cr_contact_build(const float *verts,int count,float thickness,
                                    float *output,int capacity) {
     static cr_contact_edge_t edges[CR_CONTACT_MAX_SOURCE_VERTS];
-    static int table[CR_CONTACT_HASH_SIZE],faces[CR_CONTACT_MAX_SOURCE_VERTS/3];
+    static int table[CR_CONTACT_HASH_SIZE],slots[CR_CONTACT_MAX_SOURCE_VERTS],faces[CR_CONTACT_MAX_SOURCE_VERTS/3];
     int i,j,edge_count=0,face_count=0,written=0;
     float max_clearance=0;
     if(count<3 || count>CR_CONTACT_MAX_SOURCE_VERTS || !(thickness>0))return 0;
@@ -66,7 +93,6 @@ static inline int cr_contact_build(const float *verts,int count,float thickness,
     }
     /* Most routes/tail slices are coplanar: no hashing or pairwise clipping. */
     if(max_top-min_top<=CR_CONTACT_MIN_GAP)return 0;
-    memset(table,0,sizeof(table));
     for(i=0;i<face_count;i++) {
         for(j=0;j<3;j++) {
             int a=faces[i]+j,b=faces[i]+(j+1)%3;
@@ -79,8 +105,36 @@ static inline int cr_contact_build(const float *verts,int count,float thickness,
                 slot=(slot+1)&(CR_CONTACT_HASH_SIZE-1);
             }
             if(table[slot])edges[table[slot]-1].uses++;
-            else { edges[edge_count]=(cr_contact_edge_t){a,b,1};table[slot]=++edge_count; }
+            else { slots[edge_count]=(int)slot;edges[edge_count]=(cr_contact_edge_t){a,b,1,-1,-1};table[slot]=++edge_count; }
         }
+    }
+    for(i=0;i<edge_count;i++)table[slots[i]]=0;
+    {
+        int b_slots=0;
+        for(i=0;i<edge_count;i++) {
+            if(edges[i].uses!=1)continue;
+            const float *pa=verts+edges[i].a*6,*pb=verts+edges[i].b*6;
+            if(cr_contact_same(pa,pb))continue;
+            unsigned slot=cr_contact_hash_point(pa)&(CR_CONTACT_HASH_SIZE-1);
+            while(table[slot])slot=(slot+1)&(CR_CONTACT_HASH_SIZE-1);
+            slots[b_slots++]=(int)slot;
+            table[slot]=i+1;
+        }
+        for(i=0;i<edge_count;i++) {
+            if(edges[i].uses!=1)continue;
+            const float *pb=verts+edges[i].b*6;
+            unsigned slot=cr_contact_hash_point(pb)&(CR_CONTACT_HASH_SIZE-1);
+            while(table[slot]) {
+                int k=table[slot]-1;
+                if(cr_contact_same(pb,verts+edges[k].a*6)) {
+                    edges[i].next=k;
+                    edges[k].prev=i;
+                    break;
+                }
+                slot=(slot+1)&(CR_CONTACT_HASH_SIZE-1);
+            }
+        }
+        for(i=0;i<b_slots;i++)table[slots[i]]=0;
     }
     for(i=0;i<edge_count;i++) {
         const cr_contact_edge_t *edge=&edges[i];
@@ -89,8 +143,35 @@ static inline int cr_contact_build(const float *verts,int count,float thickness,
         float dx=b[0]-a[0],dz=b[2]-a[2],length=sqrtf(dx*dx+dz*dz);
         if(length<1e-6f)continue;
         dx/=length;dz/=length;
-        float min_x=fminf(a[0],b[0])-CR_CONTACT_RADIUS,max_x=fmaxf(a[0],b[0])+CR_CONTACT_RADIUS;
-        float min_z=fminf(a[2],b[2])-CR_CONTACT_RADIUS,max_z=fmaxf(a[2],b[2])+CR_CONTACT_RADIUS;
+        float ka=0.0f,kb=0.0f;
+        if(edge->prev>=0) {
+            const float *pa=verts+edges[edge->prev].a*6,*pb=verts+edges[edge->prev].b*6;
+            float dpx=pb[0]-pa[0],dpz=pb[2]-pa[2],plen=sqrtf(dpx*dpx+dpz*dpz);
+            if(plen>1e-6f) {
+                dpx/=plen;dpz/=plen;
+                float denom=1.0f+dx*dpx+dz*dpz;
+                if(denom>0.1f) {
+                    ka=(dpx*dz-dpz*dx)/denom;
+                    if(ka>2.0f)ka=2.0f; else if(ka<-2.0f)ka=-2.0f;
+                }
+            }
+        }
+        if(edge->next>=0) {
+            const float *na=verts+edges[edge->next].a*6,*nb=verts+edges[edge->next].b*6;
+            float dnx=nb[0]-na[0],dnz=nb[2]-na[2],nlen=sqrtf(dnx*dnx+dnz*dnz);
+            if(nlen>1e-6f) {
+                dnx/=nlen;dnz/=nlen;
+                float denom=1.0f+dx*dnx+dz*dnz;
+                if(denom>0.1f) {
+                    kb=(dnx*dz-dnz*dx)/denom;
+                    if(kb>2.0f)kb=2.0f; else if(kb<-2.0f)kb=-2.0f;
+                }
+            }
+        }
+        float kmax=fmaxf(fabsf(ka),fabsf(kb));
+        float pad=CR_CONTACT_RADIUS*sqrtf(1.0f+kmax*kmax);
+        float min_x=fminf(a[0],b[0])-pad,max_x=fmaxf(a[0],b[0])+pad;
+        float min_z=fminf(a[2],b[2])-pad,max_z=fmaxf(a[2],b[2])+pad;
         for(j=0;j<face_count;j++) {
             const float *v=verts+faces[j]*6;
             if(fminf(v[0],fminf(v[6],v[12]))>max_x || fmaxf(v[0],fmaxf(v[6],v[12]))<min_x ||
@@ -119,43 +200,47 @@ static inline int cr_contact_build(const float *verts,int count,float thickness,
             }
             if(hi-lo<1e-6f || fmaxf(ga+(gb-ga)*lo,ga+(gb-ga)*hi)<=CR_CONTACT_MIN_GAP)continue;
             cr_contact_point_t poly[2][12];
-            int k,n=3,src=0;
+            int k;
             float max_gap=-1e9f,min_gap=1e9f;
             for(k=0;k<3;k++) {
                 const float *p=v+k*6;float along=(p[0]-a[0])*dx+(p[2]-a[2])*dz;
+                float across_raw=-(p[0]-a[0])*dz+(p[2]-a[2])*dx;
                 float gap=a[1]+(b[1]-a[1])*along/length-p[1];
                 float clearance=ga+(gb-ga)*along/length;
                 poly[0][k]=(cr_contact_point_t){{p[0],p[1],p[2],
-                    (-(p[0]-a[0])*dz+(p[2]-a[2])*dx)/CR_CONTACT_RADIUS,along,gap,clearance}};
+                    across_raw/CR_CONTACT_RADIUS,along,gap,clearance,0.0f}};
                 max_gap=fmaxf(max_gap,gap);min_gap=fminf(min_gap,gap);
             }
-            if(max_gap<=CR_CONTACT_MIN_GAP || min_gap>=thickness+CR_CONTACT_MAX_GAP)continue;
-            const int axes[6]={3,3,4,4,5,5};
-            const float bounds[6]={-1,1,0,length,CR_CONTACT_MIN_GAP,thickness+CR_CONTACT_MAX_GAP};
-            for(k=0;k<6 && n;k++) {
-                n=cr_contact_clip(poly[1-src],poly[src],n,axes[k],bounds[k],k%2?-1:1);src=1-src;
+            if(max_gap>CR_CONTACT_MIN_GAP && min_gap<thickness+CR_CONTACT_MAX_GAP) {
+                const int axes[6]={3,3,4,4,5,5};
+                const float bounds[6]={-1,1,0,length,CR_CONTACT_MIN_GAP,thickness+CR_CONTACT_MAX_GAP};
+                if(cr_contact_emit_clipped(poly,axes,bounds,output,capacity,&written,&max_clearance)<0)return -1;
             }
-            {
-                int result=1-src;
-                int filtered=cr_contact_clip(poly[result],poly[src],n,6,CR_CONTACT_MIN_GAP,1);
-                for(k=1;k+1<filtered;k++) {
-                    const cr_contact_point_t *tri[3]={&poly[result][0],&poly[result][k],&poly[result][k+1]};
-                    float area=(tri[1]->v[0]-tri[0]->v[0])*(tri[2]->v[2]-tri[0]->v[2])-
-                               (tri[1]->v[2]-tri[0]->v[2])*(tri[2]->v[0]-tri[0]->v[0]);
-                    int t;
-                    if(fabsf(area)<1e-10f)continue;
-                    if(written+3>capacity)return -1;
-                    for(t=0;t<3;t++) {
-                        float *out=output+6*written++;
-                        memcpy(out,tri[t]->v,3*sizeof(float));
-                        out[3]=tri[t]->v[3];out[4]=tri[t]->v[5];
-                        /* Clearance grows continuously from the true crease.
-                         * Normalize across the mesh, never per triangle/edge,
-                         * so the width taper cannot restart at tessellation seams. */
-                        out[5]=tri[t]->v[6];
-                        max_clearance=fmaxf(max_clearance,out[5]);
-                    }
+            if(ka>0.05f && ga>CR_CONTACT_MIN_GAP) {
+                float ca=(sqrtf(1.0f+ka*ka)-1.0f)/ka;
+                for(k=0;k<3;k++) {
+                    const float *p=v+k*6;float along=(p[0]-a[0])*dx+(p[2]-a[2])*dz;
+                    float across_raw=-(p[0]-a[0])*dz+(p[2]-a[2])*dx;
+                    float gap=a[1]-p[1];
+                    poly[0][k]=(cr_contact_point_t){{p[0],p[1],p[2],
+                        (across_raw+ca*along)/CR_CONTACT_RADIUS,along-ka*across_raw,gap,ga,along}};
                 }
+                const int axes[6]={3,3,4,7,5,5};
+                const float bounds[6]={-1,0,0,0,CR_CONTACT_MIN_GAP,thickness+CR_CONTACT_MAX_GAP};
+                if(cr_contact_emit_clipped(poly,axes,bounds,output,capacity,&written,&max_clearance)<0)return -1;
+            }
+            if(kb<-0.05f && gb>CR_CONTACT_MIN_GAP) {
+                float cb=(sqrtf(1.0f+kb*kb)-1.0f)/(-kb);
+                for(k=0;k<3;k++) {
+                    const float *p=v+k*6;float along_b=(p[0]-b[0])*dx+(p[2]-b[2])*dz;
+                    float across_raw=-(p[0]-b[0])*dz+(p[2]-b[2])*dx;
+                    float gap=b[1]-p[1];
+                    poly[0][k]=(cr_contact_point_t){{p[0],p[1],p[2],
+                        (across_raw-cb*along_b)/CR_CONTACT_RADIUS,along_b,gap,gb,along_b-kb*across_raw}};
+                }
+                const int axes[6]={3,3,4,7,5,5};
+                const float bounds[6]={-1,0,0,0,CR_CONTACT_MIN_GAP,thickness+CR_CONTACT_MAX_GAP};
+                if(cr_contact_emit_clipped(poly,axes,bounds,output,capacity,&written,&max_clearance)<0)return -1;
             }
         }
     }

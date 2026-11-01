@@ -50,7 +50,9 @@ static uint8_t g_event_queue[EVENT_QUEUE_SIZE];
 static int g_event_head = 0;
 static int g_event_count = 0;
 
-#define RETRY_INTERVAL_MS 200 /* re-attempt connect every 200 ms if Java not up yet */
+#define FAST_RETRY_INTERVAL_MS 50  /* fast 50 ms retry during initial startup handshake */
+#define RETRY_INTERVAL_MS      200 /* steady 200 ms retry after a later peer disconnect */
+static int g_ever_connected = 0;
 
 /* Any lost peer invalidates the visible frame, including RST/write failure.
  * Main clears content before accepting fresh state on the reconnected link. */
@@ -155,7 +157,7 @@ static int try_connect(void) {
         fd_set wfds;
         FD_ZERO(&wfds);
         FD_SET(fd, &wfds);
-        struct timeval tv = { .tv_sec = 0, .tv_usec = 300 * 1000 };
+        struct timeval tv = { .tv_sec = 0, .tv_usec = 50 * 1000 };
         int sel = select(fd + 1, NULL, &wfds, NULL, &tv);
         if (sel <= 0) {
             close(fd);
@@ -174,13 +176,16 @@ static int try_connect(void) {
 
 int cr_server_init(int port) {
     g_target_port = port;
+    g_ever_connected = 0;
     clear_event_queue();
 
     /* First connect attempt — Java should already be listening. */
     g_server_fd = try_connect();
     if (g_server_fd >= 0) {
+        g_ever_connected = 1;
         fprintf(stderr, "%s server: connected to 127.0.0.1:%d\n", log_stamp(), port);
     } else {
+        gettimeofday(&g_last_retry, NULL);
         fprintf(stderr, "server: 127.0.0.1:%d not yet listening, will retry\n", port);
     }
     g_recv_len = 0;
@@ -188,16 +193,19 @@ int cr_server_init(int port) {
 }
 
 void cr_server_poll(void) {
-    /* Reconnect if disconnected, throttled to RETRY_INTERVAL_MS. */
+    /* Reconnect if disconnected, using a fast 50 ms cadence until the first
+     * handshake completes and 200 ms afterwards. */
     if (g_server_fd < 0 && g_target_port > 0) {
         struct timeval now;
+        long retry_ms = g_ever_connected ? RETRY_INTERVAL_MS : FAST_RETRY_INTERVAL_MS;
         gettimeofday(&now, NULL);
         long since_ms = (now.tv_sec - g_last_retry.tv_sec) * 1000L
                       + (now.tv_usec - g_last_retry.tv_usec) / 1000L;
-        if (since_ms >= RETRY_INTERVAL_MS || since_ms < 0) {
+        if (since_ms >= retry_ms || since_ms < 0) {
             g_last_retry = now;
             g_server_fd = try_connect();
             if (g_server_fd >= 0) {
+                g_ever_connected = 1;
                 fprintf(stderr, "%s server: connected to 127.0.0.1:%d\n", log_stamp(), g_target_port);
                 g_recv_len = 0;
                 clear_event_queue();

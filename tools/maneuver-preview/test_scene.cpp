@@ -40,6 +40,27 @@ int main() {
         ++original.generation;assert(cr_scene_prepare(a,&original,&small));
         assert(cr_scene_info(a)->builds==info.builds+1);same_route(&owned,cr_scene_route(a));
     }
+    // Verify 360-degree roundabout framing in SmallFrame (including ±95..±120° and
+    // multi-branch splitter-island roundabouts like Pennington Circle on NJ-31).
+    {
+        unsigned gen=10000;
+        const float pennington_angles[]={-112.f,-97.f,-45.f,0.f,14.f,68.f,82.f,165.f};
+        for(int side=0;side<=1;++side) {
+            for(int deg=-180;deg<=180;++deg) {
+                cr_scene_input_t in={};
+                in.maneuver.icon=ICON_ROUNDABOUT;
+                in.maneuver.driving_side=side;
+                in.maneuver.exit_angle=(float)deg;
+                in.maneuver.bap_geometry=1;
+                in.maneuver.junction_angle_count=8;
+                std::memcpy(in.maneuver.junction_angles,pennington_angles,sizeof(pennington_angles));
+                in.generation=++gen;
+                assert(cr_scene_prepare(a,&in,&small));
+                const cr_scene_info_t *info=cr_scene_info(a);
+                assert(info && info->framed && !info->fallback);
+            }
+        }
+    }
     cr_scene_input_t bad={};bad.maneuver=sample_maneuver(14);
     for(float angle : {1000.f,-1000.f,NAN,INFINITY}) {
         bad.maneuver.exit_angle=angle;assert(!cr_scene_prepare(a,&bad,&small));assert(!cr_scene_route(a));

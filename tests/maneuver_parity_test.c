@@ -461,7 +461,7 @@ static void test_live_scene_ownership(void) {
     engine_apply_maneuver(&b,41);prepare_engine_scenes();
     assert(g_engine.current.exit_angle==45 && g_engine.next.exit_angle==160);
     assert(!scene_handles(NULL,&g_engine.next));
-    assert(maneuver_builtin_elevation(&g_engine.next)>.05f);
+    assert(maneuver_builtin_elevation(&g_engine.next)>ROUTE_TOP_Y-ROUTE_BASE_Y);
     cr_scene_t *arriving=g_engine.next_scene;
     engine_apply_maneuver(&c,41.1);
     c.icon=ICON_TURN; // Caller storage cannot change the pending snapshot.
@@ -549,12 +549,12 @@ int main(void) {
         memset(&s,0,sizeof(s));s.icon=ICON_TURN;s.exit_angle=i*160.0f;
         maneuver_build_route(&s,&path);rpath_extend(&path);rpath_densify(&path);
         rpath_set_elevation(maneuver_elevation(&s),maneuver_elevation(&s));
-        rpath_extrude(&path,&mesh,0.1f,0.02f,0.05f,0.0f,1.0f);
+        rpath_extrude(&path,&mesh,SHAFT_T,ROUTE_BASE_Y,ROUTE_TOP_Y,0.0f,1.0f);
         float raised=max_height(&mesh);
         rpath_set_elevation(0,0);
-        rpath_extrude(&path,&mesh,0.1f,0.02f,0.05f,0.0f,1.0f);
+        rpath_extrude(&path,&mesh,SHAFT_T,ROUTE_BASE_Y,ROUTE_TOP_Y,0.0f,1.0f);
         printf("overlap %+.0f degrees: raised=%.4f flat=%.4f\n",s.exit_angle,raised,max_height(&mesh));
-        assert(raised>max_height(&mesh)+0.02f);
+        assert(raised>max_height(&mesh)+(ROUTE_TOP_Y-ROUTE_BASE_Y));
     }
 
     for (i = ICON_APPROACH; i < ICON_COUNT; i++) {

@@ -166,8 +166,6 @@ void Builder::compile_road(const maneuver_state_t *maneuver) {
         exit_strip(half, half + style::ShoulderWidth, style::Shoulder);
         exit_strip(-half, half, style::Asphalt);
         end_mask();
-        begin_route();
-        end_mask();
     }
 }
 

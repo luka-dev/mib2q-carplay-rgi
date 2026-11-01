@@ -449,16 +449,8 @@ int main(int argc, char **argv) {
     }
 #endif
 
-    /* Initialize TCP server FIRST so Java can connect while display inits.
-     * If server fails, nothing works — exit immediately. */
-    if (cr_server_init(port) < 0) {
-        fprintf(stderr, "maneuver_render: server init failed\n");
-        return 1;
-    }
-
     if (platform_init(WINDOW_W, WINDOW_H) < 0) {
         fprintf(stderr, "maneuver_render: platform init failed\n");
-        cr_server_shutdown();
         return 1;
     }
 
@@ -473,7 +465,6 @@ int main(int argc, char **argv) {
     if (render_init(fb_w, fb_h) < 0) {
         fprintf(stderr, "maneuver_render: render init failed\n");
         platform_shutdown();
-        cr_server_shutdown();
         return 1;
     }
 
@@ -497,6 +488,14 @@ int main(int argc, char **argv) {
     }
     { extern float g_3d_offset_adjust;g_3d_offset_adjust=-.16f; }
     clear_maneuver();
+
+    /* Connect to Java BAPBridge after EGL/GL init so display setup is never
+     * delayed by a pending socket connect, and EVT_READY can be sent immediately. */
+    if (cr_server_init(port) < 0) {
+        fprintf(stderr, "maneuver_render: server init failed\n");
+        platform_shutdown();
+        return 1;
+    }
 
     fprintf(stderr, "maneuver_render: ready, waiting for commands on :%d\n", port);
     cr_server_mark_ready();

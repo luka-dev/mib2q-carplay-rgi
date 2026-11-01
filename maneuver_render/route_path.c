@@ -36,7 +36,7 @@
  *   standalone and combined paths — no visual jump at commit.
  * - Pre-extension (0.35..0.50): flat at 1x nominal height. */
 #define HEIGHT_ENTRY_DIST  RPATH_ANIMATION_EXTENSION   /* maneuver entry = ROUTE_EXTEND from path start */
-#define HEIGHT_RAMP_DIST   1.5f    /* fixed distance over which ramp reaches max */
+#define HEIGHT_RAMP_DIST   0.25f   /* reaches full overpass lift at the 0.04/unit slope before crossing */
 /* Per-maneuver elevation lifts (world units added to base+top).
  * On combined paths, first/second can differ. Standalone: use first. */
 static float g_ramp_lift_current = 0.0f;
@@ -854,7 +854,10 @@ void rpath_draw(const route_mesh_t *m,
     if (!m->valid || m->vert_count == 0) return;
 
     render_set_material(RENDER_MAT_ROUTE_ACTIVE);
-    const cr_route_progress_map_t *projected=render_prepare_route_progress(m->progress_points,m->progress_count);
+    const cr_route_progress_map_t *projected =
+        (m->progress_count > 0 && m->progress_points[m->progress_count - 1].d > m->progress_start)
+        ? render_prepare_route_progress(m->progress_points, m->progress_count)
+        : NULL;
 
     /* Draw in batches that fit the render.c vertex buffer (MAX_VERTS=1200) */
     int drawn = 0;

@@ -144,6 +144,7 @@ void render_set_mask_entry_fade(float start,float span);
 void render_set_mask_direction_fade(float x,float y,float dx,float dy,float span);
 
 void render_begin_route_mask(void);     /* bind FBO_ROUTE, ortho 2D, flat blue */
+void render_select_road_fbo(int idx);   /* select road FBO slot (0=current, 1=next) */
 
 /* Composite masks -> screen with materials and perspective */
 void render_composite(void);
