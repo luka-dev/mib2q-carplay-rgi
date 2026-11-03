@@ -278,13 +278,6 @@ public class TerminalModeBapCombi implements ITerminalModeComponent {
             if (artist == null) artist = "";
             if (album == null) album = "";
             boolean cpActive = com.luka.carplay.core.CarPlayApp.isActive();
-            if (cpActive && title.length() == 0 && artist.length() == 0 && album.length() == 0
-                    && (currentTitle.length() > 0 || currentArtist.length() > 0 || currentAlbum.length() > 0)) {
-                /* iOS sends a transient empty NowPlaying update between tracks when skipping;
-                 * forwarding pi_Type=0 causes the Virtual Cockpit to blank the view and flash
-                 * "Loading" ("Загрузка") for ~0.5s before the new track metadata arrives. */
-                return;
-            }
             currentTitle = title; currentArtist = artist; currentAlbum = album;
             metadataFromCarPlay = cpActive;
 

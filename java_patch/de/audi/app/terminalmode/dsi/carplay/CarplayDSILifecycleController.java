@@ -158,11 +158,19 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
         lastPhoneOrSpeechAudioMs = System.currentTimeMillis();
     }
 
-    public static boolean shouldKeepAudioFocusOnRelease() {
-        if (!com.luka.carplay.core.CarPlayApp.isActive()) return false;
-        if (appStatePhoneOrSpeech || mainAudioPhoneOrSpeech || GatedPhoneService.hasActiveCalls()) return true;
+    public static long getAudioFocusReleaseDelayMs() {
+        if (!com.luka.carplay.core.CarPlayApp.isActive()) return 0L;
+        if (appStatePhoneOrSpeech || mainAudioPhoneOrSpeech || GatedPhoneService.hasActiveCalls()) {
+            return 1000L;
+        }
         long last = lastPhoneOrSpeechAudioMs;
-        return last != 0L && (System.currentTimeMillis() - last) < 3000L;
+        if (last == 0L) return 0L;
+        long elapsed = System.currentTimeMillis() - last;
+        return elapsed < 3000L ? (3000L - elapsed + 50L) : 0L;
+    }
+
+    public static boolean shouldKeepAudioFocusOnRelease() {
+        return getAudioFocusReleaseDelayMs() > 0L;
     }
 
     public void deinit() {
@@ -564,9 +572,12 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
         private final IEventBus eventBus;
         private final IContext context;
         private ICarplayDSIControllerListener dioDSIControllerListener;
+        private static final long EMPTY_TRACK_CLEAR_DELAY_MS = 800L;
         private volatile TrackPlayPositionEvent notifiedPlayPosition;
         private volatile PlaybackInfoChangedEvent.PlaybackState notifiedPlaybackState;
         private volatile boolean hasReceivedTrackData;
+        private volatile int nowPlayingDataGeneration;
+        private TrackDataChangedEvent pendingEmptyTrackData;
         private volatile boolean screenOwnedByDevice;
         private volatile String pendingTelUrl;
         private volatile long pendingTelUrlMs;
@@ -707,9 +718,11 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
                 );
         }
 
-        void resetPlaybackState() {
+        synchronized void resetPlaybackState() {
             this.notifiedPlaybackState = null;
             this.hasReceivedTrackData = false;
+            this.nowPlayingDataGeneration++;
+            this.pendingEmptyTrackData = null;
             this.screenOwnedByDevice = false;
             this.pendingTelUrl = null;
             this.pendingTelUrlMs = 0L;
@@ -828,7 +841,7 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
             }
         }
 
-        public void updateNowPlayingData(TrackData trackdata, int i) {
+        public synchronized void updateNowPlayingData(TrackData trackdata, int i) {
             if (this.isValid(i)) {
                 String title = trackdata.getTitle();
                 String artist = trackdata.getArtist();
@@ -836,29 +849,57 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
                 boolean empty = (title == null || title.length() == 0)
                     && (artist == null || artist.length() == 0)
                     && (album == null || album.length() == 0);
-                if (empty && this.hasReceivedTrackData) {
-                    /* dio_manager clears TrackData and sends a transient empty DSI update
-                     * (duration=0) between tracks when iOS rotates MediaItemPersistentIdentifier
-                     * on 0x5001 before the next delta packet with strings arrives. Dropping it here
-                     * prevents both pi_Type=0 ("Loading") and PlayPosition=65535 on the VC. */
-                    return;
-                }
-                if (!empty) {
-                    this.hasReceivedTrackData = true;
-                }
-                TrackDataChangedEvent trackdatachangedevent = new TrackDataChangedEvent.Builder()
+                final int duration = trackdata.getDuration();
+                final TrackDataChangedEvent trackdatachangedevent = new TrackDataChangedEvent.Builder()
                     .setAlbum(album)
                     .setArtist(artist)
                     .setComposer(trackdata.getComposer())
-                    .setDuration(trackdata.getDuration())
+                    .setDuration(duration)
                     .setGenre(trackdata.getGenre())
                     .setTitle(title)
                     .build();
-                this.logger.log(1000000, "<- [%1.updateNowPlayingData] %2", LOGCLASS, trackdatachangedevent);
-                this.playPositionLogger.trackChanged();
-                this.eventBus.updateNowPlayingData(trackdatachangedevent);
-                this.notifyPlayPosition(new TrackPlayPositionEvent(0, trackdata.getDuration() / 1000));
+                if (empty && this.hasReceivedTrackData) {
+                    boolean alreadyPending = this.pendingEmptyTrackData != null;
+                    this.pendingEmptyTrackData = trackdatachangedevent;
+                    if (alreadyPending) return;
+                    final int gen = ++this.nowPlayingDataGeneration;
+                    /* dio_manager clears TrackData and sends a transient empty DSI update
+                     * (duration=0) between tracks when iOS rotates MediaItemPersistentIdentifier
+                     * on 0x5001 before the next delta packet with strings arrives. Delaying the
+                     * clear briefly prevents pi_Type=0 ("Loading") and PlayPosition=65535 flashes
+                     * on skips while still applying a real clear or untagged track if no non-empty
+                     * metadata arrives within the window. Repeated empty updates replace the
+                     * pending payload (including duration), never the first packet's deadline. */
+                    this.dispatcher.execute(
+                        new AbstractDispatcherRunnable("digitalIpodOutListener.clearNowPlayingData") {
+                            public void run() {
+                                DSICarplayListenerImpl.this.clearPendingNowPlayingData(gen);
+                            }
+                        },
+                        EMPTY_TRACK_CLEAR_DELAY_MS
+                    );
+                    return;
+                }
+                this.nowPlayingDataGeneration++;
+                this.pendingEmptyTrackData = null;
+                this.hasReceivedTrackData = !empty;
+                this.publishNowPlayingData(trackdatachangedevent);
             }
+        }
+
+        private synchronized void clearPendingNowPlayingData(int gen) {
+            if (gen != this.nowPlayingDataGeneration || this.pendingEmptyTrackData == null) return;
+            TrackDataChangedEvent track = this.pendingEmptyTrackData;
+            this.pendingEmptyTrackData = null;
+            this.hasReceivedTrackData = false;
+            this.publishNowPlayingData(track);
+        }
+
+        private void publishNowPlayingData(TrackDataChangedEvent track) {
+            this.logger.log(1000000, "<- [%1.updateNowPlayingData] %2", LOGCLASS, track);
+            this.playPositionLogger.trackChanged();
+            this.eventBus.updateNowPlayingData(track);
+            this.notifyPlayPosition(new TrackPlayPositionEvent(0, track.getDuration() / 1000));
         }
 
         private void notifyPlayPosition(TrackPlayPositionEvent trackplaypositionevent) {

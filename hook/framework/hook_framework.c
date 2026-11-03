@@ -539,6 +539,8 @@ void hook_note_ncm_carrier(const char* stage) {
     elapsed_ms = (now_ms != 0 && g_fw.ncm_identify_start_ms != 0 &&
                   now_ms >= g_fw.ncm_identify_start_ms) ?
                  (unsigned long long)(now_ms - g_fw.ncm_identify_start_ms) : 0ULL;
+    (void)up;
+    (void)elapsed_ms;
 
     if (is_transport) {
         if (!running) return;
