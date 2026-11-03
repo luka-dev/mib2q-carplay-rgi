@@ -567,18 +567,17 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
 
     public static class DSICarplayListenerImpl implements DSICarplayListener {
         private static final String LOGCLASS = "DSICarplayListenerImpl";
+        private static final long MAIN_AUDIO_MEDIA_RELEASE_DELAY_MS = 1500L;
         private final LogChannel logger;
         private final DispatcherBase dispatcher;
         private final IEventBus eventBus;
         private final IContext context;
         private ICarplayDSIControllerListener dioDSIControllerListener;
-        private static final long EMPTY_TRACK_CLEAR_DELAY_MS = 800L;
         private volatile TrackPlayPositionEvent notifiedPlayPosition;
         private volatile PlaybackInfoChangedEvent.PlaybackState notifiedPlaybackState;
-        private volatile boolean hasReceivedTrackData;
-        private volatile int nowPlayingDataGeneration;
-        private TrackDataChangedEvent pendingEmptyTrackData;
         private volatile boolean screenOwnedByDevice;
+        private volatile int lastForwardedAudioType;
+        private volatile int mainAudioZeroGeneration;
         private volatile String pendingTelUrl;
         private volatile long pendingTelUrlMs;
         private DSICarplaySafe dsiCarplaySafe;
@@ -619,6 +618,10 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
                 if (r != null && r.getDSIResourceId() == 2) {
                     /* owner 1 = MAINUNIT, owner 2 = DEVICE */
                     this.screenOwnedByDevice = (r.getOwner() != 1);
+                } else if (r != null && r.getDSIResourceId() == 1 && r.getOwner() == 1) {
+                    /* MMI explicitly taking/borrowing RESOURCE_MAIN_AUDIO (e.g. mute or source
+                     * switch): allow the subsequent updateMainAudioType(0) to pass immediately. */
+                    this.lastForwardedAudioType = 0;
                 }
             }
         }
@@ -636,6 +639,9 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
                             this.dsiCarplaySafe.requestUI2(url);
                         }
                     }
+                } else if (r != null && r.getResourceID() == 1 && r.getOwner() != 2) {
+                    ++this.mainAudioZeroGeneration;
+                    this.lastForwardedAudioType = 0;
                 }
             }
         }
@@ -718,12 +724,11 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
                 );
         }
 
-        synchronized void resetPlaybackState() {
+        void resetPlaybackState() {
             this.notifiedPlaybackState = null;
-            this.hasReceivedTrackData = false;
-            this.nowPlayingDataGeneration++;
-            this.pendingEmptyTrackData = null;
             this.screenOwnedByDevice = false;
+            ++this.mainAudioZeroGeneration;
+            this.lastForwardedAudioType = 0;
             this.pendingTelUrl = null;
             this.pendingTelUrlMs = 0L;
             appStatePhoneOrSpeech = false;
@@ -841,65 +846,21 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
             }
         }
 
-        public synchronized void updateNowPlayingData(TrackData trackdata, int i) {
+        public void updateNowPlayingData(TrackData trackdata, int i) {
             if (this.isValid(i)) {
-                String title = trackdata.getTitle();
-                String artist = trackdata.getArtist();
-                String album = trackdata.getAlbum();
-                boolean empty = (title == null || title.length() == 0)
-                    && (artist == null || artist.length() == 0)
-                    && (album == null || album.length() == 0);
-                final int duration = trackdata.getDuration();
-                final TrackDataChangedEvent trackdatachangedevent = new TrackDataChangedEvent.Builder()
-                    .setAlbum(album)
-                    .setArtist(artist)
+                TrackDataChangedEvent trackdatachangedevent = new TrackDataChangedEvent.Builder()
+                    .setAlbum(trackdata.getAlbum())
+                    .setArtist(trackdata.getArtist())
                     .setComposer(trackdata.getComposer())
-                    .setDuration(duration)
+                    .setDuration(trackdata.getDuration())
                     .setGenre(trackdata.getGenre())
-                    .setTitle(title)
+                    .setTitle(trackdata.getTitle())
                     .build();
-                if (empty && this.hasReceivedTrackData) {
-                    boolean alreadyPending = this.pendingEmptyTrackData != null;
-                    this.pendingEmptyTrackData = trackdatachangedevent;
-                    if (alreadyPending) return;
-                    final int gen = ++this.nowPlayingDataGeneration;
-                    /* dio_manager clears TrackData and sends a transient empty DSI update
-                     * (duration=0) between tracks when iOS rotates MediaItemPersistentIdentifier
-                     * on 0x5001 before the next delta packet with strings arrives. Delaying the
-                     * clear briefly prevents pi_Type=0 ("Loading") and PlayPosition=65535 flashes
-                     * on skips while still applying a real clear or untagged track if no non-empty
-                     * metadata arrives within the window. Repeated empty updates replace the
-                     * pending payload (including duration), never the first packet's deadline. */
-                    this.dispatcher.execute(
-                        new AbstractDispatcherRunnable("digitalIpodOutListener.clearNowPlayingData") {
-                            public void run() {
-                                DSICarplayListenerImpl.this.clearPendingNowPlayingData(gen);
-                            }
-                        },
-                        EMPTY_TRACK_CLEAR_DELAY_MS
-                    );
-                    return;
-                }
-                this.nowPlayingDataGeneration++;
-                this.pendingEmptyTrackData = null;
-                this.hasReceivedTrackData = !empty;
-                this.publishNowPlayingData(trackdatachangedevent);
+                this.logger.log(1000000, "<- [%1.updateNowPlayingData] %2", LOGCLASS, trackdatachangedevent);
+                this.playPositionLogger.trackChanged();
+                this.eventBus.updateNowPlayingData(trackdatachangedevent);
+                this.notifyPlayPosition(new TrackPlayPositionEvent(0, trackdata.getDuration() / 1000));
             }
-        }
-
-        private synchronized void clearPendingNowPlayingData(int gen) {
-            if (gen != this.nowPlayingDataGeneration || this.pendingEmptyTrackData == null) return;
-            TrackDataChangedEvent track = this.pendingEmptyTrackData;
-            this.pendingEmptyTrackData = null;
-            this.hasReceivedTrackData = false;
-            this.publishNowPlayingData(track);
-        }
-
-        private void publishNowPlayingData(TrackDataChangedEvent track) {
-            this.logger.log(1000000, "<- [%1.updateNowPlayingData] %2", LOGCLASS, track);
-            this.playPositionLogger.trackChanged();
-            this.eventBus.updateNowPlayingData(track);
-            this.notifyPlayPosition(new TrackPlayPositionEvent(0, track.getDuration() / 1000));
         }
 
         private void notifyPlayPosition(TrackPlayPositionEvent trackplaypositionevent) {
@@ -1053,6 +1014,51 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
                 this.logger.log(10000000, "<- [%1.updateMainAudioType] Invalid.", LOGCLASS);
             } else {
                 noteMainAudioPhoneOrSpeech(i == 1 || i == 3 || i == 4);
+                final int gen = ++this.mainAudioZeroGeneration;
+                if (i == 0 && this.lastForwardedAudioType == 2) {
+                    /* Workaround for YouTube Music: unlike Apple Music/Spotify (which keep a
+                     * single continuous AirPlay audio stream across track transitions), YouTube
+                     * Music tears down its realtime AirPlay audio stream on every track skip
+                     * (AudioStreamStop -> s_audioTornDownCallback -> updateMainAudioType(0)) while
+                     * buffering the next video, and opens a new stream 250-710ms later
+                     * (AudioStreamPrepare -> s_audioTypeCallback(1) -> updateMainAudioType(2)).
+                     * Forwarding updateMainAudioType(0) immediately causes CarPlayDSIManager to
+                     * synthesize AUDIO_MEDIA -> MAINUNIT, which releases AudioFocus and entertainment
+                     * connection 162, switching the Virtual Cockpit's active audio application away
+                     * from TerminalMode and making the cluster NowPlaying screen blink/re-sync on
+                     * every skip. dio_manager's responseUpdateMainAudioType(0) is a no-op
+                     * (cmp r1, #0; beq return), so deferring 0 by 1500ms while media is active
+                     * suppresses the transient teardown across track skips while still releasing
+                     * audio after 1.5s on a genuine stop. */
+                    this.logger.log(
+                        1000000,
+                        "<- [%1.updateMainAudioType] 0 (deferring %2ms while media active)",
+                        LOGCLASS,
+                        String.valueOf(MAIN_AUDIO_MEDIA_RELEASE_DELAY_MS)
+                    );
+                    this.dispatcher.execute(
+                        new AbstractDispatcherRunnable("digitalIpodOutListener.updateMainAudioType.deferredZero") {
+                            public void run() {
+                                if (gen != DSICarplayListenerImpl.this.mainAudioZeroGeneration) {
+                                    return;
+                                }
+                                DSICarplayListenerImpl.this.lastForwardedAudioType = 0;
+                                DSICarplayListenerImpl.this
+                                    .logger
+                                    .log(
+                                        1000000,
+                                        "<- [%1.updateMainAudioType] %2 (deferred)",
+                                        "DSICarplayListenerImpl",
+                                        0
+                                    );
+                                DSICarplayListenerImpl.this.dioDSIControllerListener.updateMainAudioType(0);
+                            }
+                        },
+                        MAIN_AUDIO_MEDIA_RELEASE_DELAY_MS
+                    );
+                    return;
+                }
+                this.lastForwardedAudioType = i;
                 this.dispatcher
                     .execute(
                         new AbstractDispatcherRunnable("digitalIpodOutListener.updateMainAudioType") {

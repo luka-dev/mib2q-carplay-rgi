@@ -105,6 +105,7 @@ public class TerminalModeBapCombi implements ITerminalModeComponent {
                 if (tmdevice.isCarplayDevice()) {
                     try {
                         com.luka.carplay.coverart.CoverArt.getInstance().resetSession();
+                        this.this$0.cachingEventListener.clearCachedEvents();
                         this.this$0.eventListener.resetCoverMerge();
                         com.luka.carplay.core.CarPlayApp.onActivate(this.this$0.context);
                     } catch (Throwable t) { /* never crash the stock flow */ }
@@ -119,6 +120,7 @@ public class TerminalModeBapCombi implements ITerminalModeComponent {
                     && !com.luka.carplay.core.CarPlayApp.isActive()) {
                 try {
                     com.luka.carplay.coverart.CoverArt.getInstance().resetSession();
+                    this.this$0.cachingEventListener.clearCachedEvents();
                     this.this$0.eventListener.resetCoverMerge();
                     com.luka.carplay.core.CarPlayApp.onActivate(this.this$0.context);
                 } catch (Throwable t) { /* never crash the stock flow */ }
@@ -136,6 +138,7 @@ public class TerminalModeBapCombi implements ITerminalModeComponent {
                 try {
                     com.luka.carplay.core.CarPlayApp.onDeactivate();
                     com.luka.carplay.coverart.CoverArt.getInstance().resetSession();
+                    this.this$0.cachingEventListener.clearCachedEvents();
                     this.this$0.eventListener.resetCoverMerge();
                 } catch (Throwable t) { /* never crash the stock flow */ }
             }
@@ -187,7 +190,24 @@ public class TerminalModeBapCombi implements ITerminalModeComponent {
         }
 
         public void updateNowPlayingData(TrackDataChangedEvent trackdatachangedevent) {
+            /* Workaround for YouTube Music: ignore transient empty NowPlaying clears cached
+             * during track-skip buffering so sendCachedEvents() never replays an empty station. */
+            if (com.luka.carplay.core.CarPlayApp.isActive()
+                    && isEmptyTrack(trackdatachangedevent)
+                    && !isEmptyTrack(this.lastTrackData)) {
+                return;
+            }
             this.lastTrackData = trackdatachangedevent;
+        }
+
+        private boolean isEmptyTrack(TrackDataChangedEvent t) {
+            if (t == null) return true;
+            String title = t.getTitle();
+            String artist = t.getArtist();
+            String album = t.getAlbum();
+            return (title == null || title.length() == 0)
+                && (artist == null || artist.length() == 0)
+                && (album == null || album.length() == 0);
         }
 
         public void updatePlayPosition(TrackPlayPositionEvent trackplaypositionevent) {
@@ -263,6 +283,11 @@ public class TerminalModeBapCombi implements ITerminalModeComponent {
 
         private synchronized void applyCoverArt(String path, int artId) {
             if (!com.luka.carplay.core.CarPlayApp.isActive() || !metadataFromCarPlay) return;
+            /* Workaround for YouTube Music: when clearNowPlayingInfo sets nowPlayingInfo = nil
+             * during track-skip buffering, iOS sends a 0-byte iAP2 artwork transfer (EVT_COVERART
+             * with clear=1, path="", artId=0). Ignore empty cover-art clears so we do not re-send
+             * CurrentStationInfo without a picture mid-skip. */
+            if (path == null || path.length() == 0 || artId == 0) return;
             if (currentTitle.length() > 0 || currentArtist.length() > 0 || currentAlbum.length() > 0) {
                 int effId = artId;
                 if (sentWithoutCover) { effId = artId + 1; sentWithoutCover = false; }  /* new id forces VC refresh */
@@ -278,6 +303,19 @@ public class TerminalModeBapCombi implements ITerminalModeComponent {
             if (artist == null) artist = "";
             if (album == null) album = "";
             boolean cpActive = com.luka.carplay.core.CarPlayApp.isActive();
+            if (cpActive && title.length() == 0 && artist.length() == 0 && album.length() == 0
+                    && (currentTitle.length() > 0 || currentArtist.length() > 0 || currentAlbum.length() > 0)) {
+                /* Workaround for YouTube Music: YTNowPlayingInfoCenterPlaybackObserverImpl first
+                 * publishes upcomingPlaybackLockScreenRenderer with the new track's strings and
+                 * then calls clearNowPlayingInfo (MPNowPlayingInfoCenter.nowPlayingInfo = nil)
+                 * while the new video's lifecycleState is < 2 (loading/buffering), before
+                 * re-publishing the active video metadata once buffered. MMI's
+                 * CurrentPlayingTrackHandler stages strings in a ModelGroup without flushing when
+                 * duration stays 0, whereas BAP CurrentStationInfo maps an empty title to
+                 * pi_Type=0 ("Loading..."). Ignore transient empty NowPlaying clears on the
+                 * cluster while CarPlay is active. */
+                return;
+            }
             currentTitle = title; currentArtist = artist; currentAlbum = album;
             metadataFromCarPlay = cpActive;
 
