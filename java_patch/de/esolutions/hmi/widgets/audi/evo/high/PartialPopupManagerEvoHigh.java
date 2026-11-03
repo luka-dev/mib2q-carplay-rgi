@@ -212,8 +212,12 @@ public class PartialPopupManagerEvoHigh extends AbstractPartialPopupManager impl
     protected int doShowPopup(IPartialPopupControllerEvo popup, int style) {
         // Also cover stock queue replay after a fullscreen popup, which bypasses
         // public showPopup(). Never suppress another popup or the right OPS.
+        boolean hideStatusLine = this.keepCarPlayStatusLineHidden();
+        if (popup.getID() == PdcSmallStageGuard.PURE_OPS_POPUP_ID) {
+            PdcSmallStageGuard.opsPopupShowing(popup, hideStatusLine);
+        }
         if ((popup.getID() == 62 || popup.getID() == PdcSmallStageGuard.PURE_OPS_POPUP_ID)
-            && this.keepCarPlayStatusLineHidden()) {
+            && hideStatusLine) {
             if (popup.getID() == 62) return 2;
             this.hideFooter();
         }

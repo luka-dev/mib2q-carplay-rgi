@@ -40,7 +40,7 @@ SI="$PROJECT_DIR/deploy/smartphone_integrator"
 # Fail before replacing an existing output if any reviewed network resource changed.
 python3 "$PROJECT_DIR/scripts/network_patcher.py" status > /dev/null
 rm -rf "$OUT" "$OUT.zip"
-mkdir -p "$HOOKS" "$ROOT/mnt/app/eso/hmi/lsd/jars" "$ROOT/mnt/app/eso/bin/apps" "$ROOT/mnt/app/armle/lib/dll"
+mkdir -p "$HOOKS" "$ROOT/mnt/app/eso/hmi/lsd/jars" "$ROOT/mnt/app/eso/hmi/lsd/images/HMIEarlyAppsEvoHigh" "$ROOT/mnt/app/eso/bin/apps" "$ROOT/mnt/app/armle/lib/dll"
 
 cp "$PROJECT_DIR/install_MoreIncredibleBash/mod/custom.sh" "$PROJECT_DIR/install_MoreIncredibleBash/mod/command.sh" "$MOD/"
 cp "$SI/carplay_child.json" "$MOD/carplay/"
@@ -90,6 +90,7 @@ for f in startncm.sh stopncm.sh usblauncher_otg.lua; do
 done
 # Both Java variants ship; custom.sh keeps the one for the E2P region and removes the other.
 cp "$PROJECT_DIR/build/carplay_hook.jar" "$PROJECT_DIR/build/carplay_hook_cn.jar" "$ROOT/mnt/app/eso/hmi/lsd/jars/"
+cp "$PROJECT_DIR/deploy/hmi/HMIEarlyAppsEvoHigh/2199999.png" "$ROOT/mnt/app/eso/hmi/lsd/images/HMIEarlyAppsEvoHigh/"
 
 # custom.sh sets the on-unit modes; make the card copy match anyway.
 find "$ROOT" -type f -exec chmod 644 {} +

@@ -364,5 +364,6 @@ Thanks for the prior work and knowledge that helped figure this out:
 - [@fifthBro](https://t.me/fifthBro)
 - [xPaiiN](https://github.com/xPaiiN) for telephony magic
 - [Matze89x](https://github.com/Matze89x) for actively testing experimental stuff
+- [chefranov](https://github.com/chefranov) for OPS background swap
 - thx to every contributor
 - and everyone who reported their bugs

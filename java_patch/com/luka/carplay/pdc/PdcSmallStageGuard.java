@@ -23,17 +23,26 @@ import de.audi.atip.hmi.HMIService;
 import de.audi.atip.hmi.view.Screen;
 import de.audi.atip.hmi.view.IScreenManager;
 import de.esolutions.hmi.widgets.audi.base.AbstractScreenWidget;
+import de.esolutions.hmi.widgets.audi.base.AbstractWidget;
+import de.esolutions.hmi.widgets.audi.evo.widgets.IconController;
+import de.esolutions.hmi.widgets.audi.evo.widgets.PartialPopupStub;
 import de.audi.app.earlyfunc.core.parking.IParkingSystem;
 import de.audi.app.earlyfunc.core.parking.ParkingPopupIdentifier;
 import de.audi.app.earlyfunc.core.parking.pla.AbstractParkingSystemPLAComponent;
 import org.dsi.ifc.carparkingsystem.DisplayContent;
 import org.dsi.ifc.carparkingsystem.DSICarParkingSystem;
+import java.io.File;
 import java.util.List;
 
 public final class PdcSmallStageGuard {
     public static final int PURE_OPS_POPUP_ID = 2100008;
     public static final int MAIN_TERMINAL = 0;
     public static final int TERMINAL_MODE_SCREEN_ID = 3200000;
+    public static final int OPS_BACKGROUND_CHOICE = 2100405;
+    public static final int OPS_BACKGROUND_STOCK = 1007;
+    public static final int OPS_BACKGROUND_TRIMMED = 2199999;
+    public static final String OPS_BACKGROUND_TRIMMED_FILE =
+        "/mnt/app/eso/hmi/lsd/images/HMIEarlyAppsEvoHigh/2199999.png";
 
     private static final String TAG = "PDC";
 
@@ -63,6 +72,10 @@ public final class PdcSmallStageGuard {
     private static int takeoverGeneration;
     private static AbstractScreenWidget protectedScreen;
     private static int protectedScreenOriginalType = -1;
+    private static Object opsPopup;
+    private static IconController opsBackgroundIcon;
+    private static String opsBackgroundTrimmedFile = OPS_BACKGROUND_TRIMMED_FILE;
+    private static int opsBackgroundTrimmedExists;
 
     private PdcSmallStageGuard() {}
 
@@ -212,7 +225,91 @@ public final class PdcSmallStageGuard {
     public static synchronized void popupUnregistered(int popupId) {
         if (popupId == PURE_OPS_POPUP_ID) {
             opsPopupVisible = false;
+            opsPopup = null;
+            opsBackgroundIcon = null;
             reset();
+        }
+    }
+
+    public static synchronized void opsPopupShowing(Object popup, boolean overCarPlay) {
+        if (popup == null) return;
+        try {
+            if (popup instanceof PartialPopupStub) {
+                popup = ((PartialPopupStub)popup).getSkeleton();
+            }
+            if (popup != opsPopup || opsBackgroundIcon == null) {
+                opsPopup = popup;
+                opsBackgroundIcon = findOpsBackground(popup);
+            }
+            applyOpsBackground(overCarPlay);
+        } catch (Throwable t) {
+            Log.w(TAG, "OPS guard: cannot prepare background icon: " + t);
+        }
+    }
+
+    private static IconController findOpsBackground(Object widget) {
+        if (!(widget instanceof AbstractWidget)) return null;
+        AbstractWidget w = (AbstractWidget)widget;
+        if (w instanceof IconController && w.getModelID() == OPS_BACKGROUND_CHOICE
+            && hasOpsBackgroundBitmap(w.getBitmapIndices())) {
+            return (IconController)w;
+        }
+        List children = w.getChildren();
+        if (children != null) {
+            for (int i = 0; i < children.size(); i++) {
+                IconController found = findOpsBackground(children.get(i));
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
+
+    private static boolean hasOpsBackgroundBitmap(int[] bitmaps) {
+        if (bitmaps == null) return false;
+        for (int i = 0; i < bitmaps.length; i++) {
+            if (bitmaps[i] == OPS_BACKGROUND_STOCK || bitmaps[i] == OPS_BACKGROUND_TRIMMED) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean hasTrimmedBackgroundFile() {
+        if (opsBackgroundTrimmedExists == 0) {
+            opsBackgroundTrimmedExists = new File(opsBackgroundTrimmedFile).isFile() ? 1 : -1;
+            if (opsBackgroundTrimmedExists < 0) {
+                Log.w(TAG, "OPS guard: trimmed background missing: " + opsBackgroundTrimmedFile);
+            }
+        }
+        return opsBackgroundTrimmedExists > 0;
+    }
+
+    private static void applyOpsBackground(boolean overCarPlay) {
+        IconController icon = opsBackgroundIcon;
+        if (icon == null) return;
+        if (overCarPlay && !hasTrimmedBackgroundFile()) {
+            overCarPlay = false;
+        }
+        int from = overCarPlay ? OPS_BACKGROUND_STOCK : OPS_BACKGROUND_TRIMMED;
+        int to = overCarPlay ? OPS_BACKGROUND_TRIMMED : OPS_BACKGROUND_STOCK;
+        try {
+            int[] bitmaps = icon.getBitmapIndices();
+            if (bitmaps == null) return;
+            boolean changed = false;
+            for (int i = 0; i < bitmaps.length; i++) {
+                if (bitmaps[i] == from) {
+                    bitmaps[i] = to;
+                    changed = true;
+                }
+            }
+            if (changed) {
+                icon.setBitmaps(bitmaps);
+                icon.setCompositesDirty(true);
+                icon.updateContent();
+                Log.i(TAG, "OPS guard: background bitmap " + from + " -> " + to);
+            }
+        } catch (Throwable t) {
+            Log.w(TAG, "OPS guard: cannot swap background bitmap: " + t);
         }
     }
 
@@ -342,6 +439,7 @@ public final class PdcSmallStageGuard {
             if (originalType != SMALL_STAGE_NO_CHANGE) {
                 widget.setSmallStageType(SMALL_STAGE_NO_CHANGE);
             }
+            applyOpsBackground(true);
             Log.i(TAG, "OPS guard: screen 3200000 smallStageType "
                 + originalType + " -> " + SMALL_STAGE_NO_CHANGE);
         } catch (Throwable t) {
@@ -358,6 +456,7 @@ public final class PdcSmallStageGuard {
         protectedScreen = null;
         protectedHmi = null;
         protectedScreenOriginalType = -1;
+        applyOpsBackground(false);
         if (widget == null || originalType < 0) return;
 
         try {

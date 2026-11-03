@@ -39,6 +39,7 @@ OWNED="/mnt/app/root/hooks/libcarplay_hook.so
 /mnt/app/root/hooks/carplay_ncm_cleanup.sh
 /mnt/app/eso/hmi/lsd/jars/carplay_hook.jar
 /mnt/app/eso/hmi/lsd/jars/carplay_hook_cn.jar
+/mnt/app/eso/hmi/lsd/images/HMIEarlyAppsEvoHigh/2199999.png
 /mnt/app/carplay_verbose
 /tmp/carplay_verbose"
 
