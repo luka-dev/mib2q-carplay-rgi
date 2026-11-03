@@ -169,14 +169,33 @@ public class GatedPhoneService implements CombiBAPServicePhone {
         if (g != null) g.setCalls(cs);
     }
 
-    /** A VC telephone action. Returns false when the gate is off, so stock handles it. */
-    static boolean onVcAction(int action, String number) {
+    /** True while at least one CarPlay call is ringing, dialing, active, or held. */
+    public static boolean hasActiveCalls() {
         GatedPhoneService g;
         synchronized (GatedPhoneService.class) { g = instance; }
-        return g != null && g.handle(action, number);
+        return g != null && g.hasLiveCallsSync();
+    }
+
+    private synchronized boolean hasLiveCallsSync() {
+        return gated && liveCalls() > 0;
+    }
+
+    /** A VC telephone action. Returns false when the gate is off, so stock handles it. */
+    static boolean onVcAction(int action, String number) {
+        return onVcAction(action, number, null);
+    }
+
+    static boolean onVcAction(int action, String number, String name) {
+        GatedPhoneService g;
+        synchronized (GatedPhoneService.class) { g = instance; }
+        return g != null && g.handle(action, number, name);
     }
 
     private synchronized boolean handle(int action, String number) {
+        return handle(action, number, null);
+    }
+
+    private synchronized boolean handle(int action, String number, String name) {
         if (!gated) return false;
         Commands c = commands;
         int result = RESULT_FAILED;
@@ -231,10 +250,12 @@ public class GatedPhoneService implements CombiBAPServicePhone {
                 real.updateMissedCallIndication(0, 0);
                 result = RESULT_OK;
                 break;
-            case ACT_DIAL:
-                if (c != null && number != null && number.length() > 0) { c.dial(number); result = RESULT_OK; }
+            case ACT_DIAL: {
+                String target = resolveDialNumber(number, name);
+                if (c != null && target.length() > 0) { c.dial(target); result = RESULT_OK; }
                 real.dialNumberResult(result);
                 break;
+            }
             default:
                 return false;
         }
@@ -494,14 +515,19 @@ public class GatedPhoneService implements CombiBAPServicePhone {
             /* iAP2 recents and favorites: param 1 = RemoteID (number), 2 = DisplayName,
              * which is the formatted number when there is no contact (accessoryd
              * CoreAccessories_18; car capture). */
-            String num = d.str("r." + i + ".a", ""), name = d.str("r." + i + ".b", "");
+            String rawNum = d.str("r." + i + ".a", ""), name = d.str("r." + i + ".b", "");
+            String cleanNum = sanitizeDialNumber(rawNum);
+            String num = cleanNum.length() > 0 ? cleanNum : rawNum;
             r[i] = recent(i, isNumber(name) ? "" : name, num,
                           callMode(d.num("r." + i + ".type", -1)), d.num64("r." + i + ".ts", 0));
         }
         CombiBAPFavoriteNumberEntry[] f = new CombiBAPFavoriteNumberEntry[fn];
         for (int i = 0; i < fn; i++) {
-            String num = d.str("f." + i + ".a", ""), name = d.str("f." + i + ".b", "");
-            f[i] = new CombiBAPFavoriteNumberEntry(i, isNumber(name) ? "" : name, num);
+            String rawNum = d.str("f." + i + ".a", ""), name = d.str("f." + i + ".b", "");
+            String cleanNum = sanitizeDialNumber(rawNum);
+            String num = cleanNum.length() > 0 ? cleanNum : rawNum;
+            String favName = name.length() > 0 ? name : rawNum;
+            f[i] = new CombiBAPFavoriteNumberEntry(i, favName, num, 2);
         }
         recents = r;
         favorites = f;
@@ -570,9 +596,59 @@ public class GatedPhoneService implements CombiBAPServicePhone {
 
     private static boolean isNumber(String s) {
         if (s == null || s.length() == 0) return false;
-        for (int i = 0; i < s.length(); i++)
-            if ("0123456789+*#-() ".indexOf(s.charAt(i)) < 0) return false;
+        for (int i = 0; i < s.length(); i++) {
+            char ch = s.charAt(i);
+            if ("0123456789+*#-(). /\u00a0\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069".indexOf(ch) < 0)
+                return false;
+        }
         return true;
+    }
+
+    /**
+     * Strips formatting characters (spaces, NBSP, parens, hyphens, dots, Unicode
+     * directional marks) from iOS Contacts phone strings so requestUI2("tel:...")
+     * passes a valid RFC 3966 / NSURL tel: URI to dio_manager and iOS.
+     */
+    public static String sanitizeDialNumber(String s) {
+        if (s == null || s.length() == 0) return "";
+        StringBuffer sb = new StringBuffer(s.length());
+        boolean hasDigit = false;
+        for (int i = 0; i < s.length(); i++) {
+            char ch = s.charAt(i);
+            if (ch >= '0' && ch <= '9') {
+                sb.append(ch);
+                hasDigit = true;
+            } else if (ch == '+' && sb.length() == 0) {
+                sb.append(ch);
+            } else if (ch == '*' || ch == '#' || ch == ',' || ch == ';') {
+                sb.append(ch);
+            }
+        }
+        return hasDigit ? sb.toString() : "";
+    }
+
+    private String resolveDialNumber(String number, String name) {
+        String clean = sanitizeDialNumber(number);
+        if (clean.length() > 0) return clean;
+        if (name != null && name.length() > 0) {
+            for (int i = 0; i < favorites.length; i++) {
+                CombiBAPFavoriteNumberEntry f = favorites[i];
+                if (f != null && name.equals(f.getName())) {
+                    String fc = sanitizeDialNumber(f.getTelNumber());
+                    if (fc.length() > 0) return fc;
+                }
+            }
+            for (int i = 0; i < recents.length; i++) {
+                CombiBAPCallStackEntry r = recents[i];
+                if (r != null && name.equals(r.getPbName())) {
+                    String rc = sanitizeDialNumber(r.getTelNumber());
+                    if (rc.length() > 0) return rc;
+                }
+            }
+            String fromName = sanitizeDialNumber(name);
+            if (fromName.length() > 0) return fromName;
+        }
+        return number != null ? number.trim() : "";
     }
 
     /* iAP2 recents Type 1 incoming / 2 outgoing / 3 missed, 0 other (iOS

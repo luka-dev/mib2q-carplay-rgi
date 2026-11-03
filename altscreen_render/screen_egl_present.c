@@ -109,6 +109,7 @@ struct screen_egl_present {
     volatile int loader_thread_started;
     volatile int loader_stop;
     volatile int loader_exited;
+    volatile uint64_t loader_hold_until_ns;
     int loader_stream_pending;
     unsigned long loader_frames;
     unsigned long loader_failures;
@@ -845,6 +846,23 @@ out:
  * a decoded picture appear before the PRISM artwork became visible. The light
  * within the glass continues moving from this timestamp. */
 #define EP_PRISM_VISIBLE_MS 2700ULL
+#define EP_LOADER_DEFAULT_MIN_MS 1800ULL
+
+static uint64_t ep_loader_min_hold_ns(void) {
+    const char *env = getenv("ALTSCREEN_LOADER_MIN_MS");
+    if (env && *env) {
+        long v = atol(env);
+        if (v >= 0) return (uint64_t)v * 1000000ULL;
+    }
+    return EP_LOADER_DEFAULT_MIN_MS * 1000000ULL;
+}
+
+static void ep_arm_loader_hold(screen_egl_present_t *p) {
+    uint64_t now = ep_monotonic_ns();
+    uint64_t hold = ep_loader_min_hold_ns();
+    if (p && now != 0 && hold != 0)
+        p->loader_hold_until_ns = now + hold;
+}
 
 /* The waiting loader stops completely before the first video draw. Preserve
  * swap-interval pacing; only wait for unused frame time if an invisible QNX
@@ -888,6 +906,7 @@ int screen_egl_present_start_loader(screen_egl_present_t *p) {
     if (!p || !p->gl_lock_initialized) return -1;
     pthread_mutex_lock(&p->gl_lock);
     if (p->loader_thread_started) {
+        ep_arm_loader_hold(p);
         pthread_mutex_unlock(&p->gl_lock);
         return 0;
     }
@@ -896,6 +915,7 @@ int screen_egl_present_start_loader(screen_egl_present_t *p) {
     p->loader_frames = 0;
     p->loader_failures = 0;
     p->loader_first_logged = 0;
+    ep_arm_loader_hold(p);
     pthread_mutex_unlock(&p->gl_lock);
     /* Post one fully visible waiting frame synchronously. The next phone IDR
      * can now take over at any time without beating an unstarted loader thread
@@ -914,7 +934,23 @@ int screen_egl_present_start_loader(screen_egl_present_t *p) {
 }
 
 void screen_egl_present_set_stream_pending(screen_egl_present_t *p, int pending) {
-    if (p) __sync_lock_test_and_set(&p->loader_stream_pending, pending ? 1 : 0);
+    if (!p) return;
+    if (pending && p->loader_thread_started) {
+        uint64_t now = ep_monotonic_ns();
+        if (p->loader_hold_until_ns == 0 || (now != 0 && now >= p->loader_hold_until_ns))
+            ep_arm_loader_hold(p);
+    }
+    __sync_lock_test_and_set(&p->loader_stream_pending, pending ? 1 : 0);
+}
+
+long screen_egl_present_loader_hold_remaining_ms(screen_egl_present_t *p) {
+    uint64_t now, until;
+    if (!p || !p->loader_thread_started) return 0;
+    until = p->loader_hold_until_ns;
+    if (until == 0) return 0;
+    now = ep_monotonic_ns();
+    if (now == 0 || now >= until) return 0;
+    return (long)((until - now + 999999ULL) / 1000000ULL);
 }
 
 void screen_egl_present_stop_loader(screen_egl_present_t *p) {

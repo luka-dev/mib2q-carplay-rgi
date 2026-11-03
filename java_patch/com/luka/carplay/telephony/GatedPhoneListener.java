@@ -32,8 +32,8 @@ public class GatedPhoneListener implements CombiBAPServicePhoneListener {
         return n != null && n.length() > 0 ? n : s;
     }
 
-    public void dialNumber(String s, String s1) { if (!GatedPhoneService.onVcAction(GatedPhoneService.ACT_DIAL, s)) real.dialNumber(s, s1); }
-    public void dialNumberFromAdbEntry(String s, String s1, CombiBAPCallStackEntry combibapcallstackentry) { if (!GatedPhoneService.onVcAction(GatedPhoneService.ACT_DIAL, adbNumber(s, combibapcallstackentry))) real.dialNumberFromAdbEntry(s, s1, combibapcallstackentry); }
+    public void dialNumber(String s, String s1) { if (!GatedPhoneService.onVcAction(GatedPhoneService.ACT_DIAL, s, s1)) real.dialNumber(s, s1); }
+    public void dialNumberFromAdbEntry(String s, String s1, CombiBAPCallStackEntry combibapcallstackentry) { if (!GatedPhoneService.onVcAction(GatedPhoneService.ACT_DIAL, adbNumber(s, combibapcallstackentry), s1)) real.dialNumberFromAdbEntry(s, s1, combibapcallstackentry); }
     public void dialService(int i) { real.dialService(i); }
     public void confirmEmergencyCall(boolean flag) { real.confirmEmergencyCall(flag); }
     public void hangupCall(int i) { if (!GatedPhoneService.onVcAction(GatedPhoneService.ACT_HANGUP, null)) real.hangupCall(i); }

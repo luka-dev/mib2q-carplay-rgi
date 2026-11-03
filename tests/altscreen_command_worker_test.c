@@ -494,6 +494,20 @@ int main(void) {
         }
         pthread_mutex_unlock(&test_lock);
         alt_rgi_active_set(0);
+        alt_layout_set(ALT_LAYOUT_LEFT);
+        assert(!strcmp(alt_cluster_url_for_mode(ALT_ZONE_FULLSCREEN), ALT_CLUSTER_URL_RGI_OFF_LEFT));
+        assert(!strcmp(alt_cluster_url_for_mode(ALT_ZONE_SPORTSCREEN), ALT_CLUSTER_URL_RGI_OFF_CENTER));
+        assert(!strcmp(alt_cluster_url_for_mode(ALT_ZONE_CLASSICSCREEN), ALT_CLUSTER_URL_RGI_OFF_CENTER));
+        alt_rgi_active_set(1);
+        alt_url_mode_set(ALT_URL_MODE_MAP_WHEN_RGI);
+        assert(!strcmp(alt_cluster_url_for_mode(ALT_ZONE_FULLSCREEN), ALT_CLUSTER_URL_RGI_ON));
+        assert(!strcmp(alt_cluster_url_for_mode(ALT_ZONE_SPORTSCREEN), ALT_CLUSTER_URL_RGI_ON));
+        alt_url_mode_set(ALT_URL_MODE_CARDS_ALWAYS);
+        assert(!strcmp(alt_cluster_url_for_mode(ALT_ZONE_FULLSCREEN), ALT_CLUSTER_URL_RGI_OFF_LEFT));
+        assert(!strcmp(alt_cluster_url_for_mode(ALT_ZONE_SPORTSCREEN), ALT_CLUSTER_URL_RGI_OFF_CENTER));
+        alt_rgi_active_set(0);
+        alt_url_mode_set(ALT_URL_MODE_MAP_WHEN_RGI);
+        alt_layout_set(ALT_LAYOUT_RIGHT);
         release_object(cmd_other);
         release_object(cmd_suggest);
     }

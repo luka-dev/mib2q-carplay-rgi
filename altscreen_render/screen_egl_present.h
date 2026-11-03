@@ -26,6 +26,10 @@ void screen_egl_present_stop_loader(screen_egl_present_t *p);
 /* During OMX startup/first-IDR wait, reduce only PRISM draw cadence to 15 Hz.
  * Direct decoded-video presentation never uses this budget. */
 void screen_egl_present_set_stream_pending(screen_egl_present_t *p, int pending);
+/* Remaining milliseconds in the minimum PRISM loader display window (0 when
+ * expired or inactive). Used by the presenter queue to hold the newest decoded
+ * frame without starving OMX buffers or losing a static initial map frame. */
+long screen_egl_present_loader_hold_remaining_ms(screen_egl_present_t *p);
 
 void *screen_egl_present_source_pointer(screen_egl_present_t *p,
                                         unsigned int index);

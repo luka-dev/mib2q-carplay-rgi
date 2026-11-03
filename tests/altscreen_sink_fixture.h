@@ -86,6 +86,10 @@ void screen_egl_present_set_stream_pending(screen_egl_present_t *p, int pending)
     (void)p;
     (void)pending;
 }
+long screen_egl_present_loader_hold_remaining_ms(screen_egl_present_t *p) {
+    (void)p;
+    return 0;
+}
 void *screen_egl_present_source_pointer(screen_egl_present_t *p, unsigned int n) {
     (void)p;
     (void)n;

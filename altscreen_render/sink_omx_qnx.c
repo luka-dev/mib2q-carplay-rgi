@@ -333,11 +333,13 @@ static void *_PresentThread(void *arg) {
         OMX_U32 slot;
         OMX_BUFFERHEADERTYPE *b;
         int recycle, timing;
+        long holdMs;
         OMX_ERRORTYPE err;
         while (!me->presentStop && me->presentCount == 0)
             pthread_cond_wait(&me->cond, &me->lock);
         if (me->presentStop) break;
-        if (me->mailbox && me->presentCount > 1) {
+        holdMs = me->present ? screen_egl_present_loader_hold_remaining_ms(me->present) : 0;
+        if ((me->mailbox || holdMs > 0) && me->presentCount > 1) {
             OMX_U32 i, keep = me->presentCount - 1, discard;
             int picture = 0;
             /* Snapshot only: a synchronous refill cannot postpone the selected
@@ -372,6 +374,16 @@ static void *_PresentThread(void *arg) {
             }
             if (me->presentStop)
                 break;
+        }
+        if (me->present) {
+            holdMs = screen_egl_present_loader_hold_remaining_ms(me->present);
+            if (holdMs > 0) {
+                struct timespec holdTs;
+                if (holdMs > 50L) holdMs = 50L;
+                _AbsTimeoutMs(&holdTs, holdMs);
+                pthread_cond_timedwait(&me->cond, &me->lock, &holdTs);
+                continue;
+            }
         }
         slot = me->presentQueue[me->presentHead];
         me->presentHead = (me->presentHead + 1) % me->nOutBufs;
@@ -1209,7 +1221,10 @@ static void _Teardown(ScreenSink *me, int destroyPresent) {
     if (!destroyPresent && me->present) {
         screen_egl_present_reset_timing(me->present);
         screen_egl_present_set_stream_pending(me->present, 0);
-        screen_egl_present_start_loader(me->present);
+        /* Do not restart the PRISM waiting shader during teardown: plane 99 is
+         * still briefly visible while the cluster switches back to stock ctx 74,
+         * and restarting the loader here caused a sub-second watermark flash on
+         * phone disconnect.  The loader is restarted on the next session start. */
     }
 }
 
@@ -1220,6 +1235,8 @@ static int _StartDecoder(ScreenSink *me) {
     uint64_t begin = _NowMs(), sourcesReady;
     fprintf(stderr, "altscreen_render[qnx]: decoder start begin at %llu ms\n",
             (unsigned long long)begin);
+    if (me->present)
+        screen_egl_present_start_loader(me->present);
     screen_egl_present_set_stream_pending(me->present, 1);
     pthread_mutex_lock(&me->lock);
     me->callbacksClosing = 0;
@@ -1614,6 +1631,8 @@ void av_sink_set_layout(int mode, int style, int rawSkin) {
     g_ss.viewAreaMode = mode;
     if (style == LOADER_STYLE_SPORT || style == LOADER_STYLE_CLASSIC)
         g_ss.layoutStyle = style;
+    if (!g_ss.started && !g_ss.callbacksClosing && g_ss.present)
+        screen_egl_present_start_loader(g_ss.present);
     layoutName = !mode ? "fullscreen"
         : (g_ss.layoutStyle == LOADER_STYLE_CLASSIC
             ? "classicscreen" : "sportscreen");

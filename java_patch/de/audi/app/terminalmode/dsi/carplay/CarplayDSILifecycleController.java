@@ -118,7 +118,9 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
         final CarplayDSILifecycleController.DSICarplayListenerImpl listener = this.dsiCarPlayListener;
         GatedPhoneService.setCommands(new GatedPhoneService.Commands() {
             public void dial(String number) {
-                String url = "tel:" + number;
+                String clean = GatedPhoneService.sanitizeDialNumber(number);
+                String target = clean.length() > 0 ? clean : number;
+                String url = "tel:" + target;
                 if (!listener.isScreenOwnedByDevice()) {
                     listener.setPendingTelUrl(url);
                     CarPlayDisclaimerSkip.press(fwAccess, "VC dial");
@@ -126,6 +128,41 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
                 dsi.requestUI2(url);
             }
         });
+    }
+
+    private static volatile boolean appStatePhoneOrSpeech;
+    private static volatile boolean mainAudioPhoneOrSpeech;
+    private static volatile long lastPhoneOrSpeechAudioMs;
+
+    static void noteAppStatePhoneOrSpeech(boolean active) {
+        if (active) {
+            appStatePhoneOrSpeech = true;
+            lastPhoneOrSpeechAudioMs = System.currentTimeMillis();
+        } else if (appStatePhoneOrSpeech) {
+            appStatePhoneOrSpeech = false;
+            lastPhoneOrSpeechAudioMs = System.currentTimeMillis();
+        }
+    }
+
+    static void noteMainAudioPhoneOrSpeech(boolean active) {
+        if (active) {
+            mainAudioPhoneOrSpeech = true;
+            lastPhoneOrSpeechAudioMs = System.currentTimeMillis();
+        } else if (mainAudioPhoneOrSpeech) {
+            mainAudioPhoneOrSpeech = false;
+            lastPhoneOrSpeechAudioMs = System.currentTimeMillis();
+        }
+    }
+
+    static void noteCallStateChanged() {
+        lastPhoneOrSpeechAudioMs = System.currentTimeMillis();
+    }
+
+    public static boolean shouldKeepAudioFocusOnRelease() {
+        if (!com.luka.carplay.core.CarPlayApp.isActive()) return false;
+        if (appStatePhoneOrSpeech || mainAudioPhoneOrSpeech || GatedPhoneService.hasActiveCalls()) return true;
+        long last = lastPhoneOrSpeechAudioMs;
+        return last != 0L && (System.currentTimeMillis() - last) < 3000L;
     }
 
     public void deinit() {
@@ -257,6 +294,7 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
             }
 
             this.this$0.dsiCarPlayListener.resetPlaybackState();
+            this.this$0.dsiCarPlayListener.trackRequestedScreenOwner(aidsiresource);
             this.this$0.dsiCarplaySafe.startService(serviceconfiguration);
             if (this.this$0.logger.isDebug2()) {
                 this.this$0
@@ -319,6 +357,14 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
                 this.this$0.logger.log(
                     1000000,
                     "[%1.requestModeChange] suppress erroneous unborrow on PAUSED -> PAUSED_BY_MUTE",
+                    LOGCLASS
+                );
+                return;
+            }
+            if ("audio paused".equals(s) && shouldKeepAudioFocusOnRelease()) {
+                this.this$0.logger.log(
+                    1000000,
+                    "[%1.requestModeChange] suppress audio paused unborrow during CarPlay call/speech",
                     LOGCLASS
                 );
                 return;
@@ -520,6 +566,7 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
         private ICarplayDSIControllerListener dioDSIControllerListener;
         private volatile TrackPlayPositionEvent notifiedPlayPosition;
         private volatile PlaybackInfoChangedEvent.PlaybackState notifiedPlaybackState;
+        private volatile boolean hasReceivedTrackData;
         private volatile boolean screenOwnedByDevice;
         private volatile String pendingTelUrl;
         private volatile long pendingTelUrlMs;
@@ -596,6 +643,7 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
         private IAppState[] convertAppState(AppState[] aappstate) {
             IAppState[] aiappstate = new IAppState[aappstate.length];
             boolean flag = false;
+            boolean phoneOrSpeech = false;
 
             for (int i = 0; i < aappstate.length; i++) {
                 /* Narrow navignore seam: suppress only incoming CarPlay NAVI ownership (ID 2).
@@ -607,6 +655,9 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
                 }
                 if (aappstate[i].getAppStateID() == 1 && aappstate[i].getOwner() == 2) {
                     flag = true;
+                    phoneOrSpeech = true;
+                } else if (aappstate[i].getAppStateID() == 3 && aappstate[i].getOwner() == 2) {
+                    phoneOrSpeech = true;
                 }
 
                 if (!flag || aappstate[i].getAppStateID() != 3) {
@@ -615,6 +666,7 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
             }
 
             this.logger.log(10000000, "[%1.convertAppState] %2", LOGCLASS, Arrays2.toString(aiappstate));
+            noteAppStatePhoneOrSpeech(phoneOrSpeech);
             return aiappstate;
         }
 
@@ -657,9 +709,13 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
 
         void resetPlaybackState() {
             this.notifiedPlaybackState = null;
+            this.hasReceivedTrackData = false;
             this.screenOwnedByDevice = false;
             this.pendingTelUrl = null;
             this.pendingTelUrlMs = 0L;
+            appStatePhoneOrSpeech = false;
+            mainAudioPhoneOrSpeech = false;
+            lastPhoneOrSpeechAudioMs = 0L;
         }
 
         public void updateMode(Resource[] aresource, AppState[] aappstate, int i) {
@@ -774,13 +830,29 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
 
         public void updateNowPlayingData(TrackData trackdata, int i) {
             if (this.isValid(i)) {
+                String title = trackdata.getTitle();
+                String artist = trackdata.getArtist();
+                String album = trackdata.getAlbum();
+                boolean empty = (title == null || title.length() == 0)
+                    && (artist == null || artist.length() == 0)
+                    && (album == null || album.length() == 0);
+                if (empty && this.hasReceivedTrackData) {
+                    /* dio_manager clears TrackData and sends a transient empty DSI update
+                     * (duration=0) between tracks when iOS rotates MediaItemPersistentIdentifier
+                     * on 0x5001 before the next delta packet with strings arrives. Dropping it here
+                     * prevents both pi_Type=0 ("Loading") and PlayPosition=65535 on the VC. */
+                    return;
+                }
+                if (!empty) {
+                    this.hasReceivedTrackData = true;
+                }
                 TrackDataChangedEvent trackdatachangedevent = new TrackDataChangedEvent.Builder()
-                    .setAlbum(trackdata.getAlbum())
-                    .setArtist(trackdata.getArtist())
+                    .setAlbum(album)
+                    .setArtist(artist)
                     .setComposer(trackdata.getComposer())
                     .setDuration(trackdata.getDuration())
                     .setGenre(trackdata.getGenre())
-                    .setTitle(trackdata.getTitle())
+                    .setTitle(title)
                     .build();
                 this.logger.log(1000000, "<- [%1.updateNowPlayingData] %2", LOGCLASS, trackdatachangedevent);
                 this.playPositionLogger.trackChanged();
@@ -864,6 +936,7 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
 
                             public void run() {
                                 GatedPhoneService.onCarPlayCalls(this.val$callState);
+                                noteCallStateChanged();
                                 GList glist = Generics.newArrayListWithCapacity(this.val$callState.length);
 
                                 for (int j = 0; j < this.val$callState.length; j++) {
@@ -938,6 +1011,7 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
             if (!this.isValid(j)) {
                 this.logger.log(10000000, "<- [%1.updateMainAudioType] Invalid.", LOGCLASS);
             } else {
+                noteMainAudioPhoneOrSpeech(i == 1 || i == 3 || i == 4);
                 this.dispatcher
                     .execute(
                         new AbstractDispatcherRunnable("digitalIpodOutListener.updateMainAudioType") {
@@ -950,6 +1024,7 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
                             }
 
                             public void run() {
+                                noteMainAudioPhoneOrSpeech(this.val$audioType == 1 || this.val$audioType == 3 || this.val$audioType == 4);
                                 this.this$0
                                     .logger
                                     .log(

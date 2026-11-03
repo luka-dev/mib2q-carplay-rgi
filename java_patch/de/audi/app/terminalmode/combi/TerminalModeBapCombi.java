@@ -277,15 +277,23 @@ public class TerminalModeBapCombi implements ITerminalModeComponent {
             if (title == null) title = "";
             if (artist == null) artist = "";
             if (album == null) album = "";
+            boolean cpActive = com.luka.carplay.core.CarPlayApp.isActive();
+            if (cpActive && title.length() == 0 && artist.length() == 0 && album.length() == 0
+                    && (currentTitle.length() > 0 || currentArtist.length() > 0 || currentAlbum.length() > 0)) {
+                /* iOS sends a transient empty NowPlaying update between tracks when skipping;
+                 * forwarding pi_Type=0 causes the Virtual Cockpit to blank the view and flash
+                 * "Loading" ("Загрузка") for ~0.5s before the new track metadata arrives. */
+                return;
+            }
             currentTitle = title; currentArtist = artist; currentAlbum = album;
-            metadataFromCarPlay = com.luka.carplay.core.CarPlayApp.isActive();
+            metadataFromCarPlay = cpActive;
 
             com.luka.carplay.coverart.CoverArt ca = com.luka.carplay.coverart.CoverArt.getInstance();
-            if (com.luka.carplay.core.CarPlayApp.isActive() && ca.hasCoverArt()) {
+            if (cpActive && ca.hasCoverArt()) {
                 sentWithoutCover = false;
                 sendNowPlaying(title, artist, album, ca.getPath(), ca.getArtId());
             } else {
-                sentWithoutCover = com.luka.carplay.core.CarPlayApp.isActive();
+                sentWithoutCover = cpActive;
                 sendNowPlaying(title, artist, album, null, 0);
             }
         }

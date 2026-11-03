@@ -140,6 +140,10 @@ static void *volatile g_alt_night_dio_session;
 static void advert_apply_night_locked(int night);
 static int alt_zone_mode_get(void);
 static const char *alt_cluster_url(void);
+static const char *alt_cluster_url_for_mode(int mode);
+static int alt_show_ui_for_mode(uint32_t gen, int mode, const char *reason);
+static uint32_t g_alt_shown_ui_gen;
+static const char *g_alt_shown_ui_url;
 
 /* the CFLite array-callbacks constant has moved names across builds; try both */
 static const void *resolve_arr_cb(void)
@@ -575,7 +579,7 @@ static void *build_cluster_dict(int night, int zone_mode)
         if (k && cf_rel) cf_rel(k);
     }
     if (!adjacent_ok) goto fail;
-    if (set_str(d, "initialURL", alt_cluster_url()) != 0) goto fail;
+    if (set_str(d, "initialURL", alt_cluster_url_for_mode(zone_mode)) != 0) goto fail;
     /* Extra fields a real HU (MHI3 libairplay 450) sends in each display dict — our subset was
      * incomplete, which the phone accepts to ADD the car but rejects at SESSION start (0s teardown).
      *
@@ -2456,6 +2460,14 @@ static void zone_cmd_done(int status, void *resp, void *ctx)
     LOG_INFO(LOG_MODULE, "updateViewArea ack: mode=%d gen=%u status=%d%s",
              mode, (unsigned)gen, status, ap_status(status));
     zone_send_ack(mode, status);
+    if (status == 0 && mode == alt_zone_mode_get() &&
+        __atomic_load_n(&g_alt_shown_ui_gen, __ATOMIC_ACQUIRE) == gen) {
+        const char *want_url = alt_cluster_url_for_mode(mode);
+        const char *shown_url = __atomic_load_n(&g_alt_shown_ui_url, __ATOMIC_ACQUIRE);
+        if (shown_url && want_url != shown_url) {
+            (void)alt_show_ui_for_mode(gen, mode, "viewArea-ack");
+        }
+    }
 }
 
 static uint32_t alt_generation_for_session(void *session)
@@ -2845,10 +2857,13 @@ static void alt_kick_viewarea(uint32_t gen)
 #define ALT_CLUSTER_URL_RGI_OFF_RIGHT  "maps:/car/instrumentcluster?showETA=yes&maneuverLayout=rightAligned&showSpeedLimit=no"
 #define ALT_CLUSTER_URL_RGI_ON         "maps:/car/instrumentcluster/map?showETA=no&maneuverLayout=no&showSpeedLimit=no"
 
-static const char *alt_cluster_url(void)
+static const char *alt_cluster_url_for_mode(int mode)
 {
     if (alt_rgi_active_get() && alt_url_mode_get() == ALT_URL_MODE_MAP_WHEN_RGI) {
         return ALT_CLUSTER_URL_RGI_ON;
+    }
+    if (mode != ALT_ZONE_FULLSCREEN) {
+        return ALT_CLUSTER_URL_RGI_OFF_CENTER;
     }
     switch (alt_layout_get()) {
     case ALT_LAYOUT_LEFT:
@@ -2860,9 +2875,14 @@ static const char *alt_cluster_url(void)
     }
 }
 
+static const char *alt_cluster_url(void)
+{
+    return alt_cluster_url_for_mode(alt_zone_mode_get());
+}
+
 static int alt_show_ui_for_mode(uint32_t gen, int mode, const char *reason)
 {
-    const char *url = alt_cluster_url();
+    const char *url = alt_cluster_url_for_mode(mode);
     if (!gen) gen = alt_generation_for_session(NULL);
     if (!gen) {
         LOG_INFO(LOG_MODULE,
@@ -2877,6 +2897,10 @@ static int alt_show_ui_for_mode(uint32_t gen, int mode, const char *reason)
         return kNoMemoryErr;
     }
     int rc = alt_ship(gen, "showUI", p);
+    if (rc == 0) {
+        __atomic_store_n(&g_alt_shown_ui_url, url, __ATOMIC_RELEASE);
+        __atomic_store_n(&g_alt_shown_ui_gen, gen, __ATOMIC_RELEASE);
+    }
     LOG_INFO(LOG_MODULE, "alt: showUI mode=%s rgi=%d reason=%s uuid=%s url=%s rc=%d%s",
              alt_zone_name(mode), (int)alt_rgi_active_get(),
              reason ? reason : "?", CLUSTER_DISPLAY_UUID, url, rc, ap_status(rc));

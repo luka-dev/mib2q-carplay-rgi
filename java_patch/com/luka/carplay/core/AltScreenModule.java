@@ -341,6 +341,7 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
      *  respawned hook starts at "off" and a session may end without stop(). */
     private static boolean sendRgiStateLocked() {
         boolean rgi = com.luka.carplay.connectivity.CarPlaySettingsUi.isAltScreenEnabled()
+            && com.luka.carplay.connectivity.CarPlaySettingsUi.isRgiEnabled()
             && (connected || videoAvailable) && navActive;
         return CarplayBus.getInstance().sendBinary(CarplayBus.CMD_ALT_RGI,
             new byte[] { (byte) (rgi ? 1 : 0) });
@@ -477,10 +478,11 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
         final int generation;
         synchronized (LOCK) {
             connected = false;
+            videoAvailable = false;
             navActive = false;
             navHidePending = false;
             clusterActive = false;
-            acceptVideoFallback = true;
+            acceptVideoFallback = false;
             generation = ++lifecycleGeneration;
         }
         republish();
