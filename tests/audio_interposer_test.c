@@ -270,6 +270,13 @@ static void qsa_transactions(void)
     assert(errno == ECANCELED && spa103_render.fill == 766 && spa103_render.head == 2);
     assert(spa103_render.reservedReadFrames == 0);
     cancelled_write = 0; spa_pcm_sink.transport.stopping = 0;
+    /* Paused buffered 103 (rate=0) must NOT claim bufferedOwnsMedia or mute
+     * type-100 realtime writes with silence. */
+    spa_apap_lifecycle_set_rate(&spa103_render.lifecycle, 0);
+    calls = native_writes;
+    assert(snd_pcm_plugin_write(&media_device, source_pcm, sizeof(source_pcm)) == (ssize_t)sizeof(source_pcm));
+    assert(errno == 0 && native_writes == calls + 1 && spa103_render.fill == 766);
+    spa_apap_lifecycle_set_rate(&spa103_render.lifecycle, 1);
     /* Alert (audio_type=2, e.g. iPhone alarm clock) opens mpl5_dio_ent too:
      * it must preempt buffered 103 without consuming the 103 ring and without
      * being cancelled as non-ent, whereas telephony (audio_type=3) cancels. */
@@ -722,6 +729,7 @@ const hook_module_def_t *hook_framework_module_at(size_t n)
 { return n == 0 ? &audio_module_def : n == 1 ? &teardown_observer : NULL; }
 hook_result_t hook_inject_message(uint16_t id, const uint8_t *p, size_t n)
 { (void)id; (void)p; (void)n; return HOOK_ERR_NOT_FOUND; }
+void hook_note_ncm_carrier(const char *stage) { (void)stage; }
 
 static void *test_dlsym(void *scope, const char *name)
 {

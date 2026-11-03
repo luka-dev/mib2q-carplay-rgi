@@ -124,6 +124,19 @@ static void test_observe_and_apply_are_separate(void)
         assert(rendered[i] == (int16_t)((float)(i < 4 ? original[i] :
             (i == 4 ? 2500 : -2500)) * state.targetGain +
             (rendered[i] >= 0 ? 0.5f : -0.5f)));
+
+    {
+        float gains[2] = { 0.0f, 0.0f };
+        int16_t scaled[4];
+        memcpy(scaled, original, sizeof(original));
+        spa_soundcheck_take_gains(&state, gains, 2);
+        assert(nearf(gains[0], state.targetGain, 0.000001f));
+        assert(nearf(gains[1], state.targetGain, 0.000001f));
+        spa_soundcheck_scale_s16(scaled, 2, 2, gains);
+        for (i = 0; i < 4; i++)
+            assert(scaled[i] == (int16_t)((float)original[i] * gains[i / 2] +
+                (original[i] >= 0 ? 0.5f : -0.5f)));
+    }
 }
 
 int main(void)

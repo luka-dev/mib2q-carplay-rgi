@@ -782,6 +782,37 @@ static void test_scene_vehicle_refinements(void)
     process_blocks(&state_b, g_input, g_output_b);
     rear_sub_bleed = channel_energy(g_output_b, SPA_STEREO_UPMIX_CHANNEL_LS, 4096);
     assert(rear_sub_bleed * 100000u < channel_energy(g_output_b, SPA_STEREO_UPMIX_CHANNEL_L, 4096));
+
+    /* 5. Positive SoundCheck gain (+6 dB / 2.0f) applied via spa_stereo_upmix_process_gain_s16
+     * runs BEFORE spa_upmix_cabin_guard_s16 and never breaches the J525 cabin buses. */
+    {
+        float gains[SPA_STEREO_UPMIX_MAX_FRAMES];
+        for (frame = 0; frame < SPA_STEREO_UPMIX_MAX_FRAMES; ++frame)
+            gains[frame] = 2.0f;
+        fill_sine(40.0f, 0);
+        make_scene_config(&cfg_a, 1);
+        assert(spa_stereo_upmix_init(&state_a, &cfg_a) == SPA_STEREO_UPMIX_OK);
+        for (frame = 0; frame < TEST_FRAMES; frame += SPA_STEREO_UPMIX_MAX_FRAMES) {
+            assert(spa_stereo_upmix_process_gain_s16(
+                       &state_a, g_input + frame * 2,
+                       SPA_STEREO_UPMIX_MAX_FRAMES,
+                       g_output_a + frame * TEST_CHANNELS,
+                       SPA_STEREO_UPMIX_MAX_FRAMES,
+                       gains) == SPA_STEREO_UPMIX_OK);
+        }
+        assert_cabin_buses_bounded(g_output_a, TEST_FRAMES);
+        spa_stereo_upmix_set_level(&state_a, SPA_UPMIX_LEVEL_OFF);
+        assert(spa_stereo_upmix_reset(&state_a) == SPA_STEREO_UPMIX_OK);
+        for (frame = 0; frame < TEST_FRAMES; frame += SPA_STEREO_UPMIX_MAX_FRAMES) {
+            assert(spa_stereo_upmix_process_gain_s16(
+                       &state_a, g_input + frame * 2,
+                       SPA_STEREO_UPMIX_MAX_FRAMES,
+                       g_output_b + frame * TEST_CHANNELS,
+                       SPA_STEREO_UPMIX_MAX_FRAMES,
+                       gains) == SPA_STEREO_UPMIX_OK);
+        }
+        assert_cabin_buses_bounded(g_output_b, TEST_FRAMES);
+    }
 }
 
 int main(void)

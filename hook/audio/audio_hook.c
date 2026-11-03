@@ -1538,6 +1538,7 @@ typedef struct {
     struct spa_scene_mask_worker sceneMaskWorker;
     int sceneMaskWorkerStarted;
     spa_soundcheck_state_t soundCheck;
+    float soundCheckGain[SPA_STEREO_UPMIX_MAX_FRAMES];
 } spa103_render_t;
 
 static spa103_render_t spa103_render = {
@@ -1624,9 +1625,9 @@ static void spa_apply_scene_mask_blob(struct spa_stereo_upmix_config *upmix)
 
 /* SCENE: the mask net on its worker (scene_mask_worker.h; priority 17)
  * when a blob is loaded.  A worker already running (the realtime path keeps its
- * one across re-params) is reused; one that fails to start leaves the net on
- * the audio thread, logged.  Not on the audio thread (scene_mask_init builds
- * tables). */
+ * one across re-params) is reused; one that fails to start falls back to
+ * spatial-only (never running the 193 KB net on the audio thread).  Not on the
+ * audio thread (scene_mask_init builds tables). */
 static void spa_scene_mask_worker_attach(struct spa_scene_mask_worker *worker, int *started,
                                          struct spa_stereo_upmix_config *upmix,
                                          const char *path)
@@ -1634,13 +1635,17 @@ static void spa_scene_mask_worker_attach(struct spa_scene_mask_worker *worker, i
     if (!upmix->scene_mask_blob) return;
     if (!*started) {
         if (spa_scene_mask_worker_start(worker, upmix->scene_mask_blob, 1u, 17) != 0) {
-            LOG_WARN(LOG_MODULE, "audio upmix %s: scene mask worker failed to start; net on the audio thread",
+            LOG_WARN(LOG_MODULE,
+                     "audio upmix %s: scene mask worker failed to start; "
+                     "running spatial-only without mask net",
                      path);
+            upmix->scene_mask_blob = NULL;
             return;
         }
         *started = 1;
     }
     spa_stereo_upmix_config_set_scene_mask_provider(upmix, spa_scene_mask_worker_provider(worker));
+    upmix->scene_mask_blob = NULL;
 }
 
 static void spa_scene_mask_worker_log_stop(struct spa_scene_mask_worker *worker, const char *path)
@@ -2780,8 +2785,7 @@ static void spa103_observe_extension_locked(const spa_apap_extension_t *ext)
     }
 }
 
-static int spa103_render_frame(const uint8_t *packet, size_t length,
-                               int sequenceAlreadyNoted)
+static int spa103_render_frame(const uint8_t *packet, size_t length)
 {
     static uint8_t plaintext[SPA_103_APAP_MAX_FRAME];
     static int16_t decoded[SPA_103_RENDER_MAX_SAMPLES];
@@ -2823,11 +2827,6 @@ static int spa103_render_frame(const uint8_t *packet, size_t length,
     if (spa103_render_drop_for_flush(packet))
         return SPA103_RENDER_FRAME_CONSUMED;
 
-    /* A flush may intentionally jump across thousands of queued sequence
-     * numbers.  Discarded pre-boundary packets must not seed the continuity
-     * baseline or the first valid post-seek record looks like transport loss. */
-    if (!sequenceAlreadyNoted) spa103_note_authenticated_sequence(packet);
-
     memset(&ext, 0, sizeof(ext));
     if (variant == SPA_APAP_AAD_EXTENSION) {
         if (!spa_apap_parse_extension(plaintext, plainLength, &ext, &audio, &audioLength)) {
@@ -2842,13 +2841,6 @@ static int spa103_render_frame(const uint8_t *packet, size_t length,
         audio = plaintext;
         audioLength = plainLength;
     }
-    if (!audioLength) {
-        pthread_mutex_lock(&spa103_render.lock);
-        spa103_observe_extension_locked(&ext);
-        spa103_render.stateOnlyPackets++;
-        pthread_mutex_unlock(&spa103_render.lock);
-        return SPA103_RENDER_FRAME_CONSUMED;
-    }
 
     pthread_mutex_lock(&spa103_render.lock);
     state = spa_apap_lifecycle_playing(&spa103_render.lifecycle);
@@ -2856,7 +2848,17 @@ static int spa103_render_frame(const uint8_t *packet, size_t length,
     if (!state)
         return SPA103_RENDER_FRAME_RETRY; /* authenticated AU remains receiver-owned */
 
+    if (!audioLength) {
+        spa103_note_authenticated_sequence(packet);
+        pthread_mutex_lock(&spa103_render.lock);
+        spa103_observe_extension_locked(&ext);
+        spa103_render.stateOnlyPackets++;
+        pthread_mutex_unlock(&spa103_render.lock);
+        return SPA103_RENDER_FRAME_CONSUMED;
+    }
+
     if (spa103_render.probeFraming) {
+        spa103_note_authenticated_sequence(packet);
 #if ENABLE_AUDIO_DIAGNOSTICS
         static int reported;
         /* Elementary-stream dump for offline decoder work: 4-byte little-endian length, then
@@ -2920,29 +2922,6 @@ static int spa103_render_frame(const uint8_t *packet, size_t length,
         (ext.hasMagicCookieId && spa103_render.haveCookieId &&
          spa103_render.cookieId != (int64_t)ext.magicCookieId) ||
         spa103_render.cookieGeneration != cookieGeneration) {
-        spa_soundcheck_discontinuity(&spa103_render.soundCheck);
-        spa103_render.haveExtensionMediaKind = 0;
-        spa103_render.haveExtensionLoudness = 0;
-    }
-    spa103_observe_extension_locked(&ext);
-    /* An announcement we have no decoder for is never a reason to tear down one that is
-     * working. TLV 2 is a real index, but the authenticated inline cookie remains the decoder
-     * authority. Drop an unsupported hint and keep decoding. */
-    if (ext.hasFormatIndex &&
-        !spa103_codec_for_index((int64_t)ext.formatIndex)) {
-        if (spa103_render.ignoredFormatIndex != (int64_t)ext.formatIndex) {
-            spa103_render.ignoredFormatIndex = (int64_t)ext.formatIndex;
-            LOG_WARN(LOG_MODULE,
-                     "buffer103: ignoring unsupported format announcement %llu; staying on %lld",
-                     (unsigned long long)ext.formatIndex,
-                     (long long)spa103_render.formatIndex);
-        }
-        ext.hasFormatIndex = 0;
-    }
-    if (!spa103_render.decoder ||
-        (ext.hasMagicCookieId && spa103_render.haveCookieId &&
-         spa103_render.cookieId != (int64_t)ext.magicCookieId) ||
-        spa103_render.cookieGeneration != cookieGeneration) {
         uint8_t *cookie = 0;
         size_t cookieSize = 0;
         spa_apac_stream_info_t info;
@@ -2951,10 +2930,6 @@ static int spa103_render_frame(const uint8_t *packet, size_t length,
         int64_t verifiedIndex = -1;
         const char *codecName;
 
-        /* A new decoder/cookie is a discontinuity even when its index happens
-         * to stay the same.  Never let rear-filter history cross it. */
-        (void)spa_stereo_upmix_reset(&spa103_render.stereoUpmix);
-        spa103_render.decodedPcmKind = SPA_DECODED_PCM_OTHER;
         pthread_mutex_unlock(&spa103_render.lock);
         /* Every packet carries the cookie for the format it is in, so a track that changes
          * codec brings its own configuration and there is nothing to wait for.  Fall back to
@@ -2977,6 +2952,28 @@ static int spa103_render_frame(const uint8_t *packet, size_t length,
             free(cookie);
             return SPA103_RENDER_FRAME_RETRY;
         }
+        pthread_mutex_unlock(&spa103_render.lock);
+        spa103_note_authenticated_sequence(packet);
+        pthread_mutex_lock(&spa103_render.lock);
+        spa_soundcheck_discontinuity(&spa103_render.soundCheck);
+        spa103_render.haveExtensionMediaKind = 0;
+        spa103_render.haveExtensionLoudness = 0;
+        spa103_observe_extension_locked(&ext);
+        if (ext.hasFormatIndex &&
+            !spa103_codec_for_index((int64_t)ext.formatIndex)) {
+            if (spa103_render.ignoredFormatIndex != (int64_t)ext.formatIndex) {
+                spa103_render.ignoredFormatIndex = (int64_t)ext.formatIndex;
+                LOG_WARN(LOG_MODULE,
+                         "buffer103: ignoring unsupported format announcement %llu; staying on %lld",
+                         (unsigned long long)ext.formatIndex,
+                         (long long)spa103_render.formatIndex);
+            }
+            ext.hasFormatIndex = 0;
+        }
+        /* A new decoder/cookie is a discontinuity even when its index happens
+         * to stay the same.  Never let rear-filter history cross it. */
+        (void)spa_stereo_upmix_reset(&spa103_render.stereoUpmix);
+        spa103_render.decodedPcmKind = SPA_DECODED_PCM_OTHER;
         if (ext.hasFormatIndex && (int64_t)ext.formatIndex != spa103_render.formatIndex) {
             const spa_apac_codec_api_t *next = spa103_codec_for_index((int64_t)ext.formatIndex);
             const spa_apac_codec_api_t *previous = spa103_render.codec;
@@ -3128,6 +3125,22 @@ static int spa103_render_frame(const uint8_t *packet, size_t length,
                     (unsigned)info.channelLayoutTag,
                     spa103_decoded_pcm_kind_name(decodedPcmKind),
                     (unsigned)spa103_render.outputChannels);
+    } else {
+        pthread_mutex_unlock(&spa103_render.lock);
+        spa103_note_authenticated_sequence(packet);
+        pthread_mutex_lock(&spa103_render.lock);
+        spa103_observe_extension_locked(&ext);
+        if (ext.hasFormatIndex &&
+            !spa103_codec_for_index((int64_t)ext.formatIndex)) {
+            if (spa103_render.ignoredFormatIndex != (int64_t)ext.formatIndex) {
+                spa103_render.ignoredFormatIndex = (int64_t)ext.formatIndex;
+                LOG_WARN(LOG_MODULE,
+                         "buffer103: ignoring unsupported format announcement %llu; staying on %lld",
+                         (unsigned long long)ext.formatIndex,
+                         (long long)spa103_render.formatIndex);
+            }
+            ext.hasFormatIndex = 0;
+        }
     }
 
     spa103_render.decodeCalls++;
@@ -3183,6 +3196,7 @@ static int spa103_render_frame(const uint8_t *packet, size_t length,
                 spa103_render.decodedPcmKind, dch, out,
                 spa103_render.sampleRate);
             size_t run = renderFrames - at;
+            int soundCheckApplied = 0;
 
             if (run > SPA_STEREO_UPMIX_MAX_FRAMES)
                 run = SPA_STEREO_UPMIX_MAX_FRAMES;
@@ -3192,7 +3206,10 @@ static int spa103_render_frame(const uint8_t *packet, size_t length,
                  * fold decoder-order (C, L, R, Ls, Rs, LFE) to ITU 2.0 stereo (L, R)
                  * and route through the stereo upmixer (or 2.0 passthrough when UpMix=Off). */
                 static int16_t foldedStereo[SPA_STEREO_UPMIX_MAX_FRAMES * 2];
+                const float *gain = spa_soundcheck_take_gains(
+                    &spa103_render.soundCheck, spa103_render.soundCheckGain, run);
                 size_t f;
+                soundCheckApplied = 1;
                 for (f = 0; f < run; f++) {
                     const int16_t *s = src + f * SPA_PCM_5_1_CHANNELS;
                     int32_t c_m3db  = ((int32_t)s[0] * 23170) >> 15;
@@ -3206,10 +3223,13 @@ static int spa103_render_frame(const uint8_t *packet, size_t length,
                     foldedStereo[f * 2 + 1] = (int16_t)r;
                 }
                 spa_stereo_upmix_set_level(&spa103_render.stereoUpmix, spa_upmix_level);
-                rc = spa_stereo_upmix_process_s16(&spa103_render.stereoUpmix,
-                                                  foldedStereo, run, rendered, run);
-                if (rc != SPA_STEREO_UPMIX_OK)
+                rc = spa_stereo_upmix_process_gain_s16(&spa103_render.stereoUpmix,
+                                                       foldedStereo, run, rendered, run,
+                                                       gain);
+                if (rc != SPA_STEREO_UPMIX_OK) {
                     spa103_widen_s16(foldedStereo, 2u, rendered, out, run);
+                    spa_soundcheck_scale_s16(rendered, run, out, gain);
+                }
             } else if (action == SPA_DECODED_PCM_ACTION_REORDER_5_1) {
                 if (out == SPA_PCM_5_1_CHANNELS)
                     spa_reorder_5_1_decoder_to_declared_s16(src, run,
@@ -3217,9 +3237,20 @@ static int spa103_render_frame(const uint8_t *packet, size_t length,
                 else
                     spa103_reorder_5_1_s16(src, rendered, out, run);
             } else if (action == SPA_DECODED_PCM_ACTION_STEREO_UPMIX) {
+                /* MainLoudnessParameters is a programme gain, not an upmix
+                 * input feature: the engine and the mask net see unscaled
+                 * `src`, and the upmix applies `gain` before its cabin guard
+                 * so a positive AAC gain (+1..+6 dB) cannot push the rendered
+                 * frame past the guard. */
+                const float *gain = spa_soundcheck_take_gains(
+                    &spa103_render.soundCheck, spa103_render.soundCheckGain,
+                    run);
+
+                soundCheckApplied = 1;
                 spa_stereo_upmix_set_level(&spa103_render.stereoUpmix, spa_upmix_level);
-                rc = spa_stereo_upmix_process_s16(&spa103_render.stereoUpmix,
-                                                  src, run, rendered, run);
+                rc = spa_stereo_upmix_process_gain_s16(&spa103_render.stereoUpmix,
+                                                       src, run, rendered, run,
+                                                       gain);
                 if (rc != SPA_STEREO_UPMIX_OK) {
                     spa103_render.upmixFailed++;
                     if (spa103_render.upmixFailed == 1)
@@ -3228,6 +3259,7 @@ static int spa103_render_frame(const uint8_t *packet, size_t length,
                                   "falling back to exact L/R widening",
                                   rc);
                     spa103_widen_s16(src, dch, rendered, out, run);
+                    spa_soundcheck_scale_s16(rendered, run, out, gain);
                 }
             } else if (dch < out) {
                 spa103_widen_s16(src, dch, rendered, out, run);
@@ -3252,12 +3284,9 @@ static int spa103_render_frame(const uint8_t *packet, size_t length,
                 spa103_widen_s16(src, dch, rendered, out, run);
             }
 
-            /* MainLoudnessParameters is a programme gain, not an upmix input
-             * feature. Apply it uniformly after reorder/upmix so AAC gain does
-             * not shift the model's absolute log-energy features or alter its
-             * semantic/object masks. */
-            spa_soundcheck_apply_s16(&spa103_render.soundCheck, rendered,
-                                     run, out);
+            if (!soundCheckApplied)
+                spa_soundcheck_apply_s16(&spa103_render.soundCheck, rendered,
+                                         run, out);
             spa_soundcheck_limit_s16(&spa103_render.soundCheck, rendered,
                                      run, out);
             spa103_pcm_stats_locked(rendered, run);
@@ -3276,8 +3305,7 @@ static int spa103_render_frame(const uint8_t *packet, size_t length,
  * temporary plaintext buffer.  Paused/cold media pays that cost; steady
  * rate=1 playback keeps the direct single-auth path. */
 static int spa103_queue_frame(const uint8_t *packet, size_t length,
-                              uint8_t *plaintext, size_t plaintextCapacity,
-                              int sequenceAlreadyNoted)
+                              uint8_t *plaintext, size_t plaintextCapacity)
 {
     uint8_t key[SPA_APAP_KEY_SIZE];
     spa_apap_extension_t ext;
@@ -3317,23 +3345,16 @@ static int spa103_queue_frame(const uint8_t *packet, size_t length,
         audio = plaintext;
         audioLength = plainLength;
     }
+    (void)audio;
+    (void)audioLength;
 
     sequence = spa103_apap_sequence(packet);
     rtp = (uint32_t)spa103_media_time_to_rtp(
         spa103_apap_media_value(packet), spa103_apap_media_scale(packet));
     pthread_mutex_lock(&spa103_render.lock);
-    if (!audioLength) {
-        spa103_observe_extension_locked(&ext);
-        result = spa_apap_lifecycle_observe(&spa103_render.lifecycle,
-                                            sequence, rtp, &crossed) ?
-                 SPA_APAP_ENQUEUE_DROPPED_FLUSH : SPA_APAP_ENQUEUE_QUEUED;
-        if (result == SPA_APAP_ENQUEUE_QUEUED)
-            spa103_render.stateOnlyPackets++;
-    } else {
-        result = spa_apap_lifecycle_enqueue(&spa103_render.lifecycle,
-                                            packet, length, sequence, rtp,
-                                            &crossed);
-    }
+    result = spa_apap_lifecycle_enqueue(&spa103_render.lifecycle,
+                                        packet, length, sequence, rtp,
+                                        &crossed);
     discarded = spa103_render.lifecycle.current_flush_dropped;
     pthread_mutex_unlock(&spa103_render.lock);
 
@@ -3357,7 +3378,6 @@ static int spa103_queue_frame(const uint8_t *packet, size_t length,
                     "sequence=%u status=%d", (unsigned)sequence, result);
         return -1;
     }
-    if (!sequenceAlreadyNoted) spa103_note_authenticated_sequence(packet);
     return 1;
 }
 
@@ -3414,7 +3434,7 @@ static int spa103_render_drain_one_queued(void)
     pthread_mutex_unlock(&spa103_render.lock);
     if (!packet) return 0;
 
-    result = spa103_render_frame(packet, length, 1);
+    result = spa103_render_frame(packet, length);
     pthread_mutex_lock(&spa103_render.lock);
     spa_apap_lifecycle_finish(&spa103_render.lifecycle,
                               result == SPA103_RENDER_FRAME_RETRY);
@@ -3430,25 +3450,31 @@ static int spa103_receive_frame(const uint8_t *packet, size_t length,
 
     if (spa103_render_should_queue())
         return spa103_queue_frame(packet, length, queuePlaintext,
-                                  queuePlaintextCapacity, 0);
-    result = spa103_render_frame(packet, length, 0);
+                                  queuePlaintextCapacity);
+    result = spa103_render_frame(packet, length);
     if (result == SPA103_RENDER_FRAME_RETRY)
         return spa103_queue_frame(packet, length, queuePlaintext,
-                                  queuePlaintextCapacity, 1);
+                                  queuePlaintextCapacity);
     return 1;
 }
 
-/* 1 while the producer should pace itself: nothing is draining the ring, or it is already half
- * full.  When decoding is off this is always true, which reproduces the capture-only build's
- * unconditional one-packet-per-frame-period sleep exactly. */
+/* 1 while the producer should pace itself: nothing is draining the ring, or it is already at its
+ * decode target (high water once primed; primeTarget while priming).  When decoding is off this is
+ * always true, which reproduces the capture-only build's unconditional one-packet-per-frame-period
+ * sleep exactly. */
 static int spa103_render_backpressure(void)
 {
+    size_t primeTarget;
     int paced;
 
     pthread_mutex_lock(&spa103_render.lock);
+    primeTarget = spa103_render.primeTargetFrames;
+    if (!primeTarget) primeTarget = spa103_prime_frames();
     paced = spa103_render.state != SPA_103_RENDER_RUNNING ||
             !spa_apap_lifecycle_playing(&spa103_render.lifecycle) ||
-            spa103_render.fill >= spa103_high_frames();
+            !spa_pcm_queue_should_decode(spa103_render.fill,
+                                         spa103_high_frames(), primeTarget,
+                                         spa103_render.primed);
     pthread_mutex_unlock(&spa103_render.lock);
     return paced;
 }
@@ -3511,6 +3537,19 @@ unsigned spa_buffered_pcm_channels(void)
 
     pthread_mutex_lock(&spa103_render.lock);
     if (spa103_render.state == SPA_103_RENDER_RUNNING && spa103_render.ring)
+        channels = spa103_render.outputChannels;
+    pthread_mutex_unlock(&spa103_render.lock);
+    return channels;
+}
+
+static unsigned spa_buffered_pcm_playing_channels(void)
+{
+    unsigned channels = 0;
+
+    pthread_mutex_lock(&spa103_render.lock);
+    if (spa103_render.state == SPA_103_RENDER_RUNNING &&
+        spa_apap_lifecycle_playing(&spa103_render.lifecycle) &&
+        spa103_render.ring)
         channels = spa103_render.outputChannels;
     pthread_mutex_unlock(&spa103_render.lock);
     return channels;
@@ -3906,25 +3945,39 @@ static int spa_rt_upmix_period_locked(const int16_t *buffer, size_t frames,
     if (spa_media_route_realtime_upmix_allowed(&spa_pcm_sink.route, 1, sourceChannels,
                                                outputChannels,
                                                spa_rt_upmix.ready && !spa_rt_upmix.guard.disabled)) {
-        uint64_t start = spa_monotonic_ns(), elapsed;
+        uint64_t start = spa_monotonic_ns(), elapsed, judgedNs;
+        size_t done = 0;
 
         if (!spa_rt_upmix.lastPeriodUpmixed) spa_rt_upmix_reset_locked();
         if (__sync_lock_test_and_set(&spa_rt_upmix_track_change, 0u))
             (void)spa_stereo_upmix_scene_track_change(&spa_rt_upmix.upmix);
         spa_stereo_upmix_set_level(&spa_rt_upmix.upmix, spa_upmix_level);
-        upmixed = spa_stereo_upmix_process_s16(&spa_rt_upmix.upmix, buffer, frames,
-                                               spa_pcm_sink.scratch, frames) ==
-                  SPA_STEREO_UPMIX_OK;
+        upmixed = frames > 0;
+        while (upmixed && done < frames) {
+            size_t chunk = frames - done;
+
+            if (chunk > SPA_STEREO_UPMIX_MAX_FRAMES)
+                chunk = SPA_STEREO_UPMIX_MAX_FRAMES;
+            upmixed = spa_stereo_upmix_process_s16(&spa_rt_upmix.upmix,
+                                                   buffer + done * sourceChannels,
+                                                   chunk,
+                                                   spa_pcm_sink.scratch + done * outputChannels,
+                                                   chunk) == SPA_STEREO_UPMIX_OK;
+            done += chunk;
+        }
         elapsed = spa_monotonic_ns() - start;
+        judgedNs = (frames > SPA_PCM_SINK_PERIOD_FRAMES)
+            ? (elapsed * (uint64_t)SPA_PCM_SINK_PERIOD_FRAMES) / (uint64_t)frames
+            : elapsed;
         {
-            uint64_t bucket = elapsed / UINT64_C(1000000);
+            uint64_t bucket = judgedNs / UINT64_C(1000000);
 
             if (bucket >= SPA_RT_UPMIX_HISTOGRAM_BUCKETS)
                 bucket = SPA_RT_UPMIX_HISTOGRAM_BUCKETS - 1u;
             ++spa_rt_upmix.msHistogram[bucket];
             spa_rt_upmix.totalNs += elapsed;
         }
-        if (spa_rt_upmix_guard_period(&spa_rt_upmix.guard, elapsed))
+        if (spa_rt_upmix_guard_period(&spa_rt_upmix.guard, judgedNs))
             LOG_WARN(LOG_MODULE,
                      "audio realtime upmix: DISABLED, %u consecutive periods over %llu us "
                      "(worst %llu us); waiting for a break in the stream",
@@ -4613,6 +4666,7 @@ static void spa_pcm_sink_close_detached(const char *reason)
 
     if (!realClose) realClose = (spa_snd_close_t)dlsym(RTLD_NEXT, "snd_pcm_close");
     result = realClose ? realClose(handle) : -1;
+    spa_rt_upmix_stop();
     spa_pcm_sink_release_cold_media_route();
     spa_pcm_io_unlock();
     LOG_WARN(LOG_MODULE,
@@ -4624,6 +4678,20 @@ static void spa_pcm_sink_close_detached(const char *reason)
                 SPA_PCM_SINK_NAME, reason ? reason : "unknown",
                 (unsigned long long)writes,
                 (unsigned long long)zeroWrites, result);
+}
+
+static size_t spa_buffered_pcm_playing_fill(unsigned channels)
+{
+    size_t fill = 0;
+
+    pthread_mutex_lock(&spa103_render.lock);
+    spa103_render_maybe_prime_locked();
+    if (spa103_render.state == SPA_103_RENDER_RUNNING &&
+        spa_apap_lifecycle_playing(&spa103_render.lifecycle) &&
+        spa103_render.ring && channels == spa103_render.outputChannels)
+        fill = spa103_render.fill;
+    pthread_mutex_unlock(&spa103_render.lock);
+    return fill;
 }
 
 static size_t spa_buffered_pcm_pending(unsigned channels)
@@ -5109,7 +5177,13 @@ static int spa_pcm_sink_bootstrap_buffered(void)
 
     channels = spa_buffered_pcm_channels();
     if (!channels || channels > SPA_103_RENDER_MAX_CHANNELS) return 0;
-    pending = spa_buffered_pcm_pending(channels);
+    /* Pre-request the media route and pre-open QSA as soon as the first playing
+     * period is decoded during the 400-ms prime window, rather than waiting
+     * until after the prime completes.  With SND_PCM_START_FULL, QSA does not
+     * start DMA until the first periods are written after prime, while MMI/J525
+     * switches and unmutes the media route in parallel with priming so the
+     * first ~1 second of the track is not swallowed. */
+    pending = spa_buffered_pcm_playing_fill(channels);
     if (pending < SPA_PCM_SINK_PERIOD_FRAMES) return 0;
     bytes = (size_t)SPA_PCM_SINK_PERIOD_FRAMES * channels * sizeof(int16_t);
     nowNs = spa_monotonic_ns();
@@ -5123,7 +5197,11 @@ static int spa_pcm_sink_bootstrap_buffered(void)
         return 0;
     }
     if (spa_pcm_sink.handle) {
+        int reacquireRoute = spa_pcm_sink.detached && !spa_pcm_sink.route.hook_owned;
         pthread_mutex_unlock(&spa_pcm_sink.lock);
+        if (reacquireRoute)
+            (void)spa_pcm_sink_request_hook_media_route("detached_buffered",
+                                                        "priming_reacquire");
         spa_pcm_io_unlock();
         return 1;
     }
@@ -6239,11 +6317,14 @@ HOOK_EXPORT ssize_t snd_pcm_plugin_write(snd_pcm_t *handle, const void *buffer, 
 
     /* One locked channel snapshot is also the ownership snapshot.  Avoid two
      * independently timed active/channels reads across a concurrent teardown.
+     * Only claim buffered media ownership when type 103 is actively playing
+     * (SETRATE{rate=1}); a paused or idle type-103 session must not mute
+     * type-100 realtime audio with silence.
      * When a non-media stream (e.g. audio_type=2 alert/alarm on mpl5_dio_ent)
      * owns the route, buffered type-103 must yield so the alert's own type-100
      * stereo PCM plays instead of buffered music or pause silence. */
     bufferedOwnsMedia = !spa_media_route_nonmedia(&spa_pcm_sink.route) &&
-                        spa_buffered_pcm_channels() == outputChannels;
+                        spa_buffered_pcm_playing_channels() == outputChannels;
     if (bufferedOwnsMedia)
         bufferedFrames = spa_buffered_pcm_peek(spa_pcm_sink.scratch, frames,
                                                outputChannels);

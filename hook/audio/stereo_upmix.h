@@ -297,6 +297,17 @@ int spa_stereo_upmix_process_s16(struct spa_stereo_upmix *state,
                                  int16_t *pcm6,
                                  size_t pcm6_capacity_frames);
 
+/* process_s16 with a per-frame programme gain (SoundCheck), frame_gain[frames]:
+ * SCENE scales each finished frame before its cabin guard, so the guard bounds
+ * the level that is played; OFF scales L/R.  The engine and the mask net still
+ * see the unscaled input.  NULL is process_s16 exactly. */
+int spa_stereo_upmix_process_gain_s16(struct spa_stereo_upmix *state,
+                                      const int16_t *pcm2,
+                                      size_t frames,
+                                      int16_t *pcm6,
+                                      size_t pcm6_capacity_frames,
+                                      const float *frame_gain);
+
 
 /* Profile-0/bank-1 J525 input matrix, first six inputs x eight buses, row-major.
  * Static storage. Includes the verified -99 dB effective input-matrix floor.
