@@ -20,6 +20,7 @@ touch "${STACK_PATH}" "${LOG_FILE}" "${COMMAND_LOG}"
 run_start()
 {
     NCM_GENERATION_DIR="${GEN_DIR}" \
+    NCM_LOCK_BASE="${GEN_DIR}" \
     NCM_LOG_FILE="${LOG_FILE}" \
     NCM_MOUNT_BIN=true \
     NCM_IF_UP_BIN=true \
@@ -32,6 +33,7 @@ run_start()
 run_stop()
 {
     NCM_GENERATION_DIR="${GEN_DIR}" \
+    NCM_LOCK_BASE="${GEN_DIR}" \
     NCM_LOG_FILE="${LOG_FILE}" \
     NCM_IFCONFIG_BIN="${IFCONFIG_STUB}" \
     NCM_TEST_CALLER=stop \
@@ -51,7 +53,12 @@ assert_destroy_count()
 }
 
 # A normal removal owns the current generation and destroys it.
+# Clean cold-start (__missing__ generation) must NOT run pre-mount destroy.
 run_start 1 2 3
+if grep -q '^start carplay0 destroy$' "${COMMAND_LOG}"; then
+    echo "cold-start unexpectedly ran pre-mount ifconfig destroy" >&2
+    exit 1
+fi
 run_stop 1 2 3 0
 assert_destroy_count 1
 if [ -r "${GEN_DIR}/ncm_generation_carplay0" ]; then
@@ -100,6 +107,7 @@ run_start 1 8 3
 
 # A failed mount must remove only its own token.
 if NCM_GENERATION_DIR="${GEN_DIR}" \
+    NCM_LOCK_BASE="${GEN_DIR}" \
     NCM_LOG_FILE="${LOG_FILE}" \
     NCM_MOUNT_BIN=false \
     NCM_IF_UP_BIN=true \

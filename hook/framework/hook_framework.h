@@ -239,5 +239,6 @@ uint8_t* hook_identify_grow(hook_context_t* ctx, size_t len, size_t new_len, siz
 bool hook_is_ready(void);
 bool hook_is_active(void);
 uint16_t hook_get_component_id(void);
+void hook_note_ncm_carrier(const char* stage);
 
 #endif /* CARPLAY_HOOK_FRAMEWORK_H */

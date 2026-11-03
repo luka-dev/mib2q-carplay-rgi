@@ -131,9 +131,9 @@ GENERATION_TEMP="${GENERATION_FILE}.$$"
 trap 'release_lock' 0
 trap 'release_lock; exit 1' 1 2 3 15
 
-# QNX 6.5 test(1) does not provide a reliable -e here.  ls works for the
-# special device node and is also what the live diagnosis used.
-if ! ls "${STACK}" >/dev/null 2>&1; then
+# QNX 6.5 test(1) does not provide a reliable -e here.  Check -r/-c with the
+# shell builtin first to avoid a fork on the cold-boot path; fall back to ls.
+if [ ! -r "${STACK}" ] && [ ! -c "${STACK}" ] && ! ls "${STACK}" >/dev/null 2>&1; then
     log_ncm "reject missing_stack=${STACK} generation=${GENERATION}"
     exit 1
 fi
@@ -146,6 +146,8 @@ fi
 # interface still exists.  Otherwise remove any previous global-name instance
 # while holding the same lock used by stopncm.sh.  This prevents mount from
 # colliding with an old carplay0 during Audi's one-second removal delay.
+# On a clean start (__missing__), skip the pre-mount ifconfig destroy + rm so
+# devnp-usbdnet.so attaches before usblauncher_otg finishes link bringup.
 read_generation
 case "${NCM_READ_GENERATION}" in
     "${GENERATION_KEY}":*)
@@ -159,8 +161,10 @@ case "${NCM_READ_GENERATION}" in
         ;;
 esac
 
-"${NCM_IFCONFIG_BIN}" "${IF_NAME}" destroy >/dev/null 2>&1
-rm -f "${GENERATION_FILE}"
+if [ "${NCM_READ_GENERATION}" != "__missing__" ]; then
+    "${NCM_IFCONFIG_BIN}" "${IF_NAME}" destroy >/dev/null 2>&1
+    rm -f "${GENERATION_FILE}"
+fi
 
 if [ "${IOPKT_INSTANCE}" = "io-pkt1" ]; then
     echo "Waiting for ${SOCKET}..."
@@ -175,6 +179,14 @@ log_ncm "begin interface=${IF_NAME} generation=${GENERATION} stack=${STACK}"
     -o "verbose=0,path=${STACK},protocol=ncm,usbdnet_mac=000022446688,mac=020022446688,name=${INTERFACE},npkt=10" \
     /mnt/app/armle/lib/dll/devnp-usbdnet.so
 MOUNT_RC=$?
+if [ "${MOUNT_RC}" -ne 0 ] && [ "${NCM_READ_GENERATION}" = "__missing__" ] &&
+   "${NCM_IFCONFIG_BIN}" "${IF_NAME}" >/dev/null 2>&1; then
+    "${NCM_IFCONFIG_BIN}" "${IF_NAME}" destroy >/dev/null 2>&1
+    "${NCM_MOUNT_BIN}" -T "${IOPKT_INSTANCE}" \
+        -o "verbose=0,path=${STACK},protocol=ncm,usbdnet_mac=000022446688,mac=020022446688,name=${INTERFACE},npkt=10" \
+        /mnt/app/armle/lib/dll/devnp-usbdnet.so
+    MOUNT_RC=$?
+fi
 if [ "${MOUNT_RC}" -ne 0 ]; then
     log_ncm "fail mount_rc=${MOUNT_RC} interface=${IF_NAME} generation=${GENERATION}"
     cleanup_new_interface

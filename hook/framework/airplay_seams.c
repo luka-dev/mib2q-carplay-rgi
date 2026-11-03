@@ -116,6 +116,7 @@ HOOK_EXPORT void *AirPlayCopyServerInfo(void *session, void *qualifier, void *ma
      * (cable/pairing). */
     {
         static int info_calls;
+        hook_note_ncm_carrier("airplay_info");
         LOG_INFO(LOG_MODULE, "/info #%d session=%p qualifier=%p out=%p",
                  ++info_calls, session, qualifier, info);
         STATE_TRACE("AIRPLAY_INFO",

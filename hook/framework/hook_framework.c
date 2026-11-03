@@ -15,6 +15,9 @@
 #include <string.h>
 #include <time.h>
 #include <errno.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <net/if.h>
 
 DEFINE_LOG_MODULE(HOOK);
 
@@ -80,6 +83,16 @@ static struct {
      * real dio -> libNmeSDK CinemoCreateIAP PLT boundary. */
     void* cinemo_iap;
     int cinemo_iap_owner_pid;
+
+    /* Per-session carplay0 carrier readiness tracking (IFF_UP vs IFF_RUNNING).
+     * devnp-usbdnet.so sets IFF_RUNNING (0x40) only after usbdif_iface_detected
+     * (SET_INTERFACE on the NCM data interface); until then io-pkt returns
+     * ENETDOWN (250) to mdnsd multicast announcements on carplay0. */
+    uint64_t ncm_identify_start_ms;
+    uint64_t ncm_last_poll_ms;
+    bool ncm_carrier_running_seen;
+    bool ncm_carrier_warned_not_running;
+    bool ncm_airplay_info_seen;
 
     /* Function pointers (only the Cinemo NME seams we actually act on).
      * write/writev/MsgSend/MsgSendv were interposed but did nothing except
@@ -460,6 +473,105 @@ static bool dispatch_message(const iap2_frame_t* frame, msg_direction_t directio
     return consumed;
 }
 
+static uint64_t framework_now_ms(void) {
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) return 0;
+    return (uint64_t)ts.tv_sec * 1000ULL + (uint64_t)ts.tv_nsec / 1000000ULL;
+}
+
+static int query_carplay0_flags(unsigned int* out_ifindex, unsigned int* out_flags) {
+    struct ifreq ifr;
+    unsigned int ifindex = if_nametoindex("carplay0");
+    int fd;
+    int rc;
+
+    if (out_ifindex) *out_ifindex = ifindex;
+    if (out_flags) *out_flags = 0;
+    if (ifindex == 0) return -1;
+
+    fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (fd < 0) fd = socket(AF_INET6, SOCK_DGRAM, 0);
+    if (fd < 0) return -1;
+
+    memset(&ifr, 0, sizeof(ifr));
+    strncpy(ifr.ifr_name, "carplay0", sizeof(ifr.ifr_name) - 1);
+    rc = ioctl(fd, SIOCGIFFLAGS, &ifr);
+    close(fd);
+    if (rc != 0) return -1;
+
+    if (out_flags) *out_flags = (unsigned int)(uint16_t)ifr.ifr_flags;
+    return 0;
+}
+
+void hook_note_ncm_carrier(const char* stage) {
+    unsigned int ifindex = 0;
+    unsigned int flags = 0;
+    uint64_t now_ms;
+    unsigned long long elapsed_ms;
+    int up, running;
+    bool is_transport;
+
+    if (!stage) return;
+#if HOOK_WIRELESS
+    if (cp_dio_owner_is_wireless()) return;
+#endif
+    is_transport = (strcmp(stage, "transport") == 0);
+    if (is_transport) {
+        if ((!g_fw.ctx.identify_accepted && !g_fw.ctx.auth_done) ||
+            g_fw.ncm_carrier_running_seen || g_fw.ncm_airplay_info_seen)
+            return;
+        now_ms = framework_now_ms();
+        if (now_ms != 0 && g_fw.ncm_last_poll_ms != 0 &&
+            now_ms - g_fw.ncm_last_poll_ms < 100ULL)
+            return;
+        g_fw.ncm_last_poll_ms = now_ms;
+    } else {
+        if (strcmp(stage, "airplay_info") == 0) {
+            if (g_fw.ncm_airplay_info_seen) return;
+            g_fw.ncm_airplay_info_seen = true;
+        }
+        now_ms = framework_now_ms();
+    }
+
+    (void)query_carplay0_flags(&ifindex, &flags);
+    up = (flags & IFF_UP) ? 1 : 0;
+    running = (flags & IFF_RUNNING) ? 1 : 0;
+    elapsed_ms = (now_ms != 0 && g_fw.ncm_identify_start_ms != 0 &&
+                  now_ms >= g_fw.ncm_identify_start_ms) ?
+                 (unsigned long long)(now_ms - g_fw.ncm_identify_start_ms) : 0ULL;
+
+    if (is_transport) {
+        if (!running) return;
+        g_fw.ncm_carrier_running_seen = true;
+        STATE_TRACE("NCM_CARRIER_STATE",
+                    "stage=carrier_ready ifindex=%u flags=0x%04x up=%d running=%d elapsed_ms=%llu",
+                    ifindex, flags, up, running, elapsed_ms);
+        LOG_WARN(LOG_MODULE,
+                 "carplay0 carrier became RUNNING after %llu ms (ifindex=%u flags=0x%04x)",
+                 elapsed_ms, ifindex, flags);
+        return;
+    }
+
+    if (running) g_fw.ncm_carrier_running_seen = true;
+    STATE_TRACE("NCM_CARRIER_STATE",
+                "stage=%s ifindex=%u flags=0x%04x up=%d running=%d elapsed_ms=%llu",
+                stage, ifindex, flags, up, running, elapsed_ms);
+
+    if (!running || g_fw.ncm_carrier_warned_not_running ||
+        strcmp(stage, "shutdown_before_info") == 0) {
+        if (!running) g_fw.ncm_carrier_warned_not_running = true;
+        LOG_WARN(LOG_MODULE,
+                 "carplay0 carrier stage=%s ifindex=%u flags=0x%04x up=%d running=%d "
+                 "running_ever=%d elapsed=%llums",
+                 stage, ifindex, flags, up, running,
+                 g_fw.ncm_carrier_running_seen ? 1 : 0, elapsed_ms);
+    } else {
+        LOG_INFO(LOG_MODULE,
+                 "carplay0 carrier stage=%s ifindex=%u flags=0x%04x up=%d running=%d elapsed=%llums",
+                 stage, ifindex, flags, up, running, elapsed_ms);
+    }
+}
+
 static void handle_state_messages(uint16_t msgid) {
     switch (msgid) {
         case IAP2_MSG_IDENTIFY_START:
@@ -471,6 +583,11 @@ static void handle_state_messages(uint16_t msgid) {
             g_fw.ctx.auth_done = false;
             g_fw.ctx.session_active = false;
             g_fw.ctx.rgd_component_valid = false;
+            g_fw.ncm_identify_start_ms = framework_now_ms();
+            g_fw.ncm_last_poll_ms = 0;
+            g_fw.ncm_carrier_running_seen = false;
+            g_fw.ncm_carrier_warned_not_running = false;
+            g_fw.ncm_airplay_info_seen = false;
 #if ENABLE_STATE_TRACE
             g_fw.ctx.lifecycle_generation = state_trace_begin_generation();
 #endif
@@ -484,6 +601,7 @@ static void handle_state_messages(uint16_t msgid) {
             g_fw.ctx.identify_accepted = true;
             LOG_INFO(LOG_MODULE, "Identify accepted (0x1D02)");
             STATE_TRACE("IAP_IDENTIFY_ACCEPTED", "msg=0x1d02");
+            hook_note_ncm_carrier("identify_accepted");
             notify_state(HOOK_EVENT_IDENTIFY_OK, NULL);
             break;
         case IAP2_MSG_IDENTIFY_END:
@@ -497,6 +615,7 @@ static void handle_state_messages(uint16_t msgid) {
             g_fw.ctx.auth_done = true;
             LOG_INFO(LOG_MODULE, "Auth complete (0xAA05)");
             STATE_TRACE("IAP_AUTH_COMPLETE", "msg=0xaa05");
+            hook_note_ncm_carrier("auth_complete");
             notify_state(HOOK_EVENT_AUTH_DONE, NULL);
             break;
         case IAP2_MSG_STOP_LOCATION:
@@ -528,12 +647,6 @@ static bool parse_array_bytes(void* arr, uint8_t** out_data, unsigned int* out_l
     *out_data = *(uint8_t**)((char*)arr + 0);
     *out_len = *(unsigned int*)((char*)arr + 4);
     return (*out_data != NULL && *out_len > 0);
-}
-
-static uint64_t framework_now_ms(void) {
-    struct timespec ts;
-    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) return 0;
-    return (uint64_t)ts.tv_sec * 1000ULL + (uint64_t)ts.tv_nsec / 1000000ULL;
 }
 
 /* bus_init() used to be fire-and-forget.  A single pthread/socket failure then
@@ -662,6 +775,10 @@ void hook_framework_shutdown(void) {
     pthread_mutex_unlock(&g_fw.lock);
 
     notify_state(HOOK_EVENT_SHUTDOWN, NULL);
+    if ((g_fw.ctx.identify_accepted || g_fw.ctx.auth_done) &&
+        !g_fw.ncm_airplay_info_seen) {
+        hook_note_ncm_carrier("shutdown_before_info");
+    }
     STATE_TRACE("HOOK_SHUTDOWN", "pid=%d", (int)getpid());
 
     /* Module destructors used to run in unspecified ELF order, including when
@@ -1067,6 +1184,7 @@ HOOK_EXPORT int _ZN12NmeTransport4SendEPKhjPj(void* self, const uint8_t* buf, un
     if (ret != 0 || !have_frame) return ret;
 
     store_injection_context(buf, (size_t)len, frame.offset);
+    hook_note_ncm_carrier("transport");
     notify_transport_send(frame.msgid);
 
     return ret;
@@ -1112,6 +1230,7 @@ HOOK_EXPORT int _ZN12NmeTransport4RecvER8NmeArrayIhE(void* self, void* out_array
     /* Tap only on success.  On an error return the array may hold stale bytes;
      * re-feeding them would corrupt the reassembler with duplicates. */
     if (ret == 0 && have) {
+        hook_note_ncm_carrier("transport");
         state_trace_feed_iap_transport_rx(data, len);
         notify_transport_recv(data, len);
     }
