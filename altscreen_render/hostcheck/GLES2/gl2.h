@@ -24,6 +24,10 @@ typedef char GLchar;
 #define GL_LINK_STATUS 0x8b82
 #define GL_TEXTURE0 0x84c0
 #define GL_TEXTURE1 0x84c1
+#define GL_TEXTURE2 0x84c2
+#define GL_FRAMEBUFFER 0x8d40
+#define GL_FRAMEBUFFER_COMPLETE 0x8cd5
+#define GL_COLOR_ATTACHMENT0 0x8ce0
 #define GL_TEXTURE_2D 0x0de1
 #define GL_TEXTURE_MIN_FILTER 0x2801
 #define GL_TEXTURE_MAG_FILTER 0x2800
@@ -85,4 +89,9 @@ void glFinish(void);
 void glReadPixels(GLint x, GLint y, GLsizei width, GLsizei height,
                   GLenum format, GLenum type, void *pixels);
 
+void glGenFramebuffers(GLsizei count, GLuint *ids);
+void glDeleteFramebuffers(GLsizei count, const GLuint *ids);
+void glBindFramebuffer(GLenum target, GLuint id);
+void glFramebufferTexture2D(GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level);
+GLenum glCheckFramebufferStatus(GLenum target);
 #endif

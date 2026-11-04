@@ -6,7 +6,7 @@
 
 ## 🎯 What it is
 
-Before the first decoded video frame arrives, the cluster needs something on screen. The production loader is **PRISM**, a GLES2 fragment shader that draws a glass Apple silhouette whose light moves inside the material, plus the `@LuKa_dev` signature (`altscreen_render/loader/prism.frag:1-2`, `tools/loader_preview/PRISM.md:1-9`). The first decoded picture stops and joins the loader thread, and native video is then presented directly, with no transition (`altscreen_render/screen_egl_present.c:959-961`). **[code]**
+Before the first decoded video frame arrives, the cluster needs something on screen. The production loader is **PRISM**, a GLES2 fragment shader that draws a glass Apple silhouette whose light moves inside the material, plus the `@LuKa_dev` signature (`altscreen_render/loader/prism.frag:1-2`, `tools/loader_preview/PRISM.md:1-9`). The first decoded picture stops and joins the loader thread, then a 700 ms camera flight reveals live video through the Apple. Steady video returns to the original direct draw. The optimized flight and its tests are described in [PRISM](../../tools/loader_preview/PRISM.md). **[code]**
 
 It replaced the earlier Apple-boot loader (white logo, 12-segment HIG spinner, SF Pro signature, art baked into `common/loader_assets.h`). That shader loader was deployed and seen live at 30 fps with a clean `VIDEO_ON` takeover **[car]**. Its files no longer exist in the tree: there is no `common/loader_assets.h` and no `common/carplay_loader.*`. See `memory/loader_shader_altscreen_port.md` for the history.
 
@@ -65,14 +65,14 @@ flowchart TB
 
 `tools/loader_preview/` holds `prism_preview.c`, the macOS preview, which uses the same loader implementation. Controls are **R** replay, **V** full/compact, **S** Sport/Classic, **G** guides, **Space** pause, and **Esc** close. Stills are captured with `--time`, `--capture`, `--frames`, `--view` and `--style`. `make bake` regenerates `prism_baked.h` from the material and signature generators (`bake_prism.py`, `prepare_material.py`, `prepare_signature.py`), which needs Python, Pillow, NumPy, SciPy and the local macOS font (`tools/loader_preview/PRISM.md:32-58`). **[code]**
 
-## 🔄 Waiting-only lifecycle
+## 🔄 Waiting and flight lifecycle
 
-The loader is a **waiting** animation, never a compositor over video. The rules as implemented and tested (2026-09-14 "PRISM cleanup" candidate): **[code]**
+The waiting shader and short flight shader have separate lifetimes. Current behavior: **[code]**
 
 - One existing managed RGBA plane 99 at 1440×542; no new plane, process, Java context or shell monitor.
 - A 30 Hz thread draws PRISM only while waiting. The shader has no video sampler, no zoom and no refraction of video.
 - Each waiting frame clears to opaque black and draws the logo and signature rectangles in one batch. Shader coverage is **2.40 %** of the panel in the full layout and **1.67 %** in compact; these are areas, not a measured GPU speed-up.
-- The first decoded picture stops and joins the thread before drawing; later pictures go straight from their native-32m EGLImage to the window, one draw and swap each, with no intermediate framebuffer, copy or queue. Only unused waiting-frame time is slept; video gets no added timer.
+- The first decoded picture joins the waiting thread and caches only the Apple and signature once in a 256×256 crop at native pixel density. A 700 ms single-pass shader combines this cache, the logo mask and the current native video image. Then subsequent video uses the original direct draw, with no extra pass or video copy. A held, client-owned OMX picture lets a static map complete the animation; newer pictures can replace it.
 - Decoder teardown joins the video presenter and stops the loader without another draw. The last RGBA swap remains until Java restores the stock map, so disconnect cannot flash PRISM. The next decoder start synchronously posts a fresh PRISM frame. A caught-up or temporarily quiet stream does **not** restart the loader.
 - `LOADER_READY` (0x83) confirms a freshly posted waiting frame for the current decode generation; `VIDEO_ON` confirms video. `VIDEO_OFF` invalidates readiness and never starts PRISM. Java gates plane 99 takeover on these explicit readiness events, and clears readiness on lifecycle stop. Native renderer and Java must be updated together. ([Cluster Contexts](../cluster-and-rgi/CLUSTER_CONTEXTS.md)).
 

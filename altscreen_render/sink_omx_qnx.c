@@ -330,6 +330,7 @@ static int _PresentGpu(ScreenSink *me, OMX_BUFFERHEADERTYPE *b) {
  * on Qualcomm's component thread. No timer, age cutoff or compressed-frame drop. */
 static void *_PresentThread(void *arg) {
     ScreenSink *me = (ScreenSink *)arg;
+    OMX_U32 held = (OMX_U32)-1; /* only during the bounded Apple flight */
     pthread_mutex_lock(&me->lock);
     for (;;) {
         OMX_U32 slot;
@@ -337,11 +338,20 @@ static void *_PresentThread(void *arg) {
         int recycle, timing;
         long holdMs;
         OMX_ERRORTYPE err;
-        while (!me->presentStop && me->presentCount == 0)
+        while (!me->presentStop && me->presentCount == 0) {
+            if (held != (OMX_U32)-1) {
+                struct timespec tick;
+                _AbsTimeoutMs(&tick,33);
+                /* Even a phone sending a single static picture completes the
+                 * flight. The held OMX slot cannot be refilled underneath GPU. */
+                pthread_cond_timedwait(&me->cond,&me->lock,&tick);
+                break;
+            }
             pthread_cond_wait(&me->cond, &me->lock);
+        }
         if (me->presentStop) break;
         holdMs = me->present ? screen_egl_present_loader_hold_remaining_ms(me->present) : 0;
-        if ((me->mailbox || holdMs > 0) && me->presentCount > 1) {
+        if ((me->mailbox || holdMs > 0 || held != (OMX_U32)-1) && me->presentCount > 1) {
             OMX_U32 i, keep = me->presentCount - 1, discard;
             int picture = 0;
             /* Snapshot only: a synchronous refill cannot postpone the selected
@@ -387,9 +397,40 @@ static void *_PresentThread(void *arg) {
                 continue;
             }
         }
-        slot = me->presentQueue[me->presentHead];
-        me->presentHead = (me->presentHead + 1) % me->nOutBufs;
-        --me->presentCount;
+        if (me->presentCount) {
+            /* Empty output cannot evict the only usable flight picture. */
+            OMX_U32 head=me->presentQueue[me->presentHead];
+            if (held != (OMX_U32)-1 && !me->outBufs[head]->nFilledLen) {
+                OMX_BUFFERHEADERTYPE *empty=me->outBufs[head];
+                me->presentHead=(me->presentHead+1)%me->nOutBufs;
+                --me->presentCount;
+                me->presentOwned[head]=0;
+                pthread_mutex_unlock(&me->lock);
+                err=OMX_FillThisBuffer(me->decoder,empty);
+                pthread_mutex_lock(&me->lock);
+                if (err != OMX_ErrorNone) { me->omxError=1; me->presentStop=1; break; }
+                if (me->presentStop) break;
+                slot=held; held=(OMX_U32)-1;
+                goto selected_output;
+            }
+            if (held != (OMX_U32)-1) {
+                OMX_BUFFERHEADERTYPE *previous=me->outBufs[held];
+                me->presentOwned[held]=0;
+                held=(OMX_U32)-1;
+                pthread_mutex_unlock(&me->lock);
+                err=OMX_FillThisBuffer(me->decoder,previous);
+                pthread_mutex_lock(&me->lock);
+                if (err != OMX_ErrorNone) { me->omxError=1; me->presentStop=1; break; }
+                if (me->presentStop) break;
+            }
+            slot = me->presentQueue[me->presentHead];
+            me->presentHead = (me->presentHead + 1) % me->nOutBufs;
+            --me->presentCount;
+        } else {
+            slot=held;
+            held=(OMX_U32)-1;
+        }
+selected_output:
         b = me->outBufs[slot];
         if (me->timing_enabled)
             alt_timing_elapsed(&me->present_queue_timing, me->presentQueuedUs[slot],
@@ -401,7 +442,12 @@ static void *_PresentThread(void *arg) {
         timing = me->timing_enabled;
         /* Clear before FillThisBuffer: a component may callback synchronously.
          * Teardown joins this thread before any OMX state/free operation. */
-        me->presentOwned[slot] = 0;
+        if (recycle && b->nFilledLen && screen_egl_present_transition_active(me->present)) {
+            held=slot;
+            recycle=0;
+        } else {
+            me->presentOwned[slot] = 0;
+        }
         pthread_mutex_unlock(&me->lock);
         if (recycle) {
             uint64_t started = timing ? alt_timing_now_us() : 0;
@@ -423,6 +469,7 @@ static void *_PresentThread(void *arg) {
     }
     /* Pending buffers never reached GPU. Keep them on the client side for the
      * normal Idle->Loaded FreeBuffer sequence; never feed old-session frames. */
+    if (held != (OMX_U32)-1) me->presentOwned[held]=0;
     me->presentCount = 0;
     me->presentExited = 1;
     pthread_cond_broadcast(&me->cond);

@@ -26,6 +26,7 @@
 #include "log_stamp.h"
 #include "loader/prism_baked.h"
 #include "loader/prism_waiting.h"
+#include "loader/prism_transition.h"
 #include "cluster_surface.h"
 #include "loader/loader_layout.h"
 
@@ -99,10 +100,20 @@ struct screen_egl_present {
     GLint attr_uv;
     GLint uniform_tex;
 
+    GLuint transition_program, transition_art, transition_fbo;
+    GLint transition_pos, transition_uv, transition_camera, transition_mix, transition_art_rect;
+    GLfloat art_rect[4];
+    GLint transition_video, transition_art_sampler, transition_material;
+    uint64_t transition_started_ns, loader_elapsed_ms;
+    uint64_t transition_work_ns, transition_max_ns;
+    unsigned transition_frames;
+    int transition_pending, transition_active;
+    prism_layout_t transition_layout;
+
     GLuint loader_program;
     GLint loader_attr_pos;
     GLint loader_u_ires, loader_u_itime;
-    GLint loader_u_content, loader_u_sigrect;
+    GLint loader_u_content, loader_u_sigrect, loader_u_raster;
     GLint loader_u_logo, loader_u_sig;
     GLuint logo_texture, sig_texture;
     pthread_t loader_thread;
@@ -292,6 +303,7 @@ static int ep_make_loader_program(screen_egl_present_t *p) {
         goto fail;
     }
     p->loader_attr_pos = glGetAttribLocation(p->loader_program, "a_pos");
+    p->loader_u_raster = glGetUniformLocation(p->loader_program, "uRaster");
     p->loader_u_ires   = glGetUniformLocation(p->loader_program, "iRes");
     p->loader_u_itime  = glGetUniformLocation(p->loader_program, "iTime");
     p->loader_u_content = glGetUniformLocation(p->loader_program, "uContent");
@@ -301,13 +313,67 @@ static int ep_make_loader_program(screen_egl_present_t *p) {
     if (vs) glDeleteShader(vs);
     if (fs) glDeleteShader(fs);
     return (p->loader_attr_pos >= 0 && p->loader_u_ires >= 0 &&
-            p->loader_u_itime >= 0 && p->loader_u_content >= 0 &&
+            p->loader_u_itime >= 0 && p->loader_u_raster >= 0 && p->loader_u_content >= 0 &&
             p->loader_u_sigrect >= 0 && p->loader_u_logo >= 0 &&
             p->loader_u_sig >= 0) ? 0 : -1;
 
 fail:
     if (vs) glDeleteShader(vs);
     if (fs) glDeleteShader(fs);
+    return -1;
+}
+
+/* Compiled once; optional failure falls back to direct video. */
+static int ep_make_transition(screen_egl_present_t *p) {
+    static const char *vs_source =
+        "attribute vec2 a_pos; attribute vec2 a_uv; varying vec2 v_uv;\n"
+        "void main(){ gl_Position=vec4(a_pos,0.0,1.0); v_uv=a_uv; }\n";
+    GLuint vs=0, fs=0;
+    GLint linked=0;
+    p->transition_program=glCreateProgram();
+    if (!p->transition_program) return -1;
+    if (glpc_load(p->transition_program,"altscreen:prism-flight",vs_source,PRISM_TRANSITION_GLES)) linked=1;
+    else {
+        vs=ep_compile_shader(GL_VERTEX_SHADER,vs_source,"PRISM flight vertex");
+        fs=ep_compile_shader(GL_FRAGMENT_SHADER,PRISM_TRANSITION_GLES,"PRISM flight");
+        if (vs && fs) {
+            glAttachShader(p->transition_program,vs); glAttachShader(p->transition_program,fs);
+            glLinkProgram(p->transition_program);
+            glGetProgramiv(p->transition_program,GL_LINK_STATUS,&linked);
+            if (linked) glpc_store(p->transition_program,"altscreen:prism-flight",vs_source,PRISM_TRANSITION_GLES);
+        }
+    }
+    if (vs) glDeleteShader(vs);
+    if (fs) glDeleteShader(fs);
+    if (!linked) goto fail;
+    p->transition_pos=glGetAttribLocation(p->transition_program,"a_pos");
+    p->transition_uv=glGetAttribLocation(p->transition_program,"a_uv");
+    p->transition_camera=glGetUniformLocation(p->transition_program,"uCamera");
+    p->transition_art_rect=glGetUniformLocation(p->transition_program,"uArtRect");
+    p->transition_mix=glGetUniformLocation(p->transition_program,"uMix");
+    p->transition_video=glGetUniformLocation(p->transition_program,"uVideo");
+    p->transition_art_sampler=glGetUniformLocation(p->transition_program,"uArt");
+    p->transition_material=glGetUniformLocation(p->transition_program,"uMaterial");
+    glGenTextures(1,&p->transition_art);
+    glBindTexture(GL_TEXTURE_2D,p->transition_art);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,PRISM_CACHE_WIDTH,PRISM_CACHE_HEIGHT,0,GL_RGBA,GL_UNSIGNED_BYTE,NULL);
+    glGenFramebuffers(1,&p->transition_fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER,p->transition_fbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,p->transition_art,0);
+    linked=glCheckFramebufferStatus(GL_FRAMEBUFFER)==GL_FRAMEBUFFER_COMPLETE && glGetError()==GL_NO_ERROR;
+    glBindFramebuffer(GL_FRAMEBUFFER,0);
+    if (linked && p->transition_pos>=0 && p->transition_uv>=0 &&
+        p->transition_art_rect>=0 && p->transition_camera>=0 && p->transition_mix>=0 && p->transition_video>=0 &&
+        p->transition_art_sampler>=0 && p->transition_material>=0) return 0;
+fail:
+    if (p->transition_fbo) glDeleteFramebuffers(1,&p->transition_fbo);
+    if (p->transition_art) glDeleteTextures(1,&p->transition_art);
+    glDeleteProgram(p->transition_program);
+    p->transition_fbo=p->transition_art=p->transition_program=0;
     return -1;
 }
 
@@ -569,6 +635,8 @@ static int ep_init_egl(screen_egl_present_t *p) {
     if (ep_make_loader_program(p) != 0) return -1;
     t_prism = ep_monotonic_ns();
     if (ep_make_loader_textures(p) != 0) return -1;
+    if (ep_make_transition(p) != 0)
+        fprintf(stderr,"altscreen_render[loader]: flight unavailable; direct-video fallback\n");
     t_art = ep_monotonic_ns();
     /* Startup cost split: shows whether EGL, a shader build (cache miss/hit)
      * or the PRISM art dominates "Screen/EGL open took". */
@@ -771,37 +839,21 @@ static int ep_loader_should_stop(screen_egl_present_t *p) {
     return stop;
 }
 
-static int ep_loader_frame(screen_egl_present_t *p, uint64_t elapsed_ms) {
+/* GL context current, gl_lock held. No allocation and no video copy. */
+static void ep_draw_waiting(screen_egl_present_t *p, const prism_layout_t *layout,
+                            uint64_t elapsed_ms, int width, int height, const float raster[4]) {
     GLfloat positions[24];
-    GLenum gl_error = GL_NO_ERROR;
-    int ok = -1;
-    int viewMode, layoutStyle;
-    prism_layout_t layout;
-    if (!p || !p->logo_texture || !p->sig_texture) return -1;
-    viewMode = (p->loader_view_area_mode && *p->loader_view_area_mode == 1) ? 1 : 0;
-    layoutStyle = (p->loader_layout_style &&
-                   *p->loader_layout_style == LOADER_STYLE_CLASSIC)
-        ? LOADER_STYLE_CLASSIC : LOADER_STYLE_SPORT;
-    layout = prism_layout(viewMode, layoutStyle, PRISM_SIGNATURE_W, PRISM_SIGNATURE_H);
-    prism_waiting_vertices(&layout, positions);
-
-    pthread_mutex_lock(&p->gl_lock);
-    if (p->loader_stop) {
-        pthread_mutex_unlock(&p->gl_lock);
-        return 1;
-    }
-    if (!eglMakeCurrent(p->egl_display, p->egl_surface, p->egl_surface,
-                        p->egl_context)) goto out;
-
-    glViewport(0, 0, p->width, p->height);
+    prism_waiting_vertices_in_rect(layout,raster,positions);
+    glViewport(0, 0, width, height);
     glDisable(GL_BLEND);
     glUseProgram(p->loader_program);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
-    glUniform2f(p->loader_u_ires, (float)p->width, (float)p->height);
+    glUniform2f(p->loader_u_ires, (float)width, (float)height);
+    glUniform4fv(p->loader_u_raster,1,raster);
     glUniform1f(p->loader_u_itime, (float)elapsed_ms / 1000.0f);
-    glUniform4fv(p->loader_u_content, 1, layout.content);
-    glUniform4fv(p->loader_u_sigrect, 1, layout.signature);
+    glUniform4fv(p->loader_u_content, 1, layout->content);
+    glUniform4fv(p->loader_u_sigrect, 1, layout->signature);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, p->logo_texture);
     glUniform1i(p->loader_u_logo, 0);
@@ -813,6 +865,34 @@ static int ep_loader_frame(screen_egl_present_t *p, uint64_t elapsed_ms) {
                           positions);
     glDrawArrays(GL_TRIANGLES, 0, 12);
     glDisableVertexAttribArray((GLuint)p->loader_attr_pos);
+}
+
+static int ep_loader_frame(screen_egl_present_t *p, uint64_t elapsed_ms) {
+    GLenum gl_error = GL_NO_ERROR;
+    int ok = -1;
+    int viewMode, layoutStyle;
+    prism_layout_t layout;
+    if (!p || !p->logo_texture || !p->sig_texture) return -1;
+    viewMode = (p->loader_view_area_mode && *p->loader_view_area_mode == 1) ? 1 : 0;
+    layoutStyle = (p->loader_layout_style &&
+                   *p->loader_layout_style == LOADER_STYLE_CLASSIC)
+        ? LOADER_STYLE_CLASSIC : LOADER_STYLE_SPORT;
+    layout = prism_layout(viewMode, layoutStyle, PRISM_SIGNATURE_W, PRISM_SIGNATURE_H);
+
+    pthread_mutex_lock(&p->gl_lock);
+    if (p->loader_stop) {
+        pthread_mutex_unlock(&p->gl_lock);
+        return 1;
+    }
+    if (!eglMakeCurrent(p->egl_display, p->egl_surface, p->egl_surface,
+                        p->egl_context)) goto out;
+
+    {
+        const float raster[4]={0,0,PRISM_WIDTH,PRISM_HEIGHT};
+        ep_draw_waiting(p,&layout,elapsed_ms,p->width,p->height,raster);
+    }
+    p->loader_elapsed_ms=elapsed_ms;
+    p->transition_layout=layout;
     gl_error = glGetError();
     if (gl_error != GL_NO_ERROR ||
         !eglSwapBuffers(p->egl_display, p->egl_surface)) goto out;
@@ -846,7 +926,7 @@ out:
  * a decoded picture appear before the PRISM artwork became visible. The light
  * within the glass continues moving from this timestamp. */
 #define EP_PRISM_VISIBLE_MS 2700ULL
-#define EP_LOADER_DEFAULT_MIN_MS 1800ULL
+#define EP_LOADER_DEFAULT_MIN_MS 1000ULL
 
 static uint64_t ep_loader_min_hold_ns(void) {
     const char *env = getenv("ALTSCREEN_LOADER_MIN_MS");
@@ -906,10 +986,14 @@ int screen_egl_present_start_loader(screen_egl_present_t *p) {
     if (!p || !p->gl_lock_initialized) return -1;
     pthread_mutex_lock(&p->gl_lock);
     if (p->loader_thread_started) {
-        ep_arm_loader_hold(p);
         pthread_mutex_unlock(&p->gl_lock);
         return 0;
     }
+    p->transition_pending=1;
+    p->transition_active=0;
+    p->transition_started_ns=0;
+    p->transition_work_ns=p->transition_max_ns=0;
+    p->transition_frames=0;
     p->loader_stop = 0;
     p->loader_exited = 0;
     p->loader_frames = 0;
@@ -934,13 +1018,13 @@ int screen_egl_present_start_loader(screen_egl_present_t *p) {
 }
 
 void screen_egl_present_set_stream_pending(screen_egl_present_t *p, int pending) {
+    int was_pending;
     if (!p) return;
-    if (pending && p->loader_thread_started) {
-        uint64_t now = ep_monotonic_ns();
-        if (p->loader_hold_until_ns == 0 || (now != 0 && now >= p->loader_hold_until_ns))
-            ep_arm_loader_hold(p);
-    }
-    __sync_lock_test_and_set(&p->loader_stream_pending, pending ? 1 : 0);
+    was_pending=__sync_lock_test_and_set(&p->loader_stream_pending, pending ? 1 : 0);
+    /* One deadline per incoming stream, including a persistent idle loader.
+     * Source attachment calls this again: it must not prolong the UX hold. */
+    if (pending && !was_pending && p->loader_thread_started)
+        ep_arm_loader_hold(p);
 }
 
 long screen_egl_present_loader_hold_remaining_ms(screen_egl_present_t *p) {
@@ -1023,6 +1107,7 @@ int screen_egl_present_frame(screen_egl_present_t *p,
     int ok = -1;
     uint64_t entry_ns, swap_begin_ns, phase_us = 0;
     int trace;
+    GLint draw_pos=0, draw_uv=1;
 
     if (!p || source_index >= p->source_count || filled_len == 0) return -1;
 
@@ -1064,6 +1149,29 @@ int screen_egl_present_frame(screen_egl_present_t *p,
         phase_us = n;
     }
 
+    if (p->transition_pending) {
+        p->transition_pending=0;
+        if (p->transition_program) {
+            prism_cache_rect(&p->transition_layout,p->art_rect);
+            glBindFramebuffer(GL_FRAMEBUFFER,p->transition_fbo);
+            ep_draw_waiting(p,&p->transition_layout,p->loader_elapsed_ms,
+                            PRISM_CACHE_WIDTH,PRISM_CACHE_HEIGHT,p->art_rect);
+            glBindFramebuffer(GL_FRAMEBUFFER,0);
+            if (glGetError()==GL_NO_ERROR) {
+                p->transition_active=1;
+                p->transition_started_ns=ep_monotonic_ns();
+                fprintf(stderr,"%s altscreen_render[loader]: Apple flight begin (700 ms, cached glass, native video)\n",log_stamp());
+            }
+        }
+    }
+    if (p->transition_active && ep_monotonic_ns()-p->transition_started_ns >= PRISM_TRANSITION_MS*1000000ULL) {
+        p->transition_active=0;
+        fprintf(stderr,"%s altscreen_render[loader]: Apple flight complete; direct video; frames=%u present_mean_us=%llu max_us=%llu\n",
+                log_stamp(),p->transition_frames,
+                (unsigned long long)(p->transition_frames?p->transition_work_ns/p->transition_frames/1000:0),
+                (unsigned long long)(p->transition_max_ns/1000));
+    }
+
     /* The EGLImage objects are created before OMX ever writes these buffers.
      * Adreno 320 updates luma through the persistent binding, but on this old
      * driver the UV plane/cache state can remain from image creation (solid
@@ -1091,13 +1199,31 @@ int screen_egl_present_frame(screen_egl_present_t *p,
     stage = "draw external image";
     glViewport(0, 0, p->width, p->height);
     glDisable(GL_BLEND);
-    glUseProgram(p->program);
-    glUniform1i(p->uniform_tex, 0);
-    glEnableVertexAttribArray((GLuint)p->attr_pos);
-    glEnableVertexAttribArray((GLuint)p->attr_uv);
-    glVertexAttribPointer((GLuint)p->attr_pos, 2, GL_FLOAT, GL_FALSE, 0,
+    draw_pos=p->attr_pos; draw_uv=p->attr_uv;
+    if (p->transition_active) {
+        float camera[4], mix[4];
+        float progress=(float)(ep_monotonic_ns()-p->transition_started_ns)/(PRISM_TRANSITION_MS*1000000.0f);
+        prism_transition_uniforms(&p->transition_layout,progress,camera,mix);
+        glUseProgram(p->transition_program);
+        glUniform4fv(p->transition_art_rect,1,p->art_rect);
+        glUniform4fv(p->transition_camera,1,camera);
+        glUniform4fv(p->transition_mix,1,mix);
+        glUniform1i(p->transition_video,0);
+        glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D,p->transition_art);
+        glUniform1i(p->transition_art_sampler,1);
+        glActiveTexture(GL_TEXTURE2); glBindTexture(GL_TEXTURE_2D,p->logo_texture);
+        glUniform1i(p->transition_material,2);
+        glActiveTexture(GL_TEXTURE0);
+        draw_pos=p->transition_pos; draw_uv=p->transition_uv;
+    } else {
+        glUseProgram(p->program);
+        glUniform1i(p->uniform_tex, 0);
+    }
+    glEnableVertexAttribArray((GLuint)draw_pos);
+    glEnableVertexAttribArray((GLuint)draw_uv);
+    glVertexAttribPointer((GLuint)draw_pos, 2, GL_FLOAT, GL_FALSE, 0,
                           positions);
-    glVertexAttribPointer((GLuint)p->attr_uv, 2, GL_FLOAT, GL_FALSE, 0,
+    glVertexAttribPointer((GLuint)draw_uv, 2, GL_FLOAT, GL_FALSE, 0,
                           texcoords);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     if (trace) {
@@ -1195,6 +1321,12 @@ out:
     {
         uint64_t end_ns = ep_monotonic_ns();
         if (entry_ns && end_ns >= entry_ns) {
+            if (p->transition_active) {
+                uint64_t duration=end_ns-entry_ns;
+                p->transition_work_ns+=duration;
+                if (duration>p->transition_max_ns) p->transition_max_ns=duration;
+                ++p->transition_frames;
+            }
             uint64_t work = end_ns - entry_ns;
             p->pace_work_samples++;
             p->pace_work_sum_ns += work;
@@ -1212,6 +1344,11 @@ out:
         p->timing_startup_pending = 0;
     pthread_mutex_unlock(&p->gl_lock);
     return ok;
+}
+
+/* Presentation-worker only; teardown joins it before resetting this state. */
+int screen_egl_present_transition_active(screen_egl_present_t *p) {
+    return p && p->transition_active;
 }
 
 void screen_egl_present_reset_timing(screen_egl_present_t *p) {
@@ -1325,6 +1462,9 @@ void screen_egl_present_destroy(screen_egl_present_t *p) {
     release_wait.tv_nsec = 50L * 1000L * 1000L; /* >=3 frames at 60 Hz */
     while (nanosleep(&release_wait, &release_wait) != 0 && errno == EINTR) {}
     ep_release_sources(p);
+    if (p->transition_fbo) glDeleteFramebuffers(1,&p->transition_fbo);
+    if (p->transition_art) glDeleteTextures(1,&p->transition_art);
+    if (p->transition_program) glDeleteProgram(p->transition_program);
     if (p->logo_texture) glDeleteTextures(1, &p->logo_texture);
     if (p->sig_texture) glDeleteTextures(1, &p->sig_texture);
     if (p->loader_program) glDeleteProgram(p->loader_program);

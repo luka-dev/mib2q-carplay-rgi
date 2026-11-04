@@ -122,6 +122,30 @@ static void stop_and_fault_tests(void) {
     recycle_error = 0;
     g_ss.omxError = 0;
 }
+static void flight_updates(int newer_picture) {
+    OMX_BUFFERHEADERTYPE b[3]={{0}},*ptrs[3]={b,b+1,b+2};
+    unsigned before=presents,base=recycled;
+    b[0].nFilledLen=b[2].nFilledLen=1024;
+    g_ss.outBufs=ptrs;g_ss.nOutBufs=3;
+    g_ss.running=g_ss.winReady=g_ss.started=1;
+    g_ss.callbacksClosing=g_ss.omxError=0;g_ss.mailbox=1;
+    transition_until_present=before+5;
+    gpu_block=1;gpu_entered=0;
+    assert(!_StartPresentThread(&g_ss));
+    _OnFillDone(&component,&g_ss,b);
+    pthread_mutex_lock(&gpu_lock);
+    while(!gpu_entered)pthread_cond_wait(&gpu_cond,&gpu_lock);
+    pthread_mutex_unlock(&gpu_lock);
+    _OnFillDone(&component,&g_ss,b+1); /* empty cannot replace held picture */
+    if(newer_picture)_OnFillDone(&component,&g_ss,b+2);
+    pthread_mutex_lock(&gpu_lock);gpu_block=0;pthread_cond_broadcast(&gpu_cond);pthread_mutex_unlock(&gpu_lock);
+    wait_recycled(base+2+(unsigned)newer_picture);
+    _DrainCallbacksAndPresenter(&g_ss);
+    assert(presents==before+5 && last_present_slot==(newer_picture?2u:0u));
+    assert(recycled==base+2+(unsigned)newer_picture);
+    transition_until_present=0;
+}
+
 int main(void) {
     OMX_BUFFERHEADERTYPE only = {0}, *ptr = &only;
     unsigned before;
@@ -146,6 +170,20 @@ int main(void) {
     present_and_wait(&only);
     assert(presents == before + 1 && av_sink_video_ready());
     _DrainCallbacksAndPresenter(&g_ss);
+    /* One decoded picture must finish the transition without input/refills.
+     * It remains client-owned until the final GPU read, then returns once. */
+    g_ss.running=g_ss.winReady=g_ss.started=1;
+    g_ss.callbacksClosing=0;
+    before=presents;
+    unsigned recycle_before=recycled;
+    transition_until_present=before+5;
+    assert(!_StartPresentThread(&g_ss));
+    present_and_wait(&only);
+    assert(presents==before+5 && recycled==recycle_before+1);
+    _DrainCallbacksAndPresenter(&g_ss);
+    transition_until_present=0;
+    flight_updates(0);
+    flight_updates(1);
     stop_and_fault_tests();
     /* Disconnect freezes the RGBA surface: no Apple flash before stock takeover. */
     g_ss.decoder=NULL;g_ss.omxInitialized=1;

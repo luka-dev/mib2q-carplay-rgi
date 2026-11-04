@@ -1,6 +1,7 @@
 // PRISM: light forms the glass Apple; the living material is the waiting state.
 // No external light streak, enclosing orb, separate spinner or sharp caustic.
 uniform vec2 iRes;
+uniform vec4 uRaster; // panel-space rectangle rendered by this viewport
 uniform float iTime;
 uniform vec4 uContent;
 uniform vec4 uSigRect;
@@ -23,7 +24,7 @@ vec3 spectrum(float x) {
 }
 // Curved light volumes and soft internal caustics; no straight flare or glare.
 vec3 liquidLight(vec2 p,float t) {
-    float a=t*0.72;
+    float a=t*1.12;
     p+=0.023*vec2(sin(p.y*11.0+a*0.74),sin(p.x*9.0-a*0.67));
     vec2 cool=vec2(-0.085+0.085*sin(a),0.025+0.060*cos(a*0.81));
     vec2 violet=vec2(0.090*cos(a*0.73+0.8),0.065+0.060*sin(a*0.91));
@@ -38,8 +39,7 @@ vec3 liquidLight(vec2 p,float t) {
 }
 void main() {
     float t=max(0.0,iTime);
-    vec2 panel=vec2(1440.0,542.0);
-    vec2 px=vec2(gl_FragCoord.x/iRes.x,1.0-gl_FragCoord.y/iRes.y)*panel;
+    vec2 px=uRaster.xy+vec2(gl_FragCoord.x/iRes.x,1.0-gl_FragCoord.y/iRes.y)*uRaster.zw;
     vec2 size=uContent.zw,local=px-uContent.xy;
     vec3 col=vec3(0.0);
     float edge=min(min(local.x,local.y),min(size.x-local.x,size.y-local.y));
@@ -87,16 +87,16 @@ void main() {
             optical.r=liquidLight(warped+normal*dispersion,t).r;
             optical.g=liquidLight(warped,t).g;
             optical.b=liquidLight(warped-normal*dispersion,t).b;
-            float lightAngle=-2.1+0.40*sin(t*0.54);
+            float lightAngle=-2.1+1.05*sin(t*1.10);
             vec2 lightDir=vec2(cos(lightAngle),sin(lightAngle));
             float key=pow(max(0.0,dot(normal,lightDir)),3.0);
             float back=pow(max(0.0,dot(normal,-lightDir)),4.0);
-            float upper=pool(q,vec2(-0.09+0.05*sin(t*0.48),-0.10),vec2(0.23,0.085));
-            float lower=pool(q,vec2(0.10,-0.04+0.08*cos(t*0.39)),vec2(0.09,0.19));
-            vec3 glass=vec3(0.065,0.075,0.10)+optical*0.76;
-            glass+=vec3(0.11,0.13,0.17)*upper+vec3(0.09,0.11,0.14)*lower;
-            glass+=bevel*(vec3(0.52,0.64,0.86)*key+vec3(0.37,0.33,0.38)*back);
-            glass+=bevel*spectrum(atan(normal.y,normal.x)/6.2831853-t*0.060)*0.23;
+            float upper=pool(q,vec2(-0.09+0.08*sin(t*0.95),-0.10),vec2(0.23,0.085));
+            float lower=pool(q,vec2(0.10,-0.04+0.09*cos(t*0.78)),vec2(0.09,0.19));
+            vec3 glass=vec3(0.085,0.10,0.135)+optical*1.10;
+            glass+=vec3(0.18,0.23,0.30)*upper+vec3(0.14,0.17,0.23)*lower;
+            glass+=bevel*(vec3(0.64,0.78,0.98)*key+vec3(0.45,0.38,0.50)*back);
+            glass+=bevel*spectrum(atan(normal.y,normal.x)/6.2831853-t*0.10)*0.30;
             // A slight moving lens deformation develops as opacity rises. It
             // changes the transmitted lights, not the silhouette or fill mask.
             col+=mask*glass*fill;

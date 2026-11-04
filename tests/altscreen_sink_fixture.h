@@ -21,7 +21,7 @@ static pthread_t callback_thread;
 static void (*recycle_observer)(OMX_BUFFERHEADERTYPE *);
 static void (*present_observer)(unsigned);
 static unsigned last_present_slot;
-static unsigned waiting_posts, waiting_before_deinit, waiting_stops;
+static unsigned transition_until_present, waiting_posts, waiting_before_deinit, waiting_stops;
 static int waiting_error;
 
 OMX_ERRORTYPE OMX_Init(void) {
@@ -85,6 +85,7 @@ void screen_egl_present_set_stream_pending(screen_egl_present_t *p, int pending)
     (void)p;
     (void)pending;
 }
+int screen_egl_present_transition_active(screen_egl_present_t *p) { (void)p; return presents < transition_until_present; }
 long screen_egl_present_loader_hold_remaining_ms(screen_egl_present_t *p) {
     (void)p;
     return 0;

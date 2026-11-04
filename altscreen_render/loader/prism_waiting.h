@@ -5,8 +5,8 @@
 /* Only these two rectangles can contain resting PRISM artwork. Clear the
  * window to black, then draw both in one batch at native resolution. No shader
  * runs over the rest of the panel; no intermediate image or video texture. */
-static inline void prism_waiting_vertices(const prism_layout_t *layout,
-                                          float vertices[24]) {
+static inline void prism_waiting_vertices_in_rect(const prism_layout_t *layout,
+                                                   const float raster[4], float vertices[24]) {
     float unit=fminf(layout->content[2]*0.78f,
                      (layout->content[3]-30.0f)*1.02f);
     float center_x=layout->content[0]+layout->content[2]*0.5f;
@@ -18,13 +18,17 @@ static inline void prism_waiting_vertices(const prism_layout_t *layout,
     };
     int i;
     for(i=0;i<2;i++) {
-        float l=rects[i][0]*2.0f/PRISM_WIDTH-1.0f;
-        float r=(rects[i][0]+rects[i][2])*2.0f/PRISM_WIDTH-1.0f;
-        float t=1.0f-rects[i][1]*2.0f/PRISM_HEIGHT;
-        float b=1.0f-(rects[i][1]+rects[i][3])*2.0f/PRISM_HEIGHT;
+        float l=(rects[i][0]-raster[0])*2.0f/raster[2]-1.0f;
+        float r=(rects[i][0]+rects[i][2]-raster[0])*2.0f/raster[2]-1.0f;
+        float t=1.0f-(rects[i][1]-raster[1])*2.0f/raster[3];
+        float b=1.0f-(rects[i][1]+rects[i][3]-raster[1])*2.0f/raster[3];
         float *v=vertices+i*12;
         v[0]=l;v[1]=b;v[2]=r;v[3]=b;v[4]=l;v[5]=t;
         v[6]=l;v[7]=t;v[8]=r;v[9]=b;v[10]=r;v[11]=t;
     }
+}
+static inline void prism_waiting_vertices(const prism_layout_t *layout,float vertices[24]) {
+    const float raster[4]={0,0,PRISM_WIDTH,PRISM_HEIGHT};
+    prism_waiting_vertices_in_rect(layout,raster,vertices);
 }
 #endif

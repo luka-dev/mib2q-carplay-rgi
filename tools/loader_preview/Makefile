@@ -6,8 +6,8 @@ CFLAGS = -O2 -std=c99 -Wall -Wextra -I$(BREW)/include
 LDFLAGS = $(BREW)/lib/libglfw3.a -framework OpenGL -framework Cocoa -framework IOKit -framework CoreVideo -framework QuartzCore
 BIN = prism_preview
 LOADER = ../../altscreen_render/loader
-HEADERS = $(LOADER)/prism.h $(LOADER)/prism_baked.h $(LOADER)/loader_layout.h $(LOADER)/prism_waiting.h
-TESTS = .prism-test-waiting
+HEADERS = $(LOADER)/prism.h $(LOADER)/prism_baked.h $(LOADER)/loader_layout.h $(LOADER)/prism_waiting.h $(LOADER)/prism_transition.h
+TESTS = .prism-test-waiting .prism-test-transition
 
 all: $(BIN)
 
@@ -17,8 +17,12 @@ $(BIN): prism_preview.c $(LOADER)/prism.c $(HEADERS)
 .prism-test-waiting: test_prism_waiting.c $(LOADER)/prism.c $(HEADERS)
 	$(CC) $(CFLAGS) test_prism_waiting.c $(LOADER)/prism.c -o $@ $(LDFLAGS)
 
+.prism-test-transition: test_prism_transition.c prism_preview.c $(LOADER)/prism.c $(HEADERS)
+	$(CC) $(CFLAGS) test_prism_transition.c $(LOADER)/prism.c -o $@ $(LDFLAGS)
+
 check: $(TESTS)
 	./.prism-test-waiting
+	./.prism-test-transition
 
 run: $(BIN)
 	./$(BIN)

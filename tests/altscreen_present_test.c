@@ -10,14 +10,14 @@ static int test_clock_gettime(clockid_t clock_id, struct timespec *now);
 
 static screen_egl_present_t presenter;
 static volatile unsigned loader_posts, video_posts;
-static unsigned active_program, draws, finishes, refreshes;
+static unsigned active_program, draws, finishes, refreshes, framebuffer, cache_draws;
 static int fail_post, fail_interval, native_interval;
 static unsigned recovery_intervals, recovery_destroyed;
 static uint64_t fake_now_ns, finish_delay_ns, swap_delay_ns;
 static float first_loader_time = -1.0f;
 
 static int test_clock_gettime(clockid_t clock_id, struct timespec *now) {
-    if (!fake_now_ns) return clock_gettime(clock_id, now);
+    if (!fake_now_ns || clock_id != CLOCK_MONOTONIC) return clock_gettime(clock_id, now);
     assert(clock_id == CLOCK_MONOTONIC);
     now->tv_sec = (time_t)(fake_now_ns / 1000000000ULL);
     now->tv_nsec = (long)(fake_now_ns % 1000000000ULL);
@@ -45,7 +45,7 @@ EGLBoolean eglSwapBuffers(EGLDisplay d,EGLSurface s) {
     (void)d;(void)s;
     if (active_program == 11) __sync_add_and_fetch(&loader_posts, 1);
     else {
-        assert(active_program == 22 && !presenter.loader_thread_started);
+        assert((active_program == 22 || active_program == 33) && !presenter.loader_thread_started);
         assert(presenter.loader_exited && finishes >= video_posts + 1);
         if (fail_post) return 0;
         if (fake_now_ns) fake_now_ns += swap_delay_ns;
@@ -54,13 +54,14 @@ EGLBoolean eglSwapBuffers(EGLDisplay d,EGLSurface s) {
     return 1; /* hidden-window case: swap doesn't pace the loader */
 }
 GLenum glGetError(void) { return GL_NO_ERROR; }
+void glBindFramebuffer(GLenum target, GLuint id) { assert(target == GL_FRAMEBUFFER); framebuffer=id; }
 void glUseProgram(GLuint p) { active_program = p; }
 void glFinish(void) {
     ++finishes;
     if (fake_now_ns) fake_now_ns += finish_delay_ns;
 }
 void glViewport(GLint x,GLint y,GLsizei w,GLsizei h)
-{ assert(x == 0 && y == 0 && w == 1440 && h == 542); }
+{ assert(x == 0 && y == 0 && ((w == 1440 && h == 542) || (w == PRISM_CACHE_WIDTH && h == PRISM_CACHE_HEIGHT))); }
 void glDisable(GLenum c) { (void)c; }
 void glUniform1i(GLint l,GLint v) { (void)l;(void)v; }
 void glUniform1f(GLint l,GLfloat v) {
@@ -84,6 +85,7 @@ void glDrawArrays(GLenum mode,GLint first,GLsizei count)
     assert(first==0);
     if(active_program==11) assert(mode==GL_TRIANGLES && count==12);
     else assert(mode==GL_TRIANGLE_STRIP && count==4);
+    if (framebuffer) ++cache_draws;
     ++draws;
 }
 static void refresh(GLenum target,GLeglImageOES image) {
@@ -125,6 +127,50 @@ int main(void) {
     wait_for_loader(stopped_posts+1);
     assert(screen_egl_present_frame(&presenter,0,1024)==0);
     assert(!presenter.loader_thread_started && presenter.loader_exited);
+
+    /* Flight uses one cached-art draw, then one external-video draw per tick.
+     * Real time controls completion: it does not need another phone frame. */
+    presenter.transition_program=33;
+    presenter.transition_fbo=44;
+    assert(screen_egl_present_start_loader(&presenter)==0);
+    screen_egl_present_stop_loader(&presenter);
+    fake_now_ns=1000000000ULL;
+    unsigned cache_before=cache_draws, video_before=video_posts;
+    for (int i=0;i<8;i++) {
+        fake_now_ns=1000000000ULL+(uint64_t)i*100000000ULL;
+        assert(screen_egl_present_frame(&presenter,0,1024)==0);
+        assert(screen_egl_present_transition_active(&presenter)==(i<7));
+        assert(cache_draws==cache_before+1);
+        assert(active_program==(i<7?33u:22u));
+    }
+    assert(video_posts==video_before+8);
+    for(int i=0;i<10;i++) assert(screen_egl_present_frame(&presenter,0,1024)==0);
+    assert(cache_draws==cache_before+1 && active_program==22);
+    fake_now_ns=0;
+    assert(screen_egl_present_start_loader(&presenter)==0);
+    assert(!presenter.transition_active && presenter.transition_pending);
+    screen_egl_present_stop_loader(&presenter);
+    presenter.transition_program=0;
+
+    /* The one-second minimum is armed once per stream. Repeated pending
+     * notifications/source attachment cannot turn it into a sliding timer. */
+    fake_now_ns=1000000000ULL;
+    presenter.loader_thread_started=1; /* clock-only fixture, no live thread */
+    presenter.loader_stream_pending=0;
+    screen_egl_present_set_stream_pending(&presenter,1);
+    assert(screen_egl_present_loader_hold_remaining_ms(&presenter)==1000);
+    fake_now_ns=1750000000ULL;
+    screen_egl_present_set_stream_pending(&presenter,1);
+    assert(screen_egl_present_loader_hold_remaining_ms(&presenter)==250);
+    fake_now_ns=2100000000ULL;
+    screen_egl_present_set_stream_pending(&presenter,1);
+    assert(screen_egl_present_loader_hold_remaining_ms(&presenter)==0);
+    screen_egl_present_set_stream_pending(&presenter,0);
+    screen_egl_present_set_stream_pending(&presenter,1);
+    assert(screen_egl_present_loader_hold_remaining_ms(&presenter)==1000);
+    presenter.loader_thread_started=0;
+    presenter.loader_stream_pending=0;
+    fake_now_ns=0;
 
     /* A cheap swap does not establish a cheap callback: OMX cannot reuse the
      * sampled source until glFinish has completed. Use a fake clock after the

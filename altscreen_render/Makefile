@@ -46,7 +46,7 @@ endif
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
-$(TARGET): $(SRC) pipeline_timing.h sink.h loader/prism_baked.h loader/prism.h loader/prism_waiting.h loader/loader_layout.h | $(BUILD_DIR)
+$(TARGET): $(SRC) pipeline_timing.h sink.h loader/prism_baked.h loader/prism.h loader/prism_waiting.h loader/prism_transition.h loader/loader_layout.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(SRC) -o $@ $(LDFLAGS)
 
 $(TESTBIN): test_feed.c frame_io.c | $(BUILD_DIR)

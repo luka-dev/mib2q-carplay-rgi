@@ -27,6 +27,8 @@ static GLuint program(const char *fragment) {
     glUseProgram(p);
     glUniform1i(glGetUniformLocation(p,"uMaterial"),0);
     glUniform1i(glGetUniformLocation(p,"uSig"),1);
+    const float raster[4]={0,0,PRISM_WIDTH,PRISM_HEIGHT};
+    glUniform4fv(glGetUniformLocation(p,"uRaster"),1,raster);
     glUniform2f(glGetUniformLocation(p,"iRes"),PRISM_WIDTH,PRISM_HEIGHT);
     return p;
 }
@@ -65,7 +67,7 @@ int main(void) {
     glDisable(GL_BLEND);glDisable(GL_DITHER);
     GLuint waiting=program(PRISM_WAITING_DESKTOP);
     GLint uniforms;glGetProgramiv(waiting,GL_ACTIVE_UNIFORMS,&uniforms);
-    assert(uniforms==6); /* resolution, time, two rectangles and two art samplers */
+    assert(uniforms==7); /* resolution, time, raster, two rectangles and two art samplers */
     GLuint material=upload(GL_TEXTURE0,PRISM_MATERIAL_PNG,sizeof(PRISM_MATERIAL_PNG));
     GLuint signature=upload(GL_TEXTURE1,PRISM_SIGNATURE_PNG,sizeof(PRISM_SIGNATURE_PNG));
     const size_t bytes=(size_t)PRISM_WIDTH*PRISM_HEIGHT*4;
@@ -104,6 +106,6 @@ int main(void) {
     free(a);free(b);glDeleteProgram(waiting);
     glDeleteTextures(1,&material);glDeleteTextures(1,&signature);
     glfwDestroyWindow(win);glfwTerminate();
-    puts("PRISM waiting: same artwork, native resolution, six artwork uniforms, black margins and opaque clear PASS");
+    puts("PRISM waiting: same artwork, native resolution, seven artwork uniforms, black margins and opaque clear PASS");
     return 0;
 }
