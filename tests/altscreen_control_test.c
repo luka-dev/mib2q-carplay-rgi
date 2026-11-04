@@ -35,6 +35,7 @@ void av_sink_session_end(void) {
     picture_ready = 0;
     pthread_mutex_unlock(&test_lock);
 }
+int av_sink_loader_ready(void) { return 0; }
 int av_sink_video_ready(void) {
     int r;
     pthread_mutex_lock(&test_lock);
@@ -86,7 +87,7 @@ static void *publish(void *unused) {
         pthread_mutex_unlock(&test_lock);
         if (stop)
             return NULL;
-        (void)decode_video_ready();
+        (void)(decode_presentation_state() == ALT_PRESENT_VIDEO);
         nanosleep(&pause, NULL);
     }
 }

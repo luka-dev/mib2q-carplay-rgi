@@ -61,6 +61,7 @@ compare("maneuver_render/protocol.h", "java_patch/com/luka/carplay/rgd/RendererS
 }, ("CMD_", "EVT_", "MAN_FLAG_"))
 compare("altscreen_render/protocol.h", "java_patch/com/luka/carplay/core/AltscreenControlServer.java", {
     "ALTCTL_PORT": "PORT", "ALTEVT_VIDEO_ON": "EVT_VIDEO_ON", "ALTEVT_VIDEO_OFF": "EVT_VIDEO_OFF",
+    "ALTEVT_LOADER_READY": "EVT_LOADER_READY",
     "ALTCMD_VIEW_AREA": "CMD_VIEW_AREA",
 })
 print(f"Local transport constants: {checks} matching Java/C ports, opcodes, flags, sizes and limits")

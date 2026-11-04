@@ -79,6 +79,8 @@ int av_sink_video_ready(void) {
     return ready;
 }
 
+int av_sink_loader_ready(void) { return 0; }
+
 void av_sink_session_end(void) {
     pthread_mutex_lock(&g_ready_lock);
     g_ready = 0;

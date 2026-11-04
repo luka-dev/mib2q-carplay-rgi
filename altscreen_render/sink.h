@@ -34,6 +34,11 @@ int av_sink_frame_ex(const uint8_t *annexb, uint32_t len, uint64_t received_ms,
  * by the control thread; the implementation must synchronize the snapshot
  * with its decode callbacks and suppress readiness during teardown. */
 int  av_sink_video_ready(void);
+/* A fresh waiting frame was posted for the current session. False at teardown
+ * and after video takes over; the control channel also fences decode generations. */
+int  av_sink_loader_ready(void);
+
+enum { ALT_PRESENT_OFF = 0, ALT_PRESENT_VIDEO = 1, ALT_PRESENT_LOADER = 2 };
 
 /* Select the startup-loader geometry.  style: 0=Sport,
  * 1=Classic, 255=unknown (preserve the current/default Sport geometry).

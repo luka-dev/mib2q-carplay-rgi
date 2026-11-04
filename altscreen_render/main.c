@@ -568,15 +568,17 @@ static int decode_startup_drained_locked(int ready, uint64_t now) {
     return alt_queue_can_enter_steady(&view, now);
 }
 
-static int decode_video_ready(void) {
-    int ready, backlogged = 0;
+static int decode_presentation_state(void) {
+    int ready, loader = 0, current, backlogged = 0;
     uint32_t generation;
     pthread_mutex_lock(&g_decode_lock);
     /* Keep the generation and sink snapshot together. The sink readiness lock
      * is a leaf here: no sink callback acquires g_decode_lock. An old callback
      * or queued END must never make a new/unconnected stream appear ready. */
-    ready = !g_decode_stop && !g_decode_failed && g_decode_client_fd >= 0 &&
-        g_decode_active_generation == g_decode_generation && av_sink_video_ready();
+    current = !g_decode_stop && !g_decode_failed && g_decode_client_fd >= 0 &&
+        g_decode_active_generation == g_decode_generation;
+    ready = current && av_sink_video_ready();
+    if (current && !ready) loader = av_sink_loader_ready();
     {
         uint64_t now = decode_now_ms();
         if (!g_decode_steady && decode_startup_drained_locked(ready, now))
@@ -592,7 +594,7 @@ static int decode_video_ready(void) {
     decode_health_send_locked(backlogged ? 0 : ready);
     pthread_mutex_unlock(&g_decode_lock);
     (void)generation;
-    return ready;
+    return ready ? ALT_PRESENT_VIDEO : (loader ? ALT_PRESENT_LOADER : ALT_PRESENT_OFF);
 }
 
 static void decode_worker_stop(void) {
@@ -842,9 +844,9 @@ int main(void) {
     __sync_synchronize();
     fprintf(stderr, "%s altscreen_render: listening on %s:%d\n", log_stamp(), ALTAV_HOST, ALTAV_PORT);
 
-    /* Start only after av_sink_open has posted PRISM. Java treats the first
-     * VIDEO_ON/OFF as surface readiness before selecting cluster plane 99. */
-    altctl_start(decode_video_ready);
+    /* Start after sink initialization. Only a current stream's LOADER_READY
+     * or VIDEO_ON permits Java to select cluster plane 99. */
+    altctl_start(decode_presentation_state);
 
     while (g_running) {
         int cfd = accept(lfd, NULL, NULL);

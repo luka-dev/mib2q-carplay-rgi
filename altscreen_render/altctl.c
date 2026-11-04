@@ -21,7 +21,7 @@
 #include <netinet/tcp.h>
 #include <arpa/inet.h>
 
-static int (*g_video_ready)(void);   /* installed before thread creation */
+static int (*g_presentation_state)(void);   /* installed before thread creation */
 static volatile int g_run = 0;
 static volatile int g_exited = 1;
 static pthread_t     g_thr;
@@ -73,7 +73,7 @@ static void *ctl_loop(void *arg) {
     unsigned int rx_used = 0;
     while (g_run) {
         /* Sample/publish hook health even while the Java control peer is absent. */
-        int state = g_video_ready && g_video_ready();
+        int state = g_presentation_state ? g_presentation_state() : ALT_PRESENT_OFF;
         if (fd < 0) {
             fd = ctl_connect();
             last_sent = -1;                       /* force resend of the current state on (re)connect */
@@ -92,11 +92,14 @@ static void *ctl_loop(void *arg) {
         if (state != last_sent) {
             unsigned char pkt[ALTCTL_PKT_SIZE];
             memset(pkt, 0, sizeof(pkt));
-            pkt[0] = (unsigned char)(state ? ALTEVT_VIDEO_ON : ALTEVT_VIDEO_OFF);
+            pkt[0] = (unsigned char)(state == ALT_PRESENT_VIDEO ? ALTEVT_VIDEO_ON
+                : (state == ALT_PRESENT_LOADER ? ALTEVT_LOADER_READY : ALTEVT_VIDEO_OFF));
             ssize_t k = send(fd, pkt, sizeof(pkt), 0);
             if (k != (ssize_t)sizeof(pkt)) { close(fd); fd = -1; continue; }  /* reconnect */
             last_sent = state;
-            fprintf(stderr, "%s altscreen_render: -> VIDEO_%s\n", log_stamp(), state ? "ON" : "OFF");
+            fprintf(stderr, "%s altscreen_render: -> %s\n", log_stamp(),
+                    state == ALT_PRESENT_VIDEO ? "VIDEO_ON" :
+                    (state == ALT_PRESENT_LOADER ? "LOADER_READY" : "VIDEO_OFF"));
         }
 
         /* 20 ms poll (~50 Hz state sampling) with instant wakeup on incoming
@@ -116,6 +119,10 @@ static void *ctl_loop(void *arg) {
                     if (rx[0] == ALTCMD_VIEW_AREA) {
                         av_sink_set_layout(rx[1] == 1 ? 1 : 0,
                                            (int)rx[2], (int)rx[3]);
+                        /* Module start replays layout after a lifecycle bounce.
+                         * Re-sample even if the same stream stayed ON: Java
+                         * cleared readiness on stop and needs fresh evidence. */
+                        last_sent = -1;
                     } else {
                         fprintf(stderr, "altscreen_render: unknown control command 0x%02x\n",
                                 (unsigned int)rx[0]);
@@ -135,9 +142,9 @@ static void *ctl_loop(void *arg) {
     return NULL;
 }
 
-void altctl_start(int (*video_ready)(void)) {
+void altctl_start(int (*presentation_state)(void)) {
     if (g_run) return;
-    g_video_ready = video_ready;
+    g_presentation_state = presentation_state;
     g_run = 1;
     g_exited = 0;
     if (pthread_create(&g_thr, NULL, ctl_loop, NULL) != 0) {

@@ -14,9 +14,10 @@
 #ifndef ALTSCREEN_ALTCTL_H
 #define ALTSCREEN_ALTCTL_H
 
-/* Called by the existing control thread, without its own locks, about every 100 ms.
+/* Called by the existing control thread, without its own locks, about every 20 ms.
  * The provider must be quick and must reject ended/superseded decode generations. */
-void altctl_start(int (*video_ready)(void)); /* provider stays valid until stop */
+/* Returns ALT_PRESENT_OFF / VIDEO / LOADER from sink.h. */
+void altctl_start(int (*presentation_state)(void)); /* provider stays valid until stop */
 void altctl_stop(void);         /* join the control thread */
 
 #endif /* ALTSCREEN_ALTCTL_H */

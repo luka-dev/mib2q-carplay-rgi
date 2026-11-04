@@ -454,6 +454,7 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
                 ? CTX_CLUSTER_MAP : CTX_STOCK_CLUSTER;
             sendRgiStateLocked();   /* navActive is false here: reset the hook's URL state */
         }
+        AltscreenControlServer.requestRendererState();
         synchronized (LOCK) {
             /* Create the single persistent worker once; recreate only if it never started or died.
              * Assign the field ONLY after start() succeeds so a throw leaves worker==null for retry. */
@@ -479,6 +480,7 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
         synchronized (LOCK) {
             connected = false;
             videoAvailable = false;
+            rendererReady = false; /* a reconnect must wait for freshly posted content */
             navActive = false;
             navHidePending = false;
             clusterActive = false;

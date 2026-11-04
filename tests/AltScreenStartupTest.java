@@ -58,13 +58,10 @@ public final class AltScreenStartupTest {
                 "physical context changed before a renderer frame was ready");
         }
     }
-    private static void publishStop() throws Exception {
-        Object lock = field("LOCK").get(null);
-        synchronized (lock) {
-            field("connected").setBoolean(null, false);
-            field("desiredCtx").setInt(null, 74);
-            lock.notifyAll();
-        }
+    private static void publishStop(AltScreenModule module) throws Exception {
+        field("enabled").setBoolean(module, true);
+        module.stop();
+        check(!field("rendererReady").getBoolean(null), "stop retained the previous session's readiness");
     }
     public static void main(String[] args) throws Exception {
         Log.setLevel(-1);
@@ -96,7 +93,7 @@ public final class AltScreenStartupTest {
 
         if ("stop".equals(scenario)) {
             display.expectQuiet();
-            publishStop();
+            publishStop(module);
             display.expect(74);
             display.expectQuiet();
             check(display.rate == 30, "stock frame rate was not restored");
@@ -118,8 +115,7 @@ public final class AltScreenStartupTest {
             display.expect(81);
             check(!field("videoAvailable").getBoolean(null), "PRISM required decoded video");
             display.expectQuiet();
-            AltScreenModule.setRendererReady(false);
-            publishStop();
+            publishStop(module);
             display.expect(74);
             display.expectQuiet();
             check(!AltScreenModule.isConnected() && display.rate == 30, "release failed");

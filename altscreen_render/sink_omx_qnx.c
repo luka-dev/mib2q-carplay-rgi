@@ -127,6 +127,7 @@ typedef struct {
     unsigned long            outputPostFailed;
     uint64_t                 newestInputMs; /* protected by lock; QNX is 32-bit */
     int                      presentationHealthy;
+    int                      loaderReady; /* posted for this session; guarded by lock */
     int                      presentConsecutiveFails;
     int                      presentRecoveryPending;
     int                      presentRecoveryAttempts;
@@ -261,6 +262,7 @@ static int _PresentGpu(ScreenSink *me, OMX_BUFFERHEADERTYPE *b) {
         result = screen_egl_present_frame(me->present, (unsigned int)i,
                                           b->nFilledLen);
         pthread_mutex_lock(&me->lock);
+        me->loaderReady = 0; /* the first video attempt stops the waiting renderer */
         if (result == 0) {
             me->outputPosted++;
             if (me->timing_enabled) {
@@ -788,6 +790,9 @@ static int _WaitState(ScreenSink *me, OMX_STATETYPE want, long timeoutMs) {
 }
 
 static void _DestroyPresent(ScreenSink *me) {
+    pthread_mutex_lock(&me->lock);
+    me->loaderReady = 0;
+    pthread_mutex_unlock(&me->lock);
     me->winReady = 0;
     if (me->present) {
         screen_egl_present_destroy(me->present);
@@ -795,6 +800,16 @@ static void _DestroyPresent(ScreenSink *me) {
     }
     me->presentOutCount = 0;
     me->presentWidth = me->presentHeight = 0;
+}
+
+/* Only the serialized decode worker starts/stops the loader. Publish readiness
+ * after the synchronous PRISM swap, never merely because the surface exists. */
+static int _StartLoader(ScreenSink *me) {
+    int rc = screen_egl_present_start_loader(me->present);
+    pthread_mutex_lock(&me->lock);
+    me->loaderReady = rc == 0;
+    pthread_mutex_unlock(&me->lock);
+    return rc;
 }
 
 static int _CreateEarlyPresent(ScreenSink *me) {
@@ -808,7 +823,7 @@ static int _CreateEarlyPresent(ScreenSink *me) {
     me->presentWidth = me->width;
     me->presentHeight = me->height;
     me->presentOutCount = 0;
-    if (screen_egl_present_start_loader(me->present) != 0) {
+    if (_StartLoader(me) != 0) {
         _DestroyPresent(me);
         return -1;
     }
@@ -1162,7 +1177,15 @@ static int _TeardownOmxJoined(ScreenSink *me) {
 }
 
 static void _Teardown(ScreenSink *me, int destroyPresent) {
-    if (!me->decoder && (!destroyPresent || !me->present) && !me->omxInitialized) return;
+    pthread_mutex_lock(&me->lock);
+    me->loaderReady = 0;
+    pthread_mutex_unlock(&me->lock);
+    /* Also stop an early loader if no OMX component was ever created. Keep the
+     * posted RGBA frame: Java may still be switching away from plane 99. */
+    if (!me->decoder && (!destroyPresent || !me->present) && !me->omxInitialized) {
+        if (me->present) screen_egl_present_stop_loader(me->present);
+        return;
+    }
     if (me->coreFatal) {
         /* The core reported Timeout/Hardware/Invalid while starting or
          * decoding: every further OMX call risks the wedged hang and the core
@@ -1173,6 +1196,9 @@ static void _Teardown(ScreenSink *me, int destroyPresent) {
         av_sink_fatal_exit(86, "core_fatal");
     }
     _DrainCallbacksAndPresenter(me);
+    if (me->present) screen_egl_present_stop_loader(me->present);
+    /* Do not redraw PRISM at session end. The last RGBA swap stays intact
+     * until Java restores stock; the next decoder start posts a fresh loader. */
     if (me->decoder || me->omxInitialized) {
         if (!_TeardownOmxJoined(me)) {
             char reason[ALT_REASON_MAX];
@@ -1221,10 +1247,7 @@ static void _Teardown(ScreenSink *me, int destroyPresent) {
     if (!destroyPresent && me->present) {
         screen_egl_present_reset_timing(me->present);
         screen_egl_present_set_stream_pending(me->present, 0);
-        /* Do not restart the PRISM waiting shader during teardown: plane 99 is
-         * still briefly visible while the cluster switches back to stock ctx 74,
-         * and restarting the loader here caused a sub-second watermark flash on
-         * phone disconnect.  The loader is restarted on the next session start. */
+        /* The next session must post PRISM before reporting loader readiness. */
     }
 }
 
@@ -1235,8 +1258,7 @@ static int _StartDecoder(ScreenSink *me) {
     uint64_t begin = _NowMs(), sourcesReady;
     fprintf(stderr, "altscreen_render[qnx]: decoder start begin at %llu ms\n",
             (unsigned long long)begin);
-    if (me->present)
-        screen_egl_present_start_loader(me->present);
+    if (me->present && _StartLoader(me) != 0) goto fail;
     screen_egl_present_set_stream_pending(me->present, 1);
     pthread_mutex_lock(&me->lock);
     me->callbacksClosing = 0;
@@ -1625,14 +1647,20 @@ int av_sink_video_ready(void) {
     return ready;
 }
 
+int av_sink_loader_ready(void) {
+    int ready;
+    pthread_mutex_lock(&g_ss.lock);
+    ready = !g_ss.callbacksClosing && !g_ss.omxError && g_ss.loaderReady;
+    pthread_mutex_unlock(&g_ss.lock);
+    return ready;
+}
+
 void av_sink_set_layout(int mode, int style, int rawSkin) {
     const char *layoutName;
     mode = mode == 1 ? 1 : 0;
     g_ss.viewAreaMode = mode;
     if (style == LOADER_STYLE_SPORT || style == LOADER_STYLE_CLASSIC)
         g_ss.layoutStyle = style;
-    if (!g_ss.started && !g_ss.callbacksClosing && g_ss.present)
-        screen_egl_present_start_loader(g_ss.present);
     layoutName = !mode ? "fullscreen"
         : (g_ss.layoutStyle == LOADER_STYLE_CLASSIC
             ? "classicscreen" : "sportscreen");

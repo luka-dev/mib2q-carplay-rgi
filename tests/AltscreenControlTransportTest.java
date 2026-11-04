@@ -61,14 +61,26 @@ public final class AltscreenControlTransportTest {
         Peer old = new Peer(true), fresh = new Peer(false);
         Object lock = field("LOCK").get(null);
         field("run").setBoolean(null, true);
-        Peer waiting = new Peer(false, 0x82);
+        Peer waiting = new Peer(false, 0x83);
         synchronized (lock) { field("client").set(null, waiting); field("clientGeneration").setInt(null, 0); }
+        AltscreenControlServer.requestRendererState();
+        check(field("writePending").getBoolean(null) && field("writeGeneration").getInt(null) == 0,
+            "lifecycle restart must request readiness from the current renderer");
         Thread waitingReader = serve(waiting, 0);
         long deadline = System.currentTimeMillis() + 3000;
         while (!AltScreenModule.ready && System.currentTimeMillis() < deadline) Thread.sleep(5);
-        check(AltScreenModule.ready && !AltScreenModule.video, "VIDEO_OFF must expose the posted PRISM frame");
+        check(AltScreenModule.ready && !AltScreenModule.video, "LOADER_READY must expose the fresh PRISM frame");
         waiting.close(); waitingReader.join(3000);
         check(!waitingReader.isAlive() && !AltScreenModule.ready, "current disconnect left stale readiness");
+        AltScreenModule.ready = AltScreenModule.video = true;
+        Peer ended = new Peer(false, 0x82);
+        synchronized (lock) { field("client").set(null, ended); field("clientGeneration").setInt(null, 1); }
+        Thread endedReader = serve(ended, 1);
+        deadline = System.currentTimeMillis() + 3000;
+        while ((AltScreenModule.ready || AltScreenModule.video) && System.currentTimeMillis() < deadline) Thread.sleep(5);
+        check(!AltScreenModule.ready && !AltScreenModule.video, "VIDEO_OFF must invalidate the previous picture");
+        ended.close(); endedReader.join(3000);
+        check(!endedReader.isAlive(), "ended reader did not stop");
         synchronized (lock) { field("client").set(null, old); field("clientGeneration").setInt(null, 1); }
         Thread oldReader = serve(old, 1); await(old.closing);
         synchronized (lock) { field("client").set(null, fresh); field("clientGeneration").setInt(null, 2); }

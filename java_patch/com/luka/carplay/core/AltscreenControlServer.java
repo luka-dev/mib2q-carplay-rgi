@@ -4,8 +4,8 @@
  * The H.264 DATA path is separate (libairplay hook -> altscreen_render :19831).  This is the
  * CONTROL path: altscreen_render connects here (client) and sends 4-byte events reporting whether
  * the CarPlay 111 cluster video is flowing (0x81 VIDEO_ON / 0x82 VIDEO_OFF).
- * Its control loop starts after the first PRISM frame is posted, so either valid event also
- * confirms surface readiness. VIDEO_OFF is a ready waiting surface, not an unready renderer.
+ * LOADER_READY (0x83) confirms a fresh PRISM frame for the current stream. VIDEO_OFF
+ * invalidates readiness: an idle surface can still contain the previous phone picture.
  *
  * VIDEO_ON is also a data-plane fallback for the cluster context.  TMDev can publish a transient
  * INVALID while dio restarts and fail to publish a matching activation afterwards even though the
@@ -32,6 +32,7 @@ final class AltscreenControlServer {
     private static final int    PORT = 19832;            /* must match altscreen protocol.h ALTCTL_PORT */
     private static final int    EVT_VIDEO_ON  = 0x81;
     private static final int    EVT_VIDEO_OFF = 0x82;
+    private static final int    EVT_LOADER_READY = 0x83;
     private static final int    CMD_VIEW_AREA = 0x01;
     static final int STYLE_SPORT   = 0;
     static final int STYLE_CLASSIC = 1;
@@ -54,6 +55,12 @@ final class AltscreenControlServer {
     private static int writeRawSkin;
 
     private AltscreenControlServer() {}
+
+    /** Replay cached layout to request a fresh readiness snapshot, even if the
+     * native stream survived a Java lifecycle stop/start unchanged. */
+    static void requestRendererState() {
+        synchronized (LOCK) { queueViewAreaLocked("module-start"); }
+    }
 
     /** Cache and publish the current Audi View-button state. */
     static void setViewAreaMode(int mode) {
@@ -207,8 +214,12 @@ final class AltscreenControlServer {
                         AltScreenModule.setVideoAvailable(true);
                     } else if (evt == EVT_VIDEO_OFF) {
                         Log.i(TAG, "VIDEO_OFF generation=" + generation);
-                        AltScreenModule.setRendererReady(true);
+                        AltScreenModule.setRendererReady(false);
                         AltScreenModule.setVideoAvailable(false);
+                    } else if (evt == EVT_LOADER_READY) {
+                        Log.i(TAG, "LOADER_READY generation=" + generation);
+                        AltScreenModule.setVideoAvailable(false);
+                        AltScreenModule.setRendererReady(true);
                     }
                 }
             }

@@ -33,6 +33,7 @@ int av_sink_frame_ex(const uint8_t *b, uint32_t n, uint64_t stamp, const alt_fra
     return av_sink_frame(b, n, stamp);
 }
 void av_sink_session_end(void) { }
+int av_sink_loader_ready(void) { return 0; }
 int av_sink_video_ready(void) { return 0; }
 const char *av_sink_omx_stage(void) { return 0; }
 void av_sink_fatal_exit(int code, const char *reason) {

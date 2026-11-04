@@ -21,7 +21,7 @@ int av_read_frame_mode(int, uint8_t **, uint32_t *, uint32_t *, alt_frame_meta_t
 static pthread_mutex_t test_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t test_cond = PTHREAD_COND_INITIALIZER;
 static unsigned reads, sink_calls;
-static int allow_picture, ready, hold_reset, reset_entered;
+static int allow_picture, ready, loader_ready, hold_reset, reset_entered;
 
 int observed_read_frame(int fd, uint8_t **buf, uint32_t *cap, uint32_t *len, alt_frame_meta_t *meta,
                         unsigned mode) {
@@ -36,9 +36,11 @@ int av_sink_frame(const uint8_t *b, uint32_t n, uint64_t stamp) {
     (void)b; (void)n; (void)stamp;
     pthread_mutex_lock(&test_lock);
     ++sink_calls;
+    loader_ready = 1;
     pthread_cond_broadcast(&test_cond);
     while (!allow_picture) pthread_cond_wait(&test_cond, &test_lock);
     ready = 1;
+    loader_ready = 0;
     pthread_cond_broadcast(&test_cond);
     pthread_mutex_unlock(&test_lock);
     return 0;
@@ -53,7 +55,13 @@ void av_sink_session_end(void) {
     pthread_cond_broadcast(&test_cond);
     while (hold_reset) pthread_cond_wait(&test_cond, &test_lock);
     ready = 0;
+    loader_ready = 0;
     pthread_mutex_unlock(&test_lock);
+}
+int av_sink_loader_ready(void) {
+    int r;
+    pthread_mutex_lock(&test_lock); r = loader_ready; pthread_mutex_unlock(&test_lock);
+    return r;
 }
 int av_sink_video_ready(void) {
     int r;
@@ -165,7 +173,7 @@ int main(void) {
     test_control_port = ntohs(addr.sin_port);
     assert(listen(listener, 2) == 0);
     assert(decode_worker_start() == 0);
-    altctl_start(decode_video_ready);
+    altctl_start(decode_presentation_state);
     control = accept_control(listener);
     expect_event(control, ALTEVT_VIDEO_OFF);
 
@@ -174,7 +182,8 @@ int main(void) {
     assert(pthread_create(&reader, NULL, read_thread, &a) == 0);
     assert(write(pair[1], record, sizeof(record)) == sizeof(record));
     wait_for_static_reader(2);
-    expect_silence(control); /* queued input alone is not a presented frame */
+    expect_event(control, ALTEVT_LOADER_READY);
+    expect_silence(control); /* loader readiness is distinct from video */
     release_picture();
     expect_event(control, ALTEVT_VIDEO_ON); /* no next input packet */
     expect_silence(control); /* healthy static video stays on */
@@ -184,6 +193,11 @@ int main(void) {
     shutdown(control, SHUT_RDWR); close(control);
     control = accept_control(listener);
     expect_event(control, ALTEVT_VIDEO_ON); /* control reconnect re-samples */
+    {
+        unsigned char layout[ALTCTL_PKT_SIZE] = { ALTCMD_VIEW_AREA, 0, 0, 0 };
+        assert(write(control, layout, sizeof(layout)) == sizeof(layout));
+        expect_event(control, ALTEVT_VIDEO_ON); /* lifecycle bounce, no new frame */
+    }
     shutdown(pair[1], SHUT_RDWR); pthread_join(reader, NULL);
     expect_event(control, ALTEVT_VIDEO_OFF); /* socket end wins over a late frame */
     close(pair[0]); close(pair[1]);
@@ -195,7 +209,7 @@ int main(void) {
     next.fd = next_pair[0]; next.generation = decode_queue_begin(next.fd);
     pthread_mutex_lock(&test_lock);
     while (!reset_entered) pthread_cond_wait(&test_cond, &test_lock);
-    ready = 1; /* stale old presentation during new-generation teardown */
+    ready = loader_ready = 1; /* neither old video nor old PRISM may leak across generations */
     pthread_mutex_unlock(&test_lock);
     expect_silence(control);
     pthread_mutex_lock(&test_lock);
@@ -204,6 +218,7 @@ int main(void) {
     assert(pthread_create(&next_reader, NULL, read_thread, &next) == 0);
     assert(write(next_pair[1], record, sizeof(record)) == sizeof(record));
     wait_for_static_reader(4);
+    expect_event(control, ALTEVT_LOADER_READY);
     expect_silence(control);
     release_picture(); expect_event(control, ALTEVT_VIDEO_ON);
     decode_queue_end(a.generation); decode_queue_fail(a.generation);
@@ -211,6 +226,10 @@ int main(void) {
     shutdown(next_pair[1], SHUT_RDWR); pthread_join(next_reader, NULL);
     expect_event(control, ALTEVT_VIDEO_OFF);
     close(next_pair[0]); close(next_pair[1]);
+    pthread_mutex_lock(&test_lock);
+    loader_ready = 1; /* a late loader completion from an ended stream is ignored */
+    pthread_mutex_unlock(&test_lock);
+    expect_silence(control);
     altctl_stop(); close(control); close(listener); decode_worker_stop();
     alarm(0);
     puts("altscreen_readiness_test: static first frame, health edges, control reconnect, generation guards and real log truncation PASS");

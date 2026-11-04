@@ -16,6 +16,7 @@ int av_sink_frame_ex(const uint8_t *b, uint32_t n, uint64_t t, const alt_frame_m
     return av_sink_frame(b, n, t);
 }
 void av_sink_session_end(void) {}
+int av_sink_loader_ready(void) { return 0; }
 int av_sink_video_ready(void) { return 1; }
 const char *av_sink_omx_stage(void) { return 0; }
 void av_sink_fatal_exit(int code, const char *reason) {
@@ -49,10 +50,10 @@ static void startup_origin_transition(void) {
     meta.received_us = (decode_now_ms() - 1900u) * 1000u;
     for (unsigned i = 0; i < 3; ++i)
         assert(!decode_queue_frame_ex(gen, &data, 1, &meta, NULL, NULL));
-    assert(decode_video_ready());
+    assert((decode_presentation_state() == ALT_PRESENT_VIDEO));
     assert(!g_decode_steady && !g_decode_failed && g_decode_items == 3);
     consume_pending();
-    assert(decode_video_ready()); /* Empty local queue still has an old last input. */
+    assert((decode_presentation_state() == ALT_PRESENT_VIDEO)); /* Empty local queue still has an old last input. */
     assert(!g_decode_steady && !g_decode_failed);
 
     /* A fresh head and tail do not hide an older middle startup AU. */
@@ -62,17 +63,17 @@ static void startup_origin_transition(void) {
     assert(!decode_queue_frame_ex(gen, &data, 1, &meta, NULL, NULL));
     meta.received_us = alt_timing_now_us();
     assert(!decode_queue_frame_ex(gen, &data, 1, &meta, NULL, NULL));
-    assert(decode_video_ready() && !g_decode_steady && !g_decode_failed);
+    assert((decode_presentation_state() == ALT_PRESENT_VIDEO) && !g_decode_steady && !g_decode_failed);
     consume_pending();
     /* An in-flight startup input must complete before steady promotion. */
     g_decode_worker_busy = 1;
     g_decode_busy_origin_ms = decode_now_ms() - 1900u;
-    assert(decode_video_ready() && !g_decode_steady);
+    assert((decode_presentation_state() == ALT_PRESENT_VIDEO) && !g_decode_steady);
     g_decode_busy_origin_ms = decode_now_ms();
-    assert(decode_video_ready() && g_decode_steady); /* Healthy busy work can promote. */
+    assert((decode_presentation_state() == ALT_PRESENT_VIDEO) && g_decode_steady); /* Healthy busy work can promote. */
     g_decode_worker_busy = 0;
     g_decode_busy_origin_ms = 0;
-    assert(decode_video_ready() && g_decode_steady);
+    assert((decode_presentation_state() == ALT_PRESENT_VIDEO) && g_decode_steady);
 
     /* Once steady, an accumulating backlog is a latency condition: the frames
      * are still queued (no generation failure, video stays ready), the tick
@@ -80,12 +81,12 @@ static void startup_origin_transition(void) {
      * while backlogged drops everything queued before it (2026-10-09). */
     meta.received_us = (decode_now_ms() - 1900u) * 1000u;
     assert(!decode_queue_frame_ex(gen, &data, 1, &meta, NULL, NULL));
-    assert(decode_video_ready()); /* A lone old/final picture remains protected. */
+    assert((decode_presentation_state() == ALT_PRESENT_VIDEO)); /* A lone old/final picture remains protected. */
     assert(!decode_queue_frame_ex(gen, &data, 1, &meta, NULL, NULL));
-    assert(decode_video_ready() && !g_decode_failed && g_decode_items == 2);
+    assert((decode_presentation_state() == ALT_PRESENT_VIDEO) && !g_decode_failed && g_decode_items == 2);
     g_health_owner = gen;  /* a status-capable hook: the tick must report STATUS 0 while backlogged */
     g_health_last = -1;
-    assert(decode_video_ready() && !g_decode_failed);
+    assert((decode_presentation_state() == ALT_PRESENT_VIDEO) && !g_decode_failed);
     assert(g_health_last == 0 && alt_wire_u32(g_health_packet + 8) == 0);
     g_health_owner = 0;
     meta.flags = ALT_WIRE_IDR;
@@ -106,7 +107,7 @@ static void startup_origin_transition(void) {
         meta.version = mode ? ALT_WIRE_VERSION : 0;
         meta.received_us = mode == 2 ? alt_timing_now_us() + 1000000u : 0;
         assert(!decode_queue_frame_ex(gen, &data, 1, &meta, NULL, NULL));
-        assert(decode_video_ready() && g_decode_steady && !g_decode_failed);
+        assert((decode_presentation_state() == ALT_PRESENT_VIDEO) && g_decode_steady && !g_decode_failed);
         consume_pending();
         close(fd[0]);
         close(fd[1]);
@@ -138,7 +139,7 @@ int main(void) {
     g_decode_active_generation = gen;
     assert(!decode_queue_frame(gen, &data, 1));
     consume_pending(); /* Model a freshly consumed input before steady readiness. */
-    assert(decode_video_ready());
+    assert((decode_presentation_state() == ALT_PRESENT_VIDEO));
     assert(g_decode_steady);
     assert(!decode_queue_frame(gen, &data, 1));
     g_decode_head->received_ms = decode_now_ms() - 5000u;
@@ -182,7 +183,7 @@ int main(void) {
     g_decode_active_generation = gen;
     assert(!decode_queue_frame(gen, &data, 1));
     consume_pending();
-    assert(decode_video_ready());
+    assert((decode_presentation_state() == ALT_PRESENT_VIDEO));
     meta.received_us = (decode_now_ms() - 1900u) * 1000u;
     assert(!decode_queue_frame_ex(gen, &data, 1, &meta, NULL, NULL));
     assert(!decode_queue_frame_ex(gen, &data, 1, &meta, NULL, NULL));

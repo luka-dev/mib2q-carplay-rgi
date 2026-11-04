@@ -147,6 +147,27 @@ int main(void) {
     assert(presents == before + 1 && av_sink_video_ready());
     _DrainCallbacksAndPresenter(&g_ss);
     stop_and_fault_tests();
+    /* Disconnect freezes the RGBA surface: no Apple flash before stock takeover. */
+    g_ss.decoder=NULL;g_ss.omxInitialized=1;
+    g_ss.present=(screen_egl_present_t *)1;
+    g_ss.inBufs=NULL;g_ss.outBufs=NULL;g_ss.freeIn=NULL;
+    unsigned waiting_before=waiting_posts;
+    g_ss.loaderReady=1;
+    unsigned stops_before=waiting_stops;
+    _Teardown(&g_ss,0);
+    assert(waiting_posts==waiting_before && waiting_before_deinit==waiting_before);
+    assert(waiting_stops==stops_before+1 && !av_sink_loader_ready());
+    /* Even an early session with no OMX component stops its waiting thread. */
+    _Teardown(&g_ss,0);
+    assert(waiting_posts==waiting_before && waiting_stops==stops_before+2);
+    g_ss.callbacksClosing=0;
+    av_sink_set_layout(1,0,0);
+    assert(waiting_posts==waiting_before); /* View changes cannot revive idle PRISM. */
+    waiting_error=-1;
+    assert(_StartLoader(&g_ss)==-1 && !av_sink_loader_ready());
+    waiting_error=0;
+    assert(!_StartLoader(&g_ss) && av_sink_loader_ready());
+    g_ss.present=NULL;
     pthread_cond_destroy(&g_ss.cond);
     pthread_mutex_destroy(&g_ss.lock);
     puts("altscreen_mailbox_test: FIFO fallback, newest picture, empty output, bounded synchronous "

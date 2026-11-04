@@ -21,12 +21,14 @@ static pthread_t callback_thread;
 static void (*recycle_observer)(OMX_BUFFERHEADERTYPE *);
 static void (*present_observer)(unsigned);
 static unsigned last_present_slot;
+static unsigned waiting_posts, waiting_before_deinit, waiting_stops;
+static int waiting_error;
 
 OMX_ERRORTYPE OMX_Init(void) {
     ++init_attempts;
     return OMX_ErrorInsufficientResources;
 }
-OMX_ERRORTYPE OMX_Deinit(void) { return OMX_ErrorNone; }
+OMX_ERRORTYPE OMX_Deinit(void) { waiting_before_deinit=waiting_posts; return OMX_ErrorNone; }
 OMX_ERRORTYPE OMX_GetHandle(OMX_HANDLETYPE *h, OMX_STRING n, OMX_PTR p, OMX_CALLBACKTYPE *c) {
     (void)h;
     (void)n;
@@ -74,13 +76,10 @@ int screen_egl_present_attach_sources(screen_egl_present_t *p, unsigned int n) {
     return -1;
 }
 int screen_egl_present_start_loader(screen_egl_present_t *p) {
-    (void)p;
-    assert(0);
-    return -1;
+    assert(p); ++waiting_posts; return waiting_error;
 }
 void screen_egl_present_stop_loader(screen_egl_present_t *p) {
-    (void)p;
-    assert(0);
+    assert(p); ++waiting_stops;
 }
 void screen_egl_present_set_stream_pending(screen_egl_present_t *p, int pending) {
     (void)p;
