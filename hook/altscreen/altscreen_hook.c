@@ -336,36 +336,39 @@ static int set_i64(void *d, const char *key, int64_t val)
  * physical non-rectangular masks cannot be represented exactly; keep critical
  * UI in the nested safe frame:
  *
- *   fullscreen rectangular safeArea: cells D2 through M5, cut at y=380
- *              = x 270..1170, y 90..380 = (270,90) 900x290
- *   sportscreen rectangular safeArea (compact Sport layout): B2 through E5, cut at y=390
- *              = x 90..450, y 90..390 = (90,90) 360x300
- *   classicscreen uses the same compact dimensions, centered horizontally
- *              = x 540..900, y 90..390 = (540,90) 360x300
+ *   fullscreen rectangular safeArea: x 330..1110, y 88..382 = (330,88) 780x294
+ *              (clears the left/right small-stage gauge bezels in D4..D5 and M4..M5)
+ *   sportscreen rectangular safeArea (compact Sport layout):
+ *              = x 108..456, y 88..382 = (108,88) 348x294
+ *              (clears the top-left bezel in B2 and the central tachometer in F3..F4)
+ *   classicscreen compact safeArea, centered between the two big gauges:
+ *              = x 540..900, y 88..382 = (540,88) 360x294
  *
- * Bottom edge: the VC draws its own translucent map bar ("10ft ... 100ft N" in
- * fullscreen, "offroad" in the small stage) from about y=390 down over row 5
- * and hides row 6 behind the clock/temperature bar.  Maps anchors its bottom
- * text to the safeArea edge, so with the old y=452 edge that text sat in the
- * lower half of H5 under the bar (calibration-grid photos, 2026-09-19).
+ * Top/bottom edges: the VC top header border ends at y=84 and the translucent
+ * NavStatus bar ("10ft ... 100ft N" in fullscreen, "offroad" in small stage)
+ * starts at y=384 over row 5 while row 6 is behind the clock/temperature bar.
+ * Maps anchors its bottom text to the safeArea edge, so y=88..382 keeps the
+ * full safe frame strictly between both bars (calibration-grid photos,
+ * 2026-09-19 and 2026-11-04).
  *
  * The background may render under a physical mask; route focus and critical UI
  * stay inside these nested safe rectangles. */
-#define FULL_SAFE_X     270
-#define FULL_SAFE_Y      90
-#define FULL_SAFE_W     900
-#define FULL_SAFE_H     290
+#define FULL_SAFE_X     330
+#define FULL_SAFE_Y      88
+#define FULL_SAFE_W     780
+#define FULL_SAFE_H     294
 
-/* Zone safe areas run y=90..390 (10 px lower than fullscreen's 380) to stay 300 px tall: CarPlaySupport's
+/* Zone safe areas run y=88..382 (294 px tall): CarPlaySupport's
  * CPSInstrumentClusterCardLayout treats a safe area narrower than ~498 px (660 px at its
  * 0.153 mm reference pitch, our pitch 292/1440 mm) as "narrow" and then needs
- * 0.3*height > ~87 px for the centred card layout; below that it logs "Undefined layout
+ * 0.3*height > ~86.8 px for the centred card layout; below that it logs "Undefined layout
  * (0), will not show cluster content" and hides ETA and turn card for third-party apps. */
-#define SMALLSCREEN_SAFE_X       90
-#define SMALLSCREEN_SAFE_Y       90
-#define SMALLSCREEN_SAFE_W      360
-#define SMALLSCREEN_SAFE_H      300
+#define SMALLSCREEN_SAFE_X      108
+#define SMALLSCREEN_SAFE_Y       88
+#define SMALLSCREEN_SAFE_W      348
+#define SMALLSCREEN_SAFE_H      294
 #define CLASSICSCREEN_SAFE_X    540
+#define CLASSICSCREEN_SAFE_W    360
 
 /* one rect dict, iOS keys: {originXPixels, originYPixels, widthPixels, heightPixels}
  * (CarKit CROrigin/CRSizeFromAirPlayDictionary). */
@@ -546,7 +549,7 @@ static void *build_cluster_dict(int night, int zone_mode)
                                          SMALLSCREEN_SAFE_W, SMALLSCREEN_SAFE_H);
             void *classic = build_viewarea(0, 0, CLUSTER_W, CLUSTER_H,
                                            CLASSICSCREEN_SAFE_X, SMALLSCREEN_SAFE_Y,
-                                           SMALLSCREEN_SAFE_W, SMALLSCREEN_SAFE_H);
+                                           CLASSICSCREEN_SAFE_W, SMALLSCREEN_SAFE_H);
             if (full && split && classic && k) {
                 cf_arrapp(arr, full);
                 cf_arrapp(arr, split);
@@ -558,7 +561,7 @@ static void *build_cluster_dict(int night, int zone_mode)
                          CLUSTER_W, CLUSTER_H,
                          FULL_SAFE_X, FULL_SAFE_Y, FULL_SAFE_W, FULL_SAFE_H,
                          SMALLSCREEN_SAFE_X, SMALLSCREEN_SAFE_Y, SMALLSCREEN_SAFE_W, SMALLSCREEN_SAFE_H,
-                         CLASSICSCREEN_SAFE_X, SMALLSCREEN_SAFE_Y, SMALLSCREEN_SAFE_W, SMALLSCREEN_SAFE_H);
+                         CLASSICSCREEN_SAFE_X, SMALLSCREEN_SAFE_Y, CLASSICSCREEN_SAFE_W, SMALLSCREEN_SAFE_H);
             }
             if (full && cf_rel) cf_rel(full);
             if (split && cf_rel) cf_rel(split);

@@ -64,7 +64,7 @@ One dictionary shape is reused under `displays` (read by AirPlaySender, key `uui
 | `maxFPS`, `features`, `viewAreas`/`initialViewArea`/`adjacentViewAreas`, `primaryInputDevice`, `rotation`, `edid`, HDR keys, `overscanned`, `zoomFactor`, `cornerMasks`, `nightMode`, `limitedUI*`, `url`/`initialURL` | Not a 111 gate | property dispatch `0x2277BAE7C` |
 | `type` | Ignored by the selector | UUID inequality chooses 111 |
 
-Stock `CopyDisplaysInfo` emits the old 210 schema for main (`edid, features, maxFPS, widthPhysical, heightPhysical, widthPixels, heightPixels, uuid`, no `uid`, no `initialVideoStreams`), so the hook adds `uid` + `initialVideoStreams` to main using the **real** main uuid and refuses the advert if it is missing (`altscreen_hook.c:544-630`). The cluster also declares three view areas over the full 1440×542 frame with nested safe areas: fullscreen `(270, 90, 900×290)`, sport `(90, 90, 360×300)`, classic `(540, 90, 360×300)` (`altscreen_hook.c:280-295`, `:455-490`). **[code]**
+Stock `CopyDisplaysInfo` emits the old 210 schema for main (`edid, features, maxFPS, widthPhysical, heightPhysical, widthPixels, heightPixels, uuid`, no `uid`, no `initialVideoStreams`), so the hook adds `uid` + `initialVideoStreams` to main using the **real** main uuid and refuses the advert if it is missing (`altscreen_hook.c:544-630`). The cluster also declares three view areas over the full 1440×542 frame with nested safe areas: fullscreen `(330, 88, 780×294)`, sport `(108, 88, 348×294)`, classic `(540, 88, 360×294)` (`altscreen_hook.c:356-371`, `:541-565`). **[code]**
 
 ### Where the advert is declared
 

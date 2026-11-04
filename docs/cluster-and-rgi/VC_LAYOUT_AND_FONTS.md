@@ -135,9 +135,9 @@ The View button stays a logical fullscreen/compact choice; the skin picks the co
 
 | Index | Name | Safe area in code |
 |---:|---|---|
-| 0 | fullscreen | `(270,90) 900×290` |
-| 1 | sportscreen | `(90,90) 360×300` |
-| 2 | classicscreen | `(540,90) 360×300` |
+| 0 | fullscreen | `(330,88) 780×294` |
+| 1 | sportscreen | `(108,88) 348×294` |
+| 2 | classicscreen | `(540,88) 360×294` |
 
 The source note listed `900×362`, `(90,135) 360×317` and `(540,135) 360×317`. Those were cut back after the 2026-09-19 calibration-grid photos showed Maps anchoring bottom text under the VC's own translucent map bar (≈ y 390 down) and clock bar. The code values are current. See [Cluster Contexts](CLUSTER_CONTEXTS.md) and [AltScreen Cluster Video](../altscreen-and-video/ALTSCREEN_CLUSTER_VIDEO.md) for how the areas are used.
 

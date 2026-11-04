@@ -117,9 +117,9 @@ flowchart TD
 
 | View area | Safe area | Cells |
 |---|---|---|
-| fullscreen | (270, 90) 900×290, bottom y = 380 | D2-M5 |
-| sportscreen | (90, 90) 360×300, bottom y = 390 | B2-E5 |
-| classicscreen | (540, 90) 360×300 | centred |
+| fullscreen | (330, 88) 780×294, bottom y = 382 | D2-M5 (clears small gauges at x < 328 / x > 1112) |
+| sportscreen | (108, 88) 348×294, bottom y = 382 | B2-F5 (clears B2 top-left bezel and F3-F4 central dial) |
+| classicscreen | (540, 88) 360×294, bottom y = 382 | G2-J5 centred |
 
 The zones change safe-area layout while retaining the full visible frame. They do not implement a map-zoom workaround. The earlier reduced-frame experiment and rejected activation are retained in the archived app analysis.
 
