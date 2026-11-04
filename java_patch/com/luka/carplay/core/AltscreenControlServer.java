@@ -6,6 +6,8 @@
  * the CarPlay 111 cluster video is flowing (0x81 VIDEO_ON / 0x82 VIDEO_OFF).
  * LOADER_READY (0x83) confirms a fresh PRISM frame for the current stream. VIDEO_OFF
  * invalidates readiness: an idle surface can still contain the previous phone picture.
+ * All events echo the current CMD_READINESS epoch in bytes 1..3. Lifecycle stop/start
+ * invalidates old events even when the control socket stays connected.
  *
  * VIDEO_ON is also a data-plane fallback for the cluster context.  TMDev can publish a transient
  * INVALID while dio restarts and fail to publish a matching activation afterwards even though the
@@ -34,6 +36,7 @@ final class AltscreenControlServer {
     private static final int    EVT_VIDEO_OFF = 0x82;
     private static final int    EVT_LOADER_READY = 0x83;
     private static final int    CMD_VIEW_AREA = 0x01;
+    private static final int    CMD_READINESS = 0x02;
     static final int STYLE_SPORT   = 0;
     static final int STYLE_CLASSIC = 1;
     static final int STYLE_UNKNOWN = 0xFF;
@@ -48,6 +51,8 @@ final class AltscreenControlServer {
     private static int viewAreaMode;                /* 0=fullscreen, 1=smallscreen */
     private static int layoutStyle = STYLE_UNKNOWN; /* current stock VC visual skin */
     private static int rawSkin = STYLE_UNKNOWN;     /* LastmodeStorage skin, diagnostics */
+    private static boolean queryPending;
+    private static int requestedEpoch;
     private static boolean writePending;
     private static int writeGeneration;
     private static int writeMode;
@@ -56,10 +61,31 @@ final class AltscreenControlServer {
 
     private AltscreenControlServer() {}
 
-    /** Replay cached layout to request a fresh readiness snapshot, even if the
-     * native stream survived a Java lifecycle stop/start unchanged. */
-    static void requestRendererState() {
-        synchronized (LOCK) { queueViewAreaLocked("module-start"); }
+    /** Cache even without a peer. The writer coalesces requests; every reply
+     * carries this 24-bit epoch in bytes 1..3 (network order). */
+    static void requestRendererState(int epoch) {
+        synchronized (LOCK) {
+            requestedEpoch = epoch;
+            queryPending = client != null;
+            LOCK.notifyAll();
+        }
+    }
+
+    /* EVENT_LOCK orders replacement with publication by the old reader. Never
+     * call the module while holding the transport LOCK (module -> queue order). */
+    private static int installClient(Socket c) {
+        synchronized (EVENT_LOCK) {
+            int generation;
+            synchronized (LOCK) {
+                if (client != null) try { client.close(); } catch (Throwable t) { }
+                client = c;
+                generation = ++clientGeneration;
+                queryPending = requestedEpoch != 0;
+                queueViewAreaLocked("renderer-connect");
+            }
+            AltScreenModule.invalidateRendererState();
+            return generation;
+        }
     }
 
     /** Cache and publish the current Audi View-button state. */
@@ -120,12 +146,7 @@ final class AltscreenControlServer {
                 while (run) {
                     final Socket c = ss.accept();
                     final int generation;
-                    synchronized (LOCK) {
-                        if (client != null) try { client.close(); } catch (Throwable t) { }
-                        client = c;
-                        generation = ++clientGeneration;
-                        queueViewAreaLocked("renderer-connect");
-                    }
+                    generation = installClient(c);
                     Log.i(TAG, "altscreen_render connected generation=" + generation);
                     Thread reader = new Thread(new Runnable() {
                         public void run() { serveClient(c, generation); }
@@ -149,27 +170,35 @@ final class AltscreenControlServer {
             int mode;
             int style;
             int preset;
+            int epoch;
+            boolean query;
             synchronized (LOCK) {
-                while (run && !writePending) {
+                while (run && !writePending && !queryPending) {
                     try { LOCK.wait(); } catch (InterruptedException e) { }
                 }
                 if (!run) return;
                 owned = client;
-                generation = writeGeneration;
+                query = queryPending;
+                epoch = requestedEpoch;
+                generation = query ? clientGeneration : writeGeneration;
                 mode = writeMode;
                 style = writeStyle;
                 preset = writeRawSkin;
-                writePending = false;
+                if (query) queryPending = false;
+                else writePending = false;
                 if (owned == null || generation != clientGeneration) continue;
             }
             try {
-                byte[] pkt = new byte[] {
+                byte[] pkt = query ? new byte[] {
+                    (byte)CMD_READINESS, (byte)(epoch >>> 16), (byte)(epoch >>> 8), (byte)epoch
+                } : new byte[] {
                     (byte)CMD_VIEW_AREA, (byte)mode, (byte)style, (byte)preset
                 };
                 OutputStream out = owned.getOutputStream();
                 out.write(pkt);
                 out.flush();
-                Log.i(TAG, "-> layout view="
+                if (query) Log.i(TAG, "-> readiness epoch=" + epoch + " generation=" + generation);
+                else Log.i(TAG, "-> layout view="
                     + layoutName(mode, style)
                     + " style=" + styleName(style) + " rawSkin=" + preset
                     + " generation=" + generation);
@@ -208,18 +237,10 @@ final class AltscreenControlServer {
                         if (client != c || generation != clientGeneration) return;
                     }
                     int evt = pkt[0] & 0xFF;
-                    if (evt == EVT_VIDEO_ON) {
-                        Log.i(TAG, "VIDEO_ON generation=" + generation);
-                        AltScreenModule.setRendererReady(true);
-                        AltScreenModule.setVideoAvailable(true);
-                    } else if (evt == EVT_VIDEO_OFF) {
-                        Log.i(TAG, "VIDEO_OFF generation=" + generation);
-                        AltScreenModule.setRendererReady(false);
-                        AltScreenModule.setVideoAvailable(false);
-                    } else if (evt == EVT_LOADER_READY) {
-                        Log.i(TAG, "LOADER_READY generation=" + generation);
-                        AltScreenModule.setVideoAvailable(false);
-                        AltScreenModule.setRendererReady(true);
+                    int epoch = ((pkt[1] & 0xFF) << 16) | ((pkt[2] & 0xFF) << 8) | (pkt[3] & 0xFF);
+                    if (evt == EVT_VIDEO_ON || evt == EVT_VIDEO_OFF || evt == EVT_LOADER_READY) {
+                        AltScreenModule.applyRendererState(epoch, evt != EVT_VIDEO_OFF, evt == EVT_VIDEO_ON);
+                        Log.i(TAG, "state=" + evt + " epoch=" + epoch + " generation=" + generation);
                     }
                 }
             }
@@ -234,12 +255,12 @@ final class AltscreenControlServer {
                     if (client == c && generation == clientGeneration) {
                         client = null;
                         writePending = false;
+                        queryPending = false;
                         owned = true;
                     }
                 }
                 if (owned) {
-                    AltScreenModule.setRendererReady(false);
-                    AltScreenModule.setVideoAvailable(false);
+                    AltScreenModule.invalidateRendererState();
                     Log.i(TAG, "altscreen_render disconnected generation=" + generation);
                 }
             }

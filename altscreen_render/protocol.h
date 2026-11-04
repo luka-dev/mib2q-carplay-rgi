@@ -40,6 +40,8 @@
 #define ALTEVT_VIDEO_ON   0x81   /* current stream has a successfully presented picture */
 #define ALTEVT_VIDEO_OFF  0x82   /* the video client disconnected / stream ended */
 #define ALTEVT_LOADER_READY 0x83 /* fresh PRISM posted for the current stream */
+/* Status bytes 1..3 echo the latest request epoch; zero before negotiation. */
+#define ALTCMD_READINESS  0x02   /* Java -> renderer: b1..3 24-bit epoch, network order */
 #define ALTCMD_VIEW_AREA  0x01   /* Java -> renderer: b1 0=full/1=compact, b2 style, b3 raw preset */
 
 #endif /* ALTSCREEN_RENDER_PROTOCOL_H */

@@ -69,6 +69,7 @@ static void *ctl_loop(void *arg) {
     int fd = -1;
     int last_sent = -1;
     int ever_connected = 0;
+    unsigned int epoch = 0;
     unsigned char rx[ALTCTL_PKT_SIZE];
     unsigned int rx_used = 0;
     while (g_run) {
@@ -78,6 +79,7 @@ static void *ctl_loop(void *arg) {
             fd = ctl_connect();
             last_sent = -1;                       /* force resend of the current state on (re)connect */
             rx_used = 0;
+            epoch = 0;
             if (fd < 0) {                          /* Java control server not up yet — retry */
                 struct timespec retry = { 0, (ever_connected ? 200L : 50L) * 1000000L };
                 nanosleep(&retry, NULL);
@@ -94,6 +96,9 @@ static void *ctl_loop(void *arg) {
             memset(pkt, 0, sizeof(pkt));
             pkt[0] = (unsigned char)(state == ALT_PRESENT_VIDEO ? ALTEVT_VIDEO_ON
                 : (state == ALT_PRESENT_LOADER ? ALTEVT_LOADER_READY : ALTEVT_VIDEO_OFF));
+            pkt[1] = (unsigned char)(epoch >> 16);
+            pkt[2] = (unsigned char)(epoch >> 8);
+            pkt[3] = (unsigned char)epoch;
             ssize_t k = send(fd, pkt, sizeof(pkt), 0);
             if (k != (ssize_t)sizeof(pkt)) { close(fd); fd = -1; continue; }  /* reconnect */
             last_sent = state;
@@ -119,9 +124,10 @@ static void *ctl_loop(void *arg) {
                     if (rx[0] == ALTCMD_VIEW_AREA) {
                         av_sink_set_layout(rx[1] == 1 ? 1 : 0,
                                            (int)rx[2], (int)rx[3]);
-                        /* Module start replays layout after a lifecycle bounce.
-                         * Re-sample even if the same stream stayed ON: Java
-                         * cleared readiness on stop and needs fresh evidence. */
+                    } else if (rx[0] == ALTCMD_READINESS) {
+                        epoch = ((unsigned int)rx[1] << 16) | ((unsigned int)rx[2] << 8) | rx[3];
+                        /* Re-sample on the NEXT loop, after receiving the epoch.
+                         * Never relabel a cached pre-request readiness snapshot. */
                         last_sent = -1;
                     } else {
                         fprintf(stderr, "altscreen_render: unknown control command 0x%02x\n",

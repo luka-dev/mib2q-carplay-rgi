@@ -84,6 +84,7 @@ static void *read_thread(void *context) {
     decode_queue_end(a->generation);
     return NULL;
 }
+static unsigned expected_epoch;
 static void expect_event(int fd, unsigned char event) {
     unsigned char pkt[ALTCTL_PKT_SIZE];
     size_t used = 0;
@@ -95,6 +96,7 @@ static void expect_event(int fd, unsigned char event) {
         used += (size_t)n;
     }
     assert(pkt[0] == event);
+    assert((((unsigned)pkt[1]<<16)|((unsigned)pkt[2]<<8)|pkt[3]) == expected_epoch);
 }
 static void expect_silence(int fd) {
     struct pollfd p = {fd, POLLIN, 0};
@@ -196,7 +198,17 @@ int main(void) {
     {
         unsigned char layout[ALTCTL_PKT_SIZE] = { ALTCMD_VIEW_AREA, 0, 0, 0 };
         assert(write(control, layout, sizeof(layout)) == sizeof(layout));
-        expect_event(control, ALTEVT_VIDEO_ON); /* lifecycle bounce, no new frame */
+        expect_silence(control); /* layout alone cannot authenticate readiness */
+        unsigned char request[ALTCTL_PKT_SIZE] = { ALTCMD_READINESS, 0x12, 0x34, 0x56 };
+        assert(write(control, request, 1) == 1);
+        expect_silence(control); /* partial request cannot change epoch */
+        assert(write(control, request+1, 3) == 3);
+        expected_epoch=0x123456;
+        expect_event(control, ALTEVT_VIDEO_ON); /* unchanged stream, fresh request */
+        request[3]++;
+        assert(write(control, request, sizeof(request)) == sizeof(request));
+        expected_epoch++;
+        expect_event(control, ALTEVT_VIDEO_ON); /* force reply even if state did not change */
     }
     shutdown(pair[1], SHUT_RDWR); pthread_join(reader, NULL);
     expect_event(control, ALTEVT_VIDEO_OFF); /* socket end wins over a late frame */
@@ -230,6 +242,15 @@ int main(void) {
     loader_ready = 1; /* a late loader completion from an ended stream is ignored */
     pthread_mutex_unlock(&test_lock);
     expect_silence(control);
+    shutdown(control, SHUT_RDWR); close(control);
+    control=accept_control(listener); expected_epoch=0;
+    expect_event(control, ALTEVT_VIDEO_OFF); /* never retain an epoch across peers */
+    {
+        unsigned char request[ALTCTL_PKT_SIZE] = { ALTCMD_READINESS, 0, 0, 9 };
+        assert(write(control, request, sizeof(request)) == sizeof(request));
+        expected_epoch=9;
+        expect_event(control, ALTEVT_VIDEO_OFF); /* query cannot revive an ended stream */
+    }
     altctl_stop(); close(control); close(listener); decode_worker_stop();
     alarm(0);
     puts("altscreen_readiness_test: static first frame, health edges, control reconnect, generation guards and real log truncation PASS");

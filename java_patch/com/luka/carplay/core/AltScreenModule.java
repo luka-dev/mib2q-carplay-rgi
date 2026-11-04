@@ -147,11 +147,9 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
      * stream is already decoding; without this fallback the module remains on
      * stock ctx 74 while displayable 99 renders invisibly. */
     private static volatile boolean videoAvailable = false;
-    /* Independent of videoAvailable: VIDEO_OFF still has a posted PRISM frame.
-     * The native control loop starts only after av_sink_open posts that frame.
-     * Keep the existing context until then, rather than selecting an empty 99
-     * during cold Screen/EGL initialization. Guarded by LOCK. */
+    /* A ready surface belongs to a specific lifecycle request. Guarded by LOCK. */
     private static boolean rendererReady;
+    private static int rendererEpoch;
     private static volatile boolean navActive = false;
     private static boolean navHidePending;
     private static volatile boolean acceptVideoFallback = false;
@@ -347,28 +345,35 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
             new byte[] { (byte) (rgi ? 1 : 0) });
     }
 
-    /** Data-plane fallback for transient/incorrect TMDev lifecycle events. */
-    public static void setVideoAvailable(boolean available) {
+    /** Called under LOCK before publishing a new plane-99 target. No socket IO. */
+    private static void beginRendererSessionLocked() {
+        rendererEpoch = (rendererEpoch % 0xFFFFFF) + 1;
+        rendererReady = false;
+        videoAvailable = false;
+        AltscreenControlServer.requestRendererState(rendererEpoch);
+    }
+
+    /** Validate and publish together: stop() cannot fall between the epoch check
+     * and the readiness write. Token zero is an unrequested/legacy snapshot. */
+    static void applyRendererState(int epoch, boolean ready, boolean video) {
         synchronized (LOCK) {
-            if (!platformSupported) return;
-            if (available && !connected && !acceptVideoFallback) {
-                return;
-            }
-            if (videoAvailable == available) return;
-            videoAvailable = available;
+            if (!connected || epoch == 0 || epoch != rendererEpoch) return;
+            rendererReady = ready;
+            videoAvailable = platformSupported && video;
+            LOCK.notifyAll();
         }
-        Log.i(TAG, "videoAvailable=" + available + " connected=" + connected);
         republish();
     }
 
-    /** Surface readiness from the current renderer control peer, not stream activity. */
-    static void setRendererReady(boolean ready) {
+    /** Current control peer disappeared/replaced. Its reader is serialized with
+     * replacement in AltCtl; keep the epoch so the new peer can answer it. */
+    static void invalidateRendererState() {
         synchronized (LOCK) {
-            if (rendererReady == ready) return;
-            rendererReady = ready;
+            rendererReady = false;
+            videoAvailable = false;
             LOCK.notifyAll();
         }
-        Log.i(TAG, "rendererReady=" + ready);
+        republish();
     }
 
     /** Navigation owns the context; VC alone controls KDK opacity. On route end,
@@ -445,6 +450,7 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
              * re-applies the desired ctx to the new one.  (In practice the same object each session.) */
             if (dm != d) { dm = d; currentCtx = -1; }
             connected = true;
+            beginRendererSessionLocked();
             navActive = false;
             navHidePending = false;
             clusterActive = false;
@@ -454,7 +460,6 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
                 ? CTX_CLUSTER_MAP : CTX_STOCK_CLUSTER;
             sendRgiStateLocked();   /* navActive is false here: reset the hook's URL state */
         }
-        AltscreenControlServer.requestRendererState();
         synchronized (LOCK) {
             /* Create the single persistent worker once; recreate only if it never started or died.
              * Assign the field ONLY after start() succeeds so a throw leaves worker==null for retry. */

@@ -20,6 +20,15 @@ public final class AltScreenStartupTest {
         f.setAccessible(true);
         return f;
     }
+    /* This test isolates the context worker. Transport/lifecycle validation is
+     * exercised with the real module in AltscreenControlTransportTest. */
+    private static void setRendererReady(boolean ready) throws Exception {
+        Object lock = field("LOCK").get(null);
+        synchronized (lock) {
+            field("rendererReady").setBoolean(null, ready);
+            lock.notifyAll();
+        }
+    }
     private static final class Display implements InvocationHandler {
         final LinkedBlockingQueue<Integer> writes = new LinkedBlockingQueue<Integer>();
         final CountDownLatch bounce = new CountDownLatch(1);
@@ -73,7 +82,7 @@ public final class AltScreenStartupTest {
         field("connected").setBoolean(null, true);
         field("desiredCtx").setInt(null, 81);
         if ("warm".equals(scenario) || display.holdBounce)
-            AltScreenModule.setRendererReady(true);
+            setRendererReady(true);
         final CountDownLatch started = new CountDownLatch(1);
         Thread worker = new Thread(new Runnable() {
             public void run() {
@@ -101,15 +110,15 @@ public final class AltScreenStartupTest {
             if ("cold".equals(scenario)) {
                 display.expectQuiet();
                 check(!field("videoAvailable").getBoolean(null), "unexpected video");
-                AltScreenModule.setRendererReady(true);
+                setRendererReady(true);
             } else if (display.holdBounce) {
                 check(display.bounce.await(3, TimeUnit.SECONDS), "bounce did not start");
                 display.expect(72);
-                AltScreenModule.setRendererReady(false);
+                setRendererReady(false);
                 display.holdBounce = false;
                 display.release.countDown();
                 display.expectQuiet();
-                AltScreenModule.setRendererReady(true);
+                setRendererReady(true);
             }
             display.expect(72);
             display.expect(81);
