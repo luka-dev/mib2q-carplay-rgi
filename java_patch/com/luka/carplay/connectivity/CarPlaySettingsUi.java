@@ -25,6 +25,8 @@ import com.luka.carplay.rgd.RouteGuidance;
 import com.luka.carplay.tone.SoundControlUi;
 import de.audi.atip.base.IFrameworkAccess;
 import de.audi.atip.hmi.IDrawerContextConnectivity;
+import de.audi.atip.hmi.event.EventDispatcher;
+import de.audi.atip.hmi.event.RunnableEvent;
 import de.audi.atip.hmi.model.ChoiceModel;
 import de.audi.atip.hmi.model.HMIModel;
 import de.audi.atip.hmi.model.listener.DefaultChoiceListener;
@@ -197,7 +199,6 @@ public final class CarPlaySettingsUi {
     private static volatile ChoiceModel rgiEnabledModel;
     private static volatile ChoiceModel rgiFarModel;
 
-    private static volatile MenuController settingsMenu;
     private static volatile MenuItemController spatialMenuItem;
     private static volatile MenuItemController upmixMenuItem;
     private static volatile MenuItemController altLayoutMenuItem;
@@ -241,9 +242,9 @@ public final class CarPlaySettingsUi {
         return type == 1 || type == 2 || type == 3;
     }
 
-    /** Spatial Audio and UpMix apply only on external MOST amplifiers. */
+    /** Unknown (-1), audio management (0), and internal amps cannot enable these controls. */
     public static boolean available() {
-        return !internalAmp(amplifier);
+        return amplifier > 3;
     }
 
     public static boolean isAltScreenEnabled() {
@@ -296,12 +297,12 @@ public final class CarPlaySettingsUi {
                     public void updateAmplifier(int type) {
                         amplifier = type;
                         SoundControlUi.updateAmplifier(type);
-                        syncAudioRowsVisibility();
-                        Log.i(TAG, "amplifier " + type + (internalAmp(type) ? " (head unit amp: audio rows hidden)" : ""));
+                        requestAudioRowsEnabledState();
+                        Log.i(TAG, "amplifier " + type + (available() ? " (audio controls enabled)" : " (audio controls disabled)"));
                     }
                 }, null);
             } catch (Throwable t) {
-                Log.w(TAG, "amplifier not watched, CarPlay settings always shown: " + t);
+                Log.w(TAG, "amplifier not watched, audio controls remain disabled until detected: " + t);
             }
             currentLevel = read();
             currentSpatial = readSpatial();
@@ -420,16 +421,38 @@ public final class CarPlaySettingsUi {
         } catch (Throwable t) { /* ignore */ }
     }
 
-    static void syncAudioRowsVisibility() {
+    /** Amplifier callbacks may arrive outside the HMI event thread. Read the latest
+     * state when dispatched so queued notifications cannot restore stale availability. */
+    static void requestAudioRowsEnabledState() {
         try {
-            if (!available()) {
-                MenuController m = settingsMenu;
-                if (m != null) {
-                    if (spatialMenuItem != null) m.remove(spatialMenuItem);
-                    if (upmixMenuItem != null) m.remove(upmixMenuItem);
-                }
+            if (spatialMenuItem == null && upmixMenuItem == null) return;
+            IFrameworkAccess f = fw;
+            if (f == null || f.getHMIService() == null) return;
+            EventDispatcher dispatcher = f.getHMIService().getEventDispatcher();
+            if (dispatcher == null) return;
+            if (dispatcher.isDispatchThread()) {
+                syncAudioRowsEnabledState();
+            } else {
+                dispatcher.postEvent(new RunnableEvent(new Runnable() {
+                    public void run() { syncAudioRowsEnabledState(); }
+                }));
             }
-        } catch (Throwable t) { /* ignore */ }
+        } catch (Throwable t) {
+            Log.w(TAG, "audio controls update could not be scheduled: " + t);
+        }
+    }
+
+    /** HMI thread only. Native disabled controls retain their value, focus and bindings. */
+    static void syncAudioRowsEnabledState() {
+        try {
+            boolean enabled = available();
+            MenuItemController spatial = spatialMenuItem;
+            MenuItemController upmix = upmixMenuItem;
+            if (spatial != null) spatial.setEnabled(enabled);
+            if (upmix != null) upmix.setEnabled(enabled);
+        } catch (Throwable t) {
+            Log.w(TAG, "audio controls update failed: " + t);
+        }
     }
 
     private static void storeKey(int key, int val) {
@@ -601,6 +624,7 @@ public final class CarPlaySettingsUi {
                 m.setChoiceListener(new DefaultChoiceListener() {
                     public void itemSelected(int id, int value, int unused, int terminal) {
                         try {
+                            if (!available()) return;
                             int v = value != 0 ? 1 : 0;
                             m.setValue(v);
                             selectSpatial(v);
@@ -618,6 +642,7 @@ public final class CarPlaySettingsUi {
                 m.setChoiceListener(new DefaultChoiceListener() {
                     public void itemSelected(int id, int value, int unused, int terminal) {
                         try {
+                            if (!available()) return;
                             m.setValue(value);
                             selectChoice(value);
                         } catch (Throwable t) { /* never into the HMI thread */ }
@@ -738,7 +763,7 @@ public final class CarPlaySettingsUi {
             Screen s = super.createScreen(id, terminal);
             if (id == SCREEN_ABOUT_CARPLAY) {
                 try { buildCarPlaySettingsScreen(s, terminal); }
-                catch (Throwable t) { /* leave stock screen on error */ }
+                catch (Throwable t) { Log.w(TAG, "settings screen construction failed: " + t); }
             }
             return s;
         }
@@ -897,7 +922,6 @@ public final class CarPlaySettingsUi {
                 }
             }
             if (menu == null) return;
-            settingsMenu = menu;
 
             // Remove stock static "About CarPlay" multiline text item
             List children = menu.getChildren();
@@ -919,25 +943,23 @@ public final class CarPlaySettingsUi {
 
             int pos = 0;
 
-            if (available()) {
-                // Row 1: Spatial Audio (checkbox, external MOST amp only)
-                MenuItemController spatialItem = createCheckboxItem(terminal, MODEL_SPATIAL,
-                    TEXT_SPATIAL, TEXT_SPATIAL_HINT, INTERNAL_ID_SPATIAL);
-                registerScreenView(screen, MODEL_SPATIAL, spatialItem);
-                menu.addWithPosition(spatialItem, pos++);
-                spatialMenuItem = spatialItem;
+            // Always retain the audio rows and their persisted values. Availability
+            // only controls native enabled state, never the screen's widget tree.
+            MenuItemController spatialItem = createCheckboxItem(terminal, MODEL_SPATIAL,
+                TEXT_SPATIAL, TEXT_SPATIAL_HINT, INTERNAL_ID_SPATIAL);
+            spatialItem.setEnabled(false);
+            registerScreenView(screen, MODEL_SPATIAL, spatialItem);
+            menu.addWithPosition(spatialItem, pos++);
+            spatialMenuItem = spatialItem;
 
-                // Row 2: UpMix (Off | Normal | Intense, external MOST amp only)
-                MenuItemController upmixItem = createComboItem(terminal, MODEL_UPMIX,
-                    TEXT_UPMIX, new int[]{TEXT_UPMIX_OFF, TEXT_UPMIX_NORMAL, TEXT_UPMIX_INTENSE},
-                    TEXT_UPMIX_HINT, INTERNAL_ID_UPMIX);
-                registerScreenView(screen, MODEL_UPMIX, upmixItem);
-                menu.addWithPosition(upmixItem, pos++);
-                upmixMenuItem = upmixItem;
-            } else {
-                spatialMenuItem = null;
-                upmixMenuItem = null;
-            }
+            // Row 2: UpMix (Off | Normal | Intense, external MOST amp only)
+            MenuItemController upmixItem = createComboItem(terminal, MODEL_UPMIX,
+                TEXT_UPMIX, new int[]{TEXT_UPMIX_OFF, TEXT_UPMIX_NORMAL, TEXT_UPMIX_INTENSE},
+                TEXT_UPMIX_HINT, INTERNAL_ID_UPMIX);
+            upmixItem.setEnabled(false);
+            registerScreenView(screen, MODEL_UPMIX, upmixItem);
+            menu.addWithPosition(upmixItem, pos++);
+            upmixMenuItem = upmixItem;
 
             // Row 3: Maps on Cluster (checkbox)
             MenuItemController altScreenItem = createCheckboxItem(terminal, MODEL_ALTSCREEN,
@@ -975,6 +997,7 @@ public final class CarPlaySettingsUi {
             menu.addWithPosition(rgiFarItem, pos++);
             rgiFarMenuItem = rgiFarItem;
 
+            syncAudioRowsEnabledState();
             syncMenuEnabledStates();
         }
 
