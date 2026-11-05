@@ -530,8 +530,12 @@ int scene_mask_control(struct scene_mask *m, const float *in512, float *elig257,
     smask_analysis(m);
     smask_features(m, m->feat);
     smask_conv1(m, m->h1);
-    smask_conv5(m->c2_wt, m->c2_b, m->h1, m->h2);
-    smask_conv5(m->c3_wt, m->c3_b, m->h2, m->h3);
+    /* Explicit const casts: ISO C before C2X does not convert float (*)[N] to const float (*)[N]
+     * implicitly, which gcc -pedantic -Werror (host tests) rejects. No code change. */
+    smask_conv5((const float (*)[SMASK_CH * SMASK_K2][8])m->c2_wt, m->c2_b,
+                (const float (*)[SMASK_ROW])m->h1, m->h2);
+    smask_conv5((const float (*)[SMASK_CH * SMASK_K2][8])m->c3_wt, m->c3_b,
+                (const float (*)[SMASK_ROW])m->h2, m->h3);
     smask_gru(m);
     smask_head(m);
     if (elig257) memcpy(elig257, m->elig, sizeof(float) * SMASK_BINS);
