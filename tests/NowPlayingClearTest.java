@@ -21,11 +21,8 @@ import de.audi.app.terminalmode.events.TrackPlayPositionEvent;
 import org.dsi.ifc.carplay.TrackData;
 
 /**
- * Verifies the YouTube Music NowPlaying sequence on MMI (DSICarplayListenerImpl)
- * and Virtual Cockpit (TerminalModeBapCombi):
- *   1. upcomingPlaybackLockScreenRenderer (new title/artist/album, duration = 0)
- *   2. clearNowPlayingInfo while singleVideo lifecycleState < 2 (empty strings, duration = 0)
- *   3. activeVideo lifecycleState == 2 (new title/artist/album, duration > 0)
+ * Verifies metadata and explicit artwork clears reach MMI and Virtual Cockpit,
+ * independently of the 1500 ms audio teardown guard used for YouTube Music skips.
  */
 public final class NowPlayingClearTest {
     static final Unsafe U;
@@ -74,8 +71,7 @@ public final class NowPlayingClearTest {
         check(busPositions.get(0).getTotalTimeOfTrack() == 0 && busPositions.get(1).getTotalTimeOfTrack() == 215,
             "unexpected play position sequence");
 
-        /* 2. TerminalModeBapCombi ignores transient empty clearNowPlayingInfo on VC
-         *    while CarPlay is active, preserving pi_Type=6 and late cover art merge. */
+        /* 2. Metadata clears must reach VC, including while CarPlay remains active. */
         final List<CombiBAPCurrentStationInfo> stations = new ArrayList<CombiBAPCurrentStationInfo>();
         TerminalModeBapCombi combi = (TerminalModeBapCombi)U.allocateInstance(TerminalModeBapCombi.class);
         Field lcField = TerminalModeBapCombi.class.getDeclaredField("lc");
@@ -116,16 +112,55 @@ public final class NowPlayingClearTest {
             for (int i = 0; i < busTracks.size(); i++) {
                 updateTrack.invoke(evListener, new Object[]{busTracks.get(i)});
                 if (i == 1) {
-                    /* Transient cover-art clear during YT Music buffering must not re-send without picture */
-                    applyCoverArt.invoke(evListener, new Object[]{"", Integer.valueOf(0)});
-                    /* Late cover art arriving during YT Music's clearNowPlayingInfo buffering window */
+                    check("".equals(currentTitleField.get(evListener)), "metadata clear retained stale title");
+                    /* Late artwork must not resurrect a cleared title. */
                     applyCoverArt.invoke(evListener, new Object[]{"/tmp/cover.jpg", Integer.valueOf(7)});
+                    check(stations.size() == 2, "late artwork resurrected cleared metadata");
                 }
             }
             check(stations.size() == 3,
-                "VC must receive upcomingPlayback, cover-art refresh, and activeVideo — never the empty clear");
-            check("Song B".equals(currentTitleField.get(evListener)),
-                "currentTitle was lost during clearNowPlayingInfo");
+                "VC must receive all three metadata updates, including the empty clear");
+            check("".equals(stations.get(1).getPrimaryInformation())
+                    && stations.get(1).getPrimaryInformationType() == 0,
+                "empty metadata did not reach BAP");
+
+            applyCoverArt.invoke(evListener, new Object[]{"/tmp/cover.jpg", Integer.valueOf(7)});
+            check(stations.get(3).getPictureID() == 8, "late artwork was not attached");
+            applyCoverArt.invoke(evListener, new Object[]{"", Integer.valueOf(0)});
+            check(stations.size() == 5
+                    && stations.get(4).getPictureID() == new CombiBAPCurrentStationInfo().getPictureID()
+                    && stations.get(4).getPictureURL() == null
+                    && "Song B".equals(stations.get(4).getPrimaryInformation()),
+                "explicit artwork clear must remove the picture and preserve track text");
+            applyCoverArt.invoke(evListener, new Object[]{"/tmp/cover.jpg", Integer.valueOf(7)});
+            check(stations.size() == 6 && stations.get(5).getPictureID() == 8,
+                "same artwork after clear must force a VC refresh");
+
+            /* Cache receives events even without audio focus. Reacquiring focus must
+             * replay the clear, not the preceding song; a session reset replays nothing. */
+            Field evField = TerminalModeBapCombi.class.getDeclaredField("eventListener");
+            evField.setAccessible(true);
+            evField.set(combi, evListener);
+            Class<?> cacheClass = Class.forName("de.audi.app.terminalmode.combi.TerminalModeBapCombi$CachingEventListener");
+            Constructor<?> cacheCtor = cacheClass.getDeclaredConstructors()[0];
+            cacheCtor.setAccessible(true);
+            Object[] cacheArgs = new Object[cacheCtor.getParameterTypes().length];
+            for (int i = 0; i < cacheArgs.length; i++) {
+                if (cacheCtor.getParameterTypes()[i] == TerminalModeBapCombi.class) cacheArgs[i] = combi;
+            }
+            Object cache = cacheCtor.newInstance(cacheArgs);
+            Method cacheUpdate = cacheClass.getDeclaredMethod("updateNowPlayingData", TrackDataChangedEvent.class);
+            Method replay = cacheClass.getDeclaredMethod("sendCachedEvents");
+            Method clearCache = cacheClass.getDeclaredMethod("clearCachedEvents");
+            cacheUpdate.setAccessible(true); replay.setAccessible(true); clearCache.setAccessible(true);
+            cacheUpdate.invoke(cache, busTracks.get(0));
+            cacheUpdate.invoke(cache, busTracks.get(1));
+            replay.invoke(cache);
+            check(stations.size() == 7 && "".equals(stations.get(6).getPrimaryInformation()),
+                "focus regain replayed stale cached metadata");
+            clearCache.invoke(cache);
+            replay.invoke(cache);
+            check(stations.size() == 7, "session reset replayed old cached events");
 
             /* Session reset clears state so a new session starts clean */
             resetCoverMerge.invoke(evListener, new Object[0]);
@@ -213,6 +248,6 @@ public final class NowPlayingClearTest {
         check(forwardedAudioTypes.size() == 5 && forwardedAudioTypes.get(4).intValue() == 0 && delayedTasks.isEmpty(),
             "updateMainAudioType(0) after explicit MMI audio borrow must be forwarded immediately");
 
-        System.out.println("NowPlayingClearTest: stock MMI pass-through, VC clear filter, and mainAudioType skip guard PASS");
+        System.out.println("NowPlayingClearTest: metadata/artwork clears, cache replay, and mainAudioType skip guard PASS");
     }
 }
