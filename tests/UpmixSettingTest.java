@@ -24,13 +24,12 @@ public final class UpmixSettingTest {
         if (CarPlaySettingsUi.levelToChoice(1) != 1) throw new AssertionError("level 1 -> Normal");
         if (CarPlaySettingsUi.levelToChoice(2) != 2) throw new AssertionError("level 2 -> Intense");
 
-        // Subwoofer is hidden on BASIC_2CH (1) / BASIC_4CH (2) and unlocked on >= 3 (9VD 6ch, Bose, B&O)
-        if (SoundControlUi.subwooferSupported(1)) throw new AssertionError("2ch no sub");
-        if (SoundControlUi.subwooferSupported(2)) throw new AssertionError("4ch no sub");
-        if (!SoundControlUi.subwooferSupported(3)) throw new AssertionError("6ch 9VD has sub");
-        for (int i = 0; i < external.length; i++) {
-            if (!SoundControlUi.subwooferSupported(external[i])) throw new AssertionError("sub expected for " + external[i]);
-        }
+        // Subwoofer 0..0 -> -9..+9 unlock only on external MOST amps; internal DSP (1..3) and an
+        // unknown amp (-1 / 0) obey the dataset range (issue #94: 8RM = 0x0122 = 3, no subwoofer)
+        for (int t = -1; t <= 3; t++)
+            if (SoundControlUi.subwooferSupported(t)) throw new AssertionError("internal/unknown amp " + t + " obeys dataset");
+        for (int i = 0; i < external.length; i++)
+            if (external[i] > 3 && !SoundControlUi.subwooferSupported(external[i])) throw new AssertionError("sub expected for " + external[i]);
 
         // Surround is hidden on internal amps (1..3) and enabled on all external MOST amps (B&O 4/21, Bose 17/18/19, etc.)
         for (int t = 1; t <= 3; t++)
