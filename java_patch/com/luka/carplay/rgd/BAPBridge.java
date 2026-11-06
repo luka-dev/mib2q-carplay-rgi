@@ -1023,11 +1023,19 @@ public class BAPBridge {
                 && (nowApproach != inApproachZone)
                 && showManeuver && hasManeuverList;
             if (approachChanged) {
-                dirty |= RouteGuidance.State.DIRTY_DIST_MAN
+                int approachDirty = RouteGuidance.State.DIRTY_DIST_MAN
                        | RouteGuidance.State.DIRTY_LANE_GUIDANCE
                        | RouteGuidance.State.DIRTY_MANEUVER_TEXT
                        | RouteGuidance.State.DIRTY_MANEUVER_STATE
                        | RouteGuidance.State.DIRTY_MANEUVER_ICON;  /* BAP needs icon refresh for approach/follow */
+                dirty |= approachDirty;
+                // Keep the synthetic refresh pending if any output fails.
+                // The next distance delta must retry geometry even though
+                // inApproachZone already reflects this transition.
+                s.markDirty(approachDirty);
+                synchronized (this) {
+                    rendererManeuverPending = true;
+                }
                 inApproachZone = nowApproach;
                 Log.i(TAG, "Approach zone " + (nowApproach ? "ENTER" : "EXIT")
                     + " (dist=" + distM + "m, highway=" + isHighway

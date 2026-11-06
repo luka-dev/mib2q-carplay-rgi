@@ -49,8 +49,9 @@ static uint64_t now_monotonic_ms(void) {
 
 /* Protects the debounce fields in g_rgd against the heartbeat tick
  * (rgd_periodic_tick, runs on bus heartbeat thread) racing with the
- * iAP2 callback thread inside rgd_message_handler.  Critical sections
- * are tiny (a few stores + a read of monotonic time). */
+ * iAP2 callback thread inside rgd_message_handler. The timer also holds it
+ * through bus enqueue, so a resumed route cannot overtake its deferred stop.
+ * Enqueue does not perform socket I/O or call back into this module. */
 static pthread_mutex_t g_rgd_debounce_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t g_rgd_start_lock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -185,6 +186,18 @@ static bool rgd_update_has_active_evidence(const rgd_update_t* upd) {
 static void rgd_update_cache_merge(const rgd_update_t* upd) {
     rgd_update_t* c = &g_rgd.update_cache;
     if (!upd) return;
+
+    /* These scalars belong to the current list head, not the whole route.
+     * Invalidate before merging so fresh distance in this same update wins.
+     * With no previous head, retain distance that arrived ahead of the list. */
+    if ((upd->present & RGD_UPD_MANEUVER_LIST)
+            && (c->present & RGD_UPD_MANEUVER_LIST) && c->maneuver_list_count > 0
+            && (upd->maneuver_list_count == 0 || upd->maneuver_list[0] != c->maneuver_list[0])) {
+        c->present &= ~(RGD_UPD_DIST_TO_MANEUVER | RGD_UPD_DIST_TO_MANEUVER_STR | RGD_UPD_DIST_TO_MANEUVER_UNI);
+        c->dist_to_maneuver = 0;
+        c->dist_to_maneuver_string[0] = '\0';
+        c->dist_to_maneuver_units = 0;
+    }
 
     if (upd->present & RGD_UPD_COMPONENT_IDS) {
         c->component_count = upd->component_count;
@@ -733,6 +746,9 @@ static void write_bus_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* 
         bus_text_uint(b, "dist_dest_m", upd->distance_remaining);
     if (present & RGD_UPD_DIST_TO_MANEUVER)
         bus_text_uint(b, "dist_maneuver_m", upd->dist_to_maneuver);
+    else if (present & RGD_UPD_MANEUVER_LIST)
+        /* Explicit unknown: omission would leave Java's previous distance. */
+        bus_text_int(b, "dist_maneuver_m", -1);
     if (present & RGD_UPD_ETA)
         bus_text_uint(b, "eta_seconds", upd->eta);
     if (present & RGD_UPD_TIME_REMAINING)
@@ -1381,17 +1397,12 @@ void rgd_periodic_tick(void) {
     }
     uint64_t elapsed = now - g_rgd.state_zero_started_ms;
 
-    /* Window expired — claim the emission.  Mark fields before
-     * unlocking so a concurrent handler doesn't re-do the same work. */
+    /* Serialize the deferred stop with cancellation by active evidence.
+     * Unlocking before enqueue lets a fresh active frame overtake this stop. */
     g_rgd.emitted_route_state = 0;
     g_rgd.state_zero_started_ms = 0;
     g_rgd.state_zero_deadline_ms = 0;
     g_rgd.state_zero_from_reroute = false;
-    pthread_mutex_unlock(&g_rgd_debounce_lock);
-
-    LOG_INFO(LOG_MODULE, "Route reset timeout: emitting deferred state=0 to Java (elapsed=%llums)",
-             (unsigned long long)elapsed);
-
     /* Direct minimal bus frame — bypass update_cache (not synchronized
      * across threads).  bus_send_text is internally thread-safe. */
     bus_text_builder_t _b_storage;
@@ -1401,6 +1412,10 @@ void rgd_periodic_tick(void) {
     bus_text_int(b, "route_state", 0);
     bus_text_int(b, "maneuver_count", 0);
     bus_send_text(EVT_RGD_UPDATE, BUS_FLAG_STICKY, b);
+    pthread_mutex_unlock(&g_rgd_debounce_lock);
+
+    LOG_INFO(LOG_MODULE, "Route reset timeout: emitting deferred state=0 to Java (elapsed=%llums)",
+             (unsigned long long)elapsed);
 }
 
 /* Called lazily on first message — now only used to mark initialization

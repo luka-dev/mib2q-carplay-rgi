@@ -83,3 +83,4 @@ python3 "$PROJECT_DIR/tests/test_rgd_native_contract.py"
 
 # Native hook -> bus -> Java -> HUD/renderer, with the JAR built above.
 SKIP_JAVA_BUILD=1 bash "$PROJECT_DIR/scripts/test_lane_guidance_e2e.sh"
+bash "$PROJECT_DIR/scripts/test_rgd_timeout.sh"

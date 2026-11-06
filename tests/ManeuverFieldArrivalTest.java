@@ -32,9 +32,13 @@ public final class ManeuverFieldArrivalTest {
         field(owner, name).set(target, value);
     }
     private static final class HUD implements InvocationHandler {
-        int main, direction, descriptors, distance, bar, distanceFailures;
+        int main, direction, descriptors, distance, bar, distanceFailures, maneuverStateFailures;
         boolean barOn;
         public Object invoke(Object proxy, Method method, Object[] args) {
+            if (method.getName().equals("updateManeuverState") && maneuverStateFailures > 0) {
+                maneuverStateFailures--;
+                throw new IllegalStateException("injected maneuver-state delivery failure");
+            }
             if (method.getName().equals("updateManeuverDescriptor")) {
                 CombiBAPNaviManeuverDescriptor[] data = (CombiBAPNaviManeuverDescriptor[]) args[0];
                 main = data[0].mainElement; direction = data[0].direction; descriptors++;
@@ -53,6 +57,7 @@ public final class ManeuverFieldArrivalTest {
     }
     private static final class Renderer extends RendererServer {
         int icon = -1, direction, angle, writes, failures, progressLevel, progressMode, progressState;
+        int progressOnFollow;
         public boolean isReady() { return true; }
         public boolean isFrameReady() { return true; }
         public boolean isConnected() { return true; }
@@ -60,6 +65,7 @@ public final class ManeuverFieldArrivalTest {
         public boolean sendVisibleArea(int x, int y, int w, int h) { return true; }
         boolean sendLaneGuidance(LaneGuidanceSnapshot lanes) { return true; }
         public boolean sendProgress(int level, int mode, int state) {
+            if (icon == RendererMapper.ICON_APPROACH && mode != 0) progressOnFollow++;
             progressLevel = level; progressMode = mode; progressState = state; return true;
         }
         public boolean sendBapProgressManeuver(int nextIcon, int nextDirection, int nextAngle,
@@ -353,8 +359,45 @@ public final class ManeuverFieldArrivalTest {
                 "selection overwrote source metadata");
         }
     }
+    private static void farStraightTransition() throws Exception {
+        Class<?> settings = com.luka.carplay.connectivity.CarPlaySettingsUi.class;
+        Field far = field(settings, "currentRgiFar");
+        int saved = far.getInt(null);
+        far.setInt(null, com.luka.carplay.connectivity.CarPlaySettingsUi.RGI_FAR_STRAIGHT);
+        try {
+            for (int failure = 0; failure < 2; failure++) {
+                Fixture f = new Fixture();
+                try {
+                    f.feed("route_generation:n:401\nroute_state:n:1\nmaneuver_count:n:1\n"
+                        + "maneuver_list:s:0\nm0_ver:n:1\nm0_type:n:2\nm0_junction_type:n:0\n"
+                        + "dist_maneuver_m:n:5000\n");
+                    check(f.renderer.icon == RendererMapper.ICON_APPROACH && f.renderer.progressMode == 0,
+                        "far-straight fixture must start with an unfilled follow icon");
+                    f.hud.maneuverStateFailures = failure;
+                    f.feed("dist_maneuver_m:n:100\n");
+                    check(f.renderer.progressOnFollow == 0,
+                        "approach progress reached the old follow icon before maneuver geometry");
+                    if (failure != 0) {
+                        check(f.renderer.icon == RendererMapper.ICON_APPROACH && f.renderer.progressMode == 0,
+                            "failed HUD update changed the old renderer's progress");
+                        check((f.state.dirtyMask & RouteGuidance.State.DIRTY_MANEUVER_ICON) != 0,
+                            "synthetic approach icon refresh was lost on failure");
+                        f.feed("dist_maneuver_m:n:90\n");
+                    }
+                    check(f.renderer.icon == 2 && f.renderer.progressMode == 1,
+                        "approach update/retry did not converge to the turn with progress");
+                    check(f.state.dirtyMask == 0 && !field(BAPBridge.class, "rendererManeuverPending").getBoolean(f.bridge),
+                        "successful approach geometry remained pending");
+                    int writes = f.renderer.writes;
+                    f.replay();
+                    check(f.renderer.writes == writes, "accepted approach geometry restarted on replay");
+                } finally { f.close(); }
+            }
+        } finally { far.setInt(null, saved); }
+    }
     public static void main(String[] args) throws Exception {
         Log.setLevel(-1);
+        farStraightTransition();
         distanceOwnership();
         blinkGapPhases();
         presentationMatrix();
