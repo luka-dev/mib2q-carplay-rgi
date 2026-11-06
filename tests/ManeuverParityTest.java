@@ -91,11 +91,11 @@ public final class ManeuverParityTest {
         a.reset();check(send(a,a.state(8,30,0,0,0,crowded)),"bounded highway roads");b=a.pendingPacket();
         check(b[7]==18 && angle(b,42)==0,"reserve final wire slot for continuing highway");
         for(int i=0;i<17;i++)check(angle(b,8+2*i)==2*crowded[i],"keep original branch order");
-        check(ManeuverMapper.map(1,-90,-1,0)[0]==ManeuverMapper.NO_INFO,
-            "raw mapper must preserve unavailable geometry");
+        check(ManeuverMapper.map(1,-90,-1,0)[0]==ManeuverMapper.TURN,
+            "known left turn must not require junction metadata");
         b=packet(a,1,-90,-1,0);
-        check(b[2]==RendererMapper.ICON_APPROACH && b[7]==0 && angle(b,4)==0,
-            "active presentation must retain neutral guidance");
+        check(b[2]==RendererMapper.ICON_TURN && angle(b,4)==-180,
+            "renderer must retain left turn without junction type");
         b=packet(a,28,-67,1,0);
         check((b[1]&4)!=0 && angle(b,4)==-134 && (b[1]&16)!=0,"raw circle exit retains exact degrees and enables snap");
         for(int dir=0;dir<256;dir+=16) {

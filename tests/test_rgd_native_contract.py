@@ -37,9 +37,9 @@ static size_t num(uint8_t *buf,size_t off,uint16_t key,int value,int size) {
 static void sample(const char *path,int which) {
     uint8_t raw[512]={0};size_t n=6;
     n=num(raw,n,MAN_TLV_INDEX,which?50:10,2);
-    n=num(raw,n,MAN_TLV_TYPE,which?2:1,1);
-    n=num(raw,n,MAN_TLV_JUNCTION_TYPE,0,1);
-    if(which!=1)n=num(raw,n,MAN_TLV_EXIT_ANGLE,which?90:-90,2);
+    n=num(raw,n,MAN_TLV_TYPE,(which==0 || which==4)?1:2,1);
+    if(which<4)n=num(raw,n,MAN_TLV_JUNCTION_TYPE,0,1);
+    if(which!=1 && which<4)n=num(raw,n,MAN_TLV_EXIT_ANGLE,which?90:-90,2);
     if(!which) {
         for(int i=-90;i<=90;i+=90)n=num(raw,n,MAN_TLV_JUNCTION_ANGLES,i,2);
         n=num(raw,n,MAN_TLV_DISTANCE_BETWEEN,6000,4);
@@ -48,13 +48,14 @@ static void sample(const char *path,int which) {
     raw[0]=raw[1]=0x40;write_be16(raw+2,n);write_be16(raw+4,0x5202);
     rgd_maneuver_t m;assert(rgd_parse_maneuver(raw,n,&m));
     if(which==1)assert(m.exit_angle==1000 && (m.present&RGD_MAN_EXIT_ANGLE));
+    if(which>=4)assert(!(m.present&RGD_MAN_JUNCTION_TYPE) && m.exit_angle==1000);
     uint8_t text[8192];bus_text_builder_t b={text,sizeof(text),0,false,false};
     bus_text_uint(&b,"route_generation",g_rgd.route_generation);bus_text_int(&b,"route_state",1);bus_text_int(&b,"maneuver_count",1);bus_text_str(&b,"maneuver_list","0");
     g_rgd.slot_ver[0]=(which==0 || which==3)?1:34;write_slot_data_keys(&b,0,&m);assert(!b.overflow);
     FILE *f=fopen(path,"wb");assert(f);assert(fwrite(text,1,b.len,f)==b.len);fclose(f);
 }
 int main(int argc,char **argv) {
-    assert(argc==5);
+    assert(argc==7);
     rgd_maneuver_map_reset();assert(g_rgd.route_generation==100);
     for(int i=0;i<3;i++)sample(argv[i+1],i);
     g_rgd.ver_counter=34;g_rgd.lane_cache[3].present=1;
@@ -63,12 +64,14 @@ int main(int argc,char **argv) {
     assert(g_rgd.slot_cache[0].present==0 && g_rgd.lane_cache[3].present==0);
     // Same clock, slot and version as the first route; only generation differs.
     sample(argv[4],3);
+    for(int i=4;i<6;i++)sample(argv[i+1],i);
     return 0;
 }
 '''
 (BUILD / 'native_input.c').write_text(c)
 subprocess.run(['cc','-std=c99','-O1','-fsanitize=address,undefined','-fno-omit-frame-pointer','-DENABLE_LOGGING=0','-I'+str(ROOT/'hook'),str(BUILD/'native_input.c'),str(ROOT/'hook/routeguidance/rgd_tlv.c'),'-o',str(BUILD/'native_input')],check=True)
-frames = [BUILD / name for name in ('old-slot.txt','new-no-angle.txt','new-known-angle.txt','new-generation.txt')]
+frames = [BUILD / name for name in ('old-slot.txt','new-no-angle.txt','new-known-angle.txt','new-generation.txt',
+                                   'left-no-junction.txt','right-no-junction.txt')]
 subprocess.run([str(BUILD/'native_input'),*map(str,frames)],check=True)
 java = r'''
 import com.luka.carplay.rgd.*;
@@ -105,7 +108,22 @@ public class NativeInputProbe {
         if(state(reset).routeGeneration!=101 || state(reset).mVer[0]!=2
                 || state(reset).mAfterRoad[0]!=null || state(reset).mJunctionAngles[0]!=null)
             throw new AssertionError("native reset generation not received");
-        System.out.println("Native RGI contract: source sentinel, slot replacement, same-clock route reset and identical clean HUD descriptors PASS");
+        for(int i=4;i<6;i++) {
+            // Replace a record that had a junction type with one that omits it.
+            parse(reset,args[i]);RouteGuidance.State missing=state(reset);
+            audit.reset();audit.sendBap(missing);
+            int direction=i==4?ManeuverMapper.DIR_LEFT:ManeuverMapper.DIR_RIGHT;
+            if(missing.mJunctionType[0]!=-1 || missing.mTurnAngle[0]!=1000
+                    || audit.sender.input[0].mainElement!=ManeuverMapper.TURN
+                    || audit.sender.input[0].direction!=direction)
+                throw new AssertionError("native missing junction lost the typed HUD turn");
+            if(!audit.sendRenderer(missing,0))throw new AssertionError("missing-junction renderer send failed");
+            byte[] packet=audit.pendingPacket();
+            int angle=(short)(((packet[4]&255)<<8)|(packet[5]&255));
+            if(packet[2]!=RendererMapper.ICON_TURN || angle!=(i==4?-180:180))
+                throw new AssertionError("native missing junction lost the typed renderer turn");
+        }
+        System.out.println("Native RGI contract: source sentinel, slot replacement, same-clock route reset, clean HUD descriptors and type-only turns on HUD/renderer PASS");
     }
 }
 '''

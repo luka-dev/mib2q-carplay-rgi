@@ -140,7 +140,7 @@ public final class ManeuverFieldArrivalTest {
             check(f.hud.direction != ManeuverMapper.DIR_LEFT, label + ": HUD substituted the prefetched secondary turn");
         if (f.renderer.writes > 0)
             check(f.renderer.icon != 2 || f.renderer.angle >= 0, label + ": renderer substituted the prefetched secondary turn");
-        if (mode != 2 && seen[0] && seen[1] && seen[2] && seen[4]) {
+        if (mode != 2 && seen[0] && seen[1] && seen[2]) {
             check(f.renderer.writes > 0 && f.renderer.icon == 2 && f.renderer.direction == 0
                 && f.renderer.angle == (seen[3] ? 134 : 180), label + ": renderer did not apply latest geometry "
                     + "seen=" + Arrays.toString(seen) + " writes=" + f.renderer.writes + " icon=" + f.renderer.icon
@@ -277,7 +277,9 @@ public final class ManeuverFieldArrivalTest {
                 check(f.state.mType[0] == type, "presentation overwrote raw unknown type");
             }
             f.feed("m0_type:n:2\n");
-            neutral(f, "missing junction must remain neutral");
+            check(f.hud.main == ManeuverMapper.TURN && f.hud.direction == ManeuverMapper.DIR_RIGHT
+                && f.renderer.icon == RendererMapper.ICON_TURN && f.renderer.angle == 180,
+                "known right turn must not wait for junction metadata");
             f.feed("m0_junction_type:n:1\n");
             neutral(f, "incompatible junction must remain neutral");
             f.feed("m0_junction_type:n:0\nm0_turn_angle:n:90\n");
@@ -336,6 +338,43 @@ public final class ManeuverFieldArrivalTest {
                 }
             } finally { f.close(); }
         }
+    }
+    private static void missingJunction() throws Exception {
+        Fixture f = new Fixture();
+        try {
+            f.feed("route_generation:n:501\nroute_state:n:1\nmaneuver_count:n:1\nmaneuver_list:s:0\n");
+            for (int type : new int[]{1,2}) {
+                int direction = type == 1 ? ManeuverMapper.DIR_LEFT : ManeuverMapper.DIR_RIGHT;
+                int angle = type == 1 ? -180 : 180;
+                f.feed("m0_full:n:1\nm0_ver:n:" + type + "\nm0_type:n:" + type
+                    + "\ndist_maneuver_m:n:100\n");
+                check(f.state.mJunctionType[0] == -1 && !f.state.mTurnAnglePresent[0],
+                    "mapping must preserve absent junction and angle in source state");
+                check(f.hud.main == ManeuverMapper.TURN && f.hud.direction == direction
+                    && f.renderer.icon == RendererMapper.ICON_TURN && f.renderer.angle == angle,
+                    "type-only maneuver must reach both HUD and renderer");
+                check(f.hud.barOn && f.hud.bar > 0 && f.renderer.progressMode == 1
+                    && f.renderer.progressLevel == f.hud.bar * 16 / 100,
+                    "type-only maneuver must retain shared approach progress");
+                for (int junction : new int[]{1,2,255}) {
+                    f.feed("m0_junction_type:n:" + junction + "\n");
+                    neutral(f, "explicit incompatible/unknown junction must not use the default");
+                }
+                f.feed("m0_junction_type:n:0\n");
+                check(f.hud.main == ManeuverMapper.TURN && f.hud.direction == direction
+                    && f.renderer.angle == angle, "late ordinary junction must restore the same turn");
+            }
+            for (int type : new int[]{-1,54,255}) {
+                f.feed("m0_full:n:1\nm0_type:n:" + type + "\n");
+                neutral(f, "missing junction must not make an unknown maneuver concrete");
+            }
+            for (int type : new int[]{7,28,46}) {
+                check(ManeuverMapper.map(type,90,-1,0,true)[0] == ManeuverMapper.NO_INFO,
+                    "ordinary default must not fabricate roundabout metadata");
+                check(ManeuverMapper.map(type,90,1,0,true)[0] != ManeuverMapper.NO_INFO,
+                    "explicit roundabout exit must remain supported");
+            }
+        } finally { f.close(); }
     }
     private static void presentationMatrix() {
         RouteGuidance.State s = new RouteGuidance.State();
@@ -397,6 +436,7 @@ public final class ManeuverFieldArrivalTest {
     }
     public static void main(String[] args) throws Exception {
         Log.setLevel(-1);
+        missingJunction();
         farStraightTransition();
         distanceOwnership();
         blinkGapPhases();
