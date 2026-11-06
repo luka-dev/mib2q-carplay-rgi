@@ -15,12 +15,20 @@ public final class LaneGuidanceLifecycleTest {
         boolean showing; int writes;
         CombiBAPNaviLaneGuidanceData[] lanes;
         HUD() { super(null); } // bypass the native framework constructor
+        public void updateManeuverDescriptor(de.audi.atip.interapp.combi.bap.navi.data.CombiBAPNaviManeuverDescriptor[] d) { }
+        public void updateExitView(int a,int b) { }
+        public void updateManeuverState(int state) { }
+        public void updateDistanceToNextManeuver(int a,int b,boolean c,int d) { }
         public void updateLaneGuidance(boolean enabled, CombiBAPNaviLaneGuidanceData[] data) {
             showing=enabled; lanes=data; writes++;
         }
     }
     public static final class Renderer extends RendererServer {
         LaneGuidanceSnapshot lanes; int writes;
+        public boolean sendVisibleArea(int x,int y,int w,int h) { return true; }
+        public boolean sendProgress(int level,int mode,int state) { return true; }
+        public boolean sendBapProgressManeuver(int icon,int direction,int angle,int side,int[] roads,
+                int level,int mode,int perspective,boolean refresh,boolean snap,int progress) { return true; }
         boolean sendLaneGuidance(LaneGuidanceSnapshot value) { lanes=value; writes++; return true; }
     }
     static void check(boolean b,String message) { if(!b)throw new AssertionError(message); }
@@ -37,6 +45,7 @@ public final class LaneGuidanceLifecycleTest {
         HUD hud=(HUD)((Unsafe)uf.get(null)).allocateInstance(HUD.class);
         Renderer renderer=new Renderer();BAPBridge bridge=new BAPBridge();
         set(bridge,"initialized",Boolean.TRUE);set(bridge,"appConnectorNavi",hud);
+        set(bridge,"bapSessionStarted",Boolean.TRUE);
         set(bridge,"routeTextPublished",Boolean.TRUE);
         set(bridge,"customRendererStarted",Boolean.TRUE);set(bridge,"rendererClient",renderer);
         RouteGuidance rg=new RouteGuidance();
@@ -76,8 +85,10 @@ public final class LaneGuidanceLifecycleTest {
             if(i==9)check(s.lgLaneDirections[3]==null && s.lgLaneCount[3]==-1,"LRU remap retained old lane content");
         }
         // Route-only changes must reevaluate the same visibility predicate.
+        set(bridge,"bapSessionStarted",Boolean.FALSE);
         s.maneuverCount=0;s.routeState=0;s.dirtyMask=RouteGuidance.State.DIRTY_ROUTE_STATE;
         check(bridge.update(s) && !hud.showing && !renderer.lanes.showing,"route-only clear missed lanes");
+        set(bridge,"bapSessionStarted",Boolean.TRUE);
         s.routeState=1;s.dirtyMask=RouteGuidance.State.DIRTY_ROUTE_STATE;
         check(bridge.update(s) && hud.showing && renderer.lanes.showing,"lanes require a maneuver count");
 

@@ -311,9 +311,18 @@ public class BAPBridge {
         return true;
     }
 
-    /**
-     * Send distance to maneuver through AppConnectorNavi using native formatter rules.
-     */
+    /** Withdraw the cached distance and progress when their maneuver changes. */
+    private synchronized void clearDistanceToManeuverCache() {
+        synchronized (distanceToManeuverLock) {
+            hasLastDistM = false;
+            lastDistM = 0;
+            lastBarOn = false;
+            lastBar = 0;
+            lastProgressState = RendererServer.PROGRESS_OFF;
+        }
+    }
+
+    /** Send distance through AppConnectorNavi using native formatter rules. */
     private void sendDistanceToManeuverRaw(int meters, boolean bargraphOn, int bargraph) throws Exception {
         sendDistanceToManeuverRaw(meters,bargraphOn,bargraph,
             bargraphOn ? RendererServer.PROGRESS_FILL : RendererServer.PROGRESS_OFF);
@@ -336,6 +345,7 @@ public class BAPBridge {
                 lastDistM = 0;
                 lastBarOn = false;
                 lastBar = 0;
+                lastProgressState = RendererServer.PROGRESS_OFF;
             }
         }
 
@@ -673,12 +683,7 @@ public class BAPBridge {
             lastFirstManeuverVer = -1;
             lastFirstRouteGeneration = -1L;
             resetActionBlinkState();
-            synchronized (distanceToManeuverLock) {
-                hasLastDistM = false;
-                lastDistM = 0;
-                lastBarOn = false;
-                lastBar = 0;
-            }
+            clearDistanceToManeuverCache();
             /* Action blink thread starts/stops with approach zone enter/exit
              * (see update() near approachChanged) — not on session start.
              * Outside approach zone the thread does nothing useful, and its
@@ -920,7 +925,8 @@ public class BAPBridge {
         int dirty = s.dirtyMask;
         cacheTravelInfo(s, dirty);
         if (dirty == 0) return false;
-        int crIconMask = RouteGuidance.State.DIRTY_MANEUVER_ICON
+        int crIconMask = RouteGuidance.State.DIRTY_ROUTE_STATE
+            | RouteGuidance.State.DIRTY_MANEUVER_ICON
             | RouteGuidance.State.DIRTY_MANEUVER_LIST
             | RouteGuidance.State.DIRTY_MANEUVER_COUNT;
         if ((dirty & crIconMask) != 0) {
@@ -940,14 +946,14 @@ public class BAPBridge {
                 && (s.maneuverCount == 0)
                 && (s.routeState <= 0);
             int distM = s.distManeuverM;
-            int[] idxs = getManeuverIndexList(s);
-            boolean hasManeuverList = (idxs != null && idxs.length > 0);
+            boolean hasManeuverList = s.maneuverOrder != null && s.maneuverOrder.length > 0;
             boolean hasAnyManeuver = (s.maneuverCount > 0);
             boolean shouldClearManeuver = (s.maneuverCount == 0) && (s.routeState <= 0);
 
-            int firstIdx = primaryManeuverIndex(s);
-            int type0 = (firstIdx >= 0 && s.mType != null && firstIdx < s.mType.length) ? s.mType[firstIdx] : -1;
-            boolean showManeuver = ManeuverMapper.isValidType(type0);
+            ManeuverPresentation maneuver = ManeuverPresentation.resolve(s, bapSessionStarted);
+            int firstIdx = maneuver.slot;
+            int type0 = firstIdx >= 0 ? s.mType[firstIdx] : -1;
+            boolean showManeuver = maneuver.hasManeuver();
 
             /* Highway-aware prepare thresholds (meters).
              *
@@ -971,6 +977,7 @@ public class BAPBridge {
             updateActionBlinkContext(
                 hasManeuverList && showManeuver && (bargraphDenominatorM > 0) && !shouldClearManeuver && !explicitClear,
                 distM, bargraphDenominatorM);
+            if (!showManeuver) stopActionBlinkThread();
 
             /*
              * Approach zone detection.
@@ -989,6 +996,10 @@ public class BAPBridge {
                 || (currentFirstVer != lastFirstManeuverVer)
                 || s.routeGeneration != lastFirstRouteGeneration;
             if (primaryChanged) {
+                // A distance gap may reuse only this maneuver's cached phase.
+                // Invalidate before publishing, so failed sends/retries cannot
+                // resurrect the previous slot, version or route's distance.
+                clearDistanceToManeuverCache();
                 inApproachZone = false;
                 lastFirstManeuverIdx = firstIdx;
                 lastFirstManeuverVer = currentFirstVer;
@@ -1004,8 +1015,10 @@ public class BAPBridge {
                 || type0 == ManeuverMapper.MT_ARRIVE_DESTINATION_RIGHT);
             boolean nowApproach = isArrival
                 || (hasUsableDistance ? (distM <= prepareThreshold) : inApproachZone);
-            boolean showFollowStraight = com.luka.carplay.connectivity.CarPlaySettingsUi.isRgiFarStraight()
-                && !nowApproach;
+            boolean showFollowStraight = maneuver != ManeuverPresentation.NONE
+                && (!showManeuver || (com.luka.carplay.connectivity.CarPlaySettingsUi.isRgiFarStraight()
+                    && !nowApproach));
+            if (showFollowStraight) maneuver = ManeuverPresentation.FOLLOW;
             boolean approachChanged = hasUsableDistance
                 && (nowApproach != inApproachZone)
                 && showManeuver && hasManeuverList;
@@ -1036,30 +1049,9 @@ public class BAPBridge {
              * 1. Maneuver icons (FctID 23)
              */
             boolean descriptorSent = false;
-            if ((dirty & (RouteGuidance.State.DIRTY_MANEUVER_ICON |
-                          RouteGuidance.State.DIRTY_MANEUVER_LIST |
-                          RouteGuidance.State.DIRTY_MANEUVER_COUNT)) != 0) {
-                if (explicitClear) {
-                    sendNoSymbol();
-                    descriptorSent = true;
-                } else if (hasManeuverList) {
-                    if (showManeuver) {
-                        if (showFollowStraight) {
-                            sendFollowStreet();
-                        } else {
-                            sendManeuvers(s);
-                        }
-                        descriptorSent = true;
-                    } else if (shouldClearManeuver) {
-                        sendNoSymbol();
-                        descriptorSent = true;
-                    } else if (hasAnyManeuver) {
-                    }
-                } else if (shouldClearManeuver) {
-                    sendNoSymbol();
-                    descriptorSent = true;
-                } else if (hasAnyManeuver) {
-                }
+            if ((dirty & crIconMask) != 0) {
+                sendManeuvers(s, maneuver);
+                descriptorSent = true;
             }
 
             /*
@@ -1076,11 +1068,9 @@ public class BAPBridge {
              *
              * Distance is converted with native BAPDistanceFormatter rules.
              */
-            if ((dirty & (RouteGuidance.State.DIRTY_DIST_MAN |
-                          RouteGuidance.State.DIRTY_MANEUVER_ICON |
-                          RouteGuidance.State.DIRTY_MANEUVER_LIST |
-                          RouteGuidance.State.DIRTY_MANEUVER_COUNT)) != 0) {
+            if ((dirty & (RouteGuidance.State.DIRTY_DIST_MAN | crIconMask)) != 0) {
                 boolean transientNoDistance = (distM <= 0)
+                    && showManeuver
                     && !shouldClearManeuver
                     && !explicitClear
                     && hasManeuverList
@@ -1141,30 +1131,18 @@ public class BAPBridge {
              * 5. Maneuver state (FctID 55) - for HUD
              */
             if ((dirty & (RouteGuidance.State.DIRTY_MANEUVER_STATE |
-                          RouteGuidance.State.DIRTY_MANEUVER_ICON |
-                          RouteGuidance.State.DIRTY_MANEUVER_LIST |
-                          RouteGuidance.State.DIRTY_MANEUVER_COUNT |
-                          RouteGuidance.State.DIRTY_DIST_MAN)) != 0) {
-                if (explicitClear) {
-                    appConnectorNavi.updateManeuverState(0);
-                } else if (shouldClearManeuver || (hasManeuverList && showManeuver)) {
-                    int bapState;
-                    if (showManeuver) {
-                        if (showFollowStraight) {
-                            bapState = 1;   /* Follow */
-                        } else if (hasUsableDistance && bargraphDenominatorM > 0 && distM <= bargraphDenominatorM) {
-                            bapState = 4;   /* Action */
-                        } else {
-                            bapState = 2;   /* Prepare */
-                        }
-                    } else {
-                        bapState = 0;
-                    }
-                    appConnectorNavi.updateManeuverState(bapState);
-                } else if (hasManeuverList && hasAnyManeuver) {
-                    appConnectorNavi.updateManeuverState(1);
-                } else if (hasAnyManeuver && !hasManeuverList) {
+                          RouteGuidance.State.DIRTY_DIST_MAN | crIconMask)) != 0) {
+                int bapState;
+                if (maneuver == ManeuverPresentation.NONE) {
+                    bapState = 0;
+                } else if (showFollowStraight) {
+                    bapState = 1;   /* Follow */
+                } else if (hasUsableDistance && bargraphDenominatorM > 0 && distM <= bargraphDenominatorM) {
+                    bapState = 4;   /* Action */
+                } else {
+                    bapState = 2;   /* Prepare */
                 }
+                appConnectorNavi.updateManeuverState(bapState);
             }
 
             /*
@@ -1238,13 +1216,13 @@ public class BAPBridge {
                 /* Check if rendered maneuver actually changed */
                 boolean iconChanged = false;
                 if ((dirty & crIconMask) != 0) {
-                    if (showManeuver && hasManeuverList && !explicitClear && !shouldClearManeuver) {
-                        iconChanged = updateRendererIfChanged(s, bargraphDenominatorM, showFollowStraight);
+                    if (maneuver != ManeuverPresentation.NONE) {
+                        iconChanged = updateRendererIfChanged(s, bargraphDenominatorM, maneuver);
                     }
                 }
                 /* Maneuver packets carry initial progress. Replays and distance
                  * deltas reuse the exact last HUD phase after identity is accepted. */
-                if (!iconChanged && (approachChanged || (dirty &
+                if (maneuver != ManeuverPresentation.NONE && !iconChanged && (approachChanged || (dirty &
                         (crIconMask | RouteGuidance.State.DIRTY_DIST_MAN)) != 0)) {
                     updateRendererProgress(s, bargraphDenominatorM);
                 }
@@ -1296,7 +1274,7 @@ public class BAPBridge {
 
     /** Refresh only real route-text caches; never store the phase-1 summary here. */
     private void updateLatchedRouteText(RouteGuidance.State s) {
-        int idx = getFirstManeuverIndex(s);
+        int idx = ManeuverPresentation.currentSlot(s);
         int version = idx >= 0 && s.mVer != null && idx < s.mVer.length ? s.mVer[idx] : -1;
         if (positionManeuverIndex != idx || positionManeuverVersion != version
                 || positionRouteGeneration != s.routeGeneration) positionRestart = true;
@@ -1549,26 +1527,14 @@ public class BAPBridge {
         appConnectorNavi.updateManeuverDescriptor(arr);
     }
 
-    /**
-     * Send only maneuverOrder[0]. Wait if that slot is not yet valid; never skip ahead.
-     * BAP supports three slots, but look-ahead would combine two instructions.
-     * AppConnectorNavi resets absent Maneuver_2/Maneuver_3 slots to NO_SYMBOL.
-     */
-    private void sendManeuvers(RouteGuidance.State s) throws Exception {
-        int[] idxs = getManeuverIndexList(s);
-        if (idxs == null || idxs.length == 0) {
-            if (s.maneuverCount == 0) sendNoSymbol();
-            return;
-        }
-
-        int idx = primaryManeuverIndex(s);
-        if (idx < 0) return; // wait for the current slot; never borrow the next turn's distance
-        int[] mapped = mapManeuver(s, idx);
-        int z = s.mZLevel != null && idx < s.mZLevel.length ? s.mZLevel[idx] : 0;
+    /** The shared presentation is selected once in update(), before either output. */
+    private void sendManeuvers(RouteGuidance.State s, ManeuverPresentation maneuver) throws Exception {
+        int idx = maneuver.slot;
+        int z = idx >= 0 ? s.mZLevel[idx] : 0;
+        byte[] streets = idx >= 0 ? maneuverSideStreets(s, idx, maneuver.main) : new byte[0];
         CombiBAPNaviManeuverDescriptor[] arr = new CombiBAPNaviManeuverDescriptor[] {
-            createDescriptor(mapped[0], mapped[1], z, maneuverSideStreets(s, idx, mapped[0]))
+            createDescriptor(maneuver.main, maneuver.direction, z, streets)
         };
-
         appConnectorNavi.updateManeuverDescriptor(arr);
     }
 
@@ -2012,33 +1978,26 @@ public class BAPBridge {
     }
 
     /** Send only changed maneuver geometry; viewport changes use their own command. */
-    private synchronized boolean updateRendererIfChanged(RouteGuidance.State s, int bargraphDenominatorM) {
-        return updateRendererIfChanged(s, bargraphDenominatorM, false);
-    }
-
     private synchronized boolean updateRendererIfChanged(RouteGuidance.State s, int bargraphDenominatorM,
-                                                         boolean followStraight) {
+                                                         ManeuverPresentation maneuver) {
         if (rendererClient == null || !customRendererStarted) return false;
 
         try {
-            int firstIdx = primaryManeuverIndex(s);
-            if (firstIdx < 0 || s.maneuverCount == 0) return false;
-            RendererMapper.Mapping mapped;
-            if (followStraight) {
-                mapped = RendererMapper.map(ManeuverMapper.FOLLOW_STREET, ManeuverMapper.DIR_STRAIGHT,
-                    s.mDrivingSide[firstIdx], ManeuverMapper.MT_FOLLOW_ROAD, 0, false, null);
-            } else {
-                int[] bap = mapManeuver(s, firstIdx);
-                mapped = RendererMapper.map(bap[0], bap[1],
-                    s.mDrivingSide[firstIdx], s.mType[firstIdx], s.mTurnAngle[firstIdx],
-                    anglePresent(s, firstIdx), s.mJunctionAngles[firstIdx]);
-            }
+            if (maneuver == ManeuverPresentation.NONE) return false;
+            int firstIdx = maneuver.slot;
+            boolean followStraight = !maneuver.hasManeuver();
+            RendererMapper.Mapping mapped = RendererMapper.map(maneuver.main, maneuver.direction,
+                firstIdx >= 0 ? s.mDrivingSide[firstIdx] : 0,
+                firstIdx >= 0 ? s.mType[firstIdx] : ManeuverMapper.MT_FOLLOW_ROAD,
+                firstIdx >= 0 ? s.mTurnAngle[firstIdx] : 0,
+                firstIdx >= 0 && ManeuverPresentation.anglePresent(s, firstIdx),
+                firstIdx >= 0 ? s.mJunctionAngles[firstIdx] : null);
             int icon = mapped.icon;
             int direction = mapped.direction;
             int exitAngle = mapped.exitAngle;
             int drivingSide = mapped.drivingSide;
             int[] junctionAngles = mapped.junctionAngles;
-            int ver = s.mVer[firstIdx];
+            int ver = firstIdx >= 0 ? s.mVer[firstIdx] : -1;
             boolean sameGeometry = followStraight == lastCrFollowStraight
                 && icon == lastCrIcon && direction == lastCrDirection
                 && exitAngle == lastCrExitAngle && drivingSide == lastCrDrivingSide
@@ -2308,41 +2267,10 @@ public class BAPBridge {
         return v;
     }
 
-    private static int getFirstManeuverIndex(RouteGuidance.State s) {
-        int maxIdx = (s.mType != null) ? s.mType.length : 0;
-        if (s.maneuverOrder != null && s.maneuverOrder.length == 0) {
-            return -1;
-        }
-        if (s.maneuverOrder != null && s.maneuverOrder.length > 0) {
-            for (int i = 0; i < s.maneuverOrder.length; i++) {
-                int idx = s.maneuverOrder[i];
-                if (idx >= 0 && idx < maxIdx) return idx;
-            }
-        }
-        return -1;
-    }
-
-    private static int primaryManeuverIndex(RouteGuidance.State s) {
-        int[] list = getManeuverIndexList(s);
-        if (list == null || list.length == 0 || s.mType == null) return -1;
-        int idx = list[0];
-        return idx >= 0 && idx < s.mType.length && ManeuverMapper.isValidType(s.mType[idx]) ? idx : -1;
-    }
-
-    private static boolean anglePresent(RouteGuidance.State s, int idx) {
-        return (s.mTurnAnglePresent != null && idx < s.mTurnAnglePresent.length && s.mTurnAnglePresent[idx])
-            || s.mTurnAngle[idx] != -1; // compatibility for callers constructing State directly
-    }
-
-    private static int[] mapManeuver(RouteGuidance.State s, int idx) {
-        return ManeuverMapper.map(s.mType[idx], s.mTurnAngle[idx], s.mJunctionType[idx],
-            s.mDrivingSide[idx], anglePresent(s, idx));
-    }
-
     private static byte[] maneuverSideStreets(RouteGuidance.State s, int idx, int main) {
         if (main == ManeuverMapper.NO_INFO || main == ManeuverMapper.NO_SYMBOL) return new byte[0];
         int angle = s.mExitAngle[idx];
-        if (angle == -1 && !anglePresent(s, idx)) angle = 1000;
+        if (angle == -1 && !ManeuverPresentation.anglePresent(s, idx)) angle = 1000;
         return SideStreets.calcSideStreetsBytes(s.mType[idx], s.mJunctionType[idx], s.mDrivingSide[idx],
             s.mJunctionAngles[idx], angle);
     }
@@ -2352,22 +2280,6 @@ public class BAPBridge {
         if (a == null || b == null || a.length != b.length) return false;
         for (int i = 0; i < a.length; i++) if (a[i] != b[i]) return false;
         return true;
-    }
-
-    private static int[] getManeuverIndexList(RouteGuidance.State s) {
-        if (s.maneuverOrder != null && s.maneuverOrder.length == 0) {
-            return null;
-        }
-        if (s.maneuverOrder != null && s.maneuverOrder.length > 0) {
-            return s.maneuverOrder;
-        }
-        /*
-         * Do not synthesize [0..maneuver_count) when iOS has not published
-         * an explicit maneuver_list yet.  During reroute, count often arrives
-         * before the new slot payloads; falling back to numeric slot order can
-         * briefly expose stale pre-reroute slots to BAP and maneuver_render.
-         */
-        return null;
     }
 
     private static int getBargraphDenominatorM(RouteGuidance.State s, int manIdx, int prepareThresholdM) {

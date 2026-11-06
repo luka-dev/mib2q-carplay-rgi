@@ -9,6 +9,7 @@
 #include "routeguidance/rgd_hook.c"
 #include <stdio.h>
 #include <stdlib.h>
+#include <assert.h>
 
 /* ---- framework seams the handler reaches; none is on the path under test ---- */
 static hook_context_t g_ctx;
@@ -23,11 +24,14 @@ uint8_t* hook_identify_grow(hook_context_t* c, size_t l, size_t n, size_t* cap) 
 static const char* g_dir;
 static FILE* g_steps;
 static int g_frames;
+static char g_last_frame[8192];
 hook_result_t bus_send_text(uint16_t type, uint8_t flags, bus_text_builder_t* b) {
     char path[512];
     FILE* f;
     (void)type; (void)flags;
     if (!b || !b->buf || b->overflow) { fprintf(stderr, "bus frame overflow\n"); exit(1); }
+    assert(b->len < sizeof(g_last_frame));
+    memcpy(g_last_frame, b->buf, b->len); g_last_frame[b->len] = '\0';
     snprintf(path, sizeof(path), "%s/%03d.txt", g_dir, g_frames);
     f = fopen(path, "wb");
     if (!f || fwrite(b->buf, 1, b->len, f) != b->len) { perror(path); exit(1); }
@@ -119,6 +123,20 @@ int main(int argc, char** argv) {
     /* Route A.  iOS has no current lane event yet, so it sends the first window
      * (events 0..5) while the maneuvers are already well ahead (4, 5, ...). */
     update(1, 4, -1, 0); expect(-1, 0);
+    /* A prefetched secondary payload must not compact the current list.
+     * Its empty primary slot carries a version so Java clears reused data. */
+    maneuver(5);
+    {
+        int first = rgd_find_slot_for_iap_index_no_touch(4);
+        int next = rgd_find_slot_for_iap_index_no_touch(5);
+        char expected[64];
+        assert(first >= 0 && next >= 0);
+        assert(!(g_rgd.slot_cache[first].present & RGD_MAN_TYPE));
+        snprintf(expected, sizeof(expected), "maneuver_list:s:%d,%d\n", first, next);
+        assert(strstr(g_last_frame, expected));
+        snprintf(expected, sizeof(expected), "m%d_ver:n:", first);
+        assert(strstr(g_last_frame, expected));
+    }
     for (int m = 4; m < 10; m++) maneuver(m);
     for (e = 0; e < 6; e++) lane_event(e, e);
     expect(-1, 0);

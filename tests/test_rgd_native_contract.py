@@ -85,7 +85,7 @@ public class NativeInputProbe {
     }
     static RouteGuidance.State state(RouteGuidance rg) throws Exception {return (RouteGuidance.State)ManeuverChainAudit.get(rg,"state");}
     static byte[] hud(ManeuverChainAudit audit,RouteGuidance rg) throws Exception {
-        audit.sendBap.invoke(audit.bridge,state(rg));return audit.sender.input[0].sideStreets;
+        audit.sendBap(state(rg));return audit.sender.input[0].sideStreets;
     }
     public static void main(String[] args) throws Exception {
         Log.setLevel(-1);ManeuverChainAudit audit=new ManeuverChainAudit();

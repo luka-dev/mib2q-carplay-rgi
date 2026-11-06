@@ -64,6 +64,7 @@ public final class LaneGuidanceE2ETest {
         LaneGuidanceLifecycleTest.Renderer renderer = new LaneGuidanceLifecycleTest.Renderer();
         BAPBridge bridge = new BAPBridge();
         set(bridge, "initialized", Boolean.TRUE); set(bridge, "appConnectorNavi", hud);
+        set(bridge, "bapSessionStarted", Boolean.TRUE);
         set(bridge, "routeTextPublished", Boolean.TRUE);
         set(bridge, "customRendererStarted", Boolean.TRUE); set(bridge, "rendererClient", renderer);
         RouteGuidance rg = new RouteGuidance();

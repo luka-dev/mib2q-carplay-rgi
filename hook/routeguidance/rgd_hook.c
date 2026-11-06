@@ -788,6 +788,13 @@ static void write_bus_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* 
             g_rgd.current_list[g_rgd.current_list_count++] = current_upd->maneuver_list[i];
         }
 
+        /* Reserve identities when the authoritative list changes, even if the
+         * maneuver payload has not arrived. Never compact away its first entry
+         * and accidentally promote a prefetched turn to the current maneuver.
+         * Snapshot replay below remains lookup-only. */
+        for (uint16_t i = 0; i < g_rgd.current_list_count; i++)
+            rgd_slot_for_iap_index(g_rgd.current_list[i], true);
+
         /*
          * Track high-water mark for diagnostics only — do NOT flush slot_cache
          * on backward index changes within an active route.
@@ -825,12 +832,10 @@ static void write_bus_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* 
             int outc = 0;
             for (uint16_t i = 0; i < g_rgd.current_list_count; i++) {
                 /* Snapshot writer: pure lookup, no LRU touch, no allocation.
-                 * Bumping seq here on every PPS write demoted real-time-used
-                 * slots to eviction victims; creating a slot from snapshot
-                 * (idx not yet seen via 0x5202) would publish an empty slot. */
+                 * Empty reserved slots retain their position and publish their
+                 * version so Java clears any previous occupant's data. */
                 int slot = rgd_find_slot_for_iap_index_no_touch(g_rgd.current_list[i]);
                 if (slot < 0) continue;
-                if (!(g_rgd.slot_cache[slot].present & RGD_MAN_TYPE)) continue;
                 if (listed_count < MAX_MANEUVER_LIST)
                     listed_slots[listed_count++] = slot;
                 loff += snprintf(list_buf + loff, sizeof(list_buf) - (size_t)loff,
@@ -841,9 +846,8 @@ static void write_bus_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* 
             if (outc > 0) {
                 bus_text_str(b, "maneuver_list", list_buf);
             } else {
-                /* All ManeuverList indices lack cached type data (evicted).
-                 * Clear stale maneuver_list so Java doesn't keep showing
-                 * the previous maneuver. */
+                /* No list entry has a mapped slot. Publish an explicit empty
+                 * list rather than retaining a previous instruction. */
                 bus_text_str(b, "maneuver_list", "");
             }
         } else {
@@ -854,7 +858,7 @@ static void write_bus_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* 
 
     for (int i = 0; i < listed_count; i++) {
         int s = listed_slots[i];
-        if (s >= 0 && s < MANEUVER_CACHE_SIZE && g_rgd.slot_cache[s].present != 0) {
+        if (s >= 0 && s < MANEUVER_CACHE_SIZE) {
             write_slot_data_keys(b, (unsigned)s, &g_rgd.slot_cache[s]);
         }
     }
@@ -1158,8 +1162,19 @@ static bool rgd_message_handler(hook_context_t* ctx, const iap2_frame_t* frame) 
         }
         rgd_mark_first_response(frame->msgid);
 
-        LOG_INFO(LOG_MODULE, "Maneuver: idx=%u type=%u desc=\"%s\"",
-                 man.index, man.maneuver_type, man.description);
+        if ((man.present & RGD_MAN_TYPE)
+                && man.maneuver_type > MAN_TYPE_CHANGE_HIGHWAY_RIGHT) {
+            LOG_WARN(LOG_MODULE, "Unknown maneuver type: idx=%u index_present=%u type=%u junction_present=%u junction=%u desc=\"%s\"",
+                     man.index, (unsigned)((man.present & RGD_MAN_INDEX) != 0),
+                     man.maneuver_type,
+                     (unsigned)((man.present & RGD_MAN_JUNCTION_TYPE) != 0),
+                     man.junction_type, man.description);
+        }
+        LOG_INFO(LOG_MODULE, "Maneuver: idx=%u type=%u desc=\"%s\" type_present=%u junction_present=%u junction=%u",
+                 man.index, man.maneuver_type, man.description,
+                 (unsigned)((man.present & RGD_MAN_TYPE) != 0),
+                 (unsigned)((man.present & RGD_MAN_JUNCTION_TYPE) != 0),
+                 man.junction_type);
         rgd_cancel_pending_zero("0x5202 maneuver");
         write_bus_maneuver_partial(&man);
     }
