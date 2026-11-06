@@ -14,6 +14,7 @@ package com.luka.carplay.rgd;
 
 import com.luka.carplay.core.CarPlayApp;
 import com.luka.carplay.framework.Log;
+import com.luka.carplay.framework.HuTime;
 import de.audi.atip.base.IFrameworkAccess;
 import de.audi.atip.interapp.combi.bap.navi.CombiBAPServiceNavi;
 import de.audi.atip.interapp.combi.bap.navi.data.CombiBAPDestinationInfo;
@@ -1476,14 +1477,14 @@ public class BAPBridge {
         /* JVM default TZ is UTC on MHI2Q. AppConnectorNavi converts a type-1
          * epoch with GregorianCalendar, so shift it to HU local time first. */
         if (timeVal >= 0L) {
-            timeVal = convertUtcToLocalMs(timeVal * 1000L) / 1000L;
+            timeVal = HuTime.convertUtcToLocalMs(timeVal * 1000L) / 1000L;
         }
         appConnectorNavi.updateTimeToDestination(1, timeFormat, timeVal);
     }
 
     private static String formatArrivalForText(long utcSeconds) {
         if (utcSeconds < 0L) return "";
-        long localMs = convertUtcToLocalMs(utcSeconds * 1000L);
+        long localMs = HuTime.convertUtcToLocalMs(utcSeconds * 1000L);
         java.util.GregorianCalendar cal = new java.util.GregorianCalendar();
         cal.setTimeInMillis(localMs);
         int hour = cal.get(java.util.Calendar.HOUR_OF_DAY);
@@ -2205,25 +2206,6 @@ public class BAPBridge {
         } catch (Throwable t) {
         }
         return 0;
-    }
-
-    /**
-     * Convert UTC epoch millis to HU local epoch millis.  The JVM default TZ on
-     * MHI2Q is UTC, so TimeZone.getDefault() cannot be used; instead
-     * IFrameworkAccess.convertUTCTimeToLocalTime() adds the HU's
-     * utcOffsetMilliseconds (timezone + DST from the UTCOffset DSI callback).
-     * Without a framework the input is returned unchanged (UTC).
-     */
-    private static long convertUtcToLocalMs(long utcMs) {
-        try {
-            IFrameworkAccess fw = CarPlayApp.framework();
-            if (fw != null) {
-                return fw.convertUTCTimeToLocalTime(utcMs);
-            }
-        } catch (Throwable t) {
-            /* ignore */
-        }
-        return utcMs;
     }
 
     /**

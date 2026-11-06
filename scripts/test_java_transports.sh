@@ -13,7 +13,8 @@ trap 'rm -rf "$TEST_DIR"' EXIT
     -cp "$PROJECT_DIR/build/carplay_hook.jar:$PROJECT_DIR/java_stock/US_MU1316_lsd.jar" \
     -d "$TEST_DIR" "$PROJECT_DIR/tests/TransportDevicePolicyTest.java" \
     "$PROJECT_DIR/tests/NowPlayingClearTest.java" \
-    "$PROJECT_DIR/tests/CarPlaySettingsAvailabilityTest.java"
+    "$PROJECT_DIR/tests/CarPlaySettingsAvailabilityTest.java" \
+    "$PROJECT_DIR/tests/HuTimePresentationTest.java"
 for variant in us eu cn; do
     case "$variant" in
         us) patch=carplay_hook.jar; stock=US_MU1316_lsd.jar ;;
@@ -31,6 +32,9 @@ for variant in us eu cn; do
     "$TEST_JDK/bin/java" -Xverify:none \
         -cp "$TEST_DIR:$PROJECT_DIR/build/$patch:$PROJECT_DIR/java_stock/$stock:$OSGI_CP" \
         CarPlaySettingsAvailabilityTest
+    "$TEST_JDK/bin/java" \
+        -cp "$TEST_DIR:$PROJECT_DIR/build/$patch:$PROJECT_DIR/java_stock/$stock:$OSGI_CP" \
+        HuTimePresentationTest
 done
 "$TEST_JDK/bin/javac" -encoding UTF-8 -cp "$PROJECT_DIR/build/carplay_hook.jar" -d "$TEST_DIR" \
     "$PROJECT_DIR/tests/CarplayBusTransportTest.java" \
