@@ -21,7 +21,9 @@
 package com.luka.carplay.telephony;
 
 import com.luka.carplay.bus.CarplayBus;
+import com.luka.carplay.core.CarPlayApp;
 import com.luka.carplay.framework.Log;
+import de.audi.atip.base.IFrameworkAccess;
 import de.audi.atip.interapp.combi.bap.phone.CombiBAPServicePhone;
 import de.audi.atip.interapp.combi.bap.phone.data.CallStartTime;
 import de.audi.atip.interapp.combi.bap.phone.data.CombiBAPCallInfo;
@@ -662,10 +664,19 @@ public class GatedPhoneService implements CombiBAPServicePhone {
         }
     }
 
+    private static long utcToLocalMs(long utcMs) {
+        try {
+            IFrameworkAccess fw = CarPlayApp.framework();
+            if (fw != null) return fw.convertUTCTimeToLocalTime(utcMs);
+        } catch (Throwable t) {
+        }
+        return utcMs;
+    }
+
     private static CombiBAPCallStackEntry recent(int pos, String name, String num, int mode, long ts) {
         if (ts <= 0) return new CombiBAPCallStackEntry(pos, name, num, 0, mode);
         Calendar c = Calendar.getInstance();
-        c.setTime(new java.util.Date(ts > 100000000000L ? ts : ts * 1000L));  /* s or ms */
+        c.setTime(new java.util.Date(utcToLocalMs(ts > 100000000000L ? ts : ts * 1000L)));  /* s or ms */
         return new CombiBAPCallStackEntry(pos, name, num, 0, mode,
             (short)c.get(Calendar.DAY_OF_MONTH), (short)(c.get(Calendar.MONTH) + 1),
             (short)c.get(Calendar.YEAR), (short)c.get(Calendar.HOUR_OF_DAY),
