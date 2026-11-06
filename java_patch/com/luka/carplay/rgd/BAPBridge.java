@@ -2010,30 +2010,7 @@ public class BAPBridge {
                 return false;
             }
 
-            /* Remaining distance becomes the arrow's 0..16 progress input.
-             * In the blink zone preserve the last phase already emitted to HUD. */
-            int remainingLevel = 0;
-            int progressMode = 0;
-            int distM = s.distManeuverM;
-            if (bargraphDenominatorM > 0 && distM > 0 && distM <= bargraphDenominatorM) {
-                int pct = (distM * 100) / bargraphDenominatorM;
-                if (pct < 0) pct = 0;
-                if (pct > 100) pct = 100;
-                remainingLevel = (pct * 16) / 100;
-                progressMode = 1;
-            }
-
-            int progressState=progressMode>0 ? RendererServer.PROGRESS_FILL : RendererServer.PROGRESS_OFF;
-            if(progressMode>0 && (distM*100)/bargraphDenominatorM < BARGRAPH_BLINK_PERCENT) {
-                synchronized(distanceToManeuverLock) {
-                    if(hasLastDistM && lastDistM==distM && lastBarOn
-                            && (lastProgressState==RendererServer.PROGRESS_BLINK_LOW
-                                || lastProgressState==RendererServer.PROGRESS_BLINK_HIGH)) {
-                        progressState=lastProgressState;
-                        remainingLevel=(lastBar*16)/100;
-                    }
-                }
-            }
+            ManeuverProgress progress = rendererProgress(s, bargraphDenominatorM, true);
 
             int perspective = 1;  /* always 3D — 2D/3D switch disabled for now */
 
@@ -2044,9 +2021,9 @@ public class BAPBridge {
                 && firstIdx == lastCrIdx && ver == lastCrVer
                 && s.routeGeneration == lastCrRouteGeneration;
             boolean ok = rendererClient.sendBapProgressManeuver(icon, direction, exitAngle,
-                drivingSide, junctionAngles, remainingLevel, progressMode,
+                drivingSide, junctionAngles, progress.level, progress.mode(),
                 perspective, roadsOnly, mapped.snapToRoad,
-                progressState);
+                progress.state);
             // Failed enqueue must remain eligible for retry with the same input.
             if (ok) {
                 lastCrIcon = icon;
@@ -2070,37 +2047,40 @@ public class BAPBridge {
         }
     }
 
-    /**
-     * Update arrow progress on distance-only updates, without a maneuver push.
-     */
+    private static final class ManeuverProgress {
+        static final ManeuverProgress OFF = new ManeuverProgress(0, RendererServer.PROGRESS_OFF);
+        final int level, state;
+        ManeuverProgress(int level, int state) { this.level = level; this.state = state; }
+        int mode() { return state == RendererServer.PROGRESS_OFF ? 0 : 1; }
+    }
+
+    /** Both geometry packets and progress-only packets use the HUD phase.
+     * A transient distance gap replays that phase; primary identity changes
+     * have already invalidated the cache in update(). */
+    private ManeuverProgress rendererProgress(RouteGuidance.State s, int denominator, boolean initial) {
+        int distance = s.distManeuverM;
+        synchronized (distanceToManeuverLock) {
+            if (hasLastDistM && (distance <= 0 || lastDistM == distance)) {
+                return lastBarOn ? new ManeuverProgress(lastBar * 16 / 100, lastProgressState)
+                    : ManeuverProgress.OFF;
+            }
+        }
+        if (denominator > 0 && distance > 0 && distance <= denominator) {
+            int percent = Math.min(100, (distance * 100) / denominator);
+            // An initial geometry packet needs a snapshot. Subsequent uncached
+            // blink updates wait for the worker that emits the HUD phase.
+            if (percent < BARGRAPH_BLINK_PERCENT && !initial) return null;
+            return new ManeuverProgress(percent * 16 / 100, RendererServer.PROGRESS_FILL);
+        }
+        return ManeuverProgress.OFF;
+    }
+
+    /** Update progress without starting a maneuver transition. */
     private synchronized void updateRendererProgress(RouteGuidance.State s, int bargraphDenominatorM) {
         if (rendererClient == null || !customRendererStarted || rendererManeuverPending) return;
-
-        synchronized (distanceToManeuverLock) {
-            if (hasLastDistM && lastDistM == s.distManeuverM) {
-                noteRendererSendResult(rendererClient.sendProgress(lastBarOn ? (lastBar * 16) / 100 : 0,
-                    lastBarOn ? 1 : 0, lastBarOn ? lastProgressState : RendererServer.PROGRESS_OFF));
-                return;
-            }
-        }
-
-        int remainingLevel = 0;
-        int progressMode = 0;
-        int distM = s.distManeuverM;
-        if (bargraphDenominatorM > 0 && distM > 0 && distM <= bargraphDenominatorM) {
-            int pct = (distM * 100) / bargraphDenominatorM;
-            if (pct < 0) pct = 0;
-            if (pct > 100) pct = 100;
-            remainingLevel = (pct * 16) / 100;
-            if (pct < BARGRAPH_BLINK_PERCENT) {
-                /* sendActionBlinkTick() supplies the same explicit phase to HUD
-                 * and renderer. A distance-only update must not overwrite it. */
-                return;
-            }
-            progressMode = 1;
-        }
-        noteRendererSendResult(rendererClient.sendProgress(remainingLevel, progressMode,
-            progressMode>0 ? RendererServer.PROGRESS_FILL : RendererServer.PROGRESS_OFF));
+        ManeuverProgress progress = rendererProgress(s, bargraphDenominatorM, false);
+        if (progress != null)
+            noteRendererSendResult(rendererClient.sendProgress(progress.level, progress.mode(), progress.state));
     }
 
     /**

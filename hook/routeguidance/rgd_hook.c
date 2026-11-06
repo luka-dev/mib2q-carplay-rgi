@@ -465,6 +465,12 @@ static void write_bus_update_partial(const rgd_update_t* upd) {
 static void write_slot_data_keys(bus_text_builder_t* b, unsigned idx, const rgd_maneuver_t* man) {
     char key[64];
 
+    /* This is the complete cached record, including an empty reserved slot.
+     * Omitted fields are absent, not deltas retaining an earlier payload.
+     * Keep identity/version separate so content updates do not become turns. */
+    snprintf(key, sizeof(key), "m%u_full", idx);
+    bus_text_int(b, key, 1);
+
     if (man->present & RGD_MAN_TYPE) {
         snprintf(key, sizeof(key), "m%u_type", idx);
         bus_text_int(b, key, man->maneuver_type);
@@ -504,7 +510,7 @@ static void write_slot_data_keys(bus_text_builder_t* b, unsigned idx, const rgd_
         bus_text_str(b, key, man->after_road_name);
     }
     if (man->present & RGD_MAN_JUNCTION_ANGLES) {
-        char buf[128];
+        char buf[128] = {0};
         int off = 0;
         for (int j = 0; j < man->junction_angle_count; j++)
             off += snprintf(buf + off, sizeof(buf) - off, "%s%d",

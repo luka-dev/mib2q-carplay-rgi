@@ -1157,6 +1157,11 @@ public class RouteGuidance implements CarplayBus.Listener {
                 continue;
             }
 
+            // Native records are complete snapshots. Legacy/manual bus deltas
+            // remain partial unless explicitly marked full. Clear absent fields
+            // through the normal comparisons, without changing slot identity or
+            // dirtying an identical replay.
+            boolean full = d.num(p + "full", 0) == 1;
             if (d.has(p + "ver")) {
                 int v = d.num(p + "ver", -1);
                 if (v >= 0 && v != state.mVer[i]) {
@@ -1167,57 +1172,49 @@ public class RouteGuidance implements CarplayBus.Listener {
                 }
             }
 
-            if (d.has(p + "type")) {
+            if (full || d.has(p + "type")) {
                 int v = d.num(p + "type", -1);
                 if (v != state.mType[i]) {
                     state.mType[i] = v;
                     state.markManeuverDirty(i, State.MAN_DIR_ICON);
                 }
             }
-            if (d.has(p + "turn_angle")) {
-                int v = d.num(p + "turn_angle", 1000);
-                if (v != state.mTurnAngle[i] || v != state.mExitAngle[i]
-                        || !state.mTurnAnglePresent[i]) {
-                    state.mTurnAngle[i] = v;
-                    state.mTurnAnglePresent[i] = true;
-                    /*
-                     * Our C hook currently publishes the iAP2 "exit angle" field under the
-                     * legacy key name "turn_angle". Keep an explicit copy so side-streets
-                     * mapping can use MHI3-like naming.
-                     */
-                    state.mExitAngle[i] = v;
+            boolean anglePresent = d.has(p + "turn_angle") || d.has(p + "exit_angle");
+            if (full || anglePresent) {
+                String key = p + (d.has(p + "exit_angle") ? "exit_angle" : "turn_angle");
+                int angle = anglePresent ? d.num(key, 1000) : -1;
+                int exitAngle = anglePresent ? angle : 1000;
+                if (angle != state.mTurnAngle[i] || exitAngle != state.mExitAngle[i]
+                        || anglePresent != state.mTurnAnglePresent[i]) {
+                    state.mTurnAngle[i] = angle;
+                    state.mExitAngle[i] = exitAngle;
+                    state.mTurnAnglePresent[i] = anglePresent;
                     state.markManeuverDirty(i, State.MAN_DIR_ICON);
                 }
             }
-            if (d.has(p + "z_level")) {
-                int v = d.num(p + "z_level", -1);
+            if (full || d.has(p + "z_level") || d.has(p + "zlevel")) {
+                String key = p + (d.has(p + "zlevel") ? "zlevel" : "z_level");
+                int v = d.num(key, -1);
                 if (v != state.mZLevel[i]) {
                     state.mZLevel[i] = v;
                     state.markManeuverDirty(i, State.MAN_DIR_ICON);
                 }
             }
-            if (d.has(p + "zlevel")) {
-                int v = d.num(p + "zlevel", -1);
-                if (v != state.mZLevel[i]) {
-                    state.mZLevel[i] = v;
-                    state.markManeuverDirty(i, State.MAN_DIR_ICON);
-                }
-            }
-            if (d.has(p + "junction_type")) {
+            if (full || d.has(p + "junction_type")) {
                 int v = d.num(p + "junction_type", -1);
                 if (v != state.mJunctionType[i]) {
                     state.mJunctionType[i] = v;
                     state.markManeuverDirty(i, State.MAN_DIR_ICON);
                 }
             }
-            if (d.has(p + "driving_side")) {
+            if (full || d.has(p + "driving_side")) {
                 int v = d.num(p + "driving_side", -1);
                 if (v != state.mDrivingSide[i]) {
                     state.mDrivingSide[i] = v;
                     state.markManeuverDirty(i, State.MAN_DIR_ICON);
                 }
             }
-            if (d.has(p + "distance")) {
+            if (full || d.has(p + "distance")) {
                 int v = d.num(p + "distance", -1);
                 if (v != state.mDistance[i]) {
                     state.mDistance[i] = v;
@@ -1228,28 +1225,28 @@ public class RouteGuidance implements CarplayBus.Listener {
                     state.markDirty(State.DIRTY_DIST_MAN);
                 }
             }
-            if (d.has(p + "name")) {
+            if (full || d.has(p + "name")) {
                 String v = d.str(p + "name");
                 if (!strEq(state.mName[i], v)) {
                     state.mName[i] = v;
                     state.markManeuverDirty(i, State.MAN_DIR_TEXT);
                 }
             }
-            if (d.has(p + "after_road")) {
+            if (full || d.has(p + "after_road")) {
                 String v = d.str(p + "after_road");
                 if (!strEq(state.mAfterRoad[i], v)) {
                     state.mAfterRoad[i] = v;
                     state.markManeuverDirty(i, State.MAN_DIR_TEXT);
                 }
             }
-            if (d.has(p + "exit_info")) {
+            if (full || d.has(p + "exit_info")) {
                 String v = d.str(p + "exit_info");
                 if (!strEq(state.mExitInfo[i], v)) {
                     state.mExitInfo[i] = v;
                     state.markManeuverDirty(i, State.MAN_DIR_TEXT);
                 }
             }
-            if (d.has(p + "junction_angles")) {
+            if (full || d.has(p + "junction_angles")) {
                 int[] newAngles = d.intList(p + "junction_angles");
                 if (!intArrayEq(state.mJunctionAngles[i], newAngles)) {
                     state.mJunctionAngles[i] = newAngles;
@@ -1257,16 +1254,7 @@ public class RouteGuidance implements CarplayBus.Listener {
                     state.markManeuverDirty(i, State.MAN_DIR_ICON);
                 }
             }
-            if (d.has(p + "exit_angle")) {
-                int v = d.num(p + "exit_angle", 1000);
-                if (v != state.mExitAngle[i] || v != state.mTurnAngle[i]
-                        || !state.mTurnAnglePresent[i]) {
-                    state.mExitAngle[i] = v;
-                    state.mTurnAngle[i] = v;
-                    state.mTurnAnglePresent[i] = true;
-                    state.markManeuverDirty(i, State.MAN_DIR_ICON);
-                }
-            }
+
         }
 
     }

@@ -12,6 +12,7 @@ import java.io.FileInputStream;
 import java.io.FileReader;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.Arrays;
 import sun.misc.Unsafe;
 
 /** Lane guidance end to end, Java half: replays the bus frames the real native
@@ -56,6 +57,12 @@ public final class LaneGuidanceE2ETest {
         return "none";
     }
 
+    static String maneuverSlot(RouteGuidance.State s, int i) {
+        return Arrays.deepToString(new Object[]{s.mType[i], s.mTurnAngle[i], s.mTurnAnglePresent[i],
+            s.mExitAngle[i], s.mJunctionType[i], s.mDrivingSide[i], s.mDistance[i], s.mZLevel[i],
+            s.mName[i], s.mAfterRoad[i], s.mExitInfo[i], s.mJunctionAngles[i], s.mVer[i]});
+    }
+
     public static void main(String[] args) throws Exception {
         Log.setLevel(System.getenv("LANE_E2E_LOG") != null ? Log.D : -1);
         File dir = new File(args[0]);
@@ -81,7 +88,20 @@ public final class LaneGuidanceE2ETest {
             if (p[0].equals("F")) {
                 byte[] text = read(new File(dir, p[1] + ".txt"));
                 parse.invoke(rg, CarplayBus.parseText(text, text.length));
+                // Every native snapshot must be sufficient on its own after reconnect.
+                // Compare listed slots only: unlisted prefetch is intentionally not published.
+                RouteGuidance fresh = new RouteGuidance();
+                parse.invoke(fresh, CarplayBus.parseText(text, text.length));
+                RouteGuidance.State freshState = (RouteGuidance.State) sf.get(fresh);
+                if (s.maneuverOrder != null) for (int slot : s.maneuverOrder)
+                    check(maneuverSlot(s, slot).equals(maneuverSlot(freshState, slot)),
+                        "frame " + frames + " slot " + slot + ": live/reconnect snapshot differs: "
+                        + maneuverSlot(s, slot) + " vs " + maneuverSlot(freshState, slot));
                 if (bridge.update(s)) s.clearDirty(); // as RouteGuidance does after a publish
+                if (s.routeState > 0 && s.maneuverOrder != null) {
+                    parse.invoke(rg, CarplayBus.parseText(text, text.length));
+                    check(s.dirtyMask == 0, "frame " + frames + ": identical snapshot dirtied state");
+                }
                 frames++;
                 continue;
             }

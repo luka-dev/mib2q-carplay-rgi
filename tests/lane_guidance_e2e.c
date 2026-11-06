@@ -137,6 +137,25 @@ int main(int argc, char** argv) {
         snprintf(expected, sizeof(expected), "m%d_ver:n:", first);
         assert(strstr(g_last_frame, expected));
     }
+    /* Replacing the SAME identity must clear omitted fields just as a fresh
+     * Java consumer would see them in the sticky snapshot. */
+    begin(0x5202);
+    u16(MAN_TLV_INDEX, 4); u8(MAN_TLV_TYPE, MAN_TYPE_RIGHT_TURN);
+    u8(MAN_TLV_JUNCTION_TYPE, 0); u8(MAN_TLV_DRIVING_SIDE, 1);
+    u16(MAN_TLV_EXIT_ANGLE, 90); u16(MAN_TLV_JUNCTION_ANGLES, 90);
+    tlv(g_msg, &g_len, MAN_TLV_DESCRIPTION, (const uint8_t*)"Old turn", 8);
+    tlv(g_msg, &g_len, MAN_TLV_AFTER_ROAD_NAME, (const uint8_t*)"Old road", 8);
+    tlv(g_msg, &g_len, MAN_TLV_EXIT_INFO, (const uint8_t*)"Exit 7", 6);
+    { uint8_t distance[4]; write_be32(distance, 6000);
+      tlv(g_msg, &g_len, MAN_TLV_DISTANCE_BETWEEN, distance, sizeof(distance)); }
+    send();
+    begin(0x5202); u16(MAN_TLV_INDEX, 4); u8(MAN_TLV_TYPE, MAN_TYPE_RIGHT_TURN);
+    tlv(g_msg, &g_len, MAN_TLV_JUNCTION_ANGLES, (const uint8_t*)"", 0);
+    tlv(g_msg, &g_len, MAN_TLV_DESCRIPTION, (const uint8_t*)"", 0);
+    send();
+    assert(strstr(g_last_frame, "m0_junction_angles:s:\n"));
+    maneuver(4); // type remains, geometry/text/step length disappear
+    begin(0x5202); u16(MAN_TLV_INDEX, 4); send(); // type disappears too
     for (int m = 4; m < 10; m++) maneuver(m);
     for (e = 0; e < 6; e++) lane_event(e, e);
     expect(-1, 0);

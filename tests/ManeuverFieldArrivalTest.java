@@ -220,6 +220,16 @@ public final class ManeuverFieldArrivalTest {
                 f.feed("dist_maneuver_m:n:0\n");
                 check(f.hud.distance == distance && f.hud.barOn && f.hud.bar == bar,
                     label + ": transient distance gap within the same maneuver lost HUD cache");
+                check(f.renderer.progressMode == 1 && f.renderer.progressLevel == bar * 16 / 100
+                    && f.renderer.progressState == RendererServer.PROGRESS_FILL,
+                    label + ": transient distance gap lost shared renderer progress");
+                // Geometry refresh and cached reconnect replay must use that same HUD phase.
+                f.feed("m0_junction_angles:s:-90,0,90\n");
+                check(f.renderer.progressMode == 1 && f.renderer.progressLevel == bar * 16 / 100,
+                    label + ": geometry packet replaced cached progress with OFF");
+                f.replay();
+                check(f.renderer.progressMode == 1 && f.renderer.progressLevel == bar * 16 / 100,
+                    label + ": cached replay replaced HUD progress");
                 f.hud.distanceFailures = failure == 1 ? 1 : 0;
                 f.renderer.failures = failure == 2 ? 1 : 0;
                 f.feed(replacements[i] + "dist_maneuver_m:n:0\n");
@@ -291,6 +301,36 @@ public final class ManeuverFieldArrivalTest {
             check(f.renderer.writes == writes, "inactive metadata resurrected guidance");
         } finally { f.close(); }
     }
+    private static void blinkGapPhases() throws Exception {
+        Method tick = BAPBridge.class.getDeclaredMethod("sendActionBlinkTick", Integer.TYPE);
+        tick.setAccessible(true);
+        for (int ticks = 1; ticks <= 2; ticks++) {
+            Fixture f = new Fixture();
+            try {
+                // Hold the same lock as the blink worker so each tested phase
+                // is deterministic, without sleeping or racing its 600 ms tick.
+                synchronized (f.bridge) {
+                    f.feed("route_generation:n:401\nroute_state:n:1\nmaneuver_count:n:1\n"
+                        + "maneuver_list:s:0\nm0_type:n:2\nm0_junction_type:n:0\ndist_maneuver_m:n:10\n");
+                    int generation = field(BAPBridge.class, "actionBlinkGeneration").getInt(f.bridge);
+                    for (int i = 0; i < ticks; i++) tick.invoke(f.bridge, Integer.valueOf(generation));
+                    int phase = ticks == 1 ? RendererServer.PROGRESS_BLINK_HIGH : RendererServer.PROGRESS_BLINK_LOW;
+                    int bar = f.hud.bar;
+                    check(f.hud.barOn && bar == (ticks == 1 ? 100 : 0)
+                        && f.renderer.progressState == phase, "blink fixture phase missing");
+                    f.feed("dist_maneuver_m:n:0\n");
+                    f.renderer.failures = 1;
+                    f.feed("m0_junction_angles:s:-90,0,90\n");
+                    check(f.state.dirtyMask != 0, "blink geometry enqueue failure lost retry");
+                    f.replay();
+                    check(f.hud.barOn && f.hud.bar == bar && f.renderer.progressMode == 1
+                        && f.renderer.progressLevel == bar * 16 / 100 && f.renderer.progressState == phase,
+                        "distance gap/geometry retry changed the HUD blink phase");
+                    check(f.state.dirtyMask == 0, "blink geometry retry did not converge");
+                }
+            } finally { f.close(); }
+        }
+    }
     private static void presentationMatrix() {
         RouteGuidance.State s = new RouteGuidance.State();
         s.maneuverOrder = new int[]{0,1}; s.mType[1] = ManeuverMapper.MT_LEFT_TURN;
@@ -316,6 +356,7 @@ public final class ManeuverFieldArrivalTest {
     public static void main(String[] args) throws Exception {
         Log.setLevel(-1);
         distanceOwnership();
+        blinkGapPhases();
         presentationMatrix();
         presentationLifecycle();
         List<int[]> permutations = new ArrayList<int[]>();
