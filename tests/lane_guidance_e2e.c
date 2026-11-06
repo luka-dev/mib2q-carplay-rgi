@@ -4,11 +4,13 @@
  * on their own and lagging the maneuver indices).  Every bus text frame the
  * hook publishes goes to <dir>/NNN.txt; <dir>/steps lists "F NNN" (feed that
  * frame) and "E <event> <seed>" (expected visible lanes: event index and the
- * content seed, -1 = no lanes).  LaneGuidanceE2ETest.java replays both through
+ * content seed, -1 = no lanes), and "D <meters> <visible>" (maneuver distance
+ * and progress). LaneGuidanceE2ETest.java replays these through
  * RouteGuidance.parse and BAPBridge.update.  Built by scripts/test_lane_guidance_e2e.sh. */
 #include "routeguidance/rgd_hook.c"
 #include <stdio.h>
 #include <stdlib.h>
+#include <assert.h>
 
 /* ---- framework seams the handler reaches; none is on the path under test ---- */
 static hook_context_t g_ctx;
@@ -23,11 +25,14 @@ uint8_t* hook_identify_grow(hook_context_t* c, size_t l, size_t n, size_t* cap) 
 static const char* g_dir;
 static FILE* g_steps;
 static int g_frames;
+static char g_last_frame[8192];
 hook_result_t bus_send_text(uint16_t type, uint8_t flags, bus_text_builder_t* b) {
     char path[512];
     FILE* f;
     (void)type; (void)flags;
     if (!b || !b->buf || b->overflow) { fprintf(stderr, "bus frame overflow\n"); exit(1); }
+    assert(b->len < sizeof(g_last_frame));
+    memcpy(g_last_frame, b->buf, b->len); g_last_frame[b->len] = '\0';
     snprintf(path, sizeof(path), "%s/%03d.txt", g_dir, g_frames);
     f = fopen(path, "wb");
     if (!f || fwrite(b->buf, 1, b->len, f) != b->len) { perror(path); exit(1); }
@@ -47,6 +52,7 @@ static uint8_t* tlv(uint8_t* at, size_t* len, uint16_t id, const uint8_t* v, siz
 }
 static void u8(uint16_t id, uint8_t v) { tlv(g_msg, &g_len, id, &v, 1); }
 static void u16(uint16_t id, uint16_t v) { uint8_t p[2]; write_be16(p, v); tlv(g_msg, &g_len, id, p, 2); }
+static void u32(uint16_t id, uint32_t v) { uint8_t p[4]; write_be32(p, v); tlv(g_msg, &g_len, id, p, 4); }
 static void send(void) {
     iap2_frame_t frame;
     write_be16(g_msg + 2, (uint16_t)g_len);
@@ -103,6 +109,7 @@ static void lane_event_without_index(int seed) {
     send();
 }
 static void expect(int event, int seed) { fprintf(g_steps, "E %d %d\n", event, seed); }
+static void expect_distance(int meters, int visible) { fprintf(g_steps, "D %d %d\n", meters, visible); }
 
 int main(int argc, char** argv) {
     char path[512];
@@ -118,7 +125,64 @@ int main(int argc, char** argv) {
 
     /* Route A.  iOS has no current lane event yet, so it sends the first window
      * (events 0..5) while the maneuvers are already well ahead (4, 5, ...). */
+    /* Distance may precede the first authoritative list. */
+    begin(0x5201); u8(RGD_TLV_ROUTE_GUIDANCE_STATE, 1);
+    u32(RGD_TLV_DIST_TO_MANEUVER, 100); send();
     update(1, 4, -1, 0); expect(-1, 0);
+    /* A prefetched secondary payload must not compact the current list.
+     * Its empty primary slot carries a version so Java clears reused data. */
+    maneuver(5);
+    {
+        int first = rgd_find_slot_for_iap_index_no_touch(4);
+        int next = rgd_find_slot_for_iap_index_no_touch(5);
+        char expected[64];
+        assert(first >= 0 && next >= 0);
+        assert(!(g_rgd.slot_cache[first].present & RGD_MAN_TYPE));
+        snprintf(expected, sizeof(expected), "maneuver_list:s:%d,%d\n", first, next);
+        assert(strstr(g_last_frame, expected));
+        snprintf(expected, sizeof(expected), "m%d_ver:n:", first);
+        assert(strstr(g_last_frame, expected));
+    }
+    /* Replacing the SAME identity must clear omitted fields just as a fresh
+     * Java consumer would see them in the sticky snapshot. */
+    begin(0x5202);
+    u16(MAN_TLV_INDEX, 4); u8(MAN_TLV_TYPE, MAN_TYPE_RIGHT_TURN);
+    u8(MAN_TLV_JUNCTION_TYPE, 0); u8(MAN_TLV_DRIVING_SIDE, 1);
+    u16(MAN_TLV_EXIT_ANGLE, 90); u16(MAN_TLV_JUNCTION_ANGLES, 90);
+    tlv(g_msg, &g_len, MAN_TLV_DESCRIPTION, (const uint8_t*)"Old turn", 8);
+    tlv(g_msg, &g_len, MAN_TLV_AFTER_ROAD_NAME, (const uint8_t*)"Old road", 8);
+    tlv(g_msg, &g_len, MAN_TLV_EXIT_INFO, (const uint8_t*)"Exit 7", 6);
+    { uint8_t distance[4]; write_be32(distance, 6000);
+      tlv(g_msg, &g_len, MAN_TLV_DISTANCE_BETWEEN, distance, sizeof(distance)); }
+    send();
+    expect_distance(100, 1);
+    begin(0x5202); u16(MAN_TLV_INDEX, 5); u8(MAN_TLV_TYPE, MAN_TYPE_LEFT_TURN);
+    u8(MAN_TLV_JUNCTION_TYPE, 0); send();
+    /* New primary without distance must not inherit the old primary's 100 m. */
+    update(1, 5, -1, 0); expect_distance(-1, 0);
+    begin(0x5201); u32(RGD_TLV_DIST_TO_MANEUVER, 150); send(); expect_distance(150, 1);
+    /* A tail-only list change still belongs to the same primary. */
+    { uint8_t list[4]; write_be16(list, 5); write_be16(list + 2, 7);
+      begin(0x5201); tlv(g_msg, &g_len, RGD_TLV_MANEUVER_LIST, list, sizeof(list)); send(); }
+    expect_distance(150, 1);
+    /* Empty list invalidates the previous owner, but a later independent
+     * distance can precede the next nonempty list. */
+    begin(0x5201); tlv(g_msg, &g_len, RGD_TLV_MANEUVER_LIST, (const uint8_t*)"", 0); send();
+    expect_distance(-1, 0);
+    begin(0x5201); u32(RGD_TLV_DIST_TO_MANEUVER, 120); send();
+    update(1, 5, -1, 0); expect_distance(120, 1);
+    /* Fresh distance in the head-changing packet wins over invalidation. */
+    { uint8_t list[4]; write_be16(list, 4); write_be16(list + 2, 5);
+      begin(0x5201); tlv(g_msg, &g_len, RGD_TLV_MANEUVER_LIST, list, sizeof(list));
+      u32(RGD_TLV_DIST_TO_MANEUVER, 100); send(); }
+    expect_distance(100, 1);
+    begin(0x5202); u16(MAN_TLV_INDEX, 4); u8(MAN_TLV_TYPE, MAN_TYPE_RIGHT_TURN);
+    tlv(g_msg, &g_len, MAN_TLV_JUNCTION_ANGLES, (const uint8_t*)"", 0);
+    tlv(g_msg, &g_len, MAN_TLV_DESCRIPTION, (const uint8_t*)"", 0);
+    send();
+    assert(strstr(g_last_frame, "m0_junction_angles:s:\n"));
+    maneuver(4); // type remains, geometry/text/step length disappear
+    begin(0x5202); u16(MAN_TLV_INDEX, 4); send(); // type disappears too
     for (int m = 4; m < 10; m++) maneuver(m);
     for (e = 0; e < 6; e++) lane_event(e, e);
     expect(-1, 0);

@@ -49,8 +49,9 @@ static uint64_t now_monotonic_ms(void) {
 
 /* Protects the debounce fields in g_rgd against the heartbeat tick
  * (rgd_periodic_tick, runs on bus heartbeat thread) racing with the
- * iAP2 callback thread inside rgd_message_handler.  Critical sections
- * are tiny (a few stores + a read of monotonic time). */
+ * iAP2 callback thread inside rgd_message_handler. The timer also holds it
+ * through bus enqueue, so a resumed route cannot overtake its deferred stop.
+ * Enqueue does not perform socket I/O or call back into this module. */
 static pthread_mutex_t g_rgd_debounce_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t g_rgd_start_lock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -185,6 +186,18 @@ static bool rgd_update_has_active_evidence(const rgd_update_t* upd) {
 static void rgd_update_cache_merge(const rgd_update_t* upd) {
     rgd_update_t* c = &g_rgd.update_cache;
     if (!upd) return;
+
+    /* These scalars belong to the current list head, not the whole route.
+     * Invalidate before merging so fresh distance in this same update wins.
+     * With no previous head, retain distance that arrived ahead of the list. */
+    if ((upd->present & RGD_UPD_MANEUVER_LIST)
+            && (c->present & RGD_UPD_MANEUVER_LIST) && c->maneuver_list_count > 0
+            && (upd->maneuver_list_count == 0 || upd->maneuver_list[0] != c->maneuver_list[0])) {
+        c->present &= ~(RGD_UPD_DIST_TO_MANEUVER | RGD_UPD_DIST_TO_MANEUVER_STR | RGD_UPD_DIST_TO_MANEUVER_UNI);
+        c->dist_to_maneuver = 0;
+        c->dist_to_maneuver_string[0] = '\0';
+        c->dist_to_maneuver_units = 0;
+    }
 
     if (upd->present & RGD_UPD_COMPONENT_IDS) {
         c->component_count = upd->component_count;
@@ -465,6 +478,12 @@ static void write_bus_update_partial(const rgd_update_t* upd) {
 static void write_slot_data_keys(bus_text_builder_t* b, unsigned idx, const rgd_maneuver_t* man) {
     char key[64];
 
+    /* This is the complete cached record, including an empty reserved slot.
+     * Omitted fields are absent, not deltas retaining an earlier payload.
+     * Keep identity/version separate so content updates do not become turns. */
+    snprintf(key, sizeof(key), "m%u_full", idx);
+    bus_text_int(b, key, 1);
+
     if (man->present & RGD_MAN_TYPE) {
         snprintf(key, sizeof(key), "m%u_type", idx);
         bus_text_int(b, key, man->maneuver_type);
@@ -504,7 +523,7 @@ static void write_slot_data_keys(bus_text_builder_t* b, unsigned idx, const rgd_
         bus_text_str(b, key, man->after_road_name);
     }
     if (man->present & RGD_MAN_JUNCTION_ANGLES) {
-        char buf[128];
+        char buf[128] = {0};
         int off = 0;
         for (int j = 0; j < man->junction_angle_count; j++)
             off += snprintf(buf + off, sizeof(buf) - off, "%s%d",
@@ -727,6 +746,9 @@ static void write_bus_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* 
         bus_text_uint(b, "dist_dest_m", upd->distance_remaining);
     if (present & RGD_UPD_DIST_TO_MANEUVER)
         bus_text_uint(b, "dist_maneuver_m", upd->dist_to_maneuver);
+    else if (present & RGD_UPD_MANEUVER_LIST)
+        /* Explicit unknown: omission would leave Java's previous distance. */
+        bus_text_int(b, "dist_maneuver_m", -1);
     if (present & RGD_UPD_ETA)
         bus_text_uint(b, "eta_seconds", upd->eta);
     if (present & RGD_UPD_TIME_REMAINING)
@@ -788,6 +810,13 @@ static void write_bus_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* 
             g_rgd.current_list[g_rgd.current_list_count++] = current_upd->maneuver_list[i];
         }
 
+        /* Reserve identities when the authoritative list changes, even if the
+         * maneuver payload has not arrived. Never compact away its first entry
+         * and accidentally promote a prefetched turn to the current maneuver.
+         * Snapshot replay below remains lookup-only. */
+        for (uint16_t i = 0; i < g_rgd.current_list_count; i++)
+            rgd_slot_for_iap_index(g_rgd.current_list[i], true);
+
         /*
          * Track high-water mark for diagnostics only — do NOT flush slot_cache
          * on backward index changes within an active route.
@@ -825,12 +854,10 @@ static void write_bus_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* 
             int outc = 0;
             for (uint16_t i = 0; i < g_rgd.current_list_count; i++) {
                 /* Snapshot writer: pure lookup, no LRU touch, no allocation.
-                 * Bumping seq here on every PPS write demoted real-time-used
-                 * slots to eviction victims; creating a slot from snapshot
-                 * (idx not yet seen via 0x5202) would publish an empty slot. */
+                 * Empty reserved slots retain their position and publish their
+                 * version so Java clears any previous occupant's data. */
                 int slot = rgd_find_slot_for_iap_index_no_touch(g_rgd.current_list[i]);
                 if (slot < 0) continue;
-                if (!(g_rgd.slot_cache[slot].present & RGD_MAN_TYPE)) continue;
                 if (listed_count < MAX_MANEUVER_LIST)
                     listed_slots[listed_count++] = slot;
                 loff += snprintf(list_buf + loff, sizeof(list_buf) - (size_t)loff,
@@ -841,9 +868,8 @@ static void write_bus_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* 
             if (outc > 0) {
                 bus_text_str(b, "maneuver_list", list_buf);
             } else {
-                /* All ManeuverList indices lack cached type data (evicted).
-                 * Clear stale maneuver_list so Java doesn't keep showing
-                 * the previous maneuver. */
+                /* No list entry has a mapped slot. Publish an explicit empty
+                 * list rather than retaining a previous instruction. */
                 bus_text_str(b, "maneuver_list", "");
             }
         } else {
@@ -854,7 +880,7 @@ static void write_bus_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* 
 
     for (int i = 0; i < listed_count; i++) {
         int s = listed_slots[i];
-        if (s >= 0 && s < MANEUVER_CACHE_SIZE && g_rgd.slot_cache[s].present != 0) {
+        if (s >= 0 && s < MANEUVER_CACHE_SIZE) {
             write_slot_data_keys(b, (unsigned)s, &g_rgd.slot_cache[s]);
         }
     }
@@ -1158,8 +1184,19 @@ static bool rgd_message_handler(hook_context_t* ctx, const iap2_frame_t* frame) 
         }
         rgd_mark_first_response(frame->msgid);
 
-        LOG_INFO(LOG_MODULE, "Maneuver: idx=%u type=%u desc=\"%s\"",
-                 man.index, man.maneuver_type, man.description);
+        if ((man.present & RGD_MAN_TYPE)
+                && man.maneuver_type > MAN_TYPE_CHANGE_HIGHWAY_RIGHT) {
+            LOG_WARN(LOG_MODULE, "Unknown maneuver type: idx=%u index_present=%u type=%u junction_present=%u junction=%u desc=\"%s\"",
+                     man.index, (unsigned)((man.present & RGD_MAN_INDEX) != 0),
+                     man.maneuver_type,
+                     (unsigned)((man.present & RGD_MAN_JUNCTION_TYPE) != 0),
+                     man.junction_type, man.description);
+        }
+        LOG_INFO(LOG_MODULE, "Maneuver: idx=%u type=%u desc=\"%s\" type_present=%u junction_present=%u junction=%u",
+                 man.index, man.maneuver_type, man.description,
+                 (unsigned)((man.present & RGD_MAN_TYPE) != 0),
+                 (unsigned)((man.present & RGD_MAN_JUNCTION_TYPE) != 0),
+                 man.junction_type);
         rgd_cancel_pending_zero("0x5202 maneuver");
         write_bus_maneuver_partial(&man);
     }
@@ -1360,17 +1397,12 @@ void rgd_periodic_tick(void) {
     }
     uint64_t elapsed = now - g_rgd.state_zero_started_ms;
 
-    /* Window expired — claim the emission.  Mark fields before
-     * unlocking so a concurrent handler doesn't re-do the same work. */
+    /* Serialize the deferred stop with cancellation by active evidence.
+     * Unlocking before enqueue lets a fresh active frame overtake this stop. */
     g_rgd.emitted_route_state = 0;
     g_rgd.state_zero_started_ms = 0;
     g_rgd.state_zero_deadline_ms = 0;
     g_rgd.state_zero_from_reroute = false;
-    pthread_mutex_unlock(&g_rgd_debounce_lock);
-
-    LOG_INFO(LOG_MODULE, "Route reset timeout: emitting deferred state=0 to Java (elapsed=%llums)",
-             (unsigned long long)elapsed);
-
     /* Direct minimal bus frame — bypass update_cache (not synchronized
      * across threads).  bus_send_text is internally thread-safe. */
     bus_text_builder_t _b_storage;
@@ -1380,6 +1412,10 @@ void rgd_periodic_tick(void) {
     bus_text_int(b, "route_state", 0);
     bus_text_int(b, "maneuver_count", 0);
     bus_send_text(EVT_RGD_UPDATE, BUS_FLAG_STICKY, b);
+    pthread_mutex_unlock(&g_rgd_debounce_lock);
+
+    LOG_INFO(LOG_MODULE, "Route reset timeout: emitting deferred state=0 to Java (elapsed=%llums)",
+             (unsigned long long)elapsed);
 }
 
 /* Called lazily on first message — now only used to mark initialization

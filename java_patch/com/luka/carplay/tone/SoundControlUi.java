@@ -7,9 +7,11 @@
  *      passthrough on Alpine B&O 0x140, and paired with THREE_D_MODE_CHOICE 1000152 /
  *      PosX=4 on Bose 0x160/0x161 and B&O Advanced 0x181), gating both Surround Level
  *      (1000040) and 3D effect (1000152), with Infoline hint 1001007 from lang_data.zip.
- *   2. Unlocks the stock SUBWOOFER_RANGE (1000015, -9..+9) control on amplifiers with
- *      a physical subwoofer channel (Bose 3D 0x160, B&O Advanced 0x181, etc.) while
- *      keeping it hidden on 2ch/4ch internal amps without a subwoofer.
+ *   2. Unlocks the stock SUBWOOFER_RANGE (1000015, -9..+9) control on external MOST
+ *      amplifiers with a physical subwoofer channel (Bose 3D 0x160, B&O Advanced 0x181,
+ *      etc.), which report 0..0 over MOST. Internal C674x DSP variants (0x120..0x122 =
+ *      1..3) keep their dataset range (0xC0030021): 8RM Standard Sound (0x0122, no sub)
+ *      sends 0..0 and stays hidden, 9VD (also 0x0122) sends what its dataset says.
  *   3. Matches the stock VNC / GALA / AudioPilot widget (AMPLIFIER_VARIANT_CHOICE 1000035)
  *      and range (DSP_LEVELLING_RANGE 1000039 / AUDIOPILOT_CHOICE 1000046) to each
  *      amplifier's actual hardware:
@@ -91,9 +93,14 @@ public final class SoundControlUi {
         return surroundSupported(amplifier);
     }
 
-    /** True on amplifiers with a dedicated subwoofer channel (9VD 6ch=3, Bose=17/18, B&O=4/21, etc.; false on 2ch=1 / 4ch=2). */
+    /**
+     * True only on external MOST amplifiers (B&O 4/5, Bose 17/18/19, B&O Adv 21/22/23, ...), which report
+     * a 0..0 subwoofer range that can be unlocked to -9..+9. False on internal C674x DSP variants (1..3)
+     * and before the amplifier is known (-1 / 0): there the dataset range stays authoritative (issue #94:
+     * 8RM Standard Sound is 0x0122 = 3 like 9VD but has no subwoofer and reports 0..0).
+     */
     public static boolean subwooferSupported(int type) {
-        return type != 1 && type != 2;
+        return type > 3;
     }
 
     public static boolean subwooferSupported() {
@@ -183,14 +190,9 @@ public final class SoundControlUi {
                 ampVar.setValue(lastRawAmplifierVariant);
             }
             RangeModel sub = subwooferModel;
-            if (sub != null) {
-                if (subwooferSupported(type)) {
-                    if (sub.getMinimum() == 0 && sub.getMaximum() == 0) {
-                        sub.setLimits(-9, 9, 1, 0);
-                    }
-                } else {
-                    sub.setLimits(0, 0, 1, 0);
-                }
+            if (sub != null && subwooferSupported(type)
+                    && sub.getMinimum() == 0 && sub.getMaximum() == 0) {
+                sub.setLimits(-9, 9, 1, 0);   // never narrow: the dataset range is authoritative otherwise
             }
             RangeModel vnc = vncModel;
             if (vnc != null) {

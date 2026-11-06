@@ -85,7 +85,7 @@ public final class ManeuverChainAudit {
     final Sender sender;
     final BAPBridge bridge = new BAPBridge();
     final RendererServer renderer = new RendererServer();
-    final Method sendBap, sendRenderer;
+    private final Method resolve, sendBap, sendRenderer;
     ManeuverChainAudit() throws Exception {
         Field f=Unsafe.class.getDeclaredField("theUnsafe"); f.setAccessible(true);
         Unsafe u=(Unsafe)f.get(null);
@@ -104,9 +104,18 @@ public final class ManeuverChainAudit {
         ctor.setAccessible(true); set(sender,"logChannel",ctor.newInstance()); set(sender,"moduleFsg",module);
         set(bridge,"appConnectorNavi",sender); set(bridge,"rendererClient",renderer);
         set(bridge,"customRendererStarted",Boolean.TRUE);
+        set(bridge,"bapSessionStarted",Boolean.TRUE);
         set(renderer,"running",Boolean.TRUE); set(renderer,"out",new ByteArrayOutputStream());
-        sendBap=BAPBridge.class.getDeclaredMethod("sendManeuvers",RouteGuidance.State.class); sendBap.setAccessible(true);
-        sendRenderer=BAPBridge.class.getDeclaredMethod("updateRendererIfChanged",RouteGuidance.State.class,Integer.TYPE); sendRenderer.setAccessible(true);
+        Class<?> presentation=Class.forName("com.luka.carplay.rgd.ManeuverPresentation");
+        resolve=presentation.getDeclaredMethod("resolve",RouteGuidance.State.class,Boolean.TYPE); resolve.setAccessible(true);
+        sendBap=BAPBridge.class.getDeclaredMethod("sendManeuvers",RouteGuidance.State.class,presentation); sendBap.setAccessible(true);
+        sendRenderer=BAPBridge.class.getDeclaredMethod("updateRendererIfChanged",RouteGuidance.State.class,Integer.TYPE,presentation); sendRenderer.setAccessible(true);
+    }
+    void sendBap(RouteGuidance.State s) throws Exception {
+        sendBap.invoke(bridge,s,resolve.invoke(null,s,get(bridge,"bapSessionStarted")));
+    }
+    boolean sendRenderer(RouteGuidance.State s,int denominator) throws Exception {
+        return (Boolean)sendRenderer.invoke(bridge,s,denominator,resolve.invoke(null,s,get(bridge,"bapSessionStarted")));
     }
     RouteGuidance.State state(int mt,int angle,int junction,int side,int z,int[] streets) {
         RouteGuidance.State s=new RouteGuidance.State(); s.maneuverCount=1; s.maneuverOrder=new int[]{0};
@@ -126,14 +135,14 @@ public final class ManeuverChainAudit {
     }
     void row(PrintWriter out,String kind,int mt,int angle,int junction,int side,int z,int[] streets) throws Exception {
         reset(); RouteGuidance.State s=state(mt,angle,junction,side,z,streets);
-        sendBap.invoke(bridge,s); check(capture.last!=null,"BAP missing");
+        sendBap(s); check(capture.last!=null,"BAP missing");
         ManeuverDescriptor_Status status=(ManeuverDescriptor_Status)capture.last;
         check(status.maneuver_2.mainElement==0 && status.maneuver_3.mainElement==0,"trailing BAP slots active");
         check(status.maneuver_1.mainElement==sender.input[0].mainElement &&
               status.maneuver_1.direction==sender.input[0].direction &&
               status.maneuver_1.zLevelGuidance==sender.input[0].zLevelGuidance,"stock numeric mapping changed");
         ByteArrayStream stream=new ByteArrayStream(); status.serialize(stream);
-        check(Boolean.TRUE.equals(sendRenderer.invoke(bridge,s,Integer.valueOf(0))),"renderer missing");
+        check(sendRenderer(s,0),"renderer missing");
         byte[] cmd=pendingPacket(); check(cmd.length==48 && cmd[0]==1,"renderer command format");
         double exit=(short)(((cmd[4]&255)<<8)|(cmd[5]&255));
         if ((cmd[1]&4)!=0) exit *= 0.5;
@@ -156,21 +165,25 @@ public final class ManeuverChainAudit {
         for(int z:new int[]{-1,0,1,2,3,255}) { audit.row(out,"z_level",1,-90,0,0,z,new int[]{-90,0,90});count++; }
         out.close();
         audit.reset(); RouteGuidance.State s=audit.state(1,-90,0,0,0,new int[]{-90,0});
-        check(Boolean.TRUE.equals(audit.sendRenderer.invoke(audit.bridge,s,Integer.valueOf(0))),"initial update");
+        check(audit.sendRenderer(s,0),"initial update");
         s.mJunctionAngles[0]=new int[]{-90,0,90};
-        boolean streetsSent=((Boolean)audit.sendRenderer.invoke(audit.bridge,s,Integer.valueOf(0))).booleanValue();
+        boolean streetsSent=audit.sendRenderer(s,0);
         s.mVer[0]++;
-        boolean versionSent=((Boolean)audit.sendRenderer.invoke(audit.bridge,s,Integer.valueOf(0))).booleanValue();
+        boolean versionSent=audit.sendRenderer(s,0);
         check(streetsSent && versionSent,"junction-only or version update suppressed");
         audit.reset(); s=audit.state(1,-90,0,0,0,null);
         s.maneuverCount=2; s.maneuverOrder=new int[]{0,1}; s.mType[0]=-1;
         s.mType[1]=2; s.mTurnAngle[1]=90; s.mJunctionType[1]=0; s.mDrivingSide[1]=0; s.mVer[1]=1;
-        audit.sendBap.invoke(audit.bridge,s);
+        audit.sendBap(s);
         boolean invalidHeadBap=audit.capture.last!=null;
-        boolean invalidHeadRenderer=((Boolean)audit.sendRenderer.invoke(audit.bridge,s,Integer.valueOf(0))).booleanValue();
-        check(!invalidHeadBap && !invalidHeadRenderer,"invalid primary slot must not borrow next maneuver");
-        audit.reset(); s=new RouteGuidance.State(); s.maneuverCount=0;
-        audit.sendBap.invoke(audit.bridge,s);
+        boolean invalidHeadRenderer=audit.sendRenderer(s,0);
+        check(invalidHeadBap && invalidHeadRenderer
+            && audit.sender.input[0].mainElement==ManeuverMapper.FOLLOW_STREET
+            && audit.pendingPacket()[2]==RendererMapper.ICON_APPROACH,
+            "invalid primary slot must show neutral guidance without borrowing next maneuver");
+        audit.reset(); set(audit.bridge,"bapSessionStarted",Boolean.FALSE);
+        s=new RouteGuidance.State(); s.maneuverCount=0;
+        audit.sendBap(s);
         check(((ManeuverDescriptor_Status)audit.capture.last).maneuver_1.mainElement==0,"empty route must send NO_SYMBOL");
         PrintWriter checks=new PrintWriter(new FileOutputStream(args[0]+".checks.json"));
         checks.println("{\"rows\":"+count+",\"junction_only_renderer_update\":"+streetsSent+

@@ -9,7 +9,7 @@ public final class ManeuverParityTest {
     static int checks;
     static void check(boolean ok, String why) { checks++; if (!ok) throw new AssertionError(why); }
     static boolean send(ManeuverChainAudit a, RouteGuidance.State s) throws Exception {
-        return ((Boolean)a.sendRenderer.invoke(a.bridge, s, Integer.valueOf(0))).booleanValue();
+        return a.sendRenderer(s,0);
     }
     static int angle(byte[] packet, int offset) {
         return (short)(((packet[offset]&255)<<8)|(packet[offset+1]&255));
@@ -91,7 +91,11 @@ public final class ManeuverParityTest {
         a.reset();check(send(a,a.state(8,30,0,0,0,crowded)),"bounded highway roads");b=a.pendingPacket();
         check(b[7]==18 && angle(b,42)==0,"reserve final wire slot for continuing highway");
         for(int i=0;i<17;i++)check(angle(b,8+2*i)==2*crowded[i],"keep original branch order");
-        b=packet(a,1,-90,-1,0); check(b[2]==0 && b[7]==0,"NO_INFO must be empty in renderer");
+        check(ManeuverMapper.map(1,-90,-1,0)[0]==ManeuverMapper.TURN,
+            "known left turn must not require junction metadata");
+        b=packet(a,1,-90,-1,0);
+        check(b[2]==RendererMapper.ICON_TURN && angle(b,4)==-180,
+            "renderer must retain left turn without junction type");
         b=packet(a,28,-67,1,0);
         check((b[1]&4)!=0 && angle(b,4)==-134 && (b[1]&16)!=0,"raw circle exit retains exact degrees and enables snap");
         for(int dir=0;dir<256;dir+=16) {
@@ -141,8 +145,10 @@ public final class ManeuverParityTest {
         check(send(a,s),"same shape/version, new primary slot must send");
         for(int bad:new int[]{-1,999}) {
             a.reset();s.maneuverOrder=new int[]{bad,1};s.maneuverCount=2;
-            a.sendBap.invoke(a.bridge,s);
-            check(a.capture.last==null && !send(a,s),"invalid primary index must not skip to next");
+            a.sendBap(s);
+            check(a.sender.input[0].mainElement==ManeuverMapper.FOLLOW_STREET && send(a,s),
+                "invalid primary must show neutral guidance, never look ahead");
+            check(a.pendingPacket()[2]==RendererMapper.ICON_APPROACH,"invalid primary borrowed secondary turn");
         }
         a.reset();s=a.state(10,0,0,0,0,null);
         check(send(a,s),"arrived initial");s.mVer[0]++;
@@ -155,7 +161,7 @@ public final class ManeuverParityTest {
             "m0_exit_angle:n:90\n"};
         for(int i=0;i<deltas.length;i++) {
             byte[] text=deltas[i].getBytes("UTF-8");parse.invoke(rg,CarplayBus.parseText(text,text.length));
-            s=(RouteGuidance.State)a.get(rg,"state");a.reset();a.sendBap.invoke(a.bridge,s);
+            s=(RouteGuidance.State)a.get(rg,"state");a.reset();a.sendBap(s);
             check(send(a,s),"parsed angle update");b=a.pendingPacket();
             check(a.sender.input[0].direction==(i==0?64:192) && b[3]==(i==0?-1:1),"parser aliases agree in BAP and renderer");
         }
@@ -179,7 +185,7 @@ public final class ManeuverParityTest {
         a.set(a.bridge,"hasLastDistM",Boolean.TRUE);a.set(a.bridge,"lastDistM",Integer.valueOf(10));
         a.set(a.bridge,"lastBarOn",Boolean.TRUE);a.set(a.bridge,"lastBar",Integer.valueOf(0));
         a.set(a.bridge,"lastProgressState",Integer.valueOf(RendererServer.PROGRESS_BLINK_LOW));
-        check(((Boolean)a.sendRenderer.invoke(a.bridge,blinking,Integer.valueOf(100))).booleanValue(),"blink snapshot send");
+        check(a.sendRenderer(blinking,100),"blink snapshot send");
         b=a.pendingPacket();check(b[44]==2 && b[46]==0 && b[47]==1,"maneuver snapshot lost current HUD phase");
         for(int type:new int[]{4,52,53}) {
             a.reset(); RouteGuidance.State ordinary=a.state(type,45,0,0,0,new int[]{-90,0,90});

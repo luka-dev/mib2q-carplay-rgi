@@ -72,6 +72,8 @@ public class ManeuverMapper {
      */
     public static final int JUNCTION_SINGLE_INTERSECTION = 0;
     public static final int JUNCTION_ROUNDABOUT = 1;
+    /* Local absence sentinel; not an iAP2 junction type. */
+    public static final int JUNCTION_NOT_SET = -1;
     public static final int DRIVING_SIDE_RIGHT = 0;
     public static final int DRIVING_SIDE_LEFT = 1;
 
@@ -148,7 +150,7 @@ public class ManeuverMapper {
      * @param turnAngle    JunctionElementExitAngle (signed). Used for simple turn geometry;
      *                    for ramps only the sign chooses a side when the type has no side.
      *                    For roundabout exits 1..19 it is quantized to nearest 22.5deg and mapped to a 0..240 code.
-     * @param junctionType Junction type (0=intersection, 1=roundabout)
+     * @param junctionType Junction type (-1=absent, 0=intersection, 1=roundabout)
      * @param drivingSide  Driving side (0=RHT, 1=LHT)
      * @return int[2] = { mainElement, direction }
      */
@@ -161,12 +163,16 @@ public class ManeuverMapper {
     public static int[] map(int maneuverType, int turnAngle, int junctionType, int drivingSide,
                             boolean anglePresent) {
         if (!anglePresent) turnAngle = 1000;
+        /* Apps may supply a maneuver type without optional junction metadata.
+         * Use ordinary mapping for absence only; preserve explicit junctions and
+         * unknown values. This does not change the raw RouteGuidance state. */
+        if (junctionType == JUNCTION_NOT_SET) junctionType = JUNCTION_SINGLE_INTERSECTION;
         int mainElement;
         int direction;
 
         /*
-         * IMPORTANT (MHI3 parity):
-         * tbt_renderer sub_2B9C90 applies a strong junctionType gate.
+         * Preserve the MHI3 sub_2B9C90 gate for supplied junction types.
+         * Absent optional metadata uses ordinary mapping, as above.
          *
          * - junctionType==0: normal intersection mapping (turns/ramps/etc).
          * - junctionType==1: only roundabout exit types (7, 28..46) are mapped here; most other
