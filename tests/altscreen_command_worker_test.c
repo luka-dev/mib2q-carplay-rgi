@@ -335,8 +335,49 @@ static void state_construction_faults(void) {
             alt_command_dispose(&retired[i], -1, 0);
     }
 }
+static void cluster_url_policy(void) {
+    /* Assert protocol values independently of the production URL constants.
+     * In particular, maneuverLayout=no means AUTO, not hidden cards. */
+    static const struct {
+        int layout;
+        const char *url;
+    } visible[] = {
+        {ALT_LAYOUT_LEFT, "maps:/car/instrumentcluster?showETA=yes&maneuverLayout=leftAligned&showSpeedLimit=no"},
+        {ALT_LAYOUT_CENTER, "maps:/car/instrumentcluster?showETA=yes&maneuverLayout=topAligned&showSpeedLimit=no"},
+        {ALT_LAYOUT_RIGHT, "maps:/car/instrumentcluster?showETA=yes&maneuverLayout=rightAligned&showSpeedLimit=no"}
+    };
+    const char *hidden = "maps:/car/instrumentcluster/map?showETA=no&maneuverLayout=topAligned&showSpeedLimit=no";
+    const int policies[] = {ALT_URL_MODE_MAP_WHEN_RGI, ALT_URL_MODE_CARDS_ALWAYS};
+    const int rgi_edges[] = {0, 1, 0};
+    const int zones[] = {ALT_ZONE_FULLSCREEN, ALT_ZONE_SPORTSCREEN,
+                         ALT_ZONE_CLASSICSCREEN, ALT_ZONE_FULLSCREEN};
+    for (unsigned l = 0; l < sizeof(visible) / sizeof(visible[0]); ++l) {
+        alt_layout_set(visible[l].layout);
+        for (unsigned p = 0; p < sizeof(policies) / sizeof(policies[0]); ++p) {
+            alt_url_mode_set(policies[p]);
+            for (unsigned r = 0; r < sizeof(rgi_edges) / sizeof(rgi_edges[0]); ++r) {
+                alt_rgi_active_set(rgi_edges[r]);
+                for (unsigned z = 0; z < sizeof(zones) / sizeof(zones[0]); ++z) {
+                    const char *expected = zones[z] == ALT_ZONE_FULLSCREEN
+                        ? visible[l].url : visible[1].url;
+                    if (policies[p] == ALT_URL_MODE_MAP_WHEN_RGI && rgi_edges[r])
+                        expected = hidden;
+                    alt_zone_mode_set(zones[z]);
+                    assert(!strcmp(alt_cluster_url(), expected));
+                    assert(alt_layout_get() == visible[l].layout);
+                }
+            }
+        }
+    }
+    alt_rgi_active_set(0);
+    alt_url_mode_set(ALT_URL_MODE_MAP_WHEN_RGI);
+    alt_layout_set(ALT_LAYOUT_RIGHT);
+    alt_zone_mode_set(ALT_ZONE_FULLSCREEN);
+}
+
 int main(void) {
     alarm(10);
+    cluster_url_policy();
     cf_ok = 1;
     alt_enabled = 1;
     alt_syms_ok = 1;
@@ -483,7 +524,7 @@ int main(void) {
             int found = 0;
             for (unsigned i = 0; i < sent_count; ++i) {
                 if (!strcmp(sent[i].type, "showUI") &&
-                    !strcmp(sent[i].url, ALT_CLUSTER_URL_RGI_ON)) {
+                    !strcmp(sent[i].url, "maps:/car/instrumentcluster/map?showETA=no&maneuverLayout=topAligned&showSpeedLimit=no")) {
                     found = 1;
                     break;
                 }
@@ -494,20 +535,6 @@ int main(void) {
         }
         pthread_mutex_unlock(&test_lock);
         alt_rgi_active_set(0);
-        alt_layout_set(ALT_LAYOUT_LEFT);
-        assert(!strcmp(alt_cluster_url_for_mode(ALT_ZONE_FULLSCREEN), ALT_CLUSTER_URL_RGI_OFF_LEFT));
-        assert(!strcmp(alt_cluster_url_for_mode(ALT_ZONE_SPORTSCREEN), ALT_CLUSTER_URL_RGI_OFF_CENTER));
-        assert(!strcmp(alt_cluster_url_for_mode(ALT_ZONE_CLASSICSCREEN), ALT_CLUSTER_URL_RGI_OFF_CENTER));
-        alt_rgi_active_set(1);
-        alt_url_mode_set(ALT_URL_MODE_MAP_WHEN_RGI);
-        assert(!strcmp(alt_cluster_url_for_mode(ALT_ZONE_FULLSCREEN), ALT_CLUSTER_URL_RGI_ON));
-        assert(!strcmp(alt_cluster_url_for_mode(ALT_ZONE_SPORTSCREEN), ALT_CLUSTER_URL_RGI_ON));
-        alt_url_mode_set(ALT_URL_MODE_CARDS_ALWAYS);
-        assert(!strcmp(alt_cluster_url_for_mode(ALT_ZONE_FULLSCREEN), ALT_CLUSTER_URL_RGI_OFF_LEFT));
-        assert(!strcmp(alt_cluster_url_for_mode(ALT_ZONE_SPORTSCREEN), ALT_CLUSTER_URL_RGI_OFF_CENTER));
-        alt_rgi_active_set(0);
-        alt_url_mode_set(ALT_URL_MODE_MAP_WHEN_RGI);
-        alt_layout_set(ALT_LAYOUT_RIGHT);
         release_object(cmd_other);
         release_object(cmd_suggest);
     }

@@ -151,12 +151,14 @@ For third-party apps the ETA and turn card are one platter drawn in the app proc
 - With no layout requested (`initWithSafeAreaFrame:…physicalPixelWidth:`): `scale = 0.153 mm / (physicalWidth / pixelWidth)` = 0.7545 for 292 mm × 1440 px. Wide if `safeW ≥ 660 × scale` (about 498 px), then 2 or 3 by safe-area mid vs display mid (equal → 2 on LHD). Otherwise centre when `0.3 × safeH > 115 × scale` (about 87 px), else layout 0: "Undefined layout (0), will not show cluster content", which hides ETA too. That is why narrow zones keep safe height ≥ 290 (now 300); fullscreen at 900 px is always wide.
 - `mapOnly` (turn cards off) is logged by `-[… setShowETA:]`; the itemType 1 → mapOnly plumbing was not found in the extracted 26.6 dylibs. Waze on `/map` showed ETA + road name and no turn card, consistent with mapOnly.
 
-URLs the hook sends today: `[code]` (`altscreen_hook.c:2599-2625`)
+URLs selected by `alt_cluster_url_for_mode()` in `hook/altscreen/altscreen_hook.c`: `[code]`
 
-- RGI off: `maps:/car/instrumentcluster?showETA=yes&maneuverLayout=rightAligned&showSpeedLimit=no` (map + cards, so the cluster shows guidance while our BAP/KDK path is idle).
-- RGI on: `maps:/car/instrumentcluster/map?showETA=no&maneuverLayout=no&showSpeedLimit=no`. The root URL is "anyContent", and Maps kept drawing its turn card and ETA there even with `showETA=no` (seen 2026-09-19); maneuvers and ETA come from BAP/KDK instead. `[car]`
+- Cards visible (RGI off, or Hide Maneuver when RGI disabled): `maps:/car/instrumentcluster?showETA=yes&maneuverLayout=<layout>&showSpeedLimit=no`. Fullscreen uses the user's `leftAligned`, `topAligned` or `rightAligned` choice; Sport and Classic use `topAligned` without changing that saved choice.
+- Cards hidden (RGI active and Hide Maneuver when RGI enabled): `maps:/car/instrumentcluster/map?showETA=no&maneuverLayout=topAligned&showSpeedLimit=no` in every zone. The root URL is "anyContent", and Maps kept drawing its turn card and ETA there even with `showETA=no` (seen 2026-09-19); maneuvers and ETA come from BAP/KDK instead. `[car]`
 
-The runtime switch is `CMD_ALT_RGI 0x0116`, sent from `AltScreenModule.republish()` (`AltScreenModule.java:299-330`, `bus_protocol.h:115`). The hook re-sends `showUI` when the 111 stream first becomes decodable, after every accepted view-area switch, and on every RGI edge. The same URL is used for every zone. There is no env override; Luka rejected one. `[code]`
+The hidden URL deliberately specifies `topAligned`, not `no` or an omitted layout. Both of the latter select automatic layout. In the inspected Apple 26.6 / 27.0 code, side layouts reserve platter width even with turn cards disabled. ETA hiding targets `estimatesVC.view`, while `_updateClientSafeArea` tests its distinct child `contentView.isHidden`; trip updates can unhide that child. With turn cards and ETA disabled, the top layout adds zero extra insets. The 27.0 template host keeps the navigation controller for `/map` and applies the explicit layout override. ARM64 emulation confirmed the inset calculation for Fullscreen, Sport and Classic; exact iOS 27.2 and vehicle behaviour remain unverified. `[decompile]` / `[test]` / `[open]`
+
+The runtime switch is `CMD_ALT_RGI 0x0116`, sent from `AltScreenModule.republish()` (`AltScreenModule.java:299-330`, `bus_protocol.h:115`). The hook re-sends `showUI` when the 111 stream first becomes decodable and on every RGI edge. After a successful view-area response for the current session and requested zone, it updates an already selected URL if the new zone requires a different one. Hidden mode keeps the same explicit top layout across all zones. There is no env override; Luka rejected one. `[code]`
 
 ## 🔗 Related
 

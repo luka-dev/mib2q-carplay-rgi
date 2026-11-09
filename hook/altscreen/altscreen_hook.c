@@ -2842,23 +2842,27 @@ static void alt_kick_viewarea(uint32_t gen)
  *           every one defaults to disabled(2) when the key is absent
  *         maneuverLayout=topAligned|leftAligned|rightAligned -> layoutJustification 1|2|3
  *         (any other value, e.g. "no", leaves the justification unset = 0)
- * The app-side CarPlaySupport card controller (CPSInstrumentClusterCardViewController)
+ * The CarPlaySupport card controller (CPSInstrumentClusterCardViewController)
  * draws ETA + turn card for third-party apps in ONE platter: layout 1 = centred column
- * (turn card top, ETA bottom), 2/3 = 213 px column at the left/right edge of the safe
- * area (turn card top, ETA bottom).  Apple Maps reads the same scene settings.
+ * (turn card top, ETA bottom), 2/3 = column at the left/right edge of the safe area.
+ * Apple Maps reads the same scene settings. With cards and ETA hidden, explicit
+ * topAligned adds no client insets. Auto can choose a side layout that still reserves
+ * platter width: ETA hiding targets the parent view, while the inset gate checks
+ * the child contentView, which trip updates can unhide (26.6 / 27.0 static analysis).
  * The normal protocol is app -> suggestUI{urls:[...]} -> HU chooses -> showUI{uuid,url};
  * stock 210 has no policy layer, so we choose: when the 111 stream first becomes
- * decodable, after every accepted view-area switch, and on every RGI edge from Java
- * (CMD_ALT_RGI is the runtime switch).  Same URL for every zone.
- *   RGI off -> map + cards (turn card right-aligned, ETA on), so the cluster shows
- *              guidance while our BAP/KDK path is idle;
- *   RGI on  -> /map = itemType 1 (map only): the root URL is "anyContent" and Maps keeps
+ * decodable, after an accepted view-area switch when the URL changes, and on every
+ * RGI edge from Java (CMD_ALT_RGI is the runtime switch).
+ *   Cards visible -> map + cards, ETA on; fullscreen uses the user's layout,
+ *                    compact zones use topAligned.
+ *   Hide cards when RGI is active -> /map = itemType 1 (map only), ETA off,
+ *              topAligned in every zone. The root URL is "anyContent" and Maps keeps
  *              drawing its turn card + ETA there even with showETA=no (seen 2026-09-19);
  *              maneuvers and ETA come from BAP/KDK. */
 #define ALT_CLUSTER_URL_RGI_OFF_LEFT   "maps:/car/instrumentcluster?showETA=yes&maneuverLayout=leftAligned&showSpeedLimit=no"
 #define ALT_CLUSTER_URL_RGI_OFF_CENTER "maps:/car/instrumentcluster?showETA=yes&maneuverLayout=topAligned&showSpeedLimit=no"
 #define ALT_CLUSTER_URL_RGI_OFF_RIGHT  "maps:/car/instrumentcluster?showETA=yes&maneuverLayout=rightAligned&showSpeedLimit=no"
-#define ALT_CLUSTER_URL_RGI_ON         "maps:/car/instrumentcluster/map?showETA=no&maneuverLayout=no&showSpeedLimit=no"
+#define ALT_CLUSTER_URL_RGI_ON         "maps:/car/instrumentcluster/map?showETA=no&maneuverLayout=topAligned&showSpeedLimit=no"
 
 static const char *alt_cluster_url_for_mode(int mode)
 {
