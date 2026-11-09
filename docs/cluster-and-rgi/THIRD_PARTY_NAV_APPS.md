@@ -12,7 +12,9 @@
 | AMap | Owner-confirmed working with its CarPlay guidance setting enabled on a recent iOS | Exact working app/iOS versions and setting label were not recorded |
 | Waze | No usable semantic RGI in the analysed 5.23.0.1 / 5.24.0.1 builds | These versions do not opt in to navigation metadata; do not generalize this to every future release |
 
-RGI/HUD maneuvers and the AltScreen map are separate outputs. A working video map does not prove that an app supplies semantic maneuvers. The old AMap 16.25.0 analysis does not describe the owner-confirmed working configuration.
+RGI/HUD maneuvers and the AltScreen map are separate outputs. A working video map does not prove that an app supplies semantic maneuvers.
+
+**AMap correction, 2026-11-08:** both the inspected 16.25.0 and 17.03.0 builds set `maneuverType` through KVC (`setValue:forKey:`). The earlier inference from missing setter selectors was wrong. In 17.03.0, `WCPNaviManeuverCard.updateInstrumentClusterManeuver:` sets `junctionType` to **0**, even for its roundabout mappings, and supplies no angles in that path. Its icon-ID conversion differs from Baidu's. The dedicated `amap` stack corrects CP28/29/30 to roundabout semantics: left, generic departure and right respectively. Ordinary turns and CP6/19 keep default behaviour; valid received angles take precedence over direction hints. See [Maneuver Mapping](MANEUVER_MAPPING.md#source-compensation-stacks) for matching and limits. This is static evidence plus host tests, not vehicle validation. Evidence: `/tmp/amap-17.3.0/findings.txt`, `maneuver-map.json`, `maneuver-mapping.asm`; binary SHA256 `a972f03cf8c6b702b6aca5d3c461e615525e5a4ca4759a72aa48caaea237d928`.
 
 ## 📋 Where RGI actually comes from
 
@@ -59,7 +61,7 @@ if ([mapDelegate respondsToSelector:@selector(mapTemplateShouldProvideNavigation
 
 It reaches the host as `hostStartNavigationSessionForTrip:sendsNavigationMetadata:supportsRouteSharing:reply:` (block `0x23d92d354`), where `-[CPSMapTemplateViewController hostStart…]` (`0x24a233380`) sets `navigatorObserver.sendsNavigationMetadata` unconditionally. `-[CPNavigationSession initWithTrip:mapTemplate:]` (`0x23d925ea8`) leaves the ivar zero, so a delegate without the selector means NO.
 
-The analysed Waze builds omit the delegate opt-in, so `source_supports_rg == 0` makes the Java RGI path deactivate cleanly. AMap's owner-confirmed working configuration enables guidance; the old missing-maneuverType result belongs to AMap 16.25.0 / iOS 26.6.
+The analysed Waze builds omit the delegate opt-in, so `source_supports_rg == 0` makes the Java RGI path deactivate cleanly. AMap's owner-confirmed working configuration enables guidance; its private KVC metadata path is conditional on HUD settings and selector availability. See the correction above rather than the superseded missing-maneuverType claim.
 
 The [archived app analysis](../archive/internal-reference-2026-10-29/cluster-and-rgi/THIRD_PARTY_NAV_APPS.md) preserves the app addresses, old AMap table, Waze maneuver construction and Waze 5.24.0.1's discarded zoom callback. That zoom finding is specific to the inspected build, not a universal claim about Waze.
 

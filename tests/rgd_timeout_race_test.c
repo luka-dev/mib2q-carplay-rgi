@@ -19,16 +19,19 @@ static pthread_cond_t capture_cond = PTHREAD_COND_INITIALIZER;
 static pthread_t active_thread;
 static bool race_next_zero, active_started, active_done;
 static int frames, last_state;
+static char last_frame[8192];
 
-static void route_state(uint8_t state) {
+static void update_byte(uint16_t key, uint8_t value) {
     uint8_t raw[11] = {0x40, 0x40, 0, 11, 0x52, 0x01, 0, 5, 0, 1, 0};
-    write_be16(raw + 8, RGD_TLV_ROUTE_GUIDANCE_STATE);
-    raw[10] = state;
+    write_be16(raw + 8, key);
+    raw[10] = value;
     iap2_frame_t frame;
     memset(&frame, 0, sizeof(frame)); frame.msgid = 0x5201; frame.frame_len = sizeof(raw);
     ctx.direction = MSG_DIR_INCOMING; ctx.raw_buf = raw; ctx.raw_len = sizeof(raw);
     rgd_message_handler(&ctx, &frame);
 }
+
+static void route_state(uint8_t state) { update_byte(RGD_TLV_ROUTE_GUIDANCE_STATE, state); }
 
 static void* activate(void* unused) {
     (void)unused;
@@ -66,6 +69,7 @@ hook_result_t bus_send_text(uint16_t type, uint8_t flags, bus_text_builder_t* b)
         pthread_mutex_unlock(&capture_lock);
     }
     pthread_mutex_lock(&capture_lock);
+    memcpy(last_frame, text, b->len + 1);
     if (zero) last_state = 0;
     else if (strstr(text, "route_state:n:1\n")) last_state = 1;
     frames++;
@@ -79,6 +83,67 @@ static void expire_pending(void) {
     assert(g_rgd.state_zero_started_ms != 0);
     g_rgd.state_zero_deadline_ms = 1; // deterministic clock advance, no grace-period sleep
     pthread_mutex_unlock(&g_rgd_debounce_lock);
+}
+
+static void source_name(const char* source) {
+    uint8_t raw[256] = {0x40, 0x40, 0, 0, 0x52, 0x01};
+    size_t len = strlen(source);
+    assert(len < sizeof(raw) - 10);
+    write_be16(raw + 2, 10 + len);
+    write_be16(raw + 6, 4 + len);
+    write_be16(raw + 8, RGD_TLV_SOURCE_NAME);
+    memcpy(raw + 10, source, len);
+    iap2_frame_t frame;
+    memset(&frame, 0, sizeof(frame)); frame.msgid = 0x5201; frame.frame_len = 10 + len;
+    ctx.direction = MSG_DIR_INCOMING; ctx.raw_buf = raw; ctx.raw_len = frame.frame_len;
+    rgd_message_handler(&ctx, &frame);
+}
+
+static void source_lifecycle(void) {
+    rgd_clear_state("source test");
+    route_state(1);
+    assert(strstr(last_frame, "source_name:s:\n"));
+    g_rgd.slot_cache[0].present = RGD_MAN_TYPE;
+    g_rgd.slot_cache[0].maneuver_type = 31;
+    uint64_t generation = g_rgd.route_generation;
+    source_name("百度地图");
+    assert(g_rgd.route_generation == generation && g_rgd.slot_cache[0].present == RGD_MAN_TYPE);
+    assert(strstr(last_frame, "source_name:s:百度地图\n"));
+    source_name("百度地图");
+    assert(g_rgd.route_generation == generation && g_rgd.slot_cache[0].present == RGD_MAN_TYPE);
+    route_state(1); // Source omitted from this wire packet, retained in snapshot.
+    assert(strstr(last_frame, "source_name:s:百度地图\n"));
+    g_rgd.lane_cache[0].present = RGD_LANE_GUIDANCE_INDEX;
+    source_name("Yandex Navi");
+    assert(g_rgd.route_generation > generation);
+    assert(g_rgd.slot_cache[0].present == 0 && g_rgd.lane_cache[0].present == 0);
+    assert(strstr(last_frame, "source_name:s:Yandex Navi\n"));
+    route_state(0); // Soft reset: source is session metadata, not route geometry.
+    assert(g_rgd.update_cache.present & RGD_UPD_SOURCE_NAME);
+    assert(strcmp(g_rgd.update_cache.source_name, "Yandex Navi") == 0);
+    route_state(1);
+    assert(strstr(last_frame, "source_name:s:Yandex Navi\n"));
+    generation = g_rgd.route_generation;
+    source_name("");
+    assert(g_rgd.route_generation > generation && strstr(last_frame, "source_name:s:\n"));
+    source_name("百度地图");
+    route_state(0); // A source change must cancel the old provider's pending timeout.
+    source_name("Yandex Navi");
+    assert(g_rgd.state_zero_started_ms == 0);
+    assert(strstr(last_frame, "source_name:s:Yandex Navi\n"));
+    rgd_clear_state("source disconnect"); route_state(1);
+    assert(strstr(last_frame, "source_name:s:\n"));
+    route_state(0); source_name("百度地图"); route_state(1);
+    assert(strstr(last_frame, "source_name:s:百度地图\n"));
+    g_rgd.slot_cache[0].present = RGD_MAN_TYPE;
+    g_rgd.lane_cache[0].present = RGD_LANE_GUIDANCE_INDEX;
+    generation = g_rgd.route_generation;
+    update_byte(RGD_TLV_SOURCE_SUPPORTS_RG, 0); // No route_state in the phone packet.
+    assert(strstr(last_frame, "source_name:s:\n"));
+    assert(!(g_rgd.update_cache.present & RGD_UPD_SOURCE_NAME));
+    assert(g_rgd.route_generation > generation && last_state == 0);
+    assert(g_rgd.slot_cache[0].present == 0 && g_rgd.lane_cache[0].present == 0);
+    puts("RGI sources: real TLV -> cached snapshot, late source, provider switch, soft reset, explicit empty and disconnect PASS");
 }
 
 int main(void) {
@@ -100,5 +165,6 @@ int main(void) {
     route_state(5); route_state(0); expire_pending();
     before = frames; rgd_periodic_tick(); assert(frames == before);
     puts("RGI timeout: concurrent activation wins final publication, cancellation, genuine end and reroute hold PASS");
+    source_lifecycle();
     return 0;
 }

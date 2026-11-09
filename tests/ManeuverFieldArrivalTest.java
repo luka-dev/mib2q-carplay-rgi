@@ -434,8 +434,59 @@ public final class ManeuverFieldArrivalTest {
             }
         } finally { far.setInt(null, saved); }
     }
+    private static void sourceStacks() throws Exception {
+        Fixture f = new Fixture();
+        try {
+            f.feed("route_generation:n:501\nroute_state:n:1\nmaneuver_count:n:1\n"
+                + "maneuver_list:s:0\nm0_ver:n:1\nm0_type:n:31\ndist_maneuver_m:n:100\n");
+            neutral(f, "unknown source uses default");
+            f.renderer.failures = 1;
+            f.feed("source_name:s:百度地图\n");
+            check(f.hud.main == ManeuverMapper.ROUNDABOUT_TRS_RIGHT && f.hud.direction == ManeuverMapper.DIR_LEFT,
+                "late Baidu source did not reach HUD");
+            check((f.state.dirtyMask & RouteGuidance.State.DIRTY_MANEUVER_ICON) != 0,
+                "late source lost failed renderer refresh");
+            f.feed("dist_maneuver_m:n:90\n");
+            check(f.renderer.icon == RendererMapper.ICON_ROUNDABOUT && f.renderer.angle == -180,
+                "renderer retry did not use Baidu semantic direction");
+            int writes = f.renderer.writes;
+            f.feed("source_name:s:百度地图\n"); f.replay();
+            check(f.renderer.writes == writes, "same source restarted animation");
+            f.feed("source_name:s:Amap\nroute_state:n:1\nmaneuver_count:n:1\nmaneuver_list:s:0\n"
+                + "m0_ver:n:1\nm0_type:n:28\nm0_junction_type:n:0\ndist_maneuver_m:n:100\n");
+            check(f.hud.direction == ManeuverMapper.DIR_LEFT && f.renderer.angle == -180
+                && f.state.mJunctionType[0] == 0, "AMap CP28 did not use separate left-circle compensation");
+            f.renderer.failures = 1;
+            f.feed("m0_type:n:29\n");
+            check(f.hud.main == ManeuverMapper.EXIT_ROUNDABOUT_TRS_RIGHT
+                && (f.state.dirtyMask & RouteGuidance.State.DIRTY_MANEUVER_ICON) != 0,
+                "AMap departure HUD/send failure not retained");
+            f.feed("dist_maneuver_m:n:90\n");
+            check(f.renderer.icon == RendererMapper.ICON_ROUNDABOUT_EXIT,
+                "AMap departure retry collapsed to straight-circle fallback");
+            writes = f.renderer.writes; f.replay();
+            check(f.renderer.writes == writes, "AMap departure replay restarted transition");
+            f.feed("m0_type:n:30\n");
+            check(f.hud.direction == ManeuverMapper.DIR_RIGHT && f.renderer.angle == 180,
+                "AMap CP30 inherited Baidu's forward-left direction");
+            // Same slot/version/generation, different provider; clear stale phase and geometry.
+            f.feed("source_name:s:Yandex Navi\nroute_state:n:1\nmaneuver_count:n:1\nmaneuver_list:s:0\n"
+                + "m0_ver:n:1\nm0_type:n:31\nm0_junction_type:n:1\n");
+            check(f.state.distManeuverM == -1 && f.renderer.angle == 0
+                && f.renderer.progressMode == 0 && !f.hud.barOn,
+                "Yandex inherited Baidu angle or progress");
+            check(ManeuverPresentation.resolve(f.state, true).semantics.exitNumber == 4,
+                "bridge path lost Yandex ordinal");
+            f.feed("source_name:s:Google Maps\nroute_state:n:1\nmaneuver_count:n:1\nmaneuver_list:s:0\n"
+                + "m0_ver:n:1\nm0_type:n:2\ndist_maneuver_m:n:100\n");
+            check(f.hud.main == ManeuverMapper.TURN && f.hud.direction == ManeuverMapper.DIR_RIGHT
+                && f.renderer.icon == RendererMapper.ICON_TURN && f.renderer.angle == 180,
+                "default stack did not resume normal mapping");
+        } finally { f.close(); }
+    }
     public static void main(String[] args) throws Exception {
         Log.setLevel(-1);
+        sourceStacks();
         missingJunction();
         farStraightTransition();
         distanceOwnership();

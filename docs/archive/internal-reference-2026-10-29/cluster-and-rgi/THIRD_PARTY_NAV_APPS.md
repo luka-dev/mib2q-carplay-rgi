@@ -41,6 +41,8 @@ Neither table has an image property. `symbolImage`, `symbolSet`, `junctionImage`
 
 ## ⚠️ Waze and AMap fail at different stages
 
+**Correction 2026-11-08:** the AMap "maneuverType never set" conclusion below is superseded. AMap 16.25.0 uses `setValue:forKey:` with `maneuverType` at `0x105074c0c` and `junctionType=0` at `0x105074c38`; ordinary setter-selector searches missed it. AMap 17.03.0 retains that KVC path. The historical AMap failure/fix claims in this section must not be used as current evidence. See the [current app analysis](../../../cluster-and-rgi/THIRD_PARTY_NAV_APPS.md).
+
 The on/off gate is `CPRouteGuidance.sourceSupportsRouteGuidance` (TLV `0x14`). It is written in one place, `-[CPSTemplateInstance setSendsNavigationMetadata:]` (`CarPlaySupport` `0x24a18b3c8`, block `0x24a18b4c4`), which copies a BOOL through. That BOOL comes from `-[CPMapTemplate startNavigationSessionForTrip:]` (`0x23d92cfb4`): `[decompile]`
 
 ```objc

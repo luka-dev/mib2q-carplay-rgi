@@ -136,6 +136,8 @@ public class RouteGuidance implements CarplayBus.Listener {
         public int[] maneuverOrder = null;
         public int visibleInApp = -1;
         public int sourceSupportsRg = -1;
+        public String sourceName = null;
+        public long sourceRevision = 0L;
         public int laneGuidanceShowing = -1;
         public int laneGuidanceIndex = -1;
 
@@ -214,6 +216,8 @@ public class RouteGuidance implements CarplayBus.Listener {
             disconnectReason = null;
             visibleInApp = -1;
             sourceSupportsRg = -1;
+            sourceName = null;
+            sourceRevision = 0L;
             laneGuidanceShowing = -1;
             laneGuidanceIndex = -1;
             clearAllManeuverSlots();
@@ -235,6 +239,25 @@ public class RouteGuidance implements CarplayBus.Listener {
                 lgLaneStatus[i] = null;
                 lgLaneAngles[i] = null;
             }
+        }
+
+        /** Route content cannot cross a native generation or a named source
+         * boundary. Session authority is updated separately by route fields. */
+        void clearRouteContent() {
+            clearAllManeuverSlots();
+            maneuverState = -1;
+            maneuverOrder = null;
+            maneuverCount = 0;
+            distManeuverM = -1;
+            distDestM = -1;
+            etaSeconds = -1;
+            timeRemainingSeconds = -1;
+            timeRemainingSampleSeconds = -1L;
+            currentRoad = null;
+            destination = null;
+            laneGuidanceShowing = -1;
+            laneGuidanceIndex = -1;
+            markAllDirtyForReplay();
         }
 
         /** Reset a reassigned maneuver without touching independent lane events. */
@@ -834,20 +857,8 @@ public class RouteGuidance implements CarplayBus.Listener {
                 // version. Reset content before applying this generation's fields,
                 // retaining route authority until the source updates it below.
                 state.routeGeneration = generation;
-                state.clearAllManeuverSlots();
-                state.maneuverState = -1;
-                state.maneuverOrder = null;
-                state.maneuverCount = 0;
-                state.distManeuverM = -1;
-                state.distDestM = -1;
-                state.etaSeconds = -1;
-                state.timeRemainingSeconds = -1;
-                state.timeRemainingSampleSeconds = -1L;
-                state.currentRoad = null;
-                state.destination = null;
-                state.laneGuidanceShowing = -1;
-                state.laneGuidanceIndex = -1;
-                state.markAllDirtyForReplay();
+                state.clearRouteContent();
+                state.sourceName = null;
             }
         }
         boolean isRouteUpdateDelta =
@@ -864,9 +875,27 @@ public class RouteGuidance implements CarplayBus.Listener {
             d.has("visible_in_app") ||
             d.has("component_ids") ||
             d.has("component_count") ||
-            d.has("source_supports_rg");
+            d.has("source_supports_rg") || d.has("source_name");
         if (isRouteUpdateDelta) {
             hasRouteUpdate = true;
+        }
+
+        if (d.has("source_name")) {
+            String name = d.has("source_supports_rg") && d.num("source_supports_rg", -1) == 0
+                ? null : d.str("source_name", "");
+            if (!strEq(state.sourceName, name)) {
+                String oldKey = NavigationStack.sourceKey(state.sourceName);
+                boolean boundary = oldKey.length() > 0 && !oldKey.equals(NavigationStack.sourceKey(name));
+                boolean stackChanged = NavigationStack.forSource(state.sourceName) != NavigationStack.forSource(name);
+                if (boundary) state.clearRouteContent();
+                state.sourceName = name;
+                if (boundary || stackChanged) {
+                    state.sourceRevision++;
+                    state.markDirty(State.DIRTY_MANEUVER_ICON);
+                }
+                Log.i(TAG, "Navigation source=\"" + name + "\" stack="
+                    + NavigationStack.forSource(name).name + " (display-name match)");
+            }
         }
 
         if (d.has("disconnect_reason")) {
@@ -882,6 +911,11 @@ public class RouteGuidance implements CarplayBus.Listener {
         }
         if (d.has("source_supports_rg")) {
             int v = d.num("source_supports_rg", -1);
+            if (v == 0 && state.sourceName != null) {
+                state.sourceName = null;
+                state.sourceRevision++;
+                state.markDirty(State.DIRTY_MANEUVER_ICON);
+            }
             if (v != state.sourceSupportsRg) {
                 state.sourceSupportsRg = v;
                 state.markDirty(State.DIRTY_SOURCE_SUPPORTS_RG);

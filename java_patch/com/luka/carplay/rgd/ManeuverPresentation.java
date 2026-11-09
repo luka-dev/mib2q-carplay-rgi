@@ -11,11 +11,17 @@ final class ManeuverPresentation {
     final int slot;
     final int main;
     final int direction;
+    final ManeuverSemantics semantics;
 
     private ManeuverPresentation(int slot, int main, int direction) {
+        this(slot, main, direction, null);
+    }
+
+    private ManeuverPresentation(int slot, int main, int direction, ManeuverSemantics semantics) {
         this.slot = slot;
         this.main = main;
         this.direction = direction;
+        this.semantics = semantics;
     }
 
     boolean hasManeuver() { return slot >= 0; }
@@ -33,11 +39,14 @@ final class ManeuverPresentation {
         int slot = currentSlot(s);
         if (slot < 0 || !ManeuverMapper.isValidType(s.mType[slot]))
             return FOLLOW;
-        int[] mapped = ManeuverMapper.map(s.mType[slot], s.mTurnAngle[slot],
-            s.mJunctionType[slot], s.mDrivingSide[slot], anglePresent(s, slot));
+        ManeuverSemantics semantics = NavigationStack.forSource(s.sourceName).resolve(
+            s.mType[slot], s.mJunctionType[slot], s.mDrivingSide[slot],
+            s.mTurnAngle[slot], anglePresent(s, slot));
+        int[] mapped = ManeuverMapper.map(semantics.mappingType(), semantics.angle,
+            semantics.junctionType, semantics.drivingSide, semantics.anglePresent);
         if (mapped[0] == ManeuverMapper.NO_INFO || mapped[0] == ManeuverMapper.NO_SYMBOL)
             return FOLLOW;
-        return new ManeuverPresentation(slot, mapped[0], mapped[1]);
+        return new ManeuverPresentation(slot, mapped[0], mapped[1], semantics);
     }
 
     static boolean anglePresent(RouteGuidance.State s, int slot) {

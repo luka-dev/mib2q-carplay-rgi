@@ -155,6 +155,20 @@ static void rgd_update_cache_reset(void) {
     memset(&g_rgd.update_cache, 0, sizeof(g_rgd.update_cache));
 }
 
+/* The source belongs to the navigation provider, not a single route. Soft
+ * reroute/reset frames need not repeat its name. Hard clear/disconnect still
+ * use rgd_update_cache_reset() and remove it. */
+static void rgd_route_cache_reset(void) {
+    char source[sizeof(g_rgd.update_cache.source_name)];
+    bool present = (g_rgd.update_cache.present & RGD_UPD_SOURCE_NAME) != 0;
+    memcpy(source, g_rgd.update_cache.source_name, sizeof(source));
+    rgd_update_cache_reset();
+    if (present) {
+        memcpy(g_rgd.update_cache.source_name, source, sizeof(source));
+        g_rgd.update_cache.present |= RGD_UPD_SOURCE_NAME;
+    }
+}
+
 static void rgd_cancel_pending_zero_locked(const char* why, uint8_t active_state) {
     if (g_rgd.state_zero_started_ms == 0) return;
     LOG_INFO(LOG_MODULE, "Route reset canceled by %s (state=%u, reroute=%d)",
@@ -229,6 +243,10 @@ static void rgd_update_cache_merge(const rgd_update_t* upd) {
     if (upd->present & RGD_UPD_SOURCE_SUPPORTS_RG) c->source_supports_route_guidance = upd->source_supports_route_guidance;
 
     c->present |= upd->present;
+    if ((upd->present & RGD_UPD_SOURCE_SUPPORTS_RG) && !upd->source_supports_route_guidance) {
+        c->source_name[0] = '\0';
+        c->present &= ~RGD_UPD_SOURCE_NAME;
+    }
 }
 
 		static void rgd_maneuver_map_reset(void) {
@@ -769,8 +787,9 @@ static void write_bus_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* 
         bus_text_int(b, "lane_guidance_index", upd->lane_guidance_index);
     if (present & RGD_UPD_LANE_SHOWING)
         bus_text_int(b, "lane_guidance_showing", upd->lane_guidance_showing);
-    if (present & RGD_UPD_SOURCE_NAME)
-        bus_text_str(b, "source_name", upd->source_name);
+    /* This is a full cached snapshot: unknown source must also replace Java's
+     * prior name after hook restart/reset. Wire absence is logged at receipt. */
+    bus_text_str(b, "source_name", (present & RGD_UPD_SOURCE_NAME) ? upd->source_name : "");
     if (present & RGD_UPD_SOURCE_SUPPORTS_RG)
         bus_text_int(b, "source_supports_rg", upd->source_supports_route_guidance);
     if (present & RGD_UPD_VISIBLE_IN_APP)
@@ -1092,11 +1111,27 @@ static bool rgd_message_handler(hook_context_t* ctx, const iap2_frame_t* frame) 
         }
         rgd_mark_first_response(frame->msgid);
 
-        LOG_INFO(LOG_MODULE, "Update: state=%u road=\"%s\" dest=\"%s\" lane_event=%d lane_showing=%d man_first=%d",
+        LOG_INFO(LOG_MODULE, "Update: state=%u road=\"%s\" dest=\"%s\" lane_event=%d lane_showing=%d man_first=%d source_present=%u source=\"%s\"",
                  upd.route_state, upd.current_road, upd.destination,
                  (upd.present & RGD_UPD_LANE_INDEX) ? (int)upd.lane_guidance_index : -1,
                  (upd.present & RGD_UPD_LANE_SHOWING) ? (int)upd.lane_guidance_showing : -1,
-                 upd.maneuver_list_count ? (int)upd.maneuver_list[0] : -1);
+                 upd.maneuver_list_count ? (int)upd.maneuver_list[0] : -1,
+                 (upd.present & RGD_UPD_SOURCE_NAME) ? 1u : 0u, upd.source_name);
+
+        /* Never relabel cached maneuvers from one provider as another. The
+         * first late source name enriches an unknown source without clearing
+         * its data. Explicit empty after a named source is a boundary too. */
+        bool source_changed = (upd.present & RGD_UPD_SOURCE_NAME)
+            && (g_rgd.update_cache.present & RGD_UPD_SOURCE_NAME)
+            && g_rgd.update_cache.source_name[0] != '\0'
+            && strcmp(upd.source_name, g_rgd.update_cache.source_name) != 0;
+        if (source_changed) {
+            LOG_INFO(LOG_MODULE, "Navigation source changed: \"%s\" -> \"%s\"; clearing route cache",
+                     g_rgd.update_cache.source_name, upd.source_name);
+            rgd_update_cache_reset();
+            rgd_maneuver_map_reset();
+            rgd_cancel_pending_zero("source changed");
+        }
 
         /*
          * Track update presence and handle route_state transitions.
@@ -1113,6 +1148,13 @@ static bool rgd_message_handler(hook_context_t* ctx, const iap2_frame_t* frame) 
         bool suppress_update = false;
         bool hard_clear = (upd.present & RGD_UPD_SOURCE_SUPPORTS_RG)
                        && upd.source_supports_route_guidance == 0;
+        /* Support loss is authoritative even when the phone omits route_state.
+         * Clear native slots as well as Java, so a new provider cannot receive
+         * full snapshots containing the old provider's cached maneuvers. */
+        if (hard_clear) {
+            upd.route_state = RGD_STATE_NOT_ACTIVE;
+            upd.present |= RGD_UPD_ROUTE_STATE;
+        }
         bool active_evidence = rgd_update_has_active_evidence(&upd);
 
         if (upd.present & RGD_UPD_ROUTE_STATE) {
@@ -1135,7 +1177,7 @@ static bool rgd_message_handler(hook_context_t* ctx, const iap2_frame_t* frame) 
                     bool from_reroute = (prev_state == RGD_STATE_REROUTING)
                                      || (g_rgd.emitted_route_state == RGD_STATE_REROUTING);
 
-                    rgd_update_cache_reset();
+                    rgd_route_cache_reset();
                     if (prev_state > 0) {
                         LOG_INFO(LOG_MODULE,
                                  "Route reset frame (state %u->0): flushing slot cache, holding Java update",
@@ -1169,8 +1211,14 @@ static bool rgd_message_handler(hook_context_t* ctx, const iap2_frame_t* frame) 
             }
             pthread_mutex_unlock(&g_rgd_debounce_lock);
         }
-        if (!suppress_update)
+        if (!suppress_update || source_changed)
             write_bus_update_partial(&upd);
+        else if (upd.present & RGD_UPD_SOURCE_NAME) {
+            /* Debounce suppresses route content, not provider identity. A late
+             * name may be sent only once, while the route is temporarily zero. */
+            memcpy(g_rgd.update_cache.source_name, upd.source_name, sizeof(upd.source_name));
+            g_rgd.update_cache.present |= RGD_UPD_SOURCE_NAME;
+        }
     }
     else if (frame->msgid == IAP2_MSG_ROUTE_GUIDANCE_MANEUVER) {
 #if RGD_TRACE_RAW_FULL

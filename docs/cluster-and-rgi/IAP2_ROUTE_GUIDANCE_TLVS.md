@@ -34,7 +34,7 @@
 | 0x0E | ManeuverCount | yes | `maneuverCount` |
 | 0x0F | RouteGuidanceBeingShownInApp | yes | `visibleInApp` (not route-active, see [RGI and BAP Bridge](RGI_AND_BAP_BRIDGE.md)) |
 | 0x10 / 0x11 / 0x12 | LaneGuidance CurrentIndex / TotalCount / Showing | yes | `laneGuidanceIndex/Total/Showing` |
-| 0x13 | SourceName | yes, sent on the bus | **dropped by Java** |
+| 0x13 | SourceName | yes, sent on the bus | Java source identity and compensation-stack selection |
 | 0x14 | SourceSupportsRouteGuidance | yes | `sourceSupportsRg` |
 | 0x15 | DestinationTimeZoneOffsetMinutes | recognised, skipped | no |
 | 0x16 | StopType | recognised, skipped | no |
@@ -45,7 +45,7 @@
 
 `[decompile]` for the Apple names, `[code]` for our handling. `rgd_tlv.h` names macros only up to `0x14` (`hook/routeguidance/rgd_tlv.h:62-82`); `rgd_tlv.c` recognises `0x15-0x1A` and skips them silently (`hook/routeguidance/rgd_tlv.c:437-450`). The code comments there label `0x17` "electricVehicleDestination" and `0x18-0x1A` "reserved", which disagrees with the accessoryd enum above. `[open]`
 
-**SourceName** is parsed (`rgd_tlv.c:420-427`) and written to the bus as `source_name` (`hook/routeguidance/rgd_hook.c:1047-1048`). `RouteGuidance.State` has no field for it and never reads the key. Surfacing it is Java-only work. `[code]`
+**SourceName** is parsed by `rgd_tlv.c` and written to every native cached bus snapshot as `source_name` (empty when unknown). `RouteGuidance.State.sourceName` drives exact display-name alias selection in `NavigationStack`. Ordinary phone deltas without the field retain cached identity; an explicit empty clears it. Native receipt logs distinguish absence from a supplied empty string. This is a localized application name, not a bundle ID. See [source compensation stacks](MANEUVER_MAPPING.md#source-compensation-stacks) for lifecycle, aliases and evidence limits. `[code]`
 
 ## 📊 ManeuverUpdate (0x5202) and lanes (0x5204)
 
@@ -77,7 +77,7 @@ The [Road Object Detection research](IAP2_ROAD_OBJECT_DETECTION.md) also finds e
 
 Opportunities, ranked by value against effort:
 
-1. **SourceName (0x13):** show which nav app is guiding. Java field only.
+1. **SourceName (0x13):** now retained by Java and logged with the selected compensation stack; verify live source names before extending the alias table.
 2. **EV fields (0x17, 0x18, 0x1A):** charging stops and battery at arrival. Only worth it with a cluster widget to drive.
 3. **StopType (0x16), destination time zone (0x15):** minor. We render the ETA as an absolute clock in the vehicle's current zone (`convertUtcToLocalMs` = HU UTCOffset DSI, DST-aware). On a cross-zone trip our clock and the iPhone's (destination zone) differ until the car crosses the boundary. 0x15 would close that edge case.
 4. **Speed-limit display:** Maps cluster URLs accept `showSpeedLimit=yes` on both 26.6 and 27; our hook currently requests `no`. Test the rendered sign on-car. Numeric extraction through RGI is not established, and RoadObjectDetection has the opposite direction. [Evidence](CARPLAY_SPEED_LIMIT.md). `[decompile]` / `[open]`

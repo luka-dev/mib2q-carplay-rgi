@@ -36,6 +36,8 @@ CLASSPATH="$PATCH_JAR:$STOCK_JAR:$OSGI_CP"
     "$PROJECT_DIR/tests/LaneGuidanceLifecycleTest.java" \
     "$PROJECT_DIR/tests/RgiDeliveryRecoveryTest.java" \
     "$PROJECT_DIR/tests/RendererMapperDirectionTest.java"
+"$JDK_DIR/bin/javac" -encoding UTF-8 -cp "$CLASSPATH" -d "$TEST_DIR" \
+    "$PROJECT_DIR/tests/NavigationStackTest.java"
 # No checkout resources or font files are visible through the working directory.
 # The pure runtime uses only classes and the embedded data in the built JAR.
 (cd "$TEST_DIR" && "$JDK_DIR/bin/java" -cp "$TEST_DIR:$PATCH_JAR" \
@@ -67,6 +69,8 @@ for variant in us eu cn; do
     "$JDK_DIR/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/$patch:$PROJECT_DIR/java_stock/$stock" \
         com.luka.carplay.rgd.BapShutdownFailureTest
     echo "Maneuver field arrival permutations: $variant"
+    "$JDK_DIR/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/$patch:$PROJECT_DIR/java_stock/$stock" \
+        com.luka.carplay.rgd.NavigationStackTest
     "$JDK_DIR/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/$patch:$PROJECT_DIR/java_stock/$stock" \
         com.luka.carplay.rgd.ManeuverFieldArrivalTest
 done
