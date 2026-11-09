@@ -31,11 +31,11 @@ public final class UpmixSettingTest {
         for (int i = 0; i < external.length; i++)
             if (external[i] > 3 && !SoundControlUi.subwooferSupported(external[i])) throw new AssertionError("sub expected for " + external[i]);
 
-        // Surround is hidden on internal amps (1..3) and enabled on all external MOST amps (B&O 4/21, Bose 17/18/19, etc.)
-        for (int t = 1; t <= 3; t++)
-            if (SoundControlUi.surroundSupported(t)) throw new AssertionError("no surround on internal " + t);
+        // Unknown/audio management must not expose controls before internal-amp detection.
+        for (int t = -1; t <= 3; t++)
+            if (SoundControlUi.surroundSupported(t)) throw new AssertionError("no surround on internal/unknown " + t);
         for (int i = 0; i < external.length; i++)
-            if (!SoundControlUi.surroundSupported(external[i])) throw new AssertionError("surround expected for " + external[i]);
+            if (external[i] > 3 && !SoundControlUi.surroundSupported(external[i])) throw new AssertionError("surround expected for " + external[i]);
 
         // VNC / GALA / AudioPilot widget & range per amplifier hardware:
         //   - Bose (17, 18, 19): boolean AudioPilot checkbox (vncMaxLevel = 0, soundSystemChoice = 4)

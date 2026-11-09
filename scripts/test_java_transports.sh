@@ -14,6 +14,7 @@ trap 'rm -rf "$TEST_DIR"' EXIT
     -d "$TEST_DIR" "$PROJECT_DIR/tests/TransportDevicePolicyTest.java" \
     "$PROJECT_DIR/tests/NowPlayingClearTest.java" \
     "$PROJECT_DIR/tests/CarPlaySettingsAvailabilityTest.java" \
+    "$PROJECT_DIR/tests/SoundControlAvailabilityTest.java" \
     "$PROJECT_DIR/tests/HuTimePresentationTest.java"
 for variant in us eu cn; do
     case "$variant" in
@@ -32,6 +33,9 @@ for variant in us eu cn; do
     "$TEST_JDK/bin/java" -Xverify:none \
         -cp "$TEST_DIR:$PROJECT_DIR/build/$patch:$PROJECT_DIR/java_stock/$stock:$OSGI_CP" \
         CarPlaySettingsAvailabilityTest
+    "$TEST_JDK/bin/java" -Xverify:none \
+        -cp "$TEST_DIR:$PROJECT_DIR/build/$patch:$PROJECT_DIR/java_stock/$stock:$OSGI_CP" \
+        SoundControlAvailabilityTest
     "$TEST_JDK/bin/java" \
         -cp "$TEST_DIR:$PROJECT_DIR/build/$patch:$PROJECT_DIR/java_stock/$stock:$OSGI_CP" \
         HuTimePresentationTest

@@ -28,6 +28,8 @@
 package com.luka.carplay.tone;
 
 import de.audi.atip.base.IFrameworkAccess;
+import de.audi.atip.hmi.event.EventDispatcher;
+import de.audi.atip.hmi.event.RunnableEvent;
 import de.audi.atip.hmi.model.ChoiceModel;
 import de.audi.atip.hmi.model.RangeModel;
 import de.audi.atip.hmi.view.HMIView;
@@ -77,6 +79,9 @@ public final class SoundControlUi {
     private static volatile MenuItemController surroundItem;
     private static volatile MenuItemController surroundLevelItem;
     private static volatile MenuItemController threeDModeItem;
+    private static volatile IFrameworkAccess framework;
+    private static int surroundTerminal;
+    private static boolean surroundGatingApplied;
 
     private SoundControlUi() {}
 
@@ -84,9 +89,9 @@ public final class SoundControlUi {
 
     public static ToneScreenFactory newFactory(IFrameworkAccess fw) { return new Factory(fw); }
 
-    /** True on external surround-capable amplifiers (B&O 0x140=4, Bose 0x160/0x161=17/18, B&O Adv 0x181=21, etc.). */
+    /** External amplifiers only; unknown (-1) and audio management (0) are not capabilities. */
     public static boolean surroundSupported(int type) {
-        return type != 1 && type != 2 && type != 3;
+        return type > 3;
     }
 
     public static boolean surroundSupported() {
@@ -207,6 +212,25 @@ public final class SoundControlUi {
                 ap.setValue(1);
             }
         } catch (Throwable t) { /* ignore */ }
+        requestSurroundState();
+    }
+
+    /** Re-read the latest amplifier on the HMI thread, including after queued callbacks. */
+    private static void requestSurroundState() {
+        try {
+            if (surroundItem == null) return;
+            IFrameworkAccess fw = framework;
+            if (fw == null || fw.getHMIService() == null) return;
+            EventDispatcher dispatcher = fw.getHMIService().getEventDispatcher();
+            if (dispatcher == null) return;
+            if (dispatcher.isDispatchThread()) {
+                syncSurroundLevelEnabled(surroundTerminal);
+            } else {
+                dispatcher.postEvent(new RunnableEvent(new Runnable() {
+                    public void run() { syncSurroundLevelEnabled(surroundTerminal); }
+                }));
+            }
+        } catch (Throwable t) { /* screen construction/conditions also reconcile the state */ }
     }
 
     private static void applyItemEnabled(MenuItemController item, boolean enabled, boolean suppressDisabledInfoline) {
@@ -222,14 +246,21 @@ public final class SoundControlUi {
 
     static void syncSurroundLevelEnabled(int terminal) {
         try {
+            boolean supported = surroundSupported();
+            MenuItemController item = surroundItem;
+            if (item != null) item.setVisible(supported);
             boolean stockDisabled = Factory.isSurroundLevelDisabledByStock(terminal);
-            applyItemEnabled(surroundItem, !stockDisabled, true);
+            applyItemEnabled(item, supported && !stockDisabled, true);
+            // On an internal/unknown amp leave stock controls alone. If we previously
+            // gated them, release that overlay using the current stock condition.
+            if (!supported && !surroundGatingApplied) return;
             ChoiceModel m = surroundModel;
-            boolean surroundOn = (m == null || m.getValue() != 0);
+            boolean surroundOn = !supported || m == null || m.getValue() != 0;
             boolean subItemsEnabled = surroundOn && !stockDisabled;
             boolean disabledByCheckbox = !surroundOn && !stockDisabled;
             applyItemEnabled(surroundLevelItem, subItemsEnabled, disabledByCheckbox);
             applyItemEnabled(threeDModeItem, subItemsEnabled, disabledByCheckbox);
+            surroundGatingApplied = supported;
         } catch (Throwable t) { /* ignore */ }
     }
 
@@ -240,9 +271,10 @@ public final class SoundControlUi {
                 ChoiceModel m = new ChoiceModel(MODEL_SURROUND) {
                     public void setValue(int value) {
                         super.setValue(value);
-                        syncSurroundLevelEnabled(0);
+                        requestSurroundState();
                     }
                     public void itemSelected(int value, int terminal) {
+                        if (!surroundSupported()) return;
                         this.setValue(value);
                         if (!boseAudioPilotAmp()) {
                             super.itemSelected(value, terminal);
@@ -276,7 +308,7 @@ public final class SoundControlUi {
                 ChoiceModel m = new ChoiceModel(MODEL_THREE_D) {
                     public void setValue(int value) {
                         ChoiceModel sm = surroundModel;
-                        if (sm != null && sm.getValue() == 0 && value == 0 && savedThreeDMode > 0) {
+                        if (surroundSupported() && sm != null && sm.getValue() == 0 && value == 0 && savedThreeDMode > 0) {
                             return;
                         }
                         savedThreeDMode = value;
@@ -381,7 +413,10 @@ public final class SoundControlUi {
     }
 
     static final class Factory extends ToneScreenFactory {
-        Factory(IFrameworkAccess fw) { super(fw); }
+        Factory(IFrameworkAccess fw) {
+            super(fw);
+            framework = fw;
+        }
 
         static boolean isSurroundLevelDisabledByStock(int terminal) {
             try {
@@ -393,7 +428,7 @@ public final class SoundControlUi {
 
         protected Screen createScreen(int id, int terminal) {
             Screen s = super.createScreen(id, terminal);
-            if (id == SCREEN_SOUND_EFFECTS && surroundSupported()) {
+            if (id == SCREEN_SOUND_EFFECTS) {
                 try { addSurroundRow(s, terminal); } catch (Throwable t) { /* stock screen unchanged on error */ }
             }
             return s;
@@ -424,6 +459,11 @@ public final class SoundControlUi {
         }
 
         private static void addSurroundRow(Screen s, int terminal) {
+            surroundTerminal = terminal;
+            surroundGatingApplied = false;
+            surroundItem = null;
+            surroundLevelItem = null;
+            threeDModeItem = null;
             AbstractScreenWidget screen = (AbstractScreenWidget) s;
             HMIView[] refViews = screen.findViews(ICoreToneModelBank.THREE_D_MODE_CHOICE);
             MenuItemController ref = (MenuItemController) refViews[0];
@@ -460,6 +500,9 @@ public final class SoundControlUi {
             item.setInternalID(INTERNAL_ID);
             item.setType(MenuItemController.TYPE_CHECKBOX);
             item.setWidgetID(1);
+            // Keep bindings stable when detection arrives after the screen was built.
+            item.setVisible(surroundSupported());
+            item.setEnabled(false);
 
             // Views first: if this throws, the menu is untouched.
             int[] ids = screen.getViewIDs();
