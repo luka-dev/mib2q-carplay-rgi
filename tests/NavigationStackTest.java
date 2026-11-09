@@ -224,9 +224,74 @@ public final class NavigationStackTest {
         check(s.dirtyMask == 0 && s.sourceRevision == revision && s.mType[0] == 2,
             "late default name restarted unchanged guidance");
     }
+    private static void yandexSchematic() throws Exception {
+        Method streets = BAPBridge.class.getDeclaredMethod("maneuverSideStreets",
+            RouteGuidance.State.class, ManeuverPresentation.class);
+        streets.setAccessible(true);
+        for (int side = 0; side <= 1; side++) for (int ordinal = 1; ordinal <= 19; ordinal++) {
+            RouteGuidance.State s = sample("Yandex Navi", 27 + ordinal, 1, -1, false);
+            s.mDrivingSide[0] = side;
+            ManeuverPresentation p = ManeuverPresentation.resolve(s, true);
+            check(!p.semantics.hasAngle() && p.semantics.exitNumber == ordinal,
+                "synthetic geometry must not become received evidence");
+            if (ordinal > 14) {
+                check(p.schematic == null, "too many exits must not be silently merged");
+                continue;
+            }
+            RendererMapper.Mapping r = RendererMapper.map(p, null);
+            byte[] hud = (byte[]) streets.invoke(null, s, p);
+            check(r.icon == RendererMapper.ICON_ROUNDABOUT && !r.snapToRoad,
+                "schematic must remain a fixed circle");
+            check(r.junctionAngles.length == ordinal + 1 && hud.length == ordinal,
+                "selected exit plus one AFTER, excluding entry");
+            check(r.exitAngle == r.junctionAngles[ordinal - 1]
+                && r.exitAngle == RendererMapper.directionAngleHalfDegrees(p.direction),
+                "same selected exit on HUD and renderer");
+            int before = 0, after = 0;
+            boolean[] occupied = new boolean[16];
+            for (int i = 0; i < r.junctionAngles.length; i++) {
+                int a = r.junctionAngles[i];
+                check(a > -360 && a < 360 && a % 45 == 0, "exact non-entry HUD bin");
+                int bin = ((-a / 45) + 16) % 16;
+                check(!occupied[bin], "distinct exits survive HUD quantization");
+                occupied[bin] = true;
+                if (i == ordinal - 1) continue;
+                boolean isBefore = side == 0 ? a > r.exitAngle : a < r.exitAngle;
+                if (isBefore) before++; else after++;
+                boolean found = false;
+                for (int j = 0; j < hud.length; j++)
+                    if ((hud[j] & 255) == bin * 16) found = true;
+                check(found, "every renderer side road reaches HUD");
+            }
+            check(before == ordinal - 1 && after == 1, "ordinal must survive mirroring");
+            if (ordinal == 6) check(r.exitAngle == (side == 0 ? -180 : 180), "sixth-exit layout");
+            check(s.mTurnAngle[0] == -1 && s.mExitAngle[0] == 1000
+                && s.mJunctionAngles[0] == null, "raw state changed");
+            for (int a = -180; a <= 180; a++) {
+                s.mTurnAngle[0] = a; s.mTurnAnglePresent[0] = true;
+                p = ManeuverPresentation.resolve(s, true);
+                check(p.schematic == null && RendererMapper.map(p, null).exitAngle == a * 2,
+                    "every valid received angle supersedes schematic, including -1/0");
+            }
+        }
+        RouteGuidance.State s = sample("Yandex Navi", 33, 1, -1, false);
+        s.mJunctionAngles[0] = new int[]{1000, 0};
+        check(ManeuverPresentation.resolve(s, true).schematic == null, "do not mix real and synthetic roads");
+        s.mJunctionAngles[0] = new int[]{1000, -1000};
+        check(ManeuverPresentation.resolve(s, true).schematic != null, "sentinels are not geometry");
+        s.mDrivingSide[0] = -1;
+        check(ManeuverPresentation.resolve(s, true).schematic == null, "unknown circulation side");
+        s.mDrivingSide[0] = 0;
+        String[] sources = {null, "Google Maps", "百度地图", "Amap", "Yandex Maps"};
+        for (int i = 0; i < sources.length; i++) {
+            s.sourceName = sources[i];
+            check(ManeuverPresentation.resolve(s, true).schematic == null, "Yandex-only presentation");
+        }
+    }
+
     public static void main(String[] args) throws Exception {
         Log.setLevel(-1);
-        aliases(); defaultParity(); compensation(); amapCompensation(); lifecycle();
+        aliases(); defaultParity(); compensation(); amapCompensation(); lifecycle(); yandexSchematic();
         System.out.println("Navigation stacks: " + checks + " checks PASS");
     }
 }

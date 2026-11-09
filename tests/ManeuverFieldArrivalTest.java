@@ -34,6 +34,7 @@ public final class ManeuverFieldArrivalTest {
     private static final class HUD implements InvocationHandler {
         int main, direction, descriptors, distance, bar, distanceFailures, maneuverStateFailures;
         boolean barOn;
+        byte[] streets;
         public Object invoke(Object proxy, Method method, Object[] args) {
             if (method.getName().equals("updateManeuverState") && maneuverStateFailures > 0) {
                 maneuverStateFailures--;
@@ -42,6 +43,7 @@ public final class ManeuverFieldArrivalTest {
             if (method.getName().equals("updateManeuverDescriptor")) {
                 CombiBAPNaviManeuverDescriptor[] data = (CombiBAPNaviManeuverDescriptor[]) args[0];
                 main = data[0].mainElement; direction = data[0].direction; descriptors++;
+                streets = data[0].sideStreets;
             }
             if (method.getName().equals("updateDistanceToNextManeuver")) {
                 if (distanceFailures > 0) {
@@ -58,6 +60,8 @@ public final class ManeuverFieldArrivalTest {
     private static final class Renderer extends RendererServer {
         int icon = -1, direction, angle, writes, failures, progressLevel, progressMode, progressState;
         int progressOnFollow;
+        int[] junctionAngles;
+        boolean snapToRoad;
         public boolean isReady() { return true; }
         public boolean isFrameReady() { return true; }
         public boolean isConnected() { return true; }
@@ -73,6 +77,7 @@ public final class ManeuverFieldArrivalTest {
                 boolean refresh, boolean snap, int progress) {
             if (failures > 0) { failures--; return false; }
             progressLevel = level; progressMode = mode; progressState = progress;
+            junctionAngles = roads; snapToRoad = snap;
             icon = nextIcon; direction = nextDirection; angle = nextAngle; writes++; return true;
         }
     }
@@ -477,6 +482,25 @@ public final class ManeuverFieldArrivalTest {
                 "Yandex inherited Baidu angle or progress");
             check(ManeuverPresentation.resolve(f.state, true).semantics.exitNumber == 4,
                 "bridge path lost Yandex ordinal");
+            f.feed("m0_driving_side:n:0\n");
+            check(f.renderer.angle == -135, "late circulation side enables fourth-exit schematic");
+            f.renderer.failures = 1;
+            f.feed("m0_type:n:33\n");
+            check(f.hud.direction == ManeuverMapper.DIR_LEFT
+                && (f.state.dirtyMask & RouteGuidance.State.DIRTY_MANEUVER_ICON) != 0,
+                "sixth-exit schematic HUD / failed renderer retry");
+            f.feed("dist_maneuver_m:n:90\n");
+            check(f.renderer.angle == -180, "schematic retry lost selected sixth exit");
+            check(Arrays.equals(f.hud.streets, new byte[]{(byte)160, (byte)192, (byte)224, 0, 32, 96})
+                && Arrays.equals(f.renderer.junctionAngles, new int[]{270, 180, 90, 0, -90, -180, -270})
+                && !f.renderer.snapToRoad, "actual outputs must retain five before and one after");
+            writes = f.renderer.writes; f.replay();
+            check(f.renderer.writes == writes, "schematic replay restarted animation");
+            f.feed("m0_turn_angle:n:0\n");
+            check(f.hud.direction == ManeuverMapper.DIR_STRAIGHT && f.renderer.angle == 0
+                && ManeuverPresentation.resolve(f.state, true).schematic == null
+                && f.hud.streets.length == 0 && f.renderer.junctionAngles.length == 0,
+                "late actual angle must replace both schematic outputs");
             f.feed("source_name:s:Google Maps\nroute_state:n:1\nmaneuver_count:n:1\nmaneuver_list:s:0\n"
                 + "m0_ver:n:1\nm0_type:n:2\ndist_maneuver_m:n:100\n");
             check(f.hud.main == ManeuverMapper.TURN && f.hud.direction == ManeuverMapper.DIR_RIGHT

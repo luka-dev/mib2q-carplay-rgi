@@ -1557,7 +1557,10 @@ public class BAPBridge {
                 + " angle=" + value.angle + " angle_source="
                 + (value.angleSource == ManeuverSemantics.ANGLE_RECEIVED ? "received"
                     : value.angleSource == ManeuverSemantics.ANGLE_DIRECTION_HINT ? "direction_hint" : "unknown")
-                + " exit_number=" + value.exitNumber);
+                + " exit_number=" + value.exitNumber
+                + " geometry=" + (maneuver.schematic == null ? "source" : "ordinal_schematic")
+                + (maneuver.schematic == null ? "" : " schematic_angle_half_degrees="
+                    + maneuver.schematic.exitAngle));
         }
         appConnectorNavi.updateManeuverDescriptor(arr);
     }
@@ -2253,6 +2256,7 @@ public class BAPBridge {
     }
 
     private static byte[] maneuverSideStreets(RouteGuidance.State s, ManeuverPresentation maneuver) {
+        if (maneuver.schematic != null) return maneuver.schematic.sideStreets;
         int idx = maneuver.slot;
         ManeuverSemantics value = maneuver.semantics;
         if (maneuver.main == ManeuverMapper.NO_INFO || maneuver.main == ManeuverMapper.NO_SYMBOL

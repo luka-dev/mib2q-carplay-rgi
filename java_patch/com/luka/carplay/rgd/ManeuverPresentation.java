@@ -12,16 +12,19 @@ final class ManeuverPresentation {
     final int main;
     final int direction;
     final ManeuverSemantics semantics;
+    final RoundaboutSchematic schematic;
 
     private ManeuverPresentation(int slot, int main, int direction) {
-        this(slot, main, direction, null);
+        this(slot, main, direction, null, null);
     }
 
-    private ManeuverPresentation(int slot, int main, int direction, ManeuverSemantics semantics) {
+    private ManeuverPresentation(int slot, int main, int direction, ManeuverSemantics semantics,
+                                 RoundaboutSchematic schematic) {
         this.slot = slot;
         this.main = main;
         this.direction = direction;
         this.semantics = semantics;
+        this.schematic = schematic;
     }
 
     boolean hasManeuver() { return slot >= 0; }
@@ -39,14 +42,18 @@ final class ManeuverPresentation {
         int slot = currentSlot(s);
         if (slot < 0 || !ManeuverMapper.isValidType(s.mType[slot]))
             return FOLLOW;
-        ManeuverSemantics semantics = NavigationStack.forSource(s.sourceName).resolve(
+        NavigationStack stack = NavigationStack.forSource(s.sourceName);
+        ManeuverSemantics semantics = stack.resolve(
             s.mType[slot], s.mJunctionType[slot], s.mDrivingSide[slot],
             s.mTurnAngle[slot], anglePresent(s, slot));
         int[] mapped = ManeuverMapper.map(semantics.mappingType(), semantics.angle,
             semantics.junctionType, semantics.drivingSide, semantics.anglePresent);
         if (mapped[0] == ManeuverMapper.NO_INFO || mapped[0] == ManeuverMapper.NO_SYMBOL)
             return FOLLOW;
-        return new ManeuverPresentation(slot, mapped[0], mapped[1], semantics);
+        RoundaboutSchematic schematic = stack == NavigationStack.YANDEX
+            ? RoundaboutSchematic.create(semantics, s.mJunctionAngles[slot]) : null;
+        return new ManeuverPresentation(slot, mapped[0],
+            schematic == null ? mapped[1] : schematic.direction, semantics, schematic);
     }
 
     static boolean anglePresent(RouteGuidance.State s, int slot) {

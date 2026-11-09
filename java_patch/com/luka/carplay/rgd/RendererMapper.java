@@ -43,6 +43,13 @@ public final class RendererMapper {
 
     static Mapping map(ManeuverPresentation maneuver, int[] roads) {
         ManeuverSemantics value = maneuver.semantics;
+        if (maneuver.schematic != null) {
+            Mapping schematic = fromBap(maneuver.main, maneuver.direction, value.drivingSide);
+            schematic.exitAngle = maneuver.schematic.exitAngle;
+            schematic.junctionAngles = maneuver.schematic.junctionAngles;
+            schematic.snapToRoad = false;
+            return schematic;
+        }
         Mapping out = value == null
             ? map(maneuver.main, maneuver.direction, 0, ManeuverMapper.MT_FOLLOW_ROAD, 0, false, null)
             // A known departure without geometry uses the existing departure
