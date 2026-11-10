@@ -22,7 +22,17 @@ Newer VAG stacks were checked first and have no 103 receiver: MPR3 AirPlay 450.1
 
 `AUDIO_SPATIAL=1` and `AUDIO_SPATIAL_ATMOS=0` select the standard `[65,23]` offer: APAC 5.1 and AAC-LC/48 kHz stereo. Secondary index 23 is fixed in the current policy. Startup policy is read at process initialization; the MMI Spatial Audio and UpMix settings can also change playback live through `/tmp/carplay_settings` and bus commands. See [current controls](STEREO_TO_5_1_UPMIX.md#mmi-level).
 
-The private dispatcher seam is fingerprinted: all VA/prologue data lives in one `spa103_private_profile_t` named `MHI2Q AirPlay 210.81` (`hook/audio/audio_hook.c:1324`); an unknown or K1004 image (whose `AirTunesServer_EnsureCreated` sits at `0x2e94c`, not `0x2e9ac`) leaves type 103 disabled and type 100 stock **[code]**.
+The private dispatcher seam is fingerprinted: VA/prologue data lives in
+`spa103_private_profiles` in `hook/audio/audio_hook.c`. The supported profiles are
+`MHI2Q AirPlay 210.81` and `MHI2Q CN K1004`. Unknown images leave type 103 disabled.
+The K1004 profile was checked against stock MU1003 libairplay.so (SHA-256
+`ea2c64202f41fe8ad1fbd3cdf9b3ce2b7a2889a333d5e9b49b1b3aaf83be3950`):
+EnsureCreated `0x2e94c`, plist response `0x2efe0`, HTTP dispatcher `0x30280`,
+server global `0xb948c`. The HTTP callback slot (`0x64`), request fields
+(`0x201c/0x2020/0x209c/0x20a8`), session clock/family (`0x13d0/0x55`),
+AudioStream type/audioType (`0x6c/0x70`) and 16-byte AirTunesTime ABI match the
+existing profile. This is static compatibility; K1004 hardware playback remains
+to be validated. The public `MHI2Q-2026-11-04` release has no CN buffered profile.
 
 ## 🌐 Negotiation — three metadata gates
 

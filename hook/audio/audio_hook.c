@@ -1124,9 +1124,8 @@ static void spa_note_setup_result(int has103, int result, void *response, uint32
 /* The public type-103 hooks are portable, but the HTTP dispatcher, request
  * layout and session-clock bridge use private libairplay addresses.  Keep all
  * of those values in one fingerprinted firmware profile instead of embedding
- * a release name in common SPA103 logic.  K1004, for example, places
- * EnsureCreated at 0x2e94c rather than 0x2e9ac and therefore needs its own
- * independently reviewed profile.
+ * a release name in common SPA103 logic. Each supported image has its own
+ * reviewed profile; the CN K1004 addresses differ from the 210.81 image.
  *
  * This check is first reached from a real interposed call.  No hook-owned ELF
  * constructor may call dlsym, inspect code bytes, log, or create a thread. */
@@ -1153,6 +1152,20 @@ static const spa103_private_profile_t spa103_private_profiles[] = {
     {
         "MHI2Q AirPlay 210.81",
         0x0002e9acu, 0x0002f040u, 0x000302e0u, 0x000babccu,
+        0x64u, 5072u, 85u, 108u, 112u,
+        0x201cu, 0x2020u, 0x209cu, 0x20a8u,
+        { 0xf0, 0x45, 0x2d, 0xe9, 0xdc, 0x41, 0x9f, 0xe5,
+          0xdc, 0x61, 0x9f, 0xe5 },
+        { 0xf0, 0x41, 0x2d, 0xe9, 0xc8, 0x50, 0x90, 0xe5,
+          0x03, 0x70, 0xa0, 0xe1 }
+    },
+    {
+        /* K1004 MU1003: independently checked against stock libairplay.so
+         * ea2c64202f41fe8ad1fbd3cdf9b3ce2b7a2889a333d5e9b49b1b3aaf83be3950.
+         * HTTP delegate, request, session and AudioStream field layouts match;
+         * functions and the AirTunes server global have different addresses. */
+        "MHI2Q CN K1004",
+        0x0002e94cu, 0x0002efe0u, 0x00030280u, 0x000b948cu,
         0x64u, 5072u, 85u, 108u, 112u,
         0x201cu, 0x2020u, 0x209cu, 0x20a8u,
         { 0xf0, 0x45, 0x2d, 0xe9, 0xdc, 0x41, 0x9f, 0xe5,
@@ -1221,8 +1234,8 @@ typedef uint64_t (*spa_up_ticks_t)(void);
  * undefined, turning the intended +150 ms anchor into a random 64-bit interval. */
 typedef uint64_t (*spa_milliseconds_to_up_ticks_t)(uint64_t);
 
-/* AirTunesTime for the AirPlay 210.81 profile, verified from
- * AirTunesClock_GetSynchronizedTimeNearUpTicks @ 0x2dc30:
+/* AirTunesTime for both profiles, verified from
+ * AirTunesClock_GetSynchronizedTimeNearUpTicks @ 0x2dc30 (210.81), 0x2dbd0 (K1004):
  * seconds at +0, reserved padding at +4, and 64-bit fractional seconds at +8. Unlike the newer
  * 32-byte Pioneer structure, this target image does not return a timeline ID here. */
 typedef struct {

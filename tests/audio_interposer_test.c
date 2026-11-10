@@ -30,6 +30,7 @@ static snd_pcm_channel_setup_t device_setup;
 static int16_t source_pcm[1536];
 static int poll_pipe[2];
 static unsigned char *image_base;
+static uintptr_t ensure_created_va;
 static int request_object, response_object, streams_object, desc_object, key_object;
 static int request_refs, response_refs, socket_opens, stock_teardowns;
 static int teardown_empty_array, teardown_stream_type = 103;
@@ -763,7 +764,8 @@ static void *test_dlsym(void *scope, const char *name)
     SYMBOL("UpTicks", unused_native);
     SYMBOL("MillisecondsToUpTicks", unused_native);
     SYMBOL("AirTunesClock_GetSynchronizedTimeNearUpTicks", unused_native);
-    if (!strcmp(name, "AirTunesServer_EnsureCreated")) return image_base + 0x2e9ac;
+    if (!strcmp(name, "AirTunesServer_EnsureCreated"))
+        return ensure_created_va ? image_base + ensure_created_va : NULL;
 #undef SYMBOL
     return NULL;
 }
@@ -926,9 +928,61 @@ static void buffered_contract_tests(void)
     assert(!contract_key_refs && !contract_info_refs);
     puts("audio_interposer_test: final mainBuffered/info pairing, allocation and stale-session PASS");
 }
-int main(void)
+/* Fixture bytes/addresses come from the stock images, not the profile table.
+ * Each invocation is a fresh process, including the cached rejection cases. */
+static int private_profile_fixture(const char *firmware, const char *fault)
+{
+    static const unsigned char ensure_bytes[] = {
+        0xf0, 0x45, 0x2d, 0xe9, 0xdc, 0x41, 0x9f, 0xe5, 0xdc, 0x61, 0x9f, 0xe5
+    };
+    static const unsigned char plist_bytes[] = {
+        0xf0, 0x41, 0x2d, 0xe9, 0xc8, 0x50, 0x90, 0xe5, 0x03, 0x70, 0xa0, 0xe1
+    };
+    int cn = !strcmp(firmware, "cn");
+    uintptr_t ensure = cn ? 0x2e94c : 0x2e9ac;
+    uintptr_t plist = cn ? 0x2efe0 : 0x2f040;
+    const spa103_private_profile_t *profile;
+    assert(cn || !strcmp(firmware, "us"));
+    assert(!posix_memalign((void **)&image_base, 4096, 0xc0000));
+    memset(image_base, 0, 0xc0000);
+    memcpy(image_base + ensure, ensure_bytes, sizeof(ensure_bytes));
+    memcpy(image_base + plist, plist_bytes, sizeof(plist_bytes));
+    ensure_created_va = ensure;
+    if (!strcmp(fault, "ensure")) image_base[ensure] ^= 1;
+    else if (!strcmp(fault, "plist")) image_base[plist] ^= 1;
+    else if (!strcmp(fault, "unknown")) ensure_created_va += 4;
+    else if (!strcmp(fault, "missing")) ensure_created_va = 0;
+    else assert(!strcmp(fault, "valid"));
+
+    profile = spa103_private_profile();
+    if (strcmp(fault, "valid")) {
+        assert(!profile && !spa_probe103() && !spa_probe103_mode());
+        assert(!spa103_install_buffered_dispatcher());
+        assert(!spa103_http_process_slot && !spa103_original_http_process);
+        free(image_base);
+        printf("audio_interposer_test: %s profile rejects %s PASS\n", firmware, fault);
+        return 0;
+    }
+    assert(profile && spa_probe103() && spa_probe103_mode() == SPA_103_MODE_BOTH);
+    assert(!strcmp(profile->name, cn ? "MHI2Q CN K1004" : "MHI2Q AirPlay 210.81"));
+    assert(profile->ensureCreatedVA == ensure && profile->setPlistResponseVA == plist);
+    assert(profile->httpProcessVA == (cn ? 0x30280u : 0x302e0u));
+    assert(profile->serverGlobalVA == (cn ? 0xb948cu : 0xbabccu));
+    assert(profile->httpProcessSlotOffset == 0x64);
+    assert(profile->sessionClockOffset == 0x13d0 && profile->sessionFamilyOffset == 0x55);
+    assert(profile->audioStreamTypeOffset == 0x6c && profile->audioStreamAudioTypeOffset == 0x70);
+    assert(profile->httpMethodPointerOffset == 0x201c && profile->httpMethodLengthOffset == 0x2020);
+    assert(profile->httpBodyPointerOffset == 0x209c && profile->httpBodyLengthOffset == 0x20a8);
+    printf("audio_interposer_test: %s private profile PASS\n", firmware);
+    return 1;
+}
+
+int main(int argc, char **argv)
 {
     assert(!setenv("AUDIO_SPATIAL", "1", 1));
+    assert(argc <= 3);
+    if (!private_profile_fixture(argc > 1 ? argv[1] : "us", argc > 2 ? argv[2] : "valid"))
+        return 0;
     assert(spa_audio_config()->stereoUpmixBackend == SPA_STEREO_UPMIX_SCENE);
     assert(spa_audio_config()->stereoLfeAssist == 1);
     assert(spa_audio_config()->realtimeUpmix == 1);
@@ -936,10 +990,6 @@ int main(void)
     assert(spa_audio_config()->voiceGainQ13 == SPA_VOICE_GAIN_Q13_DEFAULT);
     assert(spa_probe103_extra_index(SPA_APAC_48K_5_1) == SPA_AAC_LC_48K_STEREO);
     assert(!pipe(poll_pipe));
-    assert(!posix_memalign((void **)&image_base, 4096, 0xc0000));
-    memset(image_base, 0, 0xc0000);
-    memcpy(image_base + 0x2e9ac, spa103_private_profiles[0].ensureCreatedPrologue, 12);
-    memcpy(image_base + 0x2f040, spa103_private_profiles[0].setPlistResponsePrologue, 12);
     qsa_transactions();
     setup_lifetime();
     stale_setup_generations();

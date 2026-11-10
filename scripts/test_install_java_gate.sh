@@ -24,7 +24,7 @@ for sh in $shells; do
     done
     for case in MHI2Q_US_AUG22_P5087:y MHI2Q_ER_AUG22_P5092:y MHI2Q_ER_AUG22_P5152:y MHI2Q_JP_AUG22_P1017:y MHI2Q_CN_AUG22_K1004:y \
                 MHI2Q_US_AUG22_P4246:n MHI2Q_US_AUG22_P4171:n MHI2Q_ER_AUG22_P4170:n MHI2Q_US_AUG22_P508:n \
-                MHI2Q_ER_AUG22_P50921:n MHI2Q_KR_AUG22_P5000:n :n; do
+                MHI2Q_ER_AUG22_P50921:n MHI2Q_CN_AUG22_P1002:n MHI2Q_KR_AUG22_P5000:n :n; do
         train=${case%:*}; want=${case##*:}
         got=$("$sh" -c ". $T/f.sh; TRAIN=$train; train_verified && echo y || echo n")
         [ "$got" = "$want" ] || fail "$sh" "train_verified '$train' -> '$got', want '$want'"
