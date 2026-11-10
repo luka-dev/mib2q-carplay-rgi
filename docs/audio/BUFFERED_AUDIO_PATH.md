@@ -24,7 +24,8 @@ Newer VAG stacks were checked first and have no 103 receiver: MPR3 AirPlay 450.1
 
 The private dispatcher seam is fingerprinted: VA/prologue data lives in
 `spa103_private_profiles` in `hook/audio/audio_hook.c`. The supported profiles are
-`MHI2Q AirPlay 210.81` and `MHI2Q CN K1004`. Unknown images leave type 103 disabled.
+`MHI2Q AirPlay 210.81`, `MHI2Q CN K1004` and `MHI2Q CN P1404`.
+Unknown images leave type 103 disabled.
 The K1004 profile was checked against stock MU1003 libairplay.so (SHA-256
 `ea2c64202f41fe8ad1fbd3cdf9b3ce2b7a2889a333d5e9b49b1b3aaf83be3950`):
 EnsureCreated `0x2e94c`, plist response `0x2efe0`, HTTP dispatcher `0x30280`,
@@ -33,6 +34,16 @@ server global `0xb948c`. The HTTP callback slot (`0x64`), request fields
 AudioStream type/audioType (`0x6c/0x70`) and 16-byte AirTunesTime ABI match the
 existing profile. This is static compatibility; K1004 hardware playback remains
 to be validated. The public `MHI2Q-2026-11-04` release has no CN buffered profile.
+
+The P1404 MU1404 library has SHA-256
+`3173d2fdc4133890ef91fe4a93fa1962cdb2aa3a4ecfd303a52992b9a9deb9fb`.
+Its independently checked addresses are EnsureCreated `0x2e934`, plist response
+`0x2efc8`, HTTP dispatcher `0x30268`, and server global `0xb948c`.
+All field offsets above and the clock ABI also match P1404. Its clock helper is
+at `0x2dbb8`; stock code loads the session clock at `0x2470c` and the socket
+family at `0x27074`. HTTPServerCreate copies the delegate into server+`0x40`
+at `0x6bd8c`, retaining the request callback at +`0x64`. Hardware playback is
+not yet validated.
 
 ## 🌐 Negotiation — three metadata gates
 

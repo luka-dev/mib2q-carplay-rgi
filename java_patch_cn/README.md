@@ -13,6 +13,12 @@
 
 `scripts/build_java.sh` copies `java_patch/`, applies these with `patch -p1 -F0` and compiles against `java_stock/CN_MU1003_lsd.jar` into `build/carplay_hook_cn.jar`. `-F0` means a hunk whose context changed fails the build instead of landing in the wrong place. `scripts/audit_java_variants.sh` then requires 0 linkage errors for each jar on its own firmware.
 
+CN P1404 (MU1404) uses the same patch JAR. Its own reconstructed stock corpus is
+`java_stock/CN_MU1404_lsd.jar`; the audit checks both linkage directions and
+compares every replaced stock class with MU1003 after normalizing JXE exporter
+metadata and padding. All 53 currently replaced classes match. The native
+AirPlay library differs and has a separate buffered-audio profile.
+
 ## When a patch stops applying
 
 An edit in `java_patch/` touched lines next to a CN difference. Regenerate that one patch:

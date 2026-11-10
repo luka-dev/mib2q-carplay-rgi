@@ -120,14 +120,14 @@ java_jar() {
     esac
 }
 
-# The firmware this release was verified on.  Much older trains of the same region can keep
+# Firmware with reviewed stock layouts and patch compatibility. Much older trains can keep
 # the HMI on the Audi logo after the reboot (issue #24 on US P4171, #50 on US P4246).  An
 # unverified train is refused once with a loud warning; a second run in the same power
 # cycle (marker in /tmp, which is RAM) installs anyway.
 # P5152 is an ER train with the same main unit software as P5092 (MU1329; #61).
 train_verified() {
     case $TRAIN in
-        MHI2Q_US_AUG22_P5087|MHI2Q_US_AUG22_P5145|MHI2Q_ER_AUG22_P5092|MHI2Q_ER_AUG22_P5152|MHI2Q_JP_AUG22_P1017|MHI2Q_CN_AUG22_K1004) return 0 ;;
+        MHI2Q_US_AUG22_P5087|MHI2Q_US_AUG22_P5145|MHI2Q_ER_AUG22_P5092|MHI2Q_ER_AUG22_P5152|MHI2Q_JP_AUG22_P1017|MHI2Q_CN_AUG22_K1004|MHI2Q_CN_AUG22_P1404) return 0 ;;
     esac
     return 1
 }
@@ -624,7 +624,7 @@ UPDATE THE HEAD UNIT TO THE LATEST
 FIRMWARE FOR YOUR REGION FIRST:
   MHI2Q_US_AUG22_P5087 (MU1316)
   MHI2Q_ER_AUG22_P5092 / P5152 (MU1329)
-  MHI2Q_CN_AUG22_K1004 (MU1003)
+  MHI2Q_CN_AUG22_K1004 (MU1003) / P1404 (MU1404)
   MHI2Q_JP_AUG22_P1017 (MU1017)
 
 ON OLDER FIRMWARE THE MMI CAN STAY

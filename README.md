@@ -107,7 +107,7 @@ You need:
 | **US** — North America | `MHI2Q_US_AUG22_P5087`, `MHI2Q_US_AUG22_P5145` |
 | **ER** — Europe / rest of world | `MHI2Q_ER_AUG22_P5092`, `MHI2Q_ER_AUG22_P5152` |
 | **JP** — Japan | `MHI2Q_JP_AUG22_P1017` |
-| **CN** — China | `MHI2Q_CN_AUG22_K1004` |
+| **CN** — China | `MHI2Q_CN_AUG22_K1004`, `MHI2Q_CN_AUG22_P1404` (development version) |
 
 **Sound system:** external amplifiers used with these MHI2Q systems, including
 **B&O and Bose**, can carry 5.1 sound and stereo UpMix. Native Spatial Audio also
@@ -115,11 +115,13 @@ requires a supported firmware profile; see the CN limitation below. Cars using
 the MMI's built-in amplifier keep normal stereo sound; the map, calls and other
 cluster features are still available.
 
-**CN K1004:** installation and stereo UpMix are supported. The public
-`MHI2Q-2026-11-04` release does **not** enable native Spatial Audio on this firmware.
-The development version adds a K1004 buffered-audio profile; playback still needs
-validation on a K1004 head unit. Decoder queue optimization remains unavailable
-on K1004. CN `P1002` is a different firmware and is not covered by this entry.
+**CN:** the public `MHI2Q-2026-11-04` release supports K1004 installation and
+stereo UpMix, but does **not** enable native Spatial Audio on it. The development
+version adds P1404 installation support and separate buffered-audio profiles for
+K1004 and P1404; native Spatial Audio playback still needs validation on both
+firmwares. Decoder queue optimization and the experimental wireless integration
+remain unavailable on these CN libraries. CN `P1002` is a different firmware and
+is not covered by these entries.
 
 **Other CarPlay mods:** uninstall any other CarPlay mods using their own uninstallers before
 proceeding. Conflicting mods can cause malfunctions or brick the MMI.

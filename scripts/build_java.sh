@@ -6,7 +6,7 @@
 #
 # Input:  java_patch/ (+ java_patch_cn/*.patch for the CN variant)
 # Output: build/carplay_hook.jar     US/EU (MU1316 P5087, MU1329 P5092: identical stock classes)
-#         build/carplay_hook_cn.jar  CN    (MU1003 K1004)
+#         build/carplay_hook_cn.jar  CN    (MU1003 K1004, MU1404 P1404)
 #
 # The jar replaces whole stock classes, and six of them differ on CN (other superclass,
 # constructors, DSI resource API).  The CN variant is java_patch/ with the CN stock delta

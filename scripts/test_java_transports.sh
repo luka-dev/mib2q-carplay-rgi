@@ -16,11 +16,12 @@ trap 'rm -rf "$TEST_DIR"' EXIT
     "$PROJECT_DIR/tests/CarPlaySettingsAvailabilityTest.java" \
     "$PROJECT_DIR/tests/SoundControlAvailabilityTest.java" \
     "$PROJECT_DIR/tests/HuTimePresentationTest.java"
-for variant in us eu cn; do
+for variant in us eu cn cn1404; do
     case "$variant" in
         us) patch=carplay_hook.jar; stock=US_MU1316_lsd.jar ;;
         eu) patch=carplay_hook.jar; stock=EU_MU1329_lsd.jar ;;
         cn) patch=carplay_hook_cn.jar; stock=CN_MU1003_lsd.jar ;;
+        cn1404) patch=carplay_hook_cn.jar; stock=CN_MU1404_lsd.jar ;;
     esac
     # Real reconstructed J9 stock code uses the same isolated verifier
     # exception as the existing stock chain tests. Shipping output targets 1.4.
@@ -56,11 +57,12 @@ done
     -d "$TEST_DIR" "$PROJECT_DIR/tests/UpmixSettingTest.java"
 "$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar:$PROJECT_DIR/java_stock/US_MU1316_lsd.jar" \
     com.luka.carplay.core.UpmixSettingTest
-for variant in us eu cn; do
+for variant in us eu cn cn1404; do
     case "$variant" in
         us) patch=carplay_hook.jar; stock=US_MU1316_lsd.jar ;;
         eu) patch=carplay_hook.jar; stock=EU_MU1329_lsd.jar ;;
         cn) patch=carplay_hook_cn.jar; stock=CN_MU1003_lsd.jar ;;
+        cn1404) patch=carplay_hook_cn.jar; stock=CN_MU1404_lsd.jar ;;
     esac
     echo "Renderer reroute transport: $variant"
     "$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/$patch:$PROJECT_DIR/java_stock/$stock" \
@@ -80,11 +82,12 @@ for scenario in cold warm stop bounce-loss; do
         -cp "$TEST_DIR/nav-init:$PROJECT_DIR/build/carplay_hook.jar:$STOCK_JAR" \
         com.luka.carplay.core.AltScreenStartupTest "$scenario"
 done
-for variant in us eu cn; do
+for variant in us eu cn cn1404; do
     case "$variant" in
         us) patch=carplay_hook.jar; stock=US_MU1316_lsd.jar ;;
         eu) patch=carplay_hook.jar; stock=EU_MU1329_lsd.jar ;;
         cn) patch=carplay_hook_cn.jar; stock=CN_MU1003_lsd.jar ;;
+        cn1404) patch=carplay_hook_cn.jar; stock=CN_MU1404_lsd.jar ;;
     esac
     echo "Context regressions: $variant"
     for scenario in stop change peer readiness reconnect direct target-error rate-error stock-error bounce-error drift; do
@@ -97,11 +100,12 @@ done
 mkdir -p "$TEST_DIR/altctl"
 "$TEST_JDK/bin/javac" -encoding UTF-8 -cp "$PROJECT_DIR/build/carplay_hook.jar:$STOCK_JAR" -d "$TEST_DIR/altctl" \
     "$PROJECT_DIR/tests/AltscreenControlTransportTest.java"
-for variant in us eu cn; do
+for variant in us eu cn cn1404; do
     case "$variant" in
         us) patch=carplay_hook.jar; stock=US_MU1316_lsd.jar ;;
         eu) patch=carplay_hook.jar; stock=EU_MU1329_lsd.jar ;;
         cn) patch=carplay_hook_cn.jar; stock=CN_MU1003_lsd.jar ;;
+        cn1404) patch=carplay_hook_cn.jar; stock=CN_MU1404_lsd.jar ;;
     esac
     "$TEST_JDK/bin/java" -cp "$TEST_DIR/altctl:$PROJECT_DIR/build/$patch:$PROJECT_DIR/java_stock/$stock" \
         com.luka.carplay.core.AltscreenControlTransportTest

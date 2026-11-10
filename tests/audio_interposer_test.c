@@ -938,11 +938,22 @@ static int private_profile_fixture(const char *firmware, const char *fault)
     static const unsigned char plist_bytes[] = {
         0xf0, 0x41, 0x2d, 0xe9, 0xc8, 0x50, 0x90, 0xe5, 0x03, 0x70, 0xa0, 0xe1
     };
-    int cn = !strcmp(firmware, "cn");
-    uintptr_t ensure = cn ? 0x2e94c : 0x2e9ac;
-    uintptr_t plist = cn ? 0x2efe0 : 0x2f040;
+    static const struct {
+        const char *firmware, *name;
+        uintptr_t ensure, plist, http, server;
+    } fixtures[] = {
+        { "us", "MHI2Q AirPlay 210.81", 0x2e9ac, 0x2f040, 0x302e0, 0xbabcc },
+        { "cn", "MHI2Q CN K1004", 0x2e94c, 0x2efe0, 0x30280, 0xb948c },
+        { "cn1404", "MHI2Q CN P1404", 0x2e934, 0x2efc8, 0x30268, 0xb948c }
+    };
+    size_t index;
+    uintptr_t ensure, plist;
     const spa103_private_profile_t *profile;
-    assert(cn || !strcmp(firmware, "us"));
+    for (index = 0; index < sizeof(fixtures) / sizeof(fixtures[0]); ++index)
+        if (!strcmp(firmware, fixtures[index].firmware)) break;
+    assert(index < sizeof(fixtures) / sizeof(fixtures[0]));
+    ensure = fixtures[index].ensure;
+    plist = fixtures[index].plist;
     assert(!posix_memalign((void **)&image_base, 4096, 0xc0000));
     memset(image_base, 0, 0xc0000);
     memcpy(image_base + ensure, ensure_bytes, sizeof(ensure_bytes));
@@ -964,10 +975,10 @@ static int private_profile_fixture(const char *firmware, const char *fault)
         return 0;
     }
     assert(profile && spa_probe103() && spa_probe103_mode() == SPA_103_MODE_BOTH);
-    assert(!strcmp(profile->name, cn ? "MHI2Q CN K1004" : "MHI2Q AirPlay 210.81"));
+    assert(!strcmp(profile->name, fixtures[index].name));
     assert(profile->ensureCreatedVA == ensure && profile->setPlistResponseVA == plist);
-    assert(profile->httpProcessVA == (cn ? 0x30280u : 0x302e0u));
-    assert(profile->serverGlobalVA == (cn ? 0xb948cu : 0xbabccu));
+    assert(profile->httpProcessVA == fixtures[index].http);
+    assert(profile->serverGlobalVA == fixtures[index].server);
     assert(profile->httpProcessSlotOffset == 0x64);
     assert(profile->sessionClockOffset == 0x13d0 && profile->sessionFamilyOffset == 0x55);
     assert(profile->audioStreamTypeOffset == 0x6c && profile->audioStreamAudioTypeOffset == 0x70);

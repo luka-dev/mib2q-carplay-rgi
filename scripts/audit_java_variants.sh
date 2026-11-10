@@ -1,7 +1,7 @@
 #!/bin/bash
 # Each Java variant must link cleanly against every firmware it is installed on:
 #   build/carplay_hook.jar     vs java_stock/US_MU1316_lsd.jar, EU_MU1329_lsd.jar
-#   build/carplay_hook_cn.jar  vs java_stock/CN_MU1003_lsd.jar
+#   build/carplay_hook_cn.jar  vs java_stock/CN_MU1003_lsd.jar, CN_MU1404_lsd.jar
 # (tests/JavaStockLinkageAudit.java: patch->stock and stock->patch member links).
 # Keep this matrix in step with java_jar() in the installer (E2P region US/ER/JP -> US jar,
 # CN -> CN jar).  JP MU1017 has no java_stock jar: its replaced stock classes are
@@ -12,7 +12,8 @@ PROJECT_DIR=$(cd "$(dirname "$0")/.." && pwd)
 JDK="$JAVA8_HOME"
 ASM="$ASM_CP"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
-"$JDK/bin/javac" -cp "$ASM" -d "$T" "$PROJECT_DIR/tests/JavaStockLinkageAudit.java"
+"$JDK/bin/javac" -cp "$ASM" -d "$T" "$PROJECT_DIR/tests/JavaStockLinkageAudit.java" \
+    "$PROJECT_DIR/tests/JavaStockCompatibilityAudit.java"
 audit() {   # audit <jar> <stock>
     "$JDK/bin/java" -Xmx2g -cp "$T:$ASM" JavaStockLinkageAudit "$PROJECT_DIR/build/$1" "$PROJECT_DIR/java_stock/$2" \
         "$TOOLS_DIR/libs/jcl/MHI2Q_US_AUG22_P5087_MU1316/jcl.jar" \
@@ -22,4 +23,8 @@ audit() {   # audit <jar> <stock>
 audit carplay_hook.jar US_MU1316_lsd.jar
 audit carplay_hook.jar EU_MU1329_lsd.jar
 audit carplay_hook_cn.jar CN_MU1003_lsd.jar
-echo "Java variants link cleanly: US+EU jar vs MU1316/MU1329, CN jar vs MU1003 PASS"
+audit carplay_hook_cn.jar CN_MU1404_lsd.jar
+"$JDK/bin/java" -cp "$T:$ASM" JavaStockCompatibilityAudit \
+    "$PROJECT_DIR/java_stock/CN_MU1003_lsd.jar" "$PROJECT_DIR/java_stock/CN_MU1404_lsd.jar" \
+    "$PROJECT_DIR/build/carplay_hook_cn.jar"
+echo "Java variants link cleanly: US+EU jar vs MU1316/MU1329, CN jar vs MU1003/MU1404 PASS"
