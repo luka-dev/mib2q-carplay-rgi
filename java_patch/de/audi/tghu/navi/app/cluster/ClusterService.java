@@ -1119,9 +1119,10 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         return this.combiBAPListener.combiservice;
     }
 
-    /** NavigationJobs-only recovery seam used by AltScreenNavStatusGate. */
+    /** NavigationJobs-only wrapper bootstrap. Stock updateAll seeds the new gate
+     * from current listener state, after its ownership flags have been applied. */
     public void setCombiBAPListenerCombiService(CombiBAPServiceNavi svc) {
-        this.combiBAPListener.combiservice = svc;
+        this.combiBAPListener.setCombiService(svc);
     }
 
 }

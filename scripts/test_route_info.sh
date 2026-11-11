@@ -16,6 +16,9 @@ TEST_DIR=$(mktemp -d)
 trap 'rm -rf "$TEST_DIR"' EXIT
 CLASSPATH="$PATCH_JAR:$STOCK_JAR:$OSGI_CP"
 "$JDK_DIR/bin/javac" -encoding UTF-8 -cp "$CLASSPATH" -d "$TEST_DIR" \
+    "$PROJECT_DIR/tests/NativeBapReplayTest.java" \
+    "$PROJECT_DIR/tests/NativeBapHandoffTest.java" \
+    "$PROJECT_DIR/tests/NativeBapStockListenerTest.java" \
     "$PROJECT_DIR/tests/CurrentPositionDeliveryTest.java" \
     "$PROJECT_DIR/tests/RouteInfoTimeoutTest.java" \
     "$PROJECT_DIR/tests/CurrentPositionStockChainTest.java" \
@@ -59,6 +62,16 @@ CLASSPATH="$PATCH_JAR:$STOCK_JAR:$OSGI_CP"
 "$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" ClusterKdkSyncTest
 "$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" ClusterKdkBapChainTest
 "$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" ClusterKdkRendererLifecycleTest
+for stock in US_MU1316 EU_MU1329 CN_MU1003 CN_MU1404; do
+    patch=carplay_hook.jar
+    case "$stock" in CN_*) patch=carplay_hook_cn.jar ;; esac
+    echo "Native BAP restoration: $stock"
+    bap_cp="$TEST_DIR:$PROJECT_DIR/build/$patch:$PROJECT_DIR/java_stock/${stock}_lsd.jar:$OSGI_CP"
+    "$JDK_DIR/bin/java" -cp "$bap_cp" com.luka.carplay.rgd.NativeBapReplayTest
+    "$JDK_DIR/bin/java" -cp "$bap_cp" com.luka.carplay.core.NativeBapHandoffTest
+    "$JDK_DIR/bin/java" -cp "$bap_cp" NativeBapStockListenerTest
+done
+
 for variant in us eu cn; do
     case "$variant" in
         us) patch=carplay_hook.jar; stock=US_MU1316_lsd.jar ;;
