@@ -33,11 +33,13 @@ final class NavigationStack {
                 || "amapiphone".equals(key)) return AMAP;
         if ("yandex navi".equals(key) || "yandex navigator".equals(key)
                 || "yandexnavimaps".equals(key) || "навигатор".equals(key)
-                || "навігатор".equals(key)) return YANDEX;
+                || "навігатор".equals(key) || "yandex maps".equals(key)
+                || "yandexmaps".equals(key) || "яндекс карты".equals(key)
+                || "яндекс карти".equals(key)) return YANDEX;
         return DEFAULT;
     }
 
-    /** Locale-independent matching; Turkish name contains U+00A0. Do not use
+    /** Locale-independent matching; localized Yandex names contain U+00A0. Do not use
      * substring guesses such as "map", "nav" or a maneuver signature. */
     static String sourceKey(String source) {
         if (source == null) return "";
@@ -45,7 +47,13 @@ final class NavigationStack {
     }
 
     ManeuverSemantics resolve(int type, int junction, int side, int angle, boolean present) {
-        ManeuverSemantics value = new ManeuverSemantics(type, junction, side, angle, present);
+        return resolve(type, junction, side, ManeuverMapper.DRIVING_SIDE_RIGHT, angle, present);
+    }
+
+    ManeuverSemantics resolve(int type, int junction, int side, int fallbackSide,
+                              int angle, boolean present) {
+        ManeuverSemantics value = new ManeuverSemantics(
+            type, junction, side, fallbackSide, angle, present);
         for (int i = 0; i < modules.length; i++) modules[i].apply(value);
         return value;
     }

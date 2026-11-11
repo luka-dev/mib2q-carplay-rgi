@@ -9,6 +9,7 @@ final class ManeuverSemantics {
 
     final int type; // received enum, retained even when a provider encodes a different action
     final int drivingSide;
+    final boolean drivingSideInferred;
     int junctionType;
     boolean junctionInferred;
     int angle;
@@ -17,10 +18,17 @@ final class ManeuverSemantics {
     int exitNumber; // 0 = unknown; never derived from a Baidu enum
     boolean roundaboutDeparture; // known departure stage, without an exit ordinal
 
-    ManeuverSemantics(int type, int junction, int side, int angle, boolean present) {
+    ManeuverSemantics(int type, int junction, int side, int fallbackSide, int angle, boolean present) {
         this.type = type;
         this.junctionType = junction;
-        this.drivingSide = side;
+        if (side == ManeuverMapper.DRIVING_SIDE_NOT_SET) {
+            this.drivingSide = fallbackSide == ManeuverMapper.DRIVING_SIDE_LEFT
+                ? ManeuverMapper.DRIVING_SIDE_LEFT : ManeuverMapper.DRIVING_SIDE_RIGHT;
+            this.drivingSideInferred = true;
+        } else {
+            this.drivingSide = side;
+            this.drivingSideInferred = false;
+        }
         this.angle = present ? angle : 1000;
         this.anglePresent = present;
         this.angleSource = present && angle >= -180 && angle <= 180

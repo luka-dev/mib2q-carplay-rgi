@@ -1,5 +1,7 @@
 package com.luka.carplay.rgd;
 
+import com.luka.carplay.core.CarPlayApp;
+
 /** One resolved instruction shared by HUD and renderer. Raw route data stays
  * untouched; RouteGuidance/BAP session ownership decides whether guidance is active. */
 final class ManeuverPresentation {
@@ -35,7 +37,21 @@ final class ManeuverPresentation {
         return slot >= 0 && slot < s.mType.length ? slot : -1;
     }
 
+    static int vehicleDrivingSide() {
+        try {
+            return CarPlayApp.isVehicleRightHandDrive()
+                ? ManeuverMapper.DRIVING_SIDE_LEFT
+                : ManeuverMapper.DRIVING_SIDE_RIGHT;
+        } catch (NoClassDefFoundError e) {
+            return ManeuverMapper.DRIVING_SIDE_RIGHT;
+        }
+    }
+
     static ManeuverPresentation resolve(RouteGuidance.State s, boolean active) {
+        return resolve(s, active, vehicleDrivingSide());
+    }
+
+    static ManeuverPresentation resolve(RouteGuidance.State s, boolean active, int fallbackDrivingSide) {
         if (!active) return NONE;
         // Only the current list entry is authoritative. Count is a total, not
         // availability; a missing/unknown current entry must never borrow look-ahead.
@@ -44,7 +60,7 @@ final class ManeuverPresentation {
             return FOLLOW;
         NavigationStack stack = NavigationStack.forSource(s.sourceName);
         ManeuverSemantics semantics = stack.resolve(
-            s.mType[slot], s.mJunctionType[slot], s.mDrivingSide[slot],
+            s.mType[slot], s.mJunctionType[slot], s.mDrivingSide[slot], fallbackDrivingSide,
             s.mTurnAngle[slot], anglePresent(s, slot));
         int[] mapped = ManeuverMapper.map(semantics.mappingType(), semantics.angle,
             semantics.junctionType, semantics.drivingSide, semantics.anglePresent);

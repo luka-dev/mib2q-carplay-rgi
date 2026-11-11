@@ -48,6 +48,8 @@ public final class CarPlayApp {
     private static int lifecycleAppliedGeneration;
     private static IContext desiredContext;
     private static final int RGD_MODULE_INDEX = 1;
+    /* Stock AbstractTerminalModeConfiguration: sysConst(464) == 1 means RHD. */
+    private static final int SYSCONST_RIGHT_HAND_DRIVE = 464;
 
     private CarPlayApp() {}
 
@@ -55,6 +57,18 @@ public final class CarPlayApp {
     public static IFrameworkAccess framework() {
         FrameworkRef r = fwRef;
         return r != null ? r.framework() : null;
+    }
+
+    /** True when the MMI reports a right-hand-drive vehicle (stock sysConst 464).
+     *  Used only as the traffic-side fallback when a CarPlay app omits TLV 0x08. */
+    public static boolean isVehicleRightHandDrive() {
+        IFrameworkAccess fw = framework();
+        if (fw == null) return false;
+        try {
+            return fw.getSysConst(SYSCONST_RIGHT_HAND_DRIVE) == 1;
+        } catch (Throwable t) {
+            return false;
+        }
     }
 
     /** True while a CarPlay device is connected (onActivate..onDeactivate).

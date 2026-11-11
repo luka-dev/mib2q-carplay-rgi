@@ -475,15 +475,21 @@ public final class ManeuverFieldArrivalTest {
             check(f.hud.direction == ManeuverMapper.DIR_RIGHT && f.renderer.angle == 180,
                 "AMap CP30 inherited Baidu's forward-left direction");
             // Same slot/version/generation, different provider; clear stale phase and geometry.
+            // Real Yandex packets omit TLV 0x08 (m0_driving_side), so schematic activates immediately.
             f.feed("source_name:s:Yandex Navi\nroute_state:n:1\nmaneuver_count:n:1\nmaneuver_list:s:0\n"
                 + "m0_ver:n:1\nm0_type:n:31\nm0_junction_type:n:1\n");
-            check(f.state.distManeuverM == -1 && f.renderer.angle == 0
+            check(f.state.distManeuverM == -1 && f.state.mDrivingSide[0] == -1
+                && f.hud.main == ManeuverMapper.ROUNDABOUT_TRS_RIGHT && f.renderer.angle == -135
                 && f.renderer.progressMode == 0 && !f.hud.barOn,
-                "Yandex inherited Baidu angle or progress");
+                "Yandex absent drivingSide must clear Baidu progress and render fourth-exit schematic");
             check(ManeuverPresentation.resolve(f.state, true).semantics.exitNumber == 4,
                 "bridge path lost Yandex ordinal");
+            f.feed("m0_driving_side:n:1\n");
+            check(f.hud.main == ManeuverMapper.ROUNDABOUT_TRS_LEFT && f.renderer.angle == 135,
+                "late explicit LHT circulation side must mirror schematic");
             f.feed("m0_driving_side:n:0\n");
-            check(f.renderer.angle == -135, "late circulation side enables fourth-exit schematic");
+            check(f.hud.main == ManeuverMapper.ROUNDABOUT_TRS_RIGHT && f.renderer.angle == -135,
+                "late explicit RHT circulation side must restore schematic");
             f.renderer.failures = 1;
             f.feed("m0_type:n:33\n");
             check(f.hud.direction == ManeuverMapper.DIR_LEFT
@@ -501,6 +507,28 @@ public final class ManeuverFieldArrivalTest {
                 && ManeuverPresentation.resolve(f.state, true).schematic == null
                 && f.hud.streets.length == 0 && f.renderer.junctionAngles.length == 0,
                 "late actual angle must replace both schematic outputs");
+            // Live #92 Yandex Maps mN_full=1 frames (type=29 exit 2, type=30 exit 3, no TLV 0x08).
+            f.feed("source_name:s:Яндекс\u00a0Карты\nroute_state:n:1\nmaneuver_count:n:1\nmaneuver_list:s:0\n"
+                + "m0_full:n:1\nm0_ver:n:2\nm0_type:n:29\nm0_turn_angle:n:1000\nm0_exit_angle:n:1000\n"
+                + "m0_junction_type:n:1\nm0_name:s:ул. Кирова\ndist_maneuver_m:n:300\n");
+            check(f.state.mDrivingSide[0] == -1
+                && f.hud.main == ManeuverMapper.ROUNDABOUT_TRS_RIGHT
+                && f.hud.direction == ManeuverMapper.DIR_STRAIGHT
+                && Arrays.equals(f.hud.streets, new byte[]{(byte)192, 64})
+                && f.renderer.icon == RendererMapper.ICON_ROUNDABOUT && f.renderer.angle == 0
+                && Arrays.equals(f.renderer.junctionAngles, new int[]{180, 0, -180})
+                && !f.renderer.snapToRoad,
+                "live Yandex Maps exit 2 without TLV 0x08 must emit side streets +90/-90");
+            f.feed("m0_full:n:1\nm0_ver:n:3\nm0_type:n:30\nm0_turn_angle:n:1000\nm0_exit_angle:n:1000\n"
+                + "m0_junction_type:n:1\nm0_name:s:ул. Кирова\ndist_maneuver_m:n:200\n");
+            check(f.state.mDrivingSide[0] == -1
+                && f.hud.main == ManeuverMapper.ROUNDABOUT_TRS_RIGHT
+                && f.hud.direction == ManeuverMapper.DIR_SLIGHT_LEFT
+                && f.hud.streets.length == 3
+                && f.renderer.icon == RendererMapper.ICON_ROUNDABOUT && f.renderer.angle == -90
+                && Arrays.equals(f.renderer.junctionAngles, new int[]{225, 90, -90, -225})
+                && !f.renderer.snapToRoad,
+                "live Yandex Maps exit 3 without TLV 0x08 must point -45 deg with 3 side roads");
             f.feed("source_name:s:Google Maps\nroute_state:n:1\nmaneuver_count:n:1\nmaneuver_list:s:0\n"
                 + "m0_ver:n:1\nm0_type:n:2\ndist_maneuver_m:n:100\n");
             check(f.hud.main == ManeuverMapper.TURN && f.hud.direction == ManeuverMapper.DIR_RIGHT

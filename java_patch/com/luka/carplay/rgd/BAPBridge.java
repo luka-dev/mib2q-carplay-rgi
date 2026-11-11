@@ -1553,6 +1553,8 @@ public class BAPBridge {
             Log.i(TAG, "Maneuver stack=" + NavigationStack.forSource(s.sourceName).name
                 + " type=" + value.type + " junction=" + value.junctionType
                 + " inferred_junction=" + value.junctionInferred
+                + " driving_side=" + value.drivingSide
+                + " inferred_side=" + value.drivingSideInferred
                 + " roundabout_departure=" + value.roundaboutDeparture
                 + " angle=" + value.angle + " angle_source="
                 + (value.angleSource == ManeuverSemantics.ANGLE_RECEIVED ? "received"

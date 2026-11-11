@@ -1240,11 +1240,15 @@ static bool rgd_message_handler(hook_context_t* ctx, const iap2_frame_t* frame) 
                      (unsigned)((man.present & RGD_MAN_JUNCTION_TYPE) != 0),
                      man.junction_type, man.description);
         }
-        LOG_INFO(LOG_MODULE, "Maneuver: idx=%u type=%u desc=\"%s\" type_present=%u junction_present=%u junction=%u",
+        LOG_INFO(LOG_MODULE, "Maneuver: idx=%u type=%u desc=\"%s\" type_present=%u junction_present=%u junction=%u side_present=%u side=%u angle=%d roads=%u",
                  man.index, man.maneuver_type, man.description,
                  (unsigned)((man.present & RGD_MAN_TYPE) != 0),
                  (unsigned)((man.present & RGD_MAN_JUNCTION_TYPE) != 0),
-                 man.junction_type);
+                 man.junction_type,
+                 (unsigned)((man.present & RGD_MAN_DRIVING_SIDE) != 0),
+                 man.driving_side,
+                 (int)man.exit_angle,
+                 (unsigned)man.junction_angle_count);
         rgd_cancel_pending_zero("0x5202 maneuver");
         write_bus_maneuver_partial(&man);
     }

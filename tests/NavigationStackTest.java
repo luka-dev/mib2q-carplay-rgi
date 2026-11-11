@@ -1,15 +1,27 @@
 package com.luka.carplay.rgd;
 
 import com.luka.carplay.bus.CarplayBus;
+import com.luka.carplay.core.CarPlayApp;
+import com.luka.carplay.core.FrameworkRef;
 import com.luka.carplay.framework.Log;
+import de.audi.app.terminalmode.IContext;
+import de.audi.atip.base.IFrameworkAccess;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import java.util.Arrays;
 import java.util.Locale;
 
 /** Source identity/lifecycle and pure compensation through the production resolver. */
 public final class NavigationStackTest {
     private static int checks;
+    private static final String[] YANDEX_NAMES = {
+        "Навигатор", "Навігатор", "Yandex Navi", "Yandex\u00a0Navi",
+        "Yandex Navigator", "YandexNaviMaps", "YandexMaps", "Yandex Maps",
+        "Yandex\u00a0Maps", "Яндекс Карты", "Яндекс\u00a0Карты",
+        "Яндекс Карти", "Яндекс\u00a0Карти"
+    };
     private static void check(boolean value, String why) {
         checks++; if (!value) throw new AssertionError(why);
     }
@@ -26,22 +38,23 @@ public final class NavigationStackTest {
         return s;
     }
     private static void aliases() {
-        String[] yandex = {"Навигатор", "Навігатор", "Yandex Navi", "Yandex\u00a0Navi",
-            "Yandex Navigator", "YandexNaviMaps"};
         Locale original = Locale.getDefault();
         try {
             Locale.setDefault(new Locale("tr", "TR"));
-            for (int i = 0; i < yandex.length; i++)
-                check(NavigationStack.forSource(yandex[i]) == NavigationStack.YANDEX, "Yandex alias " + yandex[i]);
+            for (int i = 0; i < YANDEX_NAMES.length; i++)
+                check(NavigationStack.forSource(YANDEX_NAMES[i]) == NavigationStack.YANDEX,
+                    "Yandex alias " + YANDEX_NAMES[i]);
             check(NavigationStack.forSource(" YANDEX NAVI ") == NavigationStack.YANDEX, "locale-independent alias");
+            check(NavigationStack.forSource(" ЯНДЕКС\u00a0КАРТЫ ") == NavigationStack.YANDEX,
+                "localized Maps name normalization");
         } finally { Locale.setDefault(original); }
         check(NavigationStack.forSource("百度地图") == NavigationStack.BAIDU, "Baidu alias");
         String[] amap = {"Amap", "高德地图", "高德地圖", "AMapiPhone"};
         for (int i = 0; i < amap.length; i++)
             check(NavigationStack.forSource(amap[i]) == NavigationStack.AMAP, "AMap alias " + amap[i]);
         String[] defaults = {null, "", "Apple Maps", "Google Maps", "Waze",
-            "Gaode", "Other Navigator", "Yandex Maps", "Not Yandex Navi", "Not Amap", "com.autonavi.amap",
-            "com.baidu.map", "Baidu Maps"};
+            "Gaode", "Other Navigator", "Not Yandex Maps", "Not Yandex Navi", "Not Amap", "com.autonavi.amap",
+            "com.baidu.map", "Baidu Maps", "ru.yandex.traffic", "ru.yandex.mobile.navigator"};
         for (int i = 0; i < defaults.length; i++)
             check(NavigationStack.forSource(defaults[i]) == NavigationStack.DEFAULT, "default source " + defaults[i]);
     }
@@ -223,16 +236,113 @@ public final class NavigationStackTest {
         feed(parse, rg, "source_name:s:Google Maps\n");
         check(s.dirtyMask == 0 && s.sourceRevision == revision && s.mType[0] == 2,
             "late default name restarted unchanged guidance");
+        s.reset();
+        feed(parse, rg, man + "m0_junction_type:n:1\n");
+        s.clearDirty();
+        feed(parse, rg, "source_name:s:Яндекс\u00a0Карты\n");
+        ManeuverPresentation maps = ManeuverPresentation.resolve(s, true);
+        check(s.mType[0] == 31 && s.mDrivingSide[0] == -1
+            && maps.semantics.drivingSide == ManeuverMapper.DRIVING_SIDE_RIGHT
+            && maps.semantics.drivingSideInferred
+            && maps.semantics.exitNumber == 4 && maps.schematic != null,
+            "late Maps name must enable numbered roundabout even when TLV 0x08 is omitted");
+        check((s.dirtyMask & RouteGuidance.State.DIRTY_MANEUVER_ICON) != 0,
+            "late Maps name did not request repaint");
+    }
+    private static void vehicleDrivingSideFallback() throws Exception {
+        final int[] rhd = {0};
+        final IFrameworkAccess fw = (IFrameworkAccess) Proxy.newProxyInstance(
+            NavigationStackTest.class.getClassLoader(), new Class[]{IFrameworkAccess.class},
+            new InvocationHandler() {
+                public Object invoke(Object proxy, Method method, Object[] args) {
+                    if ("getSysConst".equals(method.getName())) {
+                        int id = ((Integer) args[0]).intValue();
+                        return Integer.valueOf(id == 464 ? rhd[0] : 0);
+                    }
+                    Class<?> rt = method.getReturnType();
+                    if (rt == Boolean.TYPE) return Boolean.FALSE;
+                    if (rt == Integer.TYPE) return Integer.valueOf(0);
+                    return null;
+                }
+            });
+        IContext ctx = (IContext) Proxy.newProxyInstance(
+            NavigationStackTest.class.getClassLoader(), new Class[]{IContext.class},
+            new InvocationHandler() {
+                public Object invoke(Object proxy, Method method, Object[] args) {
+                    if ("getFramework".equals(method.getName())) return fw;
+                    Class<?> rt = method.getReturnType();
+                    if (rt == Boolean.TYPE) return Boolean.FALSE;
+                    if (rt == Integer.TYPE) return Integer.valueOf(0);
+                    return null;
+                }
+            });
+        Field fwRefField = CarPlayApp.class.getDeclaredField("fwRef");
+        fwRefField.setAccessible(true);
+        Object savedFwRef = fwRefField.get(null);
+        try {
+            fwRefField.set(null, null);
+            RouteGuidance.State uninit = sample("Яндекс\u00a0Карты", 30, 1, -1, false);
+            uninit.mDrivingSide[0] = ManeuverMapper.DRIVING_SIDE_NOT_SET;
+            ManeuverPresentation up = ManeuverPresentation.resolve(uninit, true);
+            check(up.semantics.drivingSide == ManeuverMapper.DRIVING_SIDE_RIGHT
+                && up.semantics.drivingSideInferred && up.schematic != null,
+                "uninitialized framework ref must default fallback to RHT");
+
+            fwRefField.set(null, new FrameworkRef(ctx));
+            for (int carRhd = 0; carRhd <= 1; carRhd++) {
+                rhd[0] = carRhd;
+                int expectedSide = carRhd == 1
+                    ? ManeuverMapper.DRIVING_SIDE_LEFT : ManeuverMapper.DRIVING_SIDE_RIGHT;
+                RouteGuidance.State y = sample("Яндекс\u00a0Карты", 30, 1, -1, false);
+                y.mDrivingSide[0] = ManeuverMapper.DRIVING_SIDE_NOT_SET;
+                ManeuverPresentation yp = ManeuverPresentation.resolve(y, true);
+                RendererMapper.Mapping yr = RendererMapper.map(yp, null);
+                check(yp.semantics.drivingSide == expectedSide && yp.semantics.drivingSideInferred
+                    && yp.schematic != null && yr.drivingSide == expectedSide
+                    && yr.exitAngle == (carRhd == 1 ? 90 : -90)
+                    && y.mDrivingSide[0] == ManeuverMapper.DRIVING_SIDE_NOT_SET,
+                    "absent TLV 0x08 must follow vehicle sysConst(464) without mutating raw state");
+
+                // Explicit phone drivingSide must always override vehicle RHD/LHD coding (e.g. border crossing).
+                int opposite = 1 - expectedSide;
+                y.mDrivingSide[0] = opposite;
+                ManeuverPresentation explicit = ManeuverPresentation.resolve(y, true);
+                RendererMapper.Mapping er = RendererMapper.map(explicit, null);
+                check(explicit.semantics.drivingSide == opposite && !explicit.semantics.drivingSideInferred
+                    && explicit.schematic != null && er.drivingSide == opposite
+                    && er.exitAngle == (opposite == 1 ? 90 : -90),
+                    "explicit phone drivingSide must override vehicle fallback");
+
+                RouteGuidance.State a = sample("Amap", 29, 0, -1, false);
+                a.mDrivingSide[0] = ManeuverMapper.DRIVING_SIDE_NOT_SET;
+                ManeuverPresentation ap = ManeuverPresentation.resolve(a, true);
+                check(ap.main == (expectedSide == 1
+                        ? ManeuverMapper.EXIT_ROUNDABOUT_TRS_LEFT : ManeuverMapper.EXIT_ROUNDABOUT_TRS_RIGHT),
+                    "AMap absent drivingSide must follow vehicle fallback");
+            }
+        } finally {
+            fwRefField.set(null, savedFwRef);
+        }
     }
     private static void yandexSchematic() throws Exception {
         Method streets = BAPBridge.class.getDeclaredMethod("maneuverSideStreets",
             RouteGuidance.State.class, ManeuverPresentation.class);
         streets.setAccessible(true);
-        for (int side = 0; side <= 1; side++) for (int ordinal = 1; ordinal <= 19; ordinal++) {
-            RouteGuidance.State s = sample("Yandex Navi", 27 + ordinal, 1, -1, false);
-            s.mDrivingSide[0] = side;
-            ManeuverPresentation p = ManeuverPresentation.resolve(s, true);
-            check(!p.semantics.hasAngle() && p.semantics.exitNumber == ordinal,
+        int[][] sideCases = {
+            {ManeuverMapper.DRIVING_SIDE_NOT_SET, ManeuverMapper.DRIVING_SIDE_RIGHT, 0},
+            {ManeuverMapper.DRIVING_SIDE_NOT_SET, ManeuverMapper.DRIVING_SIDE_LEFT, 1},
+            {ManeuverMapper.DRIVING_SIDE_RIGHT, ManeuverMapper.DRIVING_SIDE_LEFT, 0},
+            {ManeuverMapper.DRIVING_SIDE_LEFT, ManeuverMapper.DRIVING_SIDE_RIGHT, 1}
+        };
+        for (int name = 0; name < YANDEX_NAMES.length; name++)
+        for (int sc = 0; sc < sideCases.length; sc++) for (int ordinal = 1; ordinal <= 19; ordinal++) {
+            int rawSide = sideCases[sc][0], fallbackSide = sideCases[sc][1], side = sideCases[sc][2];
+            RouteGuidance.State s = sample(YANDEX_NAMES[name], 27 + ordinal, 1, -1, false);
+            s.mDrivingSide[0] = rawSide;
+            ManeuverPresentation p = ManeuverPresentation.resolve(s, true, fallbackSide);
+            check(!p.semantics.hasAngle() && p.semantics.exitNumber == ordinal
+                && p.semantics.drivingSide == side
+                && p.semantics.drivingSideInferred == (rawSide == ManeuverMapper.DRIVING_SIDE_NOT_SET),
                 "synthetic geometry must not become received evidence");
             if (ordinal > 14) {
                 check(p.schematic == null, "too many exits must not be silently merged");
@@ -240,8 +350,8 @@ public final class NavigationStackTest {
             }
             RendererMapper.Mapping r = RendererMapper.map(p, null);
             byte[] hud = (byte[]) streets.invoke(null, s, p);
-            check(r.icon == RendererMapper.ICON_ROUNDABOUT && !r.snapToRoad,
-                "schematic must remain a fixed circle");
+            check(r.icon == RendererMapper.ICON_ROUNDABOUT && r.drivingSide == side && !r.snapToRoad,
+                "schematic must remain a fixed circle on resolved traffic side");
             check(r.junctionAngles.length == ordinal + 1 && hud.length == ordinal,
                 "selected exit plus one AFTER, excluding entry");
             check(r.exitAngle == r.junctionAngles[ordinal - 1]
@@ -265,11 +375,11 @@ public final class NavigationStackTest {
             }
             check(before == ordinal - 1 && after == 1, "ordinal must survive mirroring");
             if (ordinal == 6) check(r.exitAngle == (side == 0 ? -180 : 180), "sixth-exit layout");
-            check(s.mTurnAngle[0] == -1 && s.mExitAngle[0] == 1000
+            check(s.mDrivingSide[0] == rawSide && s.mTurnAngle[0] == -1 && s.mExitAngle[0] == 1000
                 && s.mJunctionAngles[0] == null, "raw state changed");
             for (int a = -180; a <= 180; a++) {
                 s.mTurnAngle[0] = a; s.mTurnAnglePresent[0] = true;
-                p = ManeuverPresentation.resolve(s, true);
+                p = ManeuverPresentation.resolve(s, true, fallbackSide);
                 check(p.schematic == null && RendererMapper.map(p, null).exitAngle == a * 2,
                     "every valid received angle supersedes schematic, including -1/0");
             }
@@ -279,10 +389,15 @@ public final class NavigationStackTest {
         check(ManeuverPresentation.resolve(s, true).schematic == null, "do not mix real and synthetic roads");
         s.mJunctionAngles[0] = new int[]{1000, -1000};
         check(ManeuverPresentation.resolve(s, true).schematic != null, "sentinels are not geometry");
-        s.mDrivingSide[0] = -1;
-        check(ManeuverPresentation.resolve(s, true).schematic == null, "unknown circulation side");
-        s.mDrivingSide[0] = 0;
-        String[] sources = {null, "Google Maps", "百度地图", "Amap", "Yandex Maps"};
+        for (int badSide : new int[]{-2, 2, 255}) {
+            s.mDrivingSide[0] = badSide;
+            check(ManeuverPresentation.resolve(s, true).schematic == null,
+                "explicit invalid circulation side must not synthesize schematic");
+        }
+        s.mDrivingSide[0] = ManeuverMapper.DRIVING_SIDE_NOT_SET;
+        check(ManeuverPresentation.resolve(s, true).schematic != null,
+            "absent circulation side must use vehicle fallback");
+        String[] sources = {null, "Google Maps", "百度地图", "Amap", "Not Yandex Maps"};
         for (int i = 0; i < sources.length; i++) {
             s.sourceName = sources[i];
             check(ManeuverPresentation.resolve(s, true).schematic == null, "Yandex-only presentation");
@@ -291,7 +406,8 @@ public final class NavigationStackTest {
 
     public static void main(String[] args) throws Exception {
         Log.setLevel(-1);
-        aliases(); defaultParity(); compensation(); amapCompensation(); lifecycle(); yandexSchematic();
+        aliases(); defaultParity(); compensation(); amapCompensation(); lifecycle();
+        vehicleDrivingSideFallback(); yandexSchematic();
         System.out.println("Navigation stacks: " + checks + " checks PASS");
     }
 }
