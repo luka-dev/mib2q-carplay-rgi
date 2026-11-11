@@ -507,27 +507,51 @@ static void *build_cluster_dict(int night, int zone_mode)
      * and "displayPanels" (uid consumer), so carry BOTH ids.  Cluster uuid MUST differ from main's. */
     if (set_str(d, "uuid", CLUSTER_DISPLAY_UUID) != 0)
         goto fail;
-    /* properties = ["Instrument Cluster"] → CarKit supportsInstrumentClusterContent (+0xB).  NOTE
-     * (verified 26.6): this is NOT the stream-111 gate and NOT hasGaugeClusterScreen (that predicate =
-     * supportsDDPContent).  The 111 gate is the negotiated enabledFeatures altScreen flag + raw displays
-     * count>=2 + UUID≠display0.  Kept because CarKit's physical-panel model still parses it. */
+    /* properties = ["Instrument Cluster", "showsInstruments"]:
+     *  - "Instrument Cluster" → CarKit supportsInstrumentClusterContent (+0xB).  NOTE
+     *    (verified 26.6): this is NOT the stream-111 gate and NOT hasGaugeClusterScreen
+     *    (that predicate = supportsDDPContent).  The 111 gate is the negotiated
+     *    enabledFeatures altScreen flag + raw displays count>=2 + UUID≠display0.  Kept
+     *    because CarKit's physical-panel model still parses it.
+     *  - "showsInstruments"   → CarKit showsInstruments (+0xD), which
+     *    initWithPhysicalScreenDictionary defaults to NO (unlike MHI3's legacy
+     *    logical-screen displays[] path, where secondary displays default to YES).
+     *    DashBoard sets CRSUIInstrumentClusterSceneSettings.displayLocation =
+     *    showsInstruments ^ 1 (0 = Instrument Cluster, 1 = Center Console), and Maps'
+     *    CarHybridInstrumentClusterNavigationModeController only binds the cluster scene
+     *    to the complementary instrumentClusterCameraStyle (3D tracking vs 2D overview)
+     *    when displayLocation is 0 or 3; displayLocation == 1 mirrors the center-console
+     *    camera style on both screens (#78). */
     {
+        static const char *const props[] = {
+            "Instrument Cluster",
+            "showsInstruments",
+            NULL
+        };
         void *k   = cf_str(0, "properties", CFENC_UTF8);
-        void *arr = cf_arrm(0, 1, arr_cb);
-        if (arr) {
-            if (cf_arrappc)
-                properties_ok = (cf_arrappc(arr, "Instrument Cluster", -1) == 0);
-            else {
-                void *s = cf_str(0, "Instrument Cluster", CFENC_UTF8);
-                if (s) {
+        void *arr = cf_arrm(0, 2, arr_cb);
+        if (k && arr) {
+            int i;
+            properties_ok = 1;
+            for (i = 0; props[i]; ++i) {
+                if (cf_arrappc) {
+                    if (cf_arrappc(arr, props[i], -1) != 0) {
+                        properties_ok = 0;
+                        break;
+                    }
+                } else {
+                    void *s = cf_str(0, props[i], CFENC_UTF8);
+                    if (!s) {
+                        properties_ok = 0;
+                        break;
+                    }
                     cf_arrapp(arr, s);
-                    properties_ok = 1;
                     if (cf_rel) cf_rel(s);
                 }
             }
-            if (k && properties_ok) cf_dictset(d, k, arr);
-            if (cf_rel) cf_rel(arr);
+            if (properties_ok) cf_dictset(d, k, arr);
         }
+        if (arr && cf_rel) cf_rel(arr);
         if (k && cf_rel) cf_rel(k);
     }
     if (!properties_ok) goto fail;
