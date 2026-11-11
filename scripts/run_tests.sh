@@ -23,6 +23,12 @@ cc -std=gnu99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
     hook/audio/scene_mask_worker.c -lm -lpthread -o "$OUT/upmix"
 "$OUT/upmix"
 
+printf '%-32s ' scene_centre_test
+cc -std=gnu99 -O2 -ffp-contract=off -Wall -Wextra -Werror -pedantic -Ihook \
+    tests/scene_centre_test.c hook/audio/scene_engine_math.c hook/audio/scene_clusters.c hook/audio/scene_engine.c \
+    -lm -o "$OUT/centre"
+"$OUT/centre"
+
 printf '%-32s ' rt_upmix_guard_test
 cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
     tests/rt_upmix_guard_test.c -o "$OUT/rtguard"

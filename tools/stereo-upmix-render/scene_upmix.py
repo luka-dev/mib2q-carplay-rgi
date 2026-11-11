@@ -71,7 +71,7 @@ class SceneConfig:
     same_sign_below_hz: float = 550.0 # ambient pair in phase below this (no low-mid hole)
     side_lp_hz: float = 7000.0        # side layer rolled off above 7 kHz (DEV40 08.10: drums .17 -> .13, nothing else moves; the air layer keeps the treble behind); 0 = full band
     decorrelate_ambient: bool = True  # static per-bin phase table, different for Ls and Rs
-    rear_delay_ms: float = 0.0        # signed: + delays the rear, - delays the front (rear-lead). Variant J (09.10): 0, the J525 rear bus is ~11.8 ms late by itself and our rear meets the amp's front bleed in phase at the doors
+    rear_delay_ms: float = 0.0        # signed: + delays the rear, - delays the front (rear-lead). Variant J (09.10): 0, the J525 rear outputs are ~5.2 ms late by themselves (11.8 was a double count, re-read 10-16) and our rear meets the amp's front bleed in phase at the doors
     bleed_cancel: float = 0.0         # J525 bank-1: the rear-door bus = 0.707*L + 2.0*Ls; Ls -= coef*L cancels the amp's front bleed (0.355 doors, 0.251 effect bus); 0 = off, needs the cabin tone probe for the tap offset
     bleed_cancel_offset_ms: float = 0.0
     front_keep_db: float = 0.0        # front anchor: the most the transfers may take from the front, dB over ~1 s (sparse wide mixes); 0 = off
@@ -97,6 +97,7 @@ class SceneConfig:
     duck_attack_ms: float = 30.0      # protection rises at once
     duck_release_ms: float = 300.0    # and lets go slowly
     seed: int = 7
+    duck_obj_ratio: float = 1.0       # the place transfers duck by duck_depth * this; 1 = like everything else (2.8 keeps protected hard-panned parts in front: tried 11-11, dropped, it empties the rear scene of toms and backing voices)
 
 
 # ----------------------------------------------------------------------------- helpers
@@ -153,11 +154,17 @@ def erb_groups(n_bins, n_fft, sr=SR):
 def phase_table(n_bins, seed, sign):
     """Static per-bin phase for Ls/Rs decorrelation of the ambient layer (free in the STFT domain)."""
     rng = np.random.default_rng(seed)
-    phi = rng.uniform(-np.pi, np.pi, n_bins)
+    # a random walk over frequency = a random group delay per bin within +-DECORR_MS, opposite in Ls and Rs:
+    # an independent phase per bin is a filter as long as the frame and smears every attack 10 ms ahead of itself
+    phi = np.cumsum(rng.uniform(-1.0, 1.0, n_bins)) * (2.0 * np.pi * (SR / 1024.0) * DECORR_MS / 1000.0)
     # a static per-bin phase: the per-bin MSC stays 1 (LTI), what drops is the band-limited
     # interaural correlation the ear uses; measure it as IACC over ERB bands, not Welch MSC.
     return np.exp(1j * sign * phi)
 
+
+
+DECORR_MS = 3.0
+ANCHOR_SPLIT_HZ = (600.0, 1900.0)   # front-anchor bands: hp_hz..600, 600..1900, 1900..6000 Hz
 
 
 def centre_removed_pan(PL, PR, C, eps, PN=None):
@@ -172,7 +179,7 @@ def centre_removed_pan(PL, PR, C, eps, PN=None):
     num = PL - C.real
     den = C.real - PR
     sig = num + den
-    tol = 1.5 * PN if PN is not None else 0.0
+    tol = (1.5 * PN if PN is not None else 0.0) + eps   # + eps: with one channel silent num, den and P_N are FFT rounding noise
     left = (num >= -tol) & (den >= -tol) & (sig > eps)
     right = (num <= tol) & (den <= tol) & (sig < -eps)
     valid = left | right
@@ -456,7 +463,9 @@ def _engine(cfg, F, G, group, freqs, duck_mask=None, inst_mask=None, prot_mask=N
         a_iatt = ema_alpha(cfg.inst_attack_ms, H); a_irel = ema_alpha(cfg.inst_release_ms, H)
         e_long = np.zeros(F); a_long = ema_alpha(cfg.inst_long_tau_s * 1000.0, H) if cfg.inst_long_tau_s > 0 else 0.0
     cold = 0
-    anchor = 1.0; anc_ex = anc_rxs = anc_es = 0.0   # front anchor state (front_keep_db)
+    # front anchor state (front_keep_db), one per band: a single gain moved every place when any other part entered
+    aband = (freqs >= ANCHOR_SPLIT_HZ[0]).astype(int) + (freqs >= ANCHOR_SPLIT_HZ[1]).astype(int)
+    anchor = np.ones(3); anc_ex = np.zeros(3); anc_rxs = np.zeros(3); anc_es = np.zeros(3)
     a_anc_meas = ema_alpha(1000.0, H); a_anc_att = ema_alpha(300.0, H); a_anc_rel = ema_alpha(2000.0, H)
 
     gsum = lambda v: np.bincount(group, weights=v, minlength=G)
@@ -522,7 +531,7 @@ def _engine(cfg, F, G, group, freqs, duck_mask=None, inst_mask=None, prot_mask=N
             dPN_, _, _, _, _, _, _ = decompose_frame(gdPL, gdPR, gdC)
             dp, de, dv = centre_removed_pan(gdPL, gdPR, gdC, eps_abs, dPN_)
             dth = np.angle(gdC + 0j)
-            ok = dv & (de > 1e-3 * blockmax) & (np.abs(dth) <= theta_max) & (np.arange(G) > 0)
+            ok = dv & (de > 1e-3 * blockmax) & ((np.abs(gdC) <= eps_abs) | (np.abs(dth) <= theta_max)) & (np.arange(G) > 0)   # |C| below eps: no angle to test
             fg = np.bincount(group, weights=freqs, minlength=G) / np.maximum(np.bincount(group, minlength=G), 1)
             ok &= (fg >= cfg.hp_hz) & (fg <= 6000.0)
             clusters.update(p, e_g, ok)
@@ -561,9 +570,10 @@ def _engine(cfg, F, G, group, freqs, duck_mask=None, inst_mask=None, prot_mask=N
             p_now = np.clip(prot_mask[ctrl_p][pbin], 0.0, 1.0)
             d_prot = d_prot + np.where(p_now > d_prot, a_datt, a_drel) * (p_now - d_prot)
             D = cfg.duck_depth * d_prot
-        cold_gain = min(1.0, (t + 1) / ramp_hops) * anchor
-        a_r = alpha_b * w_bin * (1.0 - D) * cold_gain
-        a_f = alpha_b * w_front_bin * (1.0 - D) * cold_gain
+        cold_gain = min(1.0, (t + 1) / ramp_hops) * anchor[aband]      # per bin: the ramp times its band's anchor
+        D_obj = np.minimum(1.0, cfg.duck_obj_ratio * D)
+        a_r = alpha_b * w_bin * (1.0 - D_obj) * cold_gain
+        a_f = alpha_b * w_front_bin * (1.0 - D_obj) * cold_gain
         g_r = np.sqrt(np.maximum(1.0 - (1.0 - a_r) ** 2, 0.0)) if cfg.energy_conserving else a_r
         # object: widened constant-power image per group, coherent, undecorrelated
         q = q_b
@@ -646,18 +656,21 @@ def _engine(cfg, F, G, group, freqs, duck_mask=None, inst_mask=None, prot_mask=N
             # front anchor: the front is X - a S (S = the subtraction at full transfer); its 1 s energy
             # Ex - 2a Rxs + a^2 Es in the active transfer band (hp_hz..6000 Hz) must stay >= keep Ex
             keep = 10.0 ** (-cfg.front_keep_db / 10.0)
-            inv = 1.0 / max(cold_gain, 1e-3)
-            mid = (freqs >= cfg.hp_hz) & (freqs <= 6000.0)
-            sL_full = subL[mid] * inv; sR_full = subR[mid] * inv
-            Lm = L[mid]; Rm = R[mid]
-            anc_ex += a_anc_meas * (float(np.sum(np.abs(Lm) ** 2 + np.abs(Rm) ** 2)) - anc_ex)
-            anc_rxs += a_anc_meas * (float(np.sum((np.conj(Lm) * sL_full).real + (np.conj(Rm) * sR_full).real)) - anc_rxs)
-            anc_es += a_anc_meas * (float(np.sum(np.abs(sL_full) ** 2 + np.abs(sR_full) ** 2)) - anc_es)
-            disc = anc_rxs * anc_rxs - anc_es * (1.0 - keep) * anc_ex
-            a_max = 1.0 if anc_es <= 1e-12 or disc < 0 else (anc_rxs - np.sqrt(disc)) / anc_es
-            target = min(max(a_max, 0.0), 1.0)
-            anchor += (a_anc_att if target < anchor else a_anc_rel) * (target - anchor)
-        st["anchor"] = anchor
+            inv = 1.0 / np.maximum(cold_gain, 1e-3)
+            sL_full = subL * inv; sR_full = subR * inv
+            for bnd in range(3):
+                mid = (aband == bnd) & (freqs >= cfg.hp_hz) & (freqs <= 6000.0)
+                Lm = L[mid]; Rm = R[mid]; sLm = sL_full[mid]; sRm = sR_full[mid]
+                anc_ex[bnd] += a_anc_meas * (float(np.sum(np.abs(Lm) ** 2 + np.abs(Rm) ** 2)) - anc_ex[bnd])
+                anc_rxs[bnd] += a_anc_meas * (float(np.sum((np.conj(Lm) * sLm).real + (np.conj(Rm) * sRm).real)) - anc_rxs[bnd])
+                anc_es[bnd] += a_anc_meas * (float(np.sum(np.abs(sLm) ** 2 + np.abs(sRm) ** 2)) - anc_es[bnd])
+            ex_floor = 1e-4 * float(anc_ex.sum())           # a band 40 dB under the others holds only leakage
+            for bnd in range(3):
+                disc = anc_rxs[bnd] * anc_rxs[bnd] - anc_es[bnd] * (1.0 - keep) * anc_ex[bnd]
+                a_max = 1.0 if anc_es[bnd] <= 1e-12 or disc < 0 or anc_ex[bnd] < ex_floor else (anc_rxs[bnd] - np.sqrt(disc)) / anc_es[bnd]
+                target = min(max(a_max, 0.0), 1.0)
+                anchor[bnd] += (a_anc_att if target < anchor[bnd] else a_anc_rel) * (target - anchor[bnd])
+        st["anchor"] = float(anchor.min())
         msg = yield (subL, subR, rearL, rearR, st)
 
 

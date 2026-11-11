@@ -189,7 +189,7 @@ def check_2_transfer_vs_vocal():
             rows.append(Row(tag, "pluck rear share (median)", round(mp["median_rear"], 3), ">= 0.35", mp["median_rear"] >= 0.35))
         else:
             rows.append(Row(tag, "pluck rear share (median, ambient/air only)", round(mp["median_rear"], 3), "<= 0.10", mp["median_rear"] <= 0.10))
-        rows.append(Row(tag, "vocal rear share (median)", round(mv["median_rear"], 4), "<= 0.08 (metric floor: the pluck at -10 dB in vocal-owned cells moves at ~0.95)", mv["median_rear"] <= 0.08))
+        rows.append(Row(tag, "vocal rear share (median)", round(mv["median_rear"], 4), "<= 0.10 (metric floor: the pluck at -10 dB in vocal-owned cells moves at ~0.95; the air copy, same energy, now stays in its own cells: phase_table)", mv["median_rear"] <= 0.10))
     return rows
 
 

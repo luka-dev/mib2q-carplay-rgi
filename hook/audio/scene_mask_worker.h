@@ -36,6 +36,7 @@ struct spa_scene_mask_row {
     float prot[SMASK_BINS];
     float lfe_bass;
     float lfe_drum;
+    float voc[SMASK_BINS];     /* the vocal posterior (post[0]): the centre (scene_engine_set_vocal) */
 };
 
 /* The backend's view of a mask source (stereo_upmix.h spa_stereo_upmix_config.scene_mask_provider).

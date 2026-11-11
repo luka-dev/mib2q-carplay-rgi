@@ -6,7 +6,7 @@ SCENE is active on eligible stereo media in the six-channel path. MMI controls O
 
 ## Engine contract
 
-The engine accepts interleaved stereo float32 at 48 kHz and emits `L R C LFE Ls Rs`. Its own C and LFE outputs are zero; the surrounding upmix backend supplies bass processing. Synthesized stereo has no centre feed, while the separate discrete path preserves the source centre channel.
+The engine accepts interleaved stereo float32 at 48 kHz and emits `L R C LFE Ls Rs`. Its LFE output is zero; the surrounding upmix backend supplies bass processing. C carries the centred lead vocal when the backend installs the mask net's vocal row (`scene_engine_set_vocal`: vocal posterior × L/R similarity × a 150–250 Hz high-pass, taken from the front mid with its power kept), and is zero otherwise; this stage is not in the Python reference and is covered by `tests/scene_centre_test.c`. The separate discrete path preserves the source centre channel.
 
 Analysis uses a sine window, 1024-point FFT and 256-sample hop. Paired real transforms implement stereo analysis and four-channel synthesis with three complex FFTs per hop. Front subtraction and rear signals are reconstructed by overlap-add; the front output is delayed input minus the reconstructed subtraction. The engine has 1024 samples of streaming delay, plus any configured pair delay. The hook's current rear delay is zero.
 
@@ -51,7 +51,7 @@ Held membership, high-pass shape, protection and the startup/front-anchor gain b
 
 [scene_mask.c](../../hook/audio/scene_mask.c) analyses 2048 samples every 512 input frames. Features are left/right log power and cosine/sine interchannel phase. The network produces vocal, drum-core, bass and other posteriors on a 257-bin grid. Eligibility and protection rows are mapped to the renderer's frequency bins.
 
-Protection attenuates transfer with `D = duck_depth * smoothed_protection`. Instrument eligibility is exponent-shaped and smoothed before applying it to the **remaining front signal**:
+Protection attenuates transfer with `D = duck_depth * smoothed_protection`. The place (object) transfers use `min(1, duck_obj_ratio * D)`; `duck_obj_ratio` is 1 (no extra duck). A larger value keeps protected hard-panned sources in front, at the cost of the rear scene. Instrument eligibility is exponent-shaped and smoothed before applying it to the **remaining front signal**:
 
 ```text
 O = eligibility * (input - spatial_subtraction)
@@ -71,9 +71,9 @@ The ambience path uses the residual orthogonal to the bin's averaged primary dir
 u = b * L - a * exp(-i * theta) * R
 ```
 
-Frequency shaping and independent fixed phase tables produce the ambient rear pair. The low-frequency sign rule avoids opposite-polarity rear energy below 550 Hz. The wide-pair path transfers eligible remaining stereo content using an ERB-group envelope measure, while protection limits vocal/bass/drum transfer. Bleed cancellation subtracts a shaped part of the remaining front from the rears.
+Frequency shaping and a fixed phase table produce the ambient rear pair. The table is a random walk over frequency, that is a random group delay per bin within ±3 ms, applied with opposite sign to Ls and Rs; an independent phase per bin spread every attack of the side layer over the whole 21 ms frame, half of it ahead of the onset. The low-frequency sign rule avoids opposite-polarity rear energy below 550 Hz. The wide-pair path transfers eligible remaining stereo content using an ERB-group envelope measure, while protection limits vocal/bass/drum transfer. Bleed cancellation subtracts a shaped part of the remaining front from the rears.
 
-The front anchor prevents a sparse, wide mix from leaving the front too quiet. It tracks one-second midband sums for input `X`, full-transfer subtraction `S`, and their cross term. The retained front energy is:
+The front anchor prevents a sparse, wide mix from leaving the front too quiet. It tracks one-second sums for input `X`, full-transfer subtraction `S`, and their cross term, separately in three bands (`hp_hz`–600 Hz, 600–1900 Hz, 1900–6000 Hz), so a part entering one band does not move the places of another. A band 40 dB below the sum of the three is left open. The retained front energy is:
 
 ```text
 E_front(a) = E_X - 2*a*R_XS + a^2*E_S
@@ -81,7 +81,7 @@ keep       = 10^(-front_keep_db / 10)
 E_front(a) >= keep * E_X
 ```
 
-The smaller quadratic root bounds the permitted transfer where the energy would cross the retention threshold. The bound is clamped to `[0,1]`, follows reductions over 0.3 s and recovers over 2 s. It scales transfer and ambience together. The hook uses 1.5 dB front retention for Normal and 2.8 dB for Intense.
+The smaller quadratic root bounds the permitted transfer where the energy would cross the retention threshold. The bound is clamped to `[0,1]`, follows reductions over 0.3 s and recovers over 2 s. It scales the transfer and ambience of its band together. The hook uses 1.5 dB front retention for Normal and 2.8 dB for Intense.
 
 ## Backend and output boundaries
 

@@ -232,12 +232,43 @@ void scene_mask_reset(struct scene_mask *m)
     memset(m->hist, 0, sizeof m->hist);
     memset(m->h, 0, sizeof m->h);
     m->calls = 0;
+    m->level_peak = 0.0f;
+    m->level_gain2 = 1.0f;
+}
+
+void scene_mask_set_level_ref(struct scene_mask *m, float ref_peak)
+{
+    m->level_ref = ref_peak > 0.0f ? ref_peak : 0.0f;
+    m->level_gain2 = 1.0f;
+}
+
+int scene_mask_weights_valid(const struct scene_mask_weights *w)
+{
+    const size_t first = offsetof(struct scene_mask_weights, c1_w);
+    const size_t count = (sizeof *w - first) / sizeof(float);
+    const unsigned char *p;
+    size_t i;
+
+    if (!w || memcmp(w->magic, SMASK_MAGIC, 8) != 0 || w->ch != SMASK_CH ||
+        w->hidden != SMASK_HID || w->n_out != SMASK_OUT)
+        return 0;
+    /* everything after the header is float: reject any NaN/Inf (exponent all ones) */
+    p = (const unsigned char *)w + first;
+    for (i = 0; i < count; i++) {
+        uint32_t bits;
+
+        memcpy(&bits, p + i * sizeof(float), sizeof bits);
+        if ((bits & UINT32_C(0x7f800000)) == UINT32_C(0x7f800000)) return 0;
+    }
+    for (i = 0; i < SMASK_FEAT; i++)
+        if (!(w->feat_std[i] > 1.0e-12f)) return 0;
+    return 1;
 }
 
 int scene_mask_init(struct scene_mask *m, const struct scene_mask_weights *w)
 {
     int c, i, k, g, l, n;
-    if (memcmp(w->magic, SMASK_MAGIC, 8) != 0 || w->ch != SMASK_CH || w->hidden != SMASK_HID || w->n_out != SMASK_OUT)
+    if (!scene_mask_weights_valid(w))
         return -1;
     if (!tables_ready) tables();
     memset(m, 0, sizeof *m);
@@ -269,6 +300,7 @@ int scene_mask_init(struct scene_mask *m, const struct scene_mask_weights *w)
         m->feat_istd[i] = 1.0f / w->feat_std[i];
     }
     m->has_calib = w->has_calib; m->calib_a = w->calib_a; m->calib_b = w->calib_b;
+    m->level_ref = SMASK_LEVEL_REF;
     return 0;
 }
 
@@ -329,6 +361,7 @@ SMASK_STAGE void smask_analysis(struct scene_mask *m)
 SMASK_STAGE void smask_features(const struct scene_mask *m, float feat[SMASK_FEAT][SMASK_FROW])
 {
     const v4 eps7 = V4_DUP(1e-7f), eps9 = V4_DUP(1e-9f), six = V4_DUP(6.0f), msix = V4_DUP(-6.0f);
+    const v4 gain2 = V4_DUP(m->level_gain2);
     int j, i;
     for (j = 0; j < SMASK_FBINS; j += 4) {
         v4 lr, li, rr, ri, pl, pr, mag, f[SMASK_FEAT];
@@ -338,8 +371,8 @@ SMASK_STAGE void smask_features(const struct scene_mask *m, float feat[SMASK_FEA
         pl = V4_MLA(V4_MUL(lr, lr), li, li);
         pr = V4_MLA(V4_MUL(rr, rr), ri, ri);
         mag = V4_ADD(V4_SQRT(V4_MUL(pl, pr)), eps9);
-        f[0] = v4_log(V4_ADD(pl, eps7));
-        f[1] = v4_log(V4_ADD(pr, eps7));
+        f[0] = v4_log(V4_ADD(V4_MUL(pl, gain2), eps7));                  /* the level-normalised powers */
+        f[1] = v4_log(V4_ADD(V4_MUL(pr, gain2), eps7));
         f[2] = V4_DIV(V4_MLA(V4_MUL(lr, rr), li, ri), mag);              /* Re L conj(R) / |L||R| */
         f[3] = V4_DIV(V4_SUB(V4_MUL(li, rr), V4_MUL(lr, ri)), mag);      /* Im L conj(R) / |L||R| */
         for (i = 0; i < SMASK_FEAT; i++) {
@@ -519,6 +552,17 @@ int scene_mask_control(struct scene_mask *m, const float *in512, float *elig257,
     memmove(m->hist[0], m->hist[SMASK_HOP], sizeof(float) * 2 * (SMASK_NFFT - SMASK_HOP));
     memcpy(m->hist[SMASK_NFFT - SMASK_HOP], in512, sizeof(float) * 2 * SMASK_HOP);
     m->calls++;
+    if (m->level_ref > 0.0f) {               /* scene_mask.h: the input peak the net is normalised to */
+        static const float decay = 1.0f - (float)SMASK_HOP / (48000.0f * SMASK_LEVEL_HOLD_S);
+        float peak = m->level_peak * decay, floor = m->level_ref / SMASK_LEVEL_MAX_BOOST, g;
+        for (int i = 0; i < 2 * SMASK_HOP; i++) {
+            const float a = fabsf(in512[i]);
+            if (a > peak) peak = a;
+        }
+        m->level_peak = peak;
+        g = m->level_ref / (peak > floor ? peak : floor);
+        m->level_gain2 = g * g;
+    }
     if (m->calls == 2) {                     /* x[0..1023] known: torch's reflect pad, x[-i] = x[i] */
         for (int i = 1; i <= SMASK_HOP; i++) {
             m->hist[SMASK_NFFT / 2 - i][0] = m->hist[SMASK_NFFT / 2 + i][0];

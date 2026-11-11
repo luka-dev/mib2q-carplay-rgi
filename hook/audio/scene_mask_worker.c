@@ -155,6 +155,7 @@ int spa_scene_mask_worker_step(struct spa_scene_mask_worker *w)
     memcpy(result->row.elig, w->_net.elig, sizeof(result->row.elig));
     memcpy(result->row.prot, w->_net.prot, sizeof(result->row.prot));
     spa_scene_mask_lfe_posteriors(&w->_net, &result->row.lfe_bass, &result->row.lfe_drum);
+    memcpy(result->row.voc, w->_net.post[0], sizeof(result->row.voc));
     smw_store(&w->_result_published, next);
     return 1;
 }

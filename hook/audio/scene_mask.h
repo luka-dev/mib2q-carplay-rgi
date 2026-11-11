@@ -97,6 +97,8 @@ struct scene_mask {
     float feat_mean[SMASK_FEAT], feat_istd[SMASK_FEAT];    /* standardize: (f - mean) * (1 / std) */
     float elig_w[SMASK_OUT];
     float has_calib, calib_a, calib_b;
+    float level_ref;                                   /* peak the net's input is scaled to; 0 = fed as is */
+    float level_peak, level_gain2;                     /* running input peak, the power gain of this control */
 
     float hist[SMASK_NFFT][2] SMASK_ALIGN16;           /* the newest 2048 stereo samples (interleaved L, R) */
     int   calls;                                       /* 512-sample calls since reset */
@@ -119,6 +121,13 @@ struct scene_mask {
  * identical values if two instances race), resets. Returns 0, or -1 on a bad blob (m untouched). */
 int  scene_mask_init(struct scene_mask *m, const struct scene_mask_weights *w);
 
+/* 1 when the blob is one this runtime may run: magic, dimensions, every weight
+ * finite and every feat_std positive.  A NaN or Inf weight (or a zero std,
+ * whose reciprocal is Inf) does not stay in the net: it reaches the GRU state
+ * and the eligibility rows, and the renderer then mutes or rails its output
+ * until the next full reset.  A file of the right size is not enough. */
+int  scene_mask_weights_valid(const struct scene_mask_weights *w);
+
 /* Stream start / track change: clears the sample history, the GRU state and the call counter. */
 void scene_mask_reset(struct scene_mask *m);
 
@@ -127,6 +136,18 @@ void scene_mask_reset(struct scene_mask *m);
  * prot257 = 1 - elig: exactly protect_mask()'s row; either pointer may be NULL) for control (calls - 3), or 0
  * while priming (the first two calls after reset). The posteriors stay in m->post. */
 int  scene_mask_control(struct scene_mask *m, const float *in512, float *elig257, float *prot257);
+
+/* The net reads absolute level (log |L|^2, log |R|^2), so the same song 6 dB quieter got different rows
+ * and a different rear (-8 dB residual against the scaled render; a normalising streaming app or an old
+ * master is that case).  Its training mixes were peak-normalised, so the input is brought to one peak
+ * here: the running peak (instant up, SMASK_LEVEL_HOLD_S down), raised by at most SMASK_LEVEL_MAX_BOOST
+ * so a fade or a pause is not turned into programme.  Only the two log-power features move; the engine
+ * still gets the signal as it is.  A full-scale master is unchanged (ref 1).  ref 0 = off: the port tests
+ * compare against the torch net, which has no such stage. */
+#define SMASK_LEVEL_REF       1.0f
+#define SMASK_LEVEL_HOLD_S    10.0f
+#define SMASK_LEVEL_MAX_BOOST 16.0f                    /* 24 dB */
+void scene_mask_set_level_ref(struct scene_mask *m, float ref_peak);
 
 /* Test accessors: sizeof(struct scene_mask) for a foreign-language caller, and the per-control intermediates
  * of the last call as flat, unpadded float arrays ([rows][bins]; complex spectra interleaved re, im). The

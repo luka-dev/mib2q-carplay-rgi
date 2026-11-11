@@ -486,10 +486,14 @@ SCENE_SIMD_INLINE scene_v4 v4_decompose_theta(scene_v4 cr, scene_v4 ci, scene_v4
 SCENE_SIMD_INLINE void v4_centre_removed_pan(scene_v4 pl, scene_v4 pr, scene_v4 cr, float eps, scene_v4 tol,
                                              scene_v4 *p, scene_v4 *e, scene_m4 *valid)
 {
-    const scene_v4 zero = v4_zero(), veps = v4_s(eps), ntol = v4_neg(tol);
+    /* tol + eps: with one channel at digital silence num, den and P_N are all rounding noise of the FFT
+     * (1e-4 relative against a tol of ~3e-11), and the sign test then decided by that noise whether a
+     * hard-panned source was a place at all.  eps is the size below which sig is not trusted either. */
+    const scene_v4 zero = v4_zero(), veps = v4_s(eps);
+    const scene_v4 tole = v4_add(tol, veps), ntol = v4_neg(tole);
     const scene_v4 num = v4_sub(pl, cr), den = v4_sub(cr, pr), sig = v4_add(num, den);
     const scene_m4 left = m4_and(m4_and(v4_ge(num, ntol), v4_ge(den, ntol)), v4_gt(sig, veps));
-    const scene_m4 right = m4_and(m4_and(v4_le(num, tol), v4_le(den, tol)), v4_lt(sig, v4_neg(veps)));
+    const scene_m4 right = m4_and(m4_and(v4_le(num, tole), v4_le(den, tole)), v4_lt(sig, v4_neg(veps)));
     const scene_m4 v = m4_or(left, right);
     const scene_v4 nn = v4_max0(v4_sel(left, num, v4_neg(num)));
     const scene_v4 dd = v4_max0(v4_sel(left, den, v4_neg(den)));

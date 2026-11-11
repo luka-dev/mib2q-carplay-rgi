@@ -61,7 +61,7 @@ void scene_config_defaults(struct scene_config *cfg)
     cfg->same_sign_below_hz     = 550.0f;
     cfg->side_lp_hz             = 7000.0f;
     cfg->decorrelate_ambient    = 1;
-    cfg->rear_delay_ms          = 0.0f;      /* variant J: the J525 rear bus is ~11.8 ms late by itself */
+    cfg->rear_delay_ms          = 0.0f;      /* variant J: the J525 rear outputs are ~5.2 ms late by themselves (7-9 ms at the driver with the path) */
     cfg->bleed_cancel           = 0.0f;
     cfg->bleed_cancel_offset_ms = 0.0f;
     cfg->front_keep_db          = 0.0f;      /* front anchor off; > 0 = the most the transfers may take from the front, dB */
@@ -87,6 +87,9 @@ void scene_config_defaults(struct scene_config *cfg)
     cfg->duck_attack_ms         = 30.0f;     /* protection rises at once */
     cfg->duck_release_ms        = 300.0f;    /* and lets go slowly */
     cfg->seed                   = 7;
+    cfg->duck_obj_ratio         = 1.0f;      /* place transfers duck by duck_depth * this; 1 = like everything else.  2.8 keeps a
+                                              * protected hard-panned source (toms, backing voices) in front: tried 2026-11-11 and
+                                              * dropped, it takes exactly those parts out of the rear scene */
 }
 
 /* ----------------------------------------------------------------------------- helpers */
@@ -228,13 +231,24 @@ int scene_erb_groups(int n_bins, int n_fft, int *group, float *group_freq, int *
  * interaural correlation the ear uses; measure it as IACC over ERB bands, not Welch MSC.
  * ponytail: xorshift32 instead of numpy's PCG64 stream — any static uniform phase does the job, so the
  * values differ from phase_table(); the stream fixture test loads the Python table (phL/phR) instead. */
+/* The decorrelation phase of Ls/Rs: a random walk over frequency, i.e. a random group delay per bin
+ * bounded by +-SCENE_DECORR_MS, opposite in the two channels.  A phase drawn independently per bin
+ * (the table until 2026-11-11) is a filter as long as the frame: it spread every attack of the side
+ * layer over the 21 ms window, half of it BEFORE the onset (-17 dB at 7-11 ms ahead of a wide burst,
+ * heard as a smeared rear from the back seats, where no front arrival masks it).  +-3 ms stays inside
+ * pre-masking and still turns the phase by up to 1.8 rad per bin between the two channels. */
+#define SCENE_DECORR_MS 3.0f
 void scene_phase_table(int n_bins, uint32_t seed, float sign, scene_cpx *out)
 {
+    const float step = 2.0f * SCENE_PI * ((float)SCENE_SR / (float)SCENE_NFFT) * (SCENE_DECORR_MS / 1000.0f);
+    float phi = 0.0f;
     uint32_t s = seed * 2654435761u + 0x9E3779B9u;
     if (!s) s = 1u;                                   /* xorshift32 must not start at 0 */
     for (int k = 0; k < n_bins; k++) {
         s ^= s << 13; s ^= s >> 17; s ^= s << 5;
-        float phi = (float)(s >> 8) * (2.0f * SCENE_PI / 16777216.0f) - SCENE_PI;   /* uniform [-pi, pi) */
+        phi += ((float)(s >> 8) * (2.0f / 16777216.0f) - 1.0f) * step;            /* uniform [-step, step) */
+        if (phi > SCENE_PI) phi -= 2.0f * SCENE_PI;
+        if (phi < -SCENE_PI) phi += 2.0f * SCENE_PI;
         out[k].re = cosf(sign * phi);                 /* exp(1j * sign * phi) */
         out[k].im = sinf(sign * phi);
     }

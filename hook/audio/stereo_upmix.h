@@ -29,7 +29,7 @@ enum {
     SPA_STEREO_UPMIX_FRONT_Q15_LFE_DEFAULT = 31392,
     /* Relative assist level, NOT the whole subwoofer feed: corrected BANK1
      * also feeds its sub bus from L/R/C/Ls/Rs. 0 dB re11585 does not mean off.
-     * Calibrated for phase-aligned LFE + front-door 45-65 Hz bass offload. */
+     * See the LFE assist comment in stereo_upmix.c for what it does on the sub bus. */
     SPA_STEREO_UPMIX_LFE_Q15_DEFAULT = 11585,
     SPA_STEREO_UPMIX_LFE_Q15_MAX = 16384,
     /* SCENE backend: the engine emits a sample only once its 1024-sample
@@ -117,6 +117,9 @@ struct spa_stereo_upmix_config {
     /* SCENE: the starting level (enum spa_upmix_level, below), NORMAL by default;
      * spa_stereo_upmix_set_level() changes it on the running state. */
     int level;
+    /* SCENE: how much of the centred lead vocal moves from L/R to C (0..1, 0 =
+     * C silent); needs the mask net (the vocal posterior).  Default 1. */
+    float scene_centre;
 };
 
 /* Runtime details are public only so callers can embed the complete state and
@@ -132,7 +135,7 @@ struct spa_upmix_biquad_coefficients {
 
 struct spa_stereo_upmix_runtime {
     /* Two-stage L/R biquad cascade (kDoorReliefBp + kLfeLow) plus phase recovery/dynamics. */
-    float _lfe_low48_state[2][2][2];
+    float _lfe_low48_state[2][3][2];   /* per channel: door relief, the two LFE sections */
     float _lfe_power_l;
     float _lfe_power_r;
     float _lfe_cross;
@@ -142,6 +145,9 @@ struct spa_stereo_upmix_runtime {
     float _lfe_slow_envelope;
     float _lfe_dynamic_gain;
     uint32_t _lfe_correlation_tick;
+    /* Cabin guard: the gain reductions it is holding, 0 = none (so a zeroed
+     * runtime is the idle guard).  See spa_upmix_cabin_guard_s16(). */
+    float _guard_reduction[2];   /* linked, rears alone */
     /* SCENE backend: the engine (265 KB, so it lives here, never on a stack)
      * and its output FIFO in engine order L R C LFE Ls Rs, float [-1,1]. */
     struct scene_state _scene;
@@ -234,6 +240,7 @@ void spa_stereo_upmix_config_set_scene_sigma_min(struct spa_stereo_upmix_config 
 void spa_stereo_upmix_config_set_scene_side_lp_hz(struct spa_stereo_upmix_config *config, float value);
 void spa_stereo_upmix_config_set_scene_bleed_cancel(struct spa_stereo_upmix_config *config, float value);
 void spa_stereo_upmix_config_set_scene_front_keep_db(struct spa_stereo_upmix_config *config, float value);
+void spa_stereo_upmix_config_set_scene_centre(struct spa_stereo_upmix_config *config, float value);   /* 0..1 */
 void spa_stereo_upmix_config_set_scene_wide_pair(struct spa_stereo_upmix_config *config, float alpha);
 
 /* SCENE only: install the mask row of the control period that starts now

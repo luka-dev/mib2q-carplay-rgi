@@ -34,7 +34,7 @@ HOOK = os.path.join(ROOT, "hook", "audio")
 HEADER = os.path.join(HOOK, "scene_engine.h")
 BUILD = os.path.join(ROOT, "build", "scene_port")
 import os as _os; _REPO = _os.path.normpath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '../../..')); _WS = _os.environ.get('AUDI_WORKSPACE', _os.path.expanduser('~/Desktop/AUDI_2'))  # sibling firmware/data dirs
-FIXTURES = _WS + "/upmix-data/scene_port_fixtures_2026-10-09"
+FIXTURES = _WS + "/upmix-data/scene_port_fixtures_2026-11-11"
 SOURCES = ["scene_engine_math.c", "scene_clusters.c", "scene_engine.c"]
 TOL_FRAME, TOL_DB, TOL_PLACE = 1e-4, -60.0, 1e-5
 N, H, F, SR = 1024, 256, 513, 48000
@@ -274,7 +274,7 @@ def main():
     check_layout(structs)
     fn = np.load(os.path.join(args.fixtures, "functions.npz"))
     phL, phR = fn["phL"], fn["phR"]
-    for name in ("spatial", "mask"):
+    for name in ("spatial", "mask", "vehicle"):
         fx = np.load(os.path.join(args.fixtures, "stream_%s.npz" % name), allow_pickle=True)
         run_frames(lib, structs, fx, phL, phR, name)
         run_blocks(lib, structs, fx, phL, phR, name)

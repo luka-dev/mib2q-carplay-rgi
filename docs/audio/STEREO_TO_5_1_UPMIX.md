@@ -47,10 +47,11 @@ The engine uses a 1024-sample STFT with a 256-sample hop. It separates coherent 
 | Stage | Current behavior |
 | --- | --- |
 | Front L/R | Retain the input minus transferred content, with the calibrated front anchor |
-| Rear Ls/Rs | Transferred places and decorrelated side content; 7 kHz side low-pass; no added rear delay |
-| Center | Zero for synthesized stereo; discrete APAC center is preserved |
-| LFE | Phase-coherent assist with 45–65 Hz front-woofer relief, bass/drum mask steering and paired front headroom |
-| Cabin guard | Bounds the synthesized S16 output using the J525 matrix model |
+| Rear Ls/Rs | Transferred places (full band) and decorrelated side content (the side layer alone is low-passed at 7 kHz); no added rear delay |
+| Center | The centred lead vocal: the part of the front that the mask net calls lead vocal, that is centred and above ~200 Hz moves from L/R to C with its power kept (silent without the mask net); discrete APAC center is preserved |
+| LFE | Assist to the amplifier's own L/R sub feed: a 65 Hz LR4 low-pass run on the input 350 frames ahead of the front (inside the scene latency), so it stays within 7° of the front from 30 to 80 Hz; a 72 Hz front-woofer relief of −2.9 dB; bass/drum mask steering and paired front headroom |
+| Cabin guard | Bounds the synthesized S16 output using the J525 matrix model: it reduces the LFE first, then Ls/Rs alone by half of what they would need, and the whole frame for the rest; reductions are held and released over ~150 ms |
+| Mask-net level | The net's two log-power features are scaled to a running input peak of 1.0 (10 s hold, at most +24 dB), so the scene does not depend on how loud the master is |
 
 The fixed runtime calibration includes `alpha=0.7`, `inst_alpha=0.9`, `inst_gamma=1`, `inst_gamma_lo=1.5` below 700 Hz, `duck_depth=0.25`, `sigma_min=0.08`, `bleed_cancel=0.15` and `wide_pair_alpha=0.35`. The front anchor is 1.5 dB for Normal and 2.8 dB for Intense; LFE gain is 11585 in Q15. These are **compiled parameters**, not environment settings. See `spa_configure_vehicle_scene()` in [audio_hook.c](../../hook/audio/audio_hook.c) and [audio_hook.h](../../hook/audio/audio_hook.h).
 

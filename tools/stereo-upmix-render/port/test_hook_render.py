@@ -46,7 +46,7 @@ HOOK = os.path.join(ROOT, "hook", "audio")
 BUILD = os.path.join(ROOT, "build", "scene_port")
 import os as _os; _REPO = _os.path.normpath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '../../..')); _WS = _os.environ.get('AUDI_WORKSPACE', _os.path.expanduser('~/Desktop/AUDI_2'))  # sibling firmware/data dirs
 WAV = _WS + "/upmix-data/scene_car_kit_2026-10-08/sources/album01.wav"
-DEFAULT_FIX = _WS + "/upmix-data/scene_port_fixtures_2026-10-09"
+DEFAULT_FIX = _WS + "/upmix-data/scene_port_fixtures_2026-11-11"
 LATENCY, TOL_DB, FRONT_Q15 = 1024, -60.0, 31392
 MASK_HOP, MASK_BINS, MASK_PREFILL = 512, 257, 256
 LIB_SOURCES = ["stereo_upmix.c", "scene_engine_math.c",
@@ -189,7 +189,7 @@ def mask_section(a, binary, tmp, x, n, hook_nomask):
         return
     rows_path = os.path.join(tmp, "rows.f32")
     hook = render(binary, a.wav, os.path.join(tmp, "hook_mask.wav"), "--block", "768",
-                  "--mask-blob", blob, "--mask-rows", rows_path) / 32768.0
+                  "--mask-blob", blob, "--centre", "0", "--mask-rows", rows_path) / 32768.0
     rows = np.fromfile(rows_path, np.float32).reshape(-1, 2, MASK_BINS).astype(np.float64)
     boundaries = (n - MASK_PREFILL) // MASK_HOP + 1
     check(rows.shape[0] == boundaries, "renderer wrote one record per control boundary (%d, cadence checked by it)"
@@ -220,9 +220,9 @@ def mask_section(a, binary, tmp, x, n, hook_nomask):
           "mask: hook vs stream_render on the same rows after the latency, guard frames aside: %.1f dB overall, "
           "worst channel %.1f dB (limit %.0f; bare engine %.1f dB)"
           % (overall, worst, TOL_DB, db((eng - r)[:, [0, 1, 4, 5]], r[:, [0, 1, 4, 5]])))
-    other = render(binary, a.wav, os.path.join(tmp, "hook_mask100.wav"), "--block", "100", "--mask-blob", blob) / 32768.0
+    other = render(binary, a.wav, os.path.join(tmp, "hook_mask100.wav"), "--block", "100", "--mask-blob", blob, "--centre", "0") / 32768.0
     check(np.array_equal(other, hook), "mask: --block 100 bit-identical to --block 768")
-    lfe = render(binary, a.wav, os.path.join(tmp, "hook_mask_lfe.wav"), "--lfe", "assist", "--mask-blob", blob) / 32768.0
+    lfe = render(binary, a.wav, os.path.join(tmp, "hook_mask_lfe.wav"), "--lfe", "assist", "--mask-blob", blob, "--centre", "0") / 32768.0
     check(np.abs(lfe[:, 3]).max() > 0.0 and not lfe[:, 2].any(), "mask + --lfe assist writes LFE, C stays zero")
     lf = lfe[LATENCY:n]
     guard_lfe = np.abs(np.rint(lf[:, :2] * 32768.0) - np.rint(np.rint(eng[:, :2] * 32768.0) * FRONT_Q15 / 32768.0)).max(1) > 1

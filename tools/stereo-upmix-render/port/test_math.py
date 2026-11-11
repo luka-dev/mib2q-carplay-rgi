@@ -22,7 +22,7 @@ ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 HOOK = os.path.join(ROOT, "hook", "audio")
 HEADER = os.path.join(HOOK, "scene_engine.h")
 import os as _os; _REPO = _os.path.normpath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '../../..')); _WS = _os.environ.get('AUDI_WORKSPACE', _os.path.expanduser('~/Desktop/AUDI_2'))  # sibling firmware/data dirs
-DEFAULT_FIX = _WS + "/upmix-data/scene_port_fixtures_2026-10-09"
+DEFAULT_FIX = _WS + "/upmix-data/scene_port_fixtures_2026-11-11"
 sys.path.insert(0, os.path.join(HERE, ".."))
 import scene_upmix as su   # the reference (read only)
 
@@ -186,7 +186,9 @@ def main():
     check("|phL| == 1", np.abs(phL.astype(np.complex128)), np.ones(F), TOL_HELP)
     check("phR == conj(phL) (sign mirror)", phR, np.conj(phL), TOL_HELP)
     check_flag("deterministic for a seed, different across seeds", bool((phL == ph2).all()) and np.abs(phL - ph9).max() > 0.5)
-    check_flag(f"phases spread: |mean phL|={abs(phL.mean()):.3f} (< 0.2), |mean phase|/pi={abs(np.angle(phL).mean()) / np.pi:.3f}", abs(phL.mean()) < 0.2)
+    dph = np.angle(phL[1:] * np.conj(phL[:-1])); step = 2 * np.pi * (SR / N) * 0.003    # a random walk: steps uniform within +-3 ms of group delay
+    check_flag(f"phase steps bounded by the +-3 ms group delay and spread: max |step|={np.abs(dph).max():.3f} (<= {step:.3f}), |mean step|={abs(dph.mean()):.3f} (< 0.1), rms={dph.std():.3f} (> 0.4)",
+               np.abs(dph).max() <= step * 1.001 and abs(dph.mean()) < 0.1 and dph.std() > 0.4)
     check("fixture phL unit magnitude (structure the engine test loads)", np.abs(fx["phL"]), np.ones(F), 1e-12)
     check("fixture phR == conj(fixture phL)", fx["phR"], np.conj(fx["phL"]), 1e-12)
 

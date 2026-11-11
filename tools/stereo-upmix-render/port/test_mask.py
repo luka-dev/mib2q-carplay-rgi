@@ -44,7 +44,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 HOOK = os.path.join(ROOT, "hook", "audio")
 import os as _os; _REPO = _os.path.normpath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '../../..')); _WS = _os.environ.get('AUDI_WORKSPACE', _os.path.expanduser('~/Desktop/AUDI_2'))  # sibling firmware/data dirs
-DEFAULT_FIX = _WS + "/upmix-data/scene_port_fixtures_2026-10-09"
+DEFAULT_FIX = _WS + "/upmix-data/scene_port_fixtures_2026-11-11"
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, ".."))
 import export_masknet_weights as EXP   # noqa: E402
@@ -156,6 +156,8 @@ def main():
     bad = bytearray(blob); bad[0] ^= 1
     report("init rejects a bad magic", 0.0 if lib.scene_mask_init(state, bytes(bad)) == -1 else 1.0, 0.0, "flag")
     report("init accepts the blob", 0.0 if lib.scene_mask_init(state, blob) == 0 else 1.0, 0.0, "flag")
+    lib.scene_mask_set_level_ref.argtypes = [ctypes.c_void_p, ctypes.c_float]
+    lib.scene_mask_set_level_ref(state, 0.0)             # the torch reference has no level stage (hook only, stereo_upmix_test covers it)
 
     def dbg(what, n):
         return np.ctypeslib.as_array(lib.scene_mask_debug(state, what), shape=(n,)).copy()

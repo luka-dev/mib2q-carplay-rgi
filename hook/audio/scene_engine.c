@@ -116,6 +116,7 @@ int scene_engine_init(struct scene_state *s, const struct scene_config *cfg)
         s->hp[k] = scene_smoothstep(f, cfg->hp_hz, cfg->hp_hz + 60.0f);
         s->air[k] = air_lin * scene_smoothstep(f, 2000.0f, 2500.0f);
         s->same_sign[k] = f <= cfg->same_sign_below_hz;
+        s->anc_band[k] = (f >= 600.0f) + (f >= 1900.0f);
         /* per-bin eligibility exponent: gamma_lo below the split when > 0, else gamma (1 = no sharpening) */
         s->gamma_vec[k] = cfg->inst_gamma_lo > 0.0f ? (f < cfg->inst_gamma_split_hz ? cfg->inst_gamma_lo : cfg->inst_gamma)
                                                     : cfg->inst_gamma;
@@ -164,7 +165,7 @@ void scene_engine_reset_state(struct scene_state *s)
     s->delay_rear = delay_rear;
     s->delay_front = delay_front;
     s->blen = blen;
-    s->anchor = 1.0f;
+    s->anchor[0] = s->anchor[1] = s->anchor[2] = 1.0f;
 }
 
 void scene_engine_reset(struct scene_state *s)
@@ -176,6 +177,7 @@ void scene_engine_reset(struct scene_state *s)
 void scene_engine_clear_mask(struct scene_state *s)
 {
     s->have_mask = 0;
+    s->have_voc = 0;
     /* off = the smoothers of a stream that never had a mask: the next set_mask starts them from 0 */
     memset(s->e_inst, 0, sizeof s->e_inst);
     memset(s->e_long, 0, sizeof s->e_long);
@@ -206,6 +208,15 @@ void scene_engine_set_mask(struct scene_state *s, const float *elig, const float
     s->have_mask = 1;
 }
 
+void scene_engine_set_vocal(struct scene_state *s, const float *voc, int mask_bins, float frac)
+{
+    int i;
+    s->centre_frac = frac > 0.0f ? (frac < 1.0f ? frac : 1.0f) : 0.0f;
+    s->have_voc = voc && mask_bins == s->mask_bins;
+    if (s->have_voc)
+        for (i = 0; i < mask_bins; i++) s->voc_row[i] = voc[i];
+}
+
 /* ----------------------------------------------------------------------------- one frame (_engine loop body)
  * Four bins per step on the scene_simd.h lanes (NEON, or the bit-identical scalar fallback): the three EMA
  * sets, the bounded slow pan, the holds, the output stage (long-averaged direction, unmix / transfer,
@@ -218,7 +229,7 @@ void scene_engine_set_mask(struct scene_state *s, const float *elig, const float
 typedef char scene_scratch_fits[6 * SCENE_BINS4 + 4 <= 4 * SCENE_NFFT ? 1 : -1];
 
 struct frame_scratch { float *PN, *PS, *w_member, *q_b, *a_scale, *pc_eff; };   /* [SCENE_BINS4] each */
-struct frame_ctx { int unmix, inst_on, prot_on, gamma_on; float cold_gain, eps_bin; };
+struct frame_ctx { int unmix, inst_on, prot_on, gamma_on; float eps_bin; };
 
 /* statistics: 43 ms (Wiener scalar, slow pan), 8 ms (fast pan), 300 ms (direction); *bmax folds max(fPL + fPR) */
 static inline void stats_quad(struct scene_state *s, const scene_cpx *XL, const scene_cpx *XR, int k, int n, int first, scene_v4 *bmax)
@@ -338,10 +349,10 @@ static inline void output_quad(struct scene_state *s, const struct frame_scratch
                                const scene_cpx *XL, const scene_cpx *XR, const float *wide, int k, int n)
 {
     const struct scene_config *cfg = &s->cfg;
-    const scene_v4 one = v4_s(1.0f), half = v4_s(0.5f), zero = v4_zero(), cold = v4_s(fc->cold_gain);
+    const scene_v4 one = v4_s(1.0f), half = v4_s(0.5f), zero = v4_zero(), cold = v4_ld_n(s->cold_bin + k, n);
     const scene_v4 hp = v4_ld_n(s->hp + k, n);
     scene_v4 Lr, Li, Rr, Ri, dpl, dpr, dcr, dci, pn, Rt, ab, bb, th, pnb, psb, W, sn, cs;
-    scene_v4 emr, emi, tr, ti, ur, ui, w_perm, q, alpha_b, w_bin, w_front, D, omD, a_r, a_f, g_r, cL, cR;
+    scene_v4 emr, emi, tr, ti, ur, ui, w_perm, q, alpha_b, w_bin, w_front, D, omD, omDo, a_r, a_f, g_r, cL, cR;
     scene_v4 objLr, objLi, objRr, objRi, subLr, subLi, subRr, subRi, instLr, instLi, instRr, instRi;
     scene_v4 ambLr, ambLi, ambRr, ambRi, phLr, phLi, phRr, phRi, air, GA, rearLr, rearLi, rearRr, rearRi, t1, t2, br, bi;
 
@@ -393,8 +404,11 @@ static inline void output_quad(struct scene_state *s, const struct frame_scratch
         D = v4_mul(v4_s(cfg->duck_depth), dp);
     }
     omD = v4_sub(one, D);
-    a_r = v4_mul(v4_mul(v4_mul(alpha_b, w_bin), omD), cold);
-    a_f = v4_mul(v4_mul(v4_mul(alpha_b, w_front), omD), cold);
+    /* the place transfers may duck deeper (duck_obj_ratio > 1) to keep a protected hard-panned source
+     * in front; at the default 1 this is omD */
+    omDo = v4_sub(one, v4_min(one, v4_mul(v4_s(cfg->duck_obj_ratio), D)));
+    a_r = v4_mul(v4_mul(v4_mul(alpha_b, w_bin), omDo), cold);
+    a_f = v4_mul(v4_mul(v4_mul(alpha_b, w_front), omDo), cold);
     g_r = cfg->energy_conserving ? v4_conserving(a_r) : a_r;   /* rear gain sqrt(1 - (1 - a)^2) (13.2 item 3) */
     /* object: widened constant-power image per group, coherent, undecorrelated */
     cL = v4_sqrt(v4_mul(v4_sub(one, q), half));
@@ -524,36 +538,74 @@ static inline void output_quad(struct scene_state *s, const struct frame_scratch
 
 /* Front anchor: a sparse mix of only off-centre and wide parts (no vocal, bass or drums the mask
  * protects) would otherwise move most of the song to the rear and leave the front thin.  The front
- * is X - a S, S = this frame's subtraction at full transfer (sub / cold_gain), a = the anchor gain.
+ * is X - a S, S = this frame's subtraction at full transfer (sub / cold gain), a = the anchor gain.
  * Its 1 s energy Ex - 2a Rxs + a^2 Es must stay >= keep Ex (keep = 10^(-front_keep_db/10)): the
  * largest such a is the smaller root of the quadratic.  No feedback through the measurement, so it
  * cannot hunt; the gain follows that bound down in 0.3 s and comes back in 2 s.  It scales every
- * transfer and the ambient layer together (cold_gain), so the scene keeps its shape, only quieter. */
-static void front_anchor(struct scene_state *s, const scene_cpx *XL, const scene_cpx *XR, float cold_gain)
+ * transfer and the ambient layer together (cold_bin), so the scene keeps its shape, only quieter.
+ * One gain per band (SCENE_ANCHOR_BANDS): with a single one a place moved forward or back whenever
+ * any other part of the mix came in (a panned 300-1200 Hz source lost 7 dB of rear when a second one
+ * entered at 1.5-5 kHz, and gained 5 dB when a centred one did). */
+static void front_anchor(struct scene_state *s, const scene_cpx *XL, const scene_cpx *XR)
 {
     const float keep = expf(-s->cfg.front_keep_db * (2.302585092994046f / 10.0f));   /* 10 ** (-db / 10) */
-    const float inv = 1.0f / (cold_gain > 1e-3f ? cold_gain : 1e-3f);
-    float ex = 0.0f, rxs = 0.0f, es = 0.0f, a_max, disc, target;
-    int k;
+    float ex[SCENE_ANCHOR_BANDS] = { 0 }, rxs[SCENE_ANCHOR_BANDS] = { 0 }, es[SCENE_ANCHOR_BANDS] = { 0 };
+    float floor;
+    int k, b;
 
     for (k = 0; k < s->F; k++) {
+        const float inv = 1.0f / (s->cold_bin[k] > 1e-3f ? s->cold_bin[k] : 1e-3f);
         float slr, sli, srr, sri;
         if (s->freqs[k] < s->cfg.hp_hz || s->freqs[k] > 6000.0f) continue;
+        b = s->anc_band[k];
         slr = s->subL[k].re * inv; sli = s->subL[k].im * inv;
         srr = s->subR[k].re * inv; sri = s->subR[k].im * inv;
-        ex  += XL[k].re * XL[k].re + XL[k].im * XL[k].im + XR[k].re * XR[k].re + XR[k].im * XR[k].im;
-        rxs += XL[k].re * slr + XL[k].im * sli + XR[k].re * srr + XR[k].im * sri;
-        es  += slr * slr + sli * sli + srr * srr + sri * sri;
+        ex[b]  += XL[k].re * XL[k].re + XL[k].im * XL[k].im + XR[k].re * XR[k].re + XR[k].im * XR[k].im;
+        rxs[b] += XL[k].re * slr + XL[k].im * sli + XR[k].re * srr + XR[k].im * sri;
+        es[b]  += slr * slr + sli * sli + srr * srr + sri * sri;
     }
-    s->anc_ex  += s->a_anc_meas * (ex - s->anc_ex);
-    s->anc_rxs += s->a_anc_meas * (rxs - s->anc_rxs);
-    s->anc_es  += s->a_anc_meas * (es - s->anc_es);
-    /* a^2 Es - 2a Rxs + (1 - keep) Ex <= 0 */
-    disc = s->anc_rxs * s->anc_rxs - s->anc_es * (1.0f - keep) * s->anc_ex;
-    if (s->anc_es <= 1e-12f || disc < 0.0f) a_max = 1.0f;     /* never takes that much at any a */
-    else a_max = (s->anc_rxs - sqrtf(disc)) / s->anc_es;
-    target = a_max < 0.0f ? 0.0f : (a_max > 1.0f ? 1.0f : a_max);
-    s->anchor += (target < s->anchor ? s->a_anc_att : s->a_anc_rel) * (target - s->anchor);
+    for (b = 0; b < SCENE_ANCHOR_BANDS; b++) {
+        s->anc_ex[b]  += s->a_anc_meas * (ex[b] - s->anc_ex[b]);
+        s->anc_rxs[b] += s->a_anc_meas * (rxs[b] - s->anc_rxs[b]);
+        s->anc_es[b]  += s->a_anc_meas * (es[b] - s->anc_es[b]);
+    }
+    floor = 1e-4f * (s->anc_ex[0] + s->anc_ex[1] + s->anc_ex[2]);
+    for (b = 0; b < SCENE_ANCHOR_BANDS; b++) {
+        float a_max, disc, target;
+        /* a^2 Es - 2a Rxs + (1 - keep) Ex <= 0 */
+        disc = s->anc_rxs[b] * s->anc_rxs[b] - s->anc_es[b] * (1.0f - keep) * s->anc_ex[b];
+        /* a band 40 dB under the others holds only leakage: nothing to protect, and its gain must
+         * not be found closed when its own part comes in */
+        if (s->anc_es[b] <= 1e-12f || disc < 0.0f || s->anc_ex[b] < floor) a_max = 1.0f;   /* never takes that much at any a */
+        else a_max = (s->anc_rxs[b] - sqrtf(disc)) / s->anc_es[b];
+        target = a_max < 0.0f ? 0.0f : (a_max > 1.0f ? 1.0f : a_max);
+        s->anchor[b] += (target < s->anchor[b] ? s->a_anc_att : s->a_anc_rel) * (target - s->anchor[b]);
+    }
+}
+
+/* Centre: the part of the front that is lead vocal (net output 0, 30 ms attack / 300 ms release)
+ * AND centred (43 ms similarity 2 Re(L R*) / (|L|^2 + |R|^2) near 1) AND above ~200 Hz moves from L/R to C:
+ * L, R lose w M each (M = the front mid), C gets sqrt(2 w (2 - w)) M, so the power of a centred source is
+ * kept. Runs after the front anchor: the anchor measures the rear transfers only. The amp's own centre
+ * (derived from L + R) gets correspondingly less of the vocal.
+ * ponytail: per-bin scalar loop plus one inverse FFT per hop; NEON lanes if the realtime budget gets tight. */
+static void centre_vocal(struct scene_state *s, const scene_cpx *XL, const scene_cpx *XR)
+{
+    int k;
+    for (k = 0; k < s->F; k++) {
+        float v = s->voc_row[s->mbin[k]], ev = s->e_voc[k], psi, w, g, mr, mi;
+        v = v > 0.0f ? (v < 1.0f ? v : 1.0f) : 0.0f;
+        ev += (v > ev ? s->a_datt : s->a_drel) * (v - ev);
+        s->e_voc[k] = ev;
+        psi = 2.0f * s->C[k].re / (s->PL[k] + s->PR[k] + 1e-12f);
+        w = s->centre_frac * ev * scene_smoothstep(psi, 0.6f, 0.9f) * scene_smoothstep(s->freqs[k], 150.0f, 250.0f);
+        mr = 0.5f * ((XL[k].re - s->subL[k].re) + (XR[k].re - s->subR[k].re));
+        mi = 0.5f * ((XL[k].im - s->subL[k].im) + (XR[k].im - s->subR[k].im));
+        g = sqrtf(2.0f * w * (2.0f - w));
+        s->subL[k].re += w * mr; s->subL[k].im += w * mi;
+        s->subR[k].re += w * mr; s->subR[k].im += w * mi;
+        s->ctrX[k].re = g * mr;  s->ctrX[k].im = g * mi;
+    }
 }
 
 void scene_engine_frame(struct scene_state *s, const scene_cpx *XL, const scene_cpx *XR, int t)
@@ -574,8 +626,9 @@ void scene_engine_frame(struct scene_state *s, const scene_cpx *XL, const scene_
     fc.inst_on = s->have_mask;
     fc.prot_on = s->have_mask && cfg->duck_from_mask;
     fc.gamma_on = cfg->inst_gamma != 1.0f || cfg->inst_gamma_lo > 0.0f;   /* some gamma_vec[k] != 1 */
-    fc.cold_gain = t + 1 >= SCENE_RAMP_HOPS ? 1.0f : (float)(t + 1) / (float)SCENE_RAMP_HOPS;   /* min(1, (t+1)/ramp_hops) */
-    fc.cold_gain *= s->anchor;                                  /* 1 unless the front anchor holds the transfers back */
+    m = t + 1 >= SCENE_RAMP_HOPS ? 1.0f : (float)(t + 1) / (float)SCENE_RAMP_HOPS;   /* min(1, (t+1)/ramp_hops) */
+    for (k = 0; k < F; k++)                                     /* times the band's anchor: 1 unless it holds the transfers back */
+        s->cold_bin[k] = m * s->anchor[s->anc_band[k]];
     sc.PN = (float *)(((uintptr_t)s->fft_scratch + 15u) & ~(uintptr_t)15u);
     sc.PS = sc.PN + SCENE_BINS4;
     sc.w_member = sc.PS + SCENE_BINS4;
@@ -659,7 +712,10 @@ void scene_engine_frame(struct scene_state *s, const scene_cpx *XL, const scene_
         scene_decompose_frame(gdPL, gdPR, gdC, G, dPN, NULL, NULL, NULL, NULL, NULL, NULL);
         scene_centre_removed_pan(gdPL, gdPR, gdC, G, eps_abs, dPN, dp, de, dv);
         for (g = 0; g < G; g++)
-            ok[g] = dv[g] && de[g] > 1e-3f * blockmax && angle_within(gdC[g].re, gdC[g].im, s->cos_theta_max)
+            /* a cross term below eps_abs has no angle to test (one channel silent): not anti-phase */
+            ok[g] = dv[g] && de[g] > 1e-3f * blockmax
+                    && (gdC[g].re * gdC[g].re + gdC[g].im * gdC[g].im <= eps_abs * eps_abs
+                        || angle_within(gdC[g].re, gdC[g].im, s->cos_theta_max))
                     && g > 0 && s->group_freq[g] >= cfg->hp_hz && s->group_freq[g] <= 6000.0f;
         scene_clusters_update(&s->clusters, p, e_g, ok, G);
         /* membership per BIN from the bin's own slow pan: a bin shared by a panned source and a
@@ -697,7 +753,9 @@ void scene_engine_frame(struct scene_state *s, const scene_cpx *XL, const scene_
 
     for (k = 0; k + 4 <= F; k += 4) output_quad(s, &sc, &fc, XL, XR, wide, k, 4);
     if (k < F) output_quad(s, &sc, &fc, XL, XR, wide, k, F - k);
-    if (cfg->front_keep_db > 0.0f) front_anchor(s, XL, XR, fc.cold_gain);
+    if (cfg->front_keep_db > 0.0f) front_anchor(s, XL, XR);
+    s->centre_on = s->have_voc && s->centre_frac > 0.0f;
+    if (s->centre_on) centre_vocal(s, XL, XR);
 }
 
 /* ----------------------------------------------------------------------------- block driver (SceneStream) */
@@ -797,7 +855,8 @@ static void emit_hop(struct scene_state *s, int base, float *out)
             v4_ld4(ol, &o0, &o1, &o2, &o3);
             v4_st_stride(o, v4_sub(inl, v4_mul(o0, half)), 6);
             v4_st_stride(o + 1, v4_sub(inr, v4_mul(o1, half)), 6);
-            v4_st_stride(o + 2, zero, 6);
+            v4_st_stride(o + 2, v4_mul(v4_ld(s->ola_c + idx + i), half), 6);
+            v4_st(s->ola_c + idx + i, zero);
             v4_st_stride(o + 3, zero, 6);
             v4_st_stride(o + 4, v4_mul(o2, half), 6);
             v4_st_stride(o + 5, v4_mul(o3, half), 6);
@@ -807,9 +866,10 @@ static void emit_hop(struct scene_state *s, int base, float *out)
             float *o = out + 6 * (n + i), *ol = &s->ola[idx + i][0];
             o[0] = s->inbuf[idx + i][0] - ol[0] / 2.0f;
             o[1] = s->inbuf[idx + i][1] - ol[1] / 2.0f;
-            o[2] = 0.0f; o[3] = 0.0f;
+            o[2] = s->ola_c[idx + i] / 2.0f; o[3] = 0.0f;
             o[4] = ol[2] / 2.0f; o[5] = ol[3] / 2.0f;
             ol[0] = ol[1] = ol[2] = ol[3] = 0.0f;
+            s->ola_c[idx + i] = 0.0f;
         }
         n += run;
     }
@@ -841,6 +901,10 @@ static size_t push_chunk(struct scene_state *s, const float *in, int frames, flo
         scene_irfft1024_pair(s->subL, s->subR, tsub, tsub + N, s->fft_scratch);
         scene_irfft1024_pair(s->rearL, s->rearR, trear, trear + N, s->fft_scratch);
         ola_frame(s, base, tsub, tsub + N, trear, trear + N);
+        if (s->centre_on) {                                         /* C: one more inverse into the free sub buffer */
+            scene_irfft1024(s->ctrX, tsub, s->fft_scratch);
+            for (n = 0; n < N; n++) s->ola_c[(base + n) & M] += tsub[n] * s->window[n];
+        }
         /* pad indices [tH, (t+1)H) are final now (the last covering frame is t); the window-power sum
          * of the sine window at hop N/4 is the constant 2. The first N/H hops are the pad: not emitted. */
         if (t >= N / H && !s->delay_rear && !s->delay_front && !(cfg->bleed_cancel > 0.0f && s->blen > 0) &&
@@ -853,7 +917,7 @@ static size_t push_chunk(struct scene_state *s, const float *in, int frames, flo
             if (t >= N / H) {
                 float fl = s->inbuf[idx][0] - s->ola[idx][0] / 2.0f;
                 float fr = s->inbuf[idx][1] - s->ola[idx][1] / 2.0f;
-                float rl = s->ola[idx][2] / 2.0f, rr = s->ola[idx][3] / 2.0f;
+                float rl = s->ola[idx][2] / 2.0f, rr = s->ola[idx][3] / 2.0f, c = s->ola_c[idx] / 2.0f;
                 if (s->delay_rear)       delay2(s->dline, &s->dpos, s->dlen, &rl, &rr);
                 else if (s->delay_front) delay2(s->dline, &s->dpos, s->dlen, &fl, &fr);
                 if (cfg->bleed_cancel > 0.0f && s->blen > 0) {      /* delayed front->rear bleed cancel (0-offset is applied in output_quad above hp_hz) */
@@ -863,11 +927,11 @@ static size_t push_chunk(struct scene_state *s, const float *in, int frames, flo
                 }
                 if (n_out < out_capacity) {                         /* ponytail: a full output buffer drops the sample; out_capacity >= frames + SCENE_HOP never does */
                     float *o = out + 6 * n_out;
-                    o[0] = fl; o[1] = fr; o[2] = 0.0f; o[3] = 0.0f; o[4] = rl; o[5] = rr;
+                    o[0] = fl; o[1] = fr; o[2] = c; o[3] = 0.0f; o[4] = rl; o[5] = rr;
                     n_out++;
                 }
             }
-            s->ola[idx][0] = s->ola[idx][1] = s->ola[idx][2] = s->ola[idx][3] = 0.0f;
+            s->ola[idx][0] = s->ola[idx][1] = s->ola[idx][2] = s->ola[idx][3] = s->ola_c[idx] = 0.0f;
         }
         s->in_count -= H;
         s->next_frame = t + 1;

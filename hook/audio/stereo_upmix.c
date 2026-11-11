@@ -22,18 +22,27 @@ void (*spa_stereo_upmix_test_scene_mask_observer)(uint64_t pushed, const float *
                                                   const float *prot) = NULL;
 #endif
 
-/* Staggered two-stage 48-kHz cascade for phase-coherent LFE and front-door
- * woofer relief:
- *  - Stage 1 (kDoorReliefBp, 72 Hz bandpass, Q=0.85): covers the 50-120 Hz
- *    passband of the J525 front-door woofers (R21/R23, hardware HP 62 Hz /
- *    LP 240 Hz) where scene_engine's 190 Hz HP leaves bass unsubtracted;
- *    subtracted from front L/R (kDoorReliefCut = 0.46, -5.35 dB at 72 Hz,
- *    < 0.70 dB at 190 Hz) so it does not double-attenuate lower chest vocals
- *    or snare punch in the 190-250 Hz transition band.
- *  - Stage 2 (kLfeLow, 34 Hz low-pass, Q=1.18, gain=1.62): cascaded on Stage 1
- *    so the combined LFE passband (30-55 Hz) stays in-phase with L+R in J525
- *    busLFE (before J525's hardware 66 Hz LP), while rolling off at -18 dB/oct
- *    above 55 Hz (rejecting > 14.4 dB / > 28x energy at 96 Hz). */
+/* LFE assist and front-door woofer relief at 48 kHz.
+ *
+ * The amplifier already sends 0.40 (L + R) to its sub bus and low-passes that
+ * bus itself (66 Hz), so the LFE channel is a level assist to that feed and
+ * only helps where it is in phase with it.
+ *  - kDoorReliefBp (72 Hz band-pass, Q 0.85) times kDoorReliefCut is taken out
+ *    of front L/R: -2.9 dB at 72 Hz, under 1 dB at 30 and at 160 Hz, for the
+ *    J525 front-door woofers (R21/R23, hardware HP 62 Hz / LP 240 Hz).
+ *  - kLfeLow twice = a 65 Hz LR4 low-pass (-14 dB at 96 Hz against 40 Hz).  A
+ *    low-pass that steep lags by 7 ms, so it does not run on the front: it
+ *    runs on the input kLfeLookahead frames ahead of it, which the scene's own
+ *    latency already holds (the dry ring).  That leaves the LFE within 7 deg
+ *    of the front from 30 to 80 Hz (host probe, mono sine).
+ * On the sub bus (amp model, mono input, against plain stereo) that is +3.4 dB
+ * at 30 Hz, +1.9 at 50, +0.4 at 63 and -1 from 80 to 125 Hz (the relief's share).
+ *
+ * Until 2026-11-11 the low-pass (34 Hz) was cascaded on the band-pass, on the
+ * front, and the cut was 0.46.  That was in phase with the front at 30 Hz only
+ * (-84 deg at 50 Hz, -153 at 72), so above 45 Hz it cancelled the amplifier's
+ * own feed: -1.2 dB at 50 Hz and -10 dB at 72 on the sub bus, with the doors
+ * another -5.7 dB down there -- a hole from 55 to 100 Hz against plain stereo. */
 static const struct spa_upmix_biquad_coefficients kDoorReliefBp = {
     5.51333953030103477e-03f,
     0.0f,
@@ -41,14 +50,15 @@ static const struct spa_upmix_biquad_coefficients kDoorReliefBp = {
     -1.98888498488399335f,
     0.98897332093939794f
 };
-static const struct spa_upmix_biquad_coefficients kLfeLow = {
-    8.00702464369832306e-06f,
-    1.60140492873966461e-05f,
-    8.00702464369832306e-06f,
-    -1.99621565529757139f,
-    0.99623542572879031f
+static const struct spa_upmix_biquad_coefficients kLfeLow = {   /* Butterworth, 65 Hz */
+    1.79902141421212197e-05f,
+    3.59804282842424394e-05f,
+    1.79902141421212197e-05f,
+    -1.98796733592390140e+00f,
+    9.88039296780469978e-01f
 };
-static const float kDoorReliefCut = 0.46f;
+#define SPA_UPMIX_LFE_LOOKAHEAD 350u   /* frames; the LR4's delay in its passband */
+static const float kDoorReliefCut = 0.25f;
 static const float kCabinSampleLimit = 32275.0f; /* 0.985 FS + rounding margin */
 
 /* A903C/126A07: A07 rows are OUTPUTS. Transpose once here for the detector's
@@ -192,21 +202,28 @@ static inline float32x2_t spa_upmix_pair(float l, float r)
 }
 #endif
 
+/* ahead_l/r: the input SPA_UPMIX_LFE_LOOKAHEAD frames ahead of render_l/r. */
 static float spa_upmix_lfe_normalized(
     struct spa_stereo_upmix *state, int16_t *render_l, int16_t *render_r,
+    int16_t ahead_l, int16_t ahead_r,
     float bass_confidence, float drum_confidence)
 {
     const float normalized_l = (float)(*render_l) * (1.0f / 32768.0f);
     const float normalized_r = (float)(*render_r) * (1.0f / 32768.0f);
+    const float lfe_in_l = (float)ahead_l * (1.0f / 32768.0f);
+    const float lfe_in_r = (float)ahead_r * (1.0f / 32768.0f);
 #if SPA_UPMIX_HAVE_NEON
     float32x2_t door = spa_upmix_biquad_pair(
         spa_upmix_pair(normalized_l, normalized_r),
         state->_runtime._lfe_low48_state[0][0],
         state->_runtime._lfe_low48_state[1][0], &kDoorReliefBp);
     float32x2_t low48 = spa_upmix_biquad_pair(
-        door,
-        state->_runtime._lfe_low48_state[0][1],
-        state->_runtime._lfe_low48_state[1][1], &kLfeLow);
+        spa_upmix_biquad_pair(
+            spa_upmix_pair(lfe_in_l, lfe_in_r),
+            state->_runtime._lfe_low48_state[0][1],
+            state->_runtime._lfe_low48_state[1][1], &kLfeLow),
+        state->_runtime._lfe_low48_state[0][2],
+        state->_runtime._lfe_low48_state[1][2], &kLfeLow);
     float door_l = vget_lane_f32(door, 0);
     float door_r = vget_lane_f32(door, 1);
     float low48_l = vget_lane_f32(low48, 0);
@@ -217,9 +234,11 @@ static float spa_upmix_lfe_normalized(
     float door_r = spa_upmix_biquad(
         normalized_r, state->_runtime._lfe_low48_state[1][0], &kDoorReliefBp);
     float low48_l = spa_upmix_biquad(
-        door_l, state->_runtime._lfe_low48_state[0][1], &kLfeLow);
+        spa_upmix_biquad(lfe_in_l, state->_runtime._lfe_low48_state[0][1], &kLfeLow),
+        state->_runtime._lfe_low48_state[0][2], &kLfeLow);
     float low48_r = spa_upmix_biquad(
-        door_r, state->_runtime._lfe_low48_state[1][1], &kLfeLow);
+        spa_upmix_biquad(lfe_in_r, state->_runtime._lfe_low48_state[1][1], &kLfeLow),
+        state->_runtime._lfe_low48_state[1][2], &kLfeLow);
 #endif
     *render_l = spa_upmix_float_to_s16((normalized_l - kDoorReliefCut * door_l) * 32768.0f);
     *render_r = spa_upmix_float_to_s16((normalized_r - kDoorReliefCut * door_r) * 32768.0f);
@@ -292,10 +311,52 @@ static float spa_upmix_lfe_normalized(
     return sub_band * state->_runtime._lfe_dynamic_gain;
 }
 
-static void spa_upmix_cabin_guard_s16(int16_t sample[6], int adjust_lfe)
+/* Release of the held guard reduction, per frame: ~150 ms to 1/e at 48 kHz. */
+static const float kCabinGuardRelease = 1.0f / 7200.0f;
+/* Share of a rear-bus overload that the rears alone give up; the calibration knob
+ * between a steady front (1) and a kept front/rear balance (0). */
+static const float kCabinRearShare = 0.5f;
+
+/* `held` (may be NULL = the stateless per-sample guard the tests exercise) is
+ * the reduction carried between frames: [0] linked (all six channels), [1] the
+ * rears alone.  Without it the gain was recomputed from every frame's own
+ * peak, i.e. it followed the waveform: on loud hard-panned or wide material --
+ * exactly when the +6/+9 dB rear rows overflow a bus -- that is a clipper, not
+ * a limiter (a hard-left 1 kHz sine at 0 dBFS came out with 22 % THD on the
+ * front and the rear, and a centred voice was gain-modulated by a panned
+ * instrument).  With it the reduction a peak needed is kept and released
+ * slowly, so the next cycles pass through a near-constant gain.
+ *
+ * Order of repair: the LFE, then the rears alone, then everything.  The buses
+ * that overflow on music are the rear ones (bus = 0.71 front + 2.0 or 2.8
+ * rear); a bus the fronts and the centre fill by themselves is left to the
+ * linked stage.  Taking the
+ * whole mix down for them made the guard a limiter on the front stage of every
+ * loud master (-1.5 dB mean, 79 % of the time on a -11.5 dBFS RMS clip).  The
+ * linked stage stays as the rail guarantee for whatever the rears cannot fix. */
+static void spa_upmix_cabin_guard_s16(int16_t sample[6], int adjust_lfe, float *held)
 {
+    float front[8], rear[8];
     unsigned bus, ch;
-    float peak = 0.0f;
+    float peak = 0.0f, rear_gain = 1.0f;
+
+    if (held && held[0] > 0.0f) {
+        float reduction = held[0];
+        const float gain = 1.0f - reduction;
+
+        for (ch = 0; ch < 6; ++ch) sample[ch] = (int16_t)((float)sample[ch] * gain);
+        reduction -= reduction * kCabinGuardRelease;
+        held[0] = reduction < 1.0e-5f ? 0.0f : reduction;
+    }
+    if (held && held[1] > 0.0f) {
+        float reduction = held[1];
+        const float gain = 1.0f - reduction;
+
+        sample[4] = (int16_t)((float)sample[4] * gain);
+        sample[5] = (int16_t)((float)sample[5] * gain);
+        reduction -= reduction * kCabinGuardRelease;
+        held[1] = reduction < 1.0e-5f ? 0.0f : reduction;
+    }
 
     /* Nothing here can bind while every bus row stays below the limit, and
      * |bus value| <= max column sum * max |sample|.  This is the per-frame hot
@@ -306,7 +367,6 @@ static void spa_upmix_cabin_guard_s16(int16_t sample[6], int adjust_lfe)
         if (spa_upmix_absf((float)sample[ch]) > peak)
             peak = spa_upmix_absf((float)sample[ch]);
     if (peak * kCabinMatrixMaxColumnNorm <= kCabinSampleLimit) return;
-    peak = 0.0f;
 
     if (adjust_lfe) {
         float limited = (float)sample[3];
@@ -335,51 +395,83 @@ static void spa_upmix_cabin_guard_s16(int16_t sample[6], int adjust_lfe)
             sample[3] = (int16_t)limited;
         }
         /* If LFE alone cannot repair it, preserve the candidate for the
-         * linked fallback below. Returning LFE=0 is not a rail guarantee. */
+         * stages below. Returning LFE=0 is not a rail guarantee. */
     }
-    for (ch = 0; ch < 6; ++ch)
-        if (fabsf((float)sample[ch]) > peak) peak = fabsf((float)sample[ch]);
-#if SPA_UPMIX_HAVE_NEON
-    /* The table is input-major, so one row is the eight bus coefficients of one
-     * channel: the whole 8x6 product is six scaled row accumulations instead of
-     * forty-eight scalar ones.  Each product is rounded on its own and the
-     * channels accumulate in the same order, so the result is the scalar one.
-     * This is the per-frame cost that the early-out cannot remove on loud
-     * material, which is exactly when the realtime deadline is at risk. */
-    {
-        float32x4_t low = vdupq_n_f32(0.0f);
-        float32x4_t high = vdupq_n_f32(0.0f);
-        float bus_value[8];
 
-        for (ch = 0; ch < 6; ++ch) {
+    /* The table is input-major, so one row is the eight bus coefficients of one
+     * channel: the 8x6 product is six scaled row accumulations, kept apart as
+     * the part the rears add and the rest.  This is the per-frame cost that the
+     * early-out cannot remove on loud material, which is exactly when the
+     * realtime deadline is at risk. */
+#if SPA_UPMIX_HAVE_NEON
+    {
+        float32x4_t low = vdupq_n_f32(0.0f), high = vdupq_n_f32(0.0f);
+
+        for (ch = 0; ch < 4; ++ch) {
             float32x4_t scale = vdupq_n_f32((float)sample[ch]);
 
             low = vaddq_f32(low, vmulq_f32(vld1q_f32(&kInputMatrix[ch][0]), scale));
             high = vaddq_f32(high, vmulq_f32(vld1q_f32(&kInputMatrix[ch][4]), scale));
         }
-        vst1q_f32(bus_value, low);
-        vst1q_f32(bus_value + 4, high);
-        for (bus = 0; bus < 8; ++bus)
-            if (fabsf(bus_value[bus]) > peak) peak = fabsf(bus_value[bus]);
+        vst1q_f32(front, low);
+        vst1q_f32(front + 4, high);
+        low = vmulq_n_f32(vld1q_f32(&kInputMatrix[4][0]), (float)sample[4]);
+        high = vmulq_n_f32(vld1q_f32(&kInputMatrix[4][4]), (float)sample[4]);
+        low = vaddq_f32(low, vmulq_n_f32(vld1q_f32(&kInputMatrix[5][0]), (float)sample[5]));
+        high = vaddq_f32(high, vmulq_n_f32(vld1q_f32(&kInputMatrix[5][4]), (float)sample[5]));
+        vst1q_f32(rear, low);
+        vst1q_f32(rear + 4, high);
     }
 #else
     for (bus = 0; bus < 8; ++bus) {
-        float value = 0.0f;
-        for (ch = 0; ch < 6; ++ch) value += kInputMatrix[ch][bus] * sample[ch];
-        if (fabsf(value) > peak) peak = fabsf(value);
+        front[bus] = 0.0f;
+        for (ch = 0; ch < 4; ++ch) front[bus] += kInputMatrix[ch][bus] * sample[ch];
+        rear[bus] = kInputMatrix[4][bus] * sample[4] + kInputMatrix[5][bus] * sample[5];
     }
 #endif
+    /* Rears alone: the largest gain in [0, 1] that brings every bus the fronts
+     * leave room on back under the limit (eight S16 units of margin, as below). */
+    for (bus = 0; bus < 8; ++bus) {
+        const float value = front[bus] + rear[bus];
+        const float room = kCabinSampleLimit - 8.0f - spa_upmix_absf(front[bus]);
+
+        if (spa_upmix_absf(value) <= kCabinSampleLimit - 8.0f || room <= 0.0f) continue;
+        /* |front + g rear| <= |front| + g |rear|: sufficient, and exact when
+         * both pull the same way, which is the case that overflows */
+        if (room < rear_gain * spa_upmix_absf(rear[bus]))
+            rear_gain = room / spa_upmix_absf(rear[bus]);
+    }
+    if (rear_gain < 1.0f) {
+        /* The rears take kCabinRearShare of what they would need alone and the
+         * linked stage below takes the rest from everything.  All of it on the
+         * rears kept the front steady but moved the scene forward by 3-5 dB on
+         * loud masters (a streaming app without loudness normalisation), which
+         * is where the upmix is mostly used; all of it linked is the pumping
+         * front this order was introduced against. */
+        rear_gain = 1.0f - kCabinRearShare * (1.0f - rear_gain);
+        sample[4] = (int16_t)((float)sample[4] * rear_gain);
+        sample[5] = (int16_t)((float)sample[5] * rear_gain);
+        for (bus = 0; bus < 8; ++bus) rear[bus] *= rear_gain;
+        if (held) held[1] = 1.0f - (1.0f - held[1]) * rear_gain;   /* instant attack */
+    }
+
+    peak = 0.0f;
+    for (ch = 0; ch < 6; ++ch)
+        if (fabsf((float)sample[ch]) > peak) peak = fabsf((float)sample[ch]);
+    for (bus = 0; bus < 8; ++bus)
+        if (fabsf(front[bus] + rear[bus]) > peak) peak = fabsf(front[bus] + rear[bus]);
     if (peak > kCabinSampleLimit) {
         /* Eight S16 units reserve more than the largest row's aggregate
          * truncation error, including cancellation and float roundoff. */
         float gain = (kCabinSampleLimit - 8.0f) / peak;
         for (ch = 0; ch < 6; ++ch) sample[ch] = (int16_t)(sample[ch] * gain);
+        if (held) held[0] = 1.0f - (1.0f - held[0]) * gain;   /* instant attack */
     }
 }
 
 #ifdef SPA_STEREO_UPMIX_TESTING
 void spa_stereo_upmix_test_guard_s16(int16_t sample[6], int adjust_lfe)
-{ spa_upmix_cabin_guard_s16(sample, adjust_lfe); }
+{ spa_upmix_cabin_guard_s16(sample, adjust_lfe, NULL); }
 #endif
 
 /* NaN lands on lo: the comparisons fail and the setter never stores it. */
@@ -408,6 +500,8 @@ void spa_stereo_upmix_config_set_scene_bleed_cancel(struct spa_stereo_upmix_conf
 { if (config) config->scene.bleed_cancel = spa_upmix_clampf(value, 0.0f, 0.5f); }
 void spa_stereo_upmix_config_set_scene_front_keep_db(struct spa_stereo_upmix_config *config, float value)
 { if (config) config->scene.front_keep_db = value > 0.0f ? spa_upmix_clampf(value, 0.5f, 12.0f) : 0.0f; }
+void spa_stereo_upmix_config_set_scene_centre(struct spa_stereo_upmix_config *config, float value)
+{ if (config) config->scene_centre = spa_upmix_clampf(value, 0.0f, 1.0f); }
 void spa_stereo_upmix_config_set_scene_wide_pair(struct spa_stereo_upmix_config *config, float alpha)
 {
     if (!config) return;
@@ -422,9 +516,7 @@ void spa_stereo_upmix_config_set_scene_mask_blob(struct spa_stereo_upmix_config 
 
     if (!config) return;
     /* the same checks scene_mask_init() makes, so init() can never fail on the blob */
-    config->scene_mask_blob = w && bytes == sizeof(*w) &&
-        memcmp(w->magic, SMASK_MAGIC, sizeof(w->magic)) == 0 &&
-        w->ch == SMASK_CH && w->hidden == SMASK_HID && w->n_out == SMASK_OUT ? w : NULL;
+    config->scene_mask_blob = w && bytes == sizeof(*w) && scene_mask_weights_valid(w) ? w : NULL;
 }
 
 void spa_stereo_upmix_config_set_scene_mask_provider(struct spa_stereo_upmix_config *config,
@@ -450,8 +542,10 @@ static int spa_scene_config_valid(const struct spa_stereo_upmix_config *config)
     spa_stereo_upmix_config_set_scene_bleed_cancel(&probe, probe.scene.bleed_cancel);
     spa_stereo_upmix_config_set_scene_front_keep_db(&probe, probe.scene.front_keep_db);
     spa_stereo_upmix_config_set_scene_wide_pair(&probe, probe.scene.wide_pair ? probe.scene.wide_pair_alpha : 0.0f);
+    spa_stereo_upmix_config_set_scene_centre(&probe, probe.scene_centre);
     return config->scene.n_fft == SCENE_NFFT && config->scene.hop == SCENE_HOP &&
-           memcmp(&probe.scene, &config->scene, sizeof(probe.scene)) == 0;
+           memcmp(&probe.scene, &config->scene, sizeof(probe.scene)) == 0 &&
+           probe.scene_centre == config->scene_centre;
 }
 
 static int spa_upmix_config_valid(const struct spa_stereo_upmix_config *config)
@@ -507,6 +601,7 @@ void spa_stereo_upmix_default_config(struct spa_stereo_upmix_config *config)
     config->scene_mask_blob = NULL;
     config->scene_mask_provider = NULL;
     config->level = SPA_UPMIX_LEVEL_NORMAL;
+    config->scene_centre = 1.0f;
 }
 
 void spa_stereo_upmix_config_set_lfe(
@@ -777,6 +872,7 @@ static void spa_scene_mask_boundary(struct spa_stereo_upmix *state,
 {
     struct spa_stereo_upmix_runtime *rt = &state->_runtime;
     const struct spa_scene_mask_provider *provider = state->config.scene_mask_provider;
+    const float *voc = NULL;
     float bass, drum;
 
     *elig = *prot = NULL;
@@ -785,6 +881,7 @@ static void spa_scene_mask_boundary(struct spa_stereo_upmix *state,
                               &rt->_scene_mask_row)) {
             *elig = rt->_scene_mask_row.elig;
             *prot = rt->_scene_mask_row.prot;
+            voc = rt->_scene_mask_row.voc;
             spa_scene_lfe_smooth(rt, rt->_scene_mask_row.lfe_bass, rt->_scene_mask_row.lfe_drum);
         } else if (rt->_scene_mask_sequence >= 4u) {
             spa_scene_lfe_smooth(rt, 0.0f, 0.0f);
@@ -796,10 +893,14 @@ static void spa_scene_mask_boundary(struct spa_stereo_upmix *state,
     } else if (scene_mask_control(&rt->_scene_mask, rt->_scene_mask_acc, NULL, NULL)) {
         *elig = rt->_scene_mask.elig;
         *prot = rt->_scene_mask.prot;
+        voc = rt->_scene_mask.post[0];
         spa_scene_mask_lfe_posteriors(&rt->_scene_mask, &bass, &drum);
         spa_scene_lfe_smooth(rt, bass, drum);
     }
-    if (*elig) scene_engine_set_mask(&rt->_scene, *elig, *prot, SMASK_BINS);
+    if (*elig) {
+        scene_engine_set_mask(&rt->_scene, *elig, *prot, SMASK_BINS);
+        scene_engine_set_vocal(&rt->_scene, voc, SMASK_BINS, state->config.scene_centre);
+    }
 }
 
 /* SCENE: staged int16 stereo -> float -> engine -> FIFO (primed with the
@@ -832,7 +933,8 @@ static void spa_scene_process(struct spa_stereo_upmix *state, size_t frames,
             dry[0] = state->_input_scratch[frame * SPA_STEREO_UPMIX_INPUT_CHANNELS];
             dry[1] = state->_input_scratch[frame * SPA_STEREO_UPMIX_INPUT_CHANNELS + 1];
             if (++rt->_dry_pos == SPA_SCENE_LATENCY_FRAMES) rt->_dry_pos = 0;
-            spa_upmix_cabin_guard_s16(output, state->config.lfe_enabled);
+            /* plain stereo cannot overflow a bus: stateless, nothing to hold */
+            spa_upmix_cabin_guard_s16(output, state->config.lfe_enabled, NULL);
         }
         return;
     }
@@ -883,7 +985,7 @@ static void spa_scene_process(struct spa_stereo_upmix *state, size_t frames,
         int16_t *output = pcm6 + frame * channels;
         int16_t *dry = rt->_dry_ring + rt->_dry_pos * SPA_STEREO_UPMIX_INPUT_CHANNELS;
         const int16_t dry_l = dry[0], dry_r = dry[1];
-        int16_t render_l = 0, render_r = 0, rear_l = 0, rear_r = 0, lfe = 0;
+        int16_t render_l = 0, render_r = 0, render_c = 0, rear_l = 0, rear_r = 0, lfe = 0;
         float w, g;
 
         /* the input SPA_SCENE_LATENCY_FRAMES ago: aligned with this output frame */
@@ -893,21 +995,29 @@ static void spa_scene_process(struct spa_stereo_upmix *state, size_t frames,
         if (frame < pop) {
             render_l = spa_upmix_float_to_s16(in[0] * 32768.0f);
             render_r = spa_upmix_float_to_s16(in[1] * 32768.0f);
+            render_c = spa_upmix_float_to_s16(in[2] * 32768.0f);
             rear_l = spa_upmix_float_to_s16(in[4] * 32768.0f);
             rear_r = spa_upmix_float_to_s16(in[5] * 32768.0f);
         }
         /* Level steering from the net's bass/drum posteriors (0/0 = from the
          * front alone until the net's first control, or without a net). */
-        if (state->config.lfe_enabled)
+        if (state->config.lfe_enabled) {
+            /* _dry_pos is now the oldest entry (the input 1024 frames ago, this
+             * output frame); the one written k frames ago sits k behind it */
+            const int16_t *ahead = rt->_dry_ring + SPA_STEREO_UPMIX_INPUT_CHANNELS *
+                ((rt->_dry_pos + SPA_UPMIX_LFE_LOOKAHEAD) % SPA_SCENE_LATENCY_FRAMES);
+
             lfe = spa_upmix_lfe_to_s16(
-                spa_upmix_lfe_normalized(state, &render_l, &render_r,
+                spa_upmix_lfe_normalized(state, &render_l, &render_r, ahead[0], ahead[1],
                                           rt->_scene_lfe_bass, rt->_scene_lfe_drum),
                 state->config.lfe_gain_q15);
+        }
         output[SPA_STEREO_UPMIX_CHANNEL_L] =
             spa_upmix_scale_s16_q15(render_l, state->config.front_gain_q15);
         output[SPA_STEREO_UPMIX_CHANNEL_R] =
             spa_upmix_scale_s16_q15(render_r, state->config.front_gain_q15);
-        output[SPA_STEREO_UPMIX_CHANNEL_C] = 0;
+        output[SPA_STEREO_UPMIX_CHANNEL_C] =
+            spa_upmix_scale_s16_q15(render_c, state->config.front_gain_q15);
         output[SPA_STEREO_UPMIX_CHANNEL_LFE] = lfe;
         output[SPA_STEREO_UPMIX_CHANNEL_LS] = rear_l;
         output[SPA_STEREO_UPMIX_CHANNEL_RS] = rear_r;
@@ -923,6 +1033,8 @@ static void spa_scene_process(struct spa_stereo_upmix *state, size_t frames,
                 g * (float)output[SPA_STEREO_UPMIX_CHANNEL_L] + (1.0f - g) * (float)dry_l);
             output[SPA_STEREO_UPMIX_CHANNEL_R] = spa_upmix_float_to_s16(
                 g * (float)output[SPA_STEREO_UPMIX_CHANNEL_R] + (1.0f - g) * (float)dry_r);
+            output[SPA_STEREO_UPMIX_CHANNEL_C] = spa_upmix_float_to_s16(
+                g * (float)output[SPA_STEREO_UPMIX_CHANNEL_C]);
             output[SPA_STEREO_UPMIX_CHANNEL_LFE] = spa_upmix_float_to_s16(g * (float)lfe);
             output[SPA_STEREO_UPMIX_CHANNEL_LS] = spa_upmix_float_to_s16(g * (float)rear_l);
             output[SPA_STEREO_UPMIX_CHANNEL_RS] = spa_upmix_float_to_s16(g * (float)rear_r);
@@ -930,7 +1042,7 @@ static void spa_scene_process(struct spa_stereo_upmix *state, size_t frames,
         if (gain && gain[frame] != 1.0f)
             for (i = 0; i < channels; i++)
                 output[i] = spa_upmix_float_to_s16(gain[frame] * (float)output[i]);
-        spa_upmix_cabin_guard_s16(output, state->config.lfe_enabled);
+        spa_upmix_cabin_guard_s16(output, state->config.lfe_enabled, rt->_guard_reduction);
     }
     rt->_scene_fifo_count -= (uint32_t)pop;
     if (rt->_scene_fifo_count > 0u) {

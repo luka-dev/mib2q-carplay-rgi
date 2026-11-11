@@ -306,6 +306,52 @@ static void test_corrected_guard_extremes(void)
     }
 }
 
+/* The guard is a limiter, not a clipper: a loud hard-left tone makes the rear
+ * rows overflow a bus on every cycle.  With the reduction held between frames
+ * the output is still a sine; recomputing the gain from each frame's own peak
+ * (the code until 2026-11-11) gave 30 % THD+N on this rear channel.  The bus bound must hold
+ * through the attack as well, and a reset must drop the held reduction. */
+static void test_guard_limits_without_clipping(void)
+{
+    enum { N = 288000, BLOCK = 768, TAIL = 48000 };   /* 6 s: the scene has settled */
+    static struct spa_stereo_upmix state;
+    static int16_t in[N * 2], out[N * TEST_CHANNELS];
+    struct spa_stereo_upmix_config config;
+    const double w = 2.0 * 3.14159265358979323846 * 1000.0 / 48000.0;
+    double ss = 0, cc = 0, sc = 0, xs = 0, xc = 0, fit = 0, residual = 0, a, b, det;
+    size_t i, f;
+
+    for (i = 0; i < N; ++i) {
+        in[2 * i] = (int16_t)lrint(32767.0 * sin(w * (double)i));
+        in[2 * i + 1] = 0;
+    }
+    make_scene_config(&config, 1);
+    assert(spa_stereo_upmix_init(&state, &config) == SPA_STEREO_UPMIX_OK);
+    for (f = 0; f < N; f += BLOCK)
+        assert(spa_stereo_upmix_process_s16(&state, in + f * 2, BLOCK,
+                                            out + f * TEST_CHANNELS, BLOCK) == SPA_STEREO_UPMIX_OK);
+    assert_cabin_buses_bounded(out, N);
+    assert(state._runtime._guard_reduction[1] > 0.0f);       /* it really was limiting: the rears first */
+    assert(state._runtime._guard_reduction[0] > 0.0f);       /* and the rest shared by everything */
+    for (i = N - TAIL; i < N; ++i) {
+        const double s = sin(w * (double)i), c = cos(w * (double)i);
+        const double x = out[i * TEST_CHANNELS + SPA_STEREO_UPMIX_CHANNEL_LS];
+        ss += s * s; cc += c * c; sc += s * c; xs += x * s; xc += x * c;
+    }
+    det = ss * cc - sc * sc;
+    a = (xs * cc - xc * sc) / det;
+    b = (xc * ss - xs * sc) / det;
+    for (i = N - TAIL; i < N; ++i) {
+        const double model = a * sin(w * (double)i) + b * cos(w * (double)i);
+        const double x = out[i * TEST_CHANNELS + SPA_STEREO_UPMIX_CHANNEL_LS];
+        fit += model * model;
+        residual += (x - model) * (x - model);
+    }
+    assert(fit > 0.0 && sqrt(residual / fit) < 0.03);        /* was 0.30, now ~0.005 */
+    assert(spa_stereo_upmix_reset(&state) == SPA_STEREO_UPMIX_OK);
+    assert(state._runtime._guard_reduction[0] == 0.0f && state._runtime._guard_reduction[1] == 0.0f);
+}
+
 static uint32_t g_scene_boundaries, g_scene_rows;
 static uint64_t g_scene_last_pushed;
 
@@ -397,9 +443,10 @@ static void test_scene_backend_smoke(void)
     for (frame = 0; frame < TEST_FRAMES; ++frame) {
         const int16_t *out = g_output_b + frame * TEST_CHANNELS;
 
-        assert(out[SPA_STEREO_UPMIX_CHANNEL_C] == 0 && out[SPA_STEREO_UPMIX_CHANNEL_LFE] == 0);
+        /* the centre (default 1) follows the net's vocal row (0.5 here): silent before the latency */
+        assert(out[SPA_STEREO_UPMIX_CHANNEL_LFE] == 0);
         if (frame < SPA_SCENE_LATENCY_FRAMES)
-            assert(!out[0] && !out[1] && !out[4] && !out[5]);
+            assert(!out[0] && !out[1] && !out[2] && !out[4] && !out[5]);
     }
     /* reset with the net: the same cadence and the same render again */
     g_scene_boundaries = g_scene_rows = 0;
@@ -453,6 +500,53 @@ static void worker_observer(uint64_t pushed, const float *elig, const float *pro
     if (!g_worker_rows) g_worker_first_row_boundary = g_worker_boundaries;
     g_worker_rows++;
     assert(elig[0] == 0.0f && prot[0] == 1.0f && elig[SMASK_BINS - 1] == 0.0f);
+}
+
+/* The net's rows must not depend on the programme level (scene_mask.h, the
+ * level reference): the same noise 18 dB quieter gives the same eligibility,
+ * and with the reference off it does not -- so the weights here do read level. */
+static void test_scene_mask_level_invariant(void)
+{
+    static struct scene_mask_weights blob;
+    static struct scene_mask loud, quiet;
+    static float a[SMASK_HOP * 2], b[SMASK_HOP * 2], ea[SMASK_BINS], eb[SMASK_BINS];
+    float *w = (float *)(void *)((char *)&blob + offsetof(struct scene_mask_weights, c1_w));
+    const size_t count = (sizeof(blob) - offsetof(struct scene_mask_weights, c1_w)) / sizeof(float);
+    uint32_t seed = UINT32_C(0x4c56454c);
+    double on = 0.0, off = 0.0;
+    size_t i;
+    int pass, control, k;
+
+    memcpy(blob.magic, SMASK_MAGIC, sizeof(blob.magic));
+    blob.ch = SMASK_CH; blob.hidden = SMASK_HID; blob.n_out = SMASK_OUT;
+    for (i = 0; i < count; ++i) {
+        seed = seed * UINT32_C(1664525) + UINT32_C(1013904223);
+        w[i] = ((float)(seed >> 8) / 8388608.0f - 1.0f) * 0.2f;
+    }
+    for (k = 0; k < SMASK_FEAT; ++k) { blob.feat_mean[k] = k < 2 ? -6.0f : 0.0f; blob.feat_std[k] = 3.0f; }
+    for (k = 0; k < SMASK_OUT; ++k) blob.elig_w[k] = k ? 0.0f : 1.0f;   /* one output: the sum must not saturate */
+    blob.has_calib = 0.0f;
+    assert(scene_mask_weights_valid(&blob));
+    for (pass = 0; pass < 2; ++pass) {
+        double worst = 0.0;
+
+        assert(scene_mask_init(&loud, &blob) == 0 && scene_mask_init(&quiet, &blob) == 0);
+        if (pass) { scene_mask_set_level_ref(&loud, 0.0f); scene_mask_set_level_ref(&quiet, 0.0f); }
+        for (control = 0; control < 12; ++control) {
+            for (i = 0; i < SMASK_HOP * 2; ++i) {
+                seed = seed * UINT32_C(1664525) + UINT32_C(1013904223);
+                a[i] = ((float)(seed >> 8) / 8388608.0f - 1.0f) * 0.5f;
+                b[i] = a[i] * 0.125f;
+            }
+            if (scene_mask_control(&loud, a, ea, NULL) != scene_mask_control(&quiet, b, eb, NULL)) assert(0);
+            if (control < 4) continue;
+            for (k = 0; k < SMASK_BINS; ++k)
+                if (fabs((double)ea[k] - (double)eb[k]) > worst) worst = fabs((double)ea[k] - (double)eb[k]);
+        }
+        if (pass) off = worst; else on = worst;
+    }
+    assert(on < 1.0e-3);
+    assert(off > 20.0 * on && off > 1.0e-2);
 }
 
 static int slow_control(struct scene_mask *net, const float *in512, float *elig, float *prot)
@@ -515,6 +609,7 @@ static void test_scene_mask_worker(void)
     struct spa_stereo_upmix_config config;
     struct spa_scene_mask_worker_stats stats;
     size_t frame, first_diff = TEST_FRAMES;
+    int centre_seen = 0;
     unsigned i;
 
     fill_stereo(UINT32_C(0x574f524b), 0);
@@ -555,7 +650,10 @@ static void test_scene_mask_worker(void)
         const int16_t *a = g_output_a + frame * TEST_CHANNELS;
         const int16_t *b = g_output_b + frame * TEST_CHANNELS;
 
-        assert(b[SPA_STEREO_UPMIX_CHANNEL_C] == 0 && b[SPA_STEREO_UPMIX_CHANNEL_LFE] == 0);
+        assert(b[SPA_STEREO_UPMIX_CHANNEL_LFE] == 0);
+        /* the centre needs the worker's vocal row: silent until the first one (boundary 4) lands */
+        if (frame < 1792u - SPA_SCENE_LATENCY_FRAMES) assert(b[SPA_STEREO_UPMIX_CHANNEL_C] == 0);
+        centre_seen |= b[SPA_STEREO_UPMIX_CHANNEL_C] != 0;
         if (first_diff == TEST_FRAMES && memcmp(a, b, TEST_CHANNELS * sizeof(*a)) != 0)
             first_diff = frame;
     }
@@ -563,6 +661,7 @@ static void test_scene_mask_worker(void)
      * in the output: identical before that, different after (the duck starts
      * one control later on the worker) */
     assert(first_diff >= 1280u - SPA_SCENE_LATENCY_FRAMES && first_diff < TEST_FRAMES);
+    assert(centre_seen);
     spa_scene_mask_worker_stop(&g_worker);
     assert(spa_scene_mask_worker_provider(&g_worker) == NULL);
 
@@ -738,8 +837,8 @@ static void test_scene_vehicle_refinements(void)
     assert(spa_stereo_upmix_init(&state_a, &cfg_a) == SPA_STEREO_UPMIX_OK);
     assert(spa_stereo_upmix_scene_set_mask(&state_a, elig, prot, 257) == SPA_STEREO_UPMIX_OK);
     for (i = 0; i < 4; ++i) process_blocks(&state_a, g_input, g_output_a);
-    /* Anchor must engage (< 0.50) despite the loud 50 Hz sub-bass */
-    assert(state_a._runtime._scene.anchor < 0.50f);
+    /* The 1 kHz band's anchor must engage (< 0.50) despite the loud 50 Hz sub-bass */
+    assert(state_a._runtime._scene.anchor[1] < 0.50f);
 
     /* 3. inst_gamma_lo < 700 Hz sharpens partial eligibility at 350 Hz */
     fill_sine(350.0f, 0);
@@ -821,7 +920,9 @@ int main(void)
     test_off_is_exact_and_overlap_safe();
     test_lfe_v2_phase_frequency_and_cabin_bounds();
     test_corrected_guard_extremes();
+    test_guard_limits_without_clipping();
     test_scene_backend_smoke();
+    test_scene_mask_level_invariant();
     test_scene_mask_worker();
     test_scene_levels();
     test_scene_vehicle_refinements();

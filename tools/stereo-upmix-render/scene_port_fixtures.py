@@ -13,6 +13,7 @@ Writes:
                   and the final [n,6] output, plus the input signal and the config as JSON.
                   stream_spatial: pluck hard-left + centred vocal + room bed, no mask.
                   stream_mask:    the same with the 512/128 oracle instrument mask + duck (variant J).
+                  stream_vehicle: the same with the hook's vehicle scene (front anchor, wide pair, bleed cancel).
 """
 import json, os, sys, dataclasses, numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -71,4 +72,7 @@ def spec(v):
 Pv = spec(voc[:, : su.SR * 6]); Po = spec((pluck + bed)[:, : su.SR * 6])
 e = Po / (Pv + Po + 1e-12); Tc = e.shape[0] // 4 * 4; elig = e[:Tc].reshape(Tc // 4, 4, 257).mean(1)
 golden("mask", x, cfg, inst_mask=elig, prot_mask=1.0 - elig)
+# the vehicle scene (spa_configure_vehicle_scene): front anchor per band, wide pair, low-band gamma, bleed cancel
+golden("vehicle", x, dataclasses.replace(cfg, front_keep_db=1.5, wide_pair=True, wide_pair_alpha=0.35, inst_gamma_lo=1.5, bleed_cancel=0.15),
+       inst_mask=elig, prot_mask=1.0 - elig)
 print("fixtures in", out)
