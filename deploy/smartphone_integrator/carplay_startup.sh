@@ -89,7 +89,8 @@ export IAP2_PHONE_BATTERY=on
 # coding (RCC E2P 0xFC) and rewrites this line to 0 unless it is 02 (external): the internal amp has no
 # 6-channel route (docs/audio/INTERNAL_AMP_PATH.md).
 #
-# Baked-in runtime defaults (no env needed):
+# Baked-in runtime defaults (no env needed beyond AUDIO_EXTERNAL_AMP=1; with 0 or without the
+# line the hook bypasses all of them and logs why):
 #   - SCENE stereo-to-5.1 upmixer armed on both buffered (type 103) and realtime (type 100) media;
 #     user-facing bypass and level (OFF / NORMAL / INTENSE) controlled from MMI.
 #   - Phase-coherent LFE assist (11585 Q15) + 45-65 Hz front-door woofer relief + J525 cabin guard.
@@ -99,6 +100,9 @@ export IAP2_PHONE_BATTERY=on
 #     type-103 secondary format index 23 (AAC-LC/48k/stereo); APAP receiver thread SCHED_RR 18.
 #   - Optional ring/diagnostic overrides in code: AUDIO_RING_MS (500), AUDIO_HIGH_MS (250),
 #     AUDIO_REPRIME_MS (160), AUDIO_SPATIAL_TAP.
+# Written to 1 by the installer only for verified Sound_System=02. Fail closed
+# for internal/unknown amps; the 48 kHz nav / 24 kHz voice rate upgrades remain.
+export AUDIO_EXTERNAL_AMP=0
 export AUDIO_SPATIAL=1
 export AUDIO_SPATIAL_ATMOS=0
 export AUDIO_SPATIAL_ATMOS_MODE=downmix

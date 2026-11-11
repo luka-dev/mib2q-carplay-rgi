@@ -60,6 +60,8 @@ unit() {   # unit [stock SI file] [stock deva size]: a fresh fake unit, BOTH jar
 }
 run() { CARPLAY_SAVE_WAIT=0 CARPLAY_MICROPYTHON=$MP E2P_READ="$1" E2P_AMP_READ="${2:-echo 0x000000fc 02}" "$SH" "$T/mod/custom.sh" install > "$T/log" 2>&1; }
 spatial() { grep '^export AUDIO_SPATIAL=' "$U/mnt/app/root/hooks/carplay_startup.sh"; }
+# exactly one policy line, with the wanted value, on the real startup template
+amp_policy() { [ "$(grep '^export AUDIO_EXTERNAL_AMP=' "$U/mnt/app/root/hooks/carplay_startup.sh")" = "export AUDIO_EXTERNAL_AMP=$1" ]; }
 has() { [ -f "$U/$JARS/$1" ] && ! grep -qx old "$U/$JARS/$1"; }
 
 e2p MHI2Q_US_AUG22_P5087 > "$T/us"; e2p MHI2Q_CN_AUG22_K1004 > "$T/cn"
@@ -128,11 +130,14 @@ cmp -s "$U/$LUA" "$T/lua.before" && [ ! -e "$U/$LUA.carplay-stock" ] && grep -q 
 
 # amplifier gate: only an external amp (E2P 0xFC = 02) keeps the 6-channel path
 spatial | grep -qx 'export AUDIO_SPATIAL=1' && grep -q 'Amplifier: external' "$T/log" || fail amp-ext "external amp lost AUDIO_SPATIAL=1"
+amp_policy 1 || fail amp-ext "external amp not exported as AUDIO_EXTERNAL_AMP=1 on the real template"
 unit; run "cat $T/us" "echo 0x000000fc 01" || fail amp-int "install failed"
 spatial | grep -q '^export AUDIO_SPATIAL=0 ' && grep -q '^export AUDIO_SPATIAL_ATMOS=0$' "$U/mnt/app/root/hooks/carplay_startup.sh" &&
     grep -q 'Amplifier: internal' "$T/log" || fail amp-int "internal amp kept the 6-channel path"
+amp_policy 0 || fail amp-int "internal amp not exported as AUDIO_EXTERNAL_AMP=0"
 unit; run "cat $T/us" false || fail amp-none "install failed"
 spatial | grep -q '^export AUDIO_SPATIAL=0 ' && grep -q 'amplifier coding unreadable' "$T/log" || fail amp-none "unreadable coding kept the 6-channel path"
+amp_policy 0 || fail amp-none "unreadable coding not exported as AUDIO_EXTERNAL_AMP=0"
 
 unit "$CN_SI" "$CN_DEVA" "$CN_AIRPLAY"
 cp "$CN_WIFI" "$U/mnt/app/armle/lib/dll/devnp-mrvl_wlan-sdiorm.so"

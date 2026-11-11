@@ -53,6 +53,7 @@ import de.esolutions.hmi.widgets.audi.evo.widgets.menu.InfolineTimerController;
 import de.esolutions.hmi.widgets.audi.evo.widgets.menu.MenuController;
 import de.esolutions.hmi.widgets.audi.evo.widgets.menu.MenuItemController;
 import de.esolutions.hmi.widgets.audi.evo.widgets.menu.MultiLineMenuItemController;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.util.List;
 
@@ -242,9 +243,52 @@ public final class CarPlaySettingsUi {
         return type == 1 || type == 2 || type == 3;
     }
 
-    /** Unknown (-1), audio management (0), and internal amps cannot enable these controls. */
+    /** Unknown (-1), audio management (0), and internal amps cannot enable these controls.
+     *  Neither can a unit whose hook was told to bypass: the rows would store values and send
+     *  commands that change nothing in the sound. */
     public static boolean available() {
-        return amplifier > 3;
+        return amplifier > 3 && hookProcessesAudio();
+    }
+
+    /** The startup script the installer writes; its AUDIO_EXTERNAL_AMP line is the hook's
+     *  hardware policy (hook/audio/audio_hook.c, spa_audio_config_init_once). */
+    public static final String STARTUP_FILE = "/mnt/app/root/hooks/carplay_startup.sh";
+    /** -1 = not read yet, 0 = the hook bypasses all sample processing, 1 = it processes. */
+    private static volatile int hookPolicy = -1;
+
+    private static boolean hookProcessesAudio() {
+        int policy = hookPolicy;
+        if (policy < 0) {
+            policy = readHookPolicy(STARTUP_FILE) ? 1 : 0;
+            hookPolicy = policy;
+            if (policy == 0) Log.w(TAG, "hook amplifier policy is bypass (" + STARTUP_FILE
+                + "); audio controls stay disabled");
+        }
+        return policy == 1;
+    }
+
+    /** The hook's own reading of the line: only "=1" turns processing on, a missing line is
+     *  bypass.  The runtime AmplifierListener and the installer's one-time E2P read can
+     *  disagree (a slow RCC at install time leaves 0 on a B&amp;O car); the hook obeys the
+     *  script, so the menu must too.  An unreadable script proves nothing: amplifier alone. */
+    public static boolean readHookPolicy(String path) {
+        FileInputStream in = null;
+        try {
+            in = new FileInputStream(path);
+            byte[] buf = new byte[65536];
+            int n = 0, r;
+            while (n < buf.length && (r = in.read(buf, n, buf.length - n)) > 0) n += r;
+            String text = new String(buf, 0, n, "ISO-8859-1");
+            String key = "export AUDIO_EXTERNAL_AMP=";
+            int at = text.startsWith(key) ? 0 : text.indexOf("\n" + key);
+            if (at < 0) return false;
+            at = text.indexOf('=', at) + 1;
+            return at < text.length() && text.charAt(at) == '1';
+        } catch (Throwable t) {
+            return true;
+        } finally {
+            try { if (in != null) in.close(); } catch (Throwable t) { /* nothing to do */ }
+        }
     }
 
     public static boolean isAltScreenEnabled() {

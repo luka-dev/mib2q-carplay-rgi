@@ -181,24 +181,47 @@ list_payload() {
 STARTUP=/mnt/app/root/hooks/carplay_startup.sh
 gate_audio() {
     read_amp
+    amp_external=0
     case $AMP in
         external)
             echo "  Amplifier: external (Sound_System 2, B&O/Bose over MOST) - CarPlay 5.1 and UpMix on"
-            return 0 ;;
-        internal) echo "  Amplifier: internal (Sound_System 1) - no 6-channel route, CarPlay audio stays stock stereo" ;;
-        *)        echo "  WARN amplifier coding unreadable - CarPlay audio stays stock stereo" ;;
+            amp_external=1 ;;
+        internal) echo "  Amplifier: internal (Sound_System 1) - rate upgrades only; no boost or sample processing" ;;
+        *)        echo "  WARN amplifier coding unreadable - rate upgrades only; no boost or sample processing" ;;
     esac
     [ -f "$STARTUP" ] || { echo "  WARN no $STARTUP to switch to stereo"; return 0; }
     tmp=$STARTUP.carplay-new.$$
     : > "$tmp" || { echo "FAILED create $tmp"; return 1; }
+    amp_policy_written=0
+    deva_patched=${DEVA_PATCHED:-0}
+    # a stock driver has no 6-channel geometry either
+    if [ "$deva_patched" != 1 ] && [ "$amp_external" = 1 ]; then
+        amp_external=0; AMP="$AMP, stock deva"
+        echo "  WARN deva-ctrl-qc.so is stock - CarPlay 5.1 and UpMix stay off"
+    fi
     while IFS= read -r line || [ -n "$line" ]; do
+        if [ "$amp_policy_written" = 0 ]; then
+            amp_policy_written=1
+            case $line in
+                '#!'*) printf '%s\nexport AUDIO_EXTERNAL_AMP=%s\nexport AUDIO_DEVA_PATCHED=%s\n' "$line" "$amp_external" "$deva_patched"; continue ;;
+            esac
+            printf 'export AUDIO_EXTERNAL_AMP=%s\nexport AUDIO_DEVA_PATCHED=%s\n' "$amp_external" "$deva_patched"
+        fi
         case $line in
-            "export AUDIO_SPATIAL="*)       line="export AUDIO_SPATIAL=0  # set by the installer: $AMP amplifier" ;;
-            "export AUDIO_SPATIAL_ATMOS="*) line="export AUDIO_SPATIAL_ATMOS=0" ;;
+            "export AUDIO_EXTERNAL_AMP="*) continue ;;
+            "export AUDIO_DEVA_PATCHED="*) continue ;;
+            "export AUDIO_SPATIAL="*)
+                [ "$amp_external" = 1 ] || line="export AUDIO_SPATIAL=0  # set by the installer: $AMP amplifier" ;;
+            "export AUDIO_SPATIAL_ATMOS="*)
+                [ "$amp_external" = 1 ] || line="export AUDIO_SPATIAL_ATMOS=0" ;;
         esac
-        printf '%s\n' "$line" >> "$tmp"
-    done < "$STARTUP"
-    grep -q '^export AUDIO_SPATIAL=0 ' "$tmp" || { rm -f "$tmp"; echo "FAILED: no AUDIO_SPATIAL line in $STARTUP"; return 1; }
+        printf '%s\n' "$line"
+    done < "$STARTUP" >> "$tmp"
+    [ "$(grep -c '^export AUDIO_EXTERNAL_AMP=' "$tmp")" = 1 ] || { rm -f "$tmp"; echo "FAILED: duplicate amplifier policy in $STARTUP"; return 1; }
+    [ "$(grep -c '^export AUDIO_DEVA_PATCHED=' "$tmp")" = 1 ] || { rm -f "$tmp"; echo "FAILED: duplicate driver policy in $STARTUP"; return 1; }
+    if [ "$amp_external" = 0 ]; then
+        grep -q '^export AUDIO_SPATIAL=0 ' "$tmp" || { rm -f "$tmp"; echo "FAILED: no AUDIO_SPATIAL line in $STARTUP"; return 1; }
+    fi
     chmod 755 "$tmp" && mv -f "$tmp" "$STARTUP" || { rm -f "$tmp"; echo "FAILED activate $STARTUP"; return 1; }
 }
 
@@ -551,8 +574,20 @@ patch_mcd_conf() {
 
 # ---- deva-ctrl-qc.so: 6-channel PCM + 48 kHz nav + 24 kHz voice/calls on THIS unit's binary ----
 DEVA_LIB=/mnt/app/armle/lib/dll/deva-ctrl-qc.so
+# Sets DEVA_PATCHED (1 = the driver has the 6ch / 48 kHz / 24 kHz geometry); gate_audio hands it to
+# the hook, which otherwise would offer the phone formats a stock driver cannot play.
 patch_deva() {
-    find_mp || { echo "  WARN no M.I.B. micropython - deva-ctrl-qc.so stays stock"; return 0; }
+    DEVA_PATCHED=0
+    # No patcher this time, but our stock backup beside the library means an earlier install
+    # already patched it: that driver is still the patched one.
+    find_mp || {
+        if [ -f "$DEVA_LIB.carplay-stock" ]; then
+            DEVA_PATCHED=1; echo "  WARN no M.I.B. micropython - $DEVA_LIB left as patched earlier"
+        else
+            echo "  WARN no M.I.B. micropython - deva-ctrl-qc.so stays stock, CarPlay keeps stock voice/nav formats"
+        fi
+        return 0
+    }
     [ -f "$DEVA_LIB" ] || { echo "  WARN no $DEVA_LIB"; return 0; }
     src=$DEVA_LIB
     rm -f "$DEVA_LIB.carplay-new"
@@ -561,9 +596,10 @@ patch_deva() {
         0) backup_once "$DEVA_LIB" "$DEVA_LIB.carplay-stock" || { rm -f "$DEVA_LIB.carplay-new"; return 1; }
            chmod 755 "$DEVA_LIB.carplay-new" && mv -f "$DEVA_LIB.carplay-new" "$DEVA_LIB" ||
                { rm -f "$DEVA_LIB.carplay-new"; echo "FAILED activate $DEVA_LIB"; return 1; }
+           DEVA_PATCHED=1
            echo "  $DEVA_LIB (6ch PCM + 48kHz nav + 24kHz voice/calls patched in)" ;;
-        3) echo "  $DEVA_LIB already patched" ;;
-        *) rm -f "$DEVA_LIB.carplay-new"; echo "  WARN $DEVA_LIB stays stock (unsupported library)" ;;
+        3) DEVA_PATCHED=1; echo "  $DEVA_LIB already patched" ;;
+        *) rm -f "$DEVA_LIB.carplay-new"; echo "  WARN $DEVA_LIB stays stock (unsupported library), CarPlay keeps stock voice/nav formats" ;;
     esac
     return 0
 }

@@ -114,8 +114,24 @@ public final class CarPlaySettingsAvailabilityTest {
         try { while(!events.isEmpty()) events.remove(0).dispatch(); }
         finally { onHmiThread=false; }
     }
+    static String startup(String body) throws Exception {
+        java.io.File f=java.io.File.createTempFile("carplay_startup",".sh"); f.deleteOnExit();
+        java.io.FileOutputStream out=new java.io.FileOutputStream(f);
+        try { out.write(body.getBytes("ISO-8859-1")); } finally { out.close(); }
+        return f.getPath();
+    }
     public static void main(String[] args) throws Exception {
         setup();
+        // The hook's hardware policy, read the way the hook reads it.
+        check(CarPlaySettingsUi.readHookPolicy(startup("#!/bin/sh\nexport AUDIO_EXTERNAL_AMP=1\nexport AUDIO_SPATIAL=1\n")),"=1 is processing");
+        check(!CarPlaySettingsUi.readHookPolicy(startup("#!/bin/sh\nexport AUDIO_EXTERNAL_AMP=0\nexport AUDIO_SPATIAL=1\n")),"=0 is bypass");
+        check(!CarPlaySettingsUi.readHookPolicy(startup("#!/bin/sh\nexport AUDIO_SPATIAL=1\n")),"a missing line is bypass");
+        check(!CarPlaySettingsUi.readHookPolicy(startup("#!/bin/sh\n# export AUDIO_EXTERNAL_AMP=1\nexport AUDIO_EXTERNAL_AMP=0\n")),"a comment is not the line");
+        check(CarPlaySettingsUi.readHookPolicy("/nonexistent/carplay_startup.sh"),"an unreadable script leaves the amplifier gate alone");
+        // A hook in bypass disables the rows even on an external amplifier.
+        put(UI,null,"hookPolicy",0);
+        new Fixture(21).verify(false);
+        put(UI,null,"hookPolicy",1);
         // Early detection, including repeated screen construction, keeps the same models.
         for(int amp:new int[]{-1,0,1,2,3,4,5,17,21}) new Fixture(amp).verify(amp>3);
         Fixture f=new Fixture(-1); f.verify(false);

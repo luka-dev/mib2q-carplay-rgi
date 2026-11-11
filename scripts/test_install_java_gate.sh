@@ -10,7 +10,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 SRC=$ROOT/install_MoreIncredibleBash/mod/custom.sh
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 { echo 'set -u'
-  sed -n '/^java_jar()/,/^}/p;/^train_verified()/,/^}/p;/^e2p_bytes()/,/^}/p;/^E2P_READ=/p;/^read_train()/,/^}/p;/^train_field()/,/^}/p;/^E2P_AMP_READ=/p;/^read_amp()/,/^}/p' "$SRC"
+  sed -n '/^java_jar()/,/^}/p;/^train_verified()/,/^}/p;/^e2p_bytes()/,/^}/p;/^E2P_READ=/p;/^read_train()/,/^}/p;/^train_field()/,/^}/p;/^E2P_AMP_READ=/p;/^read_amp()/,/^}/p;/^gate_audio()/,/^}/p' "$SRC"
 } > "$T/f.sh"
 fail() { echo "FAIL ($1): $2"; exit 1; }
 shells=
@@ -59,6 +59,36 @@ for sh in $shells; do
         line=${case%:*}; want=${case##*:}
         got=$(E2P_AMP_READ="echo $line" "$sh" -c ". $T/f.sh; read_amp; echo \$AMP")
         [ "$got" = "$want" ] || fail "$sh" "amp '$line' -> '$got', want '$want'"
+    done
+    # Execute a harmless startup fixture: the hardware policy must be exported
+    # before exec, including when upgrading an older template with no policy key.
+    for coding in 01 02 ff missing; do
+        for template in current legacy; do
+            {
+                echo '#!/bin/sh'
+                [ "$template" = legacy ] || echo 'export AUDIO_EXTERNAL_AMP=1'
+                echo 'export AUDIO_SPATIAL=1'
+                echo 'export AUDIO_SPATIAL_ATMOS=1'
+                echo 'exec env'
+            } > "$T/startup"
+            reader="echo 0xfc $coding"
+            [ "$coding" != missing ] || reader=false
+            STARTUP="$T/startup" E2P_AMP_READ="$reader" DEVA_PATCHED=1 "$sh" -c ". $T/f.sh; gate_audio" > "$T/amp-log"
+            "$sh" "$T/startup" > "$T/amp-env"
+            expected=0; [ "$coding" != 02 ] || expected=1
+            grep -qx "AUDIO_DEVA_PATCHED=1" "$T/amp-env" || fail deva-policy "$coding/$template patched driver not exported"
+            grep -qx "AUDIO_EXTERNAL_AMP=$expected" "$T/amp-env" || fail amp-policy "$coding/$template not applied before exec"
+            grep -qx "AUDIO_SPATIAL=$expected" "$T/amp-env" || fail amp-policy "$coding/$template wrong spatial policy"
+            grep -qx "AUDIO_SPATIAL_ATMOS=$expected" "$T/amp-env" || fail amp-policy "$coding/$template wrong Atmos policy"
+            cp "$T/startup" "$T/startup-once"
+            STARTUP="$T/startup" E2P_AMP_READ="$reader" DEVA_PATCHED=1 "$sh" -c ". $T/f.sh; gate_audio" > "$T/amp-log"
+            cmp -s "$T/startup" "$T/startup-once" || fail amp-policy "$coding/$template reinstall not idempotent"
+            # A driver that stayed stock: no upgraded formats and no 6-channel path, whatever the amp.
+            STARTUP="$T/startup" E2P_AMP_READ="$reader" DEVA_PATCHED=0 "$sh" -c ". $T/f.sh; gate_audio" > "$T/amp-log"
+            "$sh" "$T/startup" > "$T/amp-env"
+            grep -qx "AUDIO_DEVA_PATCHED=0" "$T/amp-env" && grep -qx "AUDIO_EXTERNAL_AMP=0" "$T/amp-env" &&
+                grep -qx "AUDIO_SPATIAL=0" "$T/amp-env" || fail deva-policy "$coding/$template stock driver kept an upgraded path"
+        done
     done
 done
 echo "Firmware gates (Java variant by E2P region, verified trains, E2P train parse, amplifier coding):$shells PASS"
