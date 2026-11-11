@@ -153,7 +153,8 @@ def guard_frames(lib, hook_i16, eng, lfe):
 
 
 def render(binary, wav, out, *flags):
-    r = subprocess.run([binary, *flags, wav, out], capture_output=True, text=True)
+    # --dynamics 0: the rear dynamics and the kick accent are hook stages the Python reference does not have
+    r = subprocess.run([binary, "--dynamics", "0", *flags, wav, out], capture_output=True, text=True)
     if r.returncode:
         print(r.stderr)
         sys.exit(1)

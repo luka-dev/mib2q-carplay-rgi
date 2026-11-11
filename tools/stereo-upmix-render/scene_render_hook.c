@@ -18,7 +18,7 @@
  * Usage: scene_render_hook [--mode scene|off] [--lfe off|assist] [--block 1..1024]
  *        [--alpha A] [--inst-alpha A] [--inst-gamma G] [--duck-depth D]
  *        [--rear-delay-ms MS] [--sigma-min S] [--side-lp-hz HZ] [--bleed-cancel K] [--front-keep-db DB]
- *        [--centre F]
+ *        [--centre F] [--dynamics F]
  *        [--mask-blob masknet.bin] [--mask-rows rows.f32]
  *        in.wav out.wav
  *
@@ -213,6 +213,8 @@ int main(int argc, char **argv)
             spa_stereo_upmix_config_set_scene_front_keep_db(&config, x);
         } else if (!strcmp(a, "--centre")) {
             spa_stereo_upmix_config_set_scene_centre(&config, x);
+        } else if (!strcmp(a, "--dynamics")) {
+            spa_stereo_upmix_config_set_scene_dynamics(&config, x);
         } else {
             goto usage;
         }
@@ -272,7 +274,7 @@ int main(int argc, char **argv)
 usage:
     fprintf(stderr, "usage: %s [--mode scene|off] [--lfe off|assist] [--block 1..1024] "
             "[--alpha A] [--inst-alpha A] [--inst-gamma G] [--duck-depth D] [--rear-delay-ms MS] "
-            "[--sigma-min S] [--side-lp-hz HZ] [--bleed-cancel K] [--front-keep-db DB] [--centre F] [--mask-blob masknet.bin] "
+            "[--sigma-min S] [--side-lp-hz HZ] [--bleed-cancel K] [--front-keep-db DB] [--centre F] [--dynamics F] [--mask-blob masknet.bin] "
             "[--mask-rows rows.f32] in.wav out.wav\n", argv[0]);
     return 2;
 }

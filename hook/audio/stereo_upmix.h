@@ -120,6 +120,10 @@ struct spa_stereo_upmix_config {
     /* SCENE: how much of the centred lead vocal moves from L/R to C (0..1, 0 =
      * C silent); needs the mask net (the vocal posterior).  Default 1. */
     float scene_centre;
+    /* SCENE: depth of the rear dynamics and of the kick accent on the LFE at
+     * the INTENSE level (0..1, 0 = a static scene as before 2026-11-11);
+     * NORMAL uses half of it.  Default 1. */
+    float scene_dynamics;
 };
 
 /* Runtime details are public only so callers can embed the complete state and
@@ -148,6 +152,13 @@ struct spa_stereo_upmix_runtime {
     /* Cabin guard: the gain reductions it is holding, 0 = none (so a zeroed
      * runtime is the idle guard).  See spa_upmix_cabin_guard_s16(). */
     float _guard_reduction[2];   /* linked, rears alone */
+    /* Rear dynamics (spa_upmix_rear_dynamics): the three power averages, the
+     * hop accumulator, the track's short and long energy with the swell they
+     * give, and the smoothed rear gain (0 = not started). */
+    float _dyn_p5, _dyn_p60, _dyn_p300;
+    float _dyn_acc; uint32_t _dyn_acc_n, _dyn_hops;
+    float _dyn_energy_short, _dyn_energy_long, _dyn_swell;
+    float _dyn_gain;
     /* SCENE backend: the engine (265 KB, so it lives here, never on a stack)
      * and its output FIFO in engine order L R C LFE Ls Rs, float [-1,1]. */
     struct scene_state _scene;
@@ -186,9 +197,9 @@ struct spa_stereo_upmix {
     /* the engine tuning (alpha, inst_alpha, duck_depth, side_lp_hz,
      * front_keep_db, wide_pair_alpha, surround) now and the level's target:
      * a change glides over SPA_UPMIX_LEVEL_FADE_MS, not a step */
-    float _tune[7];
-    float _tune_from[7];
-    float _tune_target[7];
+    float _tune[8];
+    float _tune_from[8];
+    float _tune_target[8];
     float _tune_t;                   /* 0..1 through the glide */
 
     /* A complete 1024-frame stereo packet is staged before output starts.
@@ -241,6 +252,7 @@ void spa_stereo_upmix_config_set_scene_side_lp_hz(struct spa_stereo_upmix_config
 void spa_stereo_upmix_config_set_scene_bleed_cancel(struct spa_stereo_upmix_config *config, float value);
 void spa_stereo_upmix_config_set_scene_front_keep_db(struct spa_stereo_upmix_config *config, float value);
 void spa_stereo_upmix_config_set_scene_centre(struct spa_stereo_upmix_config *config, float value);   /* 0..1 */
+void spa_stereo_upmix_config_set_scene_dynamics(struct spa_stereo_upmix_config *config, float value); /* 0..1 */
 void spa_stereo_upmix_config_set_scene_wide_pair(struct spa_stereo_upmix_config *config, float alpha);
 
 /* SCENE only: install the mask row of the control period that starts now

@@ -59,6 +59,9 @@ static const struct spa_upmix_biquad_coefficients kLfeLow = {   /* Butterworth, 
 };
 #define SPA_UPMIX_LFE_LOOKAHEAD 350u   /* frames; the LR4's delay in its passband */
 static const float kDoorReliefCut = 0.25f;
+static const float kLfeKickAccent = 0.40f;   /* +3.3 dB over the 0.96 rest gain */
+/* Rear dynamics and the kick accent at the NORMAL level, as a share of INTENSE. */
+static const float kDynNormalShare = 0.5f;
 static const float kCabinSampleLimit = 32275.0f; /* 0.985 FS + rounding margin */
 
 /* A903C/126A07: A07 rows are OUTPUTS. Transpose once here for the detector's
@@ -251,6 +254,7 @@ static float spa_upmix_lfe_normalized(
     float transient_ratio;
     float transient;
     float target_gain;
+    float kick;
     float gain_alpha;
 
     state->_runtime._lfe_power_l += power_alpha *
@@ -300,9 +304,14 @@ static float spa_upmix_lfe_normalized(
     if (bass_confidence < 0.0f) bass_confidence = 0.0f;
     drum_confidence = spa_upmix_bound(drum_confidence, 1.0f);
     if (drum_confidence < 0.0f) drum_confidence = 0.0f;
+    /* The kick, not the bass line: a low transient the net calls drums gets up
+     * to +3 dB for the hit (5 ms up, 40 ms back), a sustained bass note none. */
+    kick = state->_tune[7] * kLfeKickAccent * transient *
+        spa_upmix_smoothstep(drum_confidence, 0.25f, 0.50f);   /* the posterior idles near 0.27 */
     target_gain = 0.96f + 0.08f * bass_confidence +
         0.08f * drum_confidence + 0.08f * transient;
     if (target_gain > 1.10f) target_gain = 1.10f;
+    target_gain += kick;
     gain_alpha = target_gain > state->_runtime._lfe_dynamic_gain
         ? 0.0040f : 0.0005f;
     state->_runtime._lfe_dynamic_gain += gain_alpha *
@@ -502,6 +511,8 @@ void spa_stereo_upmix_config_set_scene_front_keep_db(struct spa_stereo_upmix_con
 { if (config) config->scene.front_keep_db = value > 0.0f ? spa_upmix_clampf(value, 0.5f, 12.0f) : 0.0f; }
 void spa_stereo_upmix_config_set_scene_centre(struct spa_stereo_upmix_config *config, float value)
 { if (config) config->scene_centre = spa_upmix_clampf(value, 0.0f, 1.0f); }
+void spa_stereo_upmix_config_set_scene_dynamics(struct spa_stereo_upmix_config *config, float value)
+{ if (config) config->scene_dynamics = spa_upmix_clampf(value, 0.0f, 1.0f); }
 void spa_stereo_upmix_config_set_scene_wide_pair(struct spa_stereo_upmix_config *config, float alpha)
 {
     if (!config) return;
@@ -543,9 +554,11 @@ static int spa_scene_config_valid(const struct spa_stereo_upmix_config *config)
     spa_stereo_upmix_config_set_scene_front_keep_db(&probe, probe.scene.front_keep_db);
     spa_stereo_upmix_config_set_scene_wide_pair(&probe, probe.scene.wide_pair ? probe.scene.wide_pair_alpha : 0.0f);
     spa_stereo_upmix_config_set_scene_centre(&probe, probe.scene_centre);
+    spa_stereo_upmix_config_set_scene_dynamics(&probe, probe.scene_dynamics);
     return config->scene.n_fft == SCENE_NFFT && config->scene.hop == SCENE_HOP &&
            memcmp(&probe.scene, &config->scene, sizeof(probe.scene)) == 0 &&
-           probe.scene_centre == config->scene_centre;
+           probe.scene_centre == config->scene_centre &&
+           probe.scene_dynamics == config->scene_dynamics;
 }
 
 static int spa_upmix_config_valid(const struct spa_stereo_upmix_config *config)
@@ -602,6 +615,7 @@ void spa_stereo_upmix_default_config(struct spa_stereo_upmix_config *config)
     config->scene_mask_provider = NULL;
     config->level = SPA_UPMIX_LEVEL_NORMAL;
     config->scene_centre = 1.0f;
+    config->scene_dynamics = 1.0f;
 }
 
 void spa_stereo_upmix_config_set_lfe(
@@ -643,6 +657,10 @@ int spa_stereo_upmix_scene_track_change(struct spa_stereo_upmix *state)
     /* The engine only; the net's stream carries on, on the audio thread and
      * on the worker alike (a reset() is what re-primes it). */
     scene_engine_reset(&state->_runtime._scene);
+    /* the swell is relative to this song: the next one starts from its own level */
+    state->_runtime._dyn_energy_short = state->_runtime._dyn_energy_long = 0.0f;
+    state->_runtime._dyn_hops = 0u;
+    state->_runtime._dyn_swell = 1.0f;
     return SPA_STEREO_UPMIX_OK;
 }
 
@@ -726,6 +744,7 @@ int spa_stereo_upmix_init(struct spa_stereo_upmix *state,
     state->_tune[4] = state->_tune_target[4] = saved.scene.front_keep_db;
     state->_tune[5] = state->_tune_target[5] = saved.scene.wide_pair_alpha;
     state->_tune[6] = state->_tune_target[6] = saved.scene.surround;
+    state->_tune[7] = state->_tune_target[7] = saved.scene_dynamics * kDynNormalShare;
     state->_level_applied = SPA_UPMIX_LEVEL_NORMAL;
     state->_level_req = saved.level;
     if (saved.backend == SPA_STEREO_UPMIX_SCENE) {
@@ -756,6 +775,95 @@ int spa_stereo_upmix_reset(struct spa_stereo_upmix *state)
     state->_runtime._lfe_target_polarity = 1.0f;
     state->_runtime._lfe_dynamic_gain = 0.96f;
     return SPA_STEREO_UPMIX_OK;
+}
+
+/* Rear dynamics: one gain on Ls/Rs that makes the scene move with the music
+ * instead of sitting at one size.  Three parts, all from the input envelope:
+ *
+ *  - Swell.  The track's energy over SPA_DYN_SHORT_S against its energy over
+ *    SPA_DYN_LONG_S: when the song itself rises (the band comes in, a chorus)
+ *    the rear opens by up to kDynSwellDb, in a quiet passage it closes by as
+ *    much.  Half the level change in dB, so it follows the song and never an
+ *    instrument; a track change starts it over.
+ *  - Attack.  On an onset (5 ms power over the 60 ms one) the rear is held
+ *    back by kDynAttackDuck for the 10-40 ms the slower average needs to
+ *    catch up, so the front always arrives first and whole, and the room
+ *    follows it (precedence).
+ *  - Tail.  While the input decays (5 ms power under the 300 ms one) the rear
+ *    is lifted by up to kDynTailLift: the reverberation between phrases is
+ *    what tells the size of the room, and it costs no instrument its place.
+ *
+ * The envelope is read SPA_DYN_LOOKAHEAD frames ahead of the output (the dry
+ * ring holds the input), which is the time the gain smoother needs, so the
+ * hold is in place when the onset arrives.  The depth of all three (and of the
+ * LFE kick accent) belongs to the MMI level like the rest of the tuning:
+ * INTENSE runs them at config.scene_dynamics, NORMAL at kDynNormalShare of it,
+ * and it glides with a level change (_tune[7]).  Depth 0 returns exactly 1. */
+#define SPA_DYN_LOOKAHEAD 144u    /* frames, 3 ms */
+#define SPA_DYN_HOP       256u
+#define SPA_DYN_SHORT_S   3.0f
+#define SPA_DYN_LONG_S    30.0f
+static const float kDynSwellDb = 2.0f;
+static const float kDynAttackDuck = 0.40f;   /* -4.4 dB at a full onset */
+static const float kDynTailLift = 0.33f;     /* +2.5 dB in a full decay */
+
+/* Every SPA_DYN_HOP input frames (a fixed hop, so the result does not depend
+ * on the caller's block size): the swell from the hop's mean square.  The long
+ * average is a plain running mean until it has SPA_DYN_LONG_S behind it, so a
+ * song is measured against itself from its first sound and not against
+ * whatever level its first hop happened to have. */
+static void spa_upmix_dynamics_hop(struct spa_stereo_upmix *state, float energy)
+{
+    struct spa_stereo_upmix_runtime *rt = &state->_runtime;
+    const float hop_s = (float)SPA_DYN_HOP / (float)SCENE_SR;
+    float a_long, db;
+
+    if (energy < 1.0e-9f && rt->_dyn_hops == 0u) return;       /* the song has not started */
+    if (rt->_dyn_hops < (uint32_t)(SPA_DYN_LONG_S / hop_s)) ++rt->_dyn_hops;
+    a_long = 1.0f / (float)rt->_dyn_hops;
+    if (rt->_dyn_hops == 1u) rt->_dyn_energy_short = energy;
+    rt->_dyn_energy_short += (hop_s / SPA_DYN_SHORT_S) * (energy - rt->_dyn_energy_short);
+    rt->_dyn_energy_long += a_long * (energy - rt->_dyn_energy_long);
+    /* under -70 dBFS there is no song to follow */
+    if (rt->_dyn_energy_long < 1.0e-7f || rt->_dyn_energy_short < 1.0e-9f) {
+        rt->_dyn_swell = 1.0f;
+        return;
+    }
+    db = 0.5f * 4.342944819f * logf(rt->_dyn_energy_short / rt->_dyn_energy_long);   /* half of 10 log10 */
+    db = spa_upmix_bound(db, kDynSwellDb) * state->_tune[7];
+    rt->_dyn_swell = expf(db * 0.1151292546f);                                        /* 10 ^ (db / 20) */
+}
+
+/* Once per output frame, with the input SPA_DYN_LOOKAHEAD frames ahead of it. */
+static inline float spa_upmix_rear_dynamics(struct spa_stereo_upmix *state, int16_t ahead_l, int16_t ahead_r)
+{
+    struct spa_stereo_upmix_runtime *rt = &state->_runtime;
+    const float depth = state->_tune[7];
+    const float l = (float)ahead_l * (1.0f / 32768.0f), r = (float)ahead_r * (1.0f / 32768.0f);
+    const float power = 0.5f * (l * l + r * r);
+    float onset = 0.0f, tail = 0.0f, target;
+
+    rt->_dyn_acc += power;
+    if (++rt->_dyn_acc_n == SPA_DYN_HOP) {
+        spa_upmix_dynamics_hop(state, rt->_dyn_acc * (1.0f / (float)SPA_DYN_HOP));
+        rt->_dyn_acc = 0.0f;
+        rt->_dyn_acc_n = 0u;
+    }
+    /* three plain averages of the power: 5 ms, 60 ms, 300 ms.  Equal on a
+     * steady sound; the first runs ahead of the second for as long as an onset
+     * lasts and falls under the third while the sound decays. */
+    rt->_dyn_p5 += 0.0042f * (power - rt->_dyn_p5);
+    rt->_dyn_p60 += 0.00035f * (power - rt->_dyn_p60);
+    rt->_dyn_p300 += 0.00007f * (power - rt->_dyn_p300);
+    if (rt->_dyn_p300 > 1.0e-8f) {         /* -80 dBFS: silence has no onset and no tail */
+        onset = spa_upmix_smoothstep(rt->_dyn_p5 / (rt->_dyn_p60 + 1.0e-10f), 1.41f, 3.16f);   /* 1.5..5 dB over */
+        tail = spa_upmix_smoothstep(rt->_dyn_p300 / (rt->_dyn_p5 + 1.0e-10f), 1.58f, 8.0f);    /* 2..9 dB under */
+    }
+    target = (rt->_dyn_swell > 0.0f ? rt->_dyn_swell : 1.0f) *
+        (1.0f - depth * kDynAttackDuck * onset) * (1.0f + depth * kDynTailLift * tail);
+    if (rt->_dyn_gain <= 0.0f) rt->_dyn_gain = target;      /* a zeroed runtime starts on the target */
+    rt->_dyn_gain += 0.01f * (target - rt->_dyn_gain);       /* 2 ms: no zipper, inside the look-ahead */
+    return rt->_dyn_gain;
 }
 
 /* The MMI levels (OFF / NORMAL / INTENSE):
@@ -796,7 +904,7 @@ static void spa_upmix_apply_level(struct spa_stereo_upmix *state)
         rt->_scene_lfe_bass = 0.0f;
         rt->_scene_lfe_drum = 0.0f;
     }
-    for (k = 0; k < 7; k++) state->_tune_from[k] = state->_tune[k];
+    for (k = 0; k < 8; k++) state->_tune_from[k] = state->_tune[k];
     state->_tune_t = 0.0f;
     if (level == SPA_UPMIX_LEVEL_NORMAL) {
         state->_tune_target[0] = c->alpha;
@@ -806,11 +914,13 @@ static void spa_upmix_apply_level(struct spa_stereo_upmix *state)
         state->_tune_target[4] = c->front_keep_db;
         state->_tune_target[5] = c->wide_pair_alpha;
         state->_tune_target[6] = c->surround;
+        state->_tune_target[7] = state->config.scene_dynamics * kDynNormalShare;
     } else {
         for (k = 0; k < 4; k++) state->_tune_target[k] = kUpmixLevels[level][k];
         state->_tune_target[4] = c->front_keep_db > 0.0f ? 2.8f : 0.0f;
         state->_tune_target[5] = c->wide_pair ? 0.55f : c->wide_pair_alpha;
         state->_tune_target[6] = 0.85f;
+        state->_tune_target[7] = state->config.scene_dynamics;
     }
 }
 
@@ -827,7 +937,7 @@ static void spa_upmix_glide_tuning(struct spa_stereo_upmix *state, size_t frames
                                         ((float)SPA_UPMIX_LEVEL_FADE_MS * (float)SCENE_SR);
     if (t > 1.0f) t = 1.0f;
     state->_tune_t = t;
-    for (k = 0; k < 7; k++)
+    for (k = 0; k < 8; k++)
         cur[k] = t >= 1.0f ? state->_tune_target[k]
                            : state->_tune_from[k] + (state->_tune_target[k] - state->_tune_from[k]) * t;
     scene_engine_set_tuning(&state->_runtime._scene, cur[0], cur[1], cur[2], cur[3]);
@@ -993,11 +1103,21 @@ static void spa_scene_process(struct spa_stereo_upmix *state, size_t frames,
         dry[1] = state->_input_scratch[frame * SPA_STEREO_UPMIX_INPUT_CHANNELS + 1];
         if (++rt->_dry_pos == SPA_SCENE_LATENCY_FRAMES) rt->_dry_pos = 0;
         if (frame < pop) {
+            float rear_gain = 1.0f;
+
+            if (state->config.scene_dynamics > 0.0f) {
+                /* _dry_pos is now the oldest entry (this output frame); the
+                 * input k frames ahead of it sits k further on */
+                const int16_t *ahead = rt->_dry_ring + SPA_STEREO_UPMIX_INPUT_CHANNELS *
+                    ((rt->_dry_pos + SPA_DYN_LOOKAHEAD) % SPA_SCENE_LATENCY_FRAMES);
+
+                rear_gain = spa_upmix_rear_dynamics(state, ahead[0], ahead[1]);
+            }
             render_l = spa_upmix_float_to_s16(in[0] * 32768.0f);
             render_r = spa_upmix_float_to_s16(in[1] * 32768.0f);
             render_c = spa_upmix_float_to_s16(in[2] * 32768.0f);
-            rear_l = spa_upmix_float_to_s16(in[4] * 32768.0f);
-            rear_r = spa_upmix_float_to_s16(in[5] * 32768.0f);
+            rear_l = spa_upmix_float_to_s16(in[4] * rear_gain * 32768.0f);
+            rear_r = spa_upmix_float_to_s16(in[5] * rear_gain * 32768.0f);
         }
         /* Level steering from the net's bass/drum posteriors (0/0 = from the
          * front alone until the net's first control, or without a net). */

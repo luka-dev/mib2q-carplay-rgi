@@ -914,6 +914,55 @@ static void test_scene_vehicle_refinements(void)
     }
 }
 
+/* Rear dynamics: uncorrelated noise bursts out of silence.  With the stage on
+ * the rear is held back while the onset lasts and is back by the end of the
+ * burst; the front is never touched, and depth 0 is the static scene. */
+static void test_rear_dynamics_hold_the_attack(void)
+{
+    enum { N = 96000, BLOCK = 768, PERIOD = 19200, BURST = 2880 };   /* 60 ms every 400 ms */
+    static struct spa_stereo_upmix state;
+    static int16_t in[N * 2], on[N * TEST_CHANNELS], off[N * TEST_CHANNELS];
+    struct spa_stereo_upmix_config config;
+    uint32_t seed = UINT32_C(0x44594e31);
+    double head_on = 0, head_off = 0, late_on = 0, late_off = 0;
+    size_t i, f, k;
+
+    for (i = 0; i < N; ++i) {
+        const int live = i % PERIOD < BURST;
+        /* -24 dBFS peaks: the cabin guard never binds, so the front can be compared bit for bit */
+        in[2 * i] = live ? (int16_t)(((int32_t)(test_prng(&seed) >> 16) - 32768) / 16) : 0;
+        in[2 * i + 1] = live ? (int16_t)(((int32_t)(test_prng(&seed) >> 16) - 32768) / 16) : 0;
+    }
+    for (k = 0; k < 2; ++k) {
+        int16_t *out = k ? off : on;
+
+        make_scene_config(&config, 0);
+        spa_stereo_upmix_config_set_scene_dynamics(&config, k ? 0.0f : 1.0f);
+        config.level = SPA_UPMIX_LEVEL_INTENSE;      /* the level that runs the stage at full depth */
+        assert(spa_stereo_upmix_init(&state, &config) == SPA_STEREO_UPMIX_OK);
+        for (f = 0; f < N; f += BLOCK)
+            assert(spa_stereo_upmix_process_s16(&state, in + f * 2, BLOCK,
+                                                out + f * TEST_CHANNELS, BLOCK) == SPA_STEREO_UPMIX_OK);
+    }
+    for (i = 0; i < N; ++i)                       /* the front is not this stage's business */
+        assert(on[i * TEST_CHANNELS] == off[i * TEST_CHANNELS] &&
+               on[i * TEST_CHANNELS + 1] == off[i * TEST_CHANNELS + 1]);
+    for (f = 2 * PERIOD; f + PERIOD <= N; f += PERIOD) {             /* settled bursts */
+        const size_t onset = f + SPA_SCENE_LATENCY_FRAMES;
+
+        for (i = 0; i < BURST && onset + i < N; ++i) {
+            const double a = on[(onset + i) * TEST_CHANNELS + SPA_STEREO_UPMIX_CHANNEL_LS];
+            const double b = off[(onset + i) * TEST_CHANNELS + SPA_STEREO_UPMIX_CHANNEL_LS];
+
+            if (i < 480) { head_on += a * a; head_off += b * b; }             /* first 10 ms */
+            else if (i >= 2160) { late_on += a * a; late_off += b * b; }      /* 45..60 ms */
+        }
+    }
+    assert(head_off > 0.0 && late_off > 0.0);
+    assert(head_on < 0.70 * head_off);            /* held back by more than 1.5 dB */
+    assert(late_on > 0.70 * late_off && late_on < 1.45 * late_off);   /* and back within 1.6 dB */
+}
+
 int main(void)
 {
     test_default_validation_and_fail_closed();
@@ -926,6 +975,7 @@ int main(void)
     test_scene_mask_worker();
     test_scene_levels();
     test_scene_vehicle_refinements();
+    test_rear_dynamics_hold_the_attack();
     puts("stereo_upmix_test: OK (validation, OFF bypass, LFE V2 + cabin guard, SCENE smoke, mask worker, levels, vehicle refinements)");
     return 0;
 }
