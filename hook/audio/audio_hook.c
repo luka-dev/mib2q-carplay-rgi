@@ -128,6 +128,8 @@ enum {
 };
 
 typedef struct {
+    int externalAmp;
+    int rateUpgrades;              /* 24 kHz voice / 48 kHz nav: needs the patched deva */
     int realtimePCM;
     int buffered;
     int atmos;
@@ -167,9 +169,38 @@ static void spa_audio_config_init_once(void)
     int present;
     int spatial = spa_parse_bool(SPA_AUDIO_ENV, &present);
     int atmos = spa_parse_bool(SPA_AUDIO_ATMOS_ENV, &present);
+    int externalAmp = spa_parse_bool(SPA_AUDIO_EXTERNAL_AMP_ENV, &present);
+    int externalAmpPresent = present;
+    int devaPatched = spa_parse_bool(SPA_AUDIO_DEVA_PATCHED_ENV, &present);
+    int rateUpgrades = !present || devaPatched;
 
     memset(&spa_audio_config_value, 0, sizeof(spa_audio_config_value));
+    spa_audio_config_value.rateUpgrades = rateUpgrades;
+    if (!rateUpgrades)
+        LOG_WARN(LOG_MODULE,
+                 "audio config: %s=0 (deva-ctrl-qc.so is stock); keeping the stock "
+                 "16 kHz voice and navigation formats", SPA_AUDIO_DEVA_PATCHED_ENV);
     spa_audio_config_value.atmosMode = SPA_ATMOS_DOWNMIX;
+    spa_audio_config_value.externalAmp = externalAmp;
+    spa_audio_config_value.voiceGainQ13 = SPA_VOICE_GAIN_Q13_UNITY;
+    spa_soundcheck_default_config(&spa_audio_config_value.soundCheck);
+    if (!externalAmp) {
+        /* Keep format/rate improvements, but do not alter internal-amp PCM.
+         * This hardware veto also wins over old MMI settings or forced spatial
+         * environment flags. Missing/invalid amplifier evidence is bypass --
+         * but never a silent one: a startup script deployed without the
+         * installer has no such line, and on a B&O car that turns off 5.1,
+         * UpMix, SoundCheck and the voice boost at once. */
+        if (!externalAmpPresent)
+            LOG_WARN(LOG_MODULE,
+                     "audio config: %s is not set (startup script not written by the "
+                     "installer?); treating the amplifier as unknown -> no 5.1, UpMix, "
+                     "SoundCheck or voice boost",
+                     SPA_AUDIO_EXTERNAL_AMP_ENV);
+        spa_audio_config_value.stereoUpmixBackend = SPA_STEREO_UPMIX_OFF;
+        spa_audio_config_value.soundCheck.enabled = 0;
+        return;
+    }
     /* Stereo upmix (buffered type 103 and realtime type 100) is always armed on
      * the SCENE renderer; the user-facing MMI "CarPlay UpMix" menu controls
      * OFF bypass vs active upmix levels (SPA_SETTINGS_FILE / CMD_UPMIX). */
@@ -178,7 +209,6 @@ static void spa_audio_config_init_once(void)
     spa_audio_config_value.realtimeUpmix = 1;
     spa_audio_config_value.stereoLfeGainQ15 = SPA_STEREO_UPMIX_LFE_Q15_DEFAULT;
     spa_audio_config_value.voiceGainQ13 = SPA_VOICE_GAIN_Q13_DEFAULT;
-    spa_soundcheck_default_config(&spa_audio_config_value.soundCheck);
 
     spa_audio_config_value.atmos = atmos;
     spa_audio_config_value.buffered = spatial || atmos;
@@ -204,6 +234,11 @@ static const spa_audio_config_t *spa_audio_config(void)
 {
     pthread_once(&spa_audio_config_once, spa_audio_config_init_once);
     return &spa_audio_config_value;
+}
+
+int spa_audio_external_amp(void)
+{
+    return spa_audio_config()->externalAmp;
 }
 
 static int spa_enabled(void)
@@ -274,6 +309,7 @@ HOOK_EXPORT int64_t AudioSessionGetSupportedInputFormats(int streamType)
      * Advertising 0x40 (bit 6 = PCM/24000/16/1) upgrades Siri, dictation, phone calls,
      * and microphone capture from 16 kHz to native 24 kHz wideband. */
     int64_t caps = 0x40;
+    if (!spa_audio_config()->rateUpgrades) return base;   /* stock driver: stock formats */
     LOG_INFO(LOG_MODULE, "getSupportedInputFormats(type=%d): stock=%#llx offered=%#llx (24kHz/16b/1ch)",
              streamType, (unsigned long long)base, (unsigned long long)caps);
     return caps;
@@ -291,6 +327,7 @@ HOOK_EXPORT int64_t AudioSessionGetSupportedOutputFormats(int streamType)
         /* iOS AirPlaySender table (0x27d0eed08) masks AltAudio (101) with 0x1c300cc00
          * (44.1 kHz / 48 kHz only). Stock 0x10 (16 kHz) only worked via zero-intersection
          * fallback. Offer bit 14 (0x4000 = PCM/48000/16/1) to match patched ann3_dio_ann (48 kHz). */
+        if (!spa_audio_config()->rateUpgrades) return base;   /* stock driver: stock formats */
         caps = 0x4000;
         LOG_INFO(LOG_MODULE, "getSupportedFormats(type=%d): stock=%#llx offered=%#llx (48kHz/16b/1ch)",
                  streamType, (unsigned long long)base, (unsigned long long)caps);
@@ -1505,6 +1542,20 @@ typedef struct {
     spa_apac_decoder_t *decoder;
     int64_t cookieId;               /* the cookie the decoder was built from */
     int haveCookieId;
+    /* The cookie the decoder last refused: a refusal is about that cookie, so
+     * the next one (another id, or a new SETMAGICCOOKIE) gets a fresh try. */
+    int64_t rejectedCookieId;
+    int haveRejectedCookieId;
+    uint32_t rejectedCookieGeneration;
+    uint32_t flushEpoch;            /* bumped by every FLUSHBUFFERED, under the lock */
+    /* The stereo upmixer holds its last 1024 output frames (21 ms).  Live =
+     * it was fed since its last reset, so that tail is real audio; pending =
+     * a decoder change asked for a reset that the render loop performs, after
+     * it decided what to do with the tail. */
+    int upmixLive;
+    int upmixResetPending;
+    float upmixLastGain;            /* programme gain of the last frame it was given */
+    float foldReduction;            /* held gain reduction of the 5.1 -> stereo fold */
     uint32_t cookieGeneration;      /* ...and which revision of its bytes */
     int16_t *ring;                  /* spa103_ring_frames() * 6 samples */
     uint32_t *ringSequence;         /* authenticated APAP owner of each PCM frame */
@@ -1609,9 +1660,11 @@ static void spa_scene_mask_blob_init_once(void)
     got = fread(&spa_scene_mask_blob_value, 1, sizeof(spa_scene_mask_blob_value), file);
     extra = fgetc(file);
     fclose(file);
+    /* weights_valid also refuses NaN/Inf weights and a zero feat_std: a
+     * corrupt file of the right size would otherwise stick NaN into the net. */
     if (got != sizeof(spa_scene_mask_blob_value) || extra != EOF ||
-        memcmp(spa_scene_mask_blob_value.magic, SMASK_MAGIC, sizeof(spa_scene_mask_blob_value.magic)) != 0) {
-        LOG_ERROR(LOG_MODULE, "SCENE: mask blob rejected path=%s bytes=%u%s (expected %u bytes of %s); running without a mask",
+        !scene_mask_weights_valid(&spa_scene_mask_blob_value)) {
+        LOG_ERROR(LOG_MODULE, "SCENE: mask blob rejected path=%s bytes=%u%s (expected %u bytes of %s with finite weights); running without a mask",
                   path, (unsigned)got, extra != EOF ? "+" : "",
                   (unsigned)sizeof(spa_scene_mask_blob_value), SMASK_MAGIC);
         memset(&spa_scene_mask_blob_value, 0, sizeof(spa_scene_mask_blob_value));
@@ -1986,6 +2039,7 @@ static void spa103_render_stop(void)
         spa103_render.decoder = 0;
     }
     (void)spa_stereo_upmix_reset(&spa103_render.stereoUpmix);
+    spa103_render.upmixLive = spa103_render.upmixResetPending = 0;
     free(spa103_render.ring);
     free(spa103_render.ringSequence);
     free(spa103_render.ringRTP);
@@ -2097,6 +2151,7 @@ static void spa103_note_authenticated_sequence(const uint8_t *packet)
              * holds of the old position onto the new one.  Same lock as the
              * render, same reset a prefix FLUSH or a cookie change does. */
             (void)spa_stereo_upmix_reset(&spa103_render.stereoUpmix);
+            spa103_render.upmixLive = spa103_render.upmixResetPending = 0;
         }
     }
     spa103_render.lastSequence = sequence;
@@ -2425,6 +2480,7 @@ static int spa103_render_flush(uint32_t generation, const spa_apap_flush_range_t
         pthread_mutex_unlock(&spa103_render.lock);
         return 0;
     }
+    spa103_render.flushEpoch++;
     spa_apap_lifecycle_begin_flush(&spa103_render.lifecycle, range,
                                    &removedPackets, &removedBytes);
     removedFrames = spa103_ring_prune_locked(range);
@@ -2437,6 +2493,7 @@ static int spa103_render_flush(uint32_t generation, const spa_apap_flush_range_t
         if (spa103_render.decoder && spa103_render.codec)
             spa103_render.codec->reset(spa103_render.decoder);
         (void)spa_stereo_upmix_reset(&spa103_render.stereoUpmix);
+        spa103_render.upmixLive = spa103_render.upmixResetPending = 0;
         spa103_render.haveLastSequence = 0;
     }
     spa103_render.primed = 0;
@@ -2824,13 +2881,15 @@ static int spa103_render_frame(const uint8_t *packet, size_t length)
     uint32_t frames = 0;
     uint32_t packetSequence = 0, packetRTP = 0;
     uint32_t cookieGeneration;
+    uint32_t flushEpoch;
     uint64_t anomalyCount = 0;
     int variant = 0, rc, state;
 
     pthread_mutex_lock(&spa103_render.lock);
     state = spa103_render.state;
     pthread_mutex_unlock(&spa103_render.lock);
-    if (state != SPA_103_RENDER_WAITING && state != SPA_103_RENDER_RUNNING)
+    if (state != SPA_103_RENDER_WAITING && state != SPA_103_RENDER_RUNNING &&
+        state != SPA_103_RENDER_COOKIE_FAILED && state != SPA_103_RENDER_UNSUPPORTED_LAYOUT)
         return SPA103_RENDER_FRAME_CONSUMED;
 
     pthread_mutex_lock(&spa103_lock);
@@ -2851,6 +2910,9 @@ static int spa103_render_frame(const uint8_t *packet, size_t length)
     packetSequence = spa103_apap_sequence(packet);
     packetRTP = (uint32_t)spa103_media_time_to_rtp(
         spa103_apap_media_value(packet), spa103_apap_media_scale(packet));
+    pthread_mutex_lock(&spa103_render.lock);
+    flushEpoch = spa103_render.flushEpoch;
+    pthread_mutex_unlock(&spa103_render.lock);
     if (spa103_render_drop_for_flush(packet))
         return SPA103_RENDER_FRAME_CONSUMED;
 
@@ -2867,6 +2929,28 @@ static int spa103_render_frame(const uint8_t *packet, size_t length)
     } else {
         audio = plaintext;
         audioLength = plainLength;
+    }
+
+    /* A refused cookie used to end the session's audio: the state stuck and
+     * every later packet was swallowed here, so one transient decoder failure
+     * or one unsupported item silenced all the tracks after it until the next
+     * SETUP.  The refusal belongs to that cookie only. */
+    if (state == SPA_103_RENDER_COOKIE_FAILED || state == SPA_103_RENDER_UNSUPPORTED_LAYOUT) {
+        uint32_t generationNow = spa103_cookie_generation_snapshot();
+        int retry;
+
+        pthread_mutex_lock(&spa103_render.lock);
+        retry = spa103_render.state == state &&
+                ((ext.hasMagicCookieId &&
+                  (!spa103_render.haveRejectedCookieId ||
+                   spa103_render.rejectedCookieId != (int64_t)ext.magicCookieId)) ||
+                 spa103_render.rejectedCookieGeneration != generationNow);
+        if (retry) spa103_render.state = SPA_103_RENDER_WAITING;
+        pthread_mutex_unlock(&spa103_render.lock);
+        if (!retry) return SPA103_RENDER_FRAME_CONSUMED;
+        LOG_WARN(LOG_MODULE,
+                 "buffer103: new cookie after a refused one (%s); trying the decoder again",
+                 spa103_render_state_name(state));
     }
 
     pthread_mutex_lock(&spa103_render.lock);
@@ -2998,8 +3082,12 @@ static int spa103_render_frame(const uint8_t *packet, size_t length)
             ext.hasFormatIndex = 0;
         }
         /* A new decoder/cookie is a discontinuity even when its index happens
-         * to stay the same.  Never let rear-filter history cross it. */
-        (void)spa_stereo_upmix_reset(&spa103_render.stereoUpmix);
+         * to stay the same.  Never let rear-filter history cross it.  The
+         * reset itself is done by the render loop: when the new item goes
+         * around the upmixer (discrete 5.1), the 21 ms it still holds of the
+         * outgoing item are played out first instead of being thrown away. */
+        spa103_render.upmixResetPending = 1;
+        spa103_render.foldReduction = 0.0f;
         spa103_render.decodedPcmKind = SPA_DECODED_PCM_OTHER;
         if (ext.hasFormatIndex && (int64_t)ext.formatIndex != spa103_render.formatIndex) {
             const spa_apac_codec_api_t *next = spa103_codec_for_index((int64_t)ext.formatIndex);
@@ -3093,6 +3181,9 @@ static int spa103_render_frame(const uint8_t *packet, size_t length)
                 spa103_render.state = SPA_103_RENDER_UNSUPPORTED_LAYOUT;
             else
                 spa103_render.state = SPA_103_RENDER_COOKIE_FAILED;
+            spa103_render.rejectedCookieId = (int64_t)ext.magicCookieId;
+            spa103_render.haveRejectedCookieId = ext.hasMagicCookieId;
+            spa103_render.rejectedCookieGeneration = cookieGeneration;
             pthread_mutex_unlock(&spa103_render.lock);
             LOG_ERROR(LOG_MODULE,
                       "buffer103: %s decoder setup rejected status=%d cookie=%u bytes "
@@ -3170,6 +3261,22 @@ static int spa103_render_frame(const uint8_t *packet, size_t length)
         }
     }
 
+    /* The flush window was tested above and the lock dropped since.  A
+     * FLUSHBUFFERED from the control thread fits in between: it prunes the
+     * ring and resets the decoder, and this packet -- already judged against
+     * the old window -- would then be decoded into the fresh decoder and
+     * pushed, a blip of pre-seek audio at the new position.  Judge it again
+     * if a flush happened. */
+    if (spa103_render.flushEpoch != flushEpoch) {
+        int crossed = 0;
+
+        if (spa_apap_lifecycle_observe(&spa103_render.lifecycle, packetSequence,
+                                       packetRTP, &crossed)) {
+            pthread_mutex_unlock(&spa103_render.lock);
+            return SPA103_RENDER_FRAME_CONSUMED;
+        }
+    }
+
     spa103_render.decodeCalls++;
     rc = spa103_render.codec->decodeS16(spa103_render.decoder, audio, audioLength,
                                         decoded, SPA_103_RENDER_MAX_SAMPLES, &frames);
@@ -3228,7 +3335,55 @@ static int spa103_render_frame(const uint8_t *packet, size_t length)
             if (run > SPA_STEREO_UPMIX_MAX_FRAMES)
                 run = SPA_STEREO_UPMIX_MAX_FRAMES;
 
-            if (action == SPA_DECODED_PCM_ACTION_REORDER_5_1 && !spa_spatial_enable) {
+            /* Which way this run goes.  The upmixer emits six channels only,
+             * so an eight-wide ring never takes the fold. */
+            {
+                const int viaUpmix =
+                    (action == SPA_DECODED_PCM_ACTION_REORDER_5_1 && !spa_spatial_enable &&
+                     out == SPA_PCM_5_1_CHANNELS) ||
+                    action == SPA_DECODED_PCM_ACTION_STEREO_UPMIX;
+
+                if (viaUpmix) {
+                    /* stereo -> stereo across a decoder change: the plain reset */
+                    if (spa103_render.upmixResetPending) {
+                        (void)spa_stereo_upmix_reset(&spa103_render.stereoUpmix);
+                        spa103_render.upmixResetPending = 0;
+                        spa103_render.upmixLive = 0;
+                    }
+                } else if (spa103_render.upmixLive || spa103_render.upmixResetPending) {
+                    /* Upmixed audio is followed by audio that bypasses the
+                     * upmixer (a stereo item into a discrete 5.1 one, or
+                     * Spatial switched back on inside an item).  The bypass
+                     * has no latency, the upmixer 1024 frames: its tail is the
+                     * end of what was playing.  Flush it with silence into the
+                     * ring ahead of this run, at the gain it was playing at;
+                     * the join is then sample-continuous.  Dropping it lost
+                     * 21 ms at every such boundary, and keeping the state
+                     * replayed it when the upmixer was next used. */
+                    if (spa103_render.upmixLive && out == SPA_PCM_5_1_CHANNELS) {
+                        static const int16_t silence[SPA_SCENE_LATENCY_FRAMES * 2];
+                        size_t f;
+
+                        for (f = 0; f < SPA_SCENE_LATENCY_FRAMES; f++)
+                            spa103_render.soundCheckGain[f] = spa103_render.upmixLastGain;
+                        if (spa_stereo_upmix_process_gain_s16(
+                                &spa103_render.stereoUpmix, silence,
+                                SPA_SCENE_LATENCY_FRAMES, rendered, SPA_SCENE_LATENCY_FRAMES,
+                                spa103_render.soundCheckGain) == SPA_STEREO_UPMIX_OK) {
+                            spa_soundcheck_limit_s16(&spa103_render.soundCheck, rendered,
+                                                     SPA_SCENE_LATENCY_FRAMES, out);
+                            spa103_ring_push_locked(rendered, SPA_SCENE_LATENCY_FRAMES,
+                                                    packetSequence, packetRTP);
+                            spa103_render.framesIn += SPA_SCENE_LATENCY_FRAMES;
+                        }
+                    }
+                    (void)spa_stereo_upmix_reset(&spa103_render.stereoUpmix);
+                    spa103_render.upmixLive = spa103_render.upmixResetPending = 0;
+                }
+            }
+
+            if (action == SPA_DECODED_PCM_ACTION_REORDER_5_1 && !spa_spatial_enable &&
+                out == SPA_PCM_5_1_CHANNELS) {
                 /* Live Spatial Audio = Off override during an active APAC 5.1 session:
                  * fold decoder-order (C, L, R, Ls, Rs, LFE) to ITU 2.0 stereo (L, R)
                  * and route through the stereo upmixer (or 2.0 passthrough when UpMix=Off). */
@@ -3237,22 +3392,39 @@ static int spa103_render_frame(const uint8_t *packet, size_t length)
                     &spa103_render.soundCheck, spa103_render.soundCheckGain, run);
                 size_t f;
                 soundCheckApplied = 1;
+                /* L + 0.707 C + 0.707 Ls can reach 2.4x full scale.  The sum
+                 * was clamped per sample, i.e. loud passages hard-clipped.
+                 * Same policy as the cabin guard: a linked reduction taken at
+                 * once and released over ~150 ms, so quiet and normal passages
+                 * keep their level and loud ones are limited, not clipped. */
                 for (f = 0; f < run; f++) {
                     const int16_t *s = src + f * SPA_PCM_5_1_CHANNELS;
                     int32_t c_m3db  = ((int32_t)s[0] * 23170) >> 15;
                     int32_t ls_m3db = ((int32_t)s[3] * 23170) >> 15;
                     int32_t rs_m3db = ((int32_t)s[4] * 23170) >> 15;
-                    int32_t l = (int32_t)s[1] + c_m3db + ls_m3db;
-                    int32_t r = (int32_t)s[2] + c_m3db + rs_m3db;
-                    if (l > 32767) l = 32767; else if (l < -32768) l = -32768;
-                    if (r > 32767) r = 32767; else if (r < -32768) r = -32768;
-                    foldedStereo[f * 2 + 0] = (int16_t)l;
-                    foldedStereo[f * 2 + 1] = (int16_t)r;
+                    float keep = 1.0f - spa103_render.foldReduction;
+                    float l = (float)((int32_t)s[1] + c_m3db + ls_m3db) * keep;
+                    float r = (float)((int32_t)s[2] + c_m3db + rs_m3db) * keep;
+                    float peak = fabsf(l) > fabsf(r) ? fabsf(l) : fabsf(r);
+
+                    if (peak > 32767.0f) {
+                        const float k = 32767.0f / peak;
+
+                        l *= k; r *= k;
+                        keep *= k;
+                    }
+                    spa103_render.foldReduction = (1.0f - keep) * (1.0f - 1.0f / 7200.0f);
+                    if (l > 32767.0f) l = 32767.0f; else if (l < -32768.0f) l = -32768.0f;
+                    if (r > 32767.0f) r = 32767.0f; else if (r < -32768.0f) r = -32768.0f;
+                    foldedStereo[f * 2 + 0] = (int16_t)lrintf(l);
+                    foldedStereo[f * 2 + 1] = (int16_t)lrintf(r);
                 }
                 spa_stereo_upmix_set_level(&spa103_render.stereoUpmix, spa_upmix_level);
                 rc = spa_stereo_upmix_process_gain_s16(&spa103_render.stereoUpmix,
                                                        foldedStereo, run, rendered, run,
                                                        gain);
+                spa103_render.upmixLive = 1;
+                spa103_render.upmixLastGain = gain ? gain[run - 1] : 1.0f;
                 if (rc != SPA_STEREO_UPMIX_OK) {
                     spa103_widen_s16(foldedStereo, 2u, rendered, out, run);
                     spa_soundcheck_scale_s16(rendered, run, out, gain);
@@ -3278,6 +3450,8 @@ static int spa103_render_frame(const uint8_t *packet, size_t length)
                 rc = spa_stereo_upmix_process_gain_s16(&spa103_render.stereoUpmix,
                                                        src, run, rendered, run,
                                                        gain);
+                spa103_render.upmixLive = 1;
+                spa103_render.upmixLastGain = gain ? gain[run - 1] : 1.0f;
                 if (rc != SPA_STEREO_UPMIX_OK) {
                     spa103_render.upmixFailed++;
                     if (spa103_render.upmixFailed == 1)
@@ -3683,11 +3857,19 @@ size_t spa_buffered_pcm6_read(int16_t *out, size_t frames)
  * RTPJitterBufferRead -> memset(0xffffffd1) -> SIGSEGV (dio_manager core,
  * 2026-09-19, main audio type 100 right after a type-103 release).  Stock
  * already handles 0 (status + prepare + rewrite), so every failure is a short
- * write; a deliberately cancelled fragment is reported fully consumed so the
- * stock timeline keeps pacing instead of spinning on the 30 ms select. */
+ * write; a deliberately cancelled fragment is reported fully consumed.
+ *
+ * Neither result paces stock by itself: its thread loop has no sleep of its
+ * own, only select(fd writable, 30 ms) inside CQNXSoundIF::write, and a device
+ * we are not feeding stays writable.  A refusal that returned at once therefore
+ * spun the SCHED_RR 18 audio thread for as long as the state lasted (a 103
+ * teardown, a failed params, a faulted route).  Every refusal costs the caller
+ * one period of wall clock, which is what the device would have charged.  No
+ * lock is held at any call site. */
 static ssize_t spa_stock_write_result(ssize_t rc, size_t size, int error)
 {
     if (rc >= 0) return rc;
+    (void)poll(0, 0, SPA_PCM_SINK_PERIOD_MS);
     errno = error;
     return error == ECANCELED ? (ssize_t)size : 0;
 }
@@ -3792,6 +3974,7 @@ typedef struct {
     spa_media_route_t route;
     uint64_t coldMediaRouteRequests;
     uint64_t coldMediaRouteFailures;
+    uint64_t voiceLastWriteNs;      /* last ann3/ann4 write: was a prompt playing at a dropout? */
 } spa_pcm_sink_t;
 
 static spa_pcm_sink_t spa_pcm_sink = {
@@ -3840,6 +4023,7 @@ static struct {
      * same measurement: eight counters and one add per 16 ms period. */
     uint64_t totalNs;
     uint32_t msHistogram[SPA_RT_UPMIX_HISTOGRAM_BUCKETS];
+    spa_rt_dropout_t dropout;   /* late periods and silent periods, see rt_upmix_guard.h */
 } spa_rt_upmix;
 
 static void spa_rt_upmix_reset_locked(void)
@@ -3912,11 +4096,13 @@ static void spa_rt_upmix_stop(void)
     spa_rt_upmix.ready = 0;
     sceneStarted = spa_rt_upmix.sceneMaskWorkerStarted;
     spa_rt_upmix.sceneMaskWorkerStarted = 0;
+    (void)spa_rt_dropout_period(&spa_rt_upmix.dropout, 0);   /* close an open silent run */
     if (spa_rt_upmix.periods)
         LOG_WARN(LOG_MODULE,
                  "audio realtime upmix: stop periods=%llu upmixed=%llu resets=%llu "
                  "mean_us=%llu worst_us=%llu cold_us=%llu disables=%u revivals=%u "
-                 "ms_hist=%u/%u/%u/%u/%u/%u/%u/%u/%u disabled=%d",
+                 "ms_hist=%u/%u/%u/%u/%u/%u/%u/%u/%u disabled=%d "
+                 "gap_hist=%u/%u/%u/%u zero_runs=%u longest_zero=%u",
                  (unsigned long long)spa_rt_upmix.periods,
                  (unsigned long long)spa_rt_upmix.upmixedPeriods,
                  (unsigned long long)spa_rt_upmix.resets,
@@ -3930,17 +4116,36 @@ static void spa_rt_upmix_stop(void)
                  spa_rt_upmix.msHistogram[2], spa_rt_upmix.msHistogram[3],
                  spa_rt_upmix.msHistogram[4], spa_rt_upmix.msHistogram[5],
                  spa_rt_upmix.msHistogram[6], spa_rt_upmix.msHistogram[7],
-                 spa_rt_upmix.msHistogram[8], spa_rt_upmix.guard.disabled);
+                 spa_rt_upmix.msHistogram[8], spa_rt_upmix.guard.disabled,
+                 spa_rt_upmix.dropout.gapHist[0], spa_rt_upmix.dropout.gapHist[1],
+                 spa_rt_upmix.dropout.gapHist[2], spa_rt_upmix.dropout.gapHist[3],
+                 spa_rt_upmix.dropout.zeroRuns, spa_rt_upmix.dropout.longestZeroRun);
     spa_rt_upmix.periods = spa_rt_upmix.upmixedPeriods = spa_rt_upmix.resets = 0;
     spa_rt_upmix.totalNs = 0;
     spa_rt_upmix.lastPeriodNs = 0;
     memset(&spa_rt_upmix.guard, 0, sizeof(spa_rt_upmix.guard));
     memset(spa_rt_upmix.msHistogram, 0, sizeof(spa_rt_upmix.msHistogram));
+    memset(&spa_rt_upmix.dropout, 0, sizeof(spa_rt_upmix.dropout));
     pthread_mutex_unlock(&spa_pcm_sink.lock);
     if (sceneStarted) {
         spa_scene_mask_worker_stop(&spa_rt_upmix.sceneMaskWorker);
         spa_scene_mask_worker_log_stop(&spa_rt_upmix.sceneMaskWorker, "rt");
     }
+}
+
+static int spa_pcm_all_zero(const int16_t *samples, size_t count)
+{
+    while (count--)
+        if (*samples++) return 0;
+    return 1;
+}
+
+/* Sink lock held.  Milliseconds since a nav prompt or Siri last wrote, -1 if never:
+ * tells whether another source was active when the music had a hole. */
+static long long spa_pcm_voice_ms_ago_locked(uint64_t now)
+{
+    return spa_pcm_sink.voiceLastWriteNs
+        ? (long long)((now - spa_pcm_sink.voiceLastWriteNs) / UINT64_C(1000000)) : -1;
 }
 
 /* Sink lock held.  One realtime period: the scene renderer when the route allows it, else the
@@ -3960,25 +4165,56 @@ static int spa_rt_upmix_period_locked(const int16_t *buffer, size_t frames,
             ? now - spa_rt_upmix.lastPeriodNs : 0;
 
         spa_rt_upmix.lastPeriodNs = now;
+        /* Any break restarts the renderer, not only a revival: its FIFO still
+         * holds the last 21 ms from before the break, and when something else
+         * resumes (another track or app) that tail was played first, ahead of
+         * stock's own lead-in silence. */
+        if (gap >= SPA_RT_UPMIX_PAUSE_NS) spa_rt_upmix.lastPeriodUpmixed = 0;
         if (spa_rt_upmix_guard_gap(&spa_rt_upmix.guard, gap)) {
-            spa_rt_upmix.lastPeriodUpmixed = 0;
             LOG_WARN(LOG_MODULE,
                      "audio realtime upmix: back after a %llu ms break in the stream "
                      "(attempt %u)",
                      (unsigned long long)(gap / UINT64_C(1000000)),
                      (unsigned)spa_rt_upmix.guard.disables + 1u);
         }
+        /* The owner's rare sub-second hole: a late period is the unit's stall
+         * (lock, io-audio, MOST), a run of all-zero periods is the phone's or
+         * the link's (stock zero-fills lost RTP).  A pause also lands here as
+         * a long gap; the ms tell it apart. */
+        if (spa_rt_dropout_gap(&spa_rt_upmix.dropout, gap))
+            LOG_WARN(LOG_MODULE,
+                     "audio realtime dropout: %llu ms gap between periods (voice %lld ms ago)",
+                     (unsigned long long)(gap / UINT64_C(1000000)),
+                     spa_pcm_voice_ms_ago_locked(now));
+        {
+            uint32_t run = spa_rt_dropout_period(&spa_rt_upmix.dropout,
+                                                 spa_pcm_all_zero(buffer, frames * sourceChannels));
+
+            if (run)
+                LOG_WARN(LOG_MODULE,
+                         "audio realtime dropout: %u silent periods (~%u ms) from the phone "
+                         "(voice %lld ms ago)",
+                         (unsigned)run, (unsigned)(run * SPA_PCM_SINK_PERIOD_MS),
+                         spa_pcm_voice_ms_ago_locked(now));
+        }
     }
     if (spa_media_route_realtime_upmix_allowed(&spa_pcm_sink.route, 1, sourceChannels,
                                                outputChannels,
-                                               spa_rt_upmix.ready && !spa_rt_upmix.guard.disabled)) {
+                                               spa_rt_upmix.ready)) {
         uint64_t start = spa_monotonic_ns(), elapsed, judgedNs;
         size_t done = 0;
+        const int guardOff = spa_rt_upmix.guard.disabled;
 
         if (!spa_rt_upmix.lastPeriodUpmixed) spa_rt_upmix_reset_locked();
         if (__sync_lock_test_and_set(&spa_rt_upmix_track_change, 0u))
             (void)spa_stereo_upmix_scene_track_change(&spa_rt_upmix.upmix);
-        spa_stereo_upmix_set_level(&spa_rt_upmix.upmix, spa_upmix_level);
+        /* A tripped guard is the renderer's own OFF level, not a jump to the
+         * undelayed expansion: that jump skipped the 1024 frames still in the
+         * FIFO (21 ms of music) and stepped every channel at once.  OFF fades
+         * to the time-aligned dry signal over SPA_UPMIX_LEVEL_FADE_MS and then
+         * costs no DSP at all, which is what the guard is for. */
+        spa_stereo_upmix_set_level(&spa_rt_upmix.upmix,
+                                   guardOff ? SPA_UPMIX_LEVEL_OFF : spa_upmix_level);
         upmixed = frames > 0;
         while (upmixed && done < frames) {
             size_t chunk = frames - done;
@@ -4004,10 +4240,12 @@ static int spa_rt_upmix_period_locked(const int16_t *buffer, size_t frames,
             ++spa_rt_upmix.msHistogram[bucket];
             spa_rt_upmix.totalNs += elapsed;
         }
-        if (spa_rt_upmix_guard_period(&spa_rt_upmix.guard, judgedNs))
+        /* While it is off there is nothing to judge (and the fade-out periods
+         * must not count as further trips). */
+        if (!guardOff && spa_rt_upmix_guard_period(&spa_rt_upmix.guard, judgedNs))
             LOG_WARN(LOG_MODULE,
                      "audio realtime upmix: DISABLED, %u consecutive periods over %llu us "
-                     "(worst %llu us); waiting for a break in the stream",
+                     "(worst %llu us); fading to stereo, waiting for a break in the stream",
                      (unsigned)spa_rt_upmix.guard.slowPeriods,
                      (unsigned long long)(SPA_RT_UPMIX_BUDGET_NS / 1000u),
                      (unsigned long long)(spa_rt_upmix.guard.worstNs / 1000u));
@@ -4422,7 +4660,11 @@ static void spa_pcm_sink_preroll_silence(spa_snd_write_t realWrite, snd_pcm_t *h
 }
 
 /* EAGAIN/zero is normal nonblocking backpressure, not a reason to reset QSA.
- * Recover only a confirmed underrun, and never after voice/stop cancellation. */
+ * Recover only a state the device itself reports as needing a prepare, and
+ * never after voice/stop cancellation.  Those states are the three stock's own
+ * CQNXSoundIF::write re-prepares on (0x484c8): UNDERRUN, and READY / CHANGE,
+ * which a retained handle reaches when the route changes under it (a call).
+ * With UNDERRUN alone a detached owner in READY failed every write for good. */
 static int spa_pcm_recover_underrun(snd_pcm_t *handle, int detached)
 {
     static int (*statusFn)(snd_pcm_t *, snd_pcm_channel_status_t *);
@@ -4440,7 +4682,11 @@ static int spa_pcm_recover_underrun(snd_pcm_t *handle, int detached)
     memset(&status, 0, sizeof(status));
     status.channel = SND_PCM_CHANNEL_PLAYBACK;
     if (!statusFn || !prepareFn || statusFn(handle, &status) != 0 ||
-        status.status != SND_PCM_STATUS_UNDERRUN || spa_qsa_cancelled(&io)) return 0;
+        (status.status != SND_PCM_STATUS_UNDERRUN &&
+         status.status != SND_PCM_STATUS_READY &&
+         status.status != SND_PCM_STATUS_ERROR &&     /* "HW error, need to prepare" */
+         status.status != SND_PCM_STATUS_CHANGE) ||
+        spa_qsa_cancelled(&io)) return 0;
     return prepareFn(handle, SND_PCM_CHANNEL_PLAYBACK) == 0;
 }
 
@@ -4537,14 +4783,19 @@ static void spa_pcm_sink_reset_detached_clock_locked(void)
  * selectively without also discarding valid samples outside the interval. */
 static int spa_pcm_sink_flush_buffered_timeline(uint32_t generation)
 {
+    typedef int (*spa_snd_playback_drain_t)(snd_pcm_t *);
     static spa_snd_flush_t realFlush;
+    static spa_snd_playback_drain_t realDrain;
+    static int drainLooked;
     static spa_snd_prepare_t realPrepare;
     snd_pcm_t *handle = 0;
     int detached = 0;
+    int discarded = 0;
     int flushResult = -1;
     int prepareResult = -1;
     uint64_t flushes = 0;
     uint64_t failures = 0;
+    uint64_t flushStartNs, flushNs = 0;
 
     spa_pcm_io_lock();
     /* The software prune may have waited for this I/O lock across reconnect.
@@ -4577,8 +4828,27 @@ static int spa_pcm_sink_flush_buffered_timeline(uint32_t generation)
     if (!realPrepare)
         realPrepare = (spa_snd_prepare_t)dlsym(RTLD_NEXT,
                                                "snd_pcm_plugin_prepare");
-    if (realFlush)
+    /* QSA names these the other way round from ALSA: snd_pcm_plugin_flush()
+     * finishes PLAYING the queue and then stops the channel (stock calls it
+     * before close for exactly that), snd_pcm_plugin_playback_drain() stops
+     * at once and discards the queue (<sys/asoundlib.h>).  This function
+     * exists to discard, and with flush() up to eight fragments (~128 ms) of
+     * the old position still played after a seek, with ioLock held meanwhile.
+     * flush() stays as the fallback when the drain is absent or refuses.
+     * flush_took_ms in the log is the check: a discard returns in ~0 ms. */
+    flushStartNs = spa_monotonic_ns();
+    if (!realDrain && !drainLooked) {
+        realDrain = (spa_snd_playback_drain_t)dlsym(RTLD_NEXT,
+                                                    "snd_pcm_plugin_playback_drain");
+        drainLooked = 1;
+    }
+    if (realDrain) {
+        flushResult = realDrain(handle);
+        discarded = flushResult == 0;
+    }
+    if (flushResult != 0 && realFlush)
         flushResult = realFlush(handle, SND_PCM_CHANNEL_PLAYBACK);
+    flushNs = spa_monotonic_ns() - flushStartNs;
     if (flushResult == 0 && realPrepare)
         prepareResult = realPrepare(handle, SND_PCM_CHANNEL_PLAYBACK);
 
@@ -4607,9 +4877,10 @@ static int spa_pcm_sink_flush_buffered_timeline(uint32_t generation)
     if (flushResult == 0 && prepareResult == 0) {
         LOG_WARN(LOG_MODULE,
                  "audio sink: flushed previous buffered timeline handle=%p "
-                 "owner=%s flushes=%llu",
+                 "owner=%s flushes=%llu via=%s flush_took_ms=%llu",
                  handle, detached ? "detached" : "stock",
-                 (unsigned long long)flushes);
+                 (unsigned long long)flushes, discarded ? "drain" : "flush",
+                 (unsigned long long)(flushNs / UINT64_C(1000000)));
         STATE_TRACE("QSA_TIMELINE_FLUSH",
                     "action=flush_prepare owner=%s flush_result=%d "
                     "prepare_result=%d flushes=%llu",
@@ -4774,12 +5045,15 @@ static int spa_pcm_sink_detached_pending(size_t *pendingOut)
  * the render clock; 1024-frame APAP packets are re-fragmented through the
  * existing ring into the device's measured 768-frame periods.
  *
+ * Returns 1 only when a whole period went to the device, i.e. when the call
+ * itself was the pump's clock; on 0 the caller must not loop without a wait.
+ *
  * One invocation writes AT MOST one period.  The former drain-to-empty loop
  * collapsed a 400-ms prime cushion to the normal 0/256/512-frame cadence
  * remainder in one burst, so the next network/scheduler hiccup became an
  * audible underrun.  The APAP loop now calls this once per pump iteration and
  * applies TCP backpressure around the configured high-water mark. */
-static void spa_pcm_sink_write_one_detached_period(void)
+static int spa_pcm_sink_write_one_detached_period(void)
 {
     static spa_snd_write_t realWrite;
     static spa_snd_prepare_t realPrepare;
@@ -4820,7 +5094,7 @@ static void spa_pcm_sink_write_one_detached_period(void)
             !spa_media_route_can_request(&spa_pcm_sink.route, spa_monotonic_ns())) {
             pthread_mutex_unlock(&spa_pcm_sink.lock);
             spa_pcm_io_unlock();
-            return;
+            return 0;
         }
         handle = spa_pcm_sink.handle;
         channels = spa_pcm_sink.outputChannels;
@@ -4875,7 +5149,7 @@ static void spa_pcm_sink_write_one_detached_period(void)
                 spa103_trace_qsa_ring_wait(traceRingWaitGapNs, pending,
                                            traceRingWaitCount);
 #endif
-            return;
+            return 0;
         }
         firstWrite = spa_pcm_sink.detachedWrites == 0;
         needsPrepare = spa_pcm_sink.detachedNeedsPrepare;
@@ -4895,7 +5169,7 @@ static void spa_pcm_sink_write_one_detached_period(void)
                 spa_monotonic_ns() + SPA_MEDIA_ROUTE_RETRY_DELAY_NS;
             pthread_mutex_unlock(&spa_pcm_sink.lock);
             spa_pcm_io_unlock();
-            return; /* no unowned buffered writes after a failed declaration */
+            return 0; /* no unowned buffered writes after a failed declaration */
         }
         /* Normally our flush interposer keeps this exact handle running across
          * CQNXSoundIF's close.  Retain the prepare fallback for the race where
@@ -4913,7 +5187,7 @@ static void spa_pcm_sink_write_one_detached_period(void)
                           "audio sink: detached prepare failed handle=%p result=%d",
                           handle, prepareResult);
                 spa_pcm_io_unlock();
-                return;
+                return 0;
             }
             pthread_mutex_lock(&spa_pcm_sink.lock);
             if (spa_pcm_sink.handle == handle && spa_pcm_sink.detached &&
@@ -4931,7 +5205,7 @@ static void spa_pcm_sink_write_one_detached_period(void)
                                     SPA_PCM_SINK_PERIOD_FRAMES, channels);
         if (got != SPA_PCM_SINK_PERIOD_FRAMES) {
             spa_pcm_io_unlock();
-            return;
+            return 0;
         }
         if (!realWrite)
             realWrite = (spa_snd_write_t)dlsym(RTLD_NEXT, "snd_pcm_plugin_write");
@@ -5065,7 +5339,7 @@ static void spa_pcm_sink_write_one_detached_period(void)
                 0, traceRingWaits, traceClockResets, 0, 0);
 #endif
 
-        if (written != (ssize_t)bytes) return;
+        return written == (ssize_t)bytes;
 }
 
 static unsigned spa_audio_requested_output_channels(void)
@@ -6253,9 +6527,11 @@ HOOK_EXPORT ssize_t snd_pcm_plugin_write(snd_pcm_t *handle, const void *buffer, 
         int isVoice = 0;
         pthread_mutex_lock(&spa_pcm_sink.lock);
         useBridge = handle && handle == spa_pcm_sink.handle;
-        if (!useBridge && handle)
+        if (!useBridge && handle) {
             isVoice = (handle == spa_pcm_sink.ann3Handle ||
                        handle == spa_pcm_sink.ann4Handle);
+            if (isVoice) spa_pcm_sink.voiceLastWriteNs = spa_monotonic_ns();
+        }
         if (useBridge && spa_pcm_sink.paramsState != SPA_PCM_PARAMS_READY)
             writeError = spa_pcm_sink.paramsState == SPA_PCM_PARAMS_CONFIGURING ? EBUSY : EIO;
         pthread_mutex_unlock(&spa_pcm_sink.lock);
@@ -6810,6 +7086,16 @@ static int spa103_store_magic_cookie(int64_t id, uint8_t *bytes, size_t size)
                     (unsigned)spa103_receiver.cookieGeneration);
         return 1;
     }
+    /* One SETUP spans every track and codec switch, and nothing but the stop
+     * cleanup empties the table: a full table answered the next cookie with
+     * HTTP 500 and left its packets waiting for a cookie that was thrown away.
+     * Retire the oldest instead; a decoder already built keeps its own copy. */
+    if (spa103_receiver.magicCookieCount >= SPA_103_MAX_MAGIC_COOKIES) {
+        free(spa103_receiver.magicCookies[0].bytes);
+        memmove(&spa103_receiver.magicCookies[0], &spa103_receiver.magicCookies[1],
+                (SPA_103_MAX_MAGIC_COOKIES - 1u) * sizeof(spa103_receiver.magicCookies[0]));
+        spa103_receiver.magicCookieCount = SPA_103_MAX_MAGIC_COOKIES - 1u;
+    }
     if (spa103_receiver.magicCookieCount < SPA_103_MAX_MAGIC_COOKIES) {
         spa103_magic_cookie_t *slot =
             &spa103_receiver.magicCookies[spa103_receiver.magicCookieCount++];
@@ -6878,7 +7164,7 @@ static int spa103_method_equal(const uint8_t *method, uint32_t methodLength,
  * methods use the same binary-plist envelope as SETUP and SETMAGICCOOKIE. */
 static void *spa103_parse_control_plist(void *request, const char *methodName,
                                        uint32_t *sessionSequence, uint32_t *requestNumber,
-                                       uint32_t *receiverGeneration)
+                                       uint32_t *receiverGeneration, int *inactive)
 {
     const spa103_private_profile_t *profile = spa103_private_profile();
     const uint8_t *body;
@@ -6889,6 +7175,7 @@ static void *spa103_parse_control_plist(void *request, const char *methodName,
     int active;
     char captureKind[64];
 
+    if (inactive) *inactive = 0;
     if (!profile) return 0;
     pthread_mutex_lock(&spa103_lock);
     active = spa103_receiver.session && !spa103_receiver.stop &&
@@ -6903,6 +7190,7 @@ static void *spa103_parse_control_plist(void *request, const char *methodName,
     if (!active) {
         LOG_WARN(LOG_MODULE, "buffer103: %s received without active type-103 stream",
                  methodName);
+        if (inactive) *inactive = 1;
         return 0;
     }
 
@@ -7124,7 +7412,7 @@ static int spa103_process_buffered_control(void *connection, void *request,
     int haveFromSeq = 0, haveUntilSeq = 0;
     int haveFromTime = 0, haveUntilTime = 0;
     int status = 200;
-    int result, current = 0, stale = 0;
+    int result, current = 0, stale = 0, inactive = 0;
     char responseKind[96];
 
     memset(&anchor, 0, sizeof(anchor));
@@ -7135,8 +7423,18 @@ static int spa103_process_buffered_control(void *connection, void *request,
     memset(&flushRange, 0, sizeof(flushRange));
 
     params = spa103_parse_control_plist(request, methodName, &sequence, &requestNumber,
-                                       &generation);
+                                       &generation, &inactive);
     if (!params) {
+        /* A verb that arrives while the receiver is stopping, failed, joining
+         * or already gone is late, not malformed: the stream it addressed is
+         * over.  It gets the same acknowledge-and-discard as a superseded
+         * command below and as SETMAGICCOOKIE in this state; a 400 on the
+         * control connection is how the isMedia bug restarted CarPlay. */
+        if (inactive) {
+            STATE_TRACE("BUFFERED_CONTROL", "method=%s action=discard_inactive http_status=200",
+                        methodName);
+            return spa103_send_http_status(connection, 200);
+        }
         STATE_TRACE("BUFFERED_CONTROL",
                     "method=%s action=parse_reject http_status=400",
                     methodName);
@@ -7309,6 +7607,18 @@ static int spa103_process_buffered_control(void *connection, void *request,
             /* At least one boundary must be present. Each side and each sequence/RTP component
              * is optional; the live pause path carries only untilSeq + until media time. */
             if ((!haveFromSeq && !haveFromTime) && (!haveUntilSeq && !haveUntilTime)) {
+                int64_t scale;
+
+                /* Boundaries that are present but invalid (media timescale 0)
+                 * are a well-formed flush of nothing: acknowledge it. */
+                if (spa_cf_get_i64(params, "flushFromMediaTimeScale", &scale) ||
+                    spa_cf_get_i64(params, "flushUntilMediaTimeScale", &scale)) {
+                    LOG_WARN(LOG_MODULE,
+                             "buffer103: %s[%u] carries only invalid boundaries; "
+                             "acknowledged, nothing flushed",
+                             methodName, (unsigned)requestNumber);
+                    goto done;
+                }
                 status = 400;
                 goto done;
             }
@@ -7501,7 +7811,9 @@ static int spa103_http_process(void *connection, void *request)
         goto done;
     }
     memcpy(cookieCopy, cookieBytes, (size_t)cookieLength);
-    if (spa103_store_magic_cookie(cookieID, cookieCopy, (size_t)cookieLength) != 0) {
+    /* 1 = an existing id got new bytes (stored, decoder will rebuild): success.
+     * Treating every non-zero as failure answered that replacement with 500. */
+    if (spa103_store_magic_cookie(cookieID, cookieCopy, (size_t)cookieLength) < 0) {
         cookieCopy = 0; /* store helper consumed/freed ownership on every path */
         status = 500;
         goto done;
@@ -7774,6 +8086,13 @@ static void spa103_log_prefix(const char *transport, const uint8_t *data, size_t
              (unsigned)count, text);
 }
 
+/* The APAP pump's fallback clock when no device period paced the pass. */
+static void spa103_pump_idle_wait(void)
+{
+    struct timespec wait = { 0, 1000000L };
+    while (nanosleep(&wait, &wait) != 0 && errno == EINTR) {}
+}
+
 static int spa103_receiver_should_stop(uint32_t generation)
 {
     int stop;
@@ -7924,13 +8243,14 @@ static void *spa103_thread_main(void *opaque)
                         spa103_retry_now_playing_after_media();
                         (void)spa_pcm_sink_bootstrap_buffered();
                     }
-                    spa_pcm_sink_write_one_detached_period();
-                    if (drainResult < 0 &&
-                        !spa_pcm_sink_detached_pending(0)) {
-                        struct timespec waitForCookie = { 0, 1000000L };
-                        while (nanosleep(&waitForCookie, &waitForCookie) != 0 &&
-                               errno == EINTR) {}
-                    }
+                    /* drainResult < 0: the head packet names a cookie we do
+                     * not hold yet, so nothing was decoded.  Only a period
+                     * really written to the device paced this pass; a detached
+                     * sink with an empty ring returns at once and used to spin
+                     * this SCHED_RR 18 thread (re-opening the same packet each
+                     * time) until SETMAGICCOOKIE arrived. */
+                    if (!spa_pcm_sink_write_one_detached_period() && drainResult < 0)
+                        spa103_pump_idle_wait();
                     continue;
                 }
                 /* Preserve packet order while decoded PCM is at high water.
@@ -7941,12 +8261,10 @@ static void *spa103_thread_main(void *opaque)
                  * owner drains asynchronously, so yield briefly. */
                 (void)spa_pcm_sink_bootstrap_buffered();
                 detached = spa_pcm_sink_detached_pending(&pumpPending);
-                if (detached)
-                    spa_pcm_sink_write_one_detached_period();
-                else {
-                    struct timespec yield = { 0, 1000000L };
-                    while (nanosleep(&yield, &yield) != 0 && errno == EINTR) {}
-                }
+                /* A detached write that did not reach the device (prepare or
+                 * write error, route not ready) is not a clock either. */
+                if (!detached || !spa_pcm_sink_write_one_detached_period())
+                    spa103_pump_idle_wait();
                 continue;
             }
             if (!playing && saturated) {
@@ -7973,8 +8291,10 @@ static void *spa103_thread_main(void *opaque)
                     detached, pumpPending, SPA_PCM_SINK_PERIOD_FRAMES,
                     spa103_high_frames())) {
                 /* At/above high water, do not consume another phone packet.
-                 * One blocking device period is this entire pump iteration. */
-                spa_pcm_sink_write_one_detached_period();
+                 * One blocking device period is this entire pump iteration;
+                 * if the device refused it, wait instead of spinning. */
+                if (!spa_pcm_sink_write_one_detached_period())
+                    spa103_pump_idle_wait();
                 continue;
             }
             pollTimeoutMs = spa_pcm_pump_poll_timeout_ms(
@@ -8279,6 +8599,24 @@ static int spa103_stop_receiver_checked(void *session, int anySession,
         pthread_mutex_unlock(&spa103_lock);
         STATE_TRACE("BUFFERED_STOP_TIMEOUT", "generation=%u result=%d quarantined=1",
                     (unsigned)generation, waitResult);
+        /* The quarantine is for the workers and their memory, not for the
+         * media rail.  `stopping` used to stay set here, and since only a
+         * completed join cleared it, every later write to mpl5_dio_ent --
+         * realtime music and alerts (ringtone, alarm) -- was cancelled until
+         * some later 103 SETUP or teardown happened to succeed.  Park the
+         * buffered timeline so a stock writer stops treating the stuck ring
+         * as the media owner (it would play its remainder, then silence),
+         * then release the rail.  The stuck worker sees stop=1 and exits at
+         * its next pass without writing. */
+        pthread_mutex_lock(&spa103_render.lock);
+        spa_apap_lifecycle_set_rate(&spa103_render.lifecycle, 0);
+        pthread_mutex_unlock(&spa103_render.lock);
+        pthread_mutex_lock(&spa_pcm_sink.lock);
+        spa_pcm_sink.transport.stopping = 0;
+        pthread_mutex_unlock(&spa_pcm_sink.lock);
+        LOG_WARN(LOG_MODULE,
+                 "buffer103: receiver stop timed out (generation %u); workers quarantined, "
+                 "media rail released", (unsigned)generation);
         /* Do NOT cancel, detach, free decoder/ring, or reuse the session slot.
          * A later teardown/SETUP can retry after the old workers have exited. */
         return -ETIMEDOUT;
@@ -8328,6 +8666,13 @@ static int spa103_stop_receiver_checked(void *session, int anySession,
     spa103_render_stop();
     pthread_mutex_lock(&spa_pcm_sink.lock);
     spa_pcm_sink.transport.stopping = 0;
+    /* The failure latch protects a 103 timeline the phone still believes in.
+     * A completed stop ended that timeline, so nothing is left to protect:
+     * when the receiver saw the data-socket EOF a moment before the control
+     * thread handled the TEARDOWN (two connections, two priorities), the
+     * latch survived the teardown and muted an already running type-100
+     * stream until some later Prepare. */
+    spa_pcm_sink.transport.await_media_restart = 0;
     pthread_mutex_unlock(&spa_pcm_sink.lock);
     pthread_mutex_lock(&spa103_lock);
     spa103_receiver.joining = 0;
@@ -9182,6 +9527,9 @@ static void audio_init(void)
 {
     const spa_audio_config_t *config = spa_audio_config();
     unsigned bit, channels;
+    LOG_WARN(LOG_MODULE, "audio hardware policy: externalAmp=%d voiceGainQ13=%u processing=%s",
+             config->externalAmp, (unsigned)config->voiceGainQ13,
+             config->externalAmp ? "external" : "bypass (rate upgrades only)");
     spa_tune(&bit, &channels);
     if (spa_enabled()) {
         LOG_INFO(LOG_MODULE,
@@ -9201,8 +9549,9 @@ static void audio_init(void)
         }
     }
     else
-        LOG_INFO(LOG_MODULE,
-                 "audio policy OFF (AUDIO_SPATIAL=0, AUDIO_SPATIAL_ATMOS=0) -> stock stereo");
+        LOG_INFO(LOG_MODULE, "audio policy OFF (%s) -> stock stereo",
+                 config->externalAmp ? "AUDIO_SPATIAL=0, AUDIO_SPATIAL_ATMOS=0"
+                                     : "no external amplifier");
 }
 
 /* iAP2 NowPlayingUpdate (0x5001) from the phone, on Cinemo's receive thread:

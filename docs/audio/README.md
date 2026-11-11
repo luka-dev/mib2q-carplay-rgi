@@ -1,6 +1,6 @@
 # Audio
 
-CarPlay audio supports stereo playback, SCENE UpMix and discrete 5.1. All external amplifier families on supported MHI2Q systems use the six-channel path; **B&O and Bose are confirmed**. Internal amplifiers retain stock stereo through the installer gate.
+CarPlay audio supports stereo playback, SCENE UpMix and discrete 5.1. All external amplifier families on supported MHI2Q systems use the six-channel path; **B&O and Bose are confirmed**. Internal amplifiers retain stock stereo through the installer gate. The gate is the `AUDIO_EXTERNAL_AMP` line of `carplay_startup.sh`: the installer writes `1` only for RCC E2P 0xFC = 02; with `0`, or without the line (a startup script deployed without the installer), the hook bypasses 5.1, UpMix, SoundCheck and the voice boost and says so in its log. The installer also writes `AUDIO_DEVA_PATCHED`: `0` when `deva-ctrl-qc.so` could not be patched, in which case the hook keeps the stock 16 kHz voice and navigation formats and the six-channel path stays off; the MMI rows for Spatial Audio and UpMix follow the same script line as the hook.
 
 ## 🔊 Processing
 

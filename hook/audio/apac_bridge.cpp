@@ -49,7 +49,10 @@ uint32_t CookieOffset(const uint8_t* c, uint32_t n, uint32_t* payloadBytes)
     while (at + 8 <= n) {
         const uint32_t size = BE32(c + at);
         const uint32_t type = BE32(c + at + 4);
-        if (size < 8 || at + size > n)
+        // `at + size` wraps in 32 bits: a size near 4 GiB passed this test, moved
+        // `at` backwards and looped forever (under the render lock).  at + 8 <= n
+        // holds here, so the subtraction cannot underflow.
+        if (size < 8 || size > n - at)
             return 0;
         if (type == 0x64617061u) {                          // 'dapa'
             if (size < 12)

@@ -106,4 +106,61 @@ static inline int spa_rt_upmix_guard_period(spa_rt_upmix_guard_t *guard,
     return 1;
 }
 
+/* ---- dropout bookkeeping ----------------------------------------------------
+ * A rare sub-second hole in the music that nothing above can see: stock
+ * zero-fills lost or late RTP (the hole is exact digital silence in the
+ * period) and a stalled output thread only shows as a late period.  Two cheap
+ * observations per realtime period tell the two apart after the fact.  Gaps
+ * under 32 ms are scheduler jitter; QSA holds ~128 ms, so a longer gap ran the
+ * device dry; 500 ms is the break the revival logic already knows. */
+#define SPA_RT_DROPOUT_GAP_BUCKETS 4u   /* 32..64, 64..128, 128..500, >=500 ms */
+#define SPA_RT_DROPOUT_WARN_GAP_NS UINT64_C(100000000)
+#define SPA_RT_DROPOUT_MIN_ZERO_RUN 2u  /* 32 ms of silence is audible */
+
+typedef struct {
+    uint32_t gapHist[SPA_RT_DROPOUT_GAP_BUCKETS];
+    int live;                /* music was heard since the start or the last break */
+    uint32_t zeroRun;        /* current run of all-zero periods */
+    uint32_t zeroRuns;       /* runs of at least SPA_RT_DROPOUT_MIN_ZERO_RUN */
+    uint32_t longestZeroRun;
+} spa_rt_dropout_t;
+
+/* The gap since the previous period.  1 = long enough to deserve a WARN. */
+static inline int spa_rt_dropout_gap(spa_rt_dropout_t *d, uint64_t gap_ns)
+{
+    unsigned bucket;
+
+    if (gap_ns < UINT64_C(32000000)) return 0;
+    bucket = gap_ns >= SPA_RT_UPMIX_PAUSE_NS ? 3u
+           : gap_ns >= UINT64_C(128000000) ? 2u
+           : gap_ns >= UINT64_C(64000000) ? 1u : 0u;
+    ++d->gapHist[bucket];
+    if (bucket == 3u) {
+        /* A break, not a hole: whatever silence leads back in is a start. */
+        d->live = 0;
+        d->zeroRun = 0;
+    }
+    return gap_ns > SPA_RT_DROPOUT_WARN_GAP_NS;
+}
+
+/* One period's content.  Returns the length of a run of silent periods that
+ * just ended, when it was long enough to hear, else 0.  Silence before the
+ * first music of a stream is not a hole: stock itself leads every start with
+ * mute buffers (sendMutePackets), so only a run inside live music counts. */
+static inline uint32_t spa_rt_dropout_period(spa_rt_dropout_t *d, int all_zero)
+{
+    uint32_t run = d->zeroRun;
+
+    if (all_zero) {
+        if (d->live) d->zeroRun = run + 1u;
+        return 0;
+    }
+    d->live = 1;
+    d->zeroRun = 0;
+    if (run < SPA_RT_DROPOUT_MIN_ZERO_RUN) return 0;
+    ++d->zeroRuns;
+    if (run > d->longestZeroRun) d->longestZeroRun = run;
+    return run;
+}
+
 #endif /* RT_UPMIX_GUARD_H */

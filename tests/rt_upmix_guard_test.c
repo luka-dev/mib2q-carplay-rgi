@@ -129,6 +129,61 @@ static void test_cold_reset_and_healthy_stream(void)
     assert(!guard.disabled);
 }
 
+/* Dropout bookkeeping: jitter is not a gap, the buckets split at 32/64/128/500
+ * ms, only gaps over 100 ms are worth a WARN, and silence counts as a run only
+ * once it is long enough to hear and only when it ends. */
+static void test_dropout_bookkeeping(void)
+{
+    spa_rt_dropout_t d;
+
+    memset(&d, 0, sizeof(d));
+    assert(spa_rt_dropout_gap(&d, STEADY_GAP) == 0);
+    assert(spa_rt_dropout_gap(&d, UINT64_C(31999999)) == 0);
+    assert(d.gapHist[0] == 0);
+    assert(spa_rt_dropout_gap(&d, UINT64_C(32000000)) == 0);
+    assert(spa_rt_dropout_gap(&d, UINT64_C(64000000)) == 0);
+    assert(spa_rt_dropout_gap(&d, UINT64_C(100000001)) == 1);
+    assert(spa_rt_dropout_gap(&d, UINT64_C(128000000)) == 1);
+    assert(spa_rt_dropout_gap(&d, SPA_RT_UPMIX_PAUSE_NS) == 1);
+    assert(d.gapHist[0] == 1 && d.gapHist[1] == 2 && d.gapHist[2] == 1 && d.gapHist[3] == 1);
+
+    /* Stock leads every stream with mute buffers: silence before the first
+     * music is a start, however long, not a hole. */
+    assert(spa_rt_dropout_period(&d, 1) == 0);
+    assert(spa_rt_dropout_period(&d, 1) == 0);
+    assert(spa_rt_dropout_period(&d, 1) == 0);
+    assert(spa_rt_dropout_period(&d, 0) == 0);
+    assert(d.zeroRuns == 0 && d.live);
+    /* One silent period is dither or a quiet intro, not a run. */
+    assert(spa_rt_dropout_period(&d, 1) == 0);
+    assert(spa_rt_dropout_period(&d, 0) == 0);
+    assert(d.zeroRuns == 0);
+    /* Two in a row are, reported when the music comes back. */
+    assert(spa_rt_dropout_period(&d, 1) == 0);
+    assert(spa_rt_dropout_period(&d, 1) == 0);
+    assert(d.zeroRuns == 0);
+    assert(spa_rt_dropout_period(&d, 0) == 2);
+    assert(d.zeroRuns == 1 && d.longestZeroRun == 2);
+    assert(spa_rt_dropout_period(&d, 1) == 0);
+    assert(spa_rt_dropout_period(&d, 1) == 0);
+    assert(spa_rt_dropout_period(&d, 1) == 0);
+    assert(spa_rt_dropout_period(&d, 0) == 3);
+    assert(d.zeroRuns == 2 && d.longestZeroRun == 3 && d.zeroRun == 0);
+    /* Closing at stop with nothing open changes nothing. */
+    assert(spa_rt_dropout_period(&d, 0) == 0);
+    assert(d.zeroRuns == 2);
+    /* A break (pause, track or app change) starts over: the silence that was
+     * open across it and the silence leading back in are not holes. */
+    assert(spa_rt_dropout_period(&d, 1) == 0);
+    assert(spa_rt_dropout_period(&d, 1) == 0);
+    assert(spa_rt_dropout_gap(&d, SPA_RT_UPMIX_PAUSE_NS) == 1);
+    assert(!d.live && d.zeroRun == 0);
+    assert(spa_rt_dropout_period(&d, 1) == 0);
+    assert(spa_rt_dropout_period(&d, 1) == 0);
+    assert(spa_rt_dropout_period(&d, 0) == 0);
+    assert(d.zeroRuns == 2);
+}
+
 int main(void)
 {
     test_warmup_is_excused();
@@ -136,6 +191,7 @@ int main(void)
     test_revives_only_on_a_break();
     test_break_while_healthy();
     test_cold_reset_and_healthy_stream();
-    puts("rt_upmix_guard_test: OK (warmup grace, consecutive trip, revival on a break)");
+    test_dropout_bookkeeping();
+    puts("rt_upmix_guard_test: OK (warmup grace, consecutive trip, revival on a break, dropout buckets)");
     return 0;
 }

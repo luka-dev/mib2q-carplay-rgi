@@ -19,6 +19,12 @@ fi
     hook/audio/spatial_downmix.c hook/audio/apap_lifecycle.c \
     hook/audio/apap_crypto.c hook/audio/aac_bridge.c hook/framework/iap2_protocol.c \
     -lpthread -lm -o "$audio_test_dir/audio_interposers"
+for policy in 0 missing invalid 1; do
+    "$audio_test_dir/audio_interposers" amp-policy "$policy"
+done
+for policy in 0 missing 1; do
+    "$audio_test_dir/audio_interposers" deva-policy "$policy"
+done
 for firmware in us cn cn1404; do
     for fixture in valid ensure plist unknown missing; do
         "$audio_test_dir/audio_interposers" "$firmware" "$fixture"

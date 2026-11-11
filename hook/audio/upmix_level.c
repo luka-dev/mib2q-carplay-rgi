@@ -52,11 +52,12 @@ static void upmix_init(void)
 
     bus_on(CMD_UPMIX, upmix_on_cmd, NULL);
     bus_on(CMD_SPATIAL, spatial_on_cmd, NULL);
-    LOG_WARN(LOG_MODULE, "upmix level %s (%s), spatial audio %s (%s)",
+    LOG_WARN(LOG_MODULE, "upmix level %s (%s), spatial audio %s (%s)%s",
              kLevelNames[spa_upmix_level],
              ok_upmix ? "from Java" : "default; re-read at every stream start",
              spa_spatial_enable ? "on" : "off",
-             ok_spatial ? "from Java" : "default; re-read at session/stream start");
+             ok_spatial ? "from Java" : "default; re-read at session/stream start",
+             spa_audio_external_amp() ? "" : " -- both inactive: no external amplifier");
 }
 
 static void upmix_shutdown(void)

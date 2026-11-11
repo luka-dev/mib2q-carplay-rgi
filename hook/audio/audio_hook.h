@@ -47,6 +47,14 @@
 #define SPA_AUDIO_ENV                 "AUDIO_SPATIAL"
 #define SPA_AUDIO_ATMOS_ENV           "AUDIO_SPATIAL_ATMOS"
 #define SPA_AUDIO_ATMOS_MODE_ENV      "AUDIO_SPATIAL_ATMOS_MODE"
+/* Installer hardware policy, independent of user-selected audio features.
+ * Only a verified external amplifier may enable sample processing. */
+#define SPA_AUDIO_EXTERNAL_AMP_ENV    "AUDIO_EXTERNAL_AMP"
+/* Installer: 0 when deva-ctrl-qc.so could not be patched (no micropython, or a
+ * library the patcher does not know).  The 24 kHz voice and 48 kHz navigation
+ * formats exist only in the patched driver, so they are then not advertised.
+ * Absent = patched: every install before this flag patched or refused. */
+#define SPA_AUDIO_DEVA_PATCHED_ENV    "AUDIO_DEVA_PATCHED"
 
 /* Stereo-to-5.1 SCENE ambience renderer (stereo_upmix.h SPA_STEREO_UPMIX_SCENE,
  * spec §18 item 6).  Always armed on both buffered type-103 and realtime
@@ -55,8 +63,9 @@
  * UpMix" menu (SPA_SETTINGS_FILE / CMD_UPMIX).
  *
  * Calibrated fixed parameters baked into the runtime:
- *   - Phase-coherent LFE assist (SPA_STEREO_UPMIX_LFE_Q15_DEFAULT = 11585) with
- *     45-65 Hz front-door woofer relief, mask-net bass/drum steering, paired
+ *   - LFE assist (SPA_STEREO_UPMIX_LFE_Q15_DEFAULT = 11585): a 65 Hz low-pass
+ *     time-aligned with the front, a 72 Hz front-door woofer relief (-2.9 dB),
+ *     mask-net bass/drum steering, paired
  *     front headroom and J525 cabin-matrix guard.
  *   - Scene engine variant J defaults (alpha=0.7, inst_alpha=0.9, inst_gamma=1,
  *     inst_gamma_lo=1.5 below 700 Hz, duck_depth=0.25, side_lp_hz=7000,
@@ -67,6 +76,8 @@
  *     SCHED_RR 17 scene_mask_worker thread (unset/unreadable = spatial only).
  *   - Buffered-stream Apple SoundCheck loudness metadata enabled (fallback off,
  *     peak limiter off).
+ * All sample processing below requires AUDIO_EXTERNAL_AMP=1. Internal and
+ * unknown amplifiers retain only the 48 kHz announcement / 24 kHz duplex upgrades.
  *   - Voice/navigation announcement gain (ann3_dio_ann + ann4_dio_voice) fixed
  *     at +5.0 dB (14568 in Q13) to match iOS -18.5 LUFS speech to the -13.5 LUFS
  *     SoundCheck media target, with a C1 soft-knee limiter above -2.5 dBFS. */
@@ -171,6 +182,8 @@ extern volatile int spa_spatial_enable;
 int spa_settings_reload(void);
 int spa_upmix_level_reload(void);
 int spa_spatial_reload(void);
+/* Installer hardware policy (AUDIO_EXTERNAL_AMP): 0 = all sample processing bypassed. */
+int spa_audio_external_amp(void);
 extern const hook_module_def_t upmix_level_module_def;
 
 /* ---- the decoded type-103 PCM6 rail ----------------------------------------------------------

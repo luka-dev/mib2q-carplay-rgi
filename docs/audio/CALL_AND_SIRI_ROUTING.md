@@ -6,7 +6,7 @@ The buffered media route shares the head unit with stock calls, Siri and realtim
 
 ## 📋 Current behavior
 
-The hook advertises 24 kHz voice/call/microphone formats and 48 kHz navigation announcements. `ann3_dio_ann` and `ann4_dio_voice` receive fixed +5 dB gain with a soft knee above −2.5 dBFS. Music upmix is restricted to media. Format definitions are in [audio_hook.c](../../hook/audio/audio_hook.c); the matching driver geometry is in [deva-ctrl-qc](../stock-patches/deva-ctrl-qc.so.md).
+The hook advertises 24 kHz voice/call/microphone formats and 48 kHz navigation announcements. On a verified external amplifier (`AUDIO_EXTERNAL_AMP=1`, written by the installer for E2P 0xFC = 02) `ann3_dio_ann` and `ann4_dio_voice` receive +5 dB gain with a soft knee above −2.5 dBFS; on an internal or unknown amplifier they pass through bit-exact and only the rate upgrades remain. Music upmix is restricted to media. Format definitions are in [audio_hook.c](../../hook/audio/audio_hook.c); the matching driver geometry is in [deva-ctrl-qc](../stock-patches/deva-ctrl-qc.so.md).
 
 ## 🔗 What stock does with each stream
 

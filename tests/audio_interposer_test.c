@@ -26,6 +26,9 @@ static int test_cond_wait(pthread_cond_t *, pthread_mutex_t *);
 static int allocation_fail, params_failures, readback_bad, nonblock_fail;
 static int native_writes, params_calls, cancelled_write, short_error, probe_during_params;
 static snd_pcm_t media_device = { 1 }, phone_device = { 2 };
+static const void *last_write_buffer;
+static size_t last_write_bytes;
+static int16_t captured_voice[2048];
 static snd_pcm_channel_setup_t device_setup;
 static int16_t source_pcm[1536];
 static int poll_pipe[2];
@@ -41,7 +44,7 @@ static int delay_at, reached_delay, release_delay;
 static int setup_result;
 static pthread_mutex_t *generation_pause_mutex;
 static int generation_watch_read_wait;
-static int native_flushes, native_prepares;
+static int native_flushes, native_prepares, native_drains;
 
 static void fault_pause(int stage)
 {
@@ -128,13 +131,20 @@ static int native_status(snd_pcm_t *h, snd_pcm_channel_status_t *status)
 }
 static int native_flush(snd_pcm_t *h, int channel)
 { assert(h == &media_device && channel == SND_PCM_CHANNEL_PLAYBACK); ++native_flushes; return 0; }
+static int native_drain(snd_pcm_t *h)
+{ assert(h == &media_device); ++native_drains; return 0; }
 static int native_prepare(snd_pcm_t *h, int channel)
 { assert(h == &media_device && channel == SND_PCM_CHANNEL_PLAYBACK); ++native_prepares; return 0; }
 static ssize_t native_write(snd_pcm_t *h, const void *data, size_t bytes)
 {
     snd_pcm_channel_setup_t actual;
     ++native_writes;
-    if (h == &phone_device) return (ssize_t)bytes;
+    last_write_buffer = data;
+    last_write_bytes = bytes;
+    if (h == &phone_device) {
+        if (bytes <= sizeof(captured_voice)) memcpy(captured_voice, data, bytes);
+        return (ssize_t)bytes;
+    }
     assert(h == &media_device);
     /* Mirror real libasound's PLT re-entry; no deadlock, no stereo translation. */
     memset(&actual, 0, sizeof(actual));
@@ -679,8 +689,13 @@ static void control_generation_tests(void)
     generation_pause_mutex = NULL; delay_at = 0;
     assert(control_result == 0 && spa103_render.primed == 1);
     assert(native_flushes == flushes && native_prepares == prepares);
-    assert(spa103_render_flush(901, &test_flush_range) == 1);
-    assert(native_flushes == flushes + 1 && native_prepares == prepares + 1);
+    {
+        int drains = native_drains;
+        assert(spa103_render_flush(901, &test_flush_range) == 1);
+        /* The old timeline is discarded (QSA drain), not played out (flush). */
+        assert(native_drains == drains + 1 && native_flushes == flushes &&
+               native_prepares == prepares + 1);
+    }
     assert(spa103_render.primed == 0);
     spa_pcm_sink.handle = NULL; spa103_receiver.session = NULL;
     spa103_render_stop();
@@ -741,6 +756,7 @@ static void *test_dlsym(void *scope, const char *name)
     SYMBOL("snd_pcm_plugin_write", native_write);
     SYMBOL("snd_pcm_plugin_status", native_status);
     SYMBOL("snd_pcm_plugin_flush", native_flush);
+    SYMBOL("snd_pcm_plugin_playback_drain", native_drain);
     SYMBOL("snd_pcm_plugin_prepare", native_prepare);
     SYMBOL("snd_pcm_channel_info", native_info);
     SYMBOL("snd_pcm_nonblock_mode", native_nonblock);
@@ -988,8 +1004,92 @@ static int private_profile_fixture(const char *firmware, const char *fault)
     return 1;
 }
 
+static void amplifier_policy_fixture(const char *value)
+{
+    const spa_audio_config_t *config;
+    int16_t pcm[2048];
+    unsigned offset, i, stream;
+    int external = !strcmp(value, "1");
+    if (!strcmp(value, "missing")) assert(!unsetenv(SPA_AUDIO_EXTERNAL_AMP_ENV));
+    else assert(!setenv(SPA_AUDIO_EXTERNAL_AMP_ENV, value, 1));
+    /* Hardware policy must override stale/forced feature settings. */
+    assert(!setenv(SPA_AUDIO_ENV, "1", 1));
+    assert(!setenv(SPA_AUDIO_ATMOS_ENV, "1", 1));
+    spa_spatial_enable = 1;
+    config = spa_audio_config();
+    assert(config->externalAmp == external);
+    assert(config->voiceGainQ13 == (external ? SPA_VOICE_GAIN_Q13_DEFAULT : SPA_VOICE_GAIN_Q13_UNITY));
+    assert(config->realtimePCM == external && config->buffered == external && config->atmos == external);
+    assert(config->realtimeUpmix == external && config->stereoLfeAssist == external);
+    assert(config->soundCheck.enabled == external);
+    assert(config->stereoUpmixBackend == (external ? SPA_STEREO_UPMIX_SCENE : SPA_STEREO_UPMIX_OFF));
+    /* Preserve exactly the rate improvements for every hardware policy. */
+    assert(AudioSessionGetSupportedInputFormats(100) == 0x40);
+    assert(AudioSessionGetSupportedOutputFormats(101) == 0x4000);
+    if (!external) {
+        assert(!spa_probe103());
+        assert(AudioSessionGetSupportedOutputFormats(100) == 0); /* mock stock mask */
+        /* Every signed 16-bit sample passes untouched through both real voice
+         * interposer branches, including peaks that used to enter the limiter. */
+        for (stream = 0; stream < 2; ++stream) {
+            spa_pcm_sink.ann3Handle = stream == 0 ? &phone_device : NULL;
+            spa_pcm_sink.ann4Handle = stream == 1 ? &phone_device : NULL;
+            for (offset = 0; offset < 65536; offset += 2048) {
+                for (i = 0; i < 2048; ++i) pcm[i] = (int16_t)((int)(offset + i) - 32768);
+                assert(snd_pcm_plugin_write(&phone_device, pcm, sizeof(pcm)) == sizeof(pcm));
+                assert(last_write_buffer == pcm && last_write_bytes == sizeof(pcm));
+                assert(!memcmp(captured_voice, pcm, sizeof(pcm)));
+            }
+        }
+        /* Main stereo PCM must also avoid channel expansion and sample DSP. */
+        {
+            snd_pcm_channel_params_t params = stereo_params();
+            spa_pcm_sink.handle = &media_device;
+            assert(!snd_pcm_plugin_params(&media_device, &params));
+            assert(!spa_pcm_sink.expandedParams && device_setup.format.voices == 2);
+            assert(snd_pcm_plugin_write(&media_device, pcm, sizeof(pcm)) == sizeof(pcm));
+            assert(last_write_buffer == pcm && last_write_bytes == sizeof(pcm));
+        }
+    } else {
+        /* The veto must not leak into an external-amp car: 5.1 PCM (bit 44)
+         * is still offered on main audio. */
+        assert(AudioSessionGetSupportedOutputFormats(100) ==
+               (int64_t)((uint64_t)1 << SPA_DEFAULT_BIT));
+        spa_pcm_sink.ann3Handle = &phone_device;
+        pcm[0] = 1000; pcm[1] = -1000;
+        assert(snd_pcm_plugin_write(&phone_device, pcm, 4) == 4);
+        assert(captured_voice[0] > pcm[0] && captured_voice[1] < pcm[1]);
+    }
+    printf("audio amplifier policy: %s -> %s; rate upgrades retained PASS\n",
+           value, external ? "external processing" : "bit-exact bypass");
+}
+
+/* A unit whose deva-ctrl-qc.so stayed stock must not be offered the formats
+ * that only the patched driver has; absent means patched (older installs). */
+static void deva_policy_fixture(const char *value)
+{
+    int patched = strcmp(value, "0") != 0;
+    if (!strcmp(value, "missing")) assert(!unsetenv(SPA_AUDIO_DEVA_PATCHED_ENV));
+    else assert(!setenv(SPA_AUDIO_DEVA_PATCHED_ENV, value, 1));
+    assert(!setenv(SPA_AUDIO_EXTERNAL_AMP_ENV, "1", 1));
+    assert(spa_audio_config()->rateUpgrades == patched);
+    assert(AudioSessionGetSupportedInputFormats(100) == (patched ? 0x40 : 0x10));
+    assert(AudioSessionGetSupportedOutputFormats(101) == (patched ? 0x4000 : 0));
+    printf("audio deva policy: %s -> %s PASS\n", value,
+           patched ? "24 kHz voice + 48 kHz nav offered" : "stock formats");
+}
+
 int main(int argc, char **argv)
 {
+    if (argc == 3 && !strcmp(argv[1], "deva-policy")) {
+        deva_policy_fixture(argv[2]);
+        return 0;
+    }
+    if (argc == 3 && !strcmp(argv[1], "amp-policy")) {
+        amplifier_policy_fixture(argv[2]);
+        return 0;
+    }
+    assert(!setenv(SPA_AUDIO_EXTERNAL_AMP_ENV, "1", 1));
     assert(!setenv("AUDIO_SPATIAL", "1", 1));
     assert(argc <= 3);
     if (!private_profile_fixture(argc > 1 ? argv[1] : "us", argc > 2 ? argv[2] : "valid"))
