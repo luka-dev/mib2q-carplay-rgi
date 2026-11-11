@@ -7,8 +7,27 @@
 set -e
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
+
 OUT=$(mktemp -d)
 trap 'rm -rf "$OUT"' EXIT
+
+# Linux/WSL host compilers need two things macOS clang does not:
+#  - glibc hides POSIX APIs (clock_gettime, CLOCK_MONOTONIC, ...) under -std=c99: -D_DEFAULT_SOURCE;
+#  - distro gcc builds with _FORTIFY_SOURCE, which marks write() and friends warn_unused_result,
+#    and -Werror then rejects hook code that deliberately ignores a best-effort write.
+# A `cc` shim first on PATH adds both, so every test line here and in the sub-scripts
+# (which call cc or "${CC:-cc}") builds unchanged. CC still picks the real compiler.
+case "$(uname -s)" in
+    Darwin) ;;
+    *)
+        REAL_CC=$(command -v "${CC:-cc}") || { echo "no host compiler (${CC:-cc})" >&2; exit 1; }
+        mkdir -p "$OUT/hostcc"
+        printf '#!/bin/sh\nexec "%s" -D_DEFAULT_SOURCE -Wno-unused-result "$@"\n' "$REAL_CC" > "$OUT/hostcc/cc"
+        chmod +x "$OUT/hostcc/cc"
+        PATH="$OUT/hostcc:$PATH"; export PATH
+        unset CC
+        ;;
+esac
 
 printf '%-32s ' spatial_downmix_test
 cc -std=c99 -O2 -Wall -Wextra -Werror -Ihook \

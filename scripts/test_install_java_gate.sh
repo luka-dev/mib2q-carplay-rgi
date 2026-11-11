@@ -14,7 +14,14 @@ T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 } > "$T/f.sh"
 fail() { echo "FAIL ($1): $2"; exit 1; }
 shells=
-for s in /bin/ksh /bin/mksh "$(command -v mksh 2>/dev/null)" /bin/sh; do [ -x "$s" ] && shells="$shells $s"; done
+# read_train() decodes E2P bytes with ksh base arithmetic ($((16#4d))), which the unit's pdksh has.
+# A /bin/sh without it (dash on Debian/Ubuntu) cannot run that installer function at all, so it is
+# skipped here instead of failing; macOS /bin/sh (bash) and any ksh/mksh still run every case.
+for s in /bin/ksh /bin/mksh "$(command -v mksh 2>/dev/null)" /bin/sh; do
+    [ -x "$s" ] || continue
+    [ "$("$s" -c 'echo $((16#10))' 2>/dev/null)" = 16 ] && shells="$shells $s" || echo "  (skip $s: no base#n arithmetic)" >&2
+done
+[ -n "$shells" ] || { echo "SKIP (no ksh-compatible shell; install ksh or mksh)"; exit 0; }
 for sh in $shells; do
     # Truncated names and KR strings below are synthetic negative-test inputs,
     # not an inventory of real firmware releases.
