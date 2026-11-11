@@ -23,28 +23,30 @@ public final class LaneGuidanceE2ETest {
     static final int[] ANGLES = {-90, -45, 0, 45, 90};
     /** Stock BAP boundary: capture lane guidance and current-maneuver distance. */
     public static final class HUD extends AppConnectorNavi {
-        boolean showing, barOn; int writes, distance;
+        boolean showing, barOn; int writes, distance, turnMain; String turnStreet;
         HUD() { super(null); } // skipped: allocated without the native framework
         public void updateLaneGuidance(boolean on, CombiBAPNaviLaneGuidanceData[] d) { showing = on; writes++; }
         public void updateRGStatus(int v) { }
         public void updateActiveRGType(int v) { }
         public void updateDistanceToNextManeuver(int a, int b, boolean c, int d) { distance = a; barOn = c; }
-        public void updateCurrentPositionInfo(String v) { }
+        public void updateCurrentPositionInfo(String v) { turnStreet = v; }
         public void updateTurnToInfo(String a, String b) { }
         public void updateDistanceToDestination(int a, int b, boolean c) { }
         public void updateTimeToDestination(int a, int b, long c) { }
-        public void updateManeuverDescriptor(CombiBAPNaviManeuverDescriptor[] d) { }
+        public void updateManeuverDescriptor(CombiBAPNaviManeuverDescriptor[] d) {
+            turnMain = (d != null && d.length > 0 && d[0] != null) ? d[0].mainElement : 0;
+        }
         public void updateDestinationInfo(CombiBAPDestinationInfo d) { }
         public void updateExitView(int a, int b) { }
         public void updateManeuverState(int v) { }
     }
     public static final class Renderer extends RendererServer {
-        LaneGuidanceSnapshot lanes; int writes, progressMode;
+        LaneGuidanceSnapshot lanes; int writes, progressMode, lastIcon;
         public boolean sendVisibleArea(int x, int y, int w, int h) { return true; }
         public boolean sendProgress(int level, int mode, int state) { progressMode = mode; return true; }
         public boolean sendBapProgressManeuver(int icon, int direction, int angle, int side, int[] roads,
                 int level, int mode, int perspective, boolean refresh, boolean snap, int progress) {
-            progressMode = mode; return true;
+            lastIcon = icon; progressMode = mode; return true;
         }
         boolean sendLaneGuidance(LaneGuidanceSnapshot value) { lanes = value; writes++; return true; }
     }
@@ -123,6 +125,20 @@ public final class LaneGuidanceE2ETest {
                 check(s.distManeuverM == meters, at + ": expected " + meters + ", got " + s.distManeuverM);
                 check((hud.distance > 0) == visible && hud.barOn == visible, at + ": HUD distance/progress");
                 check((renderer.progressMode != 0) == visible, at + ": renderer progress");
+                checks++;
+                continue;
+            }
+            if (p[0].equals("M")) {
+                boolean expectTurn = p[1].equals("1");
+                String road = p[2];
+                String at = "maneuver after frame " + (frames - 1) + " (icon=" + renderer.lastIcon
+                    + " hudMain=" + hud.turnMain + " street=" + hud.turnStreet + ")";
+                if (expectTurn) {
+                    check(renderer.lastIcon == RendererMapper.ICON_TURN, at + ": expected ICON_TURN");
+                    check(hud.turnMain == ManeuverMapper.TURN, at + ": expected HUD TURN");
+                    check(hud.turnStreet != null && hud.turnStreet.indexOf(road) >= 0,
+                        at + ": expected street containing " + road);
+                }
                 checks++;
                 continue;
             }

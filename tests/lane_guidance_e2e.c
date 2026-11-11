@@ -110,6 +110,35 @@ static void lane_event_without_index(int seed) {
 }
 static void expect(int event, int seed) { fprintf(g_steps, "E %d %d\n", event, seed); }
 static void expect_distance(int meters, int visible) { fprintf(g_steps, "D %d %d\n", meters, visible); }
+static void expect_maneuver(int icon, const char* road) { fprintf(g_steps, "M %d %s\n", icon, road); }
+
+static void maneuver_named(int idx, uint8_t type, int16_t angle, const char* road) {
+    begin(0x5202);
+    u16(MAN_TLV_INDEX, (uint16_t)idx);
+    u8(MAN_TLV_TYPE, type);
+    u8(MAN_TLV_JUNCTION_TYPE, 0);
+    u16(MAN_TLV_EXIT_ANGLE, (uint16_t)angle);
+    if (road) tlv(g_msg, &g_len, MAN_TLV_AFTER_ROAD_NAME, (const uint8_t*)road, strlen(road));
+    send();
+}
+
+static void update_sourced(const char* source, int state, int first, int count, int dist, int lane, int showing) {
+    begin(0x5201);
+    u8(RGD_TLV_ROUTE_GUIDANCE_STATE, (uint8_t)state);
+    if (source) tlv(g_msg, &g_len, RGD_TLV_SOURCE_NAME, (const uint8_t*)source, strlen(source));
+    if (count >= 0) u16(RGD_TLV_MANEUVER_COUNT, (uint16_t)count);
+    if (first >= 0) {
+        uint8_t list[4];
+        write_be16(list, (uint16_t)first); write_be16(list + 2, (uint16_t)(first + 1));
+        tlv(g_msg, &g_len, RGD_TLV_MANEUVER_LIST, list, 4);
+    } else if (count == 0) {
+        tlv(g_msg, &g_len, RGD_TLV_MANEUVER_LIST, (const uint8_t*)"", 0);
+    }
+    if (dist >= 0) u32(RGD_TLV_DIST_TO_MANEUVER, (uint32_t)dist);
+    if (lane >= 0) u16(RGD_TLV_LANE_GUIDANCE_INDEX, (uint16_t)lane);
+    if (showing >= 0) u8(RGD_TLV_LANE_GUIDANCE_SHOWING, (uint8_t)showing);
+    send();
+}
 
 int main(int argc, char** argv) {
     char path[512];
@@ -221,6 +250,83 @@ int main(int argc, char** argv) {
      * not on the event numbered like the first maneuver (1) */
     update(1, 1, 0, 1); lane_event_without_index(77); expect(0, 100);
     update(1, 1, 1, 1); expect(1, 101);
+
+    /* Route D (Apple Maps cold start: 0x5204 -> 0x5202 -> 0x5201 with !have_update).
+     * CarClusterNavigationController sends lanes and up to 16 maneuvers before
+     * the very first 0x5201; none may be dropped or emit headless frames. */
+    rgd_clear_state("apple_cold_start");
+    {
+        int before = g_frames;
+        for (e = 0; e < 3; e++) lane_event(e, 400 + e);
+        maneuver_named(0, MAN_TYPE_LEFT_TURN, -90, "AppleColdRd");
+        for (int m = 1; m < 16; m++) maneuver_named(m, MAN_TYPE_RIGHT_TURN, 90, "AppleNextRd");
+        assert(g_frames == before); /* staged silently until 0x5201 arrives */
+        update_sourced("Maps", 1, 0, 16, 400, 0, 1);
+        expect(0, 400);
+        expect_maneuver(1, "AppleColdRd");
+    }
+
+    /* Route E (Google Maps -> resetActiveComponents state=0 without source_name ->
+     * Apple Maps 0x5202 + 0x5204 -> 0x5201 LOADING -> 0x5201 ROUTE_SET). */
+    update_sourced("Google Maps", 1, 0, 2, 300, -1, 0);
+    maneuver_named(0, MAN_TYPE_RIGHT_TURN, 90, "GoogleRd");
+    maneuver_named(1, MAN_TYPE_LEFT_TURN, -90, "GoogleRd2");
+    expect_maneuver(1, "GoogleRd");
+    update(0, 0, -1, 0); /* CRAccNavProvider.resetActiveComponents omits source_name */
+    for (int m = 0; m < 16; m++)
+        maneuver_named(m, m == 0 ? MAN_TYPE_LEFT_TURN : MAN_TYPE_RIGHT_TURN, m == 0 ? -90 : 90,
+                       m == 0 ? "AppleSwitchRd" : "AppleLaterRd");
+    for (e = 0; e < 3; e++) lane_event(e, 500 + e);
+    update_sourced("Maps", 3, -1, 0, -1, -1, 0); /* LOADING with source_changed */
+    update_sourced("Maps", 1, 0, 16, 250, 0, 1); /* ROUTE_SET activates pre-sent batch */
+    expect(0, 500);
+    expect_maneuver(1, "AppleSwitchRd");
+
+    /* Route F (Hot provider switch without state=0: Maps active at [10,11] ->
+     * Yandex sends 0x5202(0..3) + 0x5204(0..1) -> 0x5201(source="Yandex Maps")). */
+    maneuver_named(10, MAN_TYPE_RIGHT_TURN, 90, "MapsOld10");
+    maneuver_named(11, MAN_TYPE_RIGHT_TURN, 90, "MapsOld11");
+    update_sourced("Maps", 1, 10, 16, 200, 2, 1);
+    expect(2, 502);
+    for (int m = 0; m < 4; m++)
+        maneuver_named(m, MAN_TYPE_LEFT_TURN, -90, m == 0 ? "YandexHotRd" : "YandexNextRd");
+    lane_event(0, 600); lane_event(1, 601);
+    update_sourced("Yandex Maps", 1, 0, 4, 350, 0, 1);
+    assert(rgd_find_slot_for_iap_index_no_touch(10) < 0); /* stale provider wiped */
+    expect(0, 600);
+    expect_maneuver(1, "YandexHotRd");
+
+    /* Route G (Same-app route change renumbering to 0 without state=0 or REROUTING:
+     * active list is [2,3] at lane=1, new route's 0x5202(0,1) + 0x5204(0) arrive
+     * before 0x5201([0,1], lane=0)). */
+    update_sourced("Yandex Maps", 1, 2, 4, 180, 1, 1);
+    expect(1, 601);
+    maneuver_named(0, MAN_TYPE_RIGHT_TURN, 90, "RenumberedRd");
+    maneuver_named(1, MAN_TYPE_LEFT_TURN, -90, "RenumberedRd2");
+    lane_event(0, 700);
+    update_sourced("Yandex Maps", 1, 0, 2, 500, 0, 1);
+    expect(0, 700);
+    expect_maneuver(1, "RenumberedRd");
+
+    /* Route H (Google Maps order: 0x5201 -> 0x5202 -> 0x5204) and
+     * Route I (Interleaved order: 0x5202 -> 0x5201 -> 0x5204). */
+    rgd_clear_state("google_order");
+    update_sourced("Google Maps", 3, -1, 0, -1, -1, 0);
+    update_sourced("Google Maps", 1, 0, 2, 320, 0, 1);
+    expect(-1, 0);
+    maneuver_named(0, MAN_TYPE_LEFT_TURN, -90, "GoogleLateManRd");
+    maneuver_named(1, MAN_TYPE_RIGHT_TURN, 90, "GoogleLateManRd2");
+    expect_maneuver(1, "GoogleLateManRd");
+    lane_event(0, 800);
+    expect(0, 800);
+
+    rgd_clear_state("interleaved_order");
+    maneuver_named(0, MAN_TYPE_RIGHT_TURN, 90, "InterleavedRd");
+    update_sourced("2GIS", 1, 0, 1, 210, 0, 1);
+    expect(-1, 0);
+    expect_maneuver(1, "InterleavedRd");
+    lane_event(0, 900);
+    expect(0, 900);
 
     fclose(g_steps);
     printf("native: %d bus frames\n", g_frames);

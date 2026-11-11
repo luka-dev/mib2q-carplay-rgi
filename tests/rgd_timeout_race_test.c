@@ -99,6 +99,42 @@ static void source_name(const char* source) {
     rgd_message_handler(&ctx, &frame);
 }
 
+static void maneuver_type(uint16_t idx, uint8_t type, const char* road) {
+    uint8_t raw[256] = {0x40, 0x40, 0, 0, 0x52, 0x02};
+    size_t off = 6;
+    write_be16(raw + off, 6); write_be16(raw + off + 2, MAN_TLV_INDEX); write_be16(raw + off + 4, idx); off += 6;
+    write_be16(raw + off, 5); write_be16(raw + off + 2, MAN_TLV_TYPE); raw[off + 4] = type; off += 5;
+    if (road) {
+        size_t rlen = strlen(road);
+        write_be16(raw + off, (uint16_t)(4 + rlen));
+        write_be16(raw + off + 2, MAN_TLV_AFTER_ROAD_NAME);
+        memcpy(raw + off + 4, road, rlen);
+        off += 4 + rlen;
+    }
+    write_be16(raw + 2, (uint16_t)off);
+    iap2_frame_t frame;
+    memset(&frame, 0, sizeof(frame)); frame.msgid = 0x5202; frame.frame_len = (uint16_t)off;
+    ctx.direction = MSG_DIR_INCOMING; ctx.raw_buf = raw; ctx.raw_len = off;
+    rgd_message_handler(&ctx, &frame);
+}
+
+static void source_with_route(const char* source, uint8_t state, uint16_t first_idx) {
+    uint8_t raw[256] = {0x40, 0x40, 0, 0, 0x52, 0x01};
+    size_t off = 6, len = strlen(source);
+    write_be16(raw + off, 5); write_be16(raw + off + 2, RGD_TLV_ROUTE_GUIDANCE_STATE); raw[off + 4] = state; off += 5;
+    write_be16(raw + off, (uint16_t)(4 + len)); write_be16(raw + off + 2, RGD_TLV_SOURCE_NAME);
+    memcpy(raw + off + 4, source, len); off += 4 + len;
+    if (state > 0) {
+        write_be16(raw + off, 6); write_be16(raw + off + 2, RGD_TLV_MANEUVER_COUNT); write_be16(raw + off + 4, 1); off += 6;
+        write_be16(raw + off, 6); write_be16(raw + off + 2, RGD_TLV_MANEUVER_LIST); write_be16(raw + off + 4, first_idx); off += 6;
+    }
+    write_be16(raw + 2, (uint16_t)off);
+    iap2_frame_t frame;
+    memset(&frame, 0, sizeof(frame)); frame.msgid = 0x5201; frame.frame_len = (uint16_t)off;
+    ctx.direction = MSG_DIR_INCOMING; ctx.raw_buf = raw; ctx.raw_len = off;
+    rgd_message_handler(&ctx, &frame);
+}
+
 static void source_lifecycle(void) {
     rgd_clear_state("source test");
     route_state(1);
@@ -143,7 +179,34 @@ static void source_lifecycle(void) {
     assert(!(g_rgd.update_cache.present & RGD_UPD_SOURCE_NAME));
     assert(g_rgd.route_generation > generation && last_state == 0);
     assert(g_rgd.slot_cache[0].present == 0 && g_rgd.lane_cache[0].present == 0);
-    puts("RGI sources: real TLV -> cached snapshot, late source, provider switch, soft reset, explicit empty and disconnect PASS");
+
+    // iOS CRAccNavProvider resetActiveComponents (state=0 without source_name)
+    // followed by Apple Maps 0x5202 burst BEFORE 0x5201(source="Maps") must keep
+    // the new provider's maneuvers while bumping route_generation.
+    rgd_clear_state("google_to_apple");
+    maneuver_type(0, MAN_TYPE_RIGHT_TURN, "Google St");
+    source_with_route("Google Maps", 1, 0);
+    assert(strstr(last_frame, "source_name:s:Google Maps\n"));
+    assert(strstr(last_frame, "m0_after_road:s:Google St\n"));
+    route_state(0); // CRAccNavProvider.resetActiveComponents omits source_name
+    maneuver_type(0, MAN_TYPE_LEFT_TURN, "Apple St");
+    generation = g_rgd.route_generation;
+    source_with_route("Maps", 3, 0); // LOADING first, then ROUTE_SET
+    assert(g_rgd.route_generation > generation);
+    source_with_route("Maps", 1, 0);
+    assert(strstr(last_frame, "source_name:s:Maps\n"));
+    assert(strstr(last_frame, "m0_type:n:1\n"));
+    assert(strstr(last_frame, "m0_after_road:s:Apple St\n"));
+
+    // Orphaned pre-activation 0x5202 followed by explicit state=0 must be wiped.
+    rgd_clear_state("orphan_pre_5201");
+    int before_frames = frames;
+    maneuver_type(0, MAN_TYPE_LEFT_TURN, "Orphan Rd");
+    assert(frames == before_frames); // No headless snapshot before 0x5201
+    route_state(0);
+    assert(rgd_find_slot_for_iap_index_no_touch(0) < 0);
+
+    puts("RGI sources: real TLV -> cached snapshot, late source, provider switch, pre-5201 Apple Maps handoff, soft reset, explicit empty and disconnect PASS");
 }
 
 int main(void) {

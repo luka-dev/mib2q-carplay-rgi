@@ -112,6 +112,11 @@ static struct {
 	     * gets slot data atomically with the maneuver_list.
 	     */
 	    rgd_maneuver_t slot_cache[MANEUVER_CACHE_SIZE];
+	    /* Per-slot provenance across provider transitions (0=bound to cached
+	     * source, 1=arrived since last 0x5201 while active, 2=arrived while idle
+	     * before the incoming route's 0x5201 named its provider). */
+	    uint8_t slot_origin[MANEUVER_CACHE_SIZE];
+	    uint8_t lane_slot_origin[MANEUVER_CACHE_SIZE];
 	    /* Last merged 0x5201 snapshot (used to make bus writes full-state). */
 	    rgd_update_t update_cache;
 		} g_rgd = {
@@ -268,9 +273,11 @@ static void rgd_update_cache_merge(const rgd_update_t* upd) {
 	        g_rgd.slot_seq[i] = 0;
 	        g_rgd.slot_ver[i] = 0;
 	        g_rgd.slot_cache[i].present = 0;
+	        g_rgd.slot_origin[i] = 0;
 	        g_rgd.lane_slot_to_iap_idx[i] = 0xFFFF;
 	        g_rgd.lane_slot_born[i] = 0;
 	        g_rgd.lane_cache[i].present = 0;
+	        g_rgd.lane_slot_origin[i] = 0;
 		    }
 		}
 
@@ -295,34 +302,58 @@ static const uint64_t RGD_UPD_WRITE_MASK = RGD_UPD_ROUTE_STATE |
                                             RGD_UPD_MANEUVER_COUNT |
                                             RGD_UPD_MANEUVER_LIST;
 
-static int rgd_min_current_index(void) {
-    if (g_rgd.current_list_count == 0) return -1;
-    uint16_t min = g_rgd.current_list[0];
-    for (uint16_t i = 1; i < g_rgd.current_list_count; i++) {
-        if (g_rgd.current_list[i] < min) min = g_rgd.current_list[i];
+/*
+ * Reset previous-provider state on a 0x5201 source_name boundary without
+ * discarding 0x5202/0x5204 packets that already arrived ahead of this 0x5201
+ * for the incoming route (iOS CRAccNavController and Apple Maps send 0x5202
+ * and 0x5204 before 0x5201, and CRAccNavProvider's resetActiveComponents frame
+ * omits source_name).
+ */
+static void rgd_reset_for_source_change(bool keep_staged) {
+    if (!keep_staged) {
+        rgd_maneuver_map_reset();
+        return;
     }
-    return (int)min;
+    uint64_t generation = now_monotonic_ms();
+    if (generation <= g_rgd.route_generation)
+        generation = g_rgd.route_generation + 1;
+    g_rgd.route_generation = generation;
+    g_rgd.current_list_present = false;
+    g_rgd.current_list_count = 0;
+    g_rgd.highest_list_index = 0;
+    for (int i = 0; i < MANEUVER_CACHE_SIZE; i++) {
+        if (g_rgd.slot_origin[i] == 0) {
+            g_rgd.slot_to_iap_idx[i] = 0xFFFF;
+            g_rgd.slot_seq[i] = 0;
+            g_rgd.slot_ver[i] = 0;
+            g_rgd.slot_cache[i].present = 0;
+        } else {
+            g_rgd.slot_origin[i] = 0;
+        }
+        if (g_rgd.lane_slot_origin[i] == 0) {
+            g_rgd.lane_slot_to_iap_idx[i] = 0xFFFF;
+            g_rgd.lane_slot_born[i] = 0;
+            g_rgd.lane_cache[i].present = 0;
+        } else {
+            g_rgd.lane_slot_origin[i] = 0;
+        }
+    }
 }
 
-	static bool rgd_can_process_maneuver_index(uint16_t idx) {
-	    /* Mirror MHI3 isRouteGuidanceManeuverIndexGreater semantics (simplified):
-	     * - if no route update exists => reject
-	     * - if current list is null (ManeuverList TLV not present) => accept
-	     * - if current list is empty => accept (was: reject - but transient
-	     *   state=0 clears the list before 0x5202 data arrives for the new
-	     *   route; rejecting here permanently loses that data since iOS never
-	     *   resends 0x5202 for already-sent indices)
-	     * - if route_state == REROUTING => accept all
-	     * - else accept if idx >= min(current_list)
-	     */
-	    if (!g_rgd.have_update) return false;
-	    if (!g_rgd.current_list_present) return true;
-	    if (g_rgd.current_list_count == 0) return true;
-	    if (g_rgd.last_route_state == RGD_STATE_REROUTING) return true;
-	    int min = rgd_min_current_index();
-	    if (min < 0) return false;
-	    return (int)idx >= min;
-	}
+/* True once an active 0x5201 route snapshot exists in update_cache, so late
+ * 0x5202/0x5204 packets can immediately refresh Java.  When 0x5202/0x5204
+ * precede the route's first active 0x5201, they stay staged in cache and ship
+ * atomically with that 0x5201. */
+static bool rgd_has_publishable_route_cache(void) {
+    uint64_t route_keys = g_rgd.update_cache.present
+        & (RGD_UPD_WRITE_MASK & ~(RGD_UPD_SOURCE_NAME | RGD_UPD_SOURCE_SUPPORTS_RG | RGD_UPD_COMPONENT_IDS));
+    if (route_keys == 0) return false;
+    if ((g_rgd.update_cache.present & RGD_UPD_ROUTE_STATE)
+            && g_rgd.update_cache.route_state == RGD_STATE_NOT_ACTIVE) {
+        return false;
+    }
+    return true;
+}
 
 /*
  * Helper: check if an iAP2 index is in the active ManeuverList.
@@ -360,6 +391,7 @@ static int rgd_slot_for_iap_index(uint16_t idx, bool create) {
             g_rgd.slot_to_iap_idx[s] = idx;
             g_rgd.slot_seq[s] = ++g_rgd.seq_counter;
             g_rgd.slot_ver[s] = ++g_rgd.ver_counter;
+            g_rgd.slot_origin[s] = 0;
             return s;
         }
     }
@@ -391,6 +423,7 @@ static int rgd_slot_for_iap_index(uint16_t idx, bool create) {
     g_rgd.slot_to_iap_idx[victim] = idx;
     g_rgd.slot_seq[victim] = ++g_rgd.seq_counter;
     g_rgd.slot_ver[victim] = ++g_rgd.ver_counter;
+    g_rgd.slot_origin[victim] = 0;
     memset(&g_rgd.slot_cache[victim], 0, sizeof(g_rgd.slot_cache[victim]));
     return victim;
 }
@@ -425,6 +458,7 @@ static int rgd_lane_slot_for_iap_index(uint16_t idx, bool create) {
 
     g_rgd.lane_slot_to_iap_idx[victim] = idx;
     g_rgd.lane_slot_born[victim] = ++g_rgd.lane_born_counter;
+    g_rgd.lane_slot_origin[victim] = 0;
     memset(&g_rgd.lane_cache[victim], 0, sizeof(g_rgd.lane_cache[victim]));
     return victim;
 }
@@ -443,6 +477,7 @@ static void rgd_drop_passed_lane_events(uint16_t active) {
         g_rgd.lane_slot_to_iap_idx[s] = 0xFFFF;
         g_rgd.lane_slot_born[s] = 0;
         g_rgd.lane_cache[s].present = 0;
+        g_rgd.lane_slot_origin[s] = 0;
     }
 }
 
@@ -671,6 +706,14 @@ static bool rgd_lane_slot_has_data(int slot) {
            (RGD_LANE_GUIDANCE_INDEX | RGD_LANE_INFORMATIONS);
 }
 
+static bool rgd_has_cached_maneuver_or_lane(void) {
+    for (int i = 0; i < MANEUVER_CACHE_SIZE; i++) {
+        if (g_rgd.slot_to_iap_idx[i] != 0xFFFF || g_rgd.lane_slot_to_iap_idx[i] != 0xFFFF)
+            return true;
+    }
+    return false;
+}
+
 static void write_bus_maneuver_partial(const rgd_maneuver_t* man) {
     if (!man) return;
     if (man->present == 0) return;
@@ -690,15 +733,20 @@ static void write_bus_maneuver_partial(const rgd_maneuver_t* man) {
                           RGD_MAN_EXIT_INFO_STR;
     if ((man->present & write_mask) == 0) return;
 
+    /* Accept 0x5202 in any packet order: iOS CRAccNavController and Apple Maps
+     * send 0x5202/0x5204 before 0x5201 on cold start, app switch and reroute,
+     * and never re-send cached maneuver indices. */
     unsigned iap_idx = man->index;
-    if (!rgd_can_process_maneuver_index((uint16_t)iap_idx)) return;
     int slot = rgd_slot_for_iap_index((uint16_t)iap_idx, true);
     if (slot < 0) return;
 
     /* Cache for re-publish on 0x5201 */
     g_rgd.slot_cache[slot] = *man;
+    g_rgd.slot_origin[slot] = (!g_rgd.have_update || g_rgd.last_route_state == RGD_STATE_NOT_ACTIVE) ? 2 : 1;
 
-    write_bus_snapshot_from_cache(slot, &g_rgd.slot_cache[slot], NULL);
+    if (rgd_has_publishable_route_cache() && rgd_is_active_index((uint16_t)iap_idx)) {
+        write_bus_snapshot_from_cache(slot, &g_rgd.slot_cache[slot], NULL);
+    }
 }
 
 /*
@@ -717,6 +765,7 @@ static void write_bus_lane_guidance_partial(const rgd_lane_guidance_t* lane) {
     int slot = rgd_lane_slot_for_iap_index(lane->lane_guidance_index, true);
     rgd_lane_guidance_t* dst = &g_rgd.lane_cache[slot];
     *dst = *lane;
+    g_rgd.lane_slot_origin[slot] = (!g_rgd.have_update || g_rgd.last_route_state == RGD_STATE_NOT_ACTIVE) ? 2 : 1;
     if ((dst->present & RGD_LANE_GUIDANCE_DESC) && dst->lane_guidance_description[0] != '\0') {
         for (int i = 0; i < dst->lane_count && i < MAX_LANE_GUIDANCE; i++) {
             if (dst->lanes[i].description[0] == '\0') {
@@ -725,7 +774,9 @@ static void write_bus_lane_guidance_partial(const rgd_lane_guidance_t* lane) {
             }
         }
     }
-    write_bus_snapshot_from_cache(-1, NULL, NULL);
+    if (rgd_has_publishable_route_cache()) {
+        write_bus_snapshot_from_cache(-1, NULL, NULL);
+    }
 }
 
 static void write_bus_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* extra_man,
@@ -1126,10 +1177,15 @@ static bool rgd_message_handler(hook_context_t* ctx, const iap2_frame_t* frame) 
             && g_rgd.update_cache.source_name[0] != '\0'
             && strcmp(upd.source_name, g_rgd.update_cache.source_name) != 0;
         if (source_changed) {
-            LOG_INFO(LOG_MODULE, "Navigation source changed: \"%s\" -> \"%s\"; clearing route cache",
-                     g_rgd.update_cache.source_name, upd.source_name);
+            bool explicit_zero = ((upd.present & RGD_UPD_ROUTE_STATE) && upd.route_state == RGD_STATE_NOT_ACTIVE)
+                || ((upd.present & RGD_UPD_SOURCE_SUPPORTS_RG) && upd.source_supports_route_guidance == 0)
+                || upd.source_name[0] == '\0';
+            bool keep_staged = !explicit_zero
+                && (g_rgd.last_route_state == RGD_STATE_NOT_ACTIVE || rgd_update_has_active_evidence(&upd));
+            LOG_INFO(LOG_MODULE, "Navigation source changed: \"%s\" -> \"%s\"; clearing route cache (keep_staged=%d)",
+                     g_rgd.update_cache.source_name, upd.source_name, keep_staged ? 1 : 0);
             rgd_update_cache_reset();
-            rgd_maneuver_map_reset();
+            rgd_reset_for_source_change(keep_staged);
             rgd_cancel_pending_zero("source changed");
         }
 
@@ -1171,14 +1227,19 @@ static bool rgd_message_handler(hook_context_t* ctx, const iap2_frame_t* frame) 
                     g_rgd.emitted_route_state = 0;
                 } else if (g_rgd.emitted_route_state == 0) {
                     /* Already emitted state=0 (or never emitted anything yet) —
-                     * pass through.  Re-emitting state=0 is a no-op for Java. */
+                     * pass through.  Re-emitting state=0 is a no-op for Java.
+                     * Flush any pre-activation 0x5202/0x5204 slots that arrived
+                     * before this explicit state=0 cancelled them. */
+                    if (rgd_has_cached_maneuver_or_lane()) {
+                        rgd_maneuver_map_reset();
+                    }
                 } else {
                     uint64_t now = now_monotonic_ms();
                     bool from_reroute = (prev_state == RGD_STATE_REROUTING)
                                      || (g_rgd.emitted_route_state == RGD_STATE_REROUTING);
 
                     rgd_route_cache_reset();
-                    if (prev_state > 0) {
+                    if (prev_state > 0 || rgd_has_cached_maneuver_or_lane()) {
                         LOG_INFO(LOG_MODULE,
                                  "Route reset frame (state %u->0): flushing slot cache, holding Java update",
                                  prev_state);
@@ -1218,6 +1279,15 @@ static bool rgd_message_handler(hook_context_t* ctx, const iap2_frame_t* frame) 
              * name may be sent only once, while the route is temporarily zero. */
             memcpy(g_rgd.update_cache.source_name, upd.source_name, sizeof(upd.source_name));
             g_rgd.update_cache.present |= RGD_UPD_SOURCE_NAME;
+        }
+        {
+            bool bind_all = (upd.present & RGD_UPD_SOURCE_NAME) != 0;
+            for (int i = 0; i < MANEUVER_CACHE_SIZE; i++) {
+                if (bind_all || g_rgd.slot_origin[i] == 1)
+                    g_rgd.slot_origin[i] = 0;
+                if (bind_all || g_rgd.lane_slot_origin[i] == 1)
+                    g_rgd.lane_slot_origin[i] = 0;
+            }
         }
     }
     else if (frame->msgid == IAP2_MSG_ROUTE_GUIDANCE_MANEUVER) {
