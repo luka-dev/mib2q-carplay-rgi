@@ -86,14 +86,6 @@ int spa_apac_decode_s16(spa_apac_decoder_t *decoder,
                         const uint8_t *packet, size_t length,
                         int16_t *out, size_t outCapacity, uint32_t *framesOut);
 
-/* Decode one APAC packet directly to left-aligned Q1.31 S32_LE (preserving the
- * full 24-bit float significand for the 24-bit MOST/J525 TDM slots without
- * rounding through S16).  Same channel order, capacity units and flush rule as
- * spa_apac_decode_s16(). */
-int spa_apac_decode_s32(spa_apac_decoder_t *decoder,
-                        const uint8_t *packet, size_t length,
-                        int32_t *out, size_t outCapacity, uint32_t *framesOut);
-
 /* Decode one APAC packet directly to IEEE-754 float32 (1.0f == 0 dBFS,
  * unclipped on > 0 dBFS inter-sample peaks) in the decoder's own channel
  * order, writing straight into `out` with zero bounce buffer.  Same capacity
@@ -121,8 +113,6 @@ typedef struct {
                   uint32_t *, uint32_t *, uint32_t *);
     int (*decodeS16)(spa_apac_decoder_t *, const uint8_t *, size_t,
                      int16_t *, size_t, uint32_t *);
-    int (*decodeS32)(spa_apac_decoder_t *, const uint8_t *, size_t,
-                     int32_t *, size_t, uint32_t *);
     int (*decodeF32)(spa_apac_decoder_t *, const uint8_t *, size_t,
                      float *, size_t, uint32_t *);
     void (*reset)(spa_apac_decoder_t *);

@@ -51,7 +51,7 @@ const spa_apac_codec_api_t *spa_apac_runtime_load(const char **pathOut)
         spa_apac_loaded_api.structSize != sizeof(spa_apac_loaded_api) ||
         spa_apac_loaded_api.abiVersion != SPA_APAC_CODEC_ABI_VERSION ||
         !spa_apac_loaded_api.create || !spa_apac_loaded_api.decodeS16 ||
-        !spa_apac_loaded_api.decodeS32 || !spa_apac_loaded_api.decodeF32 ||
+        !spa_apac_loaded_api.decodeF32 ||
         !spa_apac_loaded_api.reset || !spa_apac_loaded_api.destroy ||
         !spa_apac_loaded_api.getInfo) {
         memset(&spa_apac_loaded_api, 0, sizeof(spa_apac_loaded_api));

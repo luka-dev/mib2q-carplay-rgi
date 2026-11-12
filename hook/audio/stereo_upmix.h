@@ -204,7 +204,7 @@ struct spa_stereo_upmix {
 
     /* A complete 1024-frame stereo packet is staged before output starts.
      * This makes widening safe even when the PCM2 and PCM6 ranges overlap. */
-    int32_t _input_scratch[SPA_STEREO_UPMIX_MAX_FRAMES *
+    int16_t _input_scratch[SPA_STEREO_UPMIX_MAX_FRAMES *
                            SPA_STEREO_UPMIX_INPUT_CHANNELS];
     float _scene_input_scratch[SPA_STEREO_UPMIX_MAX_FRAMES *
                                SPA_STEREO_UPMIX_INPUT_CHANNELS];
@@ -327,44 +327,23 @@ int spa_stereo_upmix_process_gain_s16(struct spa_stereo_upmix *state,
                                       size_t pcm6_capacity_frames,
                                       const float *frame_gain);
 
-/* Native Q1.31 S32_LE (24-in-32) entry points for the MHI2Q QSA PCM6 rail:
- * preserves continuous sub-S16 precision through SCENE synthesis, programme
- * gain and cabin guard instead of quantizing to S16 before the LPASS TX packer. */
-int spa_stereo_upmix_process_s32(struct spa_stereo_upmix *state,
-                                 const int32_t *pcm2,
-                                 size_t frames,
-                                 int32_t *pcm6,
-                                 size_t pcm6_capacity_frames);
-
-int spa_stereo_upmix_process_gain_s32(struct spa_stereo_upmix *state,
-                                      const int32_t *pcm2,
-                                      size_t frames,
-                                      int32_t *pcm6,
-                                      size_t pcm6_capacity_frames,
-                                      const float *frame_gain);
-
-/* Realtime type-100 stereo S16 input -> native 6-channel S32_LE QSA output. */
+/* Realtime type-100 stereo S16 input -> native 6-channel S32_LE QSA output:
+ * preserves continuous sub-S16 precision through SCENE synthesis and cabin
+ * guard instead of quantizing to S16 before the LPASS TX packer. */
 int spa_stereo_upmix_process_s16_to_s32(struct spa_stereo_upmix *state,
                                         const int16_t *pcm2,
                                         size_t frames,
                                         int32_t *pcm6,
                                         size_t pcm6_capacity_frames);
 
-/* Unclipped IEEE-754 float32 stereo input (1.0f == 0 dBFS) -> float32 or
- * Q1.31 S32_LE PCM6 output for the buffered CarPlay render bus. */
+/* Unclipped IEEE-754 float32 stereo input (1.0f == 0 dBFS) -> float32 PCM6
+ * output for the buffered CarPlay render bus. */
 int spa_stereo_upmix_process_gain_f32(struct spa_stereo_upmix *state,
                                       const float *pcm2,
                                       size_t frames,
                                       float *pcm6,
                                       size_t pcm6_capacity_frames,
                                       const float *frame_gain);
-
-int spa_stereo_upmix_process_gain_f32_to_s32(struct spa_stereo_upmix *state,
-                                             const float *pcm2,
-                                             size_t frames,
-                                             int32_t *pcm6,
-                                             size_t pcm6_capacity_frames,
-                                             const float *frame_gain);
 
 
 /* Profile-0/bank-1 J525 input matrix, first six inputs x eight buses, row-major.

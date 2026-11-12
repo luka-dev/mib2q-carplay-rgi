@@ -1084,7 +1084,8 @@ static void test_s32_preserves_24bit_precision_and_cabin_bounds(void)
 {
     enum { N = 12288, BLOCK = 768 };
     static struct spa_stereo_upmix state;
-    static int32_t in_s32[N * 2], out_s32[N * TEST_CHANNELS];
+    static float in_quiet_f32[N * 2], out_f32[N * TEST_CHANNELS];
+    static int32_t out_s32[N * TEST_CHANNELS];
     static int16_t in_s16[N * 2];
     static float gains[BLOCK];
     struct spa_stereo_upmix_config config;
@@ -1093,11 +1094,10 @@ static void test_s32_preserves_24bit_precision_and_cabin_bounds(void)
     size_t i;
 
     for (i = 0; i < BLOCK; ++i) gains[i] = 0.3548134f;
-    /* Quiet -66 dBFS signal with 24-bit detail below S16 LSB */
+    /* Quiet -66 dBFS float32 signal with 24-bit detail below S16 LSB */
     for (i = 0; i < N; ++i) {
-        int32_t v = (int32_t)lrint(1000000.0 * sin(w * (double)i));
-        in_s32[2 * i] = v;
-        in_s32[2 * i + 1] = (int32_t)lrint(800000.0 * cos(w * (double)i));
+        in_quiet_f32[2 * i] = (float)(1000000.0 * sin(w * (double)i) / 2147483648.0);
+        in_quiet_f32[2 * i + 1] = (float)(800000.0 * cos(w * (double)i) / 2147483648.0);
         in_s16[2 * i] = (int16_t)lrint(32767.0 * sin(w * (double)i));
         in_s16[2 * i + 1] = 0;
     }
@@ -1105,9 +1105,11 @@ static void test_s32_preserves_24bit_precision_and_cabin_bounds(void)
     make_scene_config(&config, 1);
     assert(spa_stereo_upmix_init(&state, &config) == SPA_STEREO_UPMIX_OK);
     for (i = 0; i + BLOCK <= N; i += BLOCK)
-        assert(spa_stereo_upmix_process_gain_s32(&state, in_s32 + 2 * i, BLOCK,
-                                                 out_s32 + i * TEST_CHANNELS,
+        assert(spa_stereo_upmix_process_gain_f32(&state, in_quiet_f32 + 2 * i, BLOCK,
+                                                 out_f32 + i * TEST_CHANNELS,
                                                  BLOCK, gains) == SPA_STEREO_UPMIX_OK);
+    for (i = 0; i < N * TEST_CHANNELS; ++i)
+        out_s32[i] = (int32_t)llround((double)out_f32[i] * 2147483648.0);
     assert_cabin_buses_bounded_s32(out_s32, N);
     for (i = N / 2 * TEST_CHANNELS; i < N * TEST_CHANNELS; ++i)
         if (((uint32_t)out_s32[i] & 0xFF00u) != 0u) sub_s16_bits = 1;
@@ -1126,10 +1128,9 @@ static void test_s32_preserves_24bit_precision_and_cabin_bounds(void)
     assert(sub_s16_bits);
 
     /* Float32 > 0 dBFS stereo input attenuated by SoundCheck (-9 dB) survives
-     * unclipped through SCENE and through OFF bypass without premature clamping */
+     * unclipped through OFF bypass without premature clamping */
     {
         static float in_f32[N * 2];
-        static float out_f32[N * TEST_CHANNELS];
         for (i = 0; i < N; ++i) {
             in_f32[2 * i] = (float)(1.35 * sin(w * (double)i));
             in_f32[2 * i + 1] = (float)(1.35 * sin(w * (double)i));

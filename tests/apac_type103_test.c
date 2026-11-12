@@ -774,22 +774,22 @@ int main(int argc, char **argv)
         }
     }
 
-    /* Verify native S32_LE decode + 5.1 reorder against Apple's float32 reference
-     * at full 24-bit precision (float32 24-bit mantissa ~1e-7 vs S16's 3.05e-5). */
+    /* Verify native float32 decode + 5.1 reorder against Apple's float32
+     * reference at full 24-bit mantissa precision (~1e-7 vs S16's 3.05e-5). */
     {
         size_t at = packetsAt;
         int sub_s16_nonzero = 0;
         spa_apac_reset(decoder);
         for (i = 0; i < numPackets; i++) {
             const uint32_t packetBytes = rd32(lengthsAt + 4 * i);
-            static int32_t dec32[CHANNELS * FRAME_SAMPLES];
-            static int32_t ord32[CHANNELS * FRAME_SAMPLES];
+            static float dec_f32[CHANNELS * FRAME_SAMPLES];
+            static float ord_f32[CHANNELS * FRAME_SAMPLES];
             uint32_t outFrames = 0, s;
-            assert(spa_apac_decode_s32(decoder, g_blob + at, packetBytes,
-                                       dec32, CHANNELS * FRAME_SAMPLES,
+            assert(spa_apac_decode_f32(decoder, g_blob + at, packetBytes,
+                                       dec_f32, CHANNELS * FRAME_SAMPLES,
                                        &outFrames) == SPA_APAC_OK);
             assert(outFrames == FRAME_SAMPLES);
-            assert(spa_reorder_5_1_decoder_to_declared_s32(dec32, outFrames, ord32) ==
+            assert(spa_reorder_5_1_decoder_to_declared_f32(dec_f32, outFrames, ord_f32) ==
                    CHANNELS * FRAME_SAMPLES);
             for (s = 0; s < CHANNELS * FRAME_SAMPLES; s++) {
                 const uint32_t frame = s / CHANNELS;
@@ -798,13 +798,15 @@ int main(int argc, char **argv)
                     (size_t)i * CHANNELS * FRAME_SAMPLES +
                     (size_t)frame * CHANNELS + kDeclaredFromDecoder[ch];
                 float expect;
-                double got = (double)ord32[s] / 2147483648.0;
+                double got = (double)ord_f32[s];
                 double diff;
+                int32_t s32;
                 memcpy(&expect, ref + refSample * sizeof(expect), sizeof(expect));
                 diff = got - (double)expect;
                 if (diff < 0.0) diff = -diff;
                 assert(diff < 2e-6); /* >19 bits agreement across port + float32 fixture */
-                if (((uint32_t)ord32[s] & 0xFF00u) != 0u) sub_s16_nonzero = 1;
+                s32 = (int32_t)(got * 2147483648.0);
+                if (((uint32_t)s32 & 0xFF00u) != 0u) sub_s16_nonzero = 1;
             }
             at += packetBytes;
         }

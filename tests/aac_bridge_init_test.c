@@ -77,7 +77,7 @@ static void *client(void *unused)
         assert(g_cinemo.write == codec_write && g_cinemo.release == codec_simple);
         api = spa_aac_codec_api();
         assert(api->structSize == sizeof(*api) && api->create && api->decodeS16 &&
-               api->decodeS32 && api->decodeF32 &&
+               api->decodeF32 &&
                api->reset && api->destroy && api->getInfo);
         aac_register_plugin_directory();
     }

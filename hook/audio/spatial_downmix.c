@@ -13,13 +13,6 @@ static int16_t spa_saturate_s16(int32_t value)
     return (int16_t)value;
 }
 
-static int32_t spa_saturate_s32(int64_t value)
-{
-    if (value > INT32_MAX) return INT32_MAX;
-    if (value < INT32_MIN) return INT32_MIN;
-    return (int32_t)value;
-}
-
 enum spa_decoded_pcm_kind spa_classify_decoded_pcm(int codec_is_apac,
                                                     uint32_t channels,
                                                     uint32_t sample_rate,
@@ -112,74 +105,6 @@ size_t spa_drop_5_1_2_s16(const int16_t *input, size_t frames, int16_t *output)
     for (frame = 0; frame < frames; frame++) {
         const int16_t *src = input + frame * SPA_PCM_5_1_2_CHANNELS;
         int16_t *dst = output + frame * SPA_PCM_5_1_CHANNELS;
-        int ch;
-
-        for (ch = 0; ch < SPA_PCM_5_1_CHANNELS; ch++)
-            dst[ch] = src[ch];
-    }
-    return frames * SPA_PCM_5_1_CHANNELS;
-}
-
-size_t spa_reorder_5_1_decoder_to_declared_s32(const int32_t *input, size_t frames,
-                                               int32_t *output)
-{
-    static const int kFromDeclared[SPA_PCM_5_1_CHANNELS] = { 1, 2, 0, 5, 3, 4 };
-    size_t frame;
-
-    if (!input || !output) return 0;
-
-    for (frame = 0; frame < frames; frame++) {
-        const int32_t *src = input + frame * SPA_PCM_5_1_CHANNELS;
-        int32_t *dst = output + frame * SPA_PCM_5_1_CHANNELS;
-        int32_t tmp[SPA_PCM_5_1_CHANNELS];
-        int ch;
-
-        for (ch = 0; ch < SPA_PCM_5_1_CHANNELS; ch++)
-            tmp[ch] = src[kFromDeclared[ch]];
-        for (ch = 0; ch < SPA_PCM_5_1_CHANNELS; ch++)
-            dst[ch] = tmp[ch];
-    }
-
-    return frames * SPA_PCM_5_1_CHANNELS;
-}
-
-size_t spa_downmix_5_1_2_s32(const int32_t *input, size_t frames, int32_t *output)
-{
-    size_t frame;
-
-    if (!input || !output) return 0;
-
-    for (frame = 0; frame < frames; frame++) {
-        const int32_t *src = input + frame * SPA_PCM_5_1_2_CHANNELS;
-        int32_t *dst = output + frame * SPA_PCM_5_1_CHANNELS;
-        const int64_t left = src[0];
-        const int64_t right = src[1];
-        const int64_t center = src[2];
-        const int64_t lfe = src[3];
-        const int64_t surroundLeft = src[4];
-        const int64_t surroundRight = src[5];
-        const int64_t heightLeft = src[6];
-        const int64_t heightRight = src[7];
-
-        dst[0] = (int32_t)left;
-        dst[1] = (int32_t)right;
-        dst[2] = (int32_t)center;
-        dst[3] = (int32_t)(lfe / 2);
-        dst[4] = spa_saturate_s32(surroundLeft + heightLeft / 2);
-        dst[5] = spa_saturate_s32(surroundRight + heightRight / 2);
-    }
-
-    return frames * SPA_PCM_5_1_CHANNELS;
-}
-
-size_t spa_drop_5_1_2_s32(const int32_t *input, size_t frames, int32_t *output)
-{
-    size_t frame;
-
-    if (!input || !output) return 0;
-    for (frame = 0; frame < frames; frame++) {
-        const int32_t *src = input + frame * SPA_PCM_5_1_2_CHANNELS;
-        int32_t *dst = output + frame * SPA_PCM_5_1_CHANNELS;
         int ch;
 
         for (ch = 0; ch < SPA_PCM_5_1_CHANNELS; ch++)

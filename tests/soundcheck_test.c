@@ -139,54 +139,37 @@ static void test_observe_and_apply_are_separate(void)
     }
 }
 
-static void test_s32_precision_and_limiter(void)
+static void test_f32_headroom_and_limiter(void)
 {
     static const float aac[3] = { -6.5f, -1.0f, 0.96875f };
     spa_soundcheck_config_t config;
     spa_soundcheck_state_t state;
-    int32_t source[4] = { 10000 << 16, -(10000 << 16), 5000 << 16, -(5000 << 16) };
-    int32_t rendered[6] = {
-        10001 << 16, -(10001 << 16), 5001 << 16, -(5001 << 16), 2501 << 16, -(2501 << 16)
-    };
-    int32_t original[6];
-    int sub_s16_nonzero = 0;
+    float over[6] = { 1.25f, -1.25f, 1.40f, 0.50f, -1.10f, 1.10f };
+    float scaled[4] = { 1.20f, -0.80f, 0.50f, -0.25f };
+    const float gains[2] = { 0.5f, 1.0f };
     size_t i;
-
-    memcpy(original, rendered, sizeof(original));
-    spa_soundcheck_default_config(&config);
-    spa_soundcheck_init(&state, &config, 1, 1, -16);
-    assert(spa_soundcheck_update_main(&state, 1, aac));
-
-    spa_soundcheck_observe_s32(&state, source, 2, 2);
-    spa_soundcheck_apply_s32(&state, rendered, 1, 6);
-    for (i = 0; i < 6; i++) {
-        double expected = (double)original[i] * (double)state.targetGain;
-        int32_t ref = (int32_t)(expected >= 0.0 ? expected + 0.5 : expected - 0.5);
-        assert(rendered[i] == ref);
-        if (((uint32_t)rendered[i] & 0xFF00u) != 0u) sub_s16_nonzero = 1;
-    }
-    assert(sub_s16_nonzero); /* 24-in-32 precision retained below the S16 LSB */
-
-    config.limiterMode = SPA_SOUNDCHECK_LIMITER_SAMPLE_PEAK;
-    spa_soundcheck_init(&state, &config, 0, 0, 0);
-    for (i = 0; i < 6; i++) rendered[i] = INT32_MAX;
-    spa_soundcheck_limit_s32(&state, rendered, 1, 6);
-    for (i = 0; i < 6; i++) assert(rendered[i] <= 1913984000 + 65536);
-    assert(state.limitedFrames == 1);
 
     /* Float32 path preserves > 0 dBFS APAC/downmix peaks into SoundCheck
      * attenuation without clipping at 1.0f first. */
-    {
-        float over[6] = { 1.25f, -1.25f, 1.40f, 0.50f, -1.10f, 1.10f };
-        spa_soundcheck_default_config(&config);
-        spa_soundcheck_init(&state, &config, 1, 1, -16);
-        assert(spa_soundcheck_update_main(&state, 1, aac));
-        spa_soundcheck_observe_f32(&state, over, 1, 6);
-        spa_soundcheck_apply_f32(&state, over, 1, 6);
-        assert(nearf(over[0], 1.25f * state.targetGain, 1e-6f));
-        assert(nearf(over[2], 1.40f * state.targetGain, 1e-6f));
-        assert(over[2] < 1.0f); /* +2.9 dBFS peak lands cleanly below 0 dBFS */
-    }
+    spa_soundcheck_default_config(&config);
+    spa_soundcheck_init(&state, &config, 1, 1, -16);
+    assert(spa_soundcheck_update_main(&state, 1, aac));
+    spa_soundcheck_observe_f32(&state, over, 1, 6);
+    spa_soundcheck_apply_f32(&state, over, 1, 6);
+    assert(nearf(over[0], 1.25f * state.targetGain, 1e-6f));
+    assert(nearf(over[2], 1.40f * state.targetGain, 1e-6f));
+    assert(over[2] < 1.0f); /* +2.9 dBFS peak lands cleanly below 0 dBFS */
+
+    spa_soundcheck_scale_f32(scaled, 2, 2, gains);
+    assert(nearf(scaled[0], 0.60f, 1e-6f) && nearf(scaled[1], -0.40f, 1e-6f));
+    assert(scaled[2] == 0.50f && scaled[3] == -0.25f);
+
+    config.limiterMode = SPA_SOUNDCHECK_LIMITER_SAMPLE_PEAK;
+    spa_soundcheck_init(&state, &config, 0, 0, 0);
+    for (i = 0; i < 6; i++) over[i] = 1.25f;
+    spa_soundcheck_limit_f32(&state, over, 1, 6);
+    for (i = 0; i < 6; i++) assert(over[i] <= 0.892f);
+    assert(state.limitedFrames == 1);
 }
 
 int main(void)
@@ -195,7 +178,7 @@ int main(void)
     test_metadata_and_ramp();
     test_bypass_fallback_and_limiter();
     test_observe_and_apply_are_separate();
-    test_s32_precision_and_limiter();
-    puts("OK  Pioneer main loudness, smooth metadata changes, exact bypass, opt-in RMS/peak guards, S32 precision");
+    test_f32_headroom_and_limiter();
+    puts("OK  Pioneer main loudness, smooth metadata changes, exact bypass, opt-in RMS/peak guards, F32 headroom");
     return 0;
 }

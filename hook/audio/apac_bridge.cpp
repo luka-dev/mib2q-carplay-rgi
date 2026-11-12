@@ -82,22 +82,6 @@ int16_t ToS16(float v)
     return (int16_t)scaled;
 }
 
-int32_t ToS32(float v)
-{
-    // Left-aligned Q1.31 S32_LE (1.0 == 2^31) matching deva-ctrl-qc.so and LPASS
-    // TX packer (`s32 >> 8` into 24-bit MOST slots).  Use double so 2147483647
-    // does not round up to +2^31 in float32 before integer conversion.
-    double scaled;
-    if (!(v == v)) return 0;
-    if (v >= 1.0f) return 2147483647;
-    if (v <= -1.0f) return (-2147483647 - 1);
-    scaled = (double)v * 2147483648.0;
-    scaled += (scaled >= 0.0) ? 0.5 : -0.5;
-    if (scaled >= 2147483647.0) return 2147483647;
-    if (scaled <= -2147483648.0) return (-2147483647 - 1);
-    return (int32_t)scaled;
-}
-
 }  // namespace
 
 // Deliberately not a class with members needing construction: the whole object
@@ -108,7 +92,7 @@ struct spa_apac_decoder {
     apac::ASPDecoder decoder;
     uint32_t channels;
     uint32_t frameLength;
-    float* pcmScratch;  // lazy bounce buffer for S16/S32 helpers; unused by decodeF32
+    float* pcmScratch;  // lazy bounce buffer for S16 helper; unused by decodeF32
 };
 
 namespace {
@@ -230,36 +214,6 @@ extern "C" int spa_apac_decode_s16(spa_apac_decoder_t* decoder,
     return SPA_APAC_OK;
 }
 
-extern "C" int spa_apac_decode_s32(spa_apac_decoder_t* decoder,
-                                   const uint8_t* packet, size_t length,
-                                   int32_t* out, size_t outCapacity,
-                                   uint32_t* framesOut)
-{
-    if (!decoder || !out || !framesOut) return SPA_APAC_ERR_ARGS;
-    if (length && !packet) return SPA_APAC_ERR_ARGS;
-    if (length > 0xffffffffu) return SPA_APAC_ERR_ARGS;
-
-    *framesOut = 0;
-    if ((size_t)decoder->channels * decoder->frameLength > outCapacity)
-        return SPA_APAC_ERR_OUTPUT_SPACE;
-
-    float* scratch = EnsureScratch(decoder);
-    if (!scratch) return SPA_APAC_ERR_NO_MEMORY;
-
-    uint32_t frames = 0;
-    if (decoder->decoder.DecodeFrame(packet, (uint32_t)length, scratch,
-                                     &frames) != apac::kOk)
-        return SPA_APAC_ERR_DECODE;
-    if (frames > decoder->frameLength)
-        return SPA_APAC_ERR_DECODE;
-
-    const size_t samples = (size_t)frames * decoder->channels;
-    for (size_t i = 0; i < samples; ++i)
-        out[i] = ToS32(scratch[i]);
-    *framesOut = frames;
-    return SPA_APAC_OK;
-}
-
 extern "C" void spa_apac_reset(spa_apac_decoder_t* decoder)
 {
     if (decoder) decoder->decoder.Reset();
@@ -298,7 +252,6 @@ extern "C" int spa_apac_codec_get_api(uint32_t requestedVersion,
     api->abiVersion = SPA_APAC_CODEC_ABI_VERSION;
     api->create = spa_apac_create;
     api->decodeS16 = spa_apac_decode_s16;
-    api->decodeS32 = spa_apac_decode_s32;
     api->decodeF32 = spa_apac_decode_f32;
     api->reset = spa_apac_reset;
     api->destroy = spa_apac_destroy;

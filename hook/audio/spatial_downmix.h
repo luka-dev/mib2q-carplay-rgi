@@ -79,7 +79,7 @@ enum spa_decoded_pcm_action spa_select_decoded_pcm_action(
     enum spa_decoded_pcm_kind kind, uint32_t source_channels,
     uint32_t output_channels, uint32_t sample_rate);
 
-/* Permute interleaved S16 5.1 from the decoder's native order
+/* Permute interleaved S16/F32 5.1 from the decoder's native order
  * (C L R Ls Rs LFE) into the declared CarPlay order (L R C LFE Ls Rs).
  *
  * Returns the number of output samples (frames * 6).  Exact in-place use
@@ -87,17 +87,15 @@ enum spa_decoded_pcm_action spa_select_decoded_pcm_action(
  */
 size_t spa_reorder_5_1_decoder_to_declared_s16(const int16_t *input, size_t frames,
                                                int16_t *output);
-size_t spa_reorder_5_1_decoder_to_declared_s32(const int32_t *input, size_t frames,
-                                               int32_t *output);
 size_t spa_reorder_5_1_decoder_to_declared_f32(const float *input, size_t frames,
                                                float *output);
 
-/* Fold interleaved S16/S32/F32 5.1.2 into interleaved 5.1.  Input must already
+/* Fold interleaved S16/F32 5.1.2 into interleaved 5.1.  Input must already
  * be in the declared order documented above.
  *
  * Matrix recovered from Pioneer's SpatialAudioDownMixer path:
  *   L/R/C stay unchanged; LFE is -6 dB; each height channel is folded into
- *   its matching surround at -6 dB.  Integer paths saturate mixed surrounds to
+ *   its matching surround at -6 dB.  The S16 path saturates mixed surrounds to
  *   full scale; the F32 path preserves headroom for downstream SoundCheck and
  *   peak limiting.
  *
@@ -105,13 +103,11 @@ size_t spa_reorder_5_1_decoder_to_declared_f32(const float *input, size_t frames
  * (input == output) is supported; other overlapping ranges are not.
  */
 size_t spa_downmix_5_1_2_s16(const int16_t *input, size_t frames, int16_t *output);
-size_t spa_downmix_5_1_2_s32(const int32_t *input, size_t frames, int32_t *output);
 size_t spa_downmix_5_1_2_f32(const float *input, size_t frames, float *output);
 
 /* Test/reference policy that deliberately discards the two height channels.
  * Input and output orders are the same as spa_downmix_5_1_2_s16(). */
 size_t spa_drop_5_1_2_s16(const int16_t *input, size_t frames, int16_t *output);
-size_t spa_drop_5_1_2_s32(const int32_t *input, size_t frames, int32_t *output);
 size_t spa_drop_5_1_2_f32(const float *input, size_t frames, float *output);
 
 #endif /* SPATIAL_DOWNMIX_H */

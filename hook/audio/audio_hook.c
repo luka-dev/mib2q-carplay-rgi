@@ -6515,7 +6515,8 @@ static size_t spa_tap_limit(void)
 #endif
 }
 
-static void spa_tap_write(const char *path, size_t *taken, const void *buf, size_t len)
+static void spa_tap_write(const char *path, size_t *taken, const void *buf, size_t len,
+                          unsigned channels)
 {
     size_t limit = spa_tap_limit();
     int fd;
@@ -6527,8 +6528,8 @@ static void spa_tap_write(const char *path, size_t *taken, const void *buf, size
     close(fd);
     *taken += len;
     if (*taken >= limit)
-        LOG_WARN(LOG_MODULE, "audio tap: %s complete (%u bytes)",
-                 path, (unsigned)*taken);
+        LOG_WARN(LOG_MODULE, "audio tap: %s complete (%u bytes, s32le %uch 48000Hz)",
+                 path, (unsigned)*taken, channels);
 }
 
 typedef ssize_t (*spa_snd_write_internal_t)(snd_pcm_t *, const void *, size_t);
@@ -6538,14 +6539,16 @@ HOOK_EXPORT ssize_t snd_pcm_write_internal(snd_pcm_t *handle, const void *buffer
     static spa_snd_write_internal_t real;
     static size_t taken;
     int isSink;
+    unsigned tapChannels;
 
     if (!real) real = (spa_snd_write_internal_t)dlsym(RTLD_NEXT, "snd_pcm_write_internal");
     if (!real) return -1;
 
     pthread_mutex_lock(&spa_pcm_sink.lock);
     isSink = handle && handle == spa_pcm_sink.handle && spa_pcm_sink.expandedParams;
+    tapChannels = spa_pcm_sink.outputChannels;
     pthread_mutex_unlock(&spa_pcm_sink.lock);
-    if (isSink) spa_tap_write(SPA_TAP_OUT_PATH, &taken, buffer, size);
+    if (isSink) spa_tap_write(SPA_TAP_OUT_PATH, &taken, buffer, size, tapChannels);
 
     return real(handle, buffer, size);
 }
@@ -6758,7 +6761,7 @@ HOOK_EXPORT ssize_t snd_pcm_plugin_write(snd_pcm_t *handle, const void *buffer, 
     {
         static size_t takenIn;
         spa_tap_write(SPA_TAP_IN_PATH, &takenIn, spa_pcm_sink.scratch,
-                      frames * outputChannels * sizeof(int32_t));
+                      frames * outputChannels * sizeof(int32_t), outputChannels);
     }
     /* libasound reaches snd_pcm_write_internal through its PLT.  That
      * interposer needs the state mutex to identify this handle, so never carry

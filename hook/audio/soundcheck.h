@@ -84,21 +84,15 @@ void spa_soundcheck_discontinuity(spa_soundcheck_state_t *state);
 void spa_soundcheck_observe_s16(spa_soundcheck_state_t *state,
                                 const int16_t *samples, size_t frames,
                                 unsigned channels);
-void spa_soundcheck_observe_s32(spa_soundcheck_state_t *state,
-                                const int32_t *samples, size_t frames,
-                                unsigned channels);
 void spa_soundcheck_observe_f32(spa_soundcheck_state_t *state,
                                 const float *samples, size_t frames,
                                 unsigned channels);
 
-/* Apply the current/ramped gain to interleaved S16/S32/F32 without running
+/* Apply the current/ramped gain to interleaved S16/F32 without running
  * fallback analysis. Unity/disabled is bit-exact; F32 leaves > 0 dBFS peaks
  * unclipped until the single final quantization stage. */
 void spa_soundcheck_apply_s16(spa_soundcheck_state_t *state,
                               int16_t *samples, size_t frames,
-                              unsigned channels);
-void spa_soundcheck_apply_s32(spa_soundcheck_state_t *state,
-                              int32_t *samples, size_t frames,
                               unsigned channels);
 void spa_soundcheck_apply_f32(spa_soundcheck_state_t *state,
                               float *samples, size_t frames,
@@ -110,10 +104,8 @@ void spa_soundcheck_apply_f32(spa_soundcheck_state_t *state,
 const float *spa_soundcheck_take_gains(spa_soundcheck_state_t *state,
                                        float *gains, size_t frames);
 
-/* Scale interleaved S16/S32/F32 by taken per-frame gains. */
+/* Scale interleaved S16/F32 by taken per-frame gains. */
 void spa_soundcheck_scale_s16(int16_t *samples, size_t frames,
-                              unsigned channels, const float *gains);
-void spa_soundcheck_scale_s32(int32_t *samples, size_t frames,
                               unsigned channels, const float *gains);
 void spa_soundcheck_scale_f32(float *samples, size_t frames,
                               unsigned channels, const float *gains);
@@ -126,9 +118,6 @@ void spa_soundcheck_process_s16(spa_soundcheck_state_t *state,
 /* Optional final sample-peak guard, called after channel synthesis. */
 void spa_soundcheck_limit_s16(spa_soundcheck_state_t *state,
                               int16_t *samples, size_t frames,
-                              unsigned channels);
-void spa_soundcheck_limit_s32(spa_soundcheck_state_t *state,
-                              int32_t *samples, size_t frames,
                               unsigned channels);
 void spa_soundcheck_limit_f32(spa_soundcheck_state_t *state,
                               float *samples, size_t frames,
