@@ -49,7 +49,7 @@ enum {
 typedef struct spa_apac_decoder spa_apac_decoder_t;
 
 enum {
-    SPA_APAC_CODEC_ABI_VERSION = 3,
+    SPA_APAC_CODEC_ABI_VERSION = 4,
     SPA_APAC_MAX_CHANNELS = 16,
     SPA_APAC_FRAME_LENGTH = 1024
 };
