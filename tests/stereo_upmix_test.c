@@ -349,7 +349,9 @@ static void test_guard_limits_without_clipping(void)
     }
     assert(fit > 0.0 && sqrt(residual / fit) < 0.03);        /* was 0.30, now ~0.005 */
     assert(spa_stereo_upmix_reset(&state) == SPA_STEREO_UPMIX_OK);
-    assert(state._runtime._guard_reduction[0] == 0.0f && state._runtime._guard_reduction[1] == 0.0f);
+    assert(state._runtime._guard_reduction[0] == 0.0f &&
+           state._runtime._guard_reduction[1] == 0.0f &&
+           state._runtime._guard_reduction[2] == 0.0f);
 }
 
 static uint32_t g_scene_boundaries, g_scene_rows;
@@ -914,6 +916,38 @@ static void test_scene_vehicle_refinements(void)
     }
 }
 
+/* A centred voice near full scale: the power-kept centre is over full scale
+ * before the programme gain (SoundCheck).  It has to reach the gain and the
+ * guard unclipped: rounding it to S16 first left a flat top at gain * 32767. */
+static void test_centre_keeps_headroom_until_the_gain(void)
+{
+    enum { N = 48000, BLOCK = 768 };
+    static struct spa_stereo_upmix state;
+    static struct scene_mask_weights blob;
+    static int16_t in[N * 2], out[N * TEST_CHANNELS];
+    static float half[BLOCK];
+    struct spa_stereo_upmix_config config;
+    int peak = 0;
+    size_t i;
+
+    for (i = 0; i < N; ++i)
+        in[2 * i] = in[2 * i + 1] = (int16_t)lrint(30000.0 * sin(2.0 * 3.14159265358979 * 1000.0 * (double)i / 48000.0));
+    for (i = 0; i < BLOCK; ++i) half[i] = 0.5f;
+    make_scene_config(&config, 0);
+    memcpy(blob.magic, SMASK_MAGIC, sizeof(blob.magic));
+    blob.ch = SMASK_CH; blob.hidden = SMASK_HID; blob.n_out = SMASK_OUT;
+    for (i = 0; i < SMASK_FEAT; ++i) blob.feat_std[i] = 1.0f;
+    spa_stereo_upmix_config_set_scene_mask_blob(&config, &blob, sizeof(blob));   /* vocal row 0.5 */
+    assert(spa_stereo_upmix_init(&state, &config) == SPA_STEREO_UPMIX_OK);
+    for (i = 0; i + BLOCK <= N; i += BLOCK)
+        assert(spa_stereo_upmix_process_gain_s16(&state, in + 2 * i, BLOCK, out + i * TEST_CHANNELS,
+                                                 BLOCK, half) == SPA_STEREO_UPMIX_OK);
+    for (i = N / 2; i + BLOCK <= N; ++i)
+        if (abs(out[i * TEST_CHANNELS + SPA_STEREO_UPMIX_CHANNEL_C]) > peak)
+            peak = abs(out[i * TEST_CHANNELS + SPA_STEREO_UPMIX_CHANNEL_C]);
+    assert(peak > 17500);   /* sqrt(2 * .5 * 1.5) * 30000 * .5 = 18371; the early clip stopped at 16384 */
+}
+
 /* Rear dynamics: uncorrelated noise bursts out of silence.  With the stage on
  * the rear is held back while the onset lasts and is back by the end of the
  * burst; the front is never touched, and depth 0 is the static scene. */
@@ -963,6 +997,135 @@ static void test_rear_dynamics_hold_the_attack(void)
     assert(late_on > 0.70 * late_off && late_on < 1.45 * late_off);   /* and back within 1.6 dB */
 }
 
+static void assert_cabin_buses_bounded_s32(const int32_t *pcm6, size_t frames)
+{
+    const double limit = 32275.01;
+    const float *matrix = spa_stereo_upmix_input_matrix();
+    size_t frame;
+
+    for (frame = 0; frame < frames; ++frame) {
+        const int32_t *sample = pcm6 + frame * TEST_CHANNELS;
+        unsigned bus;
+        for (bus = 0; bus < 8; ++bus) {
+            double value = 0.0;
+            unsigned ch;
+            for (ch = 0; ch < 6; ++ch)
+                value += matrix[ch * 8 + bus] * ((double)sample[ch] / 65536.0);
+            assert(fabs(value) <= limit);
+        }
+    }
+}
+
+/* Loud 0 dBFS centred vocal without SoundCheck: power-preserving C reaches
+ * ~46340 (+3 dBFS), which previously either clipped C or ducked the entire mix
+ * via held[0].  Phantom-centre spillover (held[2]) keeps the vocal centred by
+ * symmetrically spilling the excess into L+R without triggering held[0]. */
+static void test_centre_spillover_avoids_mix_ducking_and_clipping(void)
+{
+    enum { N = 96000, BLOCK = 768, TAIL = 24000 };
+    static struct spa_stereo_upmix state;
+    static struct scene_mask_weights blob;
+    static int16_t in[N * 2], out[N * TEST_CHANNELS];
+    struct spa_stereo_upmix_config config;
+    const double w = 2.0 * 3.14159265358979323846 * 1000.0 / 48000.0;
+    unsigned ch;
+    size_t i;
+
+    for (i = 0; i < N; ++i)
+        in[2 * i] = in[2 * i + 1] = (int16_t)lrint(32767.0 * sin(w * (double)i));
+
+    memset(&blob, 0, sizeof(blob));
+    memcpy(blob.magic, SMASK_MAGIC, sizeof(blob.magic));
+    blob.ch = SMASK_CH;
+    blob.hidden = SMASK_HID;
+    blob.n_out = SMASK_OUT;
+    for (i = 0; i < SMASK_FEAT; ++i) blob.feat_std[i] = 1.0f;
+    blob.head_b[0] = 10.0f;   /* vocal posterior -> ~1.0 so C reaches ~46340 */
+
+    make_scene_config(&config, 1);
+    spa_stereo_upmix_config_set_scene_mask_blob(&config, &blob, sizeof(blob));
+    assert(spa_stereo_upmix_init(&state, &config) == SPA_STEREO_UPMIX_OK);
+
+    for (i = 0; i + BLOCK <= N; i += BLOCK)
+        assert(spa_stereo_upmix_process_s16(&state, in + 2 * i, BLOCK,
+                                            out + i * TEST_CHANNELS, BLOCK) == SPA_STEREO_UPMIX_OK);
+
+    assert_cabin_buses_bounded(out, N);
+    assert(state._runtime._guard_reduction[2] > 0.20f);  /* C spilled smoothly to L+R */
+    assert(state._runtime._guard_reduction[0] == 0.0f);  /* zero whole-mix ducking */
+
+    for (i = N - TAIL; i < N; ++i) {
+        const int16_t *s = out + i * TEST_CHANNELS;
+        /* Centered input must spill symmetrically into L and R */
+        assert(abs((int)s[0] - (int)s[1]) <= 2);
+    }
+
+    for (ch = 0; ch <= SPA_STEREO_UPMIX_CHANNEL_C; ch += 2) {
+        double ss = 0, cc = 0, sc = 0, xs = 0, xc = 0, fit = 0, residual = 0, a, b, det;
+        for (i = N - TAIL; i < N; ++i) {
+            const double sn = sin(w * (double)i), cs = cos(w * (double)i);
+            const double x = out[i * TEST_CHANNELS + ch];
+            ss += sn * sn; cc += cs * cs; sc += sn * cs; xs += x * sn; xc += x * cs;
+        }
+        det = ss * cc - sc * sc;
+        a = (xs * cc - xc * sc) / det;
+        b = (xc * ss - xs * sc) / det;
+        for (i = N - TAIL; i < N; ++i) {
+            const double model = a * sin(w * (double)i) + b * cos(w * (double)i);
+            const double x = out[i * TEST_CHANNELS + ch];
+            fit += model * model;
+            residual += (x - model) * (x - model);
+        }
+        assert(fit > 1e8 && sqrt(residual / fit) < 0.03);
+    }
+}
+
+static void test_s32_preserves_24bit_precision_and_cabin_bounds(void)
+{
+    enum { N = 12288, BLOCK = 768 };
+    static struct spa_stereo_upmix state;
+    static int32_t in_s32[N * 2], out_s32[N * TEST_CHANNELS];
+    static int16_t in_s16[N * 2];
+    static float gains[BLOCK];
+    struct spa_stereo_upmix_config config;
+    const double w = 2.0 * 3.14159265358979323846 * 440.0 / 48000.0;
+    int sub_s16_bits = 0;
+    size_t i;
+
+    for (i = 0; i < BLOCK; ++i) gains[i] = 0.3548134f;
+    /* Quiet -66 dBFS signal with 24-bit detail below S16 LSB */
+    for (i = 0; i < N; ++i) {
+        int32_t v = (int32_t)lrint(1000000.0 * sin(w * (double)i));
+        in_s32[2 * i] = v;
+        in_s32[2 * i + 1] = (int32_t)lrint(800000.0 * cos(w * (double)i));
+        in_s16[2 * i] = (int16_t)lrint(32767.0 * sin(w * (double)i));
+        in_s16[2 * i + 1] = 0;
+    }
+
+    make_scene_config(&config, 1);
+    assert(spa_stereo_upmix_init(&state, &config) == SPA_STEREO_UPMIX_OK);
+    for (i = 0; i + BLOCK <= N; i += BLOCK)
+        assert(spa_stereo_upmix_process_gain_s32(&state, in_s32 + 2 * i, BLOCK,
+                                                 out_s32 + i * TEST_CHANNELS,
+                                                 BLOCK, gains) == SPA_STEREO_UPMIX_OK);
+    assert_cabin_buses_bounded_s32(out_s32, N);
+    for (i = N / 2 * TEST_CHANNELS; i < N * TEST_CHANNELS; ++i)
+        if (((uint32_t)out_s32[i] & 0xFF00u) != 0u) sub_s16_bits = 1;
+    assert(sub_s16_bits);
+
+    /* Realtime S16 -> S32 bridge path: loud input stays bounded and retains 24-bit DSP LSBs */
+    sub_s16_bits = 0;
+    assert(spa_stereo_upmix_reset(&state) == SPA_STEREO_UPMIX_OK);
+    for (i = 0; i + BLOCK <= N; i += BLOCK)
+        assert(spa_stereo_upmix_process_s16_to_s32(&state, in_s16 + 2 * i, BLOCK,
+                                                   out_s32 + i * TEST_CHANNELS,
+                                                   BLOCK) == SPA_STEREO_UPMIX_OK);
+    assert_cabin_buses_bounded_s32(out_s32, N);
+    for (i = N / 2 * TEST_CHANNELS; i < N * TEST_CHANNELS; ++i)
+        if (((uint32_t)out_s32[i] & 0xFF00u) != 0u) sub_s16_bits = 1;
+    assert(sub_s16_bits);
+}
+
 int main(void)
 {
     test_default_validation_and_fail_closed();
@@ -976,6 +1139,9 @@ int main(void)
     test_scene_levels();
     test_scene_vehicle_refinements();
     test_rear_dynamics_hold_the_attack();
-    puts("stereo_upmix_test: OK (validation, OFF bypass, LFE V2 + cabin guard, SCENE smoke, mask worker, levels, vehicle refinements)");
+    test_centre_keeps_headroom_until_the_gain();
+    test_centre_spillover_avoids_mix_ducking_and_clipping();
+    test_s32_preserves_24bit_precision_and_cabin_bounds();
+    puts("stereo_upmix_test: OK (validation, OFF bypass, LFE V2 + cabin guard, centre spillover, S32 24-bit precision, SCENE smoke, mask worker, levels, vehicle refinements)");
     return 0;
 }

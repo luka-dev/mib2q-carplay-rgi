@@ -113,8 +113,8 @@ int main(void)
                                   sizeof(codecApi)) == SPA_APAC_OK);
     assert(codecApi.structSize == sizeof(codecApi));
     assert(codecApi.abiVersion == SPA_APAC_CODEC_ABI_VERSION);
-    assert(codecApi.create && codecApi.decodeS16 && codecApi.reset &&
-           codecApi.destroy && codecApi.getInfo);
+    assert(codecApi.create && codecApi.decodeS16 && codecApi.decodeS32 &&
+           codecApi.reset && codecApi.destroy && codecApi.getInfo);
 
     key = slurp(dir, "shk.bin", &keyLength);
     stream = slurp(dir, "spatial_apap_5.bin", &streamLength);

@@ -99,7 +99,8 @@ static int native_params(snd_pcm_t *handle, snd_pcm_channel_params_t *params)
     device_setup.mode = params->mode;
     device_setup.format = params->format;
     device_setup.buf.block = params->buf.block;
-    device_setup.buf.block.frag_size = 768 * params->format.voices * 2;
+    device_setup.buf.block.frag_size =
+        768 * params->format.voices * (params->format.format == SND_PCM_SFMT_S32_LE ? 4 : 2);
     params->buf.block.frag_size = device_setup.buf.block.frag_size;
     return 0;
 }
@@ -150,14 +151,15 @@ static ssize_t native_write(snd_pcm_t *h, const void *data, size_t bytes)
     memset(&actual, 0, sizeof(actual));
     assert(snd_pcm_plugin_setup(h, &actual) == 0);
     assert(actual.format.voices == device_setup.format.voices);
+    assert(actual.format.format == device_setup.format.format);
     if (spa_pcm_sink.expandedParams) assert(data != source_pcm);
     if (cancelled_write) {
         pthread_mutex_lock(&spa_pcm_sink.lock);
         spa_pcm_sink.transport.stopping = 1;
         pthread_mutex_unlock(&spa_pcm_sink.lock);
-        return 24;
+        return 48;
     }
-    if (short_error) { errno = EIO; return 24; }
+    if (short_error) { errno = EIO; return 48; }
     return (ssize_t)bytes;
 }
 static snd_pcm_channel_params_t stereo_params(void)
@@ -202,6 +204,8 @@ static void qsa_transactions(void)
     probe_during_params = 1;
     configure_ok();
     assert(spa_pcm_sink.expandedParams && device_setup.format.voices == 6);
+    assert(device_setup.format.format == SND_PCM_SFMT_S32_LE);
+    assert(device_setup.buf.block.frag_size == 18432);
     check_metadata(48000,6,24);
     check_metadata(44100,2,16);
     check_metadata(16000,2,16);
@@ -231,6 +235,7 @@ static void qsa_transactions(void)
     params_failures = 1; p = stereo_params();
     assert(snd_pcm_plugin_params(&media_device, &p) == 0); /* verified stock rollback */
     assert(!spa_pcm_sink.expandedParams && device_setup.format.voices == 2);
+    assert(device_setup.format.format == SND_PCM_SFMT_S16_LE);
     check_metadata(48000,2,16); /* rejected widening / stock fallback */
     assert(snd_pcm_plugin_write(&media_device, source_pcm, sizeof(source_pcm)) == sizeof(source_pcm));
     readback_bad = 1; p = stereo_params();
@@ -251,6 +256,7 @@ static void qsa_transactions(void)
     memset(&setup, 0, sizeof(setup));
     assert(snd_pcm_plugin_setup(&media_device, &setup) == 0);
     assert(setup.format.voices == 2); /* external stock caller still sees stereo */
+    assert(setup.format.format == SND_PCM_SFMT_S16_LE && setup.buf.block.frag_size == 3072);
     cancelled_write = 1; errno = 0;
     assert(snd_pcm_plugin_write(&media_device, source_pcm, sizeof(source_pcm)) == 8);
     assert(errno == ECANCELED); /* two accepted PCM6 frames -> two stereo frames */
@@ -269,7 +275,7 @@ static void qsa_transactions(void)
     assert(snd_pcm_plugin_write(&media_device, source_pcm, sizeof(source_pcm)) == sizeof(source_pcm));
     assert(errno == 0);
     /* Real buffered peek/write/commit must drop ONLY the accepted two frames. */
-    spa103_render.ring = calloc(spa103_ring_frames() * 6, sizeof(int16_t));
+    spa103_render.ring = calloc(spa103_ring_frames() * 6, sizeof(int32_t));
     assert(spa103_render.ring);
     spa103_render.state = SPA_103_RENDER_RUNNING;
     spa103_render.outputChannels = 6;

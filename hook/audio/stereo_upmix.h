@@ -150,8 +150,8 @@ struct spa_stereo_upmix_runtime {
     float _lfe_dynamic_gain;
     uint32_t _lfe_correlation_tick;
     /* Cabin guard: the gain reductions it is holding, 0 = none (so a zeroed
-     * runtime is the idle guard).  See spa_upmix_cabin_guard_s16(). */
-    float _guard_reduction[2];   /* linked, rears alone */
+     * runtime is the idle guard).  See spa_upmix_cabin_guard(). */
+    float _guard_reduction[3];   /* linked, rears alone, centre->L/R spill */
     /* Rear dynamics (spa_upmix_rear_dynamics): the three power averages, the
      * hop accumulator, the track's short and long energy with the swell they
      * give, and the smoothed rear gain (0 = not started). */
@@ -165,7 +165,7 @@ struct spa_stereo_upmix_runtime {
     float _scene_fifo[SPA_SCENE_FIFO_FRAMES * SPA_STEREO_UPMIX_OUTPUT_CHANNELS];
     uint32_t _scene_fifo_count;
     /* the stereo input SPA_SCENE_LATENCY_FRAMES late: the bypass side of the level fade */
-    int16_t _dry_ring[SPA_SCENE_LATENCY_FRAMES * SPA_STEREO_UPMIX_INPUT_CHANNELS];
+    int32_t _dry_ring[SPA_SCENE_LATENCY_FRAMES * SPA_STEREO_UPMIX_INPUT_CHANNELS];
     uint32_t _dry_pos;
     /* SCENE mask runtime (193 KB) and its 512-frame accumulator; _scene_mask_on
      * only when a blob was configured and accepted.  The LFE V2 confidences of
@@ -204,7 +204,7 @@ struct spa_stereo_upmix {
 
     /* A complete 1024-frame stereo packet is staged before output starts.
      * This makes widening safe even when the PCM2 and PCM6 ranges overlap. */
-    int16_t _input_scratch[SPA_STEREO_UPMIX_MAX_FRAMES *
+    int32_t _input_scratch[SPA_STEREO_UPMIX_MAX_FRAMES *
                            SPA_STEREO_UPMIX_INPUT_CHANNELS];
     float _scene_input_scratch[SPA_STEREO_UPMIX_MAX_FRAMES *
                                SPA_STEREO_UPMIX_INPUT_CHANNELS];
@@ -326,6 +326,29 @@ int spa_stereo_upmix_process_gain_s16(struct spa_stereo_upmix *state,
                                       int16_t *pcm6,
                                       size_t pcm6_capacity_frames,
                                       const float *frame_gain);
+
+/* Native Q1.31 S32_LE (24-in-32) entry points for the MHI2Q QSA PCM6 rail:
+ * preserves continuous sub-S16 precision through SCENE synthesis, programme
+ * gain and cabin guard instead of quantizing to S16 before the LPASS TX packer. */
+int spa_stereo_upmix_process_s32(struct spa_stereo_upmix *state,
+                                 const int32_t *pcm2,
+                                 size_t frames,
+                                 int32_t *pcm6,
+                                 size_t pcm6_capacity_frames);
+
+int spa_stereo_upmix_process_gain_s32(struct spa_stereo_upmix *state,
+                                      const int32_t *pcm2,
+                                      size_t frames,
+                                      int32_t *pcm6,
+                                      size_t pcm6_capacity_frames,
+                                      const float *frame_gain);
+
+/* Realtime type-100 stereo S16 input -> native 6-channel S32_LE QSA output. */
+int spa_stereo_upmix_process_s16_to_s32(struct spa_stereo_upmix *state,
+                                        const int16_t *pcm2,
+                                        size_t frames,
+                                        int32_t *pcm6,
+                                        size_t pcm6_capacity_frames);
 
 
 /* Profile-0/bank-1 J525 input matrix, first six inputs x eight buses, row-major.

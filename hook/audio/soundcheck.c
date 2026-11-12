@@ -160,23 +160,11 @@ void spa_soundcheck_discontinuity(spa_soundcheck_state_t *state)
     state->fallbackFrames = 0;
 }
 
-static void spa_soundcheck_update_fallback(spa_soundcheck_state_t *state,
-                                           const int16_t *samples,
-                                           size_t frames, unsigned channels)
+static void spa_soundcheck_commit_fallback_power(spa_soundcheck_state_t *state,
+                                                 float blockPower, size_t frames)
 {
-    double sum = 0.0;
-    size_t count, i;
-    float blockPower, weight, db, desiredDb, gain;
+    float weight, db, desiredDb, gain;
 
-    if (!state || !samples || !frames || !channels || state->haveMetadata ||
-        state->config.fallbackMode != SPA_SOUNDCHECK_FALLBACK_RMS)
-        return;
-    count = frames * (size_t)channels;
-    for (i = 0; i < count; i++) {
-        double value = (double)samples[i] / 32768.0;
-        sum += value * value;
-    }
-    blockPower = (float)(sum / (double)count);
     weight = (float)frames /
              ((float)state->config.sampleRate *
               SPA_SOUNDCHECK_FALLBACK_WINDOW_SECONDS);
@@ -202,12 +190,56 @@ static void spa_soundcheck_update_fallback(spa_soundcheck_state_t *state,
     }
 }
 
+static void spa_soundcheck_update_fallback(spa_soundcheck_state_t *state,
+                                           const int16_t *samples,
+                                           size_t frames, unsigned channels)
+{
+    double sum = 0.0;
+    size_t count, i;
+
+    if (!state || !samples || !frames || !channels || state->haveMetadata ||
+        state->config.fallbackMode != SPA_SOUNDCHECK_FALLBACK_RMS)
+        return;
+    count = frames * (size_t)channels;
+    for (i = 0; i < count; i++) {
+        double value = (double)samples[i] / 32768.0;
+        sum += value * value;
+    }
+    spa_soundcheck_commit_fallback_power(state, (float)(sum / (double)count), frames);
+}
+
+static void spa_soundcheck_update_fallback_s32(spa_soundcheck_state_t *state,
+                                               const int32_t *samples,
+                                               size_t frames, unsigned channels)
+{
+    double sum = 0.0;
+    size_t count, i;
+
+    if (!state || !samples || !frames || !channels || state->haveMetadata ||
+        state->config.fallbackMode != SPA_SOUNDCHECK_FALLBACK_RMS)
+        return;
+    count = frames * (size_t)channels;
+    for (i = 0; i < count; i++) {
+        double value = (double)samples[i] * (1.0 / 2147483648.0);
+        sum += value * value;
+    }
+    spa_soundcheck_commit_fallback_power(state, (float)(sum / (double)count), frames);
+}
+
 static int16_t spa_soundcheck_s16(float value)
 {
     if (!spa_soundcheck_finite(value)) return 0;
     if (value >= 32767.0f) return 32767;
     if (value <= -32768.0f) return -32768;
     return (int16_t)(value >= 0.0f ? value + 0.5f : value - 0.5f);
+}
+
+static int32_t spa_soundcheck_s32(double value)
+{
+    if (!(value == value)) return 0;
+    if (value >= 2147483647.0) return 2147483647;
+    if (value <= -2147483648.0) return (-2147483647 - 1);
+    return (int32_t)(value >= 0.0 ? value + 0.5 : value - 0.5);
 }
 
 static float spa_soundcheck_next_gain(spa_soundcheck_state_t *state)
@@ -229,6 +261,15 @@ void spa_soundcheck_observe_s16(spa_soundcheck_state_t *state,
     spa_soundcheck_update_fallback(state, samples, frames, channels);
 }
 
+void spa_soundcheck_observe_s32(spa_soundcheck_state_t *state,
+                                const int32_t *samples, size_t frames,
+                                unsigned channels)
+{
+    if (!state || !samples || !frames || !channels || !state->config.enabled)
+        return;
+    spa_soundcheck_update_fallback_s32(state, samples, frames, channels);
+}
+
 void spa_soundcheck_apply_s16(spa_soundcheck_state_t *state,
                               int16_t *samples, size_t frames,
                               unsigned channels)
@@ -247,6 +288,28 @@ void spa_soundcheck_apply_s16(spa_soundcheck_state_t *state,
         for (channel = 0; channel < channels; channel++) {
             size_t at = frame * channels + channel;
             samples[at] = spa_soundcheck_s16((float)samples[at] * gain);
+        }
+    }
+}
+
+void spa_soundcheck_apply_s32(spa_soundcheck_state_t *state,
+                              int32_t *samples, size_t frames,
+                              unsigned channels)
+{
+    size_t frame, channel;
+
+    if (!state || !samples || !frames || !channels || !state->config.enabled)
+        return;
+    if (!state->haveAppliedGain) return;
+
+    for (frame = 0; frame < frames; frame++) {
+        float gain;
+
+        gain = spa_soundcheck_next_gain(state);
+        if (gain == 1.0f) continue;
+        for (channel = 0; channel < channels; channel++) {
+            size_t at = frame * channels + channel;
+            samples[at] = spa_soundcheck_s32((double)samples[at] * (double)gain);
         }
     }
 }
@@ -278,6 +341,21 @@ void spa_soundcheck_scale_s16(int16_t *samples, size_t frames,
         for (channel = 0; channel < channels; channel++) {
             size_t at = frame * channels + channel;
             samples[at] = spa_soundcheck_s16((float)samples[at] * gains[frame]);
+        }
+    }
+}
+
+void spa_soundcheck_scale_s32(int32_t *samples, size_t frames,
+                              unsigned channels, const float *gains)
+{
+    size_t frame, channel;
+
+    if (!samples || !gains) return;
+    for (frame = 0; frame < frames; frame++) {
+        if (gains[frame] == 1.0f) continue;
+        for (channel = 0; channel < channels; channel++) {
+            size_t at = frame * channels + channel;
+            samples[at] = spa_soundcheck_s32((double)samples[at] * (double)gains[frame]);
         }
     }
 }
@@ -329,6 +407,50 @@ void spa_soundcheck_limit_s16(spa_soundcheck_state_t *state,
         for (channel = 0; channel < channels; channel++) {
             size_t at = frame * channels + channel;
             samples[at] = spa_soundcheck_s16((float)samples[at] * limiter);
+        }
+    }
+}
+
+void spa_soundcheck_limit_s32(spa_soundcheck_state_t *state,
+                              int32_t *samples, size_t frames,
+                              unsigned channels)
+{
+    double ceiling;
+    float releaseStep;
+    size_t frame, channel;
+
+    if (!state || !samples || !frames || !channels || !state->config.enabled ||
+        state->config.limiterMode != SPA_SOUNDCHECK_LIMITER_SAMPLE_PEAK)
+        return;
+    ceiling = 2147483647.0 * (double)spa_soundcheck_db_gain(
+        state->config.limiterCeilingDbfs);
+    releaseStep = 1.0f /
+        ((float)state->config.sampleRate *
+         SPA_SOUNDCHECK_LIMITER_RELEASE_MS / 1000.0f);
+
+    for (frame = 0; frame < frames; frame++) {
+        float limiter = state->limiterGain;
+        double peak = 0.0;
+
+        for (channel = 0; channel < channels; channel++) {
+            double value = (double)samples[frame * channels + channel];
+            double magnitude = value < 0.0 ? -value : value;
+            if (magnitude > peak) peak = magnitude;
+        }
+        if (peak > 0.0 && (double)limiter > ceiling / peak) {
+            limiter = (float)(ceiling / peak);
+            state->limitedFrames++;
+        } else if (limiter < 1.0f) {
+            limiter += releaseStep;
+            if (limiter > 1.0f) limiter = 1.0f;
+            if (peak > 0.0 && (double)limiter > ceiling / peak)
+                limiter = (float)(ceiling / peak);
+        }
+        state->limiterGain = limiter;
+        if (limiter == 1.0f) continue;
+        for (channel = 0; channel < channels; channel++) {
+            size_t at = frame * channels + channel;
+            samples[at] = spa_soundcheck_s32((double)samples[at] * (double)limiter);
         }
     }
 }

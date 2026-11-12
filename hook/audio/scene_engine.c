@@ -182,6 +182,7 @@ void scene_engine_clear_mask(struct scene_state *s)
     memset(s->e_inst, 0, sizeof s->e_inst);
     memset(s->e_long, 0, sizeof s->e_long);
     memset(s->d_prot, 0, sizeof s->d_prot);
+    memset(s->e_voc, 0, sizeof s->e_voc);
 }
 
 void scene_engine_set_mask(struct scene_state *s, const float *elig, const float *prot, int mask_bins)

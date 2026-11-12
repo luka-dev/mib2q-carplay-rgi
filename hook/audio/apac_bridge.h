@@ -49,7 +49,7 @@ enum {
 typedef struct spa_apac_decoder spa_apac_decoder_t;
 
 enum {
-    SPA_APAC_CODEC_ABI_VERSION = 1,
+    SPA_APAC_CODEC_ABI_VERSION = 2,
     SPA_APAC_MAX_CHANNELS = 16,
     SPA_APAC_FRAME_LENGTH = 1024
 };
@@ -86,6 +86,14 @@ int spa_apac_decode_s16(spa_apac_decoder_t *decoder,
                         const uint8_t *packet, size_t length,
                         int16_t *out, size_t outCapacity, uint32_t *framesOut);
 
+/* Decode one APAC packet directly to left-aligned Q1.31 S32_LE (preserving the
+ * full 24-bit float significand for the 24-bit MOST/J525 TDM slots without
+ * rounding through S16).  Same channel order, capacity units and flush rule as
+ * spa_apac_decode_s16(). */
+int spa_apac_decode_s32(spa_apac_decoder_t *decoder,
+                        const uint8_t *packet, size_t length,
+                        int32_t *out, size_t outCapacity, uint32_t *framesOut);
+
 /* APACDecoder::Reset — clears the filter banks' overlap-add memory only, which
  * is what a FLUSHBUFFERED has to do.  The next packet is then windowed against
  * silence rather than against the frame before the flush. */
@@ -105,6 +113,8 @@ typedef struct {
                   uint32_t *, uint32_t *, uint32_t *);
     int (*decodeS16)(spa_apac_decoder_t *, const uint8_t *, size_t,
                      int16_t *, size_t, uint32_t *);
+    int (*decodeS32)(spa_apac_decoder_t *, const uint8_t *, size_t,
+                     int32_t *, size_t, uint32_t *);
     void (*reset)(spa_apac_decoder_t *);
     void (*destroy)(spa_apac_decoder_t *);
     int (*getInfo)(const spa_apac_decoder_t *, spa_apac_stream_info_t *);

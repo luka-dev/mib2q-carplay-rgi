@@ -24,6 +24,7 @@ typedef struct { int channel, status; unsigned underrun; } snd_pcm_channel_statu
 #define SND_PCM_CHANNEL_PLAYBACK 0
 #define SND_PCM_MODE_BLOCK 1
 #define SND_PCM_SFMT_S16_LE 2
+#define SND_PCM_SFMT_S32_LE 12
 #define SND_PCM_OPEN_PLAYBACK 1
 #define SND_PCM_START_FULL 1
 #define SND_PCM_STOP_STOP 1

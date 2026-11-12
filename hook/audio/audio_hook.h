@@ -195,13 +195,13 @@ extern const hook_module_def_t upmix_level_module_def;
  * of its own samples, and the instant it is false stock type-100 behaviour
  * resumes unchanged. That fallback is the whole safety story of this path.
  *
- * spa_buffered_pcm6_read() writes exactly `frames` * 6 interleaved S16 samples
+ * spa_buffered_pcm6_read() writes exactly `frames` * 6 interleaved S32_LE samples
  * and returns `frames`, or writes nothing and returns zero.  A decoded prefix
  * followed by a synthesized zero tail is forbidden: the caller can use its
  * realtime fallback for the whole indivisible QSA period.  Both calls are safe
  * from any thread. */
 int spa_buffered_pcm6_active(void);
-size_t spa_buffered_pcm6_read(int16_t *out, size_t frames);
+size_t spa_buffered_pcm6_read(int32_t *out, size_t frames);
 
 /* Generic rail used by the sink: 6 channels for 5.1 and for Atmos
  * downmix/drop, 8 only for explicit passthrough. The read is all-or-zero and
@@ -209,14 +209,14 @@ size_t spa_buffered_pcm6_read(int16_t *out, size_t frames);
  * the active stream. */
 int spa_buffered_pcm_active(void);
 unsigned spa_buffered_pcm_channels(void);
-size_t spa_buffered_pcm_read(int16_t *out, size_t frames, unsigned channels);
+size_t spa_buffered_pcm_read(int32_t *out, size_t frames, unsigned channels);
 
 /* Transactional sink API. `peek` copies one whole period without consuming it;
  * `commit` advances only the prefix QSA accepted and releases the unwritten
  * tail. There may be only one outstanding peek; the QSA bridge serializes it
  * with its existing ioLock. The immediate `read` above remains for callers
  * which do not need device-acceptance tracking. */
-size_t spa_buffered_pcm_peek(int16_t *out, size_t frames, unsigned channels);
+size_t spa_buffered_pcm_peek(int32_t *out, size_t frames, unsigned channels);
 size_t spa_buffered_pcm_commit(size_t accepted_frames, unsigned channels);
 
 #endif /* AUDIO_HOOK_H */

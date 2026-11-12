@@ -276,7 +276,7 @@ carplay_build_hook() {
     [ "$n" = "1" ] || fail "APAC: versioned C API export missing/duplicated"
 
     echo "  undefined:$($NM -D --undefined-only $SO | sed "s/^ *//" | awk "\$1 == \"U\" { printf \" %s\", \$2 }" | head -c 400)"
-    echo "  built $OUTDIR_REL/libcarplay_apac.so (ABI v1, emutls=0 exceptions=0 rtti=0 stl=0 libstdc++=0)"
+    echo "  built $OUTDIR_REL/libcarplay_apac.so (ABI v2, emutls=0 exceptions=0 rtti=0 stl=0 libstdc++=0)"
     echo "  built $OUTDIR_REL/libcarplay_hook.so (APAC=dlopen, emutls=0 init_array=compiler-only)"
   ' || return 1
 

@@ -87,21 +87,25 @@ enum spa_decoded_pcm_action spa_select_decoded_pcm_action(
  */
 size_t spa_reorder_5_1_decoder_to_declared_s16(const int16_t *input, size_t frames,
                                                int16_t *output);
+size_t spa_reorder_5_1_decoder_to_declared_s32(const int32_t *input, size_t frames,
+                                               int32_t *output);
 
-/* Fold interleaved S16 5.1.2 into interleaved S16 5.1.  Input must already be
+/* Fold interleaved S16/S32 5.1.2 into interleaved 5.1.  Input must already be
  * in the declared order documented above.
  *
  * Matrix recovered from Pioneer's SpatialAudioDownMixer path:
  *   L/R/C stay unchanged; LFE is -6 dB; each height channel is folded into
- *   its matching surround at -6 dB.  Mixed surrounds saturate to S16.
+ *   its matching surround at -6 dB.  Mixed surrounds saturate to full scale.
  *
  * Returns the number of output samples (frames * 6).  Exact in-place use
  * (input == output) is supported; other overlapping ranges are not.
  */
 size_t spa_downmix_5_1_2_s16(const int16_t *input, size_t frames, int16_t *output);
+size_t spa_downmix_5_1_2_s32(const int32_t *input, size_t frames, int32_t *output);
 
 /* Test/reference policy that deliberately discards the two height channels.
  * Input and output orders are the same as spa_downmix_5_1_2_s16(). */
 size_t spa_drop_5_1_2_s16(const int16_t *input, size_t frames, int16_t *output);
+size_t spa_drop_5_1_2_s32(const int32_t *input, size_t frames, int32_t *output);
 
 #endif /* SPATIAL_DOWNMIX_H */

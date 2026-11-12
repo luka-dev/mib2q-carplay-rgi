@@ -163,9 +163,37 @@ static void test_cookie_resolved_pcm_kind(void)
            SPA_DECODED_PCM_ACTION_GENERIC);
 }
 
+static void test_s32_reorder_and_downmix(void)
+{
+    const int32_t decoded[6] = { 300001, 100003, -200005, 400007, -500009, 1000011 };
+    const int32_t expected_reordered[6] = { 100003, -200005, 300001, 1000011, 400007, -500009 };
+    int32_t out[6] = { 0 };
+    int32_t inplace[16] = {
+        10, 20, 30, 41, 50, 60, 81, 101,
+        0, 0, 0, INT32_MIN, 2000000000, -2000000000, 1000000000, -1000000000
+    };
+
+    assert(spa_reorder_5_1_decoder_to_declared_s32(decoded, 1, out) == 6);
+    assert(memcmp(out, expected_reordered, sizeof(out)) == 0);
+
+    assert(spa_downmix_5_1_2_s32(inplace, 2, inplace) == 12);
+    assert(inplace[0] == 10 && inplace[1] == 20 && inplace[2] == 30);
+    assert(inplace[3] == 20 && inplace[4] == 90 && inplace[5] == 110);
+    assert(inplace[9] == -1073741824);
+    assert(inplace[10] == INT32_MAX && inplace[11] == INT32_MIN);
+
+    {
+        int32_t drop_buf[8] = { 1, 2, 3, 4, 5, 6, 777, 888 };
+        const int32_t drop_exp[6] = { 1, 2, 3, 4, 5, 6 };
+        assert(spa_drop_5_1_2_s32(drop_buf, 1, drop_buf) == 6);
+        assert(memcmp(drop_buf, drop_exp, sizeof(drop_exp)) == 0);
+    }
+}
+
 int main(void)
 {
     int16_t sink = 0;
+    int32_t sink32 = 0;
 
     assert(spa_downmix_5_1_2_s16(0, 1, &sink) == 0);
     assert(spa_downmix_5_1_2_s16(&sink, 1, 0) == 0);
@@ -173,6 +201,12 @@ int main(void)
     assert(spa_drop_5_1_2_s16(&sink, 1, 0) == 0);
     assert(spa_reorder_5_1_decoder_to_declared_s16(0, 1, &sink) == 0);
     assert(spa_reorder_5_1_decoder_to_declared_s16(&sink, 1, 0) == 0);
+    assert(spa_downmix_5_1_2_s32(0, 1, &sink32) == 0);
+    assert(spa_downmix_5_1_2_s32(&sink32, 1, 0) == 0);
+    assert(spa_drop_5_1_2_s32(0, 1, &sink32) == 0);
+    assert(spa_drop_5_1_2_s32(&sink32, 1, 0) == 0);
+    assert(spa_reorder_5_1_decoder_to_declared_s32(0, 1, &sink32) == 0);
+    assert(spa_reorder_5_1_decoder_to_declared_s32(&sink32, 1, 0) == 0);
     test_matrix();
     test_saturation();
     test_exact_in_place();
@@ -181,5 +215,6 @@ int main(void)
     test_reorder_in_place();
     test_reorder_then_downmix();
     test_cookie_resolved_pcm_kind();
+    test_s32_reorder_and_downmix();
     return 0;
 }

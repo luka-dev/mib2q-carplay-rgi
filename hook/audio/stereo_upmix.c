@@ -110,17 +110,6 @@ static float spa_upmix_smoothstep(float value, float low, float high)
     return normalized * normalized * (3.0f - 2.0f * normalized);
 }
 
-static int16_t spa_upmix_scale_s16_q15(int16_t sample, uint32_t gain_q15)
-{
-    int64_t product = (int64_t)sample * (int64_t)gain_q15;
-    int64_t magnitude;
-
-    if (product >= 0)
-        return (int16_t)((product + INT64_C(16384)) / INT64_C(32768));
-    magnitude = -product;
-    return (int16_t)(-((magnitude + INT64_C(16384)) / INT64_C(32768)));
-}
-
 static int16_t spa_upmix_float_to_s16(float value)
 {
     long rounded = lrintf(spa_upmix_bound(value, 32767.0f));
@@ -128,19 +117,18 @@ static int16_t spa_upmix_float_to_s16(float value)
     return (int16_t)rounded;
 }
 
-static int16_t spa_upmix_lfe_to_s16(float normalized, uint32_t gain_q15)
+static int32_t spa_upmix_double_to_s32(double scaled)
 {
-    float scaled;
-    int32_t rounded;
+    if (!(scaled == scaled)) return 0;
+    scaled += (scaled >= 0.0) ? 0.5 : -0.5;
+    if (scaled >= 2147483647.0) return INT32_MAX;
+    if (scaled <= -2147483648.0) return INT32_MIN;
+    return (int32_t)scaled;
+}
 
-    normalized = spa_upmix_bound(normalized, 1.0f);
-    scaled = normalized * (float)gain_q15;
-    if (scaled >= (float)gain_q15) return (int16_t)gain_q15;
-    if (scaled <= -(float)gain_q15)
-        return (int16_t)(-(int32_t)gain_q15);
-    rounded = scaled >= 0.0f ? (int32_t)(scaled + 0.5f)
-                             : (int32_t)(scaled - 0.5f);
-    return (int16_t)rounded;
+static int32_t spa_upmix_float_to_s32(float value)
+{
+    return spa_upmix_double_to_s32((double)value * 65536.0);
 }
 
 /* Eight of these run per output frame and the body is a dozen operations, so
@@ -207,14 +195,14 @@ static inline float32x2_t spa_upmix_pair(float l, float r)
 
 /* ahead_l/r: the input SPA_UPMIX_LFE_LOOKAHEAD frames ahead of render_l/r. */
 static float spa_upmix_lfe_normalized(
-    struct spa_stereo_upmix *state, int16_t *render_l, int16_t *render_r,
-    int16_t ahead_l, int16_t ahead_r,
+    struct spa_stereo_upmix *state, float *render_l, float *render_r,
+    int32_t ahead_l, int32_t ahead_r,
     float bass_confidence, float drum_confidence)
 {
-    const float normalized_l = (float)(*render_l) * (1.0f / 32768.0f);
-    const float normalized_r = (float)(*render_r) * (1.0f / 32768.0f);
-    const float lfe_in_l = (float)ahead_l * (1.0f / 32768.0f);
-    const float lfe_in_r = (float)ahead_r * (1.0f / 32768.0f);
+    const float normalized_l = *render_l * (1.0f / 32768.0f);
+    const float normalized_r = *render_r * (1.0f / 32768.0f);
+    const float lfe_in_l = (float)ahead_l * (1.0f / 2147483648.0f);
+    const float lfe_in_r = (float)ahead_r * (1.0f / 2147483648.0f);
 #if SPA_UPMIX_HAVE_NEON
     float32x2_t door = spa_upmix_biquad_pair(
         spa_upmix_pair(normalized_l, normalized_r),
@@ -243,8 +231,8 @@ static float spa_upmix_lfe_normalized(
         spa_upmix_biquad(lfe_in_r, state->_runtime._lfe_low48_state[1][1], &kLfeLow),
         state->_runtime._lfe_low48_state[1][2], &kLfeLow);
 #endif
-    *render_l = spa_upmix_float_to_s16((normalized_l - kDoorReliefCut * door_l) * 32768.0f);
-    *render_r = spa_upmix_float_to_s16((normalized_r - kDoorReliefCut * door_r) * 32768.0f);
+    *render_l = (normalized_l - kDoorReliefCut * door_l) * 32768.0f;
+    *render_r = (normalized_r - kDoorReliefCut * door_r) * 32768.0f;
     const float power_alpha = 0.00075f;
     float target_polarity;
     float polarity_alpha;
@@ -324,11 +312,23 @@ static float spa_upmix_lfe_normalized(
 static const float kCabinGuardRelease = 1.0f / 7200.0f;
 /* Share of a rear-bus overload that the rears alone give up; the calibration knob
  * between a steady front (1) and a kept front/rear balance (0). */
-static const float kCabinRearShare = 0.5f;
+static const float kCabinRearShare = 0.75f;
+/* Power-preserving phantom-centre spillover (C -> L + R): when the sqrt(2)
+ * centre vocal exceeds the channel/bus rail without SoundCheck headroom, spill
+ * the excess symmetrically back into L and R at 1/sqrt(2) with the same held
+ * release so the vocal stays centred and unclipped without linked mix ducking. */
+static const float kCabinCentreSpillGain = 0.70710678f;
+static const float kCabinMaxCentreSpill = 0.40f;
+
+static inline float spa_upmix_guard_q(float value, int quantize_s16)
+{
+    return quantize_s16 ? truncf(value) : value;
+}
 
 /* `held` (may be NULL = the stateless per-sample guard the tests exercise) is
  * the reduction carried between frames: [0] linked (all six channels), [1] the
- * rears alone.  Without it the gain was recomputed from every frame's own
+ * rears alone, [2] phantom-centre spillover (C -> L + R).  Without it the gain
+ * was recomputed from every frame's own
  * peak, i.e. it followed the waveform: on loud hard-panned or wide material --
  * exactly when the +6/+9 dB rear rows overflow a bus -- that is a clipper, not
  * a limiter (a hard-left 1 kHz sine at 0 dBFS came out with 22 % THD on the
@@ -336,24 +336,44 @@ static const float kCabinRearShare = 0.5f;
  * instrument).  With it the reduction a peak needed is kept and released
  * slowly, so the next cycles pass through a near-constant gain.
  *
- * Order of repair: the LFE, then the rears alone, then everything.  The buses
- * that overflow on music are the rear ones (bus = 0.71 front + 2.0 or 2.8
- * rear); a bus the fronts and the centre fill by themselves is left to the
- * linked stage.  Taking the
+ * Order of repair: phantom-centre spillover, the LFE, then the rears alone,
+ * then everything.  The buses that overflow on music are the rear ones
+ * (bus = 0.71 front + 2.0 or 2.8 rear); a bus the fronts and the centre fill
+ * by themselves is left to spillover + the linked stage.  Taking the
  * whole mix down for them made the guard a limiter on the front stage of every
  * loud master (-1.5 dB mean, 79 % of the time on a -11.5 dBFS RMS clip).  The
- * linked stage stays as the rail guarantee for whatever the rears cannot fix. */
-static void spa_upmix_cabin_guard_s16(int16_t sample[6], int adjust_lfe, float *held)
+ * linked stage stays as the rail guarantee for whatever spillover and the
+ * rears cannot fix. */
+/* The samples are S16-scaled floats that may still be over full scale (the
+ * power-preserving centre and the rear dynamics add up to +3..4.5 dB): rounding
+ * them to S16 before this point was a hard clip the held reduction never saw.
+ * `quantize_s16` truncates intermediate guard steps for S16 callers while S32
+ * callers keep continuous 24-bit precision down to the final S32 store. */
+static void spa_upmix_cabin_guard(float sample[6], int adjust_lfe, float *held,
+                                  int quantize_s16)
 {
     float front[8], rear[8];
     unsigned bus, ch;
-    float peak = 0.0f, rear_gain = 1.0f;
+    float peak = 0.0f, rear_gain = 1.0f, s_applied = 0.0f;
 
+    if (held && held[2] > 0.0f) {
+        float s = held[2];
+        const float c = sample[2];
+        const float spill = kCabinCentreSpillGain * s * c;
+
+        s_applied = s;
+        sample[0] = spa_upmix_guard_q(sample[0] + spill, quantize_s16);
+        sample[1] = spa_upmix_guard_q(sample[1] + spill, quantize_s16);
+        sample[2] = spa_upmix_guard_q(c * (1.0f - s), quantize_s16);
+        s -= s * kCabinGuardRelease;
+        held[2] = s < 1.0e-5f ? 0.0f : s;
+    }
     if (held && held[0] > 0.0f) {
         float reduction = held[0];
         const float gain = 1.0f - reduction;
 
-        for (ch = 0; ch < 6; ++ch) sample[ch] = (int16_t)((float)sample[ch] * gain);
+        for (ch = 0; ch < 6; ++ch)
+            sample[ch] = spa_upmix_guard_q(sample[ch] * gain, quantize_s16);
         reduction -= reduction * kCabinGuardRelease;
         held[0] = reduction < 1.0e-5f ? 0.0f : reduction;
     }
@@ -361,8 +381,8 @@ static void spa_upmix_cabin_guard_s16(int16_t sample[6], int adjust_lfe, float *
         float reduction = held[1];
         const float gain = 1.0f - reduction;
 
-        sample[4] = (int16_t)((float)sample[4] * gain);
-        sample[5] = (int16_t)((float)sample[5] * gain);
+        sample[4] = spa_upmix_guard_q(sample[4] * gain, quantize_s16);
+        sample[5] = spa_upmix_guard_q(sample[5] * gain, quantize_s16);
         reduction -= reduction * kCabinGuardRelease;
         held[1] = reduction < 1.0e-5f ? 0.0f : reduction;
     }
@@ -376,6 +396,43 @@ static void spa_upmix_cabin_guard_s16(int16_t sample[6], int adjust_lfe, float *
         if (spa_upmix_absf((float)sample[ch]) > peak)
             peak = spa_upmix_absf((float)sample[ch]);
     if (peak * kCabinMatrixMaxColumnNorm <= kCabinSampleLimit) return;
+
+    /* Phantom-centre spillover: if C alone exceeds the channel ceiling while
+     * L and R still have room in the same polarity, spill the excess back into
+     * L and R at 1/sqrt(2) before touching the whole mix. */
+    {
+        const float lim = kCabinSampleLimit - 8.0f;
+        const float abs_c = spa_upmix_absf(sample[2]);
+
+        if (abs_c > lim) {
+            const float sgn = sample[2] >= 0.0f ? 1.0f : -1.0f;
+            const float l_proj = sample[0] * sgn;
+            const float r_proj = sample[1] * sgn;
+            const float max_lr = l_proj > r_proj ? l_proj : r_proj;
+            const float ds_cap = s_applied < kCabinMaxCentreSpill
+                ? (kCabinMaxCentreSpill - s_applied) / (1.0f - s_applied) : 0.0f;
+
+            if (max_lr < lim && ds_cap > 0.0f) {
+                const float ds_want = 1.0f - lim / abs_c;
+                const float ds_room = (lim - max_lr) / (kCabinCentreSpillGain * abs_c);
+                float ds = ds_want < ds_room ? ds_want : ds_room;
+
+                if (ds > ds_cap) ds = ds_cap;
+                if (ds > 0.0f) {
+                    const float c = sample[2];
+                    const float spill = kCabinCentreSpillGain * ds * c;
+
+                    sample[0] = spa_upmix_guard_q(sample[0] + spill, quantize_s16);
+                    sample[1] = spa_upmix_guard_q(sample[1] + spill, quantize_s16);
+                    sample[2] = spa_upmix_guard_q(c * (1.0f - ds), quantize_s16);
+                    if (held) {
+                        const float s_new = 1.0f - (1.0f - s_applied) * (1.0f - ds);
+                        if (s_new > held[2]) held[2] = s_new;
+                    }
+                }
+            }
+        }
+    }
 
     if (adjust_lfe) {
         float limited = (float)sample[3];
@@ -397,11 +454,11 @@ static void spa_upmix_cabin_guard_s16(int16_t sample[6], int adjust_lfe, float *
             if (low > minimum) minimum = low;
             if (high < maximum) maximum = high;
         }
-        minimum = ceilf(minimum); maximum = floorf(maximum);
+        if (quantize_s16) { minimum = ceilf(minimum); maximum = floorf(maximum); }
         if (minimum <= maximum) {
             if (limited < minimum) limited = minimum;
             if (limited > maximum) limited = maximum;
-            sample[3] = (int16_t)limited;
+            sample[3] = limited;
         }
         /* If LFE alone cannot repair it, preserve the candidate for the
          * stages below. Returning LFE=0 is not a rail guarantee. */
@@ -458,8 +515,8 @@ static void spa_upmix_cabin_guard_s16(int16_t sample[6], int adjust_lfe, float *
          * is where the upmix is mostly used; all of it linked is the pumping
          * front this order was introduced against. */
         rear_gain = 1.0f - kCabinRearShare * (1.0f - rear_gain);
-        sample[4] = (int16_t)((float)sample[4] * rear_gain);
-        sample[5] = (int16_t)((float)sample[5] * rear_gain);
+        sample[4] = spa_upmix_guard_q(sample[4] * rear_gain, quantize_s16);
+        sample[5] = spa_upmix_guard_q(sample[5] * rear_gain, quantize_s16);
         for (bus = 0; bus < 8; ++bus) rear[bus] *= rear_gain;
         if (held) held[1] = 1.0f - (1.0f - held[1]) * rear_gain;   /* instant attack */
     }
@@ -473,9 +530,20 @@ static void spa_upmix_cabin_guard_s16(int16_t sample[6], int adjust_lfe, float *
         /* Eight S16 units reserve more than the largest row's aggregate
          * truncation error, including cancellation and float roundoff. */
         float gain = (kCabinSampleLimit - 8.0f) / peak;
-        for (ch = 0; ch < 6; ++ch) sample[ch] = (int16_t)(sample[ch] * gain);
+        for (ch = 0; ch < 6; ++ch)
+            sample[ch] = spa_upmix_guard_q(sample[ch] * gain, quantize_s16);
         if (held) held[0] = 1.0f - (1.0f - held[0]) * gain;   /* instant attack */
     }
+}
+
+static void spa_upmix_cabin_guard_s16(int16_t sample[6], int adjust_lfe, float *held)
+{
+    float f[6];
+    unsigned ch;
+
+    for (ch = 0; ch < 6; ++ch) f[ch] = (float)sample[ch];
+    spa_upmix_cabin_guard(f, adjust_lfe, held, 1);
+    for (ch = 0; ch < 6; ++ch) sample[ch] = spa_upmix_float_to_s16(f[ch]);
 }
 
 #ifdef SPA_STEREO_UPMIX_TESTING
@@ -675,12 +743,28 @@ int spa_stereo_upmix_scene_track_change(struct spa_stereo_upmix *state)
 static void spa_upmix_apply_level(struct spa_stereo_upmix *state);
 static void spa_upmix_glide_tuning(struct spa_stereo_upmix *state, size_t frames, int land);
 
-static int spa_scene_arm(struct spa_stereo_upmix *state, int first)
+/* A fresh stream for the worker's net: its state is reset and the rows of the
+ * stream before are never accepted. */
+static void spa_scene_new_mask_stream(struct spa_stereo_upmix *state)
 {
     /* Process-wide, so every init() and reset() of any instance is a generation
      * the worker has never seen: a worker reused across init() (the realtime
      * path keeps its one) resets its net and its old rows are never accepted. */
     static volatile uint32_t generation_counter;
+    struct spa_stereo_upmix_runtime *rt = &state->_runtime;
+    const struct spa_scene_mask_provider *provider = state->config.scene_mask_provider;
+
+    do {
+        rt->_scene_mask_generation =
+            __atomic_add_fetch(&generation_counter, 1u, __ATOMIC_RELAXED);
+    } while (!rt->_scene_mask_generation);
+    if (provider) provider->reset(provider->context, rt->_scene_mask_generation);
+    rt->_scene_mask_sequence = 0;
+    memset(&rt->_scene_mask_row, 0, sizeof(rt->_scene_mask_row));
+}
+
+static int spa_scene_arm(struct spa_stereo_upmix *state, int first)
+{
     struct spa_stereo_upmix_runtime *rt = &state->_runtime;
     const struct spa_scene_mask_provider *provider = state->config.scene_mask_provider;
     int status = 0;
@@ -694,13 +778,7 @@ static int spa_scene_arm(struct spa_stereo_upmix *state, int first)
         scene_engine_reset_state(&rt->_scene);
         if (rt->_scene_mask_on && !provider) scene_mask_reset(&rt->_scene_mask);
     }
-    do {
-        rt->_scene_mask_generation =
-            __atomic_add_fetch(&generation_counter, 1u, __ATOMIC_RELAXED);
-    } while (!rt->_scene_mask_generation);
-    if (provider) provider->reset(provider->context, rt->_scene_mask_generation);
-    rt->_scene_mask_sequence = 0;
-    memset(&rt->_scene_mask_row, 0, sizeof(rt->_scene_mask_row));
+    spa_scene_new_mask_stream(state);
     memset(rt->_scene_fifo, 0, sizeof(rt->_scene_fifo));
     rt->_scene_fifo_count = SPA_SCENE_LATENCY_FRAMES;
     memset(rt->_dry_ring, 0, sizeof(rt->_dry_ring));
@@ -835,11 +913,11 @@ static void spa_upmix_dynamics_hop(struct spa_stereo_upmix *state, float energy)
 }
 
 /* Once per output frame, with the input SPA_DYN_LOOKAHEAD frames ahead of it. */
-static inline float spa_upmix_rear_dynamics(struct spa_stereo_upmix *state, int16_t ahead_l, int16_t ahead_r)
+static inline float spa_upmix_rear_dynamics(struct spa_stereo_upmix *state, int32_t ahead_l, int32_t ahead_r)
 {
     struct spa_stereo_upmix_runtime *rt = &state->_runtime;
     const float depth = state->_tune[7];
-    const float l = (float)ahead_l * (1.0f / 32768.0f), r = (float)ahead_r * (1.0f / 32768.0f);
+    const float l = (float)ahead_l * (1.0f / 2147483648.0f), r = (float)ahead_r * (1.0f / 2147483648.0f);
     const float power = 0.5f * (l * l + r * r);
     float onset = 0.0f, tail = 0.0f, target;
 
@@ -897,12 +975,19 @@ static void spa_upmix_apply_level(struct spa_stereo_upmix *state)
         scene_engine_reset_state(&rt->_scene);
         if (rt->_scene_mask_on && !state->config.scene_mask_provider)
             scene_mask_reset(&rt->_scene_mask);
+        /* nothing was submitted during the bypass: the worker's net still holds
+         * the music from before it, and its last row could land on this one */
+        spa_scene_new_mask_stream(state);
         memset(rt->_scene_fifo, 0, sizeof(rt->_scene_fifo));
         rt->_scene_fifo_count = SPA_SCENE_LATENCY_FRAMES;
         memset(rt->_scene_mask_acc, 0, sizeof(rt->_scene_mask_acc));
         rt->_scene_mask_fill = SPA_SCENE_MASK_PREFILL_FRAMES;
         rt->_scene_lfe_bass = 0.0f;
         rt->_scene_lfe_drum = 0.0f;
+        /* the swell reference is whatever played before the bypass */
+        rt->_dyn_energy_short = rt->_dyn_energy_long = 0.0f;
+        rt->_dyn_hops = 0u;
+        rt->_dyn_swell = 1.0f;
     }
     for (k = 0; k < 8; k++) state->_tune_from[k] = state->_tune[k];
     state->_tune_t = 0.0f;
@@ -1013,12 +1098,12 @@ static void spa_scene_mask_boundary(struct spa_stereo_upmix *state,
     }
 }
 
-/* SCENE: staged int16 stereo -> float -> engine -> FIFO (primed with the
- * latency of zeros, so a pop of `frames` is never short) -> int16 PCM6 with
+/* SCENE: staged S32-scaled stereo -> float -> engine -> FIFO (primed with the
+ * latency of zeros, so a pop of `frames` is never short) -> S16 or S32 PCM6 with
  * the LFE V2 assist, the front headroom, the programme gain and the cabin
- * guard.  The engine's float output is L R 0 0 Ls Rs at unity scale. */
+ * guard.  The engine's float output is L R C 0 Ls Rs at unity scale. */
 static void spa_scene_process(struct spa_stereo_upmix *state, size_t frames,
-                              int16_t *pcm6, const float *gain)
+                              void *pcm6, int out_s32, const float *gain)
 {
     struct spa_stereo_upmix_runtime *rt = &state->_runtime;
     const size_t channels = SPA_STEREO_UPMIX_OUTPUT_CHANNELS;
@@ -1030,28 +1115,45 @@ static void spa_scene_process(struct spa_stereo_upmix *state, size_t frames,
         /* Full OFF bypass after fade-out: skip STFT and mask worker (0% DSP CPU),
          * maintaining only the SPA_SCENE_LATENCY_FRAMES dry alignment ring. */
         for (frame = 0; frame < frames; frame++) {
-            int16_t *output = pcm6 + frame * channels;
-            int16_t *dry = rt->_dry_ring + rt->_dry_pos * SPA_STEREO_UPMIX_INPUT_CHANNELS;
-            output[SPA_STEREO_UPMIX_CHANNEL_L] = gain && gain[frame] != 1.0f
-                ? spa_upmix_float_to_s16(gain[frame] * (float)dry[0]) : dry[0];
-            output[SPA_STEREO_UPMIX_CHANNEL_R] = gain && gain[frame] != 1.0f
-                ? spa_upmix_float_to_s16(gain[frame] * (float)dry[1]) : dry[1];
-            output[SPA_STEREO_UPMIX_CHANNEL_C] = 0;
-            output[SPA_STEREO_UPMIX_CHANNEL_LFE] = 0;
-            output[SPA_STEREO_UPMIX_CHANNEL_LS] = 0;
-            output[SPA_STEREO_UPMIX_CHANNEL_RS] = 0;
+            int32_t *dry = rt->_dry_ring + rt->_dry_pos * SPA_STEREO_UPMIX_INPUT_CHANNELS;
+            const int32_t dry_l = dry[0], dry_r = dry[1];
+
             dry[0] = state->_input_scratch[frame * SPA_STEREO_UPMIX_INPUT_CHANNELS];
             dry[1] = state->_input_scratch[frame * SPA_STEREO_UPMIX_INPUT_CHANNELS + 1];
             if (++rt->_dry_pos == SPA_SCENE_LATENCY_FRAMES) rt->_dry_pos = 0;
-            /* plain stereo cannot overflow a bus: stateless, nothing to hold */
-            spa_upmix_cabin_guard_s16(output, state->config.lfe_enabled, NULL);
+            if (out_s32) {
+                int32_t *output = (int32_t *)pcm6 + frame * channels;
+                const float g_frame = gain ? gain[frame] : 1.0f;
+                float o[6] = {
+                    (float)((double)dry_l * (1.0 / 65536.0)) * g_frame,
+                    (float)((double)dry_r * (1.0 / 65536.0)) * g_frame,
+                    0.0f, 0.0f, 0.0f, 0.0f
+                };
+                /* plain stereo cannot overflow a bus: stateless, nothing to hold */
+                spa_upmix_cabin_guard(o, state->config.lfe_enabled, NULL, 0);
+                for (i = 0; i < channels; i++) output[i] = spa_upmix_float_to_s32(o[i]);
+            } else {
+                int16_t *output = (int16_t *)pcm6 + frame * channels;
+                const int16_t dry_l16 = (int16_t)(dry_l >> 16);
+                const int16_t dry_r16 = (int16_t)(dry_r >> 16);
+                output[SPA_STEREO_UPMIX_CHANNEL_L] = gain && gain[frame] != 1.0f
+                    ? spa_upmix_float_to_s16(gain[frame] * (float)dry_l16) : dry_l16;
+                output[SPA_STEREO_UPMIX_CHANNEL_R] = gain && gain[frame] != 1.0f
+                    ? spa_upmix_float_to_s16(gain[frame] * (float)dry_r16) : dry_r16;
+                output[SPA_STEREO_UPMIX_CHANNEL_C] = 0;
+                output[SPA_STEREO_UPMIX_CHANNEL_LFE] = 0;
+                output[SPA_STEREO_UPMIX_CHANNEL_LS] = 0;
+                output[SPA_STEREO_UPMIX_CHANNEL_RS] = 0;
+                /* plain stereo cannot overflow a bus: stateless, nothing to hold */
+                spa_upmix_cabin_guard_s16(output, state->config.lfe_enabled, NULL);
+            }
         }
         return;
     }
 
     for (i = 0; i < frames * SPA_STEREO_UPMIX_INPUT_CHANNELS; i++)
         state->_scene_input_scratch[i] =
-            (float)state->_input_scratch[i] * (1.0f / 32768.0f);
+            (float)state->_input_scratch[i] * (1.0f / 2147483648.0f);
     /* The push is split on the mask cadence (SPA_SCENE_MASK_PREFILL_FRAMES in
      * the header): whenever 512 frames have accumulated the net runs on them
      * and its row is installed before the next frame is pushed, so it applies
@@ -1092,10 +1194,11 @@ static void spa_scene_process(struct spa_stereo_upmix *state, size_t frames,
 
     for (frame = 0; frame < frames; frame++) {
         const float *in = rt->_scene_fifo + frame * channels;
-        int16_t *output = pcm6 + frame * channels;
-        int16_t *dry = rt->_dry_ring + rt->_dry_pos * SPA_STEREO_UPMIX_INPUT_CHANNELS;
-        const int16_t dry_l = dry[0], dry_r = dry[1];
-        int16_t render_l = 0, render_r = 0, render_c = 0, rear_l = 0, rear_r = 0, lfe = 0;
+        int32_t *dry = rt->_dry_ring + rt->_dry_pos * SPA_STEREO_UPMIX_INPUT_CHANNELS;
+        const int32_t dry_l = dry[0], dry_r = dry[1];
+        /* S16-scaled and unclamped until the guard: one rounding, at the end */
+        float o[6] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+        const float front_gain = (float)state->config.front_gain_q15 * (1.0f / 32768.0f);
         float w, g;
 
         /* the input SPA_SCENE_LATENCY_FRAMES ago: aligned with this output frame */
@@ -1108,39 +1211,33 @@ static void spa_scene_process(struct spa_stereo_upmix *state, size_t frames,
             if (state->config.scene_dynamics > 0.0f) {
                 /* _dry_pos is now the oldest entry (this output frame); the
                  * input k frames ahead of it sits k further on */
-                const int16_t *ahead = rt->_dry_ring + SPA_STEREO_UPMIX_INPUT_CHANNELS *
+                const int32_t *ahead = rt->_dry_ring + SPA_STEREO_UPMIX_INPUT_CHANNELS *
                     ((rt->_dry_pos + SPA_DYN_LOOKAHEAD) % SPA_SCENE_LATENCY_FRAMES);
 
                 rear_gain = spa_upmix_rear_dynamics(state, ahead[0], ahead[1]);
             }
-            render_l = spa_upmix_float_to_s16(in[0] * 32768.0f);
-            render_r = spa_upmix_float_to_s16(in[1] * 32768.0f);
-            render_c = spa_upmix_float_to_s16(in[2] * 32768.0f);
-            rear_l = spa_upmix_float_to_s16(in[4] * rear_gain * 32768.0f);
-            rear_r = spa_upmix_float_to_s16(in[5] * rear_gain * 32768.0f);
+            o[SPA_STEREO_UPMIX_CHANNEL_L] = in[0] * 32768.0f;
+            o[SPA_STEREO_UPMIX_CHANNEL_R] = in[1] * 32768.0f;
+            o[SPA_STEREO_UPMIX_CHANNEL_C] = in[2] * 32768.0f;
+            o[SPA_STEREO_UPMIX_CHANNEL_LS] = in[4] * rear_gain * 32768.0f;
+            o[SPA_STEREO_UPMIX_CHANNEL_RS] = in[5] * rear_gain * 32768.0f;
         }
         /* Level steering from the net's bass/drum posteriors (0/0 = from the
          * front alone until the net's first control, or without a net). */
         if (state->config.lfe_enabled) {
             /* _dry_pos is now the oldest entry (the input 1024 frames ago, this
              * output frame); the one written k frames ago sits k behind it */
-            const int16_t *ahead = rt->_dry_ring + SPA_STEREO_UPMIX_INPUT_CHANNELS *
+            const int32_t *ahead = rt->_dry_ring + SPA_STEREO_UPMIX_INPUT_CHANNELS *
                 ((rt->_dry_pos + SPA_UPMIX_LFE_LOOKAHEAD) % SPA_SCENE_LATENCY_FRAMES);
 
-            lfe = spa_upmix_lfe_to_s16(
-                spa_upmix_lfe_normalized(state, &render_l, &render_r, ahead[0], ahead[1],
-                                          rt->_scene_lfe_bass, rt->_scene_lfe_drum),
-                state->config.lfe_gain_q15);
+            o[SPA_STEREO_UPMIX_CHANNEL_LFE] = (float)state->config.lfe_gain_q15 *
+                spa_upmix_lfe_normalized(state, &o[SPA_STEREO_UPMIX_CHANNEL_L],
+                                         &o[SPA_STEREO_UPMIX_CHANNEL_R], ahead[0], ahead[1],
+                                         rt->_scene_lfe_bass, rt->_scene_lfe_drum);
         }
-        output[SPA_STEREO_UPMIX_CHANNEL_L] =
-            spa_upmix_scale_s16_q15(render_l, state->config.front_gain_q15);
-        output[SPA_STEREO_UPMIX_CHANNEL_R] =
-            spa_upmix_scale_s16_q15(render_r, state->config.front_gain_q15);
-        output[SPA_STEREO_UPMIX_CHANNEL_C] =
-            spa_upmix_scale_s16_q15(render_c, state->config.front_gain_q15);
-        output[SPA_STEREO_UPMIX_CHANNEL_LFE] = lfe;
-        output[SPA_STEREO_UPMIX_CHANNEL_LS] = rear_l;
-        output[SPA_STEREO_UPMIX_CHANNEL_RS] = rear_r;
+        o[SPA_STEREO_UPMIX_CHANNEL_L] *= front_gain;
+        o[SPA_STEREO_UPMIX_CHANNEL_R] *= front_gain;
+        o[SPA_STEREO_UPMIX_CHANNEL_C] *= front_gain;
         w = state->_wet;
         if (w != target) {
             w = target > w ? (w + step < target ? w + step : target) : (w - step > target ? w - step : target);
@@ -1149,20 +1246,23 @@ static void spa_scene_process(struct spa_stereo_upmix *state, size_t frames,
         if (w < 1.0f) {
             /* level fade: ease in/out between the scene and the plain stereo */
             g = w * w * (3.0f - 2.0f * w);
-            output[SPA_STEREO_UPMIX_CHANNEL_L] = spa_upmix_float_to_s16(
-                g * (float)output[SPA_STEREO_UPMIX_CHANNEL_L] + (1.0f - g) * (float)dry_l);
-            output[SPA_STEREO_UPMIX_CHANNEL_R] = spa_upmix_float_to_s16(
-                g * (float)output[SPA_STEREO_UPMIX_CHANNEL_R] + (1.0f - g) * (float)dry_r);
-            output[SPA_STEREO_UPMIX_CHANNEL_C] = spa_upmix_float_to_s16(
-                g * (float)output[SPA_STEREO_UPMIX_CHANNEL_C]);
-            output[SPA_STEREO_UPMIX_CHANNEL_LFE] = spa_upmix_float_to_s16(g * (float)lfe);
-            output[SPA_STEREO_UPMIX_CHANNEL_LS] = spa_upmix_float_to_s16(g * (float)rear_l);
-            output[SPA_STEREO_UPMIX_CHANNEL_RS] = spa_upmix_float_to_s16(g * (float)rear_r);
+            for (i = 0; i < channels; i++) o[i] *= g;
+            o[SPA_STEREO_UPMIX_CHANNEL_L] += (1.0f - g) * ((float)dry_l * (1.0f / 65536.0f));
+            o[SPA_STEREO_UPMIX_CHANNEL_R] += (1.0f - g) * ((float)dry_r * (1.0f / 65536.0f));
         }
         if (gain && gain[frame] != 1.0f)
-            for (i = 0; i < channels; i++)
-                output[i] = spa_upmix_float_to_s16(gain[frame] * (float)output[i]);
-        spa_upmix_cabin_guard_s16(output, state->config.lfe_enabled, rt->_guard_reduction);
+            for (i = 0; i < channels; i++) o[i] *= gain[frame];
+        if (out_s32) {
+            int32_t *output = (int32_t *)pcm6 + frame * channels;
+            spa_upmix_cabin_guard(o, state->config.lfe_enabled, rt->_guard_reduction, 0);
+            for (i = 0; i < channels; i++) output[i] = spa_upmix_float_to_s32(o[i]);
+        } else {
+            int16_t *output = (int16_t *)pcm6 + frame * channels;
+            /* whole S16 units, still unclamped: the guard's bus bound is exact on those */
+            for (i = 0; i < channels; i++) o[i] = rintf(o[i]);
+            spa_upmix_cabin_guard(o, state->config.lfe_enabled, rt->_guard_reduction, 1);
+            for (i = 0; i < channels; i++) output[i] = spa_upmix_float_to_s16(o[i]);
+        }
     }
     rt->_scene_fifo_count -= (uint32_t)pop;
     if (rt->_scene_fifo_count > 0u) {
@@ -1172,16 +1272,18 @@ static void spa_scene_process(struct spa_stereo_upmix *state, size_t frames,
 }
 
 static int spa_upmix_process(struct spa_stereo_upmix *state,
-                                 const int16_t *pcm2,
-                                 size_t frames,
-                                 void *pcm6,
-                                 size_t pcm6_capacity_frames,
-                                 const float *gain)
+                             const void *pcm2,
+                             int in_s32,
+                             size_t frames,
+                             void *pcm6,
+                             int out_s32,
+                             size_t pcm6_capacity_frames,
+                             const float *gain)
 {
     size_t input_bytes;
     size_t output_bytes;
     size_t input_samples;
-    size_t frame;
+    size_t i, frame;
     int status;
 
     if (!state) return SPA_STEREO_UPMIX_ERROR_ARGUMENT;
@@ -1197,33 +1299,57 @@ static int spa_upmix_process(struct spa_stereo_upmix *state,
     if (!pcm2 || !pcm6) return SPA_STEREO_UPMIX_ERROR_ARGUMENT;
 
     input_samples = frames * SPA_STEREO_UPMIX_INPUT_CHANNELS;
-    input_bytes = input_samples * sizeof(*pcm2);
-    output_bytes = frames * SPA_STEREO_UPMIX_OUTPUT_CHANNELS * sizeof(int16_t);
+    input_bytes = input_samples * (in_s32 ? sizeof(int32_t) : sizeof(int16_t));
+    output_bytes = frames * SPA_STEREO_UPMIX_OUTPUT_CHANNELS *
+                   (out_s32 ? sizeof(int32_t) : sizeof(int16_t));
     if (spa_upmix_ranges_overlap(state, sizeof(*state), pcm2, input_bytes) ||
         spa_upmix_ranges_overlap(state, sizeof(*state), pcm6, output_bytes))
         return SPA_STEREO_UPMIX_ERROR_STATE_OVERLAP;
-    memcpy(state->_input_scratch, pcm2, input_bytes);
+    if (in_s32) {
+        memcpy(state->_input_scratch, pcm2, input_bytes);
+    } else {
+        const int16_t *src = (const int16_t *)pcm2;
+        for (i = 0; i < input_samples; i++)
+            state->_input_scratch[i] = (int32_t)((uint32_t)(uint16_t)src[i] << 16);
+    }
 
     if (state->config.backend == SPA_STEREO_UPMIX_SCENE) {
         spa_upmix_apply_level(state);
         spa_upmix_glide_tuning(state, frames, 0);
-        spa_scene_process(state, frames, (int16_t *)pcm6, gain);
+        spa_scene_process(state, frames, pcm6, out_s32, gain);
         return SPA_STEREO_UPMIX_OK;
     }
     /* OFF: the exact bypass, [L, R, 0, 0, 0, 0]. */
-    for (frame = 0; frame < frames; frame++) {
-        const int16_t input_l = state->_input_scratch[frame * 2];
-        const int16_t input_r = state->_input_scratch[frame * 2 + 1];
-        int16_t *output = (int16_t *)pcm6 + frame * SPA_STEREO_UPMIX_OUTPUT_CHANNELS;
+    if (out_s32) {
+        for (frame = 0; frame < frames; frame++) {
+            const int32_t input_l = state->_input_scratch[frame * 2];
+            const int32_t input_r = state->_input_scratch[frame * 2 + 1];
+            int32_t *output = (int32_t *)pcm6 + frame * SPA_STEREO_UPMIX_OUTPUT_CHANNELS;
 
-        output[SPA_STEREO_UPMIX_CHANNEL_L] = gain && gain[frame] != 1.0f
-            ? spa_upmix_float_to_s16(gain[frame] * (float)input_l) : input_l;
-        output[SPA_STEREO_UPMIX_CHANNEL_R] = gain && gain[frame] != 1.0f
-            ? spa_upmix_float_to_s16(gain[frame] * (float)input_r) : input_r;
-        output[SPA_STEREO_UPMIX_CHANNEL_C] = 0;
-        output[SPA_STEREO_UPMIX_CHANNEL_LFE] = 0;
-        output[SPA_STEREO_UPMIX_CHANNEL_LS] = 0;
-        output[SPA_STEREO_UPMIX_CHANNEL_RS] = 0;
+            output[SPA_STEREO_UPMIX_CHANNEL_L] = gain && gain[frame] != 1.0f
+                ? spa_upmix_double_to_s32((double)gain[frame] * (double)input_l) : input_l;
+            output[SPA_STEREO_UPMIX_CHANNEL_R] = gain && gain[frame] != 1.0f
+                ? spa_upmix_double_to_s32((double)gain[frame] * (double)input_r) : input_r;
+            output[SPA_STEREO_UPMIX_CHANNEL_C] = 0;
+            output[SPA_STEREO_UPMIX_CHANNEL_LFE] = 0;
+            output[SPA_STEREO_UPMIX_CHANNEL_LS] = 0;
+            output[SPA_STEREO_UPMIX_CHANNEL_RS] = 0;
+        }
+    } else {
+        for (frame = 0; frame < frames; frame++) {
+            const int16_t input_l = (int16_t)(state->_input_scratch[frame * 2] >> 16);
+            const int16_t input_r = (int16_t)(state->_input_scratch[frame * 2 + 1] >> 16);
+            int16_t *output = (int16_t *)pcm6 + frame * SPA_STEREO_UPMIX_OUTPUT_CHANNELS;
+
+            output[SPA_STEREO_UPMIX_CHANNEL_L] = gain && gain[frame] != 1.0f
+                ? spa_upmix_float_to_s16(gain[frame] * (float)input_l) : input_l;
+            output[SPA_STEREO_UPMIX_CHANNEL_R] = gain && gain[frame] != 1.0f
+                ? spa_upmix_float_to_s16(gain[frame] * (float)input_r) : input_r;
+            output[SPA_STEREO_UPMIX_CHANNEL_C] = 0;
+            output[SPA_STEREO_UPMIX_CHANNEL_LFE] = 0;
+            output[SPA_STEREO_UPMIX_CHANNEL_LS] = 0;
+            output[SPA_STEREO_UPMIX_CHANNEL_RS] = 0;
+        }
     }
 
     return SPA_STEREO_UPMIX_OK;
@@ -1233,7 +1359,7 @@ int spa_stereo_upmix_process_s16(struct spa_stereo_upmix *state,
                                  const int16_t *pcm2, size_t frames,
                                  int16_t *pcm6, size_t pcm6_capacity_frames)
 {
-    return spa_upmix_process(state, pcm2, frames, pcm6, pcm6_capacity_frames, NULL);
+    return spa_upmix_process(state, pcm2, 0, frames, pcm6, 0, pcm6_capacity_frames, NULL);
 }
 
 int spa_stereo_upmix_process_gain_s16(struct spa_stereo_upmix *state,
@@ -1241,5 +1367,27 @@ int spa_stereo_upmix_process_gain_s16(struct spa_stereo_upmix *state,
                                       int16_t *pcm6, size_t pcm6_capacity_frames,
                                       const float *frame_gain)
 {
-    return spa_upmix_process(state, pcm2, frames, pcm6, pcm6_capacity_frames, frame_gain);
+    return spa_upmix_process(state, pcm2, 0, frames, pcm6, 0, pcm6_capacity_frames, frame_gain);
+}
+
+int spa_stereo_upmix_process_s32(struct spa_stereo_upmix *state,
+                                 const int32_t *pcm2, size_t frames,
+                                 int32_t *pcm6, size_t pcm6_capacity_frames)
+{
+    return spa_upmix_process(state, pcm2, 1, frames, pcm6, 1, pcm6_capacity_frames, NULL);
+}
+
+int spa_stereo_upmix_process_gain_s32(struct spa_stereo_upmix *state,
+                                      const int32_t *pcm2, size_t frames,
+                                      int32_t *pcm6, size_t pcm6_capacity_frames,
+                                      const float *frame_gain)
+{
+    return spa_upmix_process(state, pcm2, 1, frames, pcm6, 1, pcm6_capacity_frames, frame_gain);
+}
+
+int spa_stereo_upmix_process_s16_to_s32(struct spa_stereo_upmix *state,
+                                        const int16_t *pcm2, size_t frames,
+                                        int32_t *pcm6, size_t pcm6_capacity_frames)
+{
+    return spa_upmix_process(state, pcm2, 0, frames, pcm6, 1, pcm6_capacity_frames, NULL);
 }

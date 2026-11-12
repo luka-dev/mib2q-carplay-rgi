@@ -79,7 +79,7 @@ static inline int spa_pcm_expanded_size(size_t size, unsigned source_channels,
     if (!source_channels || source_channels > 8 ||
         !output_channels || output_channels > 8) return 0;
     source_frame = source_channels * sizeof(int16_t);
-    output_frame = output_channels * sizeof(int16_t);
+    output_frame = output_channels * sizeof(int32_t);
     if (size % source_frame) return 0;
     frames = size / source_frame;
     if (frames > capacity / output_frame) return 0;

@@ -96,10 +96,10 @@ int main(void)
     assert(spa_pcm_io_write(&ops, &m, pcm, 0, 12, 48, &m.stop_error) == 0);
     assert(m.stop_error == 0);
     assert(m.writes == 0);
-    assert(spa_pcm_expanded_size(3072, 2, 6, 1048576, &bytes) && bytes == 9216);
+    assert(spa_pcm_expanded_size(3072, 2, 6, 1048576, &bytes) && bytes == 18432);
     assert(spa_pcm_expanded_size(0, 2, 6, 0, &bytes) && bytes == 0);
     assert(!spa_pcm_expanded_size(3073, 2, 6, 1048576, &bytes));
-    assert(!spa_pcm_expanded_size(3072, 2, 6, 9215, &bytes)); /* allocation too small */
+    assert(!spa_pcm_expanded_size(3072, 2, 6, 18431, &bytes)); /* allocation too small */
     assert(!spa_pcm_expanded_size(3072, 0, 6, 1048576, &bytes));
     assert(!spa_pcm_expanded_size(3072, 2, 9, 1048576, &bytes));
     assert(!spa_pcm_expanded_size(SIZE_MAX - 3, 2, 6, SIZE_MAX, &bytes));
