@@ -11,6 +11,7 @@
 #define SPA_UPMIX_HAVE_NEON 0
 #endif
 
+#include <float.h>
 #include <limits.h>
 #include <math.h>
 #include <string.h>
@@ -196,13 +197,11 @@ static inline float32x2_t spa_upmix_pair(float l, float r)
 /* ahead_l/r: the input SPA_UPMIX_LFE_LOOKAHEAD frames ahead of render_l/r. */
 static float spa_upmix_lfe_normalized(
     struct spa_stereo_upmix *state, float *render_l, float *render_r,
-    int32_t ahead_l, int32_t ahead_r,
+    float lfe_in_l, float lfe_in_r,
     float bass_confidence, float drum_confidence)
 {
     const float normalized_l = *render_l * (1.0f / 32768.0f);
     const float normalized_r = *render_r * (1.0f / 32768.0f);
-    const float lfe_in_l = (float)ahead_l * (1.0f / 2147483648.0f);
-    const float lfe_in_r = (float)ahead_r * (1.0f / 2147483648.0f);
 #if SPA_UPMIX_HAVE_NEON
     float32x2_t door = spa_upmix_biquad_pair(
         spa_upmix_pair(normalized_l, normalized_r),
@@ -913,11 +912,10 @@ static void spa_upmix_dynamics_hop(struct spa_stereo_upmix *state, float energy)
 }
 
 /* Once per output frame, with the input SPA_DYN_LOOKAHEAD frames ahead of it. */
-static inline float spa_upmix_rear_dynamics(struct spa_stereo_upmix *state, int32_t ahead_l, int32_t ahead_r)
+static inline float spa_upmix_rear_dynamics(struct spa_stereo_upmix *state, float l, float r)
 {
     struct spa_stereo_upmix_runtime *rt = &state->_runtime;
     const float depth = state->_tune[7];
-    const float l = (float)ahead_l * (1.0f / 2147483648.0f), r = (float)ahead_r * (1.0f / 2147483648.0f);
     const float power = 0.5f * (l * l + r * r);
     float onset = 0.0f, tail = 0.0f, target;
 
@@ -1102,8 +1100,14 @@ static void spa_scene_mask_boundary(struct spa_stereo_upmix *state,
  * latency of zeros, so a pop of `frames` is never short) -> S16 or S32 PCM6 with
  * the LFE V2 assist, the front headroom, the programme gain and the cabin
  * guard.  The engine's float output is L R C 0 Ls Rs at unity scale. */
+enum {
+    SPA_UPMIX_FMT_S16 = 0,
+    SPA_UPMIX_FMT_S32 = 1,
+    SPA_UPMIX_FMT_F32 = 2
+};
+
 static void spa_scene_process(struct spa_stereo_upmix *state, size_t frames,
-                              void *pcm6, int out_s32, const float *gain)
+                              void *pcm6, int out_fmt, const float *gain)
 {
     struct spa_stereo_upmix_runtime *rt = &state->_runtime;
     const size_t channels = SPA_STEREO_UPMIX_OUTPUT_CHANNELS;
@@ -1115,27 +1119,35 @@ static void spa_scene_process(struct spa_stereo_upmix *state, size_t frames,
         /* Full OFF bypass after fade-out: skip STFT and mask worker (0% DSP CPU),
          * maintaining only the SPA_SCENE_LATENCY_FRAMES dry alignment ring. */
         for (frame = 0; frame < frames; frame++) {
-            int32_t *dry = rt->_dry_ring + rt->_dry_pos * SPA_STEREO_UPMIX_INPUT_CHANNELS;
-            const int32_t dry_l = dry[0], dry_r = dry[1];
+            float *dry = rt->_dry_ring + rt->_dry_pos * SPA_STEREO_UPMIX_INPUT_CHANNELS;
+            const float dry_l = dry[0], dry_r = dry[1];
 
-            dry[0] = state->_input_scratch[frame * SPA_STEREO_UPMIX_INPUT_CHANNELS];
-            dry[1] = state->_input_scratch[frame * SPA_STEREO_UPMIX_INPUT_CHANNELS + 1];
+            dry[0] = state->_scene_input_scratch[frame * SPA_STEREO_UPMIX_INPUT_CHANNELS];
+            dry[1] = state->_scene_input_scratch[frame * SPA_STEREO_UPMIX_INPUT_CHANNELS + 1];
             if (++rt->_dry_pos == SPA_SCENE_LATENCY_FRAMES) rt->_dry_pos = 0;
-            if (out_s32) {
-                int32_t *output = (int32_t *)pcm6 + frame * channels;
+            if (out_fmt != SPA_UPMIX_FMT_S16) {
                 const float g_frame = gain ? gain[frame] : 1.0f;
                 float o[6] = {
-                    (float)((double)dry_l * (1.0 / 65536.0)) * g_frame,
-                    (float)((double)dry_r * (1.0 / 65536.0)) * g_frame,
+                    dry_l * 32768.0f * g_frame,
+                    dry_r * 32768.0f * g_frame,
                     0.0f, 0.0f, 0.0f, 0.0f
                 };
-                /* plain stereo cannot overflow a bus: stateless, nothing to hold */
+                /* plain stereo cannot overflow a bus, except > 0 dBFS float peaks:
+                 * stateless guard bounds them if SoundCheck was unity/positive */
                 spa_upmix_cabin_guard(o, state->config.lfe_enabled, NULL, 0);
-                for (i = 0; i < channels; i++) output[i] = spa_upmix_float_to_s32(o[i]);
+                if (out_fmt == SPA_UPMIX_FMT_F32) {
+                    float *output = (float *)pcm6 + frame * channels;
+                    for (i = 0; i < channels; i++) output[i] = o[i] * (1.0f / 32768.0f);
+                } else {
+                    int32_t *output = (int32_t *)pcm6 + frame * channels;
+                    for (i = 0; i < channels; i++) output[i] = spa_upmix_float_to_s32(o[i]);
+                }
             } else {
                 int16_t *output = (int16_t *)pcm6 + frame * channels;
-                const int16_t dry_l16 = (int16_t)(dry_l >> 16);
-                const int16_t dry_r16 = (int16_t)(dry_r >> 16);
+                const float dry_l_s16 = dry_l * 32768.0f;
+                const float dry_r_s16 = dry_r * 32768.0f;
+                const int16_t dry_l16 = dry_l_s16 <= -32768.0f ? -32768 : spa_upmix_float_to_s16(dry_l_s16);
+                const int16_t dry_r16 = dry_r_s16 <= -32768.0f ? -32768 : spa_upmix_float_to_s16(dry_r_s16);
                 output[SPA_STEREO_UPMIX_CHANNEL_L] = gain && gain[frame] != 1.0f
                     ? spa_upmix_float_to_s16(gain[frame] * (float)dry_l16) : dry_l16;
                 output[SPA_STEREO_UPMIX_CHANNEL_R] = gain && gain[frame] != 1.0f
@@ -1151,9 +1163,6 @@ static void spa_scene_process(struct spa_stereo_upmix *state, size_t frames,
         return;
     }
 
-    for (i = 0; i < frames * SPA_STEREO_UPMIX_INPUT_CHANNELS; i++)
-        state->_scene_input_scratch[i] =
-            (float)state->_input_scratch[i] * (1.0f / 2147483648.0f);
     /* The push is split on the mask cadence (SPA_SCENE_MASK_PREFILL_FRAMES in
      * the header): whenever 512 frames have accumulated the net runs on them
      * and its row is installed before the next frame is pushed, so it applies
@@ -1194,16 +1203,16 @@ static void spa_scene_process(struct spa_stereo_upmix *state, size_t frames,
 
     for (frame = 0; frame < frames; frame++) {
         const float *in = rt->_scene_fifo + frame * channels;
-        int32_t *dry = rt->_dry_ring + rt->_dry_pos * SPA_STEREO_UPMIX_INPUT_CHANNELS;
-        const int32_t dry_l = dry[0], dry_r = dry[1];
+        float *dry = rt->_dry_ring + rt->_dry_pos * SPA_STEREO_UPMIX_INPUT_CHANNELS;
+        const float dry_l = dry[0], dry_r = dry[1];
         /* S16-scaled and unclamped until the guard: one rounding, at the end */
         float o[6] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
         const float front_gain = (float)state->config.front_gain_q15 * (1.0f / 32768.0f);
         float w, g;
 
         /* the input SPA_SCENE_LATENCY_FRAMES ago: aligned with this output frame */
-        dry[0] = state->_input_scratch[frame * SPA_STEREO_UPMIX_INPUT_CHANNELS];
-        dry[1] = state->_input_scratch[frame * SPA_STEREO_UPMIX_INPUT_CHANNELS + 1];
+        dry[0] = state->_scene_input_scratch[frame * SPA_STEREO_UPMIX_INPUT_CHANNELS];
+        dry[1] = state->_scene_input_scratch[frame * SPA_STEREO_UPMIX_INPUT_CHANNELS + 1];
         if (++rt->_dry_pos == SPA_SCENE_LATENCY_FRAMES) rt->_dry_pos = 0;
         if (frame < pop) {
             float rear_gain = 1.0f;
@@ -1211,7 +1220,7 @@ static void spa_scene_process(struct spa_stereo_upmix *state, size_t frames,
             if (state->config.scene_dynamics > 0.0f) {
                 /* _dry_pos is now the oldest entry (this output frame); the
                  * input k frames ahead of it sits k further on */
-                const int32_t *ahead = rt->_dry_ring + SPA_STEREO_UPMIX_INPUT_CHANNELS *
+                const float *ahead = rt->_dry_ring + SPA_STEREO_UPMIX_INPUT_CHANNELS *
                     ((rt->_dry_pos + SPA_DYN_LOOKAHEAD) % SPA_SCENE_LATENCY_FRAMES);
 
                 rear_gain = spa_upmix_rear_dynamics(state, ahead[0], ahead[1]);
@@ -1227,7 +1236,7 @@ static void spa_scene_process(struct spa_stereo_upmix *state, size_t frames,
         if (state->config.lfe_enabled) {
             /* _dry_pos is now the oldest entry (the input 1024 frames ago, this
              * output frame); the one written k frames ago sits k behind it */
-            const int32_t *ahead = rt->_dry_ring + SPA_STEREO_UPMIX_INPUT_CHANNELS *
+            const float *ahead = rt->_dry_ring + SPA_STEREO_UPMIX_INPUT_CHANNELS *
                 ((rt->_dry_pos + SPA_UPMIX_LFE_LOOKAHEAD) % SPA_SCENE_LATENCY_FRAMES);
 
             o[SPA_STEREO_UPMIX_CHANNEL_LFE] = (float)state->config.lfe_gain_q15 *
@@ -1247,12 +1256,16 @@ static void spa_scene_process(struct spa_stereo_upmix *state, size_t frames,
             /* level fade: ease in/out between the scene and the plain stereo */
             g = w * w * (3.0f - 2.0f * w);
             for (i = 0; i < channels; i++) o[i] *= g;
-            o[SPA_STEREO_UPMIX_CHANNEL_L] += (1.0f - g) * ((float)dry_l * (1.0f / 65536.0f));
-            o[SPA_STEREO_UPMIX_CHANNEL_R] += (1.0f - g) * ((float)dry_r * (1.0f / 65536.0f));
+            o[SPA_STEREO_UPMIX_CHANNEL_L] += (1.0f - g) * (dry_l * 32768.0f);
+            o[SPA_STEREO_UPMIX_CHANNEL_R] += (1.0f - g) * (dry_r * 32768.0f);
         }
         if (gain && gain[frame] != 1.0f)
             for (i = 0; i < channels; i++) o[i] *= gain[frame];
-        if (out_s32) {
+        if (out_fmt == SPA_UPMIX_FMT_F32) {
+            float *output = (float *)pcm6 + frame * channels;
+            spa_upmix_cabin_guard(o, state->config.lfe_enabled, rt->_guard_reduction, 0);
+            for (i = 0; i < channels; i++) output[i] = o[i] * (1.0f / 32768.0f);
+        } else if (out_fmt == SPA_UPMIX_FMT_S32) {
             int32_t *output = (int32_t *)pcm6 + frame * channels;
             spa_upmix_cabin_guard(o, state->config.lfe_enabled, rt->_guard_reduction, 0);
             for (i = 0; i < channels; i++) output[i] = spa_upmix_float_to_s32(o[i]);
@@ -1271,12 +1284,17 @@ static void spa_scene_process(struct spa_stereo_upmix *state, size_t frames,
     }
 }
 
+static size_t spa_upmix_fmt_size(int fmt)
+{
+    return fmt == SPA_UPMIX_FMT_S16 ? sizeof(int16_t) : sizeof(int32_t);
+}
+
 static int spa_upmix_process(struct spa_stereo_upmix *state,
                              const void *pcm2,
-                             int in_s32,
+                             int in_fmt,
                              size_t frames,
                              void *pcm6,
-                             int out_s32,
+                             int out_fmt,
                              size_t pcm6_capacity_frames,
                              const float *gain)
 {
@@ -1299,37 +1317,68 @@ static int spa_upmix_process(struct spa_stereo_upmix *state,
     if (!pcm2 || !pcm6) return SPA_STEREO_UPMIX_ERROR_ARGUMENT;
 
     input_samples = frames * SPA_STEREO_UPMIX_INPUT_CHANNELS;
-    input_bytes = input_samples * (in_s32 ? sizeof(int32_t) : sizeof(int16_t));
+    input_bytes = input_samples * spa_upmix_fmt_size(in_fmt);
     output_bytes = frames * SPA_STEREO_UPMIX_OUTPUT_CHANNELS *
-                   (out_s32 ? sizeof(int32_t) : sizeof(int16_t));
+                   spa_upmix_fmt_size(out_fmt);
     if (spa_upmix_ranges_overlap(state, sizeof(*state), pcm2, input_bytes) ||
         spa_upmix_ranges_overlap(state, sizeof(*state), pcm6, output_bytes))
         return SPA_STEREO_UPMIX_ERROR_STATE_OVERLAP;
-    if (in_s32) {
+    if (in_fmt == SPA_UPMIX_FMT_F32) {
+        const float *src = (const float *)pcm2;
+        for (i = 0; i < input_samples; i++) {
+            float v = src[i];
+            state->_scene_input_scratch[i] = (v == v && v <= FLT_MAX && v >= -FLT_MAX) ? v : 0.0f;
+        }
+    } else if (in_fmt == SPA_UPMIX_FMT_S32) {
         memcpy(state->_input_scratch, pcm2, input_bytes);
+        for (i = 0; i < input_samples; i++)
+            state->_scene_input_scratch[i] =
+                (float)state->_input_scratch[i] * (1.0f / 2147483648.0f);
     } else {
         const int16_t *src = (const int16_t *)pcm2;
-        for (i = 0; i < input_samples; i++)
+        for (i = 0; i < input_samples; i++) {
             state->_input_scratch[i] = (int32_t)((uint32_t)(uint16_t)src[i] << 16);
+            state->_scene_input_scratch[i] = (float)src[i] * (1.0f / 32768.0f);
+        }
     }
 
     if (state->config.backend == SPA_STEREO_UPMIX_SCENE) {
         spa_upmix_apply_level(state);
         spa_upmix_glide_tuning(state, frames, 0);
-        spa_scene_process(state, frames, pcm6, out_s32, gain);
+        spa_scene_process(state, frames, pcm6, out_fmt, gain);
         return SPA_STEREO_UPMIX_OK;
     }
     /* OFF: the exact bypass, [L, R, 0, 0, 0, 0]. */
-    if (out_s32) {
+    if (out_fmt == SPA_UPMIX_FMT_F32) {
         for (frame = 0; frame < frames; frame++) {
-            const int32_t input_l = state->_input_scratch[frame * 2];
-            const int32_t input_r = state->_input_scratch[frame * 2 + 1];
+            const float g_frame = gain ? gain[frame] : 1.0f;
+            float *output = (float *)pcm6 + frame * SPA_STEREO_UPMIX_OUTPUT_CHANNELS;
+
+            output[SPA_STEREO_UPMIX_CHANNEL_L] = state->_scene_input_scratch[frame * 2] * g_frame;
+            output[SPA_STEREO_UPMIX_CHANNEL_R] = state->_scene_input_scratch[frame * 2 + 1] * g_frame;
+            output[SPA_STEREO_UPMIX_CHANNEL_C] = 0.0f;
+            output[SPA_STEREO_UPMIX_CHANNEL_LFE] = 0.0f;
+            output[SPA_STEREO_UPMIX_CHANNEL_LS] = 0.0f;
+            output[SPA_STEREO_UPMIX_CHANNEL_RS] = 0.0f;
+        }
+    } else if (out_fmt == SPA_UPMIX_FMT_S32) {
+        for (frame = 0; frame < frames; frame++) {
             int32_t *output = (int32_t *)pcm6 + frame * SPA_STEREO_UPMIX_OUTPUT_CHANNELS;
 
-            output[SPA_STEREO_UPMIX_CHANNEL_L] = gain && gain[frame] != 1.0f
-                ? spa_upmix_double_to_s32((double)gain[frame] * (double)input_l) : input_l;
-            output[SPA_STEREO_UPMIX_CHANNEL_R] = gain && gain[frame] != 1.0f
-                ? spa_upmix_double_to_s32((double)gain[frame] * (double)input_r) : input_r;
+            if (in_fmt == SPA_UPMIX_FMT_F32) {
+                const double g_frame = gain ? (double)gain[frame] : 1.0;
+                output[SPA_STEREO_UPMIX_CHANNEL_L] = spa_upmix_double_to_s32(
+                    (double)state->_scene_input_scratch[frame * 2] * g_frame * 2147483648.0);
+                output[SPA_STEREO_UPMIX_CHANNEL_R] = spa_upmix_double_to_s32(
+                    (double)state->_scene_input_scratch[frame * 2 + 1] * g_frame * 2147483648.0);
+            } else {
+                const int32_t input_l = state->_input_scratch[frame * 2];
+                const int32_t input_r = state->_input_scratch[frame * 2 + 1];
+                output[SPA_STEREO_UPMIX_CHANNEL_L] = gain && gain[frame] != 1.0f
+                    ? spa_upmix_double_to_s32((double)gain[frame] * (double)input_l) : input_l;
+                output[SPA_STEREO_UPMIX_CHANNEL_R] = gain && gain[frame] != 1.0f
+                    ? spa_upmix_double_to_s32((double)gain[frame] * (double)input_r) : input_r;
+            }
             output[SPA_STEREO_UPMIX_CHANNEL_C] = 0;
             output[SPA_STEREO_UPMIX_CHANNEL_LFE] = 0;
             output[SPA_STEREO_UPMIX_CHANNEL_LS] = 0;
@@ -1359,7 +1408,7 @@ int spa_stereo_upmix_process_s16(struct spa_stereo_upmix *state,
                                  const int16_t *pcm2, size_t frames,
                                  int16_t *pcm6, size_t pcm6_capacity_frames)
 {
-    return spa_upmix_process(state, pcm2, 0, frames, pcm6, 0, pcm6_capacity_frames, NULL);
+    return spa_upmix_process(state, pcm2, SPA_UPMIX_FMT_S16, frames, pcm6, SPA_UPMIX_FMT_S16, pcm6_capacity_frames, NULL);
 }
 
 int spa_stereo_upmix_process_gain_s16(struct spa_stereo_upmix *state,
@@ -1367,14 +1416,14 @@ int spa_stereo_upmix_process_gain_s16(struct spa_stereo_upmix *state,
                                       int16_t *pcm6, size_t pcm6_capacity_frames,
                                       const float *frame_gain)
 {
-    return spa_upmix_process(state, pcm2, 0, frames, pcm6, 0, pcm6_capacity_frames, frame_gain);
+    return spa_upmix_process(state, pcm2, SPA_UPMIX_FMT_S16, frames, pcm6, SPA_UPMIX_FMT_S16, pcm6_capacity_frames, frame_gain);
 }
 
 int spa_stereo_upmix_process_s32(struct spa_stereo_upmix *state,
                                  const int32_t *pcm2, size_t frames,
                                  int32_t *pcm6, size_t pcm6_capacity_frames)
 {
-    return spa_upmix_process(state, pcm2, 1, frames, pcm6, 1, pcm6_capacity_frames, NULL);
+    return spa_upmix_process(state, pcm2, SPA_UPMIX_FMT_S32, frames, pcm6, SPA_UPMIX_FMT_S32, pcm6_capacity_frames, NULL);
 }
 
 int spa_stereo_upmix_process_gain_s32(struct spa_stereo_upmix *state,
@@ -1382,12 +1431,28 @@ int spa_stereo_upmix_process_gain_s32(struct spa_stereo_upmix *state,
                                       int32_t *pcm6, size_t pcm6_capacity_frames,
                                       const float *frame_gain)
 {
-    return spa_upmix_process(state, pcm2, 1, frames, pcm6, 1, pcm6_capacity_frames, frame_gain);
+    return spa_upmix_process(state, pcm2, SPA_UPMIX_FMT_S32, frames, pcm6, SPA_UPMIX_FMT_S32, pcm6_capacity_frames, frame_gain);
 }
 
 int spa_stereo_upmix_process_s16_to_s32(struct spa_stereo_upmix *state,
                                         const int16_t *pcm2, size_t frames,
                                         int32_t *pcm6, size_t pcm6_capacity_frames)
 {
-    return spa_upmix_process(state, pcm2, 0, frames, pcm6, 1, pcm6_capacity_frames, NULL);
+    return spa_upmix_process(state, pcm2, SPA_UPMIX_FMT_S16, frames, pcm6, SPA_UPMIX_FMT_S32, pcm6_capacity_frames, NULL);
+}
+
+int spa_stereo_upmix_process_gain_f32(struct spa_stereo_upmix *state,
+                                      const float *pcm2, size_t frames,
+                                      float *pcm6, size_t pcm6_capacity_frames,
+                                      const float *frame_gain)
+{
+    return spa_upmix_process(state, pcm2, SPA_UPMIX_FMT_F32, frames, pcm6, SPA_UPMIX_FMT_F32, pcm6_capacity_frames, frame_gain);
+}
+
+int spa_stereo_upmix_process_gain_f32_to_s32(struct spa_stereo_upmix *state,
+                                             const float *pcm2, size_t frames,
+                                             int32_t *pcm6, size_t pcm6_capacity_frames,
+                                             const float *frame_gain)
+{
+    return spa_upmix_process(state, pcm2, SPA_UPMIX_FMT_F32, frames, pcm6, SPA_UPMIX_FMT_S32, pcm6_capacity_frames, frame_gain);
 }

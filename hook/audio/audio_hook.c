@@ -1557,6 +1557,7 @@ typedef struct {
     int upmixResetPending;
     float upmixLastGain;            /* programme gain of the last frame it was given */
     float foldReduction;            /* held gain reduction of the 5.1 -> stereo fold */
+    float railReduction;            /* held > 0 dBFS peak guard ahead of S32_LE quantization */
     uint32_t cookieGeneration;      /* ...and which revision of its bytes */
     int32_t *ring;                  /* spa103_ring_frames() * outputChannels S32_LE samples */
     uint32_t *ringSequence;         /* authenticated APAP owner of each PCM frame */
@@ -1870,6 +1871,8 @@ static void spa103_render_start(uint32_t generation, int64_t formatIndex, int ha
     memset(spa103_render.statsPeak, 0, sizeof(spa103_render.statsPeak));
     memset(spa103_render.statsPrevious, 0, sizeof(spa103_render.statsPrevious));
     spa103_render.statsHavePrevious = 0;
+    spa103_render.foldReduction = 0.0f;
+    spa103_render.railReduction = 0.0f;
     spa103_render.cookieId = 0;
     spa103_render.haveCookieId = 0;
     spa103_render.sampleRate = 0;
@@ -2161,6 +2164,7 @@ static void spa103_note_authenticated_sequence(const uint8_t *packet, uint32_t f
              * render, same reset a prefix FLUSH or a cookie change does. */
             (void)spa_stereo_upmix_reset(&spa103_render.stereoUpmix);
             spa103_render.upmixLive = spa103_render.upmixResetPending = 0;
+            spa103_render.foldReduction = spa103_render.railReduction = 0.0f;
         }
     }
     spa103_render.lastSequence = sequence;
@@ -2503,6 +2507,7 @@ static int spa103_render_flush(uint32_t generation, const spa_apap_flush_range_t
             spa103_render.codec->reset(spa103_render.decoder);
         (void)spa_stereo_upmix_reset(&spa103_render.stereoUpmix);
         spa103_render.upmixLive = spa103_render.upmixResetPending = 0;
+        spa103_render.foldReduction = spa103_render.railReduction = 0.0f;
         spa103_render.haveLastSequence = 0;
     }
     spa103_render.primed = 0;
@@ -2752,15 +2757,15 @@ static int64_t spa103_verified_index(const spa_apac_codec_api_t *codec,
 /* Plain geometry adapter used by the OFF path and as the audible fail-safe if
  * the optional ambience renderer ever rejects a block.  Mono is duplicated to
  * the two fronts; all other absent channels are digital zero. */
-static void spa103_widen_s32(const int32_t *input, unsigned inputChannels,
-                             int32_t *output, unsigned outputChannels,
+static void spa103_widen_f32(const float *input, unsigned inputChannels,
+                             float *output, unsigned outputChannels,
                              size_t frames)
 {
     size_t frame;
 
     for (frame = 0; frame < frames; frame++) {
-        const int32_t *src = input + frame * inputChannels;
-        int32_t *dst = output + frame * outputChannels;
+        const float *src = input + frame * inputChannels;
+        float *dst = output + frame * outputChannels;
         unsigned channel;
 
         for (channel = 0; channel < outputChannels; channel++) {
@@ -2769,7 +2774,7 @@ static void spa103_widen_s32(const int32_t *input, unsigned inputChannels,
             else if (inputChannels == 1 && channel == 1)
                 dst[channel] = src[0];
             else
-                dst[channel] = 0;
+                dst[channel] = 0.0f;
         }
     }
 }
@@ -2777,7 +2782,7 @@ static void spa103_widen_s32(const int32_t *input, unsigned inputChannels,
 /* APAC index 65 is decoded as C,L,R,Ls,Rs,LFE.  Normalise it directly into
  * the ring stride so the rare 8-wide passthrough session can also switch back
  * to 65 without exposing decoder order in its first six positions. */
-static void spa103_reorder_5_1_s32(const int32_t *input, int32_t *output,
+static void spa103_reorder_5_1_f32(const float *input, float *output,
                                    unsigned outputChannels, size_t frames)
 {
     static const unsigned kFromDeclared[SPA_PCM_5_1_CHANNELS] = {
@@ -2786,14 +2791,73 @@ static void spa103_reorder_5_1_s32(const int32_t *input, int32_t *output,
     size_t frame;
 
     for (frame = 0; frame < frames; frame++) {
-        const int32_t *src = input + frame * SPA_PCM_5_1_CHANNELS;
-        int32_t *dst = output + frame * outputChannels;
+        const float *src = input + frame * SPA_PCM_5_1_CHANNELS;
+        float *dst = output + frame * outputChannels;
         unsigned channel;
 
         for (channel = 0; channel < outputChannels; channel++)
             dst[channel] = channel < SPA_PCM_5_1_CHANNELS ?
-                           src[kFromDeclared[channel]] : 0;
+                           src[kFromDeclared[channel]] : 0.0f;
     }
+}
+
+static int32_t spa103_f32_to_s32_sample(float v)
+{
+    double scaled;
+
+    if (!(v == v)) return 0;
+    if (v >= 1.0f) return INT32_MAX;
+    if (v <= -1.0f) return INT32_MIN;
+    scaled = (double)v * 2147483648.0;
+    scaled += (scaled >= 0.0) ? 0.5 : -0.5;
+    if (scaled >= 2147483647.0) return INT32_MAX;
+    if (scaled <= -2147483648.0) return INT32_MIN;
+    return (int32_t)scaled;
+}
+
+/* Single float32 -> Q1.31 S32_LE quantization stage at the ring boundary.
+ * Signals within [-1.0, 1.0] (including SoundCheck-attenuated APAC > 0 dBFS
+ * peaks and cabin-guarded UpMix outputs) are quantized untouched.  Any residual
+ * > 0 dBFS overshoot is limited cleanly with a ~150 ms release instead of
+ * flat-topping S32. */
+static void spa103_quantize_f32_to_s32_locked(const float *input,
+                                              int32_t *output,
+                                              unsigned channels,
+                                              size_t frames)
+{
+    float reduction = spa103_render.railReduction;
+    size_t frame;
+
+    for (frame = 0; frame < frames; frame++) {
+        const float *src = input + frame * channels;
+        int32_t *dst = output + frame * channels;
+        float keep = 1.0f - reduction;
+        float peak = 0.0f;
+        unsigned ch;
+
+        for (ch = 0; ch < channels; ch++) {
+            float v = src[ch];
+            float av;
+
+            if (!(v == v)) v = 0.0f;
+            av = (v < 0.0f ? -v : v) * keep;
+            if (av > peak) peak = av;
+        }
+        if (peak > 1.0f) {
+            keep /= peak;
+            reduction = 1.0f - keep;
+        }
+        if (keep == 1.0f) {
+            for (ch = 0; ch < channels; ch++)
+                dst[ch] = spa103_f32_to_s32_sample(src[ch]);
+        } else {
+            for (ch = 0; ch < channels; ch++)
+                dst[ch] = spa103_f32_to_s32_sample(src[ch] * keep);
+            reduction -= reduction * (1.0f / 7200.0f);
+            if (reduction < 1.0e-5f) reduction = 0.0f;
+        }
+    }
+    spa103_render.railReduction = reduction;
 }
 
 enum spa103_render_frame_result {
@@ -2882,7 +2946,8 @@ static void spa103_observe_extension_locked(const spa_apap_extension_t *ext)
 static int spa103_render_frame(const uint8_t *packet, size_t length)
 {
     static uint8_t plaintext[SPA_103_APAP_MAX_FRAME];
-    static int32_t decoded[SPA_103_RENDER_MAX_SAMPLES];
+    static float decoded[SPA_103_RENDER_MAX_SAMPLES];
+    static float renderedF32[SPA_103_RENDER_MAX_SAMPLES];
     static int32_t rendered[SPA_103_RENDER_MAX_SAMPLES];
     uint8_t key[SPA_APAP_KEY_SIZE];
     spa_apap_extension_t ext;
@@ -3098,6 +3163,7 @@ static int spa103_render_frame(const uint8_t *packet, size_t length)
          * outgoing item are played out first instead of being thrown away. */
         spa103_render.upmixResetPending = 1;
         spa103_render.foldReduction = 0.0f;
+        spa103_render.railReduction = 0.0f;
         spa103_render.decodedPcmKind = SPA_DECODED_PCM_OTHER;
         if (ext.hasFormatIndex && (int64_t)ext.formatIndex != spa103_render.formatIndex) {
             const spa_apac_codec_api_t *next = spa103_codec_for_index((int64_t)ext.formatIndex);
@@ -3288,7 +3354,7 @@ static int spa103_render_frame(const uint8_t *packet, size_t length)
     }
 
     spa103_render.decodeCalls++;
-    rc = spa103_render.codec->decodeS32(spa103_render.decoder, audio, audioLength,
+    rc = spa103_render.codec->decodeF32(spa103_render.decoder, audio, audioLength,
                                         decoded, SPA_103_RENDER_MAX_SAMPLES, &frames);
     if (rc != SPA_APAC_OK) {
         anomalyCount = ++spa103_render.decodeFailed;
@@ -3320,7 +3386,7 @@ static int spa103_render_frame(const uint8_t *packet, size_t length)
         /* Observe source PCM before channel synthesis.  In particular, an
          * optional metadata-free fallback must measure the stereo programme,
          * not a six-wide buffer containing synthesized/zero channels. */
-        spa_soundcheck_observe_s32(&spa103_render.soundCheck, decoded,
+        spa_soundcheck_observe_f32(&spa103_render.soundCheck, decoded,
                                    frames, dch);
 
         /* APAP fields 4/5 are CMTime durations, not decoder commands.  Match
@@ -3335,7 +3401,7 @@ static int spa103_render_frame(const uint8_t *packet, size_t length)
          * wrote beyond decoded[8192].  Keep decoded as the source and render
          * bounded, chronological blocks into a separate PCM8-sized buffer. */
         while (at < renderFrames) {
-            const int32_t *src = decoded + (sourceStart + at) * dch;
+            const float *src = decoded + (sourceStart + at) * dch;
             enum spa_decoded_pcm_action action = spa_select_decoded_pcm_action(
                 spa103_render.decodedPcmKind, dch, out,
                 spa103_render.sampleRate);
@@ -3371,17 +3437,19 @@ static int spa103_render_frame(const uint8_t *packet, size_t length)
                      * 21 ms at every such boundary, and keeping the state
                      * replayed it when the upmixer was next used. */
                     if (spa103_render.upmixLive && out == SPA_PCM_5_1_CHANNELS) {
-                        static const int32_t silence[SPA_SCENE_LATENCY_FRAMES * 2];
+                        static const float silence[SPA_SCENE_LATENCY_FRAMES * 2];
                         size_t f;
 
                         for (f = 0; f < SPA_SCENE_LATENCY_FRAMES; f++)
                             spa103_render.soundCheckGain[f] = spa103_render.upmixLastGain;
-                        if (spa_stereo_upmix_process_gain_s32(
+                        if (spa_stereo_upmix_process_gain_f32(
                                 &spa103_render.stereoUpmix, silence,
-                                SPA_SCENE_LATENCY_FRAMES, rendered, SPA_SCENE_LATENCY_FRAMES,
+                                SPA_SCENE_LATENCY_FRAMES, renderedF32, SPA_SCENE_LATENCY_FRAMES,
                                 spa103_render.soundCheckGain) == SPA_STEREO_UPMIX_OK) {
-                            spa_soundcheck_limit_s32(&spa103_render.soundCheck, rendered,
+                            spa_soundcheck_limit_f32(&spa103_render.soundCheck, renderedF32,
                                                      SPA_SCENE_LATENCY_FRAMES, out);
+                            spa103_quantize_f32_to_s32_locked(renderedF32, rendered,
+                                                              out, SPA_SCENE_LATENCY_FRAMES);
                             spa103_ring_push_locked(rendered, SPA_SCENE_LATENCY_FRAMES,
                                                     packetSequence, packetRTP);
                             spa103_render.framesIn += SPA_SCENE_LATENCY_FRAMES;
@@ -3397,7 +3465,7 @@ static int spa103_render_frame(const uint8_t *packet, size_t length)
                 /* Live Spatial Audio = Off override during an active APAC 5.1 session:
                  * fold decoder-order (C, L, R, Ls, Rs, LFE) to ITU 2.0 stereo (L, R)
                  * and route through the stereo upmixer (or 2.0 passthrough when UpMix=Off). */
-                static int32_t foldedStereo[SPA_STEREO_UPMIX_MAX_FRAMES * 2];
+                static float foldedStereo[SPA_STEREO_UPMIX_MAX_FRAMES * 2];
                 const float *gain = spa_soundcheck_take_gains(
                     &spa103_render.soundCheck, spa103_render.soundCheckGain, run);
                 size_t f;
@@ -3408,50 +3476,46 @@ static int spa103_render_frame(const uint8_t *packet, size_t length)
                  * once and released over ~150 ms, so quiet and normal passages
                  * keep their level and loud ones are limited, not clipped. */
                 for (f = 0; f < run; f++) {
-                    const int32_t *s = src + f * SPA_PCM_5_1_CHANNELS;
-                    const double kM3db = 0.70710678118654752440;
-                    double c_m3db  = (double)s[0] * kM3db;
-                    double ls_m3db = (double)s[3] * kM3db;
-                    double rs_m3db = (double)s[4] * kM3db;
-                    double keep = 1.0 - (double)spa103_render.foldReduction;
-                    double l = ((double)s[1] + c_m3db + ls_m3db) * keep;
-                    double r = ((double)s[2] + c_m3db + rs_m3db) * keep;
-                    double al = l < 0.0 ? -l : l;
-                    double ar = r < 0.0 ? -r : r;
-                    double peak = al > ar ? al : ar;
+                    const float *s = src + f * SPA_PCM_5_1_CHANNELS;
+                    const float kM3db = 0.70710678f;
+                    float c_m3db  = s[0] * kM3db;
+                    float ls_m3db = s[3] * kM3db;
+                    float rs_m3db = s[4] * kM3db;
+                    float keep = 1.0f - spa103_render.foldReduction;
+                    float l = (s[1] + c_m3db + ls_m3db) * keep;
+                    float r = (s[2] + c_m3db + rs_m3db) * keep;
+                    float al = l < 0.0f ? -l : l;
+                    float ar = r < 0.0f ? -r : r;
+                    float peak = al > ar ? al : ar;
 
-                    if (peak > 2147483647.0) {
-                        const double k = 2147483647.0 / peak;
+                    if (peak > 1.0f) {
+                        const float k = 1.0f / peak;
 
                         l *= k; r *= k;
                         keep *= k;
                     }
-                    spa103_render.foldReduction = (float)((1.0 - keep) * (1.0 - 1.0 / 7200.0));
-                    l += (l >= 0.0) ? 0.5 : -0.5;
-                    r += (r >= 0.0) ? 0.5 : -0.5;
-                    if (l >= 2147483647.0) foldedStereo[f * 2 + 0] = INT32_MAX;
-                    else if (l <= -2147483648.0) foldedStereo[f * 2 + 0] = INT32_MIN;
-                    else foldedStereo[f * 2 + 0] = (int32_t)l;
-                    if (r >= 2147483647.0) foldedStereo[f * 2 + 1] = INT32_MAX;
-                    else if (r <= -2147483648.0) foldedStereo[f * 2 + 1] = INT32_MIN;
-                    else foldedStereo[f * 2 + 1] = (int32_t)r;
+                    spa103_render.foldReduction = (1.0f - keep) * (1.0f - 1.0f / 7200.0f);
+                    if (spa103_render.foldReduction < 1.0e-5f)
+                        spa103_render.foldReduction = 0.0f;
+                    foldedStereo[f * 2 + 0] = l;
+                    foldedStereo[f * 2 + 1] = r;
                 }
                 spa_stereo_upmix_set_level(&spa103_render.stereoUpmix, spa_upmix_level);
-                rc = spa_stereo_upmix_process_gain_s32(&spa103_render.stereoUpmix,
-                                                       foldedStereo, run, rendered, run,
+                rc = spa_stereo_upmix_process_gain_f32(&spa103_render.stereoUpmix,
+                                                       foldedStereo, run, renderedF32, run,
                                                        gain);
                 spa103_render.upmixLive = 1;
                 spa103_render.upmixLastGain = gain ? gain[run - 1] : 1.0f;
                 if (rc != SPA_STEREO_UPMIX_OK) {
-                    spa103_widen_s32(foldedStereo, 2u, rendered, out, run);
-                    spa_soundcheck_scale_s32(rendered, run, out, gain);
+                    spa103_widen_f32(foldedStereo, 2u, renderedF32, out, run);
+                    spa_soundcheck_scale_f32(renderedF32, run, out, gain);
                 }
             } else if (action == SPA_DECODED_PCM_ACTION_REORDER_5_1) {
                 if (out == SPA_PCM_5_1_CHANNELS)
-                    spa_reorder_5_1_decoder_to_declared_s32(src, run,
-                                                            rendered);
+                    spa_reorder_5_1_decoder_to_declared_f32(src, run,
+                                                            renderedF32);
                 else
-                    spa103_reorder_5_1_s32(src, rendered, out, run);
+                    spa103_reorder_5_1_f32(src, renderedF32, out, run);
             } else if (action == SPA_DECODED_PCM_ACTION_STEREO_UPMIX) {
                 /* MainLoudnessParameters is a programme gain, not an upmix
                  * input feature: the engine and the mask net see unscaled
@@ -3464,8 +3528,8 @@ static int spa103_render_frame(const uint8_t *packet, size_t length)
 
                 soundCheckApplied = 1;
                 spa_stereo_upmix_set_level(&spa103_render.stereoUpmix, spa_upmix_level);
-                rc = spa_stereo_upmix_process_gain_s32(&spa103_render.stereoUpmix,
-                                                       src, run, rendered, run,
+                rc = spa_stereo_upmix_process_gain_f32(&spa103_render.stereoUpmix,
+                                                       src, run, renderedF32, run,
                                                        gain);
                 spa103_render.upmixLive = 1;
                 spa103_render.upmixLastGain = gain ? gain[run - 1] : 1.0f;
@@ -3476,11 +3540,11 @@ static int spa103_render_frame(const uint8_t *packet, size_t length)
                                   "buffer103: stereo upmix failed status=%d; "
                                   "falling back to exact L/R widening",
                                   rc);
-                    spa103_widen_s32(src, dch, rendered, out, run);
-                    spa_soundcheck_scale_s32(rendered, run, out, gain);
+                    spa103_widen_f32(src, dch, renderedF32, out, run);
+                    spa_soundcheck_scale_f32(renderedF32, run, out, gain);
                 }
             } else if (dch < out) {
-                spa103_widen_s32(src, dch, rendered, out, run);
+                spa103_widen_f32(src, dch, renderedF32, out, run);
             } else if (spa103_render.decodedPcmKind ==
                            SPA_DECODED_PCM_APAC_5_1_2 &&
                        spa103_render.formatIndex == SPA_APAC_48K_5_1_2 &&
@@ -3492,21 +3556,22 @@ static int spa103_render_frame(const uint8_t *packet, size_t length)
                  * decoder's native PCM8 order remains unmeasured; never enter
                  * this branch from a stale 65/23 SETUP hint. */
                 if (spa103_render.atmosMode == SPA_ATMOS_DOWNMIX)
-                    spa_downmix_5_1_2_s32(src, run, rendered);
+                    spa_downmix_5_1_2_f32(src, run, renderedF32);
                 else
-                    spa_drop_5_1_2_s32(src, run, rendered);
+                    spa_drop_5_1_2_f32(src, run, renderedF32);
             } else if (dch == out) {
-                memcpy(rendered, src,
-                       run * out * sizeof(*rendered));
+                memcpy(renderedF32, src,
+                       run * out * sizeof(*renderedF32));
             } else {
-                spa103_widen_s32(src, dch, rendered, out, run);
+                spa103_widen_f32(src, dch, renderedF32, out, run);
             }
 
             if (!soundCheckApplied)
-                spa_soundcheck_apply_s32(&spa103_render.soundCheck, rendered,
+                spa_soundcheck_apply_f32(&spa103_render.soundCheck, renderedF32,
                                          run, out);
-            spa_soundcheck_limit_s32(&spa103_render.soundCheck, rendered,
+            spa_soundcheck_limit_f32(&spa103_render.soundCheck, renderedF32,
                                      run, out);
+            spa103_quantize_f32_to_s32_locked(renderedF32, rendered, out, run);
             spa103_pcm_stats_locked(rendered, run);
             spa103_ring_push_locked(rendered, run, packetSequence, packetRTP);
             spa103_render.framesIn += run;

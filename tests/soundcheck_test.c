@@ -173,6 +173,20 @@ static void test_s32_precision_and_limiter(void)
     spa_soundcheck_limit_s32(&state, rendered, 1, 6);
     for (i = 0; i < 6; i++) assert(rendered[i] <= 1913984000 + 65536);
     assert(state.limitedFrames == 1);
+
+    /* Float32 path preserves > 0 dBFS APAC/downmix peaks into SoundCheck
+     * attenuation without clipping at 1.0f first. */
+    {
+        float over[6] = { 1.25f, -1.25f, 1.40f, 0.50f, -1.10f, 1.10f };
+        spa_soundcheck_default_config(&config);
+        spa_soundcheck_init(&state, &config, 1, 1, -16);
+        assert(spa_soundcheck_update_main(&state, 1, aac));
+        spa_soundcheck_observe_f32(&state, over, 1, 6);
+        spa_soundcheck_apply_f32(&state, over, 1, 6);
+        assert(nearf(over[0], 1.25f * state.targetGain, 1e-6f));
+        assert(nearf(over[2], 1.40f * state.targetGain, 1e-6f));
+        assert(over[2] < 1.0f); /* +2.9 dBFS peak lands cleanly below 0 dBFS */
+    }
 }
 
 int main(void)

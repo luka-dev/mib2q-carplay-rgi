@@ -405,6 +405,45 @@ static int spa_aac_decode_s32(struct spa_aac_decoder *d, const uint8_t *packet, 
     return SPA_APAC_OK;
 }
 
+static int spa_aac_decode_f32(struct spa_aac_decoder *d, const uint8_t *packet, size_t length,
+                              float *out, size_t outCapacity, uint32_t *framesOut)
+{
+    uint32_t frames, samples, i;
+    size_t capacityFrames;
+    int32_t writeResult;
+
+    if (!d || !out || !framesOut) return SPA_APAC_ERR_ARGS;
+    *framesOut = 0;
+    d->fifoFrames = 0;
+    d->fifoOverflow = 0;
+    capacityFrames = outCapacity / d->channels;
+    d->fifoCapacityFrames = capacityFrames > AAC_FIFO_FRAMES ?
+                            AAC_FIFO_FRAMES : (uint32_t)capacityFrames;
+
+    if (!length) {
+        if (g_cinemo.flush) g_cinemo.flush(d->codec);
+        return SPA_APAC_OK;
+    }
+    if (!packet) return SPA_APAC_ERR_ARGS;
+
+    writeResult = g_cinemo.write(d->codec, packet, (uint32_t)length, 1, 0, 1);
+    if (d->fifoOverflow) {
+        if (g_cinemo.flush) (void)g_cinemo.flush(d->codec);
+        d->fifoFrames = 0;
+        return SPA_APAC_ERR_OUTPUT_SPACE;
+    }
+    if (writeResult != 0) return SPA_APAC_ERR_DECODE;
+    if (d->formatBad) return SPA_APAC_ERR_CONFIG;
+
+    frames = d->fifoFrames;
+    samples = frames * d->channels;
+    if (samples > outCapacity) return SPA_APAC_ERR_OUTPUT_SPACE;
+    for (i = 0; i < samples; ++i)
+        out[i] = (float)d->fifo[i] * (1.0f / 32768.0f);
+    *framesOut = frames;
+    return SPA_APAC_OK;
+}
+
 static void spa_aac_reset(struct spa_aac_decoder *d)
 {
     if (!d || !d->codec) return;
@@ -451,6 +490,8 @@ const spa_apac_codec_api_t *spa_aac_codec_api(void)
                  int16_t *, size_t, uint32_t *))spa_aac_decode_s16,
         (int (*)(spa_apac_decoder_t *, const uint8_t *, size_t,
                  int32_t *, size_t, uint32_t *))spa_aac_decode_s32,
+        (int (*)(spa_apac_decoder_t *, const uint8_t *, size_t,
+                 float *, size_t, uint32_t *))spa_aac_decode_f32,
         (void (*)(spa_apac_decoder_t *))spa_aac_reset,
         (void (*)(spa_apac_decoder_t *))spa_aac_destroy,
         (int (*)(const spa_apac_decoder_t *, spa_apac_stream_info_t *))spa_aac_get_info

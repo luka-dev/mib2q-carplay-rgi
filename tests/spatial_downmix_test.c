@@ -188,6 +188,18 @@ static void test_s32_reorder_and_downmix(void)
         assert(spa_drop_5_1_2_s32(drop_buf, 1, drop_buf) == 6);
         assert(memcmp(drop_buf, drop_exp, sizeof(drop_exp)) == 0);
     }
+    /* Float32 reorder and 5.1.2 downmix preserve > 0 dBFS headroom unclipped */
+    {
+        const float dec_f32[6] = { 1.30f, 0.25f, -0.50f, 1.10f, -1.10f, 0.75f };
+        float out_f32[6] = { 0 };
+        float dmx_f32[8] = { 0.8f, -0.8f, 1.2f, 0.6f, 0.9f, -0.9f, 0.8f, -0.8f };
+        assert(spa_reorder_5_1_decoder_to_declared_f32(dec_f32, 1, out_f32) == 6);
+        assert(out_f32[0] == 0.25f && out_f32[1] == -0.50f && out_f32[2] == 1.30f);
+        assert(out_f32[3] == 0.75f && out_f32[4] == 1.10f && out_f32[5] == -1.10f);
+        assert(spa_downmix_5_1_2_f32(dmx_f32, 1, dmx_f32) == 6);
+        assert(dmx_f32[2] == 1.2f && dmx_f32[3] == 0.3f);
+        assert(dmx_f32[4] > 1.29f && dmx_f32[5] < -1.29f); /* unclipped 0.9 + 0.5*0.8 = 1.3 */
+    }
 }
 
 int main(void)

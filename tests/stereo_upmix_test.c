@@ -1124,6 +1124,32 @@ static void test_s32_preserves_24bit_precision_and_cabin_bounds(void)
     for (i = N / 2 * TEST_CHANNELS; i < N * TEST_CHANNELS; ++i)
         if (((uint32_t)out_s32[i] & 0xFF00u) != 0u) sub_s16_bits = 1;
     assert(sub_s16_bits);
+
+    /* Float32 > 0 dBFS stereo input attenuated by SoundCheck (-9 dB) survives
+     * unclipped through SCENE and through OFF bypass without premature clamping */
+    {
+        static float in_f32[N * 2];
+        static float out_f32[N * TEST_CHANNELS];
+        for (i = 0; i < N; ++i) {
+            in_f32[2 * i] = (float)(1.35 * sin(w * (double)i));
+            in_f32[2 * i + 1] = (float)(1.35 * sin(w * (double)i));
+        }
+        assert(spa_stereo_upmix_reset(&state) == SPA_STEREO_UPMIX_OK);
+        spa_stereo_upmix_set_level(&state, SPA_UPMIX_LEVEL_OFF);
+        for (i = 0; i + BLOCK <= N; i += BLOCK)
+            assert(spa_stereo_upmix_process_gain_f32(&state, in_f32 + 2 * i, BLOCK,
+                                                     out_f32 + i * TEST_CHANNELS,
+                                                     BLOCK, gains) == SPA_STEREO_UPMIX_OK);
+        /* 1.35 * 0.3548134 = 0.4790; if input had clipped at 1.0f first, peak would be 0.3548 */
+        {
+            float peak_l = 0.0f;
+            for (i = N / 2; i < N; ++i) {
+                float al = fabsf(out_f32[i * TEST_CHANNELS + SPA_STEREO_UPMIX_CHANNEL_L]);
+                if (al > peak_l) peak_l = al;
+            }
+            assert(peak_l > 0.46f && peak_l < 0.50f);
+        }
+    }
 }
 
 int main(void)

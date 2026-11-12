@@ -165,7 +165,7 @@ struct spa_stereo_upmix_runtime {
     float _scene_fifo[SPA_SCENE_FIFO_FRAMES * SPA_STEREO_UPMIX_OUTPUT_CHANNELS];
     uint32_t _scene_fifo_count;
     /* the stereo input SPA_SCENE_LATENCY_FRAMES late: the bypass side of the level fade */
-    int32_t _dry_ring[SPA_SCENE_LATENCY_FRAMES * SPA_STEREO_UPMIX_INPUT_CHANNELS];
+    float _dry_ring[SPA_SCENE_LATENCY_FRAMES * SPA_STEREO_UPMIX_INPUT_CHANNELS];
     uint32_t _dry_pos;
     /* SCENE mask runtime (193 KB) and its 512-frame accumulator; _scene_mask_on
      * only when a blob was configured and accepted.  The LFE V2 confidences of
@@ -349,6 +349,22 @@ int spa_stereo_upmix_process_s16_to_s32(struct spa_stereo_upmix *state,
                                         size_t frames,
                                         int32_t *pcm6,
                                         size_t pcm6_capacity_frames);
+
+/* Unclipped IEEE-754 float32 stereo input (1.0f == 0 dBFS) -> float32 or
+ * Q1.31 S32_LE PCM6 output for the buffered CarPlay render bus. */
+int spa_stereo_upmix_process_gain_f32(struct spa_stereo_upmix *state,
+                                      const float *pcm2,
+                                      size_t frames,
+                                      float *pcm6,
+                                      size_t pcm6_capacity_frames,
+                                      const float *frame_gain);
+
+int spa_stereo_upmix_process_gain_f32_to_s32(struct spa_stereo_upmix *state,
+                                             const float *pcm2,
+                                             size_t frames,
+                                             int32_t *pcm6,
+                                             size_t pcm6_capacity_frames,
+                                             const float *frame_gain);
 
 
 /* Profile-0/bank-1 J525 input matrix, first six inputs x eight buses, row-major.

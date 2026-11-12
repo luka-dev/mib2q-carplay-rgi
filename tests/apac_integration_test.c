@@ -114,6 +114,7 @@ int main(void)
     assert(codecApi.structSize == sizeof(codecApi));
     assert(codecApi.abiVersion == SPA_APAC_CODEC_ABI_VERSION);
     assert(codecApi.create && codecApi.decodeS16 && codecApi.decodeS32 &&
+           codecApi.decodeF32 &&
            codecApi.reset && codecApi.destroy && codecApi.getInfo);
 
     key = slurp(dir, "shk.bin", &keyLength);

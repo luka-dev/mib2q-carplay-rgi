@@ -187,3 +187,71 @@ size_t spa_drop_5_1_2_s32(const int32_t *input, size_t frames, int32_t *output)
     }
     return frames * SPA_PCM_5_1_CHANNELS;
 }
+
+size_t spa_reorder_5_1_decoder_to_declared_f32(const float *input, size_t frames,
+                                               float *output)
+{
+    static const int kFromDeclared[SPA_PCM_5_1_CHANNELS] = { 1, 2, 0, 5, 3, 4 };
+    size_t frame;
+
+    if (!input || !output) return 0;
+
+    for (frame = 0; frame < frames; frame++) {
+        const float *src = input + frame * SPA_PCM_5_1_CHANNELS;
+        float *dst = output + frame * SPA_PCM_5_1_CHANNELS;
+        float tmp[SPA_PCM_5_1_CHANNELS];
+        int ch;
+
+        for (ch = 0; ch < SPA_PCM_5_1_CHANNELS; ch++)
+            tmp[ch] = src[kFromDeclared[ch]];
+        for (ch = 0; ch < SPA_PCM_5_1_CHANNELS; ch++)
+            dst[ch] = tmp[ch];
+    }
+
+    return frames * SPA_PCM_5_1_CHANNELS;
+}
+
+size_t spa_downmix_5_1_2_f32(const float *input, size_t frames, float *output)
+{
+    size_t frame;
+
+    if (!input || !output) return 0;
+
+    for (frame = 0; frame < frames; frame++) {
+        const float *src = input + frame * SPA_PCM_5_1_2_CHANNELS;
+        float *dst = output + frame * SPA_PCM_5_1_CHANNELS;
+        const float left = src[0];
+        const float right = src[1];
+        const float center = src[2];
+        const float lfe = src[3];
+        const float surroundLeft = src[4];
+        const float surroundRight = src[5];
+        const float heightLeft = src[6];
+        const float heightRight = src[7];
+
+        dst[0] = left;
+        dst[1] = right;
+        dst[2] = center;
+        dst[3] = lfe * 0.5f;
+        dst[4] = surroundLeft + heightLeft * 0.5f;
+        dst[5] = surroundRight + heightRight * 0.5f;
+    }
+
+    return frames * SPA_PCM_5_1_CHANNELS;
+}
+
+size_t spa_drop_5_1_2_f32(const float *input, size_t frames, float *output)
+{
+    size_t frame;
+
+    if (!input || !output) return 0;
+    for (frame = 0; frame < frames; frame++) {
+        const float *src = input + frame * SPA_PCM_5_1_2_CHANNELS;
+        float *dst = output + frame * SPA_PCM_5_1_CHANNELS;
+        int ch;
+
+        for (ch = 0; ch < SPA_PCM_5_1_CHANNELS; ch++)
+            dst[ch] = src[ch];
+    }
+    return frames * SPA_PCM_5_1_CHANNELS;
+}
