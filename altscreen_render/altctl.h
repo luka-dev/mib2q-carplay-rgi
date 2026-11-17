@@ -14,10 +14,22 @@
 #ifndef ALTSCREEN_ALTCTL_H
 #define ALTSCREEN_ALTCTL_H
 
+#include <stdint.h>
+#include "luma.h"
+
 /* Called by the existing control thread, without its own locks, about every 20 ms.
  * The provider must be quick and must reject ended/superseded decode generations. */
 /* Returns ALT_PRESENT_OFF / VIDEO / LOADER from sink.h. */
 void altctl_start(int (*presentation_state)(void)); /* provider stays valid until stop */
 void altctl_stop(void);         /* join the control thread */
+
+/* Opt-in luma probe (luma.h).  The presenter arms/disarms it at each stream
+ * edge and publishes every sample; while armed, the control loop logs the
+ * last sample and its age every 10 s.  Lock-free and never blocking.
+ * altctl_luma_arm returns the stream's fresh token (odd, never 0) or 0 when
+ * disarmed; samples are published under that token, and one taken under an
+ * older token is never reported. */
+int altctl_luma_arm(int armed);
+void altctl_luma_publish(const alt_luma_t *luma, uint64_t stamp_ms, int token);
 
 #endif /* ALTSCREEN_ALTCTL_H */

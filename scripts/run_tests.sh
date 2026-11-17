@@ -206,6 +206,12 @@ cc -std=gnu99 -O1 -Wall -Wextra -Werror \
     -lpthread -o "$OUT/altscreen_readiness"
 "$OUT/altscreen_readiness"
 
+printf '%-32s ' altscreen_cap111_test
+cc -std=gnu99 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined \
+    -Icommon tests/altscreen_cap111_test.c altscreen_render/frame_io.c \
+    -lpthread -o "$OUT/altscreen_cap111"
+"$OUT/altscreen_cap111"
+
 printf '%-32s ' altscreen_timing_test
 cc -std=gnu99 -O1 -Wall -Wextra -Werror tests/altscreen_timing_test.c -o "$OUT/altscreen_timing"
 "$OUT/altscreen_timing"
