@@ -251,6 +251,9 @@ cc -std=gnu99 -O1 -Wall -Wextra -Werror -Wno-unused-function \
 printf '%-32s ' maneuver_reroute_clear
 bash scripts/test_maneuver_reroute.sh
 
+printf '%-32s ' waze_card_maneuver_test
+bash scripts/test_waze_card_maneuver.sh
+
 printf '%-32s ' rgd_lane_cache_test
 python3 -I tests/test_rgd_lane_cache.py
 
