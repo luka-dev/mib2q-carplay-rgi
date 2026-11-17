@@ -166,6 +166,12 @@ for suite in worker reversal age refresh night; do
         "tests/altscreen_command_${suite}_test.c" "$CMD_STRIP" -lpthread -lm -ldl -o "$OUT/alt_command_$suite"
     "$OUT/alt_command_$suite"
 done
+printf '%-32s ' altscreen_card_display_test
+cc -std=gnu99 -O1 -g -Wall -Wextra -Werror -Wno-unused-variable -Wno-unused-function -Wno-unused-parameter \
+    -Wno-unused-but-set-variable -ffunction-sections -fdata-sections -fsanitize=address,undefined \
+    -fno-sanitize=alignment -Ihook -Icommon tests/altscreen_card_display_test.c "$CMD_STRIP" \
+    -lpthread -lm -ldl -o "$OUT/alt_card_display"
+"$OUT/alt_card_display"
 printf '%-32s ' altscreen_deadline_test
 cc -std=gnu99 -O1 -Wall -Wextra -Werror -Wno-unused-variable -Ihook \
     tests/altscreen_deadline_test.c -lpthread -o "$OUT/alt_deadline"
