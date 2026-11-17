@@ -445,6 +445,8 @@ bash scripts/test_install_network_policy.sh
 
 printf '%-32s ' logging_mib_test
 sh scripts/test_logging_mib.sh
+printf '%-32s ' mibsi_stock_restore_test
+sh scripts/test_mibsi_stock_restore.sh
 
 printf '%-32s ' supervisor_lifecycle_test
 sh scripts/test_supervisor_lifecycle.sh

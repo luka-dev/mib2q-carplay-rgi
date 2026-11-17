@@ -173,7 +173,7 @@ To uninstall, copy `uninstall_MoreIncredibleBash/` over the card instead. That s
 
 ### Collecting logs
 
-Copy `logging_MoreIncredibleBash/` over the card and run it through the same M.I.B. entry. It deletes nothing on the unit or the card. **[code]**
+Copy `logging_MoreIncredibleBash/` over the card and run it through the same M.I.B. entry. Without a MIBSI trigger file (below) it deletes nothing on the unit or the card. **[code]**
 
 ```mermaid
 flowchart LR
@@ -201,7 +201,11 @@ flowchart LR
 | `*.txt` | `sloginfo` of MMX and RCC, `pidin ar` / `info`, `mount`, `df`, `ifconfig`, `netstat -rn`, `pfctl -sr`, the hook and jar listing, every `*.carplay-stock`, the `/tmp` and core listings |
 
 - **Verbose:** the run ends by creating `/tmp/carplay_verbose` ([what it switches on](BUILD_SYSTEM.md)). The hook and the Java log read it at the next phone connect, `altscreen_render` at its next report. The marker is in RAM, so a reboot turns verbose off again.
-- **Check:** `scripts/test_logging_mib.sh` runs it on a fake card under every shell found (ksh93, mksh from the pdksh line like QNX 6.5 `/bin/sh`, dash, sh).
+- **MIBSI leftovers:** every run also lists them (`mibsi_ls.txt`, `lsd_mibsi.txt`, `dio_mem.txt`, `dio_cksum.txt`, a wider `foreign_find.txt`). On a unit with MIBSI, or with one of the triggers below, it also saves the red-menu update state (`swdl_state.txt`, `swdl/`). **[code]**
+- **MIBSI removal:** one of two empty trigger files at the top of the card (with both present, neither runs). Restart the MMI afterwards. **[code]**
+  - `mibsi_uninstall.txt` runs MIBSI's own `Bootstrap/final/product/install_product.sh` from its uninstall card once (output in `mibsi_uninstall.txt`). Its preflight needs the stock `libairplay.so`, so it refuses while this patch has that library patched (a `libairplay.so.carplay-stock` exists); run this patch's uninstaller first and its installer again after the restart.
+  - `mibsi_stock_restore.txt` runs `mod/mibsi_stock_restore.sh`, on `MHI2Q_ER_AUG22_P5092` MU1329 only, with that firmware's `lsd.sh`, `gal`, `dio_manager` (in `mod/stock_p5092/app/`) and `dio_manager.json` (in `mod/stock_p5092/system/`) supplied by you. It checks every card and unit file's `cksum` and size first (it needs `cksum` on the script's `PATH` and refuses without it), backs up what it changes to `mibsi_backup/NNN/` at the top of the card (MIBSI's and the firmware's files: keep them out of bug reports), puts the four stock files back and deletes MIBSI's paths; a rerun does nothing. If this patch is installed, run its installer again after the restart, so it registers its message IDs in the now stock `dio_manager.json`. A `dio_manager.json` this patch's installer edited is refused as an unknown version: run this patch's uninstaller first.
+- **Check:** `scripts/test_logging_mib.sh` runs it on a fake card under every shell found (ksh93, mksh from the pdksh line like QNX 6.5 `/bin/sh`, dash, sh); `scripts/test_mibsi_stock_restore.sh` runs the restore on a fake unit.
 
 ## 🔧 Manual install (without M.I.B.)
 
