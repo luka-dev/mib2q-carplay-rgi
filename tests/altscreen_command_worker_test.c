@@ -1,6 +1,9 @@
 /* Actual native hook worker; CFLite, SDK send and bus are deterministic leaves.
  */
 #define ENABLE_LOGGING 0
+/* The product reads a literal /tmp marker; the test points it at its own file. */
+static char alt_test_url_diag_marker[512];
+#define ALT_URL_DIAG_MARKER alt_test_url_diag_marker
 #include "../hook/altscreen/altscreen_hook.c"
 #include <assert.h>
 
@@ -369,15 +372,249 @@ static void cluster_url_policy(void) {
             }
         }
     }
+    /* Opt-in URL diagnostic. The RGI line stays first and unchanged (RGI active +
+     * map-when-RGI -> /map); every other state lets Position choose the URL in
+     * every zone: Left = bare root, Center = bare /instructioncard (card only),
+     * Right = rightAligned root+query. */
+    {
+        static const char *const diag_url[] = {
+            "maps:/car/instrumentcluster",
+            "maps:/car/instrumentcluster/instructioncard",
+            "maps:/car/instrumentcluster?showETA=yes&maneuverLayout=rightAligned&showSpeedLimit=no"};
+        assert(!alt_url_diag_get());
+        __atomic_store_n(&g_alt_url_diag, 1, __ATOMIC_RELEASE);
+        for (unsigned l = 0; l < sizeof(visible) / sizeof(visible[0]); ++l) {
+            alt_layout_set(visible[l].layout);
+            for (unsigned p = 0; p < sizeof(policies) / sizeof(policies[0]); ++p) {
+                alt_url_mode_set(policies[p]);
+                for (unsigned r = 0; r < sizeof(rgi_edges) / sizeof(rgi_edges[0]); ++r) {
+                    alt_rgi_active_set(rgi_edges[r]);
+                    for (unsigned z = 0; z < sizeof(zones) / sizeof(zones[0]); ++z) {
+                        const char *expected = diag_url[l];
+                        if (policies[p] == ALT_URL_MODE_MAP_WHEN_RGI && rgi_edges[r])
+                            expected = hidden;
+                        alt_zone_mode_set(zones[z]);
+                        assert(!strcmp(alt_cluster_url(), expected));
+                        /* Zone-independent pointer: a view-area ack never re-sends. */
+                        assert(alt_cluster_url() == alt_cluster_url_for_mode(ALT_ZONE_FULLSCREEN));
+                    }
+                }
+            }
+        }
+        __atomic_store_n(&g_alt_url_diag, 0, __ATOMIC_RELEASE);
+        alt_rgi_active_set(0);
+        alt_url_mode_set(ALT_URL_MODE_CARDS_ALWAYS);
+        alt_layout_set(ALT_LAYOUT_LEFT);
+        alt_zone_mode_set(ALT_ZONE_SPORTSCREEN);
+        assert(!strcmp(alt_cluster_url(), visible[1].url));
+        alt_zone_mode_set(ALT_ZONE_FULLSCREEN);
+        assert(!strcmp(alt_cluster_url(), visible[0].url));
+    }
     alt_rgi_active_set(0);
     alt_url_mode_set(ALT_URL_MODE_MAP_WHEN_RGI);
     alt_layout_set(ALT_LAYOUT_RIGHT);
     alt_zone_mode_set(ALT_ZONE_FULLSCREEN);
 }
+/* The marker is read by alt_settings_reload (hook init and every SETUP), with or
+ * without a settings file, and disarms again once it is gone. */
+static void url_diag_marker(void) {
+    const char *dir = getenv("TMPDIR");
+    int fd;
+    assert(!alt_url_diag_get());
+    snprintf(alt_test_url_diag_marker, sizeof(alt_test_url_diag_marker), "%s/alt_url_diag.XXXXXX",
+             dir && dir[0] ? dir : "/tmp");
+    fd = mkstemp(alt_test_url_diag_marker);
+    assert(fd >= 0);
+    close(fd);
+    alt_settings_reload();
+    assert(alt_url_diag_get() == 1);
+    alt_settings_reload();
+    assert(alt_url_diag_get() == 1);
+    assert(!unlink(alt_test_url_diag_marker));
+    alt_settings_reload();
+    assert(alt_url_diag_get() == 0);
+    alt_test_url_diag_marker[0] = '\0';
+    alt_settings_reload();
+    assert(alt_url_diag_get() == 0);
+}
+static unsigned count_show_ui_from(unsigned from) {
+    unsigned count = 0;
+    for (unsigned i = from; i < sent_count; ++i)
+        if (!strcmp(sent[i].type, "showUI"))
+            ++count;
+    return count;
+}
+static void wait_show_ui(unsigned from, unsigned target) {
+    struct timespec until;
+    alt_deadline_after_ms(&until, 1500);
+    pthread_mutex_lock(&test_lock);
+    while (count_show_ui_from(from) < target)
+        assert(pthread_cond_timedwait(&test_cond, &test_lock, &until) != ETIMEDOUT);
+    pthread_mutex_unlock(&test_lock);
+}
+static const char *shown_url(void) { return __atomic_load_n(&g_alt_shown_ui_url, __ATOMIC_ACQUIRE); }
+/* A marker created mid-session is read by cfg_on_cmd, the live lever while RGI
+ * is inactive: the first url_mode toggle after arming already sends the mapped
+ * URL, the next one re-sends the IDENTICAL URL pointer, a Position change
+ * re-sends the newly mapped pointer, an unchanged payload sends nothing (also
+ * when it disarms), and a later view-area ack never re-sends while armed
+ * because the mapping is zone-free. */
+static void url_diag_cfg_resend(void) {
+    static const char *const expect[] = {
+        "maps:/car/instrumentcluster/instructioncard",
+        "maps:/car/instrumentcluster/instructioncard",
+        "maps:/car/instrumentcluster",
+        "maps:/car/instrumentcluster?showETA=yes&maneuverLayout=rightAligned&showSpeedLimit=no",
+        "maps:/car/instrumentcluster?showETA=yes&maneuverLayout=topAligned&showSpeedLimit=no"};
+    uint8_t cfg[3] = {1, ALT_URL_MODE_CARDS_ALWAYS, ALT_LAYOUT_CENTER};
+    const char *center, *dir = getenv("TMPDIR");
+    unsigned from, shown = 0;
+    int fd;
+    alt_rgi_active_set(0);
+    alt_url_mode_set(ALT_URL_MODE_MAP_WHEN_RGI);
+    alt_layout_set(ALT_LAYOUT_CENTER);
+    alt_zone_mode_set(ALT_ZONE_SPORTSCREEN);
+    assert(!alt_url_diag_get() && !strcmp(alt_cluster_url(), expect[4]));
+    snprintf(alt_test_url_diag_marker, sizeof(alt_test_url_diag_marker), "%s/alt_url_diag.XXXXXX",
+             dir && dir[0] ? dir : "/tmp");
+    fd = mkstemp(alt_test_url_diag_marker);            /* armed while the session runs */
+    assert(fd >= 0);
+    close(fd);
+    assert(!alt_url_diag_get());
+    pthread_mutex_lock(&test_lock);
+    from = sent_count;
+    pthread_mutex_unlock(&test_lock);
+    cfg_on_cmd(0, 0, cfg, sizeof(cfg), NULL);           /* url_mode 0 -> 1 */
+    center = shown_url();
+    assert(alt_url_diag_get() == 1 && alt_url_mode_get() == ALT_URL_MODE_CARDS_ALWAYS);
+    assert(center == alt_cluster_url() && !strcmp(center, expect[0]));
+    cfg[1] = ALT_URL_MODE_MAP_WHEN_RGI;
+    cfg_on_cmd(0, 0, cfg, sizeof(cfg), NULL);           /* url_mode 1 -> 0 */
+    assert(alt_url_mode_get() == ALT_URL_MODE_MAP_WHEN_RGI && shown_url() == center);
+    cfg_on_cmd(0, 0, cfg, sizeof(cfg), NULL);           /* unchanged: no showUI */
+    cfg[2] = ALT_LAYOUT_LEFT;
+    cfg_on_cmd(0, 0, cfg, sizeof(cfg), NULL);
+    assert(shown_url() == alt_cluster_url() && !strcmp(shown_url(), expect[2]));
+    cfg[2] = ALT_LAYOUT_RIGHT;
+    cfg_on_cmd(0, 0, cfg, sizeof(cfg), NULL);
+    assert(shown_url() == alt_cluster_url() && !strcmp(shown_url(), expect[3]));
+    wait_show_ui(from, 4);
+    /* The view-area ack for a fullscreen switch keeps the armed pointer: nothing
+     * queued.  Disarmed, the same ack for the compact zone does re-send. */
+    block_worker();
+    alt_zone_mode_set(ALT_ZONE_FULLSCREEN);
+    zone_cmd_done(0, NULL, (void *)(uintptr_t)((1u << 2) | ALT_ZONE_FULLSCREEN));
+    pthread_mutex_lock(&g_alt_cmd_lock);
+    assert(g_alt_commands.count == 0);
+    pthread_mutex_unlock(&g_alt_cmd_lock);
+    assert(!unlink(alt_test_url_diag_marker));
+    cfg_on_cmd(0, 0, cfg, sizeof(cfg), NULL);           /* unchanged: disarms, no showUI */
+    assert(!alt_url_diag_get());
+    pthread_mutex_lock(&g_alt_cmd_lock);
+    assert(g_alt_commands.count == 0);
+    pthread_mutex_unlock(&g_alt_cmd_lock);
+    alt_test_url_diag_marker[0] = '\0';
+    alt_zone_mode_set(ALT_ZONE_SPORTSCREEN);
+    zone_cmd_done(0, NULL, (void *)(uintptr_t)((1u << 2) | ALT_ZONE_SPORTSCREEN));
+    pthread_mutex_lock(&g_alt_cmd_lock);
+    assert(g_alt_commands.count == 1 && g_alt_commands.items[0].key == ALT_COMMAND_SHOW_UI);
+    pthread_mutex_unlock(&g_alt_cmd_lock);
+    unblock_worker();
+    wait_show_ui(from, 5);
+    pthread_mutex_lock(&test_lock);
+    for (unsigned i = from; i < sent_count; ++i)
+        if (!strcmp(sent[i].type, "showUI")) {
+            assert(shown < 5 && !strcmp(sent[i].url, expect[shown]));
+            ++shown;
+        }
+    assert(shown == 5);
+    pthread_mutex_unlock(&test_lock);
+    alt_url_mode_set(ALT_URL_MODE_MAP_WHEN_RGI);
+    alt_layout_set(ALT_LAYOUT_RIGHT);
+    alt_zone_mode_set(ALT_ZONE_FULLSCREEN);
+}
+
+/* Third-party source card (Waze): the RGI map line still wins, then the card in
+ * every zone/layout/policy, and the setting turns it off.  Pure policy, no session. */
+static void nav_card_policy(void) {
+    static const char *const card = "maps:/car/instrumentcluster/instructioncard";
+    const char *hidden = "maps:/car/instrumentcluster/map?showETA=no&maneuverLayout=topAligned&showSpeedLimit=no";
+    const int zones[] = {ALT_ZONE_FULLSCREEN, ALT_ZONE_SPORTSCREEN, ALT_ZONE_CLASSICSCREEN};
+    assert(!alt_nav_card_get() && alt_nav_card_pref_get() == 1);   /* default on */
+    __atomic_store_n(&g_alt_nav_card, 1, __ATOMIC_RELEASE);
+    for (int l = ALT_LAYOUT_LEFT; l <= ALT_LAYOUT_RIGHT; ++l) {
+        alt_layout_set(l);
+        for (int p = 0; p <= 1; ++p) {
+            alt_url_mode_set(p);
+            for (int r = 0; r <= 1; ++r) {
+                alt_rgi_active_set(r);
+                for (unsigned z = 0; z < sizeof(zones) / sizeof(zones[0]); ++z) {
+                    alt_zone_mode_set(zones[z]);
+                    if (p == ALT_URL_MODE_MAP_WHEN_RGI && r)
+                        assert(!strcmp(alt_cluster_url(), hidden));
+                    else
+                        assert(!strcmp(alt_cluster_url(), card) &&
+                               alt_cluster_url() == alt_cluster_url_for_mode(ALT_ZONE_FULLSCREEN));
+                }
+            }
+        }
+    }
+    /* Also wins over the armed URL diagnostic. */
+    alt_rgi_active_set(0);
+    __atomic_store_n(&g_alt_url_diag, 1, __ATOMIC_RELEASE);
+    alt_layout_set(ALT_LAYOUT_LEFT);
+    assert(!strcmp(alt_cluster_url(), card));
+    __atomic_store_n(&g_alt_url_diag, 0, __ATOMIC_RELEASE);
+    /* alt_waze_card=0: the normal mapping. */
+    alt_nav_card_pref_set(0);
+    alt_layout_set(ALT_LAYOUT_RIGHT);
+    alt_zone_mode_set(ALT_ZONE_FULLSCREEN);
+    assert(!strcmp(alt_cluster_url(),
+                   "maps:/car/instrumentcluster?showETA=yes&maneuverLayout=rightAligned&showSpeedLimit=no"));
+    alt_nav_card_pref_set(1);
+    __atomic_store_n(&g_alt_nav_card, 0, __ATOMIC_RELEASE);
+    alt_url_mode_set(ALT_URL_MODE_MAP_WHEN_RGI);
+}
+/* Live session: an edge sends showUI with the new URL, a repeated state sends
+ * nothing, and with the setting off an edge is recorded but sends nothing. */
+static void nav_card_live(void) {
+    static const char *const card = "maps:/car/instrumentcluster/instructioncard";
+    const char *map = "maps:/car/instrumentcluster?showETA=yes&maneuverLayout=rightAligned&showSpeedLimit=no";
+    unsigned from, shown = 0;
+    alt_rgi_active_set(0);
+    alt_url_mode_set(ALT_URL_MODE_MAP_WHEN_RGI);
+    alt_layout_set(ALT_LAYOUT_RIGHT);
+    alt_zone_mode_set(ALT_ZONE_FULLSCREEN);
+    pthread_mutex_lock(&test_lock);
+    from = sent_count;
+    pthread_mutex_unlock(&test_lock);
+    altscreen_nav_card_update(1, "Waze");
+    assert(alt_nav_card_get() == 1 && shown_url() == alt_cluster_url() && !strcmp(shown_url(), card));
+    altscreen_nav_card_update(1, "Waze");                 /* unchanged: nothing */
+    altscreen_nav_card_update(0, "Google Maps");
+    assert(!alt_nav_card_get() && !strcmp(shown_url(), map));
+    wait_show_ui(from, 2);
+    alt_nav_card_pref_set(0);
+    altscreen_nav_card_update(1, "Waze");                 /* recorded, map kept */
+    assert(alt_nav_card_get() == 1 && !strcmp(alt_cluster_url(), map));
+    altscreen_nav_card_update(0, "");
+    alt_nav_card_pref_set(1);
+    pthread_mutex_lock(&test_lock);
+    for (unsigned i = from; i < sent_count; ++i)
+        if (!strcmp(sent[i].type, "showUI")) {
+            assert(!strcmp(sent[i].url, shown == 0 ? card : map));
+            ++shown;
+        }
+    assert(shown == 2);
+    pthread_mutex_unlock(&test_lock);
+}
 
 int main(void) {
     alarm(10);
+    assert(!alt_advert_legacy_marker_path);   /* host gate: a stray /tmp file never arms it */
     cluster_url_policy();
+    nav_card_policy();
+    url_diag_marker();
     cf_ok = 1;
     alt_enabled = 1;
     alt_syms_ok = 1;
@@ -538,6 +775,8 @@ int main(void) {
         release_object(cmd_other);
         release_object(cmd_suggest);
     }
+    url_diag_cfg_resend();
+    nav_card_live();
     /* Concurrent rapid area changes exercise real completion/state reads. */
     for (unsigned i = 0; i < 24; ++i) {
         uint8_t area[3] = {(uint8_t)(i % 3), 0, 0};

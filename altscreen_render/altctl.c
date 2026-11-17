@@ -11,6 +11,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 #include <errno.h>
 #include <pthread.h>
@@ -25,6 +26,58 @@ static int (*g_presentation_state)(void);   /* installed before thread creation 
 static volatile int g_run = 0;
 static volatile int g_exited = 1;
 static pthread_t     g_thr;
+
+/* Luma probe hand-off: presenter writes, this loop reads (see luma.h).  Each
+ * armed stream gets a fresh token and this loop reports only a sample taken
+ * under the current one, never the previous stream's picture. */
+static uint32_t g_luma_token;                /* __atomic only; 0 = disarmed */
+static uint32_t g_luma_tokens;               /* issued; the decode worker's stream edge only */
+static alt_luma_shared_t g_luma;
+
+int altctl_luma_arm(int armed) {
+    uint32_t token = 0;
+    if (armed) {
+        uint32_t n = __atomic_add_fetch(&g_luma_tokens, 1u, __ATOMIC_RELAXED) & 0x3fffffffu;
+        token = (n << 1) | 1u;               /* odd, so never 0, and fits an int */
+    }
+    __atomic_store_n(&g_luma_token, token, __ATOMIC_RELAXED);
+    return (int)token;
+}
+
+void altctl_luma_publish(const alt_luma_t *luma, uint64_t stamp_ms, int token) {
+    if (luma && token)
+        alt_luma_shared_publish(&g_luma, luma, (uint32_t)stamp_ms, (uint32_t)token);
+}
+
+static uint64_t ctl_now_ms(void) {
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) return 0;
+    return (uint64_t)ts.tv_sec * 1000ULL + (uint64_t)ts.tv_nsec / 1000000ULL;
+}
+
+/* Armed only. A static scene may stop sending frames, so the presenter never
+ * logs again; this keeps the last picture's luma and age in the log.  A sample
+ * from an earlier armed stream reads as "none". */
+static void ctl_luma_report(uint64_t *next_ms, uint32_t token) {
+    alt_luma_t last;
+    uint32_t stamp = 0, sample_token = 0;
+    uint64_t now = ctl_now_ms();
+    if (!now) return;
+    if (!*next_ms) {                 /* first report one period after arming */
+        *next_ms = now + ALT_LUMA_REPORT_MS;
+        return;
+    }
+    if (now < *next_ms) return;
+    *next_ms = now + ALT_LUMA_REPORT_MS;
+    if (alt_luma_shared_read(&g_luma, &last, &stamp, &sample_token) && sample_token == token) {
+        /* Sample the clock after the snapshot, so its stamp is never newer. */
+        uint32_t age = (uint32_t)ctl_now_ms() - stamp;
+        fprintf(stderr, "%s altscreen_render: luma last min=%u mean=%u max=%u age_ms=%lu\n",
+                log_stamp(), last.min, last.mean, last.max, (unsigned long)age);
+    } else
+        fprintf(stderr, "%s altscreen_render: luma last none (armed, no sample yet)\n",
+                log_stamp());
+}
 
 static int ctl_connect(void) {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -72,9 +125,15 @@ static void *ctl_loop(void *arg) {
     unsigned int epoch = 0;
     unsigned char rx[ALTCTL_PKT_SIZE];
     unsigned int rx_used = 0;
+    uint64_t luma_next_ms = 0;
     while (g_run) {
         /* Sample/publish hook health even while the Java control peer is absent. */
         int state = g_presentation_state ? g_presentation_state() : ALT_PRESENT_OFF;
+        uint32_t luma_token = __atomic_load_n(&g_luma_token, __ATOMIC_RELAXED);
+        if (luma_token)
+            ctl_luma_report(&luma_next_ms, luma_token);   /* diagnostic; also without a Java peer */
+        else
+            luma_next_ms = 0;
         if (fd < 0) {
             fd = ctl_connect();
             last_sent = -1;                       /* force resend of the current state on (re)connect */

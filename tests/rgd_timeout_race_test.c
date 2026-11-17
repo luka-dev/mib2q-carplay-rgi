@@ -13,6 +13,13 @@ hook_result_t hook_inject_message(uint16_t m, const uint8_t* p, size_t n) {
 uint8_t* hook_identify_grow(hook_context_t* c, size_t l, size_t n, size_t* cap) {
     (void)c; (void)l; (void)n; (void)cap; return NULL;
 }
+/* altscreen_hook.c leaf: records the third-party card decisions. */
+static int card_calls, card_on = -1;
+static char card_source[64];
+void altscreen_nav_card_update(int on, const char *source) {
+    ++card_calls; card_on = on;
+    snprintf(card_source, sizeof(card_source), "%s", source ? source : "");
+}
 
 static pthread_mutex_t capture_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t capture_cond = PTHREAD_COND_INITIALIZER;
@@ -95,6 +102,26 @@ static void source_name(const char* source) {
     memcpy(raw + 10, source, len);
     iap2_frame_t frame;
     memset(&frame, 0, sizeof(frame)); frame.msgid = 0x5201; frame.frame_len = 10 + len;
+    ctx.direction = MSG_DIR_INCOMING; ctx.raw_buf = raw; ctx.raw_len = frame.frame_len;
+    rgd_message_handler(&ctx, &frame);
+}
+
+/* One 0x5201 with a source name and source_supports_rg=0 together (Waze). */
+static void source_name_no_rg(const char* source) {
+    uint8_t raw[256] = {0x40, 0x40, 0, 0, 0x52, 0x01};
+    size_t len = strlen(source), n;
+    assert(len < sizeof(raw) - 15);
+    write_be16(raw + 6, 4 + len);
+    write_be16(raw + 8, RGD_TLV_SOURCE_NAME);
+    memcpy(raw + 10, source, len);
+    n = 10 + len;
+    write_be16(raw + n, 5);
+    write_be16(raw + n + 2, RGD_TLV_SOURCE_SUPPORTS_RG);
+    raw[n + 4] = 0;
+    n += 5;
+    write_be16(raw + 2, n);
+    iap2_frame_t frame;
+    memset(&frame, 0, sizeof(frame)); frame.msgid = 0x5201; frame.frame_len = n;
     ctx.direction = MSG_DIR_INCOMING; ctx.raw_buf = raw; ctx.raw_len = frame.frame_len;
     rgd_message_handler(&ctx, &frame);
 }
@@ -209,6 +236,52 @@ static void source_lifecycle(void) {
     puts("RGI sources: real TLV -> cached snapshot, late source, provider switch, pre-5201 Apple Maps handoff, soft reset, explicit empty and disconnect PASS");
 }
 
+/* Waze-style source: a name with source_supports_rg=0 asks the cluster for the
+ * turn card; support, an explicit empty name or a disconnect ends it; an update
+ * without either field leaves it alone. */
+static void nav_card_source(void) {
+    int calls;
+    rgd_clear_state("test");
+    assert(card_on == 0);
+    source_name("Waze");                                   /* name only */
+    calls = card_calls;
+    assert(card_on == 0);
+    update_byte(RGD_TLV_SOURCE_SUPPORTS_RG, 0);            /* cached name + no support */
+    assert(card_calls == calls + 1 && card_on == 1 && !strcmp(card_source, "Waze"));
+    route_state(1);                                        /* neither field */
+    update_byte(RGD_TLV_SOURCE_SUPPORTS_RG, 0);            /* repeat without a name */
+    assert(card_calls == calls + 1 && card_on == 1);
+    update_byte(RGD_TLV_SOURCE_SUPPORTS_RG, 1);            /* RG-capable source */
+    assert(card_calls == calls + 2 && card_on == 0);
+    update_byte(RGD_TLV_SOURCE_SUPPORTS_RG, 0);            /* nameless: no decision */
+    assert(card_calls == calls + 2 && card_on == 0);
+    source_name("Waze");
+    update_byte(RGD_TLV_SOURCE_SUPPORTS_RG, 0);
+    assert(card_calls == calls + 3 && card_on == 1);
+    source_name("");                                       /* explicit empty name */
+    assert(card_calls == calls + 4 && card_on == 0);
+    source_name("Waze");
+    update_byte(RGD_TLV_SOURCE_SUPPORTS_RG, 0);
+    assert(card_on == 1);
+    calls = card_calls;
+    source_name("Waze");                                   /* same provider again */
+    assert(card_calls == calls && card_on == 1);
+    source_name("Google Maps");                            /* other provider, no field */
+    assert(card_calls == calls + 1 && card_on == 0);
+    source_name("Waze");
+    update_byte(RGD_TLV_SOURCE_SUPPORTS_RG, 0);
+    assert(card_on == 1);
+    source_name_no_rg("");                                 /* empty name + no support, one update */
+    assert(card_on == 0 && card_source[0] == '\0');
+    source_name_no_rg("Waze");                             /* name + no support, one update */
+    assert(card_on == 1 && !strcmp(card_source, "Waze"));
+    source_name_no_rg("Yandex Navi");                      /* another provider without RG: its card */
+    assert(card_on == 1 && !strcmp(card_source, "Yandex Navi"));
+    rgd_clear_state("disconnect");
+    assert(card_on == 0 && card_source[0] == '\0');
+    puts("RGI nav card: Waze name + no RG support -> card; repeats kept; RG support, another provider, empty name (also with no RG support) and disconnect -> map PASS");
+}
+
 int main(void) {
     route_state(1); route_state(0); expire_pending();
     race_next_zero = true;
@@ -229,5 +302,6 @@ int main(void) {
     before = frames; rgd_periodic_tick(); assert(frames == before);
     puts("RGI timeout: concurrent activation wins final publication, cancellation, genuine end and reroute hold PASS");
     source_lifecycle();
+    nav_card_source();
     return 0;
 }

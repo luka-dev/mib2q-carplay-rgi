@@ -7,6 +7,12 @@
 #include "rgd_hook.h"
 #include <time.h>
 
+/* altscreen_hook.c (same library); weak so host tests that build this file
+ * alone link without altscreen.  See rgd_publish_nav_card. */
+void altscreen_nav_card_update(int on, const char *source) __attribute__((weak));
+/* Provider whose turn card the cluster shows ("" = map). */
+static char g_nav_card_source[64];
+
 DEFINE_LOG_MODULE(RGD);
 
 /*
@@ -999,6 +1005,10 @@ void rgd_clear_state(const char* reason) {
     pthread_mutex_unlock(&g_rgd_debounce_lock);
     rgd_maneuver_map_reset();
     rgd_update_cache_reset();
+    if (altscreen_nav_card_update) {
+        g_nav_card_source[0] = '\0';
+        altscreen_nav_card_update(0, "");
+    }
 
     {
         bus_text_builder_t _b_storage;
@@ -1143,6 +1153,49 @@ static void rgd_mark_first_response(uint16_t msgid) {
     }
 }
 
+/* Third-party navigation source -> cluster turn card (altscreen_hook.c).
+ * Waze (through 5.27.5.0) never opts in to CarPlay route-guidance metadata: iOS
+ * sends 0x5201 with its source name and source_supports_rg=0, so there are no
+ * maneuvers for BAP/HUD.  iOS still draws such an app's turn card into the
+ * cluster stream for the bare /instructioncard URL (car test 2026-11-16), so the
+ * cluster shows that card while a named source without RG support is active.
+ * Decided only from fields this update carries: an explicit empty name (with or
+ * without the support field) -> map; supports=0 + a name (this update's, else
+ * the cached one) -> card; supports!=0, or a name-only update from a different
+ * provider -> map; anything else, including supports=0 without any name (the
+ * hard clear of the first Waze frame drops the cached name), keeps the state.
+ * altscreen_nav_card_update is weak (declared at the top of this file). */
+
+static void rgd_publish_nav_card(const rgd_update_t *upd)
+{
+    int on;
+    const char *source;
+    if (!altscreen_nav_card_update) return;
+    source = (upd->present & RGD_UPD_SOURCE_NAME) ? upd->source_name
+                                                  : g_rgd.update_cache.source_name;
+    if ((upd->present & RGD_UPD_SOURCE_NAME) && upd->source_name[0] == '\0') {
+        on = 0;   /* no provider any more, whatever the support field says */
+    } else if (upd->present & RGD_UPD_SOURCE_SUPPORTS_RG) {
+        if (upd->source_supports_route_guidance != 0)
+            on = 0;
+        else if (source[0] != '\0')
+            on = 1;
+        else
+            return;
+    } else if (upd->present & RGD_UPD_SOURCE_NAME) {
+        /* A different named provider (Apple/Google Maps without the support
+         * field) ends the card; the same name again changes nothing. */
+        if (g_nav_card_source[0] != '\0' && strcmp(upd->source_name, g_nav_card_source) != 0)
+            on = 0;
+        else
+            return;
+    } else {
+        return;
+    }
+    snprintf(g_nav_card_source, sizeof(g_nav_card_source), "%s", on ? source : "");
+    altscreen_nav_card_update(on, source);
+}
+
 /* Message handler - incoming 0x5201/0x5202/0x5204 */
 static bool rgd_message_handler(hook_context_t* ctx, const iap2_frame_t* frame) {
     if (!ctx || !frame || ctx->direction != MSG_DIR_INCOMING || !ctx->raw_buf ||
@@ -1211,6 +1264,7 @@ static bool rgd_message_handler(hook_context_t* ctx, const iap2_frame_t* frame) 
             upd.route_state = RGD_STATE_NOT_ACTIVE;
             upd.present |= RGD_UPD_ROUTE_STATE;
         }
+        rgd_publish_nav_card(&upd);
         bool active_evidence = rgd_update_has_active_evidence(&upd);
 
         if (upd.present & RGD_UPD_ROUTE_STATE) {

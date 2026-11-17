@@ -129,6 +129,14 @@ static int             g_advert_ready;
 static int             g_advert_published;
 static int             g_advert_night_mode;
 static int             g_advert_zone_mode;
+/* ALT_ADVERT_LEGACY_MARKER seen when this tree was built: publish "displays" only
+ * (no displayPanels, no cluster properties, no altScreenSuggestUIURLs). */
+static int             g_advert_legacy;
+/* Card display experiment (card_display.h): set when this tree carries the third, card-only
+ * display; the dict is borrowed (the retained array holds it).  0/NULL without the
+ * marker, which keeps every path below byte-for-byte today's. */
+static int             g_advert_card;
+static void           *g_advert_card_dict;
 static uint32_t        g_advert_sequence;
 /* Seeded from stock /info's nightMode, then updated by the
  * dio->libairplay AirPlayReceiverSessionSetNightMode boundary call.  The /info
@@ -141,9 +149,25 @@ static void advert_apply_night_locked(int night);
 static int alt_zone_mode_get(void);
 static const char *alt_cluster_url(void);
 static const char *alt_cluster_url_for_mode(int mode);
+static const char *alt_cluster_url_select(int mode, int allow_card);
 static int alt_show_ui_for_mode(uint32_t gen, int mode, const char *reason);
+/* card_display.h, included after the receiver primitives */
+static void card_log(int warn, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
+static void *build_card_dict(void);
+static void alt_card_disarm(const char *why);
+static int alt_card_armed_for_advert(int legacy);
+static uint32_t alt_card_open(void *session, uint32_t advert_seq);
+static void alt_card_close(void *session, const char *end);
+static void alt_card_close_superseded(uint32_t sequence);
+static void alt_card_note_advertised(void *session);
 static uint32_t g_alt_shown_ui_gen;
 static const char *g_alt_shown_ui_url;
+#if ENABLE_LOGGING
+/* Diagnostics only: successful showUI acks so far and the generation of the
+ * latest one.  The receiver logs the first IDR after each ack. */
+static uint32_t g_alt_showui_ack_seq;
+static uint32_t g_alt_showui_ack_gen;
+#endif
 
 /* the CFLite array-callbacks constant has moved names across builds; try both */
 static const void *resolve_arr_cb(void)
@@ -473,8 +497,16 @@ fail:
 }
 
 #define CLUSTER_DISPLAY_UUID "C1057E12-A0D1-4E20-B0C0-1057E12A0D10"
+/* Third display (card display experiment, marker-gated): a card-only cluster display that is never shown.
+ * It must differ from display 0 (110 vs 111 is a uuid compare) and from the cluster. */
+#define CARD_DISPLAY_UUID     "C1057E12-A0D1-4E20-B0C0-CA4D0000C0DE"
+#define ALT_CARD_DISPLAY_URL  "maps:/car/instrumentcluster/instructioncard"
 
-static void *build_cluster_dict(int night, int zone_mode)
+/* legacy != 0 only while ALT_ADVERT_LEGACY_MARKER is armed: the cluster dict then
+ * omits "properties" and is published under "displays" alone (legacy-advert diagnostic).
+ * allow_card_url == 0 while the tree also carries the card display: the map
+ * display never gets /instructioncard. */
+static void *build_cluster_dict_ex(int night, int zone_mode, int legacy, int allow_card_url)
 {
     int properties_ok = 0;
     int view_areas_ok = 0;
@@ -521,8 +553,9 @@ static void *build_cluster_dict(int night, int zone_mode)
      *    CarHybridInstrumentClusterNavigationModeController only binds the cluster scene
      *    to the complementary instrumentClusterCameraStyle (3D tracking vs 2D overview)
      *    when displayLocation is 0 or 3; displayLocation == 1 mirrors the center-console
-     *    camera style on both screens (#78). */
-    {
+     *    camera style on both screens (#78).
+     * The opt-in legacy-advert diagnostic omits the key entirely. */
+    if (!legacy) {
         static const char *const props[] = {
             "Instrument Cluster",
             "showsInstruments",
@@ -554,7 +587,7 @@ static void *build_cluster_dict(int night, int zone_mode)
         if (arr && cf_rel) cf_rel(arr);
         if (k && cf_rel) cf_rel(k);
     }
-    if (!properties_ok) goto fail;
+    if (!legacy && !properties_ok) goto fail;
     /* [0] fullscreen, [1] sportscreen (compact left), [2] classicscreen
      * (same compact size, centered). The encoded and visible frame stays 1440x542;
      * the entries carry different nested safe frames.  Match MHI3
@@ -606,7 +639,7 @@ static void *build_cluster_dict(int night, int zone_mode)
         if (k && cf_rel) cf_rel(k);
     }
     if (!adjacent_ok) goto fail;
-    if (set_str(d, "initialURL", alt_cluster_url_for_mode(zone_mode)) != 0) goto fail;
+    if (set_str(d, "initialURL", alt_cluster_url_select(zone_mode, allow_card_url)) != 0) goto fail;
     /* Extra fields a real HU (MHI3 libairplay 450) sends in each display dict — our subset was
      * incomplete, which the phone accepts to ADD the car but rejects at SESSION start (0s teardown).
      *
@@ -644,6 +677,10 @@ fail:
               "cluster display build incomplete — refusing altScreen advert");
     if (cf_rel) cf_rel(d);
     return 0;
+}
+static void *build_cluster_dict(int night, int zone_mode, int legacy)
+{
+    return build_cluster_dict_ex(night, zone_mode, legacy, 1);
 }
 
 /* stock CopyDisplaysInfo emits the OLD 210 schema (identifier key "uuid", NO initialVideoStreams);
@@ -762,9 +799,14 @@ static int main_disp_modernize(void *mainDisp, int night)
     return 0;
 }
 
-static void *build_displays(int night, int zone_mode)
+/* *card != 0 asks for the experimental third display [main, map cluster, card].  It is built
+ * before the cluster, so a card failure clears *card and yields exactly today's
+ * 2-display tree.  *cardDictOut is borrowed (the returned array holds it). */
+static void *build_displays(int night, int zone_mode, int legacy, int *card, void **cardDictOut)
 {
     int err = 0;
+    void *cardDict = NULL;
+    *cardDictOut = NULL;
     void *mainDisp = fn_copydisp(0, &err);      /* arg ignored; builds via ScreenCopyMain */
     if (!mainDisp) {
         /* Without the stock main (display-0) the array degrades to just [cluster];
@@ -780,19 +822,34 @@ static void *build_displays(int night, int zone_mode)
         if (cf_rel) cf_rel(mainDisp);
         return 0;
     }
-    void *cluster  = build_cluster_dict(night, zone_mode);
+    if (*card) {
+        cardDict = build_card_dict();
+        if (!cardDict) {
+            *card = 0;
+            alt_card_disarm("card display dict build failed");
+        }
+    }
+    void *cluster  = *card ? build_cluster_dict_ex(night, zone_mode, legacy, 0)
+                           : build_cluster_dict(night, zone_mode, legacy);
     if (!cluster) {
         if (cf_rel) cf_rel(mainDisp);
+        if (cardDict && cf_rel) cf_rel(cardDict);
         return 0;
     }
-    void *arr = cf_arrm(0, 2, arr_cb);
+    void *arr = cf_arrm(0, *card ? 3 : 2, arr_cb);
     if (!arr) {
         if (cf_rel) cf_rel(mainDisp);
         if (cluster && cf_rel)  cf_rel(cluster);
+        if (cardDict && cf_rel) cf_rel(cardDict);
         return 0;
     }
     cf_arrapp(arr, mainDisp); if (cf_rel) cf_rel(mainDisp);
     if (cluster)  { cf_arrapp(arr, cluster);  if (cf_rel) cf_rel(cluster);  }
+    if (cardDict) {   /* display order main, map, card -> iOS stream order 110, 111, 111 */
+        cf_arrapp(arr, cardDict);
+        if (cf_rel) cf_rel(cardDict);
+        *cardDictOut = cardDict;
+    }
     return arr;
 }
 
@@ -809,6 +866,9 @@ static void advert_clear_locked(void)
     g_advert_published = 0;
     g_advert_night_mode = 0;
     g_advert_zone_mode = 0;
+    g_advert_legacy = 0;
+    g_advert_card = 0;
+    g_advert_card_dict = NULL;
 }
 
 static void advert_clear_for_session(void *session)
@@ -888,6 +948,49 @@ static void cluster_capture_native(const void *data, uint32_t length)
 #endif
 
 #define ALT_SETTINGS_FILE "/tmp/carplay_settings"
+/* Opt-in cluster diagnostics.  Each marker lives in RAM /tmp, so a reboot is the
+ * rollback; with no marker present nothing below changes behaviour.  The paths are
+ * compile-time literals in the product.  Host builds never read /tmp (the
+ * renderer's cap111 gate): a stray file on a development machine cannot arm a
+ * diagnostic in a test that includes this hook; only a test arms one, by
+ * predefining its path. */
+#ifndef ALT_URL_DIAG_MARKER
+#if defined(__QNX__) || defined(__QNXNTO__)
+#define ALT_URL_DIAG_MARKER "/tmp/carplay_alt_url_diag"
+#else
+#define ALT_URL_DIAG_MARKER ((const char *)0)
+#endif
+#endif
+#ifndef ALT_ADVERT_LEGACY_MARKER
+#if defined(__QNX__) || defined(__QNXNTO__)
+#define ALT_ADVERT_LEGACY_MARKER "/tmp/carplay_alt_advert_legacy"
+#else
+#define ALT_ADVERT_LEGACY_MARKER ((const char *)0)
+#endif
+#endif
+/* Card display experiment (card_display.h): read once per advert tree. */
+#ifndef ALT_CARD_DISPLAY_MARKER
+#if defined(__QNX__) || defined(__QNXNTO__)
+#define ALT_CARD_DISPLAY_MARKER "/tmp/carplay_alt_card_display"
+#else
+#define ALT_CARD_DISPLAY_MARKER ((const char *)0)
+#endif
+#endif
+#ifndef ALT_CARD_CAPTURE_PATH
+#define ALT_CARD_CAPTURE_PATH "/tmp/carplay_cap111b.h264"
+#endif
+#define ALT_CARD_CAPTURE_LIMIT  (12u * 1024u * 1024u)   /* = cap111 */
+#define ALT_CARD_MIN_SESSION_US (20u * 1000000u)        /* self-disarm threshold */
+#define ALT_CARD_NIGHT_MODE     0                        /* fixed: the card frames seen so far were day */
+#define ALT_CARD_MAP_HEALTHY_FRAMES 30u
+enum { ALT_ROLE_MAP = 0, ALT_ROLE_CARD = 1 };
+#define ALT_ROLE_BIT(r) (1u << (r))
+#define ALT_ROLE_ALL    (ALT_ROLE_BIT(ALT_ROLE_MAP) | ALT_ROLE_BIT(ALT_ROLE_CARD))
+/* Every access()/unlink() of a marker goes through these pointers (a test may
+ * point a macro at a char buffer; testing the macro itself would trip -Waddress). */
+static const char *const alt_card_marker_path = ALT_CARD_DISPLAY_MARKER;
+static const char *const alt_url_diag_marker_path = ALT_URL_DIAG_MARKER;
+static const char *const alt_advert_legacy_marker_path = ALT_ADVERT_LEGACY_MARKER;
 
 enum {
     ALT_URL_MODE_MAP_WHEN_RGI = 0,
@@ -903,7 +1006,29 @@ enum {
 static volatile int g_alt_user_enable = 1;
 static volatile int g_alt_url_mode = ALT_URL_MODE_MAP_WHEN_RGI;
 static volatile int g_alt_layout = ALT_LAYOUT_RIGHT;
+/* URL diagnostic mapping (alt_cluster_url_for_mode), armed by ALT_URL_DIAG_MARKER.
+ * Refreshed at hook init, at every SETUP (alt_settings_reload) and at every
+ * CMD_ALT_CFG (cfg_on_cmd); the new mapping takes effect at the next showUI. */
+static volatile int g_alt_url_diag;
 
+static int alt_url_diag_get(void) { return __atomic_load_n(&g_alt_url_diag, __ATOMIC_ACQUIRE); }
+/* One access(); logs only when the armed state changes. */
+static void alt_url_diag_refresh(void)
+{
+    int diag = alt_url_diag_marker_path && access(alt_url_diag_marker_path, F_OK) == 0;
+    if (diag != alt_url_diag_get()) {
+        __atomic_store_n(&g_alt_url_diag, diag, __ATOMIC_RELEASE);
+        LOG_WARN(LOG_MODULE, "alt: url diag armed=%d", diag);
+    }
+}
+/* Third-party navigation turn card (Waze): g_alt_nav_card is the live source state
+ * from rgd_hook.c (altscreen_nav_card_update), g_alt_nav_card_pref the
+ * alt_waze_card=0|1 setting (default on). */
+static volatile int g_alt_nav_card;
+static volatile int g_alt_nav_card_pref = 1;
+static int alt_nav_card_get(void) { return __atomic_load_n(&g_alt_nav_card, __ATOMIC_ACQUIRE); }
+static int alt_nav_card_pref_get(void) { return __atomic_load_n(&g_alt_nav_card_pref, __ATOMIC_ACQUIRE); }
+static void alt_nav_card_pref_set(int v) { __atomic_store_n(&g_alt_nav_card_pref, v ? 1 : 0, __ATOMIC_RELEASE); }
 static int alt_user_enable_get(void) { return __atomic_load_n(&g_alt_user_enable, __ATOMIC_ACQUIRE); }
 static void alt_user_enable_set(int v) { __atomic_store_n(&g_alt_user_enable, v ? 1 : 0, __ATOMIC_RELEASE); }
 static int alt_url_mode_get(void) { return __atomic_load_n(&g_alt_url_mode, __ATOMIC_ACQUIRE); }
@@ -917,9 +1042,12 @@ static void alt_layout_set(int v)
 
 static void alt_settings_reload(void)
 {
-    FILE *f = fopen(ALT_SETTINGS_FILE, "r");
+    FILE *f;
     char line[64];
     int val;
+    /* Before the settings file: the marker must be honoured even without one. */
+    alt_url_diag_refresh();
+    f = fopen(ALT_SETTINGS_FILE, "r");
     if (!f) return;
     while (fgets(line, sizeof(line), f)) {
         if (sscanf(line, "altscreen=%d", &val) == 1 && (val == 0 || val == 1)) {
@@ -928,6 +1056,8 @@ static void alt_settings_reload(void)
             alt_url_mode_set(val);
         } else if (sscanf(line, "alt_layout=%d", &val) == 1 && val >= 0 && val <= 2) {
             alt_layout_set(val);
+        } else if (sscanf(line, "alt_waze_card=%d", &val) == 1 && (val == 0 || val == 1)) {
+            alt_nav_card_pref_set(val);
         }
     }
     fclose(f);
@@ -935,6 +1065,11 @@ static void alt_settings_reload(void)
 
 static int advert_preflight(void *session, uint32_t sequence)
 {
+    /* Card display: a newer control SETUP ends the card record of a session that never sent
+     * TEARDOWN.  First, before any early return and before the marker is read, so a
+     * short session's self-disarm already applies to this connect.  No-op without
+     * an open record (always without the marker). */
+    alt_card_close_superseded(sequence);
     if (!g_forward_available) return 0;
     alt_settings_reload();
     if (!alt_user_enable_get()) return 0;
@@ -943,10 +1078,22 @@ static int advert_preflight(void *session, uint32_t sequence)
     void *suggest_urls = NULL;
     int night_mode = g_alt_night_mode ? 1 : 0;
     int zone_mode = alt_zone_mode_get();
+    int legacy = 0;
+    int card = 0;
+    void *cardDict = NULL;
     if (alt_wireless_blocked() || !session ||
         !env_on("ALTSCREEN_ADVERT_DISPLAYS") || disp_ok != 1)
         goto fail;
-    displays = build_displays(night_mode, zone_mode);
+    /* Opt-in diagnostics, decided once for the tree this session will publish. */
+    legacy = alt_advert_legacy_marker_path && access(alt_advert_legacy_marker_path, F_OK) == 0;
+    card = alt_card_armed_for_advert(legacy);
+    if (alt_url_diag_get())
+        LOG_WARN(LOG_MODULE, "alt: url diag armed=1 layout=%d -> initialURL %s",
+                 alt_layout_get(), alt_cluster_url_select(zone_mode, !card));
+    if (legacy)
+        LOG_WARN(LOG_MODULE,
+                 "alt: advert legacy armed=1 (displays only, no displayPanels/properties/suggestURLs)");
+    displays = build_displays(night_mode, zone_mode, legacy, &card, &cardDict);
     if (!displays) goto fail;
     features = build_extfeatures();
     if (!features) goto fail;
@@ -978,10 +1125,16 @@ static int advert_preflight(void *session, uint32_t sequence)
     g_advert_published = 0;
     g_advert_night_mode = night_mode;
     g_advert_zone_mode = zone_mode;
+    g_advert_legacy = legacy;
+    g_advert_card = card;
+    g_advert_card_dict = cardDict;
+    /* Card display: the card record opens with the tree it belongs to, so records open in
+     * control-SETUP order (g_card_lock is a leaf below advert_lock). */
+    if (card) alt_card_open(session, sequence);
     pthread_mutex_unlock(&advert_lock);
     LOG_INFO(LOG_MODULE,
-             "altScreen advert preflight OK session=%p (real main uuid + 2 displays)",
-             session);
+             "altScreen advert preflight OK session=%p (real main uuid + %d displays)",
+             session, card ? 3 : 2);
     return 1;
 
 fail:
@@ -1100,7 +1253,14 @@ static void alt_on_server_info(void *session, void *info)
              * a second full CF-tree build AND a second stock ScreenCopyMain per /info (latency on the
              * negotiation path).  build_displays() returns NULL when the stock main (display-0) is
              * unavailable — publish NEITHER key then, rather than a display-0-less array that teardown-loops
-             * the whole session. */
+             * the whole session.
+             *
+             * Opt-in exception (ALT_ADVERT_LEGACY_MARKER, captured with this tree at preflight): the
+             * legacy-advert diagnostic publishes the same array under "displays" only and leaves out displayPanels
+             * and altScreenSuggestUIURLs.  The retained suggest array is still built so the ready
+             * checks above stay identical; it is simply not published.  The "car won't add" outcome
+             * above is one possible result of that test; removing the marker (reboot) restores this
+             * contract at the next control SETUP. */
             void *dv;
             void *fv;
             void *uv;
@@ -1108,6 +1268,7 @@ static void alt_on_server_info(void *session, void *info)
             void *dk;
             void *pk;
             void *uk;
+            int legacy = g_advert_legacy;
             dv = (g_advert_ready && g_advert_session == session)
                 ? g_advert_displays : NULL;
             fv = (g_advert_ready && g_advert_session == session)
@@ -1116,9 +1277,9 @@ static void alt_on_server_info(void *session, void *info)
                 ? g_advert_suggest_urls : NULL;
             fk = (dv && fv && uv) ? cf_str(0, "extendedFeatures", CFENC_UTF8) : 0;
             dk = dv ? cf_str(0, "displays", CFENC_UTF8) : 0;
-            pk = dv ? cf_str(0, "displayPanels", CFENC_UTF8) : 0;
-            uk = uv ? cf_str(0, "altScreenSuggestUIURLs", CFENC_UTF8) : 0;
-            if (dv && fv && uv && fk && dk && pk && uk) {
+            pk = (dv && !legacy) ? cf_str(0, "displayPanels", CFENC_UTF8) : 0;
+            uk = (uv && !legacy) ? cf_str(0, "altScreenSuggestUIURLs", CFENC_UTF8) : 0;
+            if (dv && fv && uv && fk && dk && (legacy || (pk && uk))) {
                 /* Mutate the retained array only before its first publication;
                  * subsequent /info dictionaries may still retain it. Runtime
                  * night changes are carried by the generation-scoped command. */
@@ -1128,12 +1289,23 @@ static void alt_on_server_info(void *session, void *info)
                 }
                 cf_dictset(info, fk, fv);
                 cf_dictset(info, dk, dv);
-                cf_dictset(info, pk, dv);
-                cf_dictset(info, uk, uv);
+                if (!legacy) {
+                    cf_dictset(info, pk, dv);
+                    cf_dictset(info, uk, uv);
+                }
                 g_advert_published = 1;
-                LOG_INFO(LOG_MODULE,
-                         "injected atomic extendedFeatures+displays+displayPanels+altScreenSuggestUIURLs contract into /info=%p",
-                         info);
+                if (g_advert_card) {
+                    alt_card_note_advertised(session);   /* leaf lock under advert_lock */
+                    card_log(1, "injected 3-display contract into /info=%p", info);
+                }
+                if (legacy)
+                    LOG_WARN(LOG_MODULE,
+                             "injected legacy extendedFeatures+displays contract into /info=%p (no displayPanels/altScreenSuggestUIURLs)",
+                             info);
+                else
+                    LOG_INFO(LOG_MODULE,
+                             "injected atomic extendedFeatures+displays+displayPanels+altScreenSuggestUIURLs contract into /info=%p",
+                             info);
             } else {
                 LOG_ERROR(LOG_MODULE,
                           "atomic /info contract skipped fv=%p dv=%p uv=%p fk=%p dk=%p pk=%p uk=%p",
@@ -1204,6 +1376,10 @@ static void *alt_params_new(int wantUuid);
 static void alt_cmd_done(int status, void *resp, void *ctx);
 static int  alt_generation_is_current(uint32_t gen);
 static fn_derive_aes_t      derive_aes;
+static int alt_send_async_for_gen_key(uint32_t gen, void *cmd, void *completion, void *ctx,
+                                      unsigned key);   /* command_worker.h */
+static int alt_setup_role(void *session, void *streamDesc, void *responseParams, int role,
+                          uint32_t cardSeq);
 
 /* Main AirPlay session belonging to the newest committed altScreen transport claim;
  * cleared on teardown. Read by CMD_ALT_ZONE to target AirPlayReceiverSessionSendCommand.
@@ -1226,6 +1402,7 @@ static void advert_apply_night_locked(int night)
     if (!g_advert_displays || !cf_arrcount || !cf_arridx) return;
     for (i = 0; i < cf_arrcount(g_advert_displays); ++i) {
         void *display = cf_arridx(g_advert_displays, i);
+        if (display == g_advert_card_dict) continue;   /* card nightMode is fixed */
         if (display) set_i64(display, "nightMode", night ? 1 : 0);
     }
 }
@@ -1301,6 +1478,12 @@ typedef struct {
     uint8_t paired_key[32];
 #endif
     volatile int stop;       /* teardown sets =1 → recv poll-loop exits (unblocks join) */
+    /* Card display: ALT_ROLE_MAP (memset default) or ALT_ROLE_CARD, the card record
+     * that set it up (0 = no record: today's single-111 behaviour) and its connID
+     * (written under alt_lock in card records only; per-stream teardown naming). */
+    int         role;
+    uint32_t    cardSeq;
+    int64_t     connID;
 } altslot_t;
 typedef struct {
     altslot_t *slot;
@@ -1504,6 +1687,8 @@ static void alt_pace_report(alt_pace_trace_t *s, uint32_t generation, alt_receiv
 }
 #endif
 
+#include "card_display.h"
+
 static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
 {
     uint8_t  aesctx[512] __attribute__((aligned(16)));
@@ -1526,10 +1711,18 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
     uint64_t sender_last_us = 0;
     unsigned sender_seen = 0, sender_parsed = 0, sender_invalid = 0, sender_throttled = 0;
     int sender_trace = ENABLE_ALTSCREEN_PACE_TRACE || log_verbose();
+    /* Diagnostic mode keeps its 1 Hz sender samples.  The default WARN log gets
+     * the same line at most once per 10 s (monotonic), so a black cluster can be
+     * told apart from a phone that submits no surfaces without carplay_verbose. */
+    uint64_t sender_interval_us = sender_trace ? UINT64_C(1000000) : UINT64_C(10000000);
     int sender_ready = 0;
     if (sender_trace) io = &io_stats;
     memset(&pace, 0, sizeof(pace));
     memset(&sender_parser, 0, sizeof(sender_parser));
+#endif
+#if ENABLE_LOGGING
+    /* Acks completed before this receiver started are not attributed to it. */
+    uint32_t showui_ack_seen = __atomic_load_n(&g_alt_showui_ack_seq, __ATOMIC_ACQUIRE);
 #endif
 
     int use_aes = 1;
@@ -1544,7 +1737,7 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
     }
     aes_ready = use_aes;
 #if ENABLE_LOGGING || ENABLE_ALTSCREEN_PACE_TRACE
-    if (sender_trace) sender_ready = alt_sender_parser_init(&sender_parser, RTLD_DEFAULT) == 0;
+    sender_ready = alt_sender_parser_init(&sender_parser, RTLD_DEFAULT) == 0;
     log_write(LOG_LEVEL_WARN, "altscreen", "111 pace begin gen=%u maxFPS=30; times are mean/max microseconds",
               (unsigned)av_gen);
 #endif
@@ -1688,7 +1881,7 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
                 int cur_night = g_alt_night_mode ? 1 : 0;
                 int cur_zone = alt_zone_mode_get();
                 stream_has_idr = 1;
-                LOG_INFO(LOG_MODULE,
+                LOG_WARN(LOG_MODULE,
                          "alt recv: first IDR arrived at frame#%lu (body=%u)",
                          nframes, bodySize);
                 /* A live video stream is only the canvas.  Select the Maps instrument-cluster
@@ -1702,6 +1895,20 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
             } else if (frame_valid && !is_idr && !stream_has_idr) {
                 alt_request_cluster_idr(av_gen, "stream-start");
             }
+#if ENABLE_LOGGING
+            /* First IDR after each accepted showUI: did the phone re-encode after the
+             * scene re-select, and how large is that picture (a tiny IDR suggests
+             * black)?  One atomic load per IDR; at most one line per ack. */
+            if (is_idr) {
+                uint32_t ack_seq = __atomic_load_n(&g_alt_showui_ack_seq, __ATOMIC_ACQUIRE);
+                if (ack_seq != showui_ack_seen) {
+                    showui_ack_seen = ack_seq;
+                    if (__atomic_load_n(&g_alt_showui_ack_gen, __ATOMIC_RELAXED) == av_gen)
+                        LOG_WARN(LOG_MODULE, "alt recv: post-showUI IDR frame#%lu body=%u ack#%u",
+                                 nframes, bodySize, (unsigned)ack_seq);
+                }
+            }
+#endif
 
             if (!alt_qemu_capture_only() && altav_take_failure(av_gen)) {
                 renderer_wait_idr = 1;
@@ -1744,6 +1951,8 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
                          nframes, bodySize);
             }
             ++nframes;
+            if (slot->cardSeq)   /* card display summary */
+                alt_card_note_map_frame(slot->cardSeq, is_idr, frame_meta.received_us);
             /* Recovery retries are generation-scoped and timer-driven by the
              * forwarder, including when this phone scene produces no frames. */
 #if ENABLE_LOGGING || ENABLE_ALTSCREEN_PACE_TRACE
@@ -1762,14 +1971,15 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
                          nframes, bodySize, renderer_wait_idr);
         }
 #if ENABLE_LOGGING || ENABLE_ALTSCREEN_PACE_TRACE
-        else if (opcode == 5 && sender_trace) {
+        else if (opcode == 5) {
             uint64_t now = alt_pace_now_us();
             ++sender_seen;
             /* The native payload is plaintext; never advance the AES stream
-             * for telemetry. Bound diagnostic parsing/logging to at most 1 Hz.
+             * for telemetry. Bound diagnostic parsing/logging to at most 1 Hz
+             * (10 s without diagnostic mode).
              * Its counters describe the phone's own reporting interval. */
             if (!now || (sender_last_us &&
-                (now < sender_last_us || now - sender_last_us < 1000000))) {
+                (now < sender_last_us || now - sender_last_us < sender_interval_us))) {
                 ++sender_throttled;
             } else {
                 alt_sender_sample_t sample;
@@ -1790,10 +2000,9 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
 
 #if ENABLE_LOGGING || ENABLE_ALTSCREEN_PACE_TRACE
     if (pace.frames) alt_pace_report(&pace, av_gen, &io_stats);
-    if (sender_trace)
-        log_write(LOG_LEVEL_WARN, "altscreen",
-            "111 sender summary gen=%u seen=%u parsed=%u invalid=%u throttled=%u available=%d",
-            (unsigned)av_gen, sender_seen, sender_parsed, sender_invalid, sender_throttled, sender_ready);
+    log_write(LOG_LEVEL_WARN, "altscreen",
+        "111 sender summary gen=%u seen=%u parsed=%u invalid=%u throttled=%u available=%d",
+        (unsigned)av_gen, sender_seen, sender_parsed, sender_invalid, sender_throttled, sender_ready);
     alt_sender_parser_close(&sender_parser);
 #endif
     if (aes_ready && aes_ctr_final) aes_ctr_final(aesctx);
@@ -1810,10 +2019,14 @@ static void *alt_thread_main(void *arg)
     int        listenSock = threadArg->listenSock;
     int        fd = -1;
     int        ls;
+    /* set under alt_lock before pthread_create; stable until threadExited */
+    int        card = slot->role == ALT_ROLE_CARD;
     free(threadArg);
 
 #ifdef __QNX__
-    {
+    /* The capture-only card receiver keeps the default priority: it never
+     * competes with the map receiver. */
+    if (!card) {
         alt_receiver_set_priority_t set_priority =
             (alt_receiver_set_priority_t)dlsym(RTLD_DEFAULT, "SetCurrentThreadPriority");
         alt_receiver_schedule_t schedule = alt_receiver_schedule(set_priority);
@@ -1875,14 +2088,15 @@ static void *alt_thread_main(void *arg)
      * stream socket, after committed SETUP, before selecting that native UI. */
     if (slot->paired) alt_show_ui_for_mode(av_gen,alt_zone_mode_get(),"paired-stream-connected");
 #endif
-    alt_recv_loop(slot, fd, av_gen);
+    if (card) alt_card_recv_loop(slot, fd, av_gen);   /* capture-only: no altav_* */
+    else alt_recv_loop(slot, fd, av_gen);
 
 done:
     if (fd >= 0) close(fd);
     /* Only close the renderer transport if WE still own it — a superseded receiver's
      * exit must not tear down the new owner's connection (that caused black 111 on
-     * fast reconnect). */
-    altav_shutdown_if_owner(av_gen);
+     * fast reconnect).  The card receiver never touched the transport. */
+    if (!card) altav_shutdown_if_owner(av_gen);
 #ifdef MHI2Q_WIRELESS_ALT
     /* No reaper may reuse this slot until threadExited is published below. */
     {
@@ -1906,8 +2120,12 @@ done:
 }
 
 /* SETUP response and transport for stream type 111.  No stock Screen object is
- * created: the hook owns the socket and decrypts the AirPlay screen wire itself. */
-static int alt_setup(void *session, void *streamDesc, void *responseParams)
+ * created: the hook owns the socket and decrypts the AirPlay screen wire itself.
+ * role/cardSeq: ALT_ROLE_MAP/0 is today's single-111 stream (alt_setup).  In a card
+ * record (cardSeq != 0) only same-role slots of the record are retired, and the
+ * card role is capture-only: no transport claim, never the command target. */
+static int alt_setup_role(void *session, void *streamDesc, void *responseParams, int role,
+                          uint32_t cardSeq)
 {
     altslot_t *slot;
     void  *server;
@@ -1934,6 +2152,7 @@ static int alt_setup(void *session, void *streamDesc, void *responseParams)
     for (i = 0; i < ALT_MAX_SESSIONS; ++i) {
         altslot_t *old = &alt_slots[i];
         if (!old->inUse || old->session != session) continue;
+        if (cardSeq && old->cardSeq == cardSeq && old->role != role) continue;
         old->closing = 1;
         old->stop = 1;
         if (old->altSock >= 0) {
@@ -1959,7 +2178,11 @@ static int alt_setup(void *session, void *streamDesc, void *responseParams)
 
     pthread_mutex_lock(&alt_lock);
     slot = alt_slot_alloc(session);
-    if (slot) slot->settingUp = 1;
+    if (slot) {
+        slot->settingUp = 1;
+        slot->role = role;
+        slot->cardSeq = cardSeq;
+    }
     pthread_mutex_unlock(&alt_lock);
     if (!slot) {
         LOG_ERROR(LOG_MODULE,
@@ -1977,6 +2200,11 @@ static int alt_setup(void *session, void *streamDesc, void *responseParams)
     }
     if (!connID) { LOG_ERROR(LOG_MODULE, "alt_setup: connID missing (streamConnectionID absent)"); err = kVersionErr; goto fail; }
     LOG_INFO(LOG_MODULE, "alt_setup: connID=%llu", (unsigned long long)connID);
+    if (cardSeq) {
+        pthread_mutex_lock(&alt_lock);
+        slot->connID = connID;
+        pthread_mutex_unlock(&alt_lock);
+    }
 
     int use_legacy = 1;
 #ifdef MHI2Q_WIRELESS_ALT
@@ -2085,7 +2313,9 @@ static int alt_setup(void *session, void *streamDesc, void *responseParams)
         err = kAlreadyInitializedErr;
         goto fail;
     }
-    if (altav_claim(av_gen)) {
+    if (role == ALT_ROLE_CARD) {
+        /* capture-only: no transport claim, never the command target */
+    } else if (altav_claim(av_gen)) {
         g_alt_session = session;
         g_alt_session_gen = av_gen;
     } else {
@@ -2100,6 +2330,11 @@ static int alt_setup(void *session, void *streamDesc, void *responseParams)
     /* The acceptor is live before this function returns and the response is sent. */
     LOG_INFO(LOG_MODULE, "alt-screen set up on port %d connID=%llu",
              port, (unsigned long long)connID);
+    if (cardSeq) {
+        card_log(1, "role=%s set up port=%d connID=%llu gen=%u%s", alt_role_name(role), port,
+                 (unsigned long long)connID, (unsigned)av_gen,
+                 role == ALT_ROLE_CARD ? " (capture-only, no transport)" : "");
+    }
     return 0;
 
 fail:
@@ -2130,6 +2365,11 @@ fail:
     if (sock >= 0) close(sock);
     LOG_ERROR(LOG_MODULE, "alt-screen setup failed err=%d%s", err, ap_status(err));
     return err;
+}
+
+static int alt_setup(void *session, void *streamDesc, void *responseParams)
+{
+    return alt_setup_role(session, streamDesc, responseParams, ALT_ROLE_MAP, 0);
 }
 
 /* find a type==111 stream desc in the request's "streams" array */
@@ -2275,6 +2515,7 @@ static void alt_on_setup_response(hook_setup_ctx_t *setup)
             }
             if (!featureEnabled) {
                 advert_clear_for_session(session);
+                alt_card_close(session, "enabledFeatures-failed");   /* never advertised */
                 LOG_ERROR(LOG_MODULE,
                           "control SETUP: enabledFeatures build failed — display advert rolled back");
             }
@@ -2283,15 +2524,23 @@ static void alt_on_setup_response(hook_setup_ctx_t *setup)
                      "control SETUP: altScreen/viewAreas not enabled because display preflight failed");
         }
 
-        void *altDesc = alt_find_111(request);
-        if (altDesc) {
-            setupHas111 = 1;
-            LOG_INFO(LOG_MODULE, "SETUP: 111 stream offered — bringing up altScreen");
-            int arc = alt_setup(session, altDesc, respOut);
-            LOG_INFO(LOG_MODULE, "SETUP: alt_setup returned %d", arc);
-            if (arc != 0) ret = arc;  /* never return HTTP success without a usable 111 dataPort */
+        uint32_t cardSeq = alt_card_seq_for_session(session);
+        if (cardSeq) {
+            /* Card record: log every descriptor, bind each 111 to map/card */
+            alt_card_log_streams(request, "SETUP", setupSequence);
+            int arc = alt_card_setup_streams(session, request, respOut, cardSeq, &setupHas111);
+            if (arc != 0) ret = arc;  /* never return success without every 111 dataPort */
         } else {
-            LOG_INFO(LOG_MODULE, "SETUP: no 111 stream in request (phone did not offer altScreen)");
+            void *altDesc = alt_find_111(request);
+            if (altDesc) {
+                setupHas111 = 1;
+                LOG_INFO(LOG_MODULE, "SETUP: 111 stream offered — bringing up altScreen");
+                int arc = alt_setup(session, altDesc, respOut);
+                LOG_INFO(LOG_MODULE, "SETUP: alt_setup returned %d", arc);
+                if (arc != 0) ret = arc;  /* never return HTTP success without a usable 111 dataPort */
+            } else {
+                LOG_INFO(LOG_MODULE, "SETUP: no 111 stream in request (phone did not offer altScreen)");
+            }
         }
     } else if (alt_enabled && ret == 0) {
         LOG_INFO(LOG_MODULE, "SETUP: alt gated off in interpose (resp=%p session=%p resolve=%d)",
@@ -2318,11 +2567,34 @@ static void alt_on_teardown(void *session, void *request, int reason)
     int listenerCount = 0;
     int haveSlot = 0;
     int i;
+    /* Card record: a per-stream TEARDOWN that names one 111 stream stops only
+     * that role.  No record: selective == 0, stopMask == ALL = today. */
+    int selective = 0;
+    unsigned stopMask = ALT_ROLE_ALL;
+    int stopsMap;
+    uint32_t cardSeq = alt_card_seq_for_session(session);
 
     if (request && alt_resolve() == 1) {
-        requestHas111 = (alt_find_111(request) != NULL);
+        if (cardSeq) {
+            unsigned named;
+            int guessed = 0;
+            alt_card_log_streams(request, "TEARDOWN", 0);
+            named = alt_card_teardown_roles(session, request, cardSeq, &guessed);
+            requestHas111 = (named != 0);
+            if (named && named != ALT_ROLE_ALL) {
+                selective = 1;
+                stopMask = named;
+            }
+            if (guessed) {   /* role binding is unverified from here on */
+                alt_card_note_guess(cardSeq);
+                alt_card_disarm("TEARDOWN 111 entry named no stream (the card was stopped, a guess)");
+            }
+        } else {
+            requestHas111 = (alt_find_111(request) != NULL);
+        }
         if (requestHas111) tearDownAlt = 1;
     }
+    stopsMap = !selective || (stopMask & ALT_ROLE_BIT(ALT_ROLE_MAP));
 
     LOG_INFO(LOG_MODULE,
              "altScreen teardown session=%p request=%p reason=%d alt111=%d action=%s",
@@ -2337,6 +2609,7 @@ static void alt_on_teardown(void *session, void *request, int reason)
         for (i = 0; i < ALT_MAX_SESSIONS; ++i) {
             altslot_t *slot = &alt_slots[i];
             if (!slot->inUse || slot->session != session) continue;
+            if (selective && !(stopMask & ALT_ROLE_BIT(slot->role))) continue;
             haveSlot = 1;
             slot->closing = 1;
             slot->stop = 1;
@@ -2345,6 +2618,7 @@ static void alt_on_teardown(void *session, void *request, int reason)
         for (;;) {
             int setupActive = 0;
             for (i = 0; i < ALT_MAX_SESSIONS; ++i) {
+                if (selective && !(stopMask & ALT_ROLE_BIT(alt_slots[i].role))) continue;
                 if (alt_slots[i].inUse && alt_slots[i].session == session &&
                     alt_slots[i].settingUp) {
                     setupActive = 1;
@@ -2366,7 +2640,7 @@ static void alt_on_teardown(void *session, void *request, int reason)
 
         /* Revoke command ownership and wake every generation sharing this
          * possibly-reused session address. */
-        if (g_alt_session == session) {
+        if (g_alt_session == session && stopsMap) {
             revokedCommandGen = g_alt_session_gen;
             g_alt_session = NULL;
             g_alt_session_gen = 0;
@@ -2374,6 +2648,7 @@ static void alt_on_teardown(void *session, void *request, int reason)
         for (i = 0; i < ALT_MAX_SESSIONS; ++i) {
             altslot_t *slot = &alt_slots[i];
             if (!slot->inUse || slot->session != session) continue;
+            if (selective && !(stopMask & ALT_ROLE_BIT(slot->role))) continue;
             if (slot->altSock >= 0) {
                 listeners[listenerCount++] = slot->altSock;
                 slot->altSock = -1;
@@ -2387,7 +2662,12 @@ static void alt_on_teardown(void *session, void *request, int reason)
     pthread_mutex_unlock(&alt_lock);
     if (revokedCommandGen) alt_command_revoke(revokedCommandGen);
     for (i = 0; i < listenerCount; ++i) close(listeners[i]);
-    if (tearDownAlt) advert_clear_for_session(session);
+    /* stopping only the card keeps the advert and the map's state */
+    if (tearDownAlt && stopsMap) advert_clear_for_session(session);
+    if (selective)
+        card_log(1, "TEARDOWN stopped role(s)%s%s only session=%p",
+                 (stopMask & ALT_ROLE_BIT(ALT_ROLE_MAP)) ? " map" : "",
+                 (stopMask & ALT_ROLE_BIT(ALT_ROLE_CARD)) ? " card" : "", session);
     if (haveSlot && tearDownAlt) {
         alt_gc_exited_slots();
         if (setupTimedOut)
@@ -2405,6 +2685,7 @@ static void alt_on_teardown(void *session, void *request, int reason)
                  "per-stream TEARDOWN has no 111 - preserving altScreen session=%p",
                  session);
     }
+    if (request == NULL && cardSeq) alt_card_close(session, "teardown");   /* session end */
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -2660,7 +2941,13 @@ static void alt_showui_done(int status, void *resp, void *ctx)
 {
     uint32_t gen = (uint32_t)(uintptr_t)ctx;
     (void)resp;
-    LOG_INFO(LOG_MODULE, "session command 'showUI' ack: gen=%u status=%d%s",
+#if ENABLE_LOGGING
+    if (status == 0) {   /* arms the receiver's one post-showUI IDR line */
+        __atomic_store_n(&g_alt_showui_ack_gen, gen, __ATOMIC_RELAXED);
+        (void)__sync_add_and_fetch(&g_alt_showui_ack_seq, 1);
+    }
+#endif
+    LOG_WARN(LOG_MODULE, "session command 'showUI' ack: gen=%u status=%d%s",
              (unsigned)gen, status, ap_status(status));
 }
 
@@ -2882,16 +3169,47 @@ static void alt_kick_viewarea(uint32_t gen)
  *   Hide cards when RGI is active -> /map = itemType 1 (map only), ETA off,
  *              topAligned in every zone. The root URL is "anyContent" and Maps keeps
  *              drawing its turn card + ETA there even with showETA=no (seen 2026-09-19);
- *              maneuvers and ETA come from BAP/KDK. */
+ *              maneuvers and ETA come from BAP/KDK.
+ * Opt-in URL diagnostic (ALT_URL_DIAG_MARKER, black-cluster/Waze test): after the
+ * unchanged RGI line, the Maneuver Cards Position setting picks the URL in EVERY zone:
+ *   Left -> bare root (itemType 3, no query), Center -> bare /instructioncard
+ *   (itemType 2, card only: does iOS draw a Waze turn card there? 2026-11-16 car test:
+ *   none under bare root, topAligned or rightAligned), Right -> today's fullscreen
+ *   rightAligned root+query.
+ * So RGI active + map-when-RGI still gives /map; any other state (RGI inactive in
+ * either url_mode, or RGI active with cards always) uses the mapping.  cfg_on_cmd
+ * re-reads the marker and applies a Position change live, and a url_mode toggle
+ * while RGI is inactive re-sends showUI with the identical URL pointer (same-URL
+ * re-select). */
+#define ALT_CLUSTER_URL_PLAIN          "maps:/car/instrumentcluster"
 #define ALT_CLUSTER_URL_RGI_OFF_LEFT   "maps:/car/instrumentcluster?showETA=yes&maneuverLayout=leftAligned&showSpeedLimit=no"
 #define ALT_CLUSTER_URL_RGI_OFF_CENTER "maps:/car/instrumentcluster?showETA=yes&maneuverLayout=topAligned&showSpeedLimit=no"
 #define ALT_CLUSTER_URL_RGI_OFF_RIGHT  "maps:/car/instrumentcluster?showETA=yes&maneuverLayout=rightAligned&showSpeedLimit=no"
 #define ALT_CLUSTER_URL_RGI_ON         "maps:/car/instrumentcluster/map?showETA=no&maneuverLayout=topAligned&showSpeedLimit=no"
+#define ALT_CLUSTER_URL_CARD_ONLY      "maps:/car/instrumentcluster/instructioncard"
 
-static const char *alt_cluster_url_for_mode(int mode)
+/* allow_card == 0 while a card display record is open: the map display never
+ * gets /instructioncard and falls through to today's map URLs.  allow_card == 1 is
+ * today's function. */
+static const char *alt_cluster_url_select(int mode, int allow_card)
 {
     if (alt_rgi_active_get() && alt_url_mode_get() == ALT_URL_MODE_MAP_WHEN_RGI) {
         return ALT_CLUSTER_URL_RGI_ON;
+    }
+    /* A named source without route-guidance support (Waze) is guiding: its turn
+     * card is the only guidance there is, in every zone (zone-free pointer). */
+    if (allow_card && alt_nav_card_get() && alt_nav_card_pref_get()) {
+        return ALT_CLUSTER_URL_CARD_ONLY;
+    }
+    if (alt_url_diag_get()) {
+        switch (alt_layout_get()) {
+        case ALT_LAYOUT_LEFT:
+            return ALT_CLUSTER_URL_PLAIN;
+        case ALT_LAYOUT_CENTER:
+            return allow_card ? ALT_CLUSTER_URL_CARD_ONLY : ALT_CLUSTER_URL_PLAIN;
+        default:
+            return ALT_CLUSTER_URL_RGI_OFF_RIGHT;
+        }
     }
     if (mode != ALT_ZONE_FULLSCREEN) {
         return ALT_CLUSTER_URL_RGI_OFF_CENTER;
@@ -2904,6 +3222,11 @@ static const char *alt_cluster_url_for_mode(int mode)
     default:
         return ALT_CLUSTER_URL_RGI_OFF_RIGHT;
     }
+}
+
+static const char *alt_cluster_url_for_mode(int mode)
+{
+    return alt_cluster_url_select(mode, !alt_card_guard_get());
 }
 
 static const char *alt_cluster_url(void)
@@ -2932,7 +3255,7 @@ static int alt_show_ui_for_mode(uint32_t gen, int mode, const char *reason)
         __atomic_store_n(&g_alt_shown_ui_url, url, __ATOMIC_RELEASE);
         __atomic_store_n(&g_alt_shown_ui_gen, gen, __ATOMIC_RELEASE);
     }
-    LOG_INFO(LOG_MODULE, "alt: showUI mode=%s rgi=%d reason=%s uuid=%s url=%s rc=%d%s",
+    LOG_WARN(LOG_MODULE, "alt: showUI mode=%s rgi=%d reason=%s uuid=%s url=%s rc=%d%s",
              alt_zone_name(mode), (int)alt_rgi_active_get(),
              reason ? reason : "?", CLUSTER_DISPLAY_UUID, url, rc, ap_status(rc));
     return rc;
@@ -2958,12 +3281,33 @@ static void rgi_on_cmd(uint16_t type, uint8_t flags, const uint8_t *payload, uin
              active, alt_cluster_url(), rc, ap_status(rc));
 }
 
+/* rgd_hook.c (iAP2 receive thread / disconnect): a third-party source without
+ * route-guidance support started (on=1) or ended (on=0).  Cached like the RGI
+ * edge, so a pre-session change applies on the first IDR; a live session gets
+ * showUI at once.  Logs every edge with the source name. */
+void altscreen_nav_card_update(int on, const char *source)
+{
+    int rc;
+    on = on ? 1 : 0;
+    if (__atomic_exchange_n(&g_alt_nav_card, on, __ATOMIC_ACQ_REL) == on) return;
+    if (!alt_nav_card_pref_get()) {
+        LOG_WARN(LOG_MODULE, "alt: nav source \"%s\" card=%d (alt_waze_card=0: map kept)",
+                 source ? source : "", on);
+        return;
+    }
+    rc = alt_show_ui_for_mode(0, alt_zone_mode_get(), "nav-source");
+    LOG_WARN(LOG_MODULE, "alt: nav source \"%s\" card=%d -> cluster url %s rc=%d%s",
+             source ? source : "", on, alt_cluster_url(), rc, ap_status(rc));
+}
+
 static void cfg_on_cmd(uint16_t type, uint8_t flags, const uint8_t *payload, uint32_t len, void *ctx)
 {
     int en, url_mode, layout;
     int url_changed;
     (void)type; (void)flags; (void)ctx;
     if (!payload || len < 3) return;
+    /* A marker armed mid-session applies at this Position / Map Cards change. */
+    alt_url_diag_refresh();
     en = payload[0] ? 1 : 0;
     url_mode = payload[1] ? 1 : 0;
     layout = (payload[2] <= 2) ? (int)payload[2] : ALT_LAYOUT_RIGHT;

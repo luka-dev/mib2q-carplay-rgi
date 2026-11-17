@@ -162,6 +162,61 @@ The hidden URL deliberately specifies `topAligned`, not `no` or an omitted layou
 
 The runtime switch is `CMD_ALT_RGI 0x0116`, sent from `AltScreenModule.republish()` (`AltScreenModule.java:299-330`, `bus_protocol.h:115`). The hook re-sends `showUI` when the 111 stream first becomes decodable and on every RGI edge. After a successful view-area response for the current session and requested zone, it updates an already selected URL if the new zone requires a different one. Hidden mode keeps the same explicit top layout across all zones. There is no env override; Luka rejected one. `[code]`
 
+## Waze turn card on the cluster (automatic)
+
+Car test 2026-11-16 (Waze 5.27.5.0, diagnostic build, Position = Center): for the bare `maps:/car/instrumentcluster/instructioncard` URL (itemType 2), iOS draws Waze's own turn card (arrow and distance) into stream 111. No other URL showed it: bare root, `topAligned` and `rightAligned` gave the map only. `[test]`
+
+The hook now selects that URL by itself, with no marker:
+
+- **Decision (`rgd_hook.c`, `rgd_publish_nav_card`).** From each 0x5201: `source_supports_rg = 0` with a source name (this update's, else the cached one) means card; a different provider that also sends `source_supports_rg = 0` gets its own card. An explicit empty source name (with or without `source_supports_rg`), `source_supports_rg != 0`, a name-only update from a different provider, or a disconnect (`rgd_clear_state`) means map. An update with neither field changes nothing, and neither does `source_supports_rg = 0` without any name: Waze's first frame is a hard clear, which drops the cached name. `[code]`
+- **URL (`altscreen_hook.c`, `alt_cluster_url_for_mode`).** RGI active with Map Cards = Hidden still gives `/map`. The card comes next, in every zone and Position, and ahead of the `alt_url_diag` mapping. `altscreen_nav_card_update` sends `showUI` (`reason=nav-source`) on each edge in a live session; before a session the state is cached and used at the first IDR. `[code]`
+- **Setting.** `alt_waze_card=0` in `/tmp/carplay_settings` keeps the map; the default is on. There is no menu row yet, so this is a manual override in RAM: the Java settings writer rewrites the file without the key on the next settings change, and a reboot clears it. The hook re-reads the file at every SETUP and keeps the last value it read until it restarts. `[code]`
+- **Logs.** `alt: nav source "<name>" card=<0|1> -> cluster url …` (WARN) for each edge, then the usual `alt: showUI mode=… reason=nav-source`.
+
+Open on the car: whether Waze sends anything when its route ends while the app stays in front. If it does not, the card stays until another provider, an empty source name or a disconnect. While the card is shown the cluster has no map; map and card together would need a second cluster stream. Host tests: `rgd_timeout_race_test` (`nav_card_source`) and `altscreen_command_worker_test` (`nav_card_policy`, `nav_card_live`). `[test]`
+
+## Waze cluster diagnostic build (opt-in markers)
+
+With Waze the VC can stay black while Apple Maps works. Waze reports `source_supports_rg = 0`, so RGI stays off and Waze always gets the root URL with its query on ctx 81. Each of the diagnostics below is armed by its own RAM marker in `/tmp` and tests one open cause: the scene is never re-selected, Waze does not draw for root+query, the `displayPanels`/`properties` advert, or a phone-side cause. With no marker present the cluster behaves as before; only logging changes, and these changes are on by default: `[code]`
+
+- `alt: showUI mode=`, the `'showUI' ack` and `first IDR arrived` now log at WARN, so they appear without verbose.
+- A new WARN line, `post-showUI IDR`, logs the first keyframe after each accepted showUI.
+- `111 sender` lines now log without verbose: one every 10 s, or 1 Hz with verbose or the pace trace, and a `111 sender summary` per stream. To produce them, every production session now parses the phone's opcode-5 bplist with the stock CFLite parser in the stream-111 receive thread, at most once per 10 s. Before this build that parse ran only with verbose.
+
+On the car only the `alt_url_diag` mapping has been used so far (2026-11-16, see above). No car results are claimed for `advert_legacy`, `luma_probe`, `capture111` or `card_display`. `[open]`
+
+**Arming.** Put an empty trigger file at the top of the M.I.B. SD card and run the [logging script](../../logging_MoreIncredibleBash/mod/custom.sh). On every run the script creates the marker for each trigger file present and removes the marker for each one missing, so to disarm, delete the file and run the script again. `info.txt` records the armed set before the run (`diag …`) and after it (`diag markers: …`). The markers are in RAM (`/tmp` is `/dev/shmem`), so a reboot disarms everything.
+
+| Trigger file | RAM marker | Read by, when | Effect when armed |
+|---|---|---|---|
+| `alt_url_diag.txt` | `/tmp/carplay_alt_url_diag` | hook: at hook start, at every SETUP (media SETUPs included) and at every cluster setting command (a CarPlay on Cluster, Position or Map Cards change; also Java boot and hook hello). The change takes effect at the next showUI. | Maneuver Cards Position picks the URL in every zone: Left = bare `maps:/car/instrumentcluster`, Center = bare `maps:/car/instrumentcluster/instructioncard` (itemType 2, card only; added 2026-11-16 after Waze 5.27.5.0 drew no turn card under bare root, `topAligned` or `rightAligned`), Right = the full-screen `rightAligned` root+query URL. That Right URL is the unarmed URL only in the full-screen view, because Sport and Classic normally get `topAligned`. The mapping applies whenever RGI is inactive, and also while RGI is active with Map Cards during Guidance = Shown. Only RGI active with Map Cards = Hidden keeps `/map` unchanged. |
+| `advert_legacy.txt` | `/tmp/carplay_alt_advert_legacy` | hook, when the session's display advert is built | The cluster is advertised through legacy `displays` only, without `displayPanels`, cluster `properties` (`Instrument Cluster`, `showsInstruments`) or `altScreenSuggestUIURLs`. |
+| `luma_probe.txt` | `/tmp/carplay_luma_probe` | cluster renderer, at each decoder start (each new stream) | Logs min/mean/max luma of the presented picture. It only logs and never skips a frame; at most once a second, the sampled frame's swap waits for a synchronous 3-row readback. |
+| `capture111.txt` | `/tmp/carplay_cap111` | cluster renderer, at the next hook connection. That is the stream start; a reconnect after a codec change or a link loss is a new connection. | One raw stream-111 capture to `/tmp/carplay_cap111.h264`. It is single-shot: the renderer removes the marker when it arms. The capture closes at 12 MB or when that hook connection ends, so a stable session keeps one capture open. Each script run copies the file into the save's `tmp/`. Once the renderer has closed the capture (`cap111 wrote` in the log), the run deletes the RAM copy and re-arms the marker while the trigger stays on the card. A capture still being written is kept, and `info.txt` says so; a later run saves the rest. The file contains map imagery and location. |
+| `card_display.txt` | `/tmp/carplay_alt_card_display` | hook (QNX builds only), once per phone connect when the display advert is built; ignored while `advert_legacy` is armed and for wireless CarPlay | Experiment: a third, card-only cluster display (initial URL `/instructioncard`) is advertised, so iOS can open a second stream 111 for the turn card. That stream is only appended to `/tmp/carplay_cap111b.h264` (12 MB cap) and never shown; while the session runs, the cluster display keeps its map URLs and never gets `/instructioncard`. The marker is two-phase: the connect removes it and writes `carplay_alt_card_display.active`, and only an advertised session of 20 s or more that received a map keyframe puts it back. A shorter or keyframe-less session, a guessed per-stream TEARDOWN, a card receiver error or a failed card dict leaves it removed and writes the reason to `carplay_alt_card_display.disarmed`; the next script run then renames the trigger to `card_display.disarmed` instead of re-arming it (rename it back to arm again). After a crash or dio_manager restart the marker stays removed, and the reason is written at the next connect after the script re-arms it. Each run copies the capture into the save's `tmp/` and deletes the RAM copy once it is saved and the hook log shows it closed. The file contains map imagery and location. |
+
+**Reading it in the car.** Waze should be navigating with the VC black, in the full-screen view. Verbose is on after the script run, which the 1 Hz `111 sender` lines need.
+
+- **Same-URL re-send.** Toggle "Map Cards during Guidance" (the row needs the Route Guidance setting On). While RGI is inactive, which is always the case for Waze, the URL does not depend on this row. Each toggle therefore sends a `cfg-change` showUI with an identical URL, with or without a marker. A map appearing means re-selecting the scene is enough. Run this before arming `alt_url_diag`, or with Position = Right: the first setting change after arming already sends the mapped URL.
+- **URL test.** Arm `alt_url_diag` and run the script; no reconnect is needed. Start from Position = Right: in the full-screen view the armed Right URL is the same `rightAligned` root+query URL as unarmed, so the VC should stay black. Then step Left / Center / Right to get bare root / `/instructioncard` / `rightAligned` root+query. Each change sends a `cfg-change` showUI. The `url=` field of `alt: showUI mode=` shows what was sent, and `alt: url diag armed=1` confirms the marker.
+- **Advert test.** The advert marker is read per session. Arm `advert_legacy`, run the script, then reconnect the phone.
+- **Black source or black presentation.** Near-zero `luma` while frames arrive means the decoded picture is black. A `luma last` age that keeps growing means no new picture is presented. Decoding the capture on a computer shows whether the phone encoded black.
+- **Capture.** The capture starts at the next hook connection after arming. Arm `capture111`, run the script, start Waze navigating, and only then connect the phone. The capture then begins on Waze's scene and does not spend its 12 MB on the home screen or another app first. `cap111 armed generation=` in the render log marks the start. Try the levers in that session, then disconnect the phone (`cap111 wrote`) and run the script to save the file.
+
+| grep (in the save's `tmp/carplay_hook.log` / `tmp/altscreen_render.log`) | What it shows |
+|---|---|
+| `alt: showUI mode=` | every showUI: zone, `rgi`, `reason` (`first-IDR`, `cfg-change`, …), `url`, `rc` (now WARN) |
+| `'showUI' ack` | the phone's status for that showUI (now WARN) |
+| `first IDR arrived` | the stream's first keyframe and its `body=` size (now WARN) |
+| `post-showUI IDR` | the keyframe that follows a showUI (new) |
+| `111 sender` | the phone's encoder counters, e.g. `submitSurfaceFPS=`: 1 Hz with verbose, otherwise every 10 s; `111 sender summary` per stream |
+| `alt: url diag armed` | the URL-diagnostic marker as the hook read it |
+| `alt: advert legacy armed` | the legacy-advert marker for the session |
+| `luma probe` | the probe armed for this stream (`armed rows=…`), disarmed (`off`), or a readback error |
+| `luma min=` | luma samples of the presented picture: the stream's first, every dark/not-dark change and one per 10 s. As a fixed string: `grep -F 'altscreen_render[egl]: luma'`, because `[egl]` is a character class in a basic regex. |
+| `luma last` | every 10 s while armed: the latest sample of this stream and its `age_ms`. A growing `age_ms` with `mean` below 6 means a static black picture; `none` means this stream has no sample yet. |
+| `cap111 armed` / `cap111 wrote` | capture start (generation, existing bytes) and close (bytes written) |
+
 ## 🔗 Related
 
 - [RGI and BAP Bridge](RGI_AND_BAP_BRIDGE.md): `source_supports_rg == 0` (as in the analysed Waze builds) clears RGI cleanly.

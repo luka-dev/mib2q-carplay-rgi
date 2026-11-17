@@ -33,6 +33,7 @@
 #include <stdint.h>
 #include <time.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/time.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -687,6 +688,111 @@ static void socket_pace_sample(void) {
     }
 }
 
+/* Opt-in raw stream-111 capture (offline "is the phone encoding black?" and
+ * HUD analysis). The RAM marker is read once per hook connection and removed
+ * when it arms, so one marker yields one capture. Every payload, config
+ * included, is appended in arrival order: the file is a valid Annex-B stream
+ * (protocol.h). The cap counts the file's real size, so a re-armed marker
+ * never grows it past 12 MB of RAM. Host builds never read /tmp: a stray file
+ * on a development machine cannot arm a test, which injects its own paths. */
+#if defined(__QNX__) || defined(__QNXNTO__)
+static const char *g_cap111_marker = "/tmp/carplay_cap111";
+#else
+static const char *g_cap111_marker = NULL;
+#endif
+static const char *g_cap111_path = "/tmp/carplay_cap111.h264";
+static uint64_t g_cap111_limit = 12u * 1024u * 1024u;
+
+typedef struct {
+    int fd;
+    uint32_t written, skipped;
+    uint64_t size;      /* fstat size at arming plus every byte appended since */
+} cap111_t;
+
+static void cap111_close(cap111_t *cap) {
+    if (cap->fd < 0) return;
+    close(cap->fd);
+    cap->fd = -1;
+    if (cap->skipped)
+        fprintf(stderr, "altscreen_render: cap111 skipped %u payloads (EAGAIN/EINTR)\n",
+                (unsigned)cap->skipped);
+    fprintf(stderr, "altscreen_render: cap111 wrote %u bytes\n", (unsigned)cap->written);
+}
+
+/* Once per connection. Disarmed: one access() and nothing else. Never follows
+ * a symlink, also where O_NOFOLLOW does not exist (QNX 6.5): an existing path
+ * must be a regular file per lstat and the opened file must be that same file;
+ * a missing one is created with O_EXCL, which fails on any existing name, a
+ * symlink included (the hook's capture_file.h does the same). */
+static void cap111_begin(cap111_t *cap, uint32_t generation) {
+    const char *marker = g_cap111_marker;
+    const char *path = g_cap111_path;
+    struct stat st, lst;
+    int flags = O_WRONLY | O_CREAT | O_APPEND | O_NONBLOCK, existed = 0;
+    memset(cap, 0, sizeof(*cap));
+    cap->fd = -1;
+    if (!marker || !path || access(marker, F_OK) != 0) return;
+    unlink(marker);                       /* single-shot */
+    if (lstat(path, &lst) == 0) {
+        if (!S_ISREG(lst.st_mode)) {
+            fprintf(stderr, "altscreen_render: cap111 target is not a regular file; capture off\n");
+            return;
+        }
+        existed = 1;
+    } else if (errno == ENOENT) {
+        flags |= O_EXCL;
+    } else {
+        fprintf(stderr, "altscreen_render: cap111 open FAILED errno=%d\n", errno);
+        return;
+    }
+#ifdef O_NOFOLLOW
+    flags |= O_NOFOLLOW;
+#endif
+    cap->fd = open(path, flags, 0600);    /* location/map imagery: owner only */
+    if (cap->fd < 0) {
+        fprintf(stderr, "altscreen_render: cap111 open FAILED errno=%d\n", errno);
+        return;
+    }
+    if (fstat(cap->fd, &st) != 0 || !S_ISREG(st.st_mode) ||
+        (existed && (st.st_dev != lst.st_dev || st.st_ino != lst.st_ino))) {
+        fprintf(stderr, "altscreen_render: cap111 target is not a regular file; capture off\n");
+        close(cap->fd);
+        cap->fd = -1;
+        return;
+    }
+    cap->size = (uint64_t)st.st_size;
+    fprintf(stderr, "%s altscreen_render: cap111 armed generation=%u existing=%lu bytes\n",
+            log_stamp(), (unsigned)generation, (unsigned long)cap->size);
+    if (cap->size >= g_cap111_limit)
+        cap111_close(cap);
+}
+
+/* Reader thread, armed only, before decode_queue_frame_ex can swap buf away.
+ * Never blocks or retries: EAGAIN/EINTR skip one payload, any other error or
+ * a short write ends the capture. */
+static void cap111_append(cap111_t *cap, const uint8_t *data, uint32_t len) {
+    ssize_t n;
+    if (cap->size + len > g_cap111_limit) {
+        cap111_close(cap);
+        return;
+    }
+    n = write(cap->fd, data, len);
+    if (n == (ssize_t)len) {
+        cap->written += len;
+        cap->size += len;
+        return;
+    }
+    if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)) {
+        ++cap->skipped;
+        return;
+    }
+    if (n > 0)
+        cap->written += (uint32_t)n;
+    fprintf(stderr, "altscreen_render: cap111 write FAILED n=%ld errno=%d; capture off\n",
+            (long)n, errno);
+    cap111_close(cap);
+}
+
 /* Serve one connected client until it disconnects or a protocol error. */
 static void serve_client(int cfd, uint32_t generation) {
     int one = 1, rcvbuf = 512 * 1024, descriptor_flags = fcntl(cfd, F_GETFL, 0);
@@ -712,10 +818,12 @@ static void serve_client(int cfd, uint32_t generation) {
     alt_timing_stat_t arrivals = {0}, sender_gaps = {0}, link_delays = {0};
     uint8_t hello[ALT_WIRE_HELLO_SIZE];
     alt_control_record_t greeting = {ALT_WIRE_HELLO, 0, ALT_HELLO_STATUS_CAPABILITY};
+    cap111_t capture;
     if (!alt_control_encode(hello, sizeof(hello), &greeting))
         return;
     /* Best effort only: old send-only hooks never read this tiny greeting. */
     (void)send(cfd, hello, sizeof(hello), 0);
+    cap111_begin(&capture, generation);
     for (;;) {
         alt_frame_meta_t meta;
         int r = av_read_frame_mode(cfd, &buf, &cap, &len, &meta, wire_state.version);
@@ -762,6 +870,8 @@ static void serve_client(int cfd, uint32_t generation) {
                 }
             }
             if (len > 0) socket_pace_sample();
+            if (len > 0 && capture.fd >= 0)
+                cap111_append(&capture, buf, len);   /* before buf ownership can swap */
             if (len > 0 && decode_queue_frame_ex(generation, buf, len, &meta, &buf, &cap) != 0) {
                 fprintf(stderr,
                         "altscreen_render: decode queue rejected generation %u frame\n",
@@ -778,6 +888,7 @@ static void serve_client(int cfd, uint32_t generation) {
                     errno);
         break;                                   /* -1 disconnect / -2 proto error */
     }
+    cap111_close(&capture);
     free(buf);
 }
 

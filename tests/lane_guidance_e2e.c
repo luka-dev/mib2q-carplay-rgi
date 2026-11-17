@@ -8,6 +8,8 @@
  * and progress). LaneGuidanceE2ETest.java replays these through
  * RouteGuidance.parse and BAPBridge.update.  Built by scripts/test_lane_guidance_e2e.sh. */
 #include "routeguidance/rgd_hook.c"
+/* altscreen_hook.c leaf (weak in the product; Mach-O ld needs a definition). */
+void altscreen_nav_card_update(int on, const char *source) { (void)on; (void)source; }
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>

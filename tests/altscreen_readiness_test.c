@@ -155,6 +155,81 @@ static void check_log_cap(void) {
     unlink(path); unlink(previous); rmdir(dir);
 }
 
+/* Armed-only control-loop report: the last presented luma and its age, so a
+ * static scene that stopped sending frames still shows its picture.  The next
+ * armed stream reads "none" until it publishes, even when the previous stream's
+ * presenter publishes late. */
+static void check_luma_report(void) {
+    static const char none[] = " altscreen_render: luma last none (armed, no sample yet)\n";
+    static const char last[] = " altscreen_render: luma last min=";
+    char dir[] = "/tmp/altscreen-luma-log.XXXXXX", path[160], text[2048];
+    unsigned lo = 0, mean = 0, hi = 0, nones = 0, lines = 0;
+    unsigned long age = 0;
+    const char *line;
+    FILE *f;
+    size_t n;
+    int status;
+    assert(mkdtemp(dir));
+    snprintf(path, sizeof(path), "%s/current", dir);
+    pid_t child = fork();
+    assert(child >= 0);
+    if (child == 0) {
+        uint64_t next = 0;
+        alt_luma_t luma = {3, 40, 200}, black = {0, 1, 4};
+        int token, older;
+        assert(freopen(path, "a", stderr));
+        setvbuf(stderr, NULL, _IONBF, 0);
+        assert(altctl_luma_arm(0) == 0 && g_luma_token == 0);
+        token = altctl_luma_arm(1);
+        assert((token & 1) && (uint32_t)token == g_luma_token);
+        ctl_luma_report(&next, (uint32_t)token);   /* arming starts the 10 s period, no line */
+        assert(next >= ALT_LUMA_REPORT_MS);
+        ctl_luma_report(&next, (uint32_t)token);   /* not due yet */
+        next = 1;
+        ctl_luma_report(&next, (uint32_t)token);   /* due, nothing published yet: none */
+        altctl_luma_publish(&luma, ctl_now_ms(), token);
+        next = 1;
+        ctl_luma_report(&next, (uint32_t)token);   /* 3/40/200 */
+        older = token;
+        token = altctl_luma_arm(1);                /* next stream */
+        assert((token & 1) && token != older);
+        next = 1;
+        ctl_luma_report(&next, (uint32_t)token);   /* the old sample is hidden: none */
+        altctl_luma_publish(&black, ctl_now_ms(), older);
+        next = 1;
+        ctl_luma_report(&next, (uint32_t)token);   /* a late old-stream sample too: none */
+        altctl_luma_publish(&black, ctl_now_ms(), token);
+        next = 1;
+        ctl_luma_report(&next, (uint32_t)token);   /* 0/1/4 */
+        _exit(0);
+    }
+    assert(waitpid(child, &status, 0) == child && WIFEXITED(status) && !WEXITSTATUS(status));
+    f = fopen(path, "r");
+    assert(f);
+    n = fread(text, 1, sizeof(text) - 1, f);
+    fclose(f);
+    text[n] = '\0';
+    for (line = strstr(text, none); line; line = strstr(line + 1, none)) ++nones;
+    assert(nones == 3);
+    for (line = strstr(text, last); line; line = strstr(line + 1, last)) ++lines;
+    assert(lines == 2);
+    {
+        const char *first = strstr(text, last), *second = strstr(first + 1, last);
+        const char *before = strstr(text, none);
+        /* none, 3/40/200, none, none, 0/1/4 */
+        assert(before < first && strstr(before + 1, none) > first);
+        assert(strstr(strstr(first, none) + 1, none) < second);
+        assert(!strstr(second, none));
+        assert(sscanf(first, " altscreen_render: luma last min=%u mean=%u max=%u age_ms=%lu",
+                      &lo, &mean, &hi, &age) == 4);
+        assert(lo == 3 && mean == 40 && hi == 200 && age < 1000);
+        assert(sscanf(second, " altscreen_render: luma last min=%u mean=%u max=%u age_ms=%lu",
+                      &lo, &mean, &hi, &age) == 4);
+        assert(lo == 0 && mean == 1 && hi == 4 && age < 1000);
+    }
+    unlink(path); rmdir(dir);
+}
+
 int main(void) {
     int pair[2], next_pair[2], listener, control;
     pthread_t reader, next_reader;
@@ -164,7 +239,10 @@ int main(void) {
     uint8_t record[] = {0, 0, 0, 1, 0x65};
     alarm(20);
     signal(SIGPIPE, SIG_IGN);
+    /* Host gate: a stray /tmp/carplay_cap111 cannot arm capture in host tests. */
+    assert(g_cap111_marker == NULL);
     check_log_cap();
+    check_luma_report();
     listener = socket(AF_INET, SOCK_STREAM, 0);
     assert(listener >= 0);
     memset(&addr, 0, sizeof(addr));
@@ -253,6 +331,6 @@ int main(void) {
     }
     altctl_stop(); close(control); close(listener); decode_worker_stop();
     alarm(0);
-    puts("altscreen_readiness_test: static first frame, health edges, control reconnect, generation guards and real log truncation PASS");
+    puts("altscreen_readiness_test: static first frame, health edges, control reconnect, generation guards, real log truncation and armed luma report PASS");
     return 0;
 }
