@@ -206,6 +206,26 @@ cc -std=gnu99 -O1 -Wall -Wextra -Werror \
     -lpthread -o "$OUT/altscreen_readiness"
 "$OUT/altscreen_readiness"
 
+# The parity half needs car frames and navigation-app art, which are never
+# committed: CARD_REC_FIXTURES opts in, otherwise it SKIPs after the API checks.
+printf '%-32s ' card_rec_test
+cc -std=c99 -O1 -g -Wall -Wextra -Werror -pedantic -fsanitize=address,undefined \
+    -Ialtscreen_render tests/card_rec_test.c altscreen_render/card_rec.c \
+    altscreen_render/card_rec_match.c altscreen_render/card_rec_load.c \
+    altscreen_render/card_rec_gates.c altscreen_render/card_rec_text.c altscreen_render/card_rec_stab.c \
+    -lz -o "$OUT/card_rec"
+"$OUT/card_rec"
+
+# The time-driven stabiliser feed; with CARD_REC_FIXTURES it also replays the
+# reference decisions as sequences.
+printf '%-32s ' card_rec_stab_test
+cc -std=c99 -O1 -g -Wall -Wextra -Werror -pedantic -fsanitize=address,undefined \
+    -Ialtscreen_render tests/card_rec_stab_test.c altscreen_render/card_rec.c \
+    altscreen_render/card_rec_match.c altscreen_render/card_rec_load.c \
+    altscreen_render/card_rec_gates.c altscreen_render/card_rec_text.c altscreen_render/card_rec_stab.c \
+    -o "$OUT/card_rec_stab"
+"$OUT/card_rec_stab"
+
 printf '%-32s ' altscreen_timing_test
 cc -std=gnu99 -O1 -Wall -Wextra -Werror tests/altscreen_timing_test.c -o "$OUT/altscreen_timing"
 "$OUT/altscreen_timing"
