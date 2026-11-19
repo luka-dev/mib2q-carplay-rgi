@@ -52,6 +52,8 @@ import org.dsi.ifc.carplay.ServiceConfiguration;
 import org.dsi.ifc.carplay.TelephonyState;
 import org.dsi.ifc.carplay.TouchEvent;
 import com.luka.carplay.input.TouchpadController;
+import com.luka.carplay.input.ConsoleKeyCarPlay;
+import com.luka.carplay.connectivity.CarPlaySettingsUi;
 import com.luka.carplay.core.SteeringWheelInputModule;
 import org.dsi.ifc.carplay.TrackData;
 import org.dsi.ifc.global.ResourceLocator;
@@ -179,6 +181,8 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
          * inject into the torn-down DSI proxy (stale-DSI injection) and accumulate across
          * connect cycles. */
         TouchpadController.getInstance().setTouchSink(null);
+        try { ConsoleKeyCarPlay.uninstall(this.fw); } catch (Throwable t) { }
+        ConsoleKeyCarPlay.setUiRequester(null);
         GatedPhoneService.setCommands(null);
         this.dsiCarPlayListener.resetPlaybackState();
         super.deinit();
@@ -1135,6 +1139,15 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
                     } catch (Throwable t) { /* never break the DSI flow */ }
                 }
             });
+            /* Console keys open CarPlay: bridge requestUI to the DSI proxy, then wrap the
+             * stock button listeners (when the setting is on).  Removed in deinit(). */
+            ConsoleKeyCarPlay.setUiRequester(new ConsoleKeyCarPlay.UiRequester() {
+                public void open(int ui) {
+                    try { if (outer.dsiCarplaySafe != null) outer.dsiCarplaySafe.requestUI(ui); }
+                    catch (Throwable t) { /* never break the DSI flow */ }
+                }
+            });
+            try { if (CarPlaySettingsUi.isConsoleKeysEnabled()) ConsoleKeyCarPlay.install(outer.fw); } catch (Throwable t) { }
         }
 
         public void updateKey(Key key, KeyState keystate) {

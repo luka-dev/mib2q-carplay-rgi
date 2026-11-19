@@ -9,6 +9,7 @@
  *   6. CarPlay Map Cards  (2-choice: Hide when guiding | Always show -> KEY_ALT_URL 1003, alt_url=0|1, CMD_ALT_CFG)
  *   7. Turn Preview       (2-choice: Always next turn | Straight arrow when far -> KEY_RGI_FAR 1006, rgi_far=0|1)
  *   8. Cockpit Turn Card  (2-choice: Always visible | Auto-hide when far -> KEY_RGI_VC 1007, rgi_vc=0|1)
+ *   9. Console Keys Open CarPlay (checkbox: Off | On -> KEY_CONSOLE_KEYS 1008, console_keys=0|1)
  * Each row carries a native MMI Infoline hint shown on focus.
  *
  * Stored in the stock HMI persistence (IStorageAccess, namespace 1009) and flushed
@@ -20,7 +21,9 @@ package com.luka.carplay.connectivity;
 
 import com.luka.carplay.bus.CarplayBus;
 import com.luka.carplay.core.AltScreenModule;
+import com.luka.carplay.core.CarPlayApp;
 import com.luka.carplay.framework.Log;
+import com.luka.carplay.input.ConsoleKeyCarPlay;
 import com.luka.carplay.rgd.RouteGuidance;
 import com.luka.carplay.tone.SoundControlUi;
 import de.audi.atip.base.IFrameworkAccess;
@@ -67,6 +70,7 @@ public final class CarPlaySettingsUi {
     private static final int KEY_ALT_LAYOUT  = 1004;
     private static final int KEY_RGI_ENABLED = 1005;
     private static final int KEY_RGI_FAR     = 1006;
+    private static final int KEY_CONSOLE_KEYS = 1008;
 
     public static final int LEVEL_OFF = 0;
     public static final int LEVEL_NORMAL = 1;
@@ -100,6 +104,10 @@ public final class CarPlaySettingsUi {
     public static final int RGI_FAR_STRAIGHT = 1;
     public static final int RGI_FAR_DEFAULT = RGI_FAR_NEXT;
 
+    public static final int CONSOLE_KEYS_OFF = 0;
+    public static final int CONSOLE_KEYS_ON = 1;
+    public static final int CONSOLE_KEYS_DEFAULT = CONSOLE_KEYS_OFF;
+
     public static final String SETTINGS_FILE = "/tmp/carplay_settings"; // hook/audio/audio_hook.h (SPA_SETTINGS_FILE)
 
     public static final int MODEL_SPATIAL     = 2500500;       // module 25, index 500
@@ -109,6 +117,7 @@ public final class CarPlaySettingsUi {
     public static final int MODEL_ALT_LAYOUT  = 2500504;       // module 25, index 504
     public static final int MODEL_RGI_ENABLED = 2500505;       // module 25, index 505
     public static final int MODEL_RGI_FAR     = 2500506;       // module 25, index 506
+    public static final int MODEL_CONSOLE_KEYS = 2500507;      // module 25, index 507
 
     private static final int INDEX_SPATIAL     = MODEL_SPATIAL % 100000;
     private static final int INDEX_UPMIX       = MODEL_UPMIX % 100000;
@@ -117,6 +126,7 @@ public final class CarPlaySettingsUi {
     private static final int INDEX_ALT_LAYOUT  = MODEL_ALT_LAYOUT % 100000;
     private static final int INDEX_RGI_ENABLED = MODEL_RGI_ENABLED % 100000;
     private static final int INDEX_RGI_FAR     = MODEL_RGI_FAR % 100000;
+    private static final int INDEX_CONSOLE_KEYS = MODEL_CONSOLE_KEYS % 100000;
 
     private static final int DRAWER_CM_OPT        = 2500001;
     private static final int SCREEN_ABOUT_CARPLAY = 2500140;
@@ -131,6 +141,7 @@ public final class CarPlaySettingsUi {
     private static final int INTERNAL_ID_RGI_ENABLED = 2509914;
     private static final int INTERNAL_ID_ALT_URL     = 2509915;
     private static final int INTERNAL_ID_RGI_FAR     = 2509916;
+    private static final int INTERNAL_ID_CONSOLE_KEYS = 2509917;
 
     // HMIConnectivityEvoHigh string table slots 1500..1524 (text ids 2501500..2501524)
     public static final int TEXT_TITLE                  = 2501500;
@@ -158,6 +169,8 @@ public final class CarPlaySettingsUi {
     public static final int TEXT_RGI_FAR_NEXT           = 2501522;
     public static final int TEXT_RGI_FAR_STRAIGHT       = 2501523;
     public static final int TEXT_RGI_FAR_HINT           = 2501524;
+    public static final int TEXT_CONSOLE_KEYS       = 2501525;
+    public static final int TEXT_CONSOLE_KEYS_HINT  = 2501526;
 
     private static final String[] FALLBACK_TEXTS = new String[]{
         "CarPlay settings",
@@ -184,7 +197,9 @@ public final class CarPlaySettingsUi {
         "Guidance Maneuver Preview",
         "Always next maneuver",
         "Follow road when far",
-        "Show the next turn in advance, or a straight arrow until you get closer"
+        "Show the next turn in advance, or a straight arrow until you get closer",
+        "Console Keys Open CarPlay",
+        "Tap NAV, MEDIA, TEL or RADIO to jump to the matching CarPlay screen"
     };
 
     private static final int[] SUBMENU_BITMAPS = new int[]{39, 39, 39, 39};
@@ -199,6 +214,7 @@ public final class CarPlaySettingsUi {
     private static volatile ChoiceModel altLayoutModel;
     private static volatile ChoiceModel rgiEnabledModel;
     private static volatile ChoiceModel rgiFarModel;
+    private static volatile ChoiceModel consoleKeysModel;
 
     private static volatile MenuItemController spatialMenuItem;
     private static volatile MenuItemController upmixMenuItem;
@@ -213,6 +229,7 @@ public final class CarPlaySettingsUi {
     private static volatile int pendingAltLayout  = ALT_LAYOUT_DEFAULT;
     private static volatile int pendingRgiEnabled = RGI_ENABLED_DEFAULT;
     private static volatile int pendingRgiFar     = RGI_FAR_DEFAULT;
+    private static volatile int pendingConsoleKeys = CONSOLE_KEYS_DEFAULT;
 
     private static volatile int currentSpatial    = SPATIAL_DEFAULT;
     private static volatile int currentLevel      = LEVEL_NORMAL;
@@ -221,6 +238,7 @@ public final class CarPlaySettingsUi {
     private static volatile int currentAltLayout  = ALT_LAYOUT_DEFAULT;
     private static volatile int currentRgiEnabled = RGI_ENABLED_DEFAULT;
     private static volatile int currentRgiFar     = RGI_FAR_DEFAULT;
+    private static volatile int currentConsoleKeys = CONSOLE_KEYS_DEFAULT;
 
     private CarPlaySettingsUi() {}
 
@@ -311,6 +329,10 @@ public final class CarPlaySettingsUi {
         return currentRgiFar == RGI_FAR_STRAIGHT;
     }
 
+    public static boolean isConsoleKeysEnabled() {
+        return currentConsoleKeys == CONSOLE_KEYS_ON;
+    }
+
     /** Send active AltScreen enable, URL policy, and card placement to the C hook. */
     public static boolean sendAltConfigToHook() {
         byte[] payload = new byte[]{
@@ -333,6 +355,7 @@ public final class CarPlaySettingsUi {
                 FlushValuesDict.register(NAMESPACE, KEY_ALT_LAYOUT);
                 FlushValuesDict.register(NAMESPACE, KEY_RGI_ENABLED);
                 FlushValuesDict.register(NAMESPACE, KEY_RGI_FAR);
+                FlushValuesDict.register(NAMESPACE, KEY_CONSOLE_KEYS);
             } catch (Throwable t) {
                 Log.w(TAG, "flush key not registered: " + t);
             }
@@ -355,6 +378,7 @@ public final class CarPlaySettingsUi {
             currentAltLayout = readBounded(KEY_ALT_LAYOUT, ALT_LAYOUT_DEFAULT, 0, 2);
             currentRgiEnabled = readBounded(KEY_RGI_ENABLED, RGI_ENABLED_DEFAULT, 0, 1);
             currentRgiFar = readBounded(KEY_RGI_FAR, RGI_FAR_DEFAULT, 0, 1);
+            currentConsoleKeys = readBounded(KEY_CONSOLE_KEYS, CONSOLE_KEYS_DEFAULT, 0, 1);
             writeSettingsFile();
             show(currentSpatial, levelToChoice(currentLevel));
             showAltScreen(currentAltScreen);
@@ -362,12 +386,14 @@ public final class CarPlaySettingsUi {
             showAltLayout(currentAltLayout);
             showRgiEnabled(currentRgiEnabled);
             showRgiFar(currentRgiFar);
+            showConsoleKeys(currentConsoleKeys);
             syncMenuEnabledStates();
             sendAltConfigToHook();
             Log.i(TAG, "boot level=" + currentLevel + " (choice=" + levelToChoice(currentLevel)
                 + "), spatial=" + currentSpatial + ", altscreen=" + currentAltScreen
                 + ", alt_url=" + currentAltUrl + ", alt_layout=" + currentAltLayout
-                + ", rgi=" + currentRgiEnabled + ", rgi_far=" + currentRgiFar);
+                + ", rgi=" + currentRgiEnabled + ", rgi_far=" + currentRgiFar
+                + ", console_keys=" + currentConsoleKeys);
         } catch (Throwable t) {
             Log.w(TAG, "boot failed: " + t);
         }
@@ -440,6 +466,18 @@ public final class CarPlaySettingsUi {
         RouteGuidance.onRgiSettingsChanged();
         AltScreenModule.onSettingsChanged();
         Log.i(TAG, "selected rgi " + enable);
+    }
+
+    /** The user toggled the console hard-key -> CarPlay mapping (0=Off, 1=On). */
+    public static void selectConsoleKeys(int enable) {
+        if (enable != CONSOLE_KEYS_OFF && enable != CONSOLE_KEYS_ON) return;
+        currentConsoleKeys = enable;
+        storeKey(KEY_CONSOLE_KEYS, enable);
+        try {
+            if (enable == CONSOLE_KEYS_ON && CarPlayApp.isActive()) ConsoleKeyCarPlay.install(fw);
+            else ConsoleKeyCarPlay.uninstall(fw);
+        } catch (Throwable t) { Log.w(TAG, "console keys sync: " + t); }
+        Log.i(TAG, "selected console keys " + enable);
     }
 
     /** The user picked Guidance Maneuver Preview (0=Always next maneuver, 1=Follow road when far). */
@@ -639,14 +677,23 @@ public final class CarPlaySettingsUi {
         } catch (Throwable t) { /* UI mirror only */ }
     }
 
+    public static void showConsoleKeys(int enable) {
+        try {
+            int v = enable != 0 ? 1 : 0;
+            pendingConsoleKeys = v;
+            ChoiceModel m = consoleKeysModel;
+            if (m != null) m.setValue(v);
+        } catch (Throwable t) { /* UI mirror only */ }
+    }
+
     static final class Bank extends ConnectivityModelBank {
         private static final int[] EXTRA_MODELS = new int[]{
             MODEL_SPATIAL, MODEL_UPMIX, MODEL_ALTSCREEN, MODEL_ALT_URL,
-            MODEL_ALT_LAYOUT, MODEL_RGI_ENABLED, MODEL_RGI_FAR
+            MODEL_ALT_LAYOUT, MODEL_RGI_ENABLED, MODEL_RGI_FAR, MODEL_CONSOLE_KEYS
         };
 
         Bank() {
-            int need = INDEX_RGI_FAR + 1;
+            int need = INDEX_CONSOLE_KEYS + 1;
             if (this.models.length < need) {
                 HMIModel[] grown = new HMIModel[need];
                 System.arraycopy(this.models, 0, grown, 0, this.models.length);
@@ -782,6 +829,23 @@ public final class CarPlaySettingsUi {
                 rgiFarModel = m;
                 return;
             }
+            if (i == INDEX_CONSOLE_KEYS) {
+                if (this.models[i] != null) return;
+                final ChoiceModel m = new ChoiceModel(MODEL_CONSOLE_KEYS);
+                m.setChoiceListener(new DefaultChoiceListener() {
+                    public void itemSelected(int id, int value, int unused, int terminal) {
+                        try {
+                            int v = value != 0 ? 1 : 0;
+                            m.setValue(v);
+                            selectConsoleKeys(v);
+                        } catch (Throwable t) { /* never into the HMI thread */ }
+                    }
+                });
+                m.setValue(pendingConsoleKeys);
+                this.models[i] = m;
+                consoleKeysModel = m;
+                return;
+            }
             super.createModel(i);
         }
     }
@@ -814,7 +878,7 @@ public final class CarPlaySettingsUi {
 
         public String getText(int id) {
             String s = super.getText(id);
-            if ((s == null || s.length() == 0) && id >= TEXT_TITLE && id <= TEXT_RGI_FAR_HINT) {
+            if ((s == null || s.length() == 0) && id >= TEXT_TITLE && id <= TEXT_CONSOLE_KEYS_HINT) {
                 return FALLBACK_TEXTS[id - TEXT_TITLE];
             }
             return s;
@@ -822,7 +886,7 @@ public final class CarPlaySettingsUi {
 
         public int getTextStatus(int id) {
             int st = super.getTextStatus(id);
-            if (st == 0 && id >= TEXT_TITLE && id <= TEXT_RGI_FAR_HINT) {
+            if (st == 0 && id >= TEXT_TITLE && id <= TEXT_CONSOLE_KEYS_HINT) {
                 return 8;
             }
             return st;
@@ -1040,6 +1104,12 @@ public final class CarPlaySettingsUi {
             registerScreenView(screen, MODEL_RGI_FAR, rgiFarItem);
             menu.addWithPosition(rgiFarItem, pos++);
             rgiFarMenuItem = rgiFarItem;
+
+            // Row 8: Console Keys Open CarPlay (checkbox)
+            MenuItemController consoleKeysItem = createCheckboxItem(terminal, MODEL_CONSOLE_KEYS,
+                TEXT_CONSOLE_KEYS, TEXT_CONSOLE_KEYS_HINT, INTERNAL_ID_CONSOLE_KEYS);
+            registerScreenView(screen, MODEL_CONSOLE_KEYS, consoleKeysItem);
+            menu.addWithPosition(consoleKeysItem, pos++);
 
             syncAudioRowsEnabledState();
             syncMenuEnabledStates();

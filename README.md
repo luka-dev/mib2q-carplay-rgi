@@ -269,6 +269,9 @@ See [audio documentation](docs/audio/README.md) for the audio processing and
   Faster swipes move further.
 - **Siri with a short press.** Press the steering-wheel voice button briefly to open Siri
   while CarPlay is connected. A long press still works.
+- **Console keys open CarPlay.** With **Console Keys Open CarPlay** enabled, a tap on NAV/MAP,
+  MEDIA, TEL or RADIO jumps to the matching CarPlay screen (map, Now Playing, phone, media).
+  Off by default; the keys work as standard otherwise.
 - **Parking sensors beside CarPlay.** The parking sensor display can appear alongside CarPlay
   instead of covering the whole screen.
 - **Car information for the iPhone.** Sends wheel speed, remaining fuel range, outside temperature
@@ -293,6 +296,7 @@ push the rotary knob **to the right**, and select **CarPlay settings**.
 | **Route Guidance** — On / Off | Shows or hides the car's 3D turn arrows in the Virtual Cockpit and HUD. | Immediately |
 | **Map Cards during Guidance** — Hidden / Shown | Hides the phone's turn cards while the car shows its own guidance, or keeps both visible. | Immediately |
 | **Guidance Maneuver Preview** — Always next maneuver / Follow road when far | Shows the next turn early, or a straight-ahead arrow until you get closer. | Immediately |
+| **Console Keys Open CarPlay** — Off / On | Tap NAV/MAP, MEDIA, TEL or RADIO to open the matching CarPlay screen. | Immediately |
 
 <a id="logging"></a>
 
