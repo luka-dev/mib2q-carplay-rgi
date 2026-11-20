@@ -6520,13 +6520,14 @@ static void spa_tap_write(const char *path, size_t *taken, const void *buf, size
 {
     size_t limit = spa_tap_limit();
     int fd;
+    ssize_t written;
     if (!limit || *taken >= limit || !buf || !len) return;
     if (len > limit - *taken) len = limit - *taken;
     fd = open(path, O_WRONLY | O_CREAT | O_APPEND, 0600);
     if (fd < 0) return;
-    (void)write(fd, buf, len);
+    written = write(fd, buf, len);
     close(fd);
-    *taken += len;
+    if (written > 0) *taken += (size_t)written;
     if (*taken >= limit)
         LOG_WARN(LOG_MODULE, "audio tap: %s complete (%u bytes, s32le %uch 48000Hz)",
                  path, (unsigned)*taken, channels);
