@@ -86,9 +86,9 @@ def decode_extension_value(field_id: int, payload: bytes) -> dict[str, object]:
             )
         decoded["value"] = int.from_bytes(payload, "big")
     elif field_id == 12:
-        if len(payload) != 1:
+        if len(payload) > 1:
             raise ValueError(
-                f"soundcheck_media_kind field must be 1 byte, got {len(payload)}"
+                f"soundcheck_media_kind field must be 0..1 bytes, got {len(payload)}"
             )
         decoded["value"] = int.from_bytes(payload, "big")
     elif field_id in (4, 5):

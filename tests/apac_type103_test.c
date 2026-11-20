@@ -426,6 +426,27 @@ static void test_extension_metadata(void)
     assert(ext.unknownFieldCount == 1);
     assert(audioLength == 1 && audio[0] == 0xaa);
 
+    /* Kind 0 uses an empty payload in the captured silent podcast. It is
+     * present, unlike an absent field, and must not swallow the following AU. */
+    {
+        static const unsigned char emptyKind[] = { SPA_APAP_TLV_MEDIA_KIND, 0, 0, 0xaa, 0xbb };
+        static const unsigned char zeroKind[] = { SPA_APAP_TLV_MEDIA_KIND, 1, 0, 0, 0xaa, 0xbb };
+        static const unsigned char absentKind[] = { 0, 0xaa, 0xbb };
+        static const unsigned char oversizedKind[] = { SPA_APAP_TLV_MEDIA_KIND, 2, 0, 0, 0 };
+        const unsigned char *forms[] = { emptyKind, zeroKind, absentKind };
+        const size_t sizes[] = { sizeof(emptyKind), sizeof(zeroKind), sizeof(absentKind) };
+        size_t i;
+        for (i = 0; i < sizeof(forms) / sizeof(forms[0]); i++) {
+            memset(&ext, 0, sizeof(ext));
+            assert(spa_apap_parse_extension(forms[i], sizes[i], &ext, &audio, &audioLength));
+            assert(ext.hasMediaKind == (i < 2) && ext.mediaKind == 0);
+            assert(audioLength == 2 && audio[0] == 0xaa && audio[1] == 0xbb);
+        }
+        memset(&ext, 0, sizeof(ext));
+        assert(!spa_apap_parse_extension(oversizedKind, sizeof(oversizedKind),
+                                         &ext, &audio, &audioLength));
+    }
+
     /* Known fields fail closed on an impossible shape. */
     {
         static const unsigned char malformedLoudness[] = {
