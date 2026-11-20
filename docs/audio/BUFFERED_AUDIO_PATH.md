@@ -202,7 +202,7 @@ Crypto validation: Pioneer's `chacha20_poly1305_encrypt_all_64x64@0x1bae90` unde
 | 8 | samples per frame | 1024 | 1024 | validated |
 | 10 | `TransitionID` (BE uint64) | absent | absent | count and drop; never a reset |
 | 11 | MainLoudnessParameters, 3 × BE32 float | `[-6.5,-1,0.96875]` | `[-18,-1.8125,-1.78125]` / `[-19.25,-2.25,-2.25]` | SoundCheck gain |
-| 12 | SoundCheck media kind | 1 | 1 | selects SETUP target |
+| 12 | SoundCheck media kind (0..1 bytes; empty encodes 0) | 1 | 1 | selects SETUP target |
 | 17 / 18 | cookie ID / inline cookie | 39-byte AAC | 33-byte APAC | decoder authority |
 | 19 / 21 | `SbufTracer` / extended | once | 43 packets | length/count telemetry only |
 | 20 | source/content format index | 73 | 35 | telemetry only |

@@ -509,8 +509,9 @@ int spa_apap_parse_extension(const uint8_t *plaintext, size_t length,
             state->loudnessParameters[2] = spa_be_float(plaintext + at + 8);
             state->hasLoudnessParameters = 1;
         } else if (fieldId == SPA_APAP_TLV_MEDIA_KIND) {
-            if (fieldLength != 1) return 0;
-            state->mediaKind = plaintext[at];
+            /* iOS can encode media kind 0 with an empty payload. */
+            if (fieldLength > 1) return 0;
+            state->mediaKind = fieldLength ? plaintext[at] : 0;
             state->hasMediaKind = 1;
         } else if (fieldId == SPA_APAP_TLV_MAGIC_COOKIE && fieldLength) {
             state->magicCookie = plaintext + at;
