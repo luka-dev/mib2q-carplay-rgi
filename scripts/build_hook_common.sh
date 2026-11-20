@@ -99,7 +99,11 @@ carplay_build_hook() {
 
   echo "=== CarPlay Hook Build (Docker $IMG) -> $OUTDIR_REL ==="
 
-  docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
+  # Optional user override for e.g. NFS root-squash; keep Docker's default otherwise.
+  local DOCKER_USER_ARGS=()
+  [ -n "${DOCKER_BUILD_USER:-}" ] && DOCKER_USER_ARGS=(--user "$DOCKER_BUILD_USER")
+  docker run --rm --platform=linux/amd64 "${DOCKER_USER_ARGS[@]}" \
+    -v "$PROJECT_DIR":/src "$IMG" bash -c '
     set -e
     export PATH=/opt/qnx650/host/linux/x86/usr/bin:$PATH
     export QNX_HOST=/opt/qnx650/host/linux/x86 QNX_TARGET=/opt/qnx650/target/qnx6
