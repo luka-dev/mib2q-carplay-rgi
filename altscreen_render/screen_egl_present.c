@@ -29,6 +29,8 @@
 #include "loader/prism_transition.h"
 #include "cluster_surface.h"
 #include "loader/loader_layout.h"
+#include "luma.h"
+#include "altctl.h"
 
 #include <screen/screen.h>
 #include <EGL/egl.h>
@@ -70,6 +72,15 @@
 #endif
 #ifndef GL_TEXTURE_EXTERNAL_OES
 #define GL_TEXTURE_EXTERNAL_OES     0x8d65
+#endif
+
+/* Opt-in luma probe marker (luma.h), read once per incoming stream.  RAM
+ * /tmp, so a reboot disarms it.  Host builds never read /tmp: a stray file on
+ * a development machine cannot arm a test, which injects its own path. */
+#if defined(__QNX__) || defined(__QNXNTO__)
+static const char *ep_luma_marker = "/tmp/carplay_luma_probe";
+#else
+static const char *ep_luma_marker = NULL;
 #endif
 
 struct screen_egl_present {
@@ -153,6 +164,15 @@ struct screen_egl_present {
     unsigned long pace_samples, pace_swap_samples;
     uint64_t pace_work_sum_ns, pace_work_max_ns;
     unsigned long pace_work_samples;
+
+    /* Opt-in luma probe (luma.h). The decode worker's stream edge allocates
+     * luma_rows once, then release-stores luma_request: 0 = off, otherwise the
+     * armed stream's token from altctl_luma_arm (odd, unique per process).
+     * The presentation worker owns the rest. */
+    int luma_request;
+    unsigned char *luma_rows;      /* ALT_LUMA_ROWS x width RGBA; freed at destroy */
+    int luma_session;
+    alt_luma_sampler_t luma;
 };
 
 static int ep_has_extension(const char *extensions, const char *wanted) {
@@ -1017,6 +1037,78 @@ int screen_egl_present_start_loader(screen_egl_present_t *p) {
     return result == 0 ? 0 : -1;
 }
 
+/* Decode worker, at the pending edge of each incoming stream, before that
+ * stream's presentation worker starts. Disarmed this is one access() call and
+ * one relaxed store: no allocation, no lock and no log line. */
+static void ep_luma_stream_begin(screen_egl_present_t *p) {
+    const char *marker = ep_luma_marker;
+    int armed = marker != NULL && access(marker, F_OK) == 0;
+    if (!armed) {
+        altctl_luma_arm(0);   /* also covers a presenter rebuilt while armed */
+        if (__atomic_load_n(&p->luma_request, __ATOMIC_RELAXED)) {
+            __atomic_store_n(&p->luma_request, 0, __ATOMIC_RELEASE);
+            fprintf(stderr, "%s altscreen_render[egl]: luma probe off (marker gone)\n",
+                    log_stamp());
+        }
+        return;
+    }
+    if (!p->luma_rows) {
+        p->luma_rows = (unsigned char *)malloc((size_t)ALT_LUMA_ROWS * (size_t)p->width * 4u);
+        if (!p->luma_rows) {
+            altctl_luma_arm(0);   /* never report an earlier stream's sample */
+            fprintf(stderr, "altscreen_render[egl]: luma probe buffer FAILED; probe stays off\n");
+            return;
+        }
+    }
+    /* Token first: the control loop knows it before any sample carries it. */
+    __atomic_store_n(&p->luma_request, altctl_luma_arm(1), __ATOMIC_RELEASE);
+    fprintf(stderr, "%s altscreen_render[egl]: luma probe armed rows=%d,%d,%d width=%d\n",
+            log_stamp(), alt_luma_row_y(p->height, 0), alt_luma_row_y(p->height, 1),
+            alt_luma_row_y(p->height, 2), p->width);
+}
+
+/* Presentation worker, gl_lock held, context current: after glFinish and the
+ * frame's own GL error gate, before eglSwapBuffers. Diagnostic only: it never
+ * fails, skips or repeats the frame, and its GL errors never reach the gate.
+ * Its only cost is the synchronous 3-row readback, at most once a second. */
+static void ep_luma_probe(screen_egl_present_t *p, int request) {
+    size_t row_bytes = (size_t)p->width * 4u;
+    GLenum error = GL_NO_ERROR;
+    alt_luma_t luma;
+    uint64_t now;
+    unsigned i;
+    __atomic_thread_fence(__ATOMIC_ACQUIRE);   /* pairs with the stream edge */
+    if (request != p->luma_session) {
+        memset(&p->luma, 0, sizeof(p->luma));
+        p->luma_session = request;
+    }
+    now = ep_monotonic_ns();
+    if (!now || !p->luma_rows ||
+        !alt_luma_sample_due(&p->luma, now, p->transition_active))
+        return;
+    for (i = 0; i < 8u && glGetError() != GL_NO_ERROR; ++i) {}
+    for (i = 0; i < ALT_LUMA_ROWS; ++i)
+        glReadPixels(0, alt_luma_row_y(p->height, i), p->width, 1, GL_RGBA,
+                     GL_UNSIGNED_BYTE, p->luma_rows + i * row_bytes);
+    for (i = 0; i < 8u; ++i) {
+        GLenum drained = glGetError();
+        if (drained == GL_NO_ERROR) break;
+        if (error == GL_NO_ERROR) error = drained;
+    }
+    if (error != GL_NO_ERROR) {
+        p->luma.failed = 1;   /* at most one line per stream; the frame still swaps */
+        fprintf(stderr,
+                "%s altscreen_render[egl]: luma probe readback gl=0x%x; probe off for this stream\n",
+                log_stamp(), (unsigned)error);
+        return;
+    }
+    alt_luma_reduce_rgba(p->luma_rows, ALT_LUMA_ROWS * (uint32_t)p->width, &luma);
+    altctl_luma_publish(&luma, now / 1000000ULL, request);
+    if (alt_luma_note_sample(&p->luma, &luma, now))
+        fprintf(stderr, "%s altscreen_render[egl]: luma min=%u mean=%u max=%u\n",
+                log_stamp(), luma.min, luma.mean, luma.max);
+}
+
 void screen_egl_present_set_stream_pending(screen_egl_present_t *p, int pending) {
     int was_pending;
     if (!p) return;
@@ -1025,6 +1117,9 @@ void screen_egl_present_set_stream_pending(screen_egl_present_t *p, int pending)
      * Source attachment calls this again: it must not prolong the UX hold. */
     if (pending && !was_pending && p->loader_thread_started)
         ep_arm_loader_hold(p);
+    /* The same edge reads the opt-in luma-probe marker once per stream. */
+    if (pending && !was_pending)
+        ep_luma_stream_begin(p);
 }
 
 long screen_egl_present_loader_hold_remaining_ms(screen_egl_present_t *p) {
@@ -1239,6 +1334,12 @@ int screen_egl_present_frame(screen_egl_present_t *p,
     }
     gl_error = glGetError();
     if (gl_error != GL_NO_ERROR) goto fail;
+    {
+        /* Disarmed: this load and branch are the probe's whole per-frame cost. */
+        int luma_request = __atomic_load_n(&p->luma_request, __ATOMIC_RELAXED);
+        if (luma_request)
+            ep_luma_probe(p, luma_request);
+    }
 
     stage = "eglSwapBuffers";
     swap_begin_ns = ep_monotonic_ns();
@@ -1484,5 +1585,6 @@ void screen_egl_present_destroy(screen_egl_present_t *p) {
 
     if (p->rgba_surface) cluster_surface_destroy(p->rgba_surface);
     if (p->gl_lock_initialized) pthread_mutex_destroy(&p->gl_lock);
+    free(p->luma_rows);
     free(p);
 }
