@@ -328,11 +328,13 @@ static void fake_release(const void *p)
     if (p == &response_object) --response_refs;
 }
 static int fake_media_flag=1,fake_media_type=1;
+static const char *fake_audio_mode;
 static void *fake_dict_get(const void *dict, const void *key)
 {
     const char *name = key;
     if (dict == &request_object && !strcmp(name, "streams")) return &streams_object;
     if (dict == &desc_object) {
+        if (!strcmp(name, "audioMode")) return (void *)fake_audio_mode;
         if (!strcmp(name, "audioType")) return fake_media_type?"media":"telephony";
         if (!strcmp(name, "isMedia") && !fake_media_flag)return NULL;
         if (!strcmp(name, "shk")) return &key_object;
@@ -367,6 +369,21 @@ static void *fake_array_index(const void *p, long i)
 { return p == &streams_object && i == 0 ? &desc_object : NULL; }
 static int fake_string_copy(const void *p, char *out, size_t size)
 { snprintf(out, size, "%s", (const char *)p); return 1; }
+
+static void buffered_audio_mode_tests(void)
+{
+    const char *modes[] = { NULL, "default", "spokenAudio", "futureMediaMode", "" };
+    size_t i;
+    cfa_str = fake_string; cfa_rel = fake_release;
+    cfa_dictget = fake_dict_get; cfa_dictgeti = fake_dict_int;
+    cfa_strgetc = fake_string_copy;
+    for (i = 0; i < sizeof(modes) / sizeof(modes[0]); ++i) {
+        fake_audio_mode = modes[i];
+        assert(spa103_validate_setup_stream(&desc_object, 65, 1));
+    }
+    fake_audio_mode = NULL;
+    puts("audio_interposer_test: buffered spokenAudio/unknown/fallback modes PASS");
+}
 static void *fake_typed_get(const void *dict, const void *key, uint32_t type, int32_t *error)
 { (void)type; if (error) *error = 0; return fake_dict_get(dict, key); }
 static uint32_t fake_type_id(void) { return 1; }
@@ -1108,6 +1125,7 @@ int main(int argc, char **argv)
     assert(spa_probe103_extra_index(SPA_APAC_48K_5_1) == SPA_AAC_LC_48K_STEREO);
     assert(!pipe(poll_pipe));
     qsa_transactions();
+    buffered_audio_mode_tests();
     setup_lifetime();
     stale_setup_generations();
     absent_cleanup_generation();
