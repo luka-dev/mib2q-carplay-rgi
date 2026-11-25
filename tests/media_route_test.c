@@ -93,7 +93,7 @@ static void overlap_and_failures(void)
 static void capacity_fails_closed(void)
 {
     spa_media_route_t route = { 0 };
-    int streams[SPA_MEDIA_ROUTE_MAX_MAIN_STREAMS + 1];
+    int streams[SPA_MEDIA_ROUTE_MAX_MAIN_STREAMS + 1] = { 0 }; /* only the addresses matter; gcc -Werror=maybe-uninitialized */
     size_t i;
     for (i = 0; i < SPA_MEDIA_ROUTE_MAX_MAIN_STREAMS; ++i)
         assert(spa_media_route_stock_begin(&route, &streams[i]) == 1);
